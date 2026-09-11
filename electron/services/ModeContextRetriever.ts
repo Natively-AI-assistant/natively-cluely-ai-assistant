@@ -78,6 +78,14 @@ export interface ModeRetrievalOptions {
      */
     rerankPoolMultiplier?: number;
     /**
+     * The caller's retrieval budget for query-embedding RETRIES, in ms. The V3
+     * mode port passes its RetrievalPlan.timeoutMs (1200 / 2400 exhaustive) so
+     * a slow hosted embed route degrades this turn to lexical after one attempt
+     * instead of running a 13 s retry ladder inside a live answer. Absent = the
+     * historical ladder.
+     */
+    queryEmbedRetryBudgetMs?: number;
+    /**
      * Follow-up referent hint (round-7 Failure-2). A short/anaphoric follow-up
      * ("What processor controls it?", "What throughput does that give?") loses
      * the subject — the bare query has no referent, so retrieval can't find the
@@ -1822,6 +1830,7 @@ export class ModeContextRetriever {
             // started an 8000ms-budget hosted rerank and discarded it.
             rerankDeadlineMs: options.rerankDeadlineMs,
             rerankPoolMultiplier: options.rerankPoolMultiplier,
+            queryEmbedRetryBudgetMs: options.queryEmbedRetryBudgetMs,
         });
 
         diagLog('retrieveHybrid() return', { usedFallback: result.usedFallback, usedHybrid: result.usedHybrid, chunkCount: result.chunks?.length, hasContext: !!result.formattedContext });

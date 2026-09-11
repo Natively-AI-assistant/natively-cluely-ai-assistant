@@ -8328,6 +8328,30 @@ let isMultimodal = !!(imagePaths?.length);
         // synchronous span, no concurrent streams see the temporary install.
         const raceCustomRestore = this.installConfiguredCustomForRace(textProviders, message, context, finalSystemPrompt, isMultimodal, imagePaths);
 
+        // Let a configured spare actually land when the gateway stalls
+        // (2026-09-10). Measured with api.natively.software flapping and a
+        // working Gemini key on file: the natively rung timed out at its 4 s
+        // connect budget, was retried (cfg.maxAttempts 2) for another 4 s, and
+        // the Gemini spare then opened with ~5 s left under the 13 s live
+        // ceiling but only the shared 2.5 s ttft budget — "Gemini Flash attempt
+        // 1/2: timeout | 2/2: timeout" on every turn, regeneration repeated the
+        // same order, and the user saw "The model did not produce an answer in
+        // time". Real telemetry puts Gemini Flash's first token at p50 1.5 s /
+        // p90 9.6 s, so 2.5 s was never a budget the spare could meet.
+        //   • natively: ONE attempt when a spare exists. A connect timeout is a
+        //     gateway that is not answering; the second attempt cost 4 s and
+        //     landed on none of the measured turns. A single-provider user keeps
+        //     both attempts (nothing behind natively is worth the time).
+        //   • spares: the same 8 s first-token budget the natively rung gets;
+        //     the outer live ceiling (raceStreamWithDeadline) still bounds the
+        //     whole turn, so this cannot extend a turn past 13 s.
+        if (textProviders.length > 1) {
+          for (const rung of textProviders) {
+            if (rung.id === 'natively') rung.maxAttempts = 1;
+            else if (rung.ttftTimeoutMs == null) rung.ttftTimeoutMs = NATIVELY_TEXT_TTFT_MS;
+          }
+        }
+
         if (textProviders.length > 0) {
           const ordered = orderTextByHealth(textProviders, this.textHealth, Date.now());
           const raceStart = Date.now();

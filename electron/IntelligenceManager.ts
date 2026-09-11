@@ -413,5 +413,15 @@ export class IntelligenceManager extends EventEmitter {
         this.session.reset();
         this.engine.reset();
         this.engine.clearWtaDiversityHistory();
+        // V3 conversation state (referents, active topic, previous source ids)
+        // outlived every reset: it is keyed by meeting id, and outside a
+        // meeting that key is a constant, so an ad-hoc session accumulated
+        // referents across unrelated questions until the next mode switch.
+        // Measured 2026-09-10: "Why do you want this role?" resolved to
+        // "(referring to: PYQ)" from a past-paper question asked before the
+        // reset. A reset is the session boundary; the referents go with it.
+        try {
+            require('./context-intelligence/question/conversation-state-store').clearConversationState();
+        } catch { /* non-fatal — the store is process-global and optional */ }
     }
 }

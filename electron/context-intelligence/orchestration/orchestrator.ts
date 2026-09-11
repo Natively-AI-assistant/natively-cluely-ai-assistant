@@ -60,6 +60,10 @@ export interface AnswerRequest {
   hasAttachedDocuments?: boolean;
   /** Attached file names — filename-role routing (glossary/formula). */
   attachedFileNames?: readonly string[];
+  /** The screen-understanding description for this turn, when a screenshot
+   *  was attached. Lends its terms to the retrieval query when the spoken
+   *  question only points at the screen — see screenEnrichedQuery. */
+  screenText?: string;
 
   /**
    * Source types the TURN adds to the mode's allowlist because of what is
@@ -144,6 +148,28 @@ export function bareFragmentQuery(resolved: string, attachedFileNames: readonly 
   return words ? `${resolved} ${words}`.trim() : null;
 }
 
+// A question that only POINTS at the screen carries none of the screen's
+// terms (2026-09-11, measured in technical-interview with a spec attached and a
+// Slack thread on screen): "answer what he is asking from our spec" retrieved on
+// "answer / asking / spec" and found a résumé chunk; the screen said "what is
+// our instant refund limit and who owns reconciliation escalations", which the
+// spec answers in two lines. When the question is deictic or short, the
+// screen's own text joins the retrieval query — the QUESTION is unchanged.
+const SCREEN_DEIXIS_RE = /\b(?:this|that|these|those|it|here|on (?:my |the )?screen|what (?:he|she|they)(?:'s| is| are)? (?:asking|saying|showing)|what(?:'s| is) (?:he|she|they) (?:asking|saying)|him|her|them)\b/i;
+export const SCREEN_QUERY_MAX_CHARS = 600;
+export function screenEnrichedQuery(query: string, screenText: string | undefined): string {
+  const screen = String(screenText ?? '').replace(/\s+/g, ' ').trim();
+  if (!screen) return query;
+  const q = String(query ?? '').trim();
+  const words = q.split(/\s+/).filter(Boolean).length;
+  if (q && !SCREEN_DEIXIS_RE.test(q) && words > 10) return query;
+  // Prefer the screen's own question-shaped lines; fall back to its head.
+  const sentences = screen.split(/(?<=[.?!])\s+/);
+  const asks = sentences.filter((t) => /\?$/.test(t) || /^(?:what|how|which|who|when|where|why|can|could|do|does|is|are)\b/i.test(t));
+  const lend = (asks.length ? asks.join(' ') : screen).slice(0, SCREEN_QUERY_MAX_CHARS);
+  return q ? `${q} ${lend}`.trim() : lend;
+}
+
 /** Decide ONCE. The result is deep-frozen; nothing downstream may reinterpret it. */
 export function decide(req: AnswerRequest): Readonly<TurnDecision> {
   const basePolicy = resolveModePolicy(req.modeId);   // THROWS on unknown id — fails closed
@@ -204,7 +230,7 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
     // can be about: widen the retrieval query with their names so their
     // chunks surface, and the follow-up guidance applies the fragment to them.
     // The resolved question itself is unchanged — only the retrieval query.
-    queries: [bareFragmentQuery(q.resolved, req.attachedFileNames) ?? q.resolved],
+    queries: [screenEnrichedQuery(bareFragmentQuery(q.resolved, req.attachedFileNames) ?? q.resolved, req.screenText)],
     entities: [],
     useSemanticSearch: true,
     useKeywordSearch: true,

@@ -96,7 +96,11 @@ const REFINEMENT_RE = new RegExp(
   'i',
 );
 // Comparative/qualitative refinements that imply "than the prior answer".
-const REFINEMENT_COMPARATIVE_RE = /\b(shorter|longer|briefer|tighter|punchier|simpler|clearer|more\s+\w+|less\s+\w+|the\s+(?:final|spoken|short|long|concise|polished|natural)\s+version|in\s+(?:one|two|three)\s+(?:line|lines|sentence|sentences)|as\s+bullets?|spoken version|final version)\b/i;
+// "in simple words" / "plain english" / "dumb it down" / "eli5" (2026-09-11, measured
+// in a manual chain): after a correct "net 45 days" answer, "in simple words" was not a
+// refinement, re-retrieved on its own three words, and the composer's absence framing
+// announced that no payment-terms line was retrieved — one turn after quoting it.
+const REFINEMENT_COMPARATIVE_RE = /\b(shorter|longer|briefer|tighter|punchier|simpler|clearer|more\s+\w+|less\s+\w+|the\s+(?:final|spoken|short|long|concise|polished|natural)\s+version|in\s+(?:one|two|three)\s+(?:line|lines|sentence|sentences)|as\s+bullets?|spoken version|final version|in\s+(?:simple|simpler|plain|easy|easier|layman'?s|everyday|normal)\s+(?:words|terms|english|language)|dumb(?:ed)?\s+(?:it|that|this)?\s*down|eli5|like\s+i'?m\s+(?:five|5)|simply\s+put|in\s+a\s+nutshell|tl;?dr|one[- ]liner|as\s+a\s+(?:one[- ]liner|headline|tweet))\b/i;
 // Must reference the PRIOR ANSWER — a demonstrative pronoun, OR "the <answer-noun>" from a
 // small allowlist of things an answer IS (NOT a generic "the <any noun>", which would treat
 // a brand-new imperative like "add caching to the payment service" or "fix the bug in the

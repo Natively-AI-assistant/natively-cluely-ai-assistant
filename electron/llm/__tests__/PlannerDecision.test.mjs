@@ -30,10 +30,33 @@ test('PlannerDecision stays silent for low-confidence non-visual triggers', asyn
 test('PlannerDecision stays silent during cooldown', async () => {
   const decision = await decide({
     triggerQuestion: 'How should I answer this?',
+    // The utterance the cooldown is guarding against re-triggering on.
+    lastTriggerQuestion: 'How should I answer this',
     now: 10_000,
     lastTriggerTime: 9_000,
   });
 
+  assert.equal(decision.kind, 'silent');
+  assert.equal(decision.reason, 'cooldown');
+});
+
+// 2026-09-11: with NO previous question text on record, a question-shaped
+// utterance inside the window is a real turn; a bare fragment is still silenced.
+test('PlannerDecision: a question-shaped turn passes the cooldown when the last trigger carried no text', async () => {
+  const decision = await decide({
+    triggerQuestion: 'can you summarise the meeting so far',
+    now: 10_000,
+    lastTriggerTime: 9_000,
+  });
+  assert.notEqual(decision.reason, 'cooldown');
+});
+
+test('PlannerDecision: a bare fragment inside the cooldown is still silenced with no previous text', async () => {
+  const decision = await decide({
+    triggerQuestion: 'the thing',
+    now: 10_000,
+    lastTriggerTime: 9_000,
+  });
   assert.equal(decision.kind, 'silent');
   assert.equal(decision.reason, 'cooldown');
 });

@@ -165,9 +165,11 @@ describe('unsupported-in-mode is distinct from "no source needed"', () => {
     // FAST, and MEETING_TRANSCRIPT reported as unsupported.
     const r = classify('How many backend roles are we opening this quarter?', 'technical-interview');
     assert.notEqual(r.path, 'FAST', 'must not answer a meeting question from model knowledge');
-    assert.deepEqual(r.unsupportedInMode, ['MEETING_TRANSCRIPT']);
-    assert.ok(!r.requiredSourceTypes.includes('MEETING_TRANSCRIPT'),
-      'the mode still must not plan a transcript it does not authorize');
+    // UPDATED 2026-09-11: technical-interview now authorizes MEETING_TRANSCRIPT
+    // (the interview conversation is a source), so the meeting claim is
+    // PLANNED here rather than reported unsupported — the turn still grounds.
+    assert.ok(r.requiredSourceTypes.includes('MEETING_TRANSCRIPT'), JSON.stringify(r.requiredSourceTypes));
+    assert.deepEqual(r.unsupportedInMode, []);
   });
 
   test('the same question in team-meet IS supported and retrieves', () => {
