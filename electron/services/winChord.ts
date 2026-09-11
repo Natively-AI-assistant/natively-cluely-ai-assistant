@@ -34,6 +34,19 @@ export interface Win32Chord {
     id: string;
 }
 
+/** VK_LEFT..VK_DOWN — the only completing keys allowed to carry Alt. */
+const VK_LEFT = 0x25;
+const VK_DOWN = 0x28;
+
+/**
+ * True for VK_LEFT/UP/RIGHT/DOWN. CONTRACT: mirrors the `0x25..=0x28` arm in
+ * `is_safe_mods` (native-module/src/app_chord.rs) — the two must agree or the
+ * Rust-side defence-in-depth guard silently drops a chord the JS side sent.
+ */
+function isArrowVk(vk: number): boolean {
+    return vk >= VK_LEFT && vk <= VK_DOWN;
+}
+
 /**
  * Win32 VK for an Electron key token supported by Natively's default binds.
  */
@@ -120,7 +133,7 @@ export function acceleratorToWin32Chord(accelerator: string, id: string): Win32C
     // covering horizontal scrolling without intercepting AltGr text.
     if ((mods & MOD_CTRL) === 0) return null;
     if ((mods & MOD_WIN) !== 0) return null;
-    if ((mods & MOD_ALT) !== 0 && (keyVk < 0x25 || keyVk > 0x28)) return null;
+    if ((mods & MOD_ALT) !== 0 && !isArrowVk(keyVk)) return null;
 
     return { vk: keyVk, mods, id };
 }

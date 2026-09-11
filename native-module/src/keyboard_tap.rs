@@ -859,10 +859,6 @@ impl StealthKeyboardTap {
         }
     }
 
-    /// Suppress Ctrl while the overlay is visible on Windows.
-    #[napi]
-    pub fn set_ctrl_suppressed(&self, _suppressed: bool) {}
-
     /// True while the tap is engaged. Use to drive UI state ("stealth
     /// typing" badge, mode indicator, etc.).
     #[napi(getter)]

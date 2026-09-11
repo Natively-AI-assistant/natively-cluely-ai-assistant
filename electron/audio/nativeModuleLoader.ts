@@ -60,7 +60,6 @@ export interface NativeModule {
       shortcutOnly: boolean,
       overlayBounds?: OverlayBoundsInput | null,
     ): boolean;
-    setCtrlSuppressed?(suppressed: boolean): void;
     stop(): void;
     readonly isActive: boolean;
   };

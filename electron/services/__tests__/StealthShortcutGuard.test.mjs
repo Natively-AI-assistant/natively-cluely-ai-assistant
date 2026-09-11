@@ -46,14 +46,29 @@ test('full stealth start() passes shortcutOnly=false (existing behaviour preserv
   assert.match(src, /\}, appChords, \/\* shortcutOnly \*\/ false, overlayBounds\)/, 'the full typing tap must start with shortcutOnly=false.');
 });
 
-test('the guard defaults ON and remains opt-out', () => {
+test('the guard defaults ON and an explicit false opts out', () => {
   const src = read(SKM);
-  assert.match(src, /private shortcutGuardEnabled = false/, 'runtime state starts inactive until Windows boot applies the policy.');
+  // Runtime state starts inactive; boot applies the persisted policy. These are
+  // two different things — the field is not the default.
+  assert.match(src, /private shortcutGuardEnabled = false/, 'the runtime flag must start inactive until boot applies the policy.');
   const settings = read('electron/services/SettingsManager.ts');
   assert.match(settings, /stealthShortcutGuard\?: boolean/, 'the persisted setting must exist.');
-  // Unset enables the guard; an explicit false is the escape hatch.
+  // Unset enables the guard; an explicit false is the escape hatch. Both the
+  // getter and the boot path must agree, or the Settings toggle and the startup
+  // behaviour drift apart.
   const main = read('electron/main.ts');
-  assert.match(main, /appState\.getStealthShortcutGuardEnabled\(\)/, 'boot must use the shared default-on policy.');
+  assert.match(main, /get\('stealthShortcutGuard'\) !== false/, 'the getter must treat unset as enabled.');
+  assert.match(main, /appState\.getStealthShortcutGuardEnabled\(\)/, 'boot must use the shared default-on policy, not its own inline read.');
+});
+
+test('the default-on guard has a reachable opt-out in Settings', () => {
+  // A default the user cannot turn off is not opt-out. The guard installs an
+  // always-present WH_KEYBOARD_LL hook, which is more visible to EDR/AV than
+  // one that exists only during stealth-typing sessions — that trade-off has to
+  // stay the user's to make, not just an IPC channel with no UI attached.
+  const ui = read('src/components/SettingsOverlay.tsx');
+  assert.match(ui, /setStealthShortcutGuard/, 'Settings must expose a toggle for the shortcut guard.');
+  assert.match(ui, /getStealthShortcutGuard/, 'the toggle must load its current state.');
 });
 
 test('a rebind re-arms a running guard with the new chords', () => {
@@ -72,12 +87,17 @@ test('the guard tracks only shortcuts registered in the active app mode', () => 
   assert.match(mode, /this\.notifyChordsChanged\(\)/, 'switching launcher/overlay mode must re-arm the hook with the active chord table.');
 });
 
-test('Ctrl suppression follows the actual overlay window visibility', () => {
+test('overlay registration adds no per-window listeners that outlive it', () => {
+  // setOverlayWindow() runs again on every overlay (re-)creation — and the
+  // comment above overlayWebContents notes WebContents are reused after a
+  // reload, so a same-window re-registration is expected. Anything attached
+  // here with win.on() accumulates across those calls; the token guard makes
+  // stale handlers inert but does NOT detach them. 'closed' is once() and
+  // self-limiting, so it is the only listener allowed.
   const src = read(SKM);
   const registration = src.slice(src.indexOf('public setOverlayWindow('), src.indexOf('public isAvailable('));
-  assert.match(
-    registration,
-    /win\.on\('show', syncCtrlSuppression\);[\s\S]*win\.on\('hide', syncCtrlSuppression\);[\s\S]*isVisible\(\)[\s\S]*setCtrlSuppressed\(suppress\)/,
-    'show/hide must sync BrowserWindow visibility to the native Ctrl suppressor.',
-  );
+  assert.ok(registration.length > 0, 'setOverlayWindow() not found');
+  assert.doesNotMatch(registration, /win\.on\(/,
+    'BUG: use win.once() or detach on re-registration — win.on() here leaks a listener per call.');
+  assert.match(registration, /win\.once\('closed'/, 'the closed handler must still be registered.');
 });
