@@ -3,7 +3,7 @@
  *
  * These are source-level guardrails for the exact production failures fixed in
  * this change set: clearing a key must null the in-memory client, Codex must be
- * gated on real OAuth sign-in (not only an enabled flag), and credential-change
+ * gated on an enabled local CLI path (not Natively's separate OAuth flag), and credential-change
  * IPC handlers must refresh settings/model state after provider removals.
  */
 
@@ -59,15 +59,15 @@ describe('LLMHelper key setters clear in-memory provider clients', () => {
   });
 });
 
-describe('Codex availability uses OAuth state, not only enabled config', () => {
-  test('isCodexAvailable requires enabled config plus signedIn=true from CodexOAuthService', () => {
+describe('Codex availability uses the configured local CLI, not Natively OAuth state', () => {
+  test('isCodexAvailable requires enabled config plus a non-empty CLI path', () => {
     const source = read('electron/LLMHelper.ts');
     const start = source.indexOf('private isCodexAvailable(): boolean');
     assert.ok(start >= 0, 'isCodexAvailable helper must exist');
     const block = source.slice(start, source.indexOf('\n  // ---------------------------', start));
     assert.match(block, /if\s*\(!this\.codexCliConfig\.enabled\)\s*return false/);
-    assert.match(block, /CodexOAuthService/);
-    assert.match(block, /getStatus\(\)\.signedIn\s*===\s*true/);
+    assert.match(block, /codexCliConfig\.path/);
+    assert.doesNotMatch(block, /CodexOAuthService/);
   });
 
   test('structured generation and routeWithScopeFallback consult isCodexAvailable()', () => {
@@ -76,7 +76,7 @@ describe('Codex availability uses OAuth state, not only enabled config', () => {
     assert.match(structured, /if\s*\(this\.isCodexAvailable\(\)\)\s*\{[\s\S]*?Codex CLI/, 'structured provider ladder must not add Codex when signed out');
 
     const routed = source.slice(source.indexOf('routeWithScopeFallback({'), source.indexOf('for (const routedProvider', source.indexOf('routeWithScopeFallback({')));
-    assert.match(routed, /hasCodex:\s*this\.isCodexAvailable\(\)/, 'router availability should be based on OAuth-aware helper');
+    assert.match(routed, /hasCodex:\s*this\.isCodexAvailable\(\)/, 'router availability should be based on local CLI helper');
   });
 
   test('Codex CLI is NOT first in the structured-extraction ladder (2026-08-02 latency fix)', () => {
@@ -107,12 +107,12 @@ describe('Codex availability uses OAuth state, not only enabled config', () => {
       'Codex CLI must be pushed onto the provider ladder AFTER the Gemini flash cascade — a document ingest must never block on it first');
   });
 
-  test('direct Codex generation throws a clean disabled/signed-out reason', () => {
+  test('direct Codex generation throws a clean disabled/unavailable-path reason', () => {
     const source = read('electron/LLMHelper.ts');
     const generate = source.slice(source.indexOf('private async generateWithCodexCli'), source.indexOf('private async *streamWithCodexCli'));
     const stream = source.slice(source.indexOf('private async *streamWithCodexCli'), source.indexOf('public switchToCurl'));
-    assert.match(generate, /if\s*\(!this\.isCodexAvailable\(\)\)\s*throw new Error\('Codex CLI transport is disabled or ChatGPT is signed out\.'\)/);
-    assert.match(stream, /if\s*\(!this\.isCodexAvailable\(\)\)\s*throw new Error\('Codex CLI transport is disabled or ChatGPT is signed out\.'\)/);
+    assert.match(generate, /if\s*\(!this\.isCodexAvailable\(\)\)\s*throw new Error\('Codex CLI transport is disabled or the local CLI path is unavailable\.'\)/);
+    assert.match(stream, /if\s*\(!this\.isCodexAvailable\(\)\)\s*throw new Error\('Codex CLI transport is disabled or the local CLI path is unavailable\.'\)/);
   });
 
   test('both Codex sign-out paths broadcast credentials-changed and refresh stale defaults', () => {

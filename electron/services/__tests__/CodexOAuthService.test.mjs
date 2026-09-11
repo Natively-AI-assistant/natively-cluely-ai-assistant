@@ -303,18 +303,15 @@ test('CodexOAuthService PKCE verifier is 43 chars (32 bytes base64url)', () => {
 });
 
 // =============================================================================
-// 4. CodexCliService wire-level — no more CLI subprocess for OAuth paths
+// 4. CodexCliService transport boundary — local CLI is the primary path
 // =============================================================================
 
-test('CodexCliService: the deprecated `path` argument is ignored at runtime (no subprocess spawn)', () => {
+test('CodexCliService: the configured path is used by the local CLI transport', () => {
   const source = read('electron/services/CodexCliService.ts');
-  // The old subprocess imports are gone.
-  assert.doesNotMatch(source, /from 'child_process'/);
-  assert.doesNotMatch(source, /\bspawn\(/);
-  // The new HTTP-direct surface is in place.
-  assert.match(source, /https:\/\/api\.openai\.com\/v1\/responses/);
-  // Bearer header is built from CodexOAuthService, not argv.
-  assert.match(source, /Authorization:\s*`Bearer \$\{[^}]*\}`/);
+  assert.match(source, /from 'child_process'/);
+  assert.match(source, /spawn\(resolvedPath, args/);
+  assert.match(source, /app-server/);
+  assert.match(source, /buildExecArgs/);
 });
 
 test('CodexCliService: 401 triggers a single refresh-and-retry (open-sse chatCore parity)', () => {

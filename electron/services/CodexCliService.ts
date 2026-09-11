@@ -1,44 +1,17 @@
 /**
- * CodexCliService — direct HTTPS ChatGPT Codex provider (replaces subprocess)
+ * CodexCliService — local Codex CLI transport.
  *
- * History: the previous implementation spawned the `codex` CLI as a child
- * process and parsed its NDJSON event stream. This had two persistent
- * failure modes that drove the rewrite:
- *   1. Users without the @openai/codex binary (or with a stale one) hit
- *      ENOENT every chat. The auto-detect fallback covered common install
- *      locations but not, e.g., `nix run` or non-PATH installs.
- *   2. The CLI is a Rust binary that cold-loads the model on first
- *      invocation, so the first delta could take 5-8s and the subprocess
- *      IPC overhead added more. The 60s default timeout saved us from
- *      the most catastrophic hangs but the user-visible behavior was still
- *      "sometimes it works, sometimes it doesn't".
+ * Chat answers use the configured `codex exec --json` process, so the CLI's
+ * own ChatGPT login is the source of truth. Model discovery uses the same
+ * executable's `app-server --stdio` JSON-RPC endpoint. This keeps the answer
+ * path and the model picker on one credential and one CLI installation.
  *
- * The new design drops the subprocess entirely. We use ChatGPT OAuth
- * (see CodexOAuthService) to mint a bearer token, then call
- * `https://api.openai.com/v1/responses` directly with `fetch()` and
- * `ReadableStream` SSE. This is the same endpoint the open-sse
- * `CodexExecutor` calls (codex.md:1113 — `baseUrl: https://chatgpt.com/backend-api/codex/responses`),
- * adapted to Electron's Node runtime and pinned to the OpenAI-hosted
- * `/v1/responses` route that all ChatGPT-account bearer tokens accept.
- *
- * Public surface preserved for backward compatibility:
- *   - DEFAULT_CODEX_CLI_CONFIG (shape unchanged)
- *   - CodexCliService.run / .stream (signature unchanged)
- *   - CodexCliService.normalizeConfig (signature unchanged)
- *   - CodexCliService.buildArgs (DEPRECATED — returns [] but kept so the
- *     few tests that import it don't break; new code should not call it)
- *   - resolveCodexReasoningEffort (unchanged, per-model VALID set)
- *
- * Wire-level differences from the old subprocess design:
- *   - Bearer token is read from CodexOAuthService (not argv)
- *   - Reasoning effort goes in `body.reasoning.effort` (not -c flag)
- *   - `service_tier` goes in `body.service_tier` (not -c flag)
- *   - 401 → refresh-once-and-retry (matches open-sse chatCore:844-863)
- *   - 429 / 5xx → exponential backoff with jitter (up to 3 attempts)
- *   - AbortSignal cancels the in-flight fetch and propagates to the
- *     stream consumer; partial deltas yielded so far are NOT lost.
+ * The empty-path branch in `stream()` retains the former HTTPS helpers for
+ * compatibility with older internal callers and their wire-format tests. The
+ * normalized application configuration always supplies a CLI path.
  */
 
+import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import sharp from 'sharp';
@@ -92,11 +65,11 @@ export type CodexServiceTier = 'default' | 'fast' | 'flex';
 // omit the field. 'minimal' is intentionally NOT in this union because no
 // codex-supported model accepts it (OpenAI removed it after the original gpt-5
 // line — see electron/llm/__tests__/OpenAiReasoningEffort.test.mjs).
-export type CodexModelReasoningEffort = 'none' | 'low' | 'medium' | 'high' | 'xhigh';
+export type CodexModelReasoningEffort = 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
 
 export const CODEX_SANDBOX_MODES: readonly CodexSandboxMode[] = ['read-only', 'workspace-write', 'danger-full-access'] as const;
 export const CODEX_SERVICE_TIERS: readonly CodexServiceTier[] = ['default', 'fast', 'flex'] as const;
-export const CODEX_MODEL_REASONING_EFFORTS: readonly CodexModelReasoningEffort[] = ['none', 'low', 'medium', 'high', 'xhigh'] as const;
+export const CODEX_MODEL_REASONING_EFFORTS: readonly CodexModelReasoningEffort[] = ['none', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'] as const;
 
 // Per-model valid reasoning_effort sets. Mirrors the OpenAI HTTP VALID map at
 // electron/llm/__tests__/OpenAiReasoningEffort.test.mjs:27-45. Sending
@@ -121,6 +94,7 @@ const CODEX_MODEL_REASONING_SETS: ReadonlyArray<readonly [string, readonly Codex
   ['gpt-5.2',          ['none', 'low', 'medium', 'high', 'xhigh']],
   ['gpt-5.4',          ['none', 'low', 'medium', 'high', 'xhigh']],
   ['gpt-5.5',          ['none', 'low', 'medium', 'high', 'xhigh']],
+  ['gpt-6',            ['low', 'medium', 'high', 'xhigh', 'max', 'ultra']],
   // codex variants — `none` not supported; `xhigh` only on 5.2-codex+.
   ['gpt-5.5-codex',    ['low', 'medium', 'high', 'xhigh']],
   ['gpt-5.4-codex',    ['low', 'medium', 'high', 'xhigh']],
@@ -169,16 +143,12 @@ export function resolveCodexReasoningEffort(
 
 export interface CodexCliConfig {
   enabled: boolean;
-  /**
-   * @deprecated Kept for IPC backward-compat. The new implementation does
-   * not spawn a CLI binary; `path` is ignored at runtime. The settings
-   * field is still read/written so the Settings UI doesn't reset.
-   */
+  /** Executable used for both `codex exec` and `codex app-server`. */
   path: string;
   model: string;
   fastModel: string;
   timeoutMs: number;
-  /** @deprecated Ignored — Codex CLI sandbox flags don't apply to HTTP. */
+  /** Sandbox passed to `codex exec`. */
   sandboxMode: CodexSandboxMode;
   serviceTier: CodexServiceTier;
   modelReasoningEffort?: CodexModelReasoningEffort;
@@ -189,46 +159,104 @@ export interface CodexCliRunOptions {
   model: string;
   timeoutMs: number;
   imagePaths?: string[];
-  /** @deprecated Ignored. */
+  /** Sandbox passed to `codex exec`; retained as an optional call override. */
   sandboxMode?: CodexSandboxMode;
   serviceTier?: CodexServiceTier;
   modelReasoningEffort?: CodexModelReasoningEffort;
   signal?: AbortSignal;
-  /** Optional system prompt (used as the `instructions` field on the
-   *  Responses API; matches open-sse CodexExecutor.transformRequest
-   *  at codex.md:419-422). */
+  /** Optional system prompt, combined with `prompt` before CLI stdin. */
   instructions?: string;
-  /**
-   * Optional session-stable id used as the basis for `prompt_cache_key` and
-   * the `session_id` request header. The Codex backend keys its server-side
-   * cache + rate-limit bucket off `session_id`, so a stable value across
-   * consecutive calls yields cache hits. When omitted, the service-wide
-   * SESSION_ID (one per process) is used.
-   */
+  /** Retained for compatibility with the former HTTP transport. */
   sessionId?: string;
 }
 
-// Default fast model: gpt-5.3-codex works with both ChatGPT-account and API-key
-// auth. The faster gpt-5.3-codex-spark is API-key-only and 400s on ChatGPT auth.
+export interface CodexCliModelInfo {
+  id: string;
+  name: string;
+  description?: string;
+  hidden?: boolean;
+  isDefault?: boolean;
+  defaultReasoningEffort?: string;
+  supportedReasoningEfforts?: string[];
+  inputModalities?: string[];
+}
+
+/**
+ * Normalize the model catalogue returned by `codex app-server model/list`.
+ * The CLI has added fields to this response over time, so the renderer only
+ * depends on the small stable subset needed by the model picker.
+ */
+export function normalizeCodexModelCatalog(
+  raw: unknown,
+  options: { includeHidden?: boolean } = {},
+): CodexCliModelInfo[] {
+  const value = raw as { data?: unknown; models?: unknown } | unknown[] | null | undefined;
+  const entries = Array.isArray(value)
+    ? value
+    : Array.isArray(value?.data)
+      ? value.data
+      : Array.isArray(value?.models)
+        ? value.models
+        : [];
+  const includeHidden = options.includeHidden === true;
+  const seen = new Set<string>();
+  const models: CodexCliModelInfo[] = [];
+
+  for (const entry of entries) {
+    if (!entry || typeof entry !== 'object') continue;
+    const item = entry as Record<string, unknown>;
+    const id = [item.id, item.model, item.slug]
+      .find(candidate => typeof candidate === 'string' && candidate.trim().length > 0);
+    if (typeof id !== 'string') continue;
+    const normalizedId = id.trim();
+    if (seen.has(normalizedId)) continue;
+    const hidden = item.hidden === true;
+    if (hidden && !includeHidden) continue;
+
+    const displayName = [item.displayName, item.name, item.title]
+      .find(candidate => typeof candidate === 'string' && candidate.trim().length > 0);
+    const supportedReasoningEfforts = Array.isArray(item.supportedReasoningEfforts)
+      ? item.supportedReasoningEfforts.filter((effort): effort is string => typeof effort === 'string')
+      : undefined;
+    const inputModalities = Array.isArray(item.inputModalities)
+      ? item.inputModalities.filter((modality): modality is string => typeof modality === 'string')
+      : undefined;
+
+    seen.add(normalizedId);
+    models.push({
+      id: normalizedId,
+      name: typeof displayName === 'string' ? displayName.trim() : normalizedId,
+      ...(typeof item.description === 'string' && item.description.trim()
+        ? { description: item.description.trim() }
+        : {}),
+      ...(hidden ? { hidden: true } : {}),
+      ...(item.isDefault === true ? { isDefault: true } : {}),
+      ...(typeof item.defaultReasoningEffort === 'string'
+        ? { defaultReasoningEffort: item.defaultReasoningEffort }
+        : {}),
+      ...(supportedReasoningEfforts?.length ? { supportedReasoningEfforts } : {}),
+      ...(inputModalities?.length ? { inputModalities } : {}),
+    });
+  }
+
+  return models;
+}
+
+// These are offline fallbacks. A successful app-server catalogue replaces them
+// with the models available to the user's current Codex CLI account.
 export const DEFAULT_CODEX_CLI_CONFIG: CodexCliConfig = {
   enabled: false,
-  path: 'codex', // deprecated — kept so older settings round-trip without resetting
+  path: 'codex',
   model: 'gpt-5.4',
   fastModel: 'gpt-5.3-codex',
   timeoutMs: 60_000,
-  sandboxMode: 'read-only', // deprecated
+  sandboxMode: 'read-only',
   serviceTier: 'default',
   modelReasoningEffort: undefined,
 };
 
-// Codex backend endpoint. ChatGPT-subscription OAuth bearer tokens issued by
-// `https://auth.openai.com/oauth/token` are routed to ChatGPT's own backend,
-// not the public `api.openai.com` host — the open-sse reference (and the
-// official `codex_cli_rs` binary) hit `chatgpt.com/backend-api/codex/responses`.
-// Using `api.openai.com/v1/responses` here would 401 with a ChatGPT OAuth
-// token, defeating the entire "no API key, just ChatGPT subscription" path.
-// See codex.md:1113 (`baseUrl` in open-sse/providers/registry/codex.js) and
-// codex.md:1149-1169 for the OAuth constants that map to this endpoint.
+// Legacy HTTPS compatibility endpoint. Production calls use the local CLI;
+// this remains available only for the empty-path compatibility branch below.
 const CODEX_RESPONSES_URL = 'https://chatgpt.com/backend-api/codex/responses';
 
 // Retry policy for transient upstream failures. Matches the open-sse
@@ -259,32 +287,69 @@ function isTransientStreamMessage(msg: string): boolean {
 // =============================================================================
 
 export class CodexCliService {
-  /**
-   * Process-stable session id used as the default value for
-   * `CodexCliRunOptions.sessionId`. Generated once at module load and
-   * reused for every Codex call within this run. The Codex backend uses
-   * this as the basis for `prompt_cache_key` + `session_id` header, so a
-   * stable value yields cache hits across consecutive calls. Mirrors
-   * open-sse's `resolveCacheSessionId()` (codex.md:195-204).
-   */
+  /** Retained for the legacy HTTP helper methods below. */
   public static readonly SESSION_ID: string =
     `natively-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 
   /**
-   * @deprecated The HTTP-direct implementation does not use a CLI binary
-   * and has no `argv`. Kept so callers that still import `buildArgs` for
-   * tests/inspection don't crash; returns an empty array. The new
-   * equivalents are `body.model`, `body.reasoning.effort`, and
-   * `body.service_tier` in the request body.
+   * Build the argv for the local Codex CLI transport. Keep this in one place
+   * so chat requests and tests cannot drift on sandbox/model/image flags.
    */
   public static buildArgs(
-    _model: string,
-    _imagePaths: string[] = [],
-    _sandboxMode: CodexSandboxMode = 'read-only',
-    _serviceTier?: CodexServiceTier,
-    _modelReasoningEffort?: CodexModelReasoningEffort,
+    model: string,
+    imagePaths: string[] = [],
+    sandboxMode: CodexSandboxMode = 'read-only',
+    serviceTier?: CodexServiceTier,
+    modelReasoningEffort?: CodexModelReasoningEffort,
   ): string[] {
-    return [];
+    return this.buildExecArgs(model, imagePaths, sandboxMode, serviceTier, modelReasoningEffort);
+  }
+
+  public static buildExecArgs(
+    model: string,
+    imagePaths: string[] = [],
+    sandboxMode: CodexSandboxMode = 'read-only',
+    serviceTier?: CodexServiceTier,
+    modelReasoningEffort?: CodexModelReasoningEffort,
+  ): string[] {
+    const args = [
+      'exec',
+      '--ephemeral',
+      '--ignore-user-config',
+      '--ignore-rules',
+      '--json',
+      '--color',
+      'never',
+      '--sandbox',
+      sandboxMode,
+      '--skip-git-repo-check',
+      '--model',
+      model,
+      // Keep the CLI on the same HTTPS/SSE transport as the installed Codex
+      // client. This avoids an unnecessary WebSocket negotiation on networks
+      // where it is blocked, while still using the user's local CLI login.
+      '-c',
+      'model_provider="natively-chatgpt-sse"',
+      '-c',
+      'model_providers.natively-chatgpt-sse.name="OpenAI"',
+      '-c',
+      'model_providers.natively-chatgpt-sse.wire_api="responses"',
+      '-c',
+      'model_providers.natively-chatgpt-sse.requires_openai_auth=true',
+      '-c',
+      'model_providers.natively-chatgpt-sse.supports_websockets=false',
+    ];
+    if (serviceTier && serviceTier !== 'default') {
+      args.push('-c', `service_tier="${serviceTier}"`);
+    }
+    const resolvedEffort = resolveCodexReasoningEffort(model, modelReasoningEffort);
+    if (resolvedEffort) {
+      args.push('-c', `model_reasoning_effort="${resolvedEffort}"`);
+    }
+    for (const imagePath of imagePaths) {
+      if (imagePath) args.push('--image', imagePath);
+    }
+    return args;
   }
 
   public static normalizeConfig(config: Partial<CodexCliConfig> = {}): CodexCliConfig {
@@ -305,8 +370,7 @@ export class CodexCliService {
     modelReasoningEffort = resolveCodexReasoningEffort(modelName, modelReasoningEffort);
     return {
       enabled: !!config.enabled,
-      // `path` is preserved verbatim for backward-compat (Settings UI
-      // may still display it). New HTTP-direct code does not use it.
+      // `path` is the executable used by both `exec` and `app-server`.
       path: (config.path || DEFAULT_CODEX_CLI_CONFIG.path).trim() || DEFAULT_CODEX_CLI_CONFIG.path,
       model: modelName,
       fastModel: (config.fastModel || DEFAULT_CODEX_CLI_CONFIG.fastModel).trim() || DEFAULT_CODEX_CLI_CONFIG.fastModel,
@@ -325,25 +389,358 @@ export class CodexCliService {
   public static async run(_path: string, options: CodexCliRunOptions): Promise<string> {
     if (options.signal?.aborted) throw new Error('Codex request aborted before start.');
     let out = '';
-    for await (const chunk of this.stream('', options)) {
+    for await (const chunk of this.stream(_path, options)) {
       out += chunk;
     }
     return out;
   }
 
   /**
-   * Stream the Codex response as a series of text deltas.
-   *
-   * The `_path` parameter is preserved for backward-compat with the old
-   * subprocess surface (LLMHelper.streamWithCodexCli still passes
-   * `this.codexCliConfig.path`); it is ignored.
+   * Stream the Codex response as a series of text deltas. A configured path
+   * always uses the user's local CLI login. The empty-path branch remains a
+   * compatibility seam for older internal callers that exercised the former
+   * HTTP transport directly; production config is normalized to `codex`.
    */
   public static async *stream(_path: string, options: CodexCliRunOptions): AsyncGenerator<string, void, unknown> {
     if (options.signal?.aborted) throw new Error('Codex request aborted before start.');
 
+    if (_path?.trim()) {
+      yield* this.streamLocalCli(_path, options);
+      return;
+    }
+
+    yield* this.streamHttp(options);
+  }
+
+  private static buildCliPrompt(options: CodexCliRunOptions): string {
+    return [options.instructions, options.prompt]
+      .map(value => (typeof value === 'string' ? value.trim() : ''))
+      .filter(Boolean)
+      .join('\n\n');
+  }
+
+  private static async *streamLocalCli(
+    binPath: string,
+    options: CodexCliRunOptions,
+  ): AsyncGenerator<string, void, unknown> {
+    const resolvedPath = await this.resolvePathOrAutoDetect(binPath);
+    const args = this.buildExecArgs(
+      options.model,
+      options.imagePaths,
+      options.sandboxMode,
+      options.serviceTier,
+      options.modelReasoningEffort,
+    );
+    const child = spawn(resolvedPath, args, { stdio: ['pipe', 'pipe', 'pipe'] });
+    const timeoutMs = Number.isFinite(options.timeoutMs) && options.timeoutMs > 0
+      ? options.timeoutMs
+      : DEFAULT_CODEX_CLI_CONFIG.timeoutMs;
+    let stdout = '';
+    let stderr = '';
+    let lineBuffer = '';
+    let emitted = false;
+    let aborted = false;
+    let timedOut = false;
+    let finished = false;
+    let failure: Error | null = null;
+    const queue: string[] = [];
+    let notify: (() => void) | null = null;
+    const wake = () => {
+      const pending = notify;
+      notify = null;
+      pending?.();
+    };
+    const emitLine = (line: string) => {
+      const extracted = this.extractText(line);
+      if (!extracted) return;
+      // Older Natively wrapper scripts emit zero-width keepalive deltas while
+      // the CLI is warming up. They must not become visible answer text or
+      // count as the first useful token in the outer live-deadline logic.
+      const visible = extracted.replace(/[\u200B-\u200D\uFEFF]/g, '');
+      if (!visible.trim()) return;
+      emitted = true;
+      queue.push(visible);
+      wake();
+    };
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      if (!failure) failure = new Error(`Codex CLI timed out after ${timeoutMs}ms.`);
+      child.kill('SIGTERM');
+      wake();
+    }, timeoutMs);
+
+    const onAbort = () => {
+      aborted = true;
+      child.kill('SIGTERM');
+      wake();
+    };
+    options.signal?.addEventListener('abort', onAbort, { once: true });
+
+    child.stdout?.on('data', chunk => {
+      const text = chunk.toString();
+      stdout += text;
+      lineBuffer += text;
+      const lines = lineBuffer.split(/\r?\n/);
+      lineBuffer = lines.pop() || '';
+      for (const line of lines) emitLine(line);
+    });
+    child.stderr?.on('data', chunk => {
+      stderr += chunk.toString();
+    });
+    child.stdin?.on('error', error => {
+      if (!failure) failure = new Error(`Codex CLI stdin failed for "${binPath}". ${error.message}`);
+      wake();
+    });
+    child.on('error', error => {
+      clearTimeout(timer);
+      if (!failure) failure = new Error(`Codex CLI was not found at "${binPath}". ${error.message}`);
+      finished = true;
+      wake();
+    });
+    child.on('close', code => {
+      clearTimeout(timer);
+      const tail = lineBuffer.trim();
+      if (tail) emitLine(tail);
+      lineBuffer = '';
+      if (code !== 0 && !failure && !aborted) {
+        const codexError = this.extractCodexError(stdout);
+        const detail = codexError || (stderr ? this.sanitize(stderr) : '');
+        failure = new Error(detail ? `Codex CLI: ${detail}` : `Codex CLI exited with code ${code}.`);
+      }
+      finished = true;
+      wake();
+    });
+
+    try {
+      child.stdin?.write(this.buildCliPrompt(options));
+      child.stdin?.end();
+    } catch (error: any) {
+      if (!failure) failure = new Error(`Codex CLI stdin failed for "${binPath}". ${error.message}`);
+      wake();
+    }
+
+    try {
+      while (!finished || queue.length > 0) {
+        while (queue.length > 0) yield queue.shift()!;
+        if (finished) break;
+        await new Promise<void>(resolve => { notify = resolve; });
+      }
+    } finally {
+      clearTimeout(timer);
+      options.signal?.removeEventListener('abort', onAbort);
+    }
+
+    if (aborted) return;
+    if (failure) {
+      if (emitted && !timedOut) {
+        console.warn('[CodexCliService] Codex CLI stream ended after emitting partial output:', failure.message);
+        return;
+      }
+      throw failure;
+    }
+    if (!emitted) {
+      const normalized = this.extractText(stdout);
+      if (normalized) {
+        yield normalized;
+        return;
+      }
+      const codexError = this.extractCodexError(stdout);
+      throw new Error(codexError || (stderr ? this.sanitize(stderr) : 'Codex CLI returned an empty response.'));
+    }
+  }
+
+  public static getCandidatePaths(): string[] {
+    const home = process.env.HOME || process.env.USERPROFILE || '';
+    if (process.platform === 'win32') {
+      const local = process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local');
+      const programs = process.env.ProgramFiles || 'C:\\Program Files';
+      return [
+        path.join(local, 'Programs', 'Codex', 'codex.exe'),
+        path.join(programs, 'Codex', 'codex.exe'),
+        path.join(home, '.cargo', 'bin', 'codex.exe'),
+        path.join(home, 'AppData', 'Roaming', 'npm', 'codex.cmd'),
+      ];
+    }
+    return [
+      '/opt/homebrew/bin/codex',
+      '/usr/local/bin/codex',
+      path.join(home, '.cargo', 'bin', 'codex'),
+      path.join(home, '.local', 'bin', 'codex'),
+      path.join(home, '.bun', 'bin', 'codex'),
+      '/Applications/Codex.app/Contents/Resources/codex',
+      path.join(home, 'Applications', 'Codex.app', 'Contents', 'Resources', 'codex'),
+    ];
+  }
+
+  public static autoDetectPath(): string | null {
+    for (const candidate of this.getCandidatePaths()) {
+      try {
+        const stat = fs.statSync(candidate);
+        if (!stat.isFile()) continue;
+        if (process.platform === 'win32' || (stat.mode & 0o111) !== 0) return candidate;
+      } catch { /* keep looking */ }
+    }
+    return null;
+  }
+
+  private static pathLooksResolvable(binPath: string): boolean {
+    const requested = binPath?.trim();
+    if (!requested) return false;
+    if (!requested.includes(path.sep) && !requested.includes('/')) {
+      const pathEntries = (process.env.PATH || '').split(path.delimiter).filter(Boolean);
+      const commandNames = [requested];
+      if (process.platform === 'win32' && !path.extname(requested)) {
+        const extensions = (process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD')
+          .split(';')
+          .filter(Boolean);
+        commandNames.push(...extensions.map(extension => `${requested}${extension}`));
+      }
+      return pathEntries.some(directory => commandNames.some(commandName => {
+        try {
+          const stat = fs.statSync(path.join(directory, commandName));
+          return stat.isFile() && (process.platform === 'win32' || (stat.mode & 0o111) !== 0);
+        } catch {
+          return false;
+        }
+      }));
+    }
+    try {
+      const stat = fs.statSync(requested);
+      return stat.isFile() && (process.platform === 'win32' || (stat.mode & 0o111) !== 0);
+    } catch {
+      return false;
+    }
+  }
+
+  public static async resolvePathOrAutoDetect(binPath: string): Promise<string> {
+    const requested = binPath?.trim() || DEFAULT_CODEX_CLI_CONFIG.path;
+    if (this.pathLooksResolvable(requested)) return requested;
+    const detected = this.autoDetectPath();
+    if (detected && detected !== requested) {
+      console.warn(`[CodexCliService] "${requested}" not found; using auto-detected "${detected}".`);
+      return detected;
+    }
+    return requested;
+  }
+
+  public static async validateExecutable(
+    input: string,
+    timeoutMs = 10_000,
+  ): Promise<{ success: boolean; error?: string; resolvedPath?: string }> {
+    const tryOne = (binPath: string): Promise<{ success: boolean; error?: string }> => new Promise(resolve => {
+      const child = spawn(binPath, ['--version'], { stdio: ['ignore', 'pipe', 'pipe'] });
+      let stderr = '';
+      let settled = false;
+      const finish = (result: { success: boolean; error?: string }) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(result);
+      };
+      const timer = setTimeout(() => {
+        child.kill('SIGTERM');
+        finish({ success: false, error: `Codex CLI validation timed out for "${binPath}".` });
+      }, timeoutMs);
+      child.stderr?.on('data', chunk => { stderr += chunk.toString(); });
+      child.on('error', error => finish({
+        success: false,
+        error: `Codex CLI was not found at "${binPath}". ${error.message}`,
+      }));
+      child.on('close', code => finish(code === 0
+        ? { success: true }
+        : { success: false, error: `Codex CLI validation failed for "${binPath}"${stderr ? `: ${this.sanitize(stderr)}` : '.'}` }));
+    });
+
+    const first = await tryOne(input || DEFAULT_CODEX_CLI_CONFIG.path);
+    if (first.success) return { success: true, resolvedPath: input || DEFAULT_CODEX_CLI_CONFIG.path };
+    const detected = this.autoDetectPath();
+    if (detected && detected !== input) {
+      const second = await tryOne(detected);
+      if (second.success) return { success: true, resolvedPath: detected };
+    }
+    return first;
+  }
+
+  public static async listModels(
+    binPath = DEFAULT_CODEX_CLI_CONFIG.path,
+    timeoutMs = 10_000,
+  ): Promise<CodexCliModelInfo[]> {
+    const resolvedPath = await this.resolvePathOrAutoDetect(binPath);
+    const raw = await new Promise<unknown>((resolve, reject) => {
+      const child = spawn(resolvedPath, ['app-server', '--stdio'], { stdio: ['pipe', 'pipe', 'pipe'] });
+      let stdout = '';
+      let stderr = '';
+      let lineBuffer = '';
+      let settled = false;
+      let initialized = false;
+      const finish = (fn: () => void) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        try { child.kill('SIGTERM'); } catch { /* already closed */ }
+        fn();
+      };
+      const timer = setTimeout(() => finish(() => reject(new Error(`Codex CLI model discovery timed out after ${timeoutMs}ms.`))), timeoutMs);
+      const send = (message: Record<string, unknown>) => {
+        try { child.stdin?.write(`${JSON.stringify(message)}\n`); } catch (error: any) {
+          finish(() => reject(new Error(`Codex CLI model discovery failed: ${error.message}`)));
+        }
+      };
+      const handleLine = (line: string) => {
+        if (!line.trim()) return;
+        let message: any;
+        try { message = JSON.parse(line); } catch { return; }
+        if (message?.id === 1 && !initialized) {
+          initialized = true;
+          send({ jsonrpc: '2.0', method: 'initialized', params: {} });
+          send({
+            jsonrpc: '2.0',
+            id: 2,
+            method: 'model/list',
+            params: { includeHidden: false, limit: 100 },
+          });
+          return;
+        }
+        if (message?.id !== 2) return;
+        if (message.error) {
+          finish(() => reject(new Error(message.error.message || 'Codex CLI model discovery failed.')));
+          return;
+        }
+        finish(() => resolve(message.result || { data: [] }));
+      };
+      child.stdout?.on('data', chunk => {
+        stdout += chunk.toString();
+        lineBuffer += chunk.toString();
+        const lines = lineBuffer.split(/\r?\n/);
+        lineBuffer = lines.pop() || '';
+        for (const line of lines) handleLine(line);
+      });
+      child.stderr?.on('data', chunk => { stderr += chunk.toString(); });
+      child.on('error', error => finish(() => reject(new Error(`Codex CLI was not found at "${binPath}". ${error.message}`))));
+      child.on('close', code => {
+        if (settled) return;
+        const detail = stderr ? this.sanitize(stderr) : this.sanitize(stdout);
+        finish(() => reject(new Error(detail || `Codex CLI model discovery exited with code ${code}.`)));
+      });
+      send({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          clientInfo: { name: 'natively', title: 'Natively', version: '1.0.0' },
+          capabilities: { experimentalApi: true },
+        },
+      });
+    });
+    return normalizeCodexModelCatalog(raw);
+  }
+
+  private static async *streamHttp(options: CodexCliRunOptions): AsyncGenerator<string, void, unknown> {
+    if (options.signal?.aborted) throw new Error('Codex request aborted before start.');
+
     const oauth = CodexOAuthService.getInstance();
-    const status = oauth.getStatus();
-    if (!status.signedIn) {
+    if (oauth.getStatus().signedIn !== true) {
       throw new Error(CODEX_NOT_SIGNED_IN_MESSAGE);
     }
 
@@ -1023,6 +1420,10 @@ export class CodexCliService {
     if (value.item) return this.findText(value.item);
     if (value.data) return this.findText(value.data);
     return '';
+  }
+
+  private static sanitize(text: string): string {
+    return text.replace(/\s+/g, ' ').trim().slice(0, 1000);
   }
 }
 

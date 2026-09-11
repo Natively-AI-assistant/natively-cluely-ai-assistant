@@ -102,6 +102,59 @@ export const prettifyModelId = (id: string): string => {
     return id.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 };
 
+export interface CodexCliModelOption {
+    id: string;
+    name: string;
+    description?: string;
+    supportedReasoningEfforts?: string[];
+    defaultReasoningEffort?: string;
+    inputModalities?: string[];
+}
+
+/**
+ * Merge the live model/list catalogue with offline presets. The CLI catalogue
+ * is authoritative when available, while presets keep the picker usable when
+ * an older CLI does not expose app-server or the account is temporarily offline.
+ */
+export const mergeCodexCliModelOptions = (
+    catalog: unknown,
+    currentIds: string[] = [],
+): CodexCliModelOption[] => {
+    const out: CodexCliModelOption[] = [];
+    const seen = new Set<string>();
+    const push = (entry: any) => {
+        const id = typeof entry?.id === 'string' ? entry.id.trim() : '';
+        if (!id || seen.has(id)) return;
+        seen.add(id);
+        const name = typeof entry?.name === 'string' && entry.name.trim()
+            ? entry.name.trim()
+            : prettifyModelId(id);
+        out.push({
+            id,
+            name,
+            ...(typeof entry?.description === 'string' ? { description: entry.description } : {}),
+            ...(Array.isArray(entry?.supportedReasoningEfforts)
+                ? { supportedReasoningEfforts: entry.supportedReasoningEfforts.filter((v: unknown): v is string => typeof v === 'string') }
+                : {}),
+            ...(typeof entry?.defaultReasoningEffort === 'string'
+                ? { defaultReasoningEffort: entry.defaultReasoningEffort }
+                : {}),
+            ...(Array.isArray(entry?.inputModalities)
+                ? { inputModalities: entry.inputModalities.filter((v: unknown): v is string => typeof v === 'string') }
+                : {}),
+        });
+    };
+
+    const liveCatalog = Array.isArray(catalog) ? catalog : [];
+    if (liveCatalog.length > 0) {
+        liveCatalog.forEach(push);
+    } else {
+        CODEX_CLI_MODEL_PRESETS.forEach(push);
+    }
+    currentIds.forEach(id => push({ id, name: prettifyModelId(id) }));
+    return out;
+};
+
 /**
  * Providers whose model allow-list is OPT-IN: an empty list means NOTHING is
  * selected, not "everything".

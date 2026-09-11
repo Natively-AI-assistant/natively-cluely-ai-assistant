@@ -315,11 +315,11 @@ export function initializeIpcHandlers(appState: AppState): void {
       const allProviders = [...curlProviders, ...legacyProviders];
       const llmHelper = appState.processingHelper.getLLMHelper();
       const codexConfig = llmHelper.getCodexCliConfig();
-      let codexSignedIn = false;
-      try {
-        const { CodexOAuthService } = require('./services/CodexOAuthService');
-        codexSignedIn = CodexOAuthService.getInstance().getStatus().signedIn === true;
-      } catch { /* optional */ }
+      // Codex authentication is owned by the configured local CLI. Do not
+      // gate routing on Natively's separate OAuth store.
+      const codexCliReady = codexConfig.enabled === true
+        && typeof codexConfig.path === 'string'
+        && codexConfig.path.trim().length > 0;
 
       const has = (value?: string) => !!(value && value.trim().length > 0);
       // THE shared predicate (groqModels.ts) — the three hand-synced copies
@@ -395,7 +395,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         } else if (enabledForFamily.length > 0 && !enabledForFamily.includes(modelId)) return false;
 
         if (modelId === 'natively') return has(cm.getNativelyApiKey());
-        if (modelId.startsWith('codex-cli')) return codexConfig.enabled === true && codexSignedIn;
+        if (modelId.startsWith('codex-cli')) return codexCliReady;
         if (modelId.startsWith('antigravity:')) return AntigravityService.getInstance().getStatus().signedIn
           && (antigravityCatalog === null || antigravityCatalog.some(({ id }) => modelId === `antigravity:${id}`));
         if (modelId.startsWith('litellm/')) return has(cm.getLitellmBaseURL());
@@ -473,7 +473,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         : modelAvailable('claude-sonnet-4-6') ? 'claude-sonnet-4-6'
         : modelAvailable('qwen/qwen3.6-27b') ? 'qwen/qwen3.6-27b'
         : modelAvailable('deepseek-v4-flash') ? 'deepseek-v4-flash'
-        : (codexConfig.enabled === true && codexSignedIn && modelAvailable('codex-cli')) ? 'codex-cli'
+        : (codexCliReady && modelAvailable('codex-cli')) ? 'codex-cli'
         : (litellmFallbackModel && modelAvailable(litellmFallbackModel)) ? litellmFallbackModel
         : antigravityFallback ? antigravityFallback
         : allProviders.find((p: any) => modelAvailable(p?.id))?.id
@@ -11843,25 +11843,27 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  safeHandle('get-codex-cli-models', async () => {
+    try {
+      const config = appState.processingHelper.getLLMHelper().getCodexCliConfig();
+      const models = await CodexCliService.listModels(config.path);
+      return { success: true, models };
+    } catch (error: any) {
+      return { success: false, models: [], error: error?.message || 'Could not load Codex CLI models.' };
+    }
+  });
+
   safeHandle('test-codex-cli', async (_, config?: any) => {
     try {
-      // The new implementation is HTTP-direct — there is no CLI binary to
-      // validate. The test is now "do we have a valid OAuth token + a
-      // reachable model?". A lightweight probe is a status read; the
-      // Settings UI also has a "Try it" button that issues a real chat
-      // call. This handler returns success=true with the current
-      // normalized config so the Settings UI's "Test" button keeps
-      // working without an error state.
       const current = appState.processingHelper.getLLMHelper().getCodexCliConfig();
       const normalized = CodexCliService.normalizeConfig({ ...current, ...(config || {}) });
-      const { CodexOAuthService } = require('./services/CodexOAuthService');
-      const status = CodexOAuthService.getInstance().getStatus();
+      const probe = await CodexCliService.validateExecutable(normalized.path);
+      if (!probe.success) return { success: false, error: probe.error, config: normalized };
+      const resolvedPath = probe.resolvedPath || normalized.path;
       return {
         success: true,
-        resolvedPath: normalized.path, // legacy field; ignored
-        config: normalized,
-        signedIn: status.signedIn,
-        email: status.email,
+        resolvedPath,
+        config: { ...normalized, path: resolvedPath },
       };
     } catch (error: any) {
       return { success: false, error: error.message };
@@ -11869,10 +11871,8 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   const runCodexAuthAction = async (action: 'status' | 'logout' | 'login' | 'doctor', config?: any) => {
-    // Legacy wrapper. The OAuth-direct implementation does not use
-    // CLI subprocesses for auth, so the old action map is reimplemented
-    // against CodexOAuthService. The renderer-facing shape is unchanged
-    // so the Settings UI keeps working without changes.
+    // Legacy in-app OAuth wrapper. Chat requests use the configured local CLI;
+    // this action map remains for older settings state and IPC consumers.
     try {
       const { CodexOAuthService } = require('./services/CodexOAuthService');
       const oauth = CodexOAuthService.getInstance();

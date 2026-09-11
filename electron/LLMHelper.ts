@@ -1870,12 +1870,10 @@ export class LLMHelper {
     // accepts the router's 'codex'.
     if (this.isProviderDisabled('codex-cli')) return false;
     if (!this.codexCliConfig.enabled) return false;
-    try {
-      const { CodexOAuthService } = require('./services/CodexOAuthService');
-      return CodexOAuthService.getInstance().getStatus().signedIn === true;
-    } catch {
-      return false;
-    }
+    // Codex authentication belongs to the configured local CLI, not to
+    // Natively's separate OAuth store. The child process reports a useful
+    // login error if its own account is unavailable.
+    return typeof this.codexCliConfig.path === 'string' && this.codexCliConfig.path.trim().length > 0;
   }
   // ---------------------------
 
@@ -2241,7 +2239,7 @@ export class LLMHelper {
   }
 
   private async generateWithCodexCli(userContent: string, systemPrompt?: string, fastMode = false, imagePaths?: string[], signal?: AbortSignal): Promise<string> {
-    if (!this.isCodexAvailable()) throw new Error('Codex CLI transport is disabled or ChatGPT is signed out.');
+    if (!this.isCodexAvailable()) throw new Error('Codex CLI transport is disabled or the local CLI path is unavailable.');
     // Codex routes to chatgpt.com/backend-api — it is a CLOUD provider, and it
     // needs the same local-only last boundary every other cloud provider has.
     // The vision chain already omits it when isLocalOnlyMode is set, but that
@@ -2258,13 +2256,9 @@ export class LLMHelper {
     // stays for uniformity; the vision + scope terms are new coverage.
     this.assertOutboundScopes('codex', userContent, imagePaths);
     const model = this.getSelectedCodexCliModel(fastMode);
-    // System prompt is sent separately as `body.instructions` (the
-    // Responses-API field the Codex backend uses for system content),
-    // NOT concatenated into the user prompt. Concatenation diverges
-    // from how the codex CLI processes the same prompts — different
-    // role classification, different prompt caching, different
-    // instruction-following behavior. Matches open-sse CodexExecutor.
-    // transformRequest (codex.md:395-487).
+    // CodexCliService combines the system and user prompts before writing
+    // them to the CLI stdin; the CLI has one prompt stream rather than the
+    // Responses API's separate `instructions` field.
     return CodexCliService.run(this.codexCliConfig.path, {
       prompt: userContent,
       instructions: systemPrompt,
@@ -2279,7 +2273,7 @@ export class LLMHelper {
   }
 
   private async *streamWithCodexCli(userContent: string, systemPrompt?: string, fastMode = false, imagePaths?: string[], signal?: AbortSignal, modelOverride?: string): AsyncGenerator<string, void, unknown> {
-    if (!this.isCodexAvailable()) throw new Error('Codex CLI transport is disabled or ChatGPT is signed out.');
+    if (!this.isCodexAvailable()) throw new Error('Codex CLI transport is disabled or the local CLI path is unavailable.');
     // Codex routes to chatgpt.com/backend-api — it is a CLOUD provider, and it
     // needs the same local-only last boundary every other cloud provider has.
     // The vision chain already omits it when isLocalOnlyMode is set, but that
@@ -2293,8 +2287,8 @@ export class LLMHelper {
     // reaches CodexCliService.stream, which is the property that matters.
     this.assertOutboundScopes('codex', userContent, imagePaths);
     const model = modelOverride || this.getSelectedCodexCliModel(fastMode);
-    // See note in generateWithCodexCli — system prompt is sent
-    // separately as `body.instructions`, not concatenated.
+    // CodexCliService combines `instructions` and `prompt` for the CLI stdin
+    // stream while retaining this call shape for the provider interface.
     yield* CodexCliService.stream(this.codexCliConfig.path, {
       prompt: userContent,
       instructions: systemPrompt,
@@ -4238,7 +4232,7 @@ let isMultimodal = !!(imagePaths?.length);
       providers.push(buildGeminiProvider(GEMINI_FLASH_MODEL));
     }
 
-    // Priority 5: Codex CLI (when enabled AND signed in).
+    // Priority 5: Codex CLI (when enabled and configured).
     //
     // DELIBERATELY BELOW THE GEMINI CASCADE (2026-08-02). This block used to sit
     // at Priority 0, ahead of everything — which directly contradicted the
@@ -4250,7 +4244,7 @@ let isMultimodal = !!(imagePaths?.length);
     // wall-clock the user experiences as "file uploading got slower", while
     // flash-lite does the same extraction in ~1-2s.
     //
-    // It stays in the ladder (a signed-in user's own backend is a legitimate
+    // It stays in the ladder (the user's own CLI account is a legitimate
     // fallback when every cloud key is dead) but it must never be the FIRST
     // thing a document ingest waits on. Codex ordering on OTHER surfaces
     // (routeWithScopeFallback, chat) is untouched.
@@ -6231,14 +6225,14 @@ let isMultimodal = !!(imagePaths?.length);
       }
       // isCodexAvailable() — NOT `codexCliConfig.enabled` — is the gate every
       // other Codex call site uses. It additionally covers the disabled-provider
-      // kill switch and "is ChatGPT actually signed in". streamWithCodexCli
+      // kill switch and a non-empty local CLI path. streamWithCodexCli
       // throws on both, so a looser gate here would not leak anything, but it
       // would seat a provider that is guaranteed to fail: one wasted attempt
       // per request, a bogus unhealthy mark in visionHealth, and a misleading
       // "Codex CLI failed" line in the logs.
       //
-      // TTFT: Codex is a reasoning model behind an OAuth hop, so it gets the
-      // Pro budget rather than the flash one. A timeout still records it
+      // TTFT: Codex is a reasoning model behind the CLI's remote account, so it
+      // gets the Pro budget rather than the flash one. A timeout still records it
       // unhealthy and deprioritizes it on later requests — see the note in
       // orderVisionByHealth if that proves too tight in practice.
       if (this.isCodexAvailable()) {
@@ -11656,7 +11650,7 @@ let isMultimodal = !!(imagePaths?.length);
       }
     }
 
-    // ATTEMPT 2: Codex CLI (if user has it enabled and signed in — text-only path)
+    // ATTEMPT 2: Codex CLI (if the user has it enabled — text-only path)
     if (this.isCodexAvailable()) {
       console.log(`[LLMHelper] Attempting Codex CLI for summary...`);
       try {

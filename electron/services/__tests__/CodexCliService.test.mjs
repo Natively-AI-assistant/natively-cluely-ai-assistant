@@ -1,26 +1,18 @@
 // electron/services/__tests__/CodexCliService.test.mjs
 //
-// Unit tests for the rewritten CodexCliService. The HTTP-direct
-// implementation no longer spawns a CLI subprocess, so the old tests
-// that built mock binaries to verify wire-level CLI argv are no longer
-// applicable. They live in CodexIntegrationE2E.test.mjs and
-// CodexPostCommitE2E.test.mjs and assert legacy subprocess behaviour —
-// the equivalent coverage for the new path is in
-// CodexOAuthService.test.mjs (auth + retry logic) and here (resolver,
-// config, SSE parser, run/stream).
+// Unit tests for CodexCliService. The production path uses the user's local
+// Codex CLI; the empty-path HTTP helpers remain covered for compatibility with
+// older internal callers and historical wire-format tests.
 //
 // What's covered here:
 //
 //   1. Defaults, sandbox-mode/tier/reasoning-effort unions
 //   2. resolveCodexReasoningEffort (per-model VALID set, downgrade policy)
 //   3. normalizeConfig (legacy path field, sandbox, reasoning downgrade)
-//   4. buildArgs — DEPRECATED, returns []
+//   4. buildArgs — local `codex exec` argv
 //   5. extractText — still used by the legacy CLI fixture tests
 //   6. extractCodexError — still used by the legacy CLI fixture tests
-//   7. CodexOAuthService.signOut, getStatus, refresh tokens
-//
-// The HTTP-direct stream/run tests are smoke-tested via the OAuth tests
-// (which exercise the same fetch path with mocked responses).
+//   7. legacy HTTP parser/auth compatibility
 //
 // Run via: npm run build:electron && node --test electron/services/__tests__/CodexCliService.test.mjs
 
@@ -66,20 +58,21 @@ test('CODEX_MODEL_REASONING_EFFORTS includes none (per OpenAI gpt-5.1+ semantics
 });
 
 // =============================================================================
-// buildArgs — DEPRECATED
+// buildArgs — local CLI
 // =============================================================================
 
-test('buildArgs: deprecated, returns empty array (HTTP-direct path has no argv)', () => {
+test('buildArgs: emits the local codex exec argv', () => {
   const args = CodexCliService.buildArgs('gpt-5.4', [], 'read-only', 'default', 'low');
-  assert.ok(Array.isArray(args));
-  assert.equal(args.length, 0,
-    'buildArgs is deprecated and must return []; the HTTP path uses body.model + body.reasoning.effort');
+  assert.deepEqual(args.slice(0, 8), [
+    'exec', '--ephemeral', '--ignore-user-config', '--ignore-rules',
+    '--json', '--color', 'never', '--sandbox',
+  ]);
+  assert.ok(args.includes('--model'));
+  assert.ok(args.includes('gpt-5.4'));
+  assert.ok(args.includes('model_reasoning_effort="low"'));
 });
 
-test('buildArgs: ignores all 5 parameters without throwing', () => {
-  // The deprecated method must accept the legacy signature so callers
-  // (and the legacy CLI fixture tests) don't crash. None of the args
-  // are used.
+test('buildArgs: includes images, service tier, and the sandbox mode', () => {
   const args = CodexCliService.buildArgs(
     'gpt-5.3-codex',
     ['/tmp/a.png', '/tmp/b.png'],
@@ -87,7 +80,12 @@ test('buildArgs: ignores all 5 parameters without throwing', () => {
     'fast',
     'xhigh',
   );
-  assert.equal(args.length, 0);
+  assert.ok(args.includes('--sandbox'));
+  assert.ok(args.includes('workspace-write'));
+  assert.ok(args.includes('service_tier="fast"'));
+  assert.ok(args.includes('--image'));
+  assert.ok(args.includes('/tmp/a.png'));
+  assert.ok(args.includes('/tmp/b.png'));
 });
 
 // =============================================================================
@@ -269,10 +267,10 @@ test('extractCodexError: handles plain string error message', () => {
 });
 
 // =============================================================================
-// CodexCliService.run / .stream — must throw when not signed in
+// Legacy empty-path HTTP compatibility — must throw when not signed in
 // =============================================================================
 
-test('run: throws when Codex OAuth is not signed in', async () => {
+test('legacy HTTP run: throws when its OAuth session is not signed in', async () => {
   // The HTTP-direct path requires an OAuth token. Without one, run()
   // surfaces a clear "sign in" error instead of silently failing into
   // the canned fallback.
@@ -291,7 +289,7 @@ test('run: throws when Codex OAuth is not signed in', async () => {
   );
 });
 
-test('stream: throws when Codex OAuth is not signed in', async () => {
+test('legacy HTTP stream: throws when its OAuth session is not signed in', async () => {
   const oauthModulePath = path.resolve(__dirname, '../../../dist-electron/electron/services/CodexOAuthService.js');
   const oauthMod = await import(pathToFileURL(oauthModulePath).href);
   oauthMod.CodexOAuthService.getInstance().__resetForTest();
@@ -745,14 +743,14 @@ test('parseSseStream: source-pin — done: true sets sawTerminalEvent=true (comm
 // at the 30s wall-clock mark. The fix converts the timer to an IDLE timer
 // that resets on every yielded delta. This source-pin verifies the fix.
 
-test('stream(): source uses resetDeadline() on each yielded delta — idle-timer fix pin', () => {
+test('streamHttp(): source uses resetDeadline() on each yielded delta — idle-timer fix pin', () => {
   const source = fs.readFileSync(
     path.resolve(__dirname, '../../../electron/services/CodexCliService.ts'),
     'utf8',
   );
-  // stream() starts with `public static async *stream(`
-  const streamMethodIdx = source.indexOf('public static async *stream(');
-  assert.ok(streamMethodIdx > 0, 'stream() method must still exist in CodexCliService.ts');
+  // The compatibility HTTP path keeps its idle deadline reset behaviour.
+  const streamMethodIdx = source.indexOf('private static async *streamHttp(');
+  assert.ok(streamMethodIdx > 0, 'streamHttp() method must still exist in CodexCliService.ts');
   // 3000 chars: enough to span the full method body including the for-await loop.
   const streamBody = source.slice(streamMethodIdx, streamMethodIdx + 3000);
 
@@ -769,4 +767,3 @@ test('stream(): source uses resetDeadline() on each yielded delta — idle-timer
   assert.match(loopBody, /resetDeadline\(\)/,
     'resetDeadline() must be called inside the for-await loop body — not outside it');
 });
-

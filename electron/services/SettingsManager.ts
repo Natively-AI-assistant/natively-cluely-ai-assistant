@@ -58,7 +58,7 @@ export interface AppSettings {
     // is permissive (the per-model VALID set is enforced at runtime so e.g.
     // xhigh on gpt-5.3-codex is silently downgraded). 'none' means "don't pass
     // -c model_reasoning_effort at all" — distinct from omitting the setting.
-    codexCliModelReasoningEffort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh';
+    codexCliModelReasoningEffort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
     // Hindsight long-term memory server (optional, user-provisioned sidecar — Cloud OR
     // local). baseUrl empty by default → feature off. Env (HINDSIGHT_BASE_URL) overrides
     // these for dev. apiKey only for Hindsight Cloud. autoStart/serverCommand reserved for

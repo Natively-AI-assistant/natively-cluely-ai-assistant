@@ -2,15 +2,10 @@
 //
 // Integration tests for the Codex request contract.
 //
-// HISTORY — READ THIS BEFORE ADDING A SPAWN TEST. Until 2026-08, CodexCliService
-// shelled out to the `codex` CLI, and this file spawned real mock /bin/sh
-// binaries to capture argv and assert the flags that reached the wire. That
-// architecture is GONE: the service now talks to the Codex backend over HTTPS
-// with an OAuth bearer token. `buildArgs()` survives only as a stub returning
-// `[]`, the `path` argument to run()/stream() is documented as ignored, and both
-// entry points check `CodexOAuthService.getStatus().signedIn` before doing any
-// work — so every spawn-based test threw "Not signed in to ChatGPT" before the
-// mock binary ever ran, and then failed reading an argv log nothing had written.
+// HISTORY — READ THIS BEFORE ADDING A SPAWN TEST. The local CLI path is now the
+// primary transport and the configured executable receives the generated
+// `codex exec` argv. The empty-path HTTP helpers remain only for compatibility
+// with older wire-format tests.
 //
 // The old A-section asserted `-c model_reasoning_effort="xhigh"` CLI flags that
 // nothing emits any more. Rather than delete the coverage, the invariants that
@@ -21,12 +16,8 @@
 //   old A.6           real error, not canned text   → extractCodexError()
 //   old A.8           AbortSignal cancels           → pre-flight abort check
 //
-// Genuinely retired, because the thing they tested no longer exists:
-//   old A.4  resolvePathOrAutoDetect ENOENT fallback — there is no binary path
-//   old A.3/A.7  subprocess spawn/timeout timing     — there is no subprocess
-//   old A.5  partial-line argv chunk recovery        — covered by the SSE reader
-// A.7 below pins the removal itself, so a future change that re-introduces a
-// CLI surface has to come past a test rather than silently resurrect dead flags.
+// The local CLI transport is covered by CodexLocalCliTransport.test.mjs and the
+// A.8 argv/path assertion below.
 //
 // Every assertion here was verified against the real compiled service before
 // being written — the effort downgrades and body shape are observed values, not
@@ -157,22 +148,22 @@ test('A.7: an already-aborted signal is refused before any auth or network work'
   );
 });
 
-test('A.8: the CLI surface is retired — buildArgs is a stub and the path arg is ignored', () => {
-  // Pins the architecture change itself. Without this, a future contributor
-  // reading `buildArgs(model, imagePaths, sandboxMode, ...)` could reasonably
-  // assume flags still reach a subprocess and "fix" it by emitting some, which
-  // would be dead code that no test would catch.
-  assert.deepEqual(
-    CodexCliService.buildArgs('gpt-5.4', ['/tmp/x.png'], 'read-only', 'fast', 'xhigh'),
-    [],
-    'buildArgs must stay a no-op stub; Codex is an HTTPS surface with no argv',
-  );
+test('A.8: the configured path reaches the local CLI and builds a complete exec command', () => {
+  const args = CodexCliService.buildArgs('gpt-5.4', ['/tmp/x.png'], 'read-only', 'fast', 'xhigh');
+  assert.equal(args[0], 'exec');
+  assert.ok(args.includes('--model'));
+  assert.ok(args.includes('gpt-5.4'));
+  assert.ok(args.includes('--image'));
+  assert.ok(args.includes('/tmp/x.png'));
+  assert.ok(args.includes('service_tier="fast"'));
   const src = fs.readFileSync(
     path.resolve(__dirname, '../CodexCliService.ts'),
     'utf8',
   );
-  assert.match(src, /_path[\s\S]{0,400}?it is ignored/,
-    'the ignored-path contract must stay documented on the public entry points');
+  assert.match(src, /spawn\(resolvedPath, args/,
+    'the configured Codex executable must receive the generated exec argv');
+  assert.match(src, /app-server/,
+    'the same executable must provide model discovery through app-server');
 });
 
 // ─── B. Source-level structural assertions ─────────────────────────────────
