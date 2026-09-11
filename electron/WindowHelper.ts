@@ -1149,6 +1149,22 @@ export class WindowHelper {
           }
         }
 
+        // Same staleness problem as launcherZoomed above, but for a fill: if the
+        // window leaves its filled bounds by any route other than the maximize
+        // button (a drag, a display change), launcherFilled was previously never
+        // cleared — which permanently disables enforceLauncherAspectRatio()'s
+        // `if (this.launcherFilled) return` guard for the rest of the session.
+        if (this.launcherFilled && !this.launcherRatioCorrecting) {
+          const workArea = this.getDisplayWorkArea(bounds);
+          if (
+            Math.abs(bounds.width - workArea.width) > 2 ||
+            Math.abs(bounds.height - workArea.height) > 2
+          ) {
+            this.launcherFilled = false;
+            this.emitLauncherMaximizedState(false);
+          }
+        }
+
         this.rememberLauncherNormalBounds();
       }
     });
@@ -2810,6 +2826,12 @@ export class WindowHelper {
     if (!win || win.isDestroyed()) return;
 
     if (this.launcherFilled) {
+      // Flip the flag BEFORE animating, not after: animateLauncherBounds's
+      // reduced-motion path is a synchronous setBounds(), which fires 'resize'
+      // in the same tick. enforceLauncherAspectRatio()'s very first guard is
+      // `if (this.launcherFilled) return`, and that guard has to see the new
+      // state or it clamps the just-restored window as an off-ratio resize.
+      this.launcherFilled = false;
       // ONE frame change, nothing else. Note isMaximized() reports true while
       // filled — Electron treats a transparent frameless window whose bounds
       // equal the work area as maximized — so an isMaximized() check here would
@@ -2819,7 +2841,6 @@ export class WindowHelper {
         this.launcherNormalBounds ?? this.defaultLauncherBounds(win),
         LAUNCHER_CONTRACT_DURATION_MS,
       );
-      this.launcherFilled = false;
     } else {
       // A genuine OS maximize (Win+Up, snap) may be in effect — unwind it so the
       // window is never both natively maximized and filled.
@@ -2837,11 +2858,14 @@ export class WindowHelper {
         // to a default box instead of returning where the window actually was.
         this.launcherNormalBounds = win.getBounds();
       }
+      // Same ordering reason as the branch above, mirrored: set the flag first
+      // so a synchronous reduced-motion setBounds() sees launcherFilled already
+      // true when its 'resize' event reaches enforceLauncherAspectRatio().
+      this.launcherFilled = true;
       this.animateLauncherBounds(
         this.getDisplayWorkArea(win.getBounds()),
         LAUNCHER_EXPAND_DURATION_MS,
       );
-      this.launcherFilled = true;
     }
 
     this.emitLauncherMaximizedState(this.launcherFilled);
