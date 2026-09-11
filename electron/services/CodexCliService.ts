@@ -743,8 +743,9 @@ export class CodexCliService {
         // Never refresh the CLI's session (that would sign the CLI out). The
         // CLI may have refreshed it on disk since this request started, so
         // retry once if the token changed; otherwise the user has to refresh
-        // it from the CLI side.
-        const reread = readCodexCliAuth();
+        // it from the CLI side. Forced: the cache keys on mtime+size, which a
+        // same-length rotation within the timestamp resolution would not change.
+        const reread = readCodexCliAuth({ force: true });
         if (!refreshedOnce && reread.status === 'ok' && reread.accessToken !== credential.accessToken) {
           refreshedOnce = true;
           continue;

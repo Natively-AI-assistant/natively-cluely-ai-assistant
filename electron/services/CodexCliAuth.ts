@@ -92,11 +92,15 @@ export interface CodexCliAuthReader {
   readFileSync?: (filePath: string) => string;
   statSync?: (filePath: string) => { mtimeMs: number; size: number };
   now?: () => number;
+  /** Skip the metadata cache and re-read the file (the post-401 re-read). */
+  force?: boolean;
 }
 
 // Availability is asked on every routing decision, so the file is re-parsed
 // only when it changes (the CLI rewrites it on login and on its own refresh).
-// Expiry is re-evaluated against `now` on every call regardless.
+// Expiry is re-evaluated against `now` on every call regardless. mtime+size can
+// miss a rewrite (coarse timestamps, same-length token), so anything reacting
+// to a rejected token passes `force`.
 let cache: { file: string; mtimeMs: number; size: number; raw: string } | null = null;
 
 /** Synchronous so routing predicates (LLMHelper.isCodexAvailable) can call it. */
@@ -111,7 +115,7 @@ export function readCodexCliAuth(opts: CodexCliAuthReader = {}): CodexCliAuthSta
   const now = (opts.now ?? Date.now)();
   try {
     const st = statSync(file);
-    if (!cache || cache.file !== file || cache.mtimeMs !== st.mtimeMs || cache.size !== st.size) {
+    if (opts.force || !cache || cache.file !== file || cache.mtimeMs !== st.mtimeMs || cache.size !== st.size) {
       cache = { file, mtimeMs: st.mtimeMs, size: st.size, raw: readFileSync(file) };
     }
     return parseCodexAuthJson(cache.raw, now);

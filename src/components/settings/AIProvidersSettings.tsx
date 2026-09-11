@@ -2246,6 +2246,17 @@ const LightweightEmbeddingNotice: React.FC<{ onOpenEmbeddings?: () => void }> = 
     );
 };
 
+// Unified Codex sign-in: Natively's own (source 'natively') or the Codex CLI's
+// `codex login`, used read-only (source 'codex-cli'). `cliLogin` is the CLI
+// session's state either way, for the expired-login hint.
+type CodexSignInStatus = { signedIn: boolean; source?: 'natively' | 'codex-cli' | null; cliLogin?: string; email?: string; expiresAt?: number };
+
+const readCodexSignInStatus = async (): Promise<CodexSignInStatus | null> => {
+    const status = await window.electronAPI?.codexLoginStatus?.().catch(() => null);
+    if (!status?.success) return null;
+    return { signedIn: !!status.signedIn, source: status.source ?? null, cliLogin: status.cliLogin, email: status.email, expiresAt: status.expiresAt };
+};
+
 export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     aiResponseLanguage,
     availableAiLanguages,
@@ -2386,16 +2397,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     // kicks it off and listens for IPC events. We keep the auth state
     // visible so the user can see who's signed in and re-auth / sign out
     // without leaving Settings.
-    // Unified Codex sign-in: Natively's own (source 'natively') or the Codex
-    // CLI's `codex login`, used read-only (source 'codex-cli'). `cliLogin` is the
-    // CLI session's state either way, for the expired-login hint.
-    type CodexSignInStatus = { signedIn: boolean; source?: 'natively' | 'codex-cli' | null; cliLogin?: string; email?: string; expiresAt?: number };
     const [codexOauthStatus, setCodexOauthStatus] = useState<CodexSignInStatus>({ signedIn: false });
-    const readCodexSignInStatus = async (): Promise<CodexSignInStatus | null> => {
-        const status = await window.electronAPI?.codexLoginStatus?.().catch(() => null);
-        if (!status?.success) return null;
-        return { signedIn: !!status.signedIn, source: status.source ?? null, cliLogin: status.cliLogin, email: status.email, expiresAt: status.expiresAt };
-    };
     const [codexOauthInProgress, setCodexOauthInProgress] = useState(false);
     const [antigravityStatus, setAntigravityStatus] = useState({ signedIn: false, inProgress: false, expiresAt: undefined as number | undefined });
     const [antigravityModels, setAntigravityModels] = useState<{ id: string; label: string }[]>([]);
