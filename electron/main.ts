@@ -2504,10 +2504,10 @@ export class AppState {
         // provider closure is passed rather than the instance — it also means a
         // later RAGManager re-init is picked up without re-wiring.
         try {
-          this.intelligenceManager?.setRagRetrieverProvider?.(
-            () => this.ragManager?.getRetriever() ?? null,
+          this.intelligenceManager?.setMeetingRagProvider?.(
+            () => this.ragManager ?? null,
           );
-        } catch (e) { console.warn('[AppState] V3 meeting retriever wiring skipped:', e); }
+        } catch (e) { console.warn('[AppState] V3 meeting RAG wiring skipped:', e); }
 
         console.log('[AppState] RAGManager initialized');
       }
