@@ -747,7 +747,18 @@ export class ModeHybridRetriever {
             return;
         }
 
-        if (!this.isEmbeddingAvailable() || !activeSpace) {
+        // Gate on "a provider is assigned" (activeSpace is non-null exactly
+        // then), NOT on isReady(). isReady() stays false for the lazy local
+        // provider until its first embed() — and the first embed only ever
+        // happens through a call like the one below, so gating ingest on
+        // isReady() deadlocked keyless installs: every file went lexical_only,
+        // every retry (prewarm, retryAllLexicalOnlyFiles, the boot scheduler)
+        // hit the same gate, and the model never loaded (live-verified
+        // 2026-09-12). Indexing is a background job that CAN pay the cold
+        // load: each sub-batch below has its own timeout + retry, unlike the
+        // per-query path (~L1506) where the strict isReady() gate remains
+        // correct.
+        if (!activeSpace) {
             // No embedder: persist chunk TEXT (lexical retrieval still wins a
             // re-chunk per query) and mark lexical_only so prewarm retries later.
             const wrote = this.persistChunks(file.id, chunks, null, null);
