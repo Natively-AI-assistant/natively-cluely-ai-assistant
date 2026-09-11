@@ -26,7 +26,7 @@ test('embeddings scope denial gracefully uses bundled local embeddings when Olla
   const src = read('electron/rag/EmbeddingProviderResolver.ts');
 
   assert.match(src, /\[ScopeFallback\] embeddings denied; Ollama unavailable, using bundled local embedding model/);
-  assert.match(src, /return local/);
+  assert.match(src, /return \{ provider: local, demotedPinned \}/);
 });
 
 test('transcript scope denial routes full context to Ollama when available', () => {

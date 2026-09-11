@@ -88,8 +88,11 @@ describe('D3: postmortem ownership questions are not misrouted to the meeting tr
   test('technical-interview: "Who owns the follow-up?" retrieves from documents', () => {
     const r = classify('Who owns the follow-up?', 'technical-interview');
     assert.equal(r.shouldRetrieve, true, r.reason);
-    assert.ok(!r.claimTypes.includes('MEETING_STATEMENT'),
-      `no meeting transcript exists in this mode: ${JSON.stringify(r.claimTypes)}`);
+    // UPDATED 2026-09-11: technical-interview now authorizes the transcript as
+    // a SECONDARY source, so the meeting claim may stand as an alternative —
+    // what D3 protects is that the attached documents are still read.
+    assert.ok(r.requiredSourceTypes.includes('REFERENCE_FILE'),
+      `documents must still be planned: ${JSON.stringify(r.requiredSourceTypes)}`);
   });
 
   test('NON-REGRESSION team-meet: "Who owns the source-contract patch?" stays transcript-only', () => {

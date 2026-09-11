@@ -468,7 +468,10 @@ describe('C5 — channel audit: every screen transport reaches the contract (202
 
   test('IntelligenceEngine V3 personaBase unions domContext + OCR and promotes deictic screen turns', () => {
     const src = read('../../IntelligenceEngine.ts');
-    assert.match(src, /\[options\?\.domContext, options\?\.screenContext\?\.ocrText\]/, 'IE personaBase lost the channel union');
+    // 2026-09-11: the OCR channel reads whichever field the understanding
+    // result populated — ScreenUnderstandingService returns extractedText /
+    // visibleSummary, not ocrText — so the union names all three.
+    assert.match(src, /\[options\?\.domContext, \(options\?\.screenContext\?\.ocrText \|\| \(options\?\.screenContext as any\)\?\.extractedText \|\| \(options\?\.screenContext as any\)\?\.visibleSummary\)\]/, 'IE personaBase lost the channel union');
     assert.match(src, /isPromotedScreenCodingTurn\(\{/, 'IE lost the shared screen promotion');
   });
 

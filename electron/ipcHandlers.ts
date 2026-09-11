@@ -1558,7 +1558,14 @@ export function initializeIpcHandlers(appState: AppState): void {
                   .createScreenRetrievalPort({
                     description: v3ScreenDescription,
                     userId: V3_USER_ID,
-                    sessionId: String(senderId),
+                    // The SAME key the request scope carries below (2026-09-11).
+                    // This was String(senderId) while the request scope moved to
+                    // v3ConversationSessionId, so every screen chunk the port
+                    // produced was rejected OUT_OF_SCOPE at the scope gate —
+                    // measured on a manual "fix" with a stack trace on screen:
+                    // 7 screen candidates, 7 rejected, and the answer came from
+                    // an attached error-log fixture instead of the screenshot.
+                    sessionId: v3ConversationSessionId(appState, senderId),
                   })
               : null;
 
@@ -5336,6 +5343,14 @@ export function initializeIpcHandlers(appState: AppState): void {
                     && (isIntelligenceFlagEnabled('contextOsPropertyValidation')
                         || manualActiveMode?.documentGroundedCustomModeActive === true)
                     && docContextBlock
+                    // A provider stall is not an absence of evidence. Measured
+                    // 2026-09-10 with the hosted route timing out: the deadline
+                    // fallback text ("The model did not produce an answer in
+                    // time…") was then judged unable to prove the property and
+                    // REPLACED by "This is not directly mentioned in the
+                    // uploaded material." — a transport failure reported to the
+                    // user as a fact about their document, with zero model tokens.
+                    && finalGenerationMode !== 'provider_error_no_answer'
                     && trimmed.length >= 8) {
                   const answerIsRefusal = isAssistantRefusal(trimmed) || /^\s*(?:there is |there's )?no (?:information|mention|data)\b/i.test(trimmed);
                   if (!answerIsRefusal) {
@@ -15324,7 +15339,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       const result: any = await dialog.showOpenDialog({
         properties: ['openFile'],
         filters: [
-          { name: 'Text & Documents', extensions: ['txt', 'md', 'markdown', 'json', 'csv', 'tsv', 'xml', 'html', 'htm', 'log', 'pdf', 'docx'] },
+          // One source of truth with the extractor: a hand-copied list here
+          // refused every source/config file the extractor accepts (2026-09-10).
+          { name: 'Text, Documents & Code', extensions: [...SAFE_DOCUMENT_EXTENSIONS].map(extension => extension.slice(1)) },
           { name: 'All Files', extensions: ['*'] },
         ],
       });
@@ -16965,9 +16982,40 @@ export function initializeIpcHandlers(appState: AppState): void {
         // with skipCooldown/forceFresh and optional screenshot paths — so the
         // harness can exercise the surface users actually report on, not only
         // the planner-routed auto-answer path.
+        // Mirror the real hotkey handler (generate-what-to-say): a screenshot
+        // goes through ScreenUnderstandingService FIRST and its result rides
+        // along as `screenContext`, so the V3 screen port has a description to
+        // retrieve from. Without this the harness sent the raw image only, the
+        // screen port had nothing, and two "screenshot gaps" measured on
+        // 2026-09-11 were the harness bypassing the product path.
+        const e2eScreenContext = (async () => {
+          if (!params.hotkey || !params.imagePaths?.length) return undefined;
+          try {
+            const { getScreenUnderstandingService } = require('./services/screen/ScreenUnderstandingService');
+            const { SettingsManager: SM2 } = require('./services/SettingsManager');
+            const { CredentialsManager: CM2 } = require('./services/CredentialsManager');
+            const settings2 = SM2.getInstance(); const credentials2 = CM2.getInstance();
+            const providerScopes = settings2.get('providerDataScopes') || {};
+            const localVisionAvailable = credentials2.anyLocalVisionProviderConfigured?.() ?? false;
+            const sur = await getScreenUnderstandingService().understand({
+              modeId: 'what-to-say', transcript: params.question, userAction: 'what_to_say', qualityMode: 'balanced',
+              imagePaths: params.imagePaths,
+              screenUnderstandingMode: settings2.getScreenUnderstandingMode(),
+              technicalInterviewVisionFirst: settings2.getTechnicalInterviewVisionFirst(),
+              providerPolicy: {
+                localOnly: settings2.getScreenUnderstandingMode() === 'private_vision',
+                allowScreenshots: providerScopes.screenshots !== false,
+                visionAvailable: credentials2.anyVisionProviderConfigured?.() ?? true,
+                localVisionAvailable,
+              },
+            });
+            console.log('[E2E] screen understanding', { status: sur?.status, chars: String(sur?.extractedText ?? sur?.visibleSummary ?? '').length, provider: sur?.providerUsed, failureReason: sur?.failureReason, warnings: sur?.warnings });
+            return sur?.status === 'available' ? sur : undefined;
+          } catch (e: any) { console.warn('[E2E] screen understanding threw', e?.message); return undefined; }
+        })();
         Promise.resolve(
           params.hotkey
-            ? im.runWhatShouldISay(params.question, 0.9, params.imagePaths, { skipCooldown: true, forceFresh: true })
+            ? e2eScreenContext.then((screenContext) => im.runWhatShouldISay(params.question, 0.9, params.imagePaths, { skipCooldown: true, forceFresh: true, ...(screenContext ? { screenContext } : {}) }))
             : im.handleSuggestionTrigger({
               context: builtContext,
               lastQuestion: params.question,

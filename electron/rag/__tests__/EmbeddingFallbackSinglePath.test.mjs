@@ -55,7 +55,9 @@ describe('EmbeddingPipeline single-text fallback promotion', () => {
   // structural assertions only pin that the parts are still wired together.
   test('getEmbeddingForQuery() retries the primary before any fallback is considered', () => {
     const source = read('electron/rag/EmbeddingPipeline.ts');
-    const block = methodBlock(source, 'async getEmbeddingForQuery(text: string)');
+    // 2026-09-10: the signature grew an options bag (`retryBudgetMs`), so the
+    // locator pins the method name rather than the full parameter list.
+    const block = methodBlock(source, 'async getEmbeddingForQuery(');
     assert.match(block, /const provider = this\.provider/, 'query path should capture the starting provider');
     assert.match(block, /const runQuery = \(p: IEmbeddingProvider, label: string\)/, 'query path should support running against either provider');
     assert.match(block, /for \(let attempt = 0; attempt <= QUERY_RETRY_ATTEMPTS/, 'the primary must be retried in place');

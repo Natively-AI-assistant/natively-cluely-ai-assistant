@@ -26,6 +26,24 @@ const port = (chunks, files = [{ id: 'f1' }]) => createModeRetrievalPort({
 });
 
 describe('mode retrieval port', () => {
+  test('the plan\'s retrieval timeout reaches the query embed as its retry budget (2026-09-10)', async () => {
+    // The legacy port always passed `timeoutMs`; this port ignored it, so the
+    // orchestrator's 1200 ms plan bounded nothing and a slow hosted embed ran
+    // a 13 s retry ladder inside a live turn. Deliberately NOT rerankDeadlineMs
+    // — that would skip every rerank whose 3000 ms budget exceeds the plan.
+    let seen = null;
+    const p = createModeRetrievalPort({
+      modesManager: { retrieveHybridRaw: async (_m, _f, opts) => { seen = opts; return { chunks: [] }; } },
+      modeInfo: { id: 'm1' }, files: [{ id: 'f1' }], tokenBudget: 3600, userId: 'local',
+    });
+    await p.retrieve({ decision });
+    assert.ok(seen, 'retrieveHybridRaw was called');
+    assert.equal(seen.queryEmbedRetryBudgetMs, decision.retrievalPlan.timeoutMs);
+    assert.equal(decision.retrievalPlan.timeoutMs, 1200, 'the non-exhaustive live plan is 1200 ms');
+    assert.equal(seen.rerankDeadlineMs, undefined, 'the rerank budget is not throttled by the plan timeout');
+    assert.equal(seen.allowRerank, true);
+  });
+
   test('a declared file is admitted with full provenance', async () => {
     const r = await port([{ sourceId: 'f1', fileName: 'pricing.json', text: 'floor is 17 percent', chunkIndex: 0, score: 0.9 }])
       .retrieve({ decision });

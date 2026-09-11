@@ -109,6 +109,22 @@ export interface AppAPIConfig {
   explicitKeyManagement?: boolean;
 }
 
+/** What a startup probe learned. 'transient' is "not right now" — a timeout,
+ *  a 5xx, a resolver that hung — and is the ONLY outcome that still names a
+ *  provider worth asking again. */
+export type ProbeOutcome = 'available' | 'transient' | 'permanent';
+
+export interface EmbeddingResolution {
+  provider: IEmbeddingProvider;
+  /**
+   * The provider the user PINNED (manual mode) that failed its startup probe
+   * for a transient reason, when the resolution fell through to the bundled
+   * model. The pipeline keeps re-probing it so the session recovers its
+   * embedding space without a restart (2026-09-11 — see resolveWithDemotion).
+   */
+  demotedPinned: IEmbeddingProvider | null;
+}
+
 export class EmbeddingProviderResolver {
   /** Cloud providers get a bounded probe-retry before we demote (hysteresis). */
   private static readonly CLOUD_PROBE_ATTEMPTS = 3;
@@ -367,16 +383,16 @@ export class EmbeddingProviderResolver {
     return { candidates, embeddingsDenied };
   }
 
-  private static async probeAvailable(provider: IEmbeddingProvider): Promise<boolean> {
+  private static async probeAvailable(provider: IEmbeddingProvider): Promise<ProbeOutcome> {
     const isCloud = EmbeddingProviderResolver.CLOUD_PROVIDER_NAMES.has(provider.name);
     const attempts = isCloud ? EmbeddingProviderResolver.CLOUD_PROBE_ATTEMPTS : 1;
     for (let i = 1; i <= attempts; i++) {
       try {
-        if (await provider.isAvailable()) return true;
+        if (await provider.isAvailable()) return 'available';
       } catch (error: any) {
         if (error?.permanentAuthFailure || error?.status === 401 || error?.status === 403) {
           console.warn(`[EmbeddingProviderResolver] ${provider.name} unavailable due to permanent auth failure — demoting immediately.`);
-          return false;
+          return 'permanent';
         }
         throw error;
       }
@@ -385,8 +401,9 @@ export class EmbeddingProviderResolver {
         await new Promise(r => setTimeout(r, EmbeddingProviderResolver.CLOUD_PROBE_BACKOFF_MS * i));
       }
     }
-    return false;
+    return 'transient';
   }
+
 
   /**
    * Returns the best available provider.
@@ -470,6 +487,24 @@ export class EmbeddingProviderResolver {
   }
 
   static async resolve(config: AppAPIConfig): Promise<IEmbeddingProvider> {
+    return (await EmbeddingProviderResolver.resolveWithDemotion(config)).provider;
+  }
+
+  /**
+   * resolve(), plus WHICH pinned provider was demoted and why it still matters.
+   *
+   * Measured 2026-09-11 on a phone-hotspot network: the natively probe failed
+   * 2/3 at launch, the resolver fell through to the bundled model, and the
+   * whole session ran 384-d MiniLM — every persisted voyage-4 vector stranded,
+   * every reference-file query answered lexically, "the meeting notes weren't
+   * retrieved for this turn". A mid-session promotion re-probes its primary
+   * every minute and demotes as soon as it answers; a STARTUP demotion had no
+   * such path, so a ten-second blip cost the user their embedding space until
+   * they relaunched. A transiently-failed pinned provider is handed back so the
+   * pipeline can schedule the same re-probe. Permanent auth failures and
+   * providers the user never pinned are not — there is nothing to wait for.
+   */
+  static async resolveWithDemotion(config: AppAPIConfig): Promise<EmbeddingResolution> {
     // Measure only what this resolve can actually USE, and do it concurrently.
     //
     // These were four SEQUENTIAL network round trips with 15-20s timeouts, run
@@ -497,12 +532,17 @@ export class EmbeddingProviderResolver {
     const { candidates, embeddingsDenied } = EmbeddingProviderResolver.buildCandidatesWithScope(measured);
     const chosenProvider = measured.embeddingMode === 'manual' ? (measured.embeddingProvider || '') : '';
 
+    let demotedPinned: IEmbeddingProvider | null = null;
     for (let i = 0; i < candidates.length; i++) {
       const provider = candidates[i];
-      const available = await EmbeddingProviderResolver.probeAvailable(provider);
-      if (available) {
+      const outcome = await EmbeddingProviderResolver.probeAvailable(provider);
+      if (outcome === 'available') {
         console.log(`[EmbeddingProviderResolver] Selected provider: ${provider.name} (${provider.dimensions}d)`);
-        return provider;
+        return { provider, demotedPinned: null };
+      }
+      if (outcome === 'transient' && chosenProvider && provider.name === chosenProvider
+          && EmbeddingProviderResolver.CLOUD_PROVIDER_NAMES.has(provider.name)) {
+        demotedPinned = provider;
       }
       // Say which it actually is. Printed unconditionally, "trying next" read as
       // "the chain continued" even when the list was exhausted — which made a
@@ -527,6 +567,6 @@ export class EmbeddingProviderResolver {
     }
     const local = new LocalEmbeddingProvider();
     console.log(`[EmbeddingProviderResolver] Selected provider: ${local.name} (${local.dimensions}d, lazy load)`);
-    return local;
+    return { provider: local, demotedPinned };
   }
 }

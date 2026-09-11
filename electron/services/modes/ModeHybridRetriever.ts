@@ -137,6 +137,13 @@ const CHUNK_OVERLAP = 30;
 // per-call embed timeout and lose all progress. 100 aligns with the Gemini
 // batchEmbedContents request cap.
 const MODE_INDEX_EMBED_BATCH = Number(process.env.NATIVELY_MODE_INDEX_EMBED_BATCH) || 100;
+/**
+ * Most chunks a single live query may embed ephemerally (chunks with no vector
+ * in the active space). Sized for "a file was uploaded a moment ago and its
+ * background index has not landed" — never for "the whole corpus changed
+ * space". See performHybridRetrieval for the crash this bounds.
+ */
+export const QUERY_EPHEMERAL_EMBED_MAX = Number(process.env.NATIVELY_QUERY_EPHEMERAL_EMBED_MAX) || 24;
 
 /**
  * F22 — the LOCAL ONNX embedder needs a much smaller indexing batch.
@@ -279,6 +286,9 @@ const FTS_WEIGHT = 0.4;  // alpha for combined score: alpha * fts + (1-alpha) * 
  * (reject noise) on the correct scale.
  */
 const MIN_LEXICAL_SCORE = MIN_COMBINED_SCORE * FTS_WEIGHT;
+/** Below this many hybrid hits, token-overlapping chunks are added for the reranker (2026-09-11). */
+export const THIN_RESULTS_TOPUP_BELOW = 3;
+export const THIN_RESULTS_TOPUP_MAX = 8;
 
 /** Convert a combined-scale threshold to the lexical scale. */
 const toLexicalThreshold = (combinedThreshold: number): number => combinedThreshold * FTS_WEIGHT;
@@ -1375,6 +1385,15 @@ export class ModeHybridRetriever {
         /** Exhaustive request: rerank pool = the user's candidateCount × this,
          *  capped at 2×RERANK_CANDIDATE_POOL. Absent/1 = the setting exactly. */
         rerankPoolMultiplier?: number;
+        /**
+         * The caller's retrieval budget for the QUERY EMBEDDING's retries, in ms
+         * (EmbeddingPipeline.getEmbeddingForQuery → retryBudgetMs). The V3
+         * orchestrator plans retrieval at 1200 ms (2400 ms exhaustive) but had
+         * no way to hand that number to this hop, so a slow hosted embed route
+         * ran its full 3-attempt ladder (13 s measured) inside a live turn.
+         * Absent = the historical ladder (legacy/manual callers).
+         */
+        queryEmbedRetryBudgetMs?: number;
     }): Promise<ModeRetrievedContext> {
         const {
             query,
@@ -1387,6 +1406,7 @@ export class ModeHybridRetriever {
             rerankSurface,
             rerankDeadlineMs,
             rerankPoolMultiplier,
+            queryEmbedRetryBudgetMs,
         } = params;
         // Unsearchable placeholder files (deep-run 2, issue 12): an image-only
         // PDF's "[Page 1] [Page 2]" extraction is not evidence — served as a
@@ -1486,7 +1506,7 @@ export class ModeHybridRetriever {
         if (this.isEmbeddingAvailable() && !usingLexicalForLocalManualQuery) {
             try {
                 markH4HybridStage('perform_hybrid_enter', { candidateCount: allCandidates.length });
-                candidates = await this.performHybridRetrieval(allCandidates, queryWords, queryText, adaptiveThreshold, files);
+                candidates = await this.performHybridRetrieval(allCandidates, queryWords, queryText, adaptiveThreshold, files, queryEmbedRetryBudgetMs);
                 markH4HybridStage('perform_hybrid_exit', { candidateCount: candidates.length });
                 // EMPTY-HYBRID FLOOR (2026-09-07, always answer). A paraphrased live
                 // question ("did we get paged or did a customer tell us") against a
@@ -1499,6 +1519,26 @@ export class ModeHybridRetriever {
                 if (candidates.length === 0 && allCandidates.length > 0) {
                     candidates = this.performLexicalRetrieval(allCandidates, queryWords, 0);
                     markH4HybridStage('empty_hybrid_floor', { candidateCount: candidates.length, pool: allCandidates.length });
+                } else if (candidates.length < THIN_RESULTS_TOPUP_BELOW && allCandidates.length > candidates.length) {
+                    // THIN-RESULTS TOP-UP (2026-09-11). A one-content-word lookup
+                    // ("what does the document say the tooling is") cleared the
+                    // combined threshold with ONE chunk — the handbook's title —
+                    // while the on-call section holding "Tooling: PagerDuty…"
+                    // scored under it on both arms, and the turn went out as
+                    // "the exact tools weren't retrieved". When the hybrid arm
+                    // returns fewer than a handful, chunks that share a token
+                    // with the question join the pool; the reranker orders them
+                    // and selection still caps them, so a weak extra costs a
+                    // rerank slot, never an answer.
+                    const seen = new Set(candidates.map((c) => `${c.sourceId}#${c.chunkIndex}`));
+                    const extra = this.performLexicalRetrieval(allCandidates, queryWords, 0)
+                        .filter((c) => c.ftsScore > 0 && !seen.has(`${c.sourceId}#${c.chunkIndex}`))
+                        .sort((a, b) => b.ftsScore - a.ftsScore)
+                        .slice(0, THIN_RESULTS_TOPUP_MAX);
+                    if (extra.length) {
+                        candidates = candidates.concat(extra);
+                        markH4HybridStage('thin_results_topup', { added: extra.length, candidateCount: candidates.length, pool: allCandidates.length });
+                    }
                 }
             } catch (error) {
                 markH4HybridStage('perform_hybrid_error', { message: error instanceof Error ? error.message : String(error) });
@@ -1525,6 +1565,22 @@ export class ModeHybridRetriever {
                 modeId: params.modeId,
             });
             candidates = this.performLexicalRetrieval(allCandidates, queryWords, toLexicalThreshold(adaptiveThreshold));
+            // EMPTY-LEXICAL FLOOR (2026-09-11). The hybrid branch above already
+            // refuses to hand the model NOTHING while the corpus has chunks; this
+            // branch did not, and it is the branch a network outage lands in.
+            // Measured with the pinned provider demoted at launch: "what was
+            // jonas talking about again" scored one overlapping token against
+            // an incident timeline whose row named Jonas, fell under the
+            // threshold, and the turn went out with zero evidence — "the meeting
+            // notes weren't retrieved for this turn". Same floor, same reasoning:
+            // the best-overlapping chunks at a zero threshold, still capped and
+            // still judged for answerability downstream.
+            // Strictly positive: a query sharing NO token with the corpus keeps
+            // its honest zero (the confidence signal reports no_candidates).
+            if (candidates.length === 0 && allCandidates.length > 0) {
+                candidates = this.performLexicalRetrieval(allCandidates, queryWords, 0).filter((c) => c.ftsScore > 0);
+                markH4HybridStage('empty_lexical_floor', { candidateCount: candidates.length, pool: allCandidates.length });
+            }
         }
 
         markH4HybridStage('ranking_complete', { candidateCount: candidates.length });
@@ -2130,7 +2186,8 @@ export class ModeHybridRetriever {
         queryWords: Set<string>,
         queryText: string,
         minScore: number = MIN_COMBINED_SCORE,
-        files: ModeReferenceFile[] = []
+        files: ModeReferenceFile[] = [],
+        queryEmbedRetryBudgetMs?: number,
     ): Promise<ChunkCandidate[]> {
         // Embed query — the ONLY embedding round-trip on the hot path (PI v3,
         // W3). Chunk vectors are persisted at UPLOAD time (indexFile) and
@@ -2139,7 +2196,10 @@ export class ModeHybridRetriever {
         // that burned the latency budget on every turn.
         let queryEmbedding: number[];
         try {
-            queryEmbedding = await this.embeddingPipeline.getEmbeddingForQuery(queryText);
+            queryEmbedding = await this.embeddingPipeline.getEmbeddingForQuery(
+                queryText,
+                typeof queryEmbedRetryBudgetMs === 'number' ? { retryBudgetMs: queryEmbedRetryBudgetMs } : undefined,
+            );
         } catch (error) {
             // Surface key-pool health in the failure so a 429-burst (vs. a genuine
             // outage) is distinguishable in logs without re-running with tracing on.
@@ -2165,6 +2225,35 @@ export class ModeHybridRetriever {
         const missing = candidates.filter(c => !persisted.has(`${c.sourceId}:${c.chunkIndex}`));
         diagLog('HYBRID performHybrid vectors', { activeSpace, totalCandidates: candidates.length, persistedHits: persisted.size, missingCount: missing.length });
         const ephemeral = new Map<string, number[]>();
+        // NEVER re-embed a corpus on the hot path. When the active space has
+        // just changed (a provider promotion after five hosted failures, or a
+        // Settings switch) NO persisted vector matches, so `missing` is every
+        // chunk of every attached file. Handing all of them to one
+        // getEmbeddingsWithFallback() call sent 629 chunks of a 420 KB reference
+        // pack through the local ONNX worker as ONE batch — the worker runs a
+        // batch as a single session.run — and the process died with SIGTRAP in
+        // onnxruntime::MatMul → CPUAllocator::Alloc (Electron-2026-09-10-215850,
+        // same signature as the user's own Electron-2026-09-08-143050). The
+        // ingest path already bounds its batches for exactly this reason (F22);
+        // this is the one remaining unbounded batch. Above the cap the chunks
+        // score lexically for THIS turn and the fire-and-forget re-index below
+        // persists them in bounded sub-batches for the next one.
+        if (missing.length > QUERY_EPHEMERAL_EMBED_MAX) {
+            console.warn(
+                `[ModeHybridRetriever] ${missing.length} of ${candidates.length} candidates have no vector in `
+                + `${activeSpace ?? 'the active space'}; scoring them lexically this turn (cap ${QUERY_EPHEMERAL_EMBED_MAX}) `
+                + 'and re-indexing in the background',
+            );
+            if (activeSpace) {
+                const missingFileIds = new Set(missing.map(c => c.sourceId));
+                for (const file of files) {
+                    if (missingFileIds.has(file.id) && file.content?.trim()) {
+                        this.indexFile(file).catch(() => { /* logged inside */ });
+                    }
+                }
+            }
+            missing.length = 0;
+        }
         if (missing.length > 0) {
             const missingTexts = missing.map(c => c.text);
             try {
