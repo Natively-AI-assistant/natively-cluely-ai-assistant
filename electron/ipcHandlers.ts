@@ -1,6 +1,7 @@
 // ipcHandlers.ts
 
 import * as crypto from 'crypto';
+import { AntigravityService, initializeAntigravityLifecycle } from './services/AntigravityService';
 import { buildEmbeddingConfig } from './rag/embeddingConfigIdentity';
 import { app, BrowserWindow, dialog, desktopCapturer, ipcMain, shell, systemPreferences } from 'electron';
 import { micSettingsUri } from '../src/lib/micPermissionPolicy.mjs';
@@ -28,8 +29,71 @@ import { TRIAL_SENTINEL_KEY, DOM_CONTEXT_MAX_CHARS } from './config/constants';
 import { AI_RESPONSE_LANGUAGES, RECOGNITION_LANGUAGES } from './config/languages';
 import { resolveCodingPromptSignals } from './llm/codingPromptSignals';
 import { isBareCodeRequest, looksLikeCodingAnswer, buildPriorCodingContextBlock as buildPriorCodingBlockForV3 } from './llm/codingFollowup';
-import { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, validateAnswerStructure, validateProfileOutput, validateProfileEvidence, buildProfileRepairInstruction, raceStreamWithDeadline, firstUsefulDeadlineMs, LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, CODING_REGEN_ABORT_CHARS, isStealthEvasionQuestion, stripProfileTokensFromCoding, isBareFollowUp, isRefinementFollowUp, buildContextFreeClarification, sanitizeCandidateAnswer, acceptRepairedAnswer, CANDIDATE_VOICE_ANSWER_TYPES, detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES, piTelemetry, classifyProviderError, detectExplicitCodingContract, isCodingContinuation, buildPriorCodingContextBlock, buildCodingContractPrompt, explicitContractProducesCode, CODING_VERIFICATION_INSTRUCTION, humanizeDirectiveFor, detectCorporateFiller, humanizeForAnswerType, applySpeakabilityBudget, compressTechnicalConcept, checkCodeCompleteness, varySpokenOpening, type ExplicitCodingContract, type AnswerType } from './llm';
+import { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, validateAnswerStructure, validateProfileOutput, validateProfileEvidence, buildProfileRepairInstruction, raceStreamWithDeadline, firstUsefulDeadlineMs, totalHardTimeoutMs, repairDeadlineMs, LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, CODING_REGEN_ABORT_CHARS, isStealthEvasionQuestion, stripProfileTokensFromCoding, isBareFollowUp, isRefinementFollowUp, buildContextFreeClarification, sanitizeCandidateAnswer, acceptRepairedAnswer, CANDIDATE_VOICE_ANSWER_TYPES, detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES, piTelemetry, classifyProviderError, detectExplicitCodingContract, isCodingContinuation, buildPriorCodingContextBlock, buildCodingContractPrompt, explicitContractProducesCode, CODING_VERIFICATION_INSTRUCTION, humanizeDirectiveFor, detectCorporateFiller, humanizeForAnswerType, applySpeakabilityBudget, compressTechnicalConcept, checkCodeCompleteness, varySpokenOpening, type ExplicitCodingContract, type AnswerType } from './llm';
+
+/**
+ * First-token budget for a post-answer repair/regeneration stream.
+ *
+ * These were hardcoded (7000, or 8000 on the two coding-regen paths) on every
+ * route. On a gateway whose first token measures 9s that window can never
+ * succeed, so the repair was spent and thrown away every turn — silently, since
+ * the user just never sees their answer improve. Derived from the route budget
+ * now; `minMs` carries each site's own previous value as a floor so this change
+ * can only ever add room. See liveDeadlines.repairDeadlineMs.
+ */
+/** The exact argument tuple LLMHelper.streamChat takes. */
+type StreamChatArgs = Parameters<import('./LLMHelper').LLMHelper['streamChat']>;
+
+/**
+ * Arguments for a post-answer repair stream on the manual-chat surface.
+ *
+ * Replays this turn's answer call so the repair sees the same images, context,
+ * system prompt, scopes and route the answer saw — a repair used to be sent as
+ * `streamChat(prompt, undefined, undefined, undefined, true, true)` and was
+ * reasoning from the prior answer text alone. Falls back to the caller's own
+ * arguments when this turn has no remembered answer. The abort signal is always
+ * the caller's, never the remembered one.
+ */
+function repairCallArgs(
+  llmHelper: any,
+  turnKey: object | undefined | null,
+  repairPrompt: string,
+  signal: AbortSignal | undefined,
+  fallbackContext?: string,
+  fallbackSystemPrompt?: string,
+): StreamChatArgs {
+  const replayed = llmHelper?.replayAnswerCall?.(turnKey, repairPrompt, signal);
+  if (replayed) {
+    // A repair site that supplies its own system prompt (the strict doc-grounded
+    // regen) means it — inheriting the answer's would undo the stricter
+    // contract it is re-running under. The caller's wins; the images,
+    // transcript, scopes and route are still inherited.
+    if (fallbackSystemPrompt !== undefined) replayed[3] = fallbackSystemPrompt;
+    // Same precedence for the context. It was accepted and then ignored on this
+    // branch, so the two coding-regen sites silently lost
+    // codingPriorProblemBlock in the common case (a turn that HAS a remembered
+    // answer) — a regeneration that exists to re-solve the previous problem
+    // could no longer see it, and nothing typechecked or warned.
+    if (fallbackContext !== undefined) replayed[2] = fallbackContext;
+    return replayed;
+  }
+  return [repairPrompt, undefined, fallbackContext, fallbackSystemPrompt, true, true, [], signal] as StreamChatArgs;
+}
+
+function repairFirstUsefulMs(llmHelper: any, minMs: number = 7000, turnKey?: object | null): number {
+  const isUserEndpoint = llmHelper?.isUsingUserEndpoint?.() === true;
+  return repairDeadlineMs({
+    hasImages: turnKey ? llmHelper?.replayedAnswerHasImages?.(turnKey) === true : false,
+    isLocal: llmHelper?.isUsingOllama?.() === true || llmHelper?.isUsingCodexCli?.() === true,
+    viaServerCascade: llmHelper?.isUsingNativelyServerCascade?.() === true,
+    isUserEndpoint,
+    observedUserEndpointLatency: isUserEndpoint ? (llmHelper?.observedAnswerLatency?.() ?? null) : null,
+    minMs,
+  });
+}
 import { stripPriorAssistantTurns } from './llm/conversationHistoryPolicy';
+import { performanceHooks, applyAdaptiveTtft, secondaryStreamObserver } from './llm/performance/wiring';
+import { estimateTokens as _estimatePerfTokens } from './llm/modelCapabilities';
 import { mintTurnId } from './llm/turnIdentity';
 import type { StreamRouteOptions } from './llm/streamContextPolicy';
 import { buildProfileJitPrompt } from './llm/ProfileJitPromptBuilder';
@@ -89,7 +153,6 @@ import { detectIncompleteNumericAnswer, completenessRegenFabricates, isDocGround
 import { mergeProviderDataScopes } from './llm/ProviderRouter';
 import {
   DirectAssistService,
-  buildDirectAssistReferenceContext,
   type DirectAssistRequestInput,
   type DirectAssistStreamEvent,
 } from './direct-assist';
@@ -109,7 +172,16 @@ interface DirectAssistRendererRequest {
     url?: string;
     title?: string;
   } | null;
-  history?: Array<{ role: 'user' | 'assistant'; content: string }>;
+  history?: Array<{
+    role: 'user' | 'assistant';
+    content: string;
+    /** Validated survivors only — an evicted screenshot is skipped, not fatal. */
+    imagePaths?: string[];
+    /** What the user attached, so the prompt can name what is missing. */
+    imageCount?: number;
+    /** The turn's cached transcription, for its whole attachment set. */
+    imageDescription?: string;
+  }>;
   transcript?: string;
   imagePaths?: string[];
   requestedLanguage?: string;
@@ -142,6 +214,37 @@ const DIRECT_ASSIST_IMAGE_MIMES: Readonly<Record<string, string>> = Object.freez
  * the host platform's path rules, including case-insensitive root comparison
  * on Windows. An alternate drive/UNC root remains absolute and is rejected.
  */
+/**
+ * The V3 conversation-ring key for a main-process surface.
+ *
+ * Delegates to the engine so typed chat and what-to-answer land in the SAME
+ * ring. They previously derived it independently — typed chat off a webContents
+ * id, what-to-answer off the meeting id — so each surface built a history the
+ * other could not read, and a screenshot described on one was invisible to the
+ * other. `fallbackKey` covers a turn with no engine at all, where nothing else
+ * is going to read the ring either.
+ */
+function v3ConversationSessionId(appState: AppState, fallbackKey: string | number): string {
+  const {
+    resolveConversationSessionId, NO_CONVERSATION_SCOPE,
+  } = require('./context-intelligence/question/conversation-state-store') as
+    typeof import('./context-intelligence/question/conversation-state-store');
+  try {
+    const manager = appState.getIntelligenceManager?.() as
+      { conversationSessionId?: () => string } | undefined;
+    const key = manager?.conversationSessionId?.();
+    // `NO_CONVERSATION_SCOPE` means the engine has no meeting and no session, so
+    // its key is a shared bucket rather than an identity. Returning it here was
+    // truthy, so the per-sender fallback below was unreachable and every window
+    // — typed chat, what-to-answer, assist — collapsed into one ring. That is
+    // the failure the comment at IntelligenceEngine.conversationSessionId
+    // documents, and it made the renderer-destroyed clear below wipe the live
+    // ring that what-to-answer and assist were using.
+    if (key && key !== NO_CONVERSATION_SCOPE) return key;
+  } catch { /* no engine on this turn — fall through */ }
+  return resolveConversationSessionId(null, fallbackKey);
+}
+
 function isDirectAssistCanonicalPathInsideRoot(root: string, candidate: string): boolean {
   const relative = path.relative(root, candidate);
   return relative !== '..'
@@ -204,6 +307,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
       const defaultModel = cm.getDefaultModel();
+      const antigravityCatalog = defaultModel.startsWith('antigravity:') && AntigravityService.getInstance().getStatus().signedIn
+        ? await AntigravityService.getInstance().getModels().catch(() => null)
+        : null;
       const curlProviders = cm.getCurlProviders() || [];
       const legacyProviders = cm.getCustomProviders() || [];
       const allProviders = [...curlProviders, ...legacyProviders];
@@ -236,6 +342,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       // isProviderEnabled() in AIProvidersSettings.tsx must use the same names.
       const providerFamily = (modelId: string): string => {
         if (modelId === 'natively') return 'natively';
+        if (modelId.startsWith('antigravity:')) return 'antigravity';
         if (modelId.startsWith('codex-cli')) return 'codex-cli';
         if (modelId.startsWith('litellm/')) return 'litellm';
         if (modelId.startsWith('nvidia_nim/')) return 'nvidia_nim';
@@ -289,6 +396,8 @@ export function initializeIpcHandlers(appState: AppState): void {
 
         if (modelId === 'natively') return has(cm.getNativelyApiKey());
         if (modelId.startsWith('codex-cli')) return codexConfig.enabled === true && codexSignedIn;
+        if (modelId.startsWith('antigravity:')) return AntigravityService.getInstance().getStatus().signedIn
+          && (antigravityCatalog === null || antigravityCatalog.some(({ id }) => modelId === `antigravity:${id}`));
         if (modelId.startsWith('litellm/')) return has(cm.getLitellmBaseURL());
         if (modelId.startsWith('nvidia_nim/')) return has(cm.getNvidiaNimApiKey());
         if (modelId.startsWith('ollama-')) return true; // live Ollama probe happens at execution time
@@ -352,7 +461,13 @@ export function initializeIpcHandlers(appState: AppState): void {
       const geminiNext = ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.1-flash-lite']
         .find(id => modelAvailable(id));
 
-      const next = modelAvailable('natively') ? 'natively'
+      const antigravityFallback = AntigravityService.getInstance().getStatus().signedIn
+        && !cm.getDisabledProviders().includes('antigravity')
+        ? (antigravityCatalog ?? await AntigravityService.getInstance().getModels().catch(() => []))
+          .map(({ id }) => `antigravity:${id}`).find(modelAvailable)
+        : undefined;
+      const next = defaultModel.startsWith('antigravity:') && antigravityFallback ? antigravityFallback
+        : modelAvailable('natively') ? 'natively'
         : geminiNext ? geminiNext
         : modelAvailable('gpt-5.4') ? 'gpt-5.4'
         : modelAvailable('claude-sonnet-4-6') ? 'claude-sonnet-4-6'
@@ -360,6 +475,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         : modelAvailable('deepseek-v4-flash') ? 'deepseek-v4-flash'
         : (codexConfig.enabled === true && codexSignedIn && modelAvailable('codex-cli')) ? 'codex-cli'
         : (litellmFallbackModel && modelAvailable(litellmFallbackModel)) ? litellmFallbackModel
+        : antigravityFallback ? antigravityFallback
         : allProviders.find((p: any) => modelAvailable(p?.id))?.id
           || null;
       if (!next) {
@@ -369,6 +485,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         console.warn('[IPC] refreshRuntimeDefaultIfUnavailable: no available model (all providers disabled or unconfigured)');
         return null;
       }
+      if (cm.getDefaultModel() !== defaultModel) return null;
       cm.setDefaultModel(next);
       llmHelper.setModel(next, allProviders);
       // Same two listeners as every other model change. Converted alongside the
@@ -708,13 +825,50 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Overlay renderer → main: the panel's LIVE right edge (px from the overlay
   // window's left edge), streamed during the width spring so the toggle aux
   // window rides the panel's top-right corner. Only the overlay may send.
-  safeHandle('overlay-toggle-anchor', async (event, payload: { panelRight?: number }) => {
-    const overlayWin = appState.getWindowHelper().getOverlayWindow();
-    if (!overlayWin || overlayWin.isDestroyed()) return;
-    if (overlayWin.webContents.id !== event.sender.id) return;
-    if (typeof payload?.panelRight !== 'number') return;
-    appState.getWindowHelper().setOverlayToggleAnchor(payload.panelRight);
-  });
+  // Overlay renderer → main: the smooth-resize envelope. 'begin' grows the
+  // window (origin fixed) so the drag renders in CSS with no native resizes;
+  // 'end' fits the result — or returns to the pre-drag size for a click.
+  // Resolves with the size actually applied. Only the overlay may drive it.
+  safeHandle(
+    'overlay-resize-envelope',
+    async (
+      event,
+      payload:
+        | { phase: 'begin'; drag?: { direction: string; startWidth: number; startHeight: number; minWidth: number; minHeight: number; panelLeft: number } }
+        | { phase: 'end'; final?: { width: number; height: number } },
+    ) => {
+      const helper = appState.getWindowHelper();
+      const overlayWin = helper.getOverlayWindow();
+      if (!overlayWin || overlayWin.isDestroyed()) return undefined;
+      if (overlayWin.webContents.id !== event.sender.id) return undefined;
+      if (payload?.phase === 'begin') return helper.beginOverlayResizeEnvelope(payload.drag);
+      if (payload?.phase === 'end') {
+        const f = payload.final;
+        const final =
+          f && Number.isFinite(f.width) && Number.isFinite(f.height) && f.width > 0 && f.height > 0
+            ? { width: Math.round(f.width), height: Math.round(f.height) }
+            : undefined;
+        return helper.endOverlayResizeEnvelope(final);
+      }
+      return undefined;
+    },
+  );
+
+  safeHandle(
+    'overlay-toggle-anchor',
+    async (event, payload: { panelRight?: number; panelLeft?: number }) => {
+      const overlayWin = appState.getWindowHelper().getOverlayWindow();
+      if (!overlayWin || overlayWin.isDestroyed()) return;
+      if (overlayWin.webContents.id !== event.sender.id) return;
+      if (typeof payload?.panelRight !== 'number') return;
+      appState
+        .getWindowHelper()
+        .setOverlayToggleAnchor(
+          payload.panelRight,
+          typeof payload.panelLeft === 'number' ? payload.panelLeft : undefined,
+        );
+    },
+  );
 
   // Overlay renderer → main: hover hit-test result — false while the pointer
   // is over the fixed window's transparent side margins (collapsed state), so
@@ -1247,6 +1401,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               }
             } catch { /* debug identity only */ }
             const modePort = createModeRetrievalPort({
+              rerankSurface: 'manual',
               modesManager: mm,
               modeInfo,
               files,
@@ -1337,6 +1492,20 @@ export function initializeIpcHandlers(appState: AppState): void {
             let v3ScreenDescription = '';
             if (imagePaths?.length) {
               try {
+                const screenStore = require('./services/screen/ScreenshotDescriptionStore') as
+                  typeof import('./services/screen/ScreenshotDescriptionStore');
+                // CACHE READ. This path consumes the description as TEXT only
+                // (createScreenRetrievalPort below takes `description`), so a
+                // hit can skip the whole vision pre-pass — seconds off a turn
+                // whenever a user re-attaches a screen they already asked about.
+                // Keyed on the exact image bytes; see the store for why a
+                // perceptual hash would be wrong here.
+                // Keyed on the whole attachment set, so a multi-image turn
+                // caches and hits exactly like a single-image one.
+                const cacheKey = screenStore.hashImageSet(imagePaths);
+                if (cacheKey) {
+                  v3ScreenDescription = screenStore.getScreenshotDescription(cacheKey)?.description ?? '';
+                }
                 const {
                   getScreenUnderstandingService,
                 } = require('./services/screen/ScreenUnderstandingService');
@@ -1345,7 +1514,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                 const credentials = CredentialsManager.getInstance();
                 const providerScopes = settings.get('providerDataScopes') || {};
                 const localVisionAvailable = credentials.anyLocalVisionProviderConfigured?.() ?? false;
-                const sur = await getScreenUnderstandingService().understand({
+                const sur = v3ScreenDescription ? null : await getScreenUnderstandingService().understand({
                   modeId: modeId,
                   transcript: v3Question,
                   userAction: 'manual_use_screen',
@@ -1364,13 +1533,18 @@ export function initializeIpcHandlers(appState: AppState): void {
                     localVisionAvailable,
                   },
                 });
-                if (sur?.status === 'available') {
-                  v3ScreenDescription = [
-                    sur.visibleSummary,
-                    sur.extractedText,
-                    ...(sur.codeBlocks ?? []),
-                    ...(sur.tables ?? []).map((t: any) => t.markdown).filter(Boolean),
-                  ].filter((part: unknown) => typeof part === 'string' && part.trim()).join('\n\n');
+                if (sur) {
+                  // Shared assembler, not an inline list: the inline version here
+                  // omitted `sur.errors` entirely, so the extraction schema's own
+                  // error-line field never reached the ring and "what was the
+                  // error code in that screenshot?" had nothing to read.
+                  v3ScreenDescription = require('./services/screen/screenDescription')
+                    .composeScreenDescription(sur);
+                  // Not written back either — same reason as the what-to-say
+                  // site above: this is the answering call's output, not a
+                  // transcription. The READ above is still correct, because
+                  // what the cache holds IS a transcription.
+                  void cacheKey;
                 }
               } catch (screenErr: any) {
                 // NEVER silent (§22.1): degrading to bytes-only is a real
@@ -1459,7 +1633,11 @@ export function initializeIpcHandlers(appState: AppState): void {
               // a u:local|s:<sender> turn.
               scope: {
                 userId: V3_USER_ID,
-                sessionId: String(senderId),
+                // ONE key across surfaces (see resolveConversationSessionId).
+                // This was String(senderId) while what-to-answer read the ring
+                // under the meeting id, so the two surfaces kept separate
+                // histories and neither could see the other's screenshots.
+                sessionId: v3ConversationSessionId(appState, senderId),
                 ...(v3MeetingId ? { meetingId: v3MeetingId } : {}),
               },
               retrieval: port,
@@ -1747,11 +1925,19 @@ export function initializeIpcHandlers(appState: AppState): void {
               // ── ANSWER-SIDE SINKS (skipped when truncated) ──────────────
               if (!v3Truncated) {
                 try {
-                  const { recordAnswerSummary } = require('./context-intelligence/question/conversation-state-store');
+                  const {
+                    recordAnswerSummary,
+                  } = require('./context-intelligence/question/conversation-state-store');
                   // Third argument is what makes a screenshot survive its own
                   // turn: the description enters the conversation ring, so a
                   // later "what was in that screenshot?" has something to read.
-                  recordAnswerSummary(String(senderId), finalText, v3ScreenDescription || undefined);
+                  // The key MUST match the one the scope above was built with,
+                  // or this writes a ring nothing ever reads.
+                  recordAnswerSummary(
+                    v3ConversationSessionId(appState, senderId),
+                    finalText,
+                    v3ScreenDescription || undefined,
+                  );
                 } catch { /* continuity only */ }
                 try {
                   // The user/answer PAIR is the antecedent unit for follow-up
@@ -1844,7 +2030,11 @@ export function initializeIpcHandlers(appState: AppState): void {
             event.sender?.once?.('destroyed', () => {
               _convoCleanupRegistered.delete(senderId);
               try { _manualConversationMemory.clearSession(String(senderId)); } catch { /* noop */ }
-              try { require('./context-intelligence/question/conversation-state-store').clearConversationState(String(senderId)); } catch { /* noop */ }
+              // MUST be the same key the writers use. This was String(senderId)
+              // while writes moved to v3ConversationSessionId, which would have
+              // left "clear" deleting an empty bucket and the real ring — the
+              // user's screenshots included — alive behind it.
+              try { require('./context-intelligence/question/conversation-state-store').clearConversationState(v3ConversationSessionId(appState, senderId)); } catch { /* noop */ }
             });
           }
         } catch { /* noop */ }
@@ -2544,7 +2734,9 @@ export function initializeIpcHandlers(appState: AppState): void {
             }
           } catch { /* refinement recall never blocks the answer */ }
         }
-        if (!context && !autoContextSnapshot && isBareFollowUp(message)) {
+        // An attached screenshot IS the context (2026-09-07): "this" / "explain"
+        // with an image must reach the vision path, not the clarification.
+        if (!context && !autoContextSnapshot && !imagePaths?.length && isBareFollowUp(message)) {
           let clarSurface: 'manual' | 'lecture' | 'sales' = 'manual';
           try {
             const { ModesManager } = require('./services/ModesManager');
@@ -2592,6 +2784,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         if (turnContract
             && turnContract.sourceOwner === 'clarify'
             && isIntelligenceFlagEnabled('contextOsPropertyValidation')
+            // Retired 2026-09-07 (always answer) — see clarificationShortCircuitEnabled.
+            && require('./intelligence/context-os').clarificationShortCircuitEnabled()
             && !isCodingChat
             && !imagePaths?.length
             && !isStealthChat
@@ -2626,7 +2820,11 @@ export function initializeIpcHandlers(appState: AppState): void {
             // "the project" with no explicit switch at all), which the
             // legacy resolver has no opinion on.
             const clarify = manualOwnership?.shouldClarifyInsteadOfProfile
-              ? require('./llm/sourceOwnership').buildSourceSwitchClarification(manualOwnership.owner)
+              ? require('./llm/sourceOwnership').buildSourceSwitchClarification(
+                  manualOwnership.owner,
+                  manualOwnership.requestedSource ?? null,
+                  { hasReferenceFiles: Boolean((manualActiveMode as any)?.hasReferenceFiles) },
+                )
               : buildSourceClarification({
                 hasReferenceFiles: Boolean((manualActiveMode as any)?.hasReferenceFiles),
                 hasProfileFacts: _hasProfileFactsForTurn,
@@ -2859,10 +3057,15 @@ export function initializeIpcHandlers(appState: AppState): void {
         // ask is an explicit internal refusal, so it may bypass provider generation;
         // it must not contain profile facts and is not authoritative memory.
         if (manualOwnership?.shouldClarifyInsteadOfProfile && !_ownerEnforcementOff
+            && require('./intelligence/context-os').clarificationShortCircuitEnabled()
             && !isCodingChat && !imagePaths?.length && !isStealthChat) {
           try {
             const { buildSourceSwitchClarification } = require('./llm/sourceOwnership');
-            const clarify = buildSourceSwitchClarification(manualOwnership.owner);
+            const clarify = buildSourceSwitchClarification(
+              manualOwnership.owner,
+              manualOwnership.requestedSource ?? null,
+              { hasReferenceFiles: Boolean((manualActiveMode as any)?.hasReferenceFiles) },
+            );
             if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) return null;
             event.sender.send('gemini-stream-token', clarify, { streamId: myStreamId });
             event.sender.send('gemini-stream-done', { finalText: clarify, streamId: myStreamId });
@@ -3617,7 +3820,11 @@ export function initializeIpcHandlers(appState: AppState): void {
             providerAttempts: 1,
           });
           chatTrace.mark('provider_request_started', { ignoreKnowledgeMode: Boolean(ignoreKnowledge) });
-          const stream = llmHelper.streamChat(
+          // Hoisted so this turn's answer call can be handed to LLMHelper for
+          // its post-answer repairs to replay — same transcript, images,
+          // system prompt, scopes and route the answer got. Keyed by this
+          // stream's own controller so a later turn cannot inherit it.
+          const _manualAnswerArgs: StreamChatArgs = [
             message,
             imagePaths,
             context,
@@ -3703,7 +3910,9 @@ export function initializeIpcHandlers(appState: AppState): void {
                   }
                 : {}),
             },
-          );
+          ];
+          llmHelper.rememberAnswerCall?.(myController.signal, _manualAnswerArgs);
+          const stream = llmHelper.streamChat(..._manualAnswerArgs);
 
           // Coding chat STREAMS LIVE through a gate that holds tokens only until
           // the first "## " heading is confirmed (never code-first), then passes
@@ -3808,11 +4017,70 @@ export function initializeIpcHandlers(appState: AppState): void {
           // F-301: on the natively-api route the server rotates providers at
           // 10s; give it room to rescue the turn instead of aborting at 7s.
           const viaServerCascade = llmHelper.isUsingNativelyServerCascade?.() === true;
+          // A user-supplied endpoint gets the longer ceiling; a shipped provider
+          // called directly gets the shorter one. WTA and manual chat read the
+          // same route table so one surface cannot inherit the other's bound.
+          const usingUserEndpoint = llmHelper.isUsingUserEndpoint?.() === true;
+          const observedUserEndpointLatency = usingUserEndpoint
+            ? (llmHelper.observedAnswerLatency?.() ?? null)
+            : null;
+          const manualStreamStartedAt = Date.now();
+          let manualRecordedFirstToken = false;
+          // Captured off the wire, recorded only once the turn produces usable
+          // content — the same two-step the WTA path uses. These two surfaces
+          // feed ONE latency map, so if they disagree about when a measurement
+          // counts the map means nothing.
+          let manualPendingFirstTokenMs: number | null = null;
+          const noteManualFirstToken = () => {
+            if (manualRecordedFirstToken || !usingUserEndpoint) return;
+            manualRecordedFirstToken = true;
+            manualPendingFirstTokenMs = Date.now() - manualStreamStartedAt;
+          };
+          const commitManualFirstToken = () => {
+            if (manualPendingFirstTokenMs == null) return;
+            const ms = manualPendingFirstTokenMs;
+            manualPendingFirstTokenMs = null;
+            try { llmHelper.recordAnswerFirstToken?.(ms); } catch { /* never break the answer */ }
+          };
           let manualFirstUseful = false;
           let manualSuperseded = false;
+          // ── Provider Performance Profile ─────────────────────────────────
+          // The twin of the WTA wiring in IntelligenceEngine. These two surfaces
+          // have drifted apart before — the vision deadline was fixed on WTA in
+          // e079cd4a and "this site had been left on the text deadline" (see the
+          // comment on firstUsefulDeadlineMs below) — so they take the same
+          // helper with the same inputs rather than each assembling their own.
+          const manualPerf = performanceHooks({
+            llmHelper: llmHelper as any,
+            hasImages: (imagePaths?.length ?? 0) > 0,
+            inputTokens: _estimatePerfTokens(`${message ?? ''}${context ?? ''}`),
+            isUserCancelled: () => manualSuperseded || myController?.signal.aborted === true,
+            onDiagnostics: (record) => {
+              if (record.terminationReason === 'done') return;
+              console.log('[Perf] manual chat turn ended early', record);
+            },
+          });
           await raceStreamWithDeadline({
             stream: stream as AsyncGenerator<string>,
-            firstUsefulDeadlineMs: firstUsefulDeadlineMs(answerPlan.answerType, usingLocalLlm, viaServerCascade),
+            observe: manualPerf.observe,
+            interTokenStallMs: manualPerf.interTokenStallMs,
+            // A screenshot turn is served by the vision chain, whose measured
+            // first-token p50 is 5.6s and max 11.6s; the 7000ms text deadline
+            // aborted roughly half of healthy vision turns on this surface
+            // (2026-09-06). WTA moved to totalHardTimeoutMs for this case in
+            // e079cd4a; this site had been left on the text deadline. Non-vision
+            // turns take the route table's answer-type deadline, which is now
+            // user-endpoint aware and measurement-aware.
+            // Post-filter, identical to the WTA site. Identity while the
+            // adaptiveTtft flag is off; persisted-profile-backed when it is on.
+            // The two surfaces read the same route table, so they take the same
+            // post-filter — a divergence here is invisible from either one.
+            firstUsefulDeadlineMs: applyAdaptiveTtft(
+              (imagePaths?.length ?? 0) > 0
+                ? totalHardTimeoutMs({ isLocal: usingLocalLlm, isVisionTurn: true, viaServerCascade })
+                : firstUsefulDeadlineMs(answerPlan.answerType, usingLocalLlm, viaServerCascade, usingUserEndpoint, observedUserEndpointLatency),
+              { llmHelper: llmHelper as any, hasImages: (imagePaths?.length ?? 0) > 0, inputTokens: _estimatePerfTokens(`${message ?? ''}${context ?? ''}`) },
+            ),
             isUsefulYet: () => manualFirstUseful,
             shouldAbort: () => {
               if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) {
@@ -3829,6 +4097,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               try { myController?.abort(); } catch { /* noop */ }
             },
             onToken: (token: string) => {
+              noteManualFirstToken();
               // F-302: "useful" must mean USER-USEFUL CONTENT, not "a token
               // object arrived". raceStreamWithDeadline forwards every yielded
               // value unfiltered, so a leading "\n\n" used to flip this flag —
@@ -3842,6 +4111,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               // loses the interior whitespace ("a b" + " c" counted 4, not 5).
               if ((fullResponse + token).trim().length >= 5) {
                 manualFirstUseful = true;
+                commitManualFirstToken();
               }
               // First token back from the provider — the gap from
               // provider_request_started is pre-work + provider TTFT (the real cost).
@@ -3965,8 +4235,9 @@ export function initializeIpcHandlers(appState: AppState): void {
                 let regen = '';
                 const regenAbort = new AbortController();
                 await raceStreamWithDeadline({
-                  stream: llmHelper.streamChat(regenPrompt, undefined, codingPriorProblemBlock || undefined, undefined, true, true, [], regenAbort.signal) as AsyncGenerator<string>,
-                  firstUsefulDeadlineMs: usingLocalLlm ? LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS : 8000,
+                    observe: secondaryStreamObserver('regeneration'),
+                  stream: llmHelper.streamChat(...repairCallArgs(llmHelper, myController?.signal, regenPrompt, regenAbort.signal, codingPriorProblemBlock || undefined)) as AsyncGenerator<string>,
+                  firstUsefulDeadlineMs: repairFirstUsefulMs(llmHelper, 8000, myController?.signal),
                   isUsefulYet: () => regen.length >= 10,
                   shouldAbort: () => regen.length > CODING_REGEN_ABORT_CHARS,
                   onToken: (tok: string) => { regen += tok; },
@@ -4074,8 +4345,9 @@ export function initializeIpcHandlers(appState: AppState): void {
                 // silently no-op'd at runtime AND failed the typecheck.)
                 const regenAbort = new AbortController();
                 await raceStreamWithDeadline({
-                  stream: llmHelper.streamChat(regenPrompt, undefined, codingPriorProblemBlock || undefined, undefined, true, true, [], regenAbort.signal) as AsyncGenerator<string>,
-                  firstUsefulDeadlineMs: usingLocalLlm ? LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS : 8000,
+                    observe: secondaryStreamObserver('regeneration'),
+                  stream: llmHelper.streamChat(...repairCallArgs(llmHelper, myController?.signal, regenPrompt, regenAbort.signal, codingPriorProblemBlock || undefined)) as AsyncGenerator<string>,
+                  firstUsefulDeadlineMs: repairFirstUsefulMs(llmHelper, 8000, myController?.signal),
                   isUsefulYet: () => regen.length >= 10,
                   shouldAbort: () => regen.length > CODING_REGEN_ABORT_CHARS,
                   onToken: (tok: string) => { regen += tok; },
@@ -4191,8 +4463,9 @@ export function initializeIpcHandlers(appState: AppState): void {
                   // (was 4s) clears MiniMax's 4-6s first-token when it's the fallback.
                   // Local model: longer budget for the same cold-load reason as above.
                   await raceStreamWithDeadline({
-                    stream: llmHelper.streamChat(repairPrompt, undefined, undefined, undefined, true, true) as AsyncGenerator<string>,
-                    firstUsefulDeadlineMs: usingLocalLlm ? LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS : 7000,
+                      observe: secondaryStreamObserver('repair'),
+                    stream: llmHelper.streamChat(...repairCallArgs(llmHelper, myController?.signal, repairPrompt, undefined)) as AsyncGenerator<string>,
+                    firstUsefulDeadlineMs: repairFirstUsefulMs(llmHelper, 7000, myController?.signal),
                     isUsefulYet: () => repaired.length >= 5,
                     shouldAbort: () => repaired.length > 1200,
                     onToken: (tok: string) => { repaired += tok; },
@@ -4397,10 +4670,39 @@ export function initializeIpcHandlers(appState: AppState): void {
                   : answerPlan.answerType === 'sales_answer'
                     ? "I don't have enough context on that yet — could you share a bit more?"
                     : "Could you give me a bit more to go on?";
-                piTelemetry.emit('pi_assistant_voice_misfire_repaired', { answerType: answerPlan.answerType, reason: misfire.reason });
-                console.warn('[ProfileIntelligence] assistant-voice identity/refusal misfire replaced with honest line', { answerType: answerPlan.answerType, reason: misfire.reason });
-                fullResponse = honest;
-                finalText = honest;
+                // ALWAYS ANSWER (2026-09-07): regenerate once before the honest
+                // line — mirrors IntelligenceEngine.regenerateUsableAnswer.
+                let regenerated: string | null = null;
+                try {
+                  const regenPrompt = [
+                    '<answer_instructions note="follow these; never repeat them">',
+                    'The user explicitly asked for an answer. Answer the question directly and concretely. Do NOT ask the user to repeat or share more, do NOT describe what context is missing, and do NOT identify yourself as an AI assistant. Use the evidence when it applies; otherwise answer from general knowledge, clearly marked as such.',
+                    '</answer_instructions>',
+                    (manualContextOsGeneration as any)?.retrievedBlockRaw ? `## EVIDENCE\n${String((manualContextOsGeneration as any).retrievedBlockRaw).trim()}` : '',
+                    context || autoContextSnapshot ? `## CONVERSATION\n${String(context || autoContextSnapshot).trim()}` : '',
+                    `## QUESTION\n${message}`,
+                    'Output ONLY the answer.',
+                  ].filter(Boolean).join('\n');
+                  let regen = '';
+                  const regenAbort = new AbortController();
+                  await raceStreamWithDeadline({
+                      observe: secondaryStreamObserver('regeneration'),
+                    stream: llmHelper.streamChat(...repairCallArgs(llmHelper, myController?.signal, regenPrompt, regenAbort.signal)) as AsyncGenerator<string>,
+                    firstUsefulDeadlineMs: repairFirstUsefulMs(llmHelper, 8000, myController?.signal),
+                    isUsefulYet: () => regen.trim().length >= 5,
+                    shouldAbort: () => regen.length > 1800,
+                    onToken: (tok: string) => { regen += tok; },
+                    onCleanup: () => { try { regenAbort.abort(); } catch { /* best effort */ } },
+                  });
+                  const regenTrim = regen.trim();
+                  if (regenTrim.length >= 5 && !detectAssistantVoiceMisfire(regenTrim).isMisfire) regenerated = regenTrim;
+                } catch (regenErr: any) {
+                  console.warn('[ProfileIntelligence] misfire regeneration skipped:', regenErr?.message);
+                }
+                piTelemetry.emit('pi_assistant_voice_misfire_repaired', { answerType: answerPlan.answerType, reason: misfire.reason, regenerated: Boolean(regenerated) });
+                console.warn('[ProfileIntelligence] assistant-voice identity/refusal misfire', { answerType: answerPlan.answerType, reason: misfire.reason, regenerated: Boolean(regenerated) });
+                fullResponse = regenerated ?? honest;
+                finalText = regenerated ?? honest;
               }
             } catch (avErr: any) {
               console.warn('[ProfileIntelligence] assistant-voice guard skipped:', avErr?.message);
@@ -5129,7 +5431,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                         '(e.g. a different unit, a table row, or a synonym for the term the question uses).',
                         'If the SPECIFIC fact asked for is genuinely present (even if phrased differently), synthesize it directly in 2-4 natural sentences.',
                         'If, after a careful re-read, the specific fact asked for is still NOT actually present in these excerpts — even though the excerpts are',
-                        'from the right document/topic — say so honestly (e.g. "I could not find that specific detail in the retrieved sections").',
+                        'from the right document/topic — say so in one short clause, then still give the most useful general-knowledge answer, clearly marked as general knowledge (never as a fact from the document).',
                         'Do NOT invent, guess, or borrow a similar-sounding fact from an unrelated part of the excerpts (e.g. a different subsystem, model, or dataset)',
                         'to avoid saying it is absent — an honest "not found" is always better than an unrelated or fabricated answer.',
                         'Do not restate the question.',
@@ -5159,7 +5461,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                     : [
                         'You are answering a question strictly from the uploaded reference material below.',
                         'Do NOT greet. Do NOT ask what the user wants. Answer the question directly from the material.',
-                        'If the material does not contain the answer, say so in one sentence and stop.',
+                        'If the material does not contain the answer, say so in one sentence, then answer from general knowledge, clearly marked as general knowledge.',
                         '',
                         docContextBlock || '(no retrieved material)',
                         '',
@@ -5199,6 +5501,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                     });
                   } catch { regenSystemPrompt = undefined; }
                   await raceStreamWithDeadline({
+                      observe: secondaryStreamObserver('regeneration'),
                     // Pass regenAbort.signal so streamChat/_streamChatInner can
                     // abort the underlying provider fetch when onCleanup fires.
                     // streamChat() finds AbortSignal instances by instanceof scan
@@ -5206,8 +5509,8 @@ export function initializeIpcHandlers(appState: AppState): void {
                     // position, but the signal must go in its typed slot (#8,
                     // after extraDataScopes) to also satisfy the compiler —
                     // passing it as arg #7 typechecked as ProviderDataScope[].
-                    stream: llmHelper.streamChat(strictPrompt, undefined, undefined, regenSystemPrompt, true, true, [], regenAbort.signal) as AsyncGenerator<string>,
-                    firstUsefulDeadlineMs: usingLocalLlm ? LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS : 7000,
+                    stream: llmHelper.streamChat(...repairCallArgs(llmHelper, myController?.signal, strictPrompt, regenAbort.signal, undefined, regenSystemPrompt)) as AsyncGenerator<string>,
+                    firstUsefulDeadlineMs: repairFirstUsefulMs(llmHelper, 7000, myController?.signal),
                     isUsefulYet: () => regen.length >= 8,
                     shouldAbort: () => regen.length > 2000,
                     onToken: (tok: string) => { regen += tok; },
@@ -5358,15 +5661,14 @@ export function initializeIpcHandlers(appState: AppState): void {
                   piTelemetry.emit('pi_doc_grounded_false_refusal_kept_original', {});
                   console.warn('[DocGrounded] false-refusal regen did not cleanly improve on a substantial original — keeping original answer', { chars: trimmed.length });
                 } else {
-                  // Retry didn't help → ship a SAFE failure line (NOT a greeting),
-                  // referencing the uploaded material (not "the conversation"), and
-                  // BLOCK it from SessionTracker so it cannot poison the next turn.
-                  const safe = "I couldn't find that in the uploaded material. Try rephrasing, or ask about a specific section of the document.";
-                  fullResponse = safe;
-                  finalText = safe;
-                  blockedFromSessionTracker = true;
-                  piTelemetry.emit('pi_doc_grounded_safe_failure', { reason });
-                  console.warn('[DocGrounded] regeneration did not recover — shipping safe failure line, blocked from SessionTracker', { reason });
+                  // ALWAYS ANSWER (2026-09-07, owner's direction): the regen did
+                  // not cleanly improve on the streamed answer, so the streamed
+                  // answer stands. This used to ship "I couldn't find that in
+                  // the uploaded material. Try rephrasing…" — a canned line the
+                  // user cannot act on, replacing an answer the model produced
+                  // over the evidence it was given.
+                  piTelemetry.emit('pi_doc_grounded_kept_original', { reason });
+                  console.warn('[DocGrounded] regeneration did not recover — keeping the streamed answer', { reason });
                 }
               }
             } catch (dgErr: any) {
@@ -5437,6 +5739,16 @@ export function initializeIpcHandlers(appState: AppState): void {
               liveMode: liveModeIdAtDoneEmit,
             });
           } else if (_chatStreamsBySender.get(senderId)?.streamId === myStreamId) {
+            // A canned opener followed by a real answer is thrown away on this
+            // surface too (cannedOpener.ts, 2026-09-07): the renderer replaces
+            // the streamed row with finalText, so the opener never survives.
+            try {
+              const { stripCannedOpener, stripCannedTail } = require('./llm/cannedOpener') as typeof import('./llm/cannedOpener');
+              const cleaned = stripCannedOpener(finalText ?? fullResponse);
+              if (cleaned.stripped.length) { finalText = cleaned.text; console.log('[ManualChat] canned opener stripped', { count: cleaned.stripped.length }); }
+              const tail = stripCannedTail(finalText ?? fullResponse);
+              if (tail.stripped) { finalText = tail.text; console.log('[ManualChat] canned tail stripped'); }
+            } catch { /* never block done */ }
             // finalText is set ONLY when repair changed the streamed answer — the
             // renderer replaces the streamed row in place (no double-render). When
             // the streamed answer was already valid, finalText is undefined and the
@@ -5660,8 +5972,9 @@ export function initializeIpcHandlers(appState: AppState): void {
                       // (was 6s) clears MiniMax's 4-6s first-token when it's the fallback.
                       let fixed = '';
                       await raceStreamWithDeadline({
-                        stream: llmHelper.streamChat(repairPrompt, undefined, undefined, undefined, true, true) as AsyncGenerator<string>,
-                        firstUsefulDeadlineMs: 7000,
+                          observe: secondaryStreamObserver('verification'),
+                        stream: llmHelper.streamChat(...repairCallArgs(llmHelper, myController?.signal, repairPrompt, undefined)) as AsyncGenerator<string>,
+                        firstUsefulDeadlineMs: repairFirstUsefulMs(llmHelper, 7000, myController?.signal),
                         isUsefulYet: () => fixed.length >= 5,
                         onToken: (tok: string) => { fixed += tok; },
                       });
@@ -6152,6 +6465,46 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   };
 
+  /**
+   * The single Direct Assist attachment boundary. Callers decide what a
+   * rejection MEANS: the current turn's attachments fail the request, earlier
+   * turns' carried screenshots are skipped.
+   */
+  const resolveDirectAssistImagePath = (
+    rendererPath: string,
+    userDataDir: string,
+    canonicalUserDataDir: string,
+  ): { ok: true; canonicalPath: string } | { ok: false; rejection: string } => {
+    const { validateImagePath } = require('./utils/curlUtils') as typeof import('./utils/curlUtils');
+    try {
+      // Do not trust validateImagePath's original-path fallback: a path can
+      // look allowlisted while a symlink/junction resolves outside userData.
+      // Canonical containment is the authoritative Direct Assist boundary.
+      const canonicalPath = fs.realpathSync.native(rendererPath);
+      if (!isDirectAssistCanonicalPathInsideRoot(canonicalUserDataDir, canonicalPath)) {
+        return { ok: false, rejection: 'An image attachment was rejected.' };
+      }
+      const validation = validateImagePath(rendererPath, userDataDir);
+      if (!validation.isValid) {
+        return { ok: false, rejection: 'An image attachment was rejected.' };
+      }
+      const stat = fs.statSync(canonicalPath);
+      if (!stat.isFile() || stat.size <= 0 || stat.size > DIRECT_ASSIST_MAX_IMAGE_BYTES) {
+        return { ok: false, rejection: 'An image attachment has an invalid size or type.' };
+      }
+      const detectedMime = sniffDirectAssistImage(canonicalPath);
+      if (
+        !detectedMime
+        || DIRECT_ASSIST_IMAGE_MIMES[path.extname(canonicalPath).toLowerCase()] !== detectedMime
+      ) {
+        return { ok: false, rejection: 'An attachment is not a supported image.' };
+      }
+      return { ok: true, canonicalPath };
+    } catch {
+      return { ok: false, rejection: 'An image attachment is unavailable.' };
+    }
+  };
+
   const normalizeDirectAssistRequest = (
     raw: unknown,
   ): { request?: DirectAssistRendererRequest; error?: DirectAssistIpcError; requestId: string } => {
@@ -6254,12 +6607,29 @@ export function initializeIpcHandlers(appState: AppState): void {
       pageContext = null;
     }
 
+    // Resolved at most once per request, and only if something actually carries
+    // an attachment — an unreadable userData root must not fail a plain typed
+    // question that has no images at all.
+    const userDataDir = app.getPath('userData');
+    let canonicalUserDataDirCache: string | null | undefined;
+    const getCanonicalUserDataDir = (): string | null => {
+      if (canonicalUserDataDirCache !== undefined) return canonicalUserDataDirCache;
+      let resolved: string | null;
+      try {
+        resolved = fs.realpathSync.native(userDataDir);
+      } catch {
+        resolved = null;
+      }
+      canonicalUserDataDirCache = resolved;
+      return resolved;
+    };
+
     let history: DirectAssistRendererRequest['history'];
     if (candidate.history !== undefined) {
       if (!Array.isArray(candidate.history) || candidate.history.length > DIRECT_ASSIST_MAX_HISTORY_TURNS) {
         return { requestId, error: directAssistError('INVALID_REQUEST', 'Direct Assist history is invalid.') };
       }
-      history = [];
+      const rawTurns: { role: 'user' | 'assistant'; content: string; imagePaths: string[] }[] = [];
       let historyChars = 0;
       for (const rawTurn of candidate.history) {
         if (
@@ -6274,11 +6644,104 @@ export function initializeIpcHandlers(appState: AppState): void {
         if (historyChars > DIRECT_ASSIST_MAX_CONTEXT_FIELD_CHARS) {
           return { requestId, error: directAssistError('CONTEXT_TOO_LARGE', 'Direct Assist history is too large.') };
         }
-        history.push(Object.freeze({
+        const rawImagePaths = (rawTurn as any).imagePaths;
+        if (rawImagePaths !== undefined) {
+          // Shape is still strict — only AVAILABILITY is forgiving below.
+          if (
+            !Array.isArray(rawImagePaths)
+            || rawImagePaths.length > DIRECT_ASSIST_MAX_IMAGES
+            || rawImagePaths.some((value: unknown) => typeof value !== 'string' || value.trim().length === 0)
+          ) {
+            return { requestId, error: directAssistError('INVALID_REQUEST', 'Direct Assist history contains an invalid turn.') };
+          }
+        }
+        rawTurns.push({
           role: (rawTurn as any).role,
           content: (rawTurn as any).content,
-        }));
+          imagePaths: Array.isArray(rawImagePaths) ? [...rawImagePaths] as string[] : [],
+        });
       }
+
+      // Validating every turn's attachments would be up to
+      // DIRECT_ASSIST_MAX_HISTORY_TURNS x DIRECT_ASSIST_MAX_IMAGES synchronous
+      // realpath+stat+header-read triples on the main process, per Direct Assist
+      // turn. Only DIRECT_ASSIST_MAX_IMAGES of them can ever be dispatched, so
+      // walk newest-first and stop at that many — the same set
+      // selectCarriedHistoryImages would pick.
+      // DESCRIPTIONS FIRST — a transcribed turn needs no bytes at all.
+      //
+      // selectCarriedHistoryImages skips every turn that has a description
+      // (text beats bytes), but the budget below was description-blind, so when
+      // history held more images than the budget and the NEWEST turns were
+      // already transcribed, the whole budget was spent validating images that
+      // would never be dispatched — and the older, untranscribed turn, the only
+      // one whose bytes were actually needed, arrived with no imagePaths and was
+      // silently uncarried. The comment claiming the two select "the same set"
+      // was only true when nothing was transcribed.
+      //
+      // Looked up on the renderer paths: the store keys on the FILE BYTES, so
+      // this is the same hash the canonical paths would produce, and it is a
+      // read-only cache probe — every actual dispatch still goes through the
+      // full validation below.
+      const describedByTurn = new Map<number, string>();
+      const screenStorePre = require('./services/screen/ScreenshotDescriptionStore') as
+        typeof import('./services/screen/ScreenshotDescriptionStore');
+      for (let i = rawTurns.length - 1; i >= 0; i -= 1) {
+        if (!rawTurns[i].imagePaths.length) continue;
+        try {
+          const described = screenStorePre.getDescriptionForImageSet(rawTurns[i].imagePaths);
+          if (described) describedByTurn.set(i, described);
+        } catch { /* a cache miss is the normal case */ }
+      }
+
+      const validated = new Map<string, string | null>();
+      // Free payload slots only: the current turn's own attachments always win
+      // them, so anything beyond this could never be dispatched anyway.
+      let validationBudget = Math.max(0, DIRECT_ASSIST_MAX_IMAGES - (
+        Array.isArray(candidate.imagePaths)
+          ? Math.min(candidate.imagePaths.length, DIRECT_ASSIST_MAX_IMAGES)
+          : 0
+      ));
+      for (let i = rawTurns.length - 1; i >= 0 && validationBudget > 0; i -= 1) {
+        // Already transcribed: its bytes are never carried, so spending budget
+        // here is what starved the older turn that actually needed it.
+        if (describedByTurn.has(i)) continue;
+        const turnImagePaths = rawTurns[i].imagePaths;
+        for (let j = turnImagePaths.length - 1; j >= 0 && validationBudget > 0; j -= 1) {
+          const rendererPath = turnImagePaths[j];
+          if (validated.has(rendererPath)) continue;
+          validationBudget -= 1;
+          const canonicalUserDataDir = getCanonicalUserDataDir();
+          if (!canonicalUserDataDir) {
+            validated.set(rendererPath, null);
+            continue;
+          }
+          const resolved = resolveDirectAssistImagePath(rendererPath, userDataDir, canonicalUserDataDir);
+          // A screenshot the queue has since unlinked is the EXPECTED case, not
+          // an attack: skip it and let imageCount tell the prompt one is gone.
+          validated.set(rendererPath, resolved.ok ? resolved.canonicalPath : null);
+        }
+      }
+
+      // Descriptions come from the pre-pass above (screenStorePre), which is the
+      // shared transcription cache the main live path populates: a screenshot it
+      // has already transcribed reaches a Direct follow-up as text, cheaper than
+      // the bytes and outliving them.
+      history = rawTurns.map((turn, index) => {
+        const canonicalPaths = turn.imagePaths
+          .map((rendererPath) => validated.get(rendererPath) ?? null)
+          .filter((canonicalPath): canonicalPath is string => Boolean(canonicalPath));
+        return Object.freeze({
+          role: turn.role,
+          content: turn.content,
+          imagePaths: Object.freeze(canonicalPaths) as string[],
+          imageCount: turn.imagePaths.length,
+          // ONE lookup per turn, keyed on the turn's whole attachment set —
+          // which is what a description actually describes.
+          // Reuses the pre-pass result rather than hashing the same files again.
+          imageDescription: describedByTurn.get(index) ?? '',
+        });
+      });
       Object.freeze(history);
     }
 
@@ -6291,43 +6754,17 @@ export function initializeIpcHandlers(appState: AppState): void {
       ) {
         return { requestId, error: directAssistError('INVALID_ATTACHMENT', 'Image attachment payload is invalid.') };
       }
-      const { validateImagePath } = require('./utils/curlUtils') as typeof import('./utils/curlUtils');
-      const userDataDir = app.getPath('userData');
-      let canonicalUserDataDir: string;
-      try {
-        canonicalUserDataDir = fs.realpathSync.native(userDataDir);
-      } catch {
+      const canonicalUserDataDir = getCanonicalUserDataDir();
+      if (!canonicalUserDataDir) {
         return { requestId, error: directAssistError('INVALID_ATTACHMENT', 'The app attachment directory is unavailable.') };
       }
       imagePaths = [];
       for (const rendererPath of candidate.imagePaths as string[]) {
-        try {
-          // Do not trust validateImagePath's original-path fallback: a path can
-          // look allowlisted while a symlink/junction resolves outside userData.
-          // Canonical containment is the authoritative Direct Assist boundary.
-          const canonicalPath = fs.realpathSync.native(rendererPath);
-          if (!isDirectAssistCanonicalPathInsideRoot(canonicalUserDataDir, canonicalPath)) {
-            return { requestId, error: directAssistError('INVALID_ATTACHMENT', 'An image attachment was rejected.') };
-          }
-          const validation = validateImagePath(rendererPath, userDataDir);
-          if (!validation.isValid) {
-            return { requestId, error: directAssistError('INVALID_ATTACHMENT', 'An image attachment was rejected.') };
-          }
-          const stat = fs.statSync(canonicalPath);
-          if (!stat.isFile() || stat.size <= 0 || stat.size > DIRECT_ASSIST_MAX_IMAGE_BYTES) {
-            return { requestId, error: directAssistError('INVALID_ATTACHMENT', 'An image attachment has an invalid size or type.') };
-          }
-          const detectedMime = sniffDirectAssistImage(canonicalPath);
-          if (
-            !detectedMime
-            || DIRECT_ASSIST_IMAGE_MIMES[path.extname(canonicalPath).toLowerCase()] !== detectedMime
-          ) {
-            return { requestId, error: directAssistError('INVALID_ATTACHMENT', 'An attachment is not a supported image.') };
-          }
-          imagePaths.push(canonicalPath);
-        } catch {
-          return { requestId, error: directAssistError('INVALID_ATTACHMENT', 'An image attachment is unavailable.') };
+        const resolved = resolveDirectAssistImagePath(rendererPath, userDataDir, canonicalUserDataDir);
+        if (!resolved.ok) {
+          return { requestId, error: directAssistError('INVALID_ATTACHMENT', resolved.rejection) };
         }
+        imagePaths.push(resolved.canonicalPath);
       }
       Object.freeze(imagePaths);
     }
@@ -6440,6 +6877,25 @@ export function initializeIpcHandlers(appState: AppState): void {
     return { success: true };
   });
 
+  safeHandle('get-direct-assist-fallback-enabled', async () => {
+    return SettingsManager.getInstance().getDirectAssistFallbackEnabled();
+  });
+
+  safeHandle('set-direct-assist-fallback-enabled', async (_, enabled: unknown) => {
+    if (typeof enabled !== 'boolean') {
+      return { success: false, error: 'invalid_type' };
+    }
+    const settings = SettingsManager.getInstance();
+    if (!settings.set('directAssistFallbackEnabled', enabled)) {
+      return { success: false, error: 'settings_store_degraded' };
+    }
+    const effective = settings.getDirectAssistFallbackEnabled();
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed()) win.webContents.send('direct-assist-fallback-enabled-changed', effective);
+    });
+    return { success: true };
+  });
+
   safeHandle('direct-assist-stream', async (event, rawRequest: unknown) => {
     const normalized = normalizeDirectAssistRequest(rawRequest);
     if (normalized.error || !normalized.request) {
@@ -6525,14 +6981,14 @@ export function initializeIpcHandlers(appState: AppState): void {
     const onSenderDestroyed = (): void => controller.abort();
     event.sender.once?.('destroyed', onSenderDestroyed);
 
-    // referenceContext and meetingTranscript are always server-computed, not
+    // referenceFiles and meetingTranscript are always server-computed, not
     // taken from the renderer (which never sends either): raw, unchunked,
-    // unranked — every attached reference file's full text (capped only by a
-    // total-size safety ceiling, see buildDirectAssistReferenceContext), and
-    // the live session's last 180s of transcript (the same window the legacy
-    // live auto-answer path already reads via getFormattedContext). Direct
-    // Assist has no retrieval step of its own; this is the entire "evidence",
-    // left for the model to read itself.
+    // unranked — every attached reference file's full text, and the live
+    // session's last 180s of transcript (the same window the legacy live
+    // auto-answer path already reads via getFormattedContext). Direct Assist
+    // has no retrieval step of its own; this is the entire "evidence", left
+    // for the model to read itself. Sizing happens once, downstream, against
+    // the real prompt budget.
     //
     // Both catches fail closed to '' (getActiveModeInfo() has a documented
     // real throw case — see the FAIL-CLOSED comment ~line 3182 above) rather
@@ -6542,12 +6998,32 @@ export function initializeIpcHandlers(appState: AppState): void {
     // "nothing to include" — exactly the silent-mystery gap this feature's
     // trimmedFields notice exists to close, so a load failure should not be
     // invisible to both the notice AND the logs.
-    let referenceContext = '';
+    let referenceFiles: { fileName: string; content: string }[] = [];
     try {
       const { ModesManager } = require('./services/ModesManager');
       const activeModeId = ModesManager.getInstance().getActiveModeInfo()?.id;
       if (activeModeId) {
-        referenceContext = buildDirectAssistReferenceContext(ModesManager.getInstance().getReferenceFiles(activeModeId));
+        // Handed over STRUCTURED, not pre-rendered: prepareDirectAssistPrompt
+        // shares the real prompt budget across the files (see
+        // allocateDirectAssistReferenceFiles). Flattening here first is what
+        // used to let the oldest attachment consume the whole ceiling and
+        // starve every other file, resume included, with no notice anywhere.
+        // Each file is still bounded so one corrupt row cannot balloon main.
+        referenceFiles = (ModesManager.getInstance().getReferenceFiles(activeModeId) as {
+          fileName?: string;
+          content?: string;
+        }[]).map((file) => {
+          const content = typeof file?.content === 'string' ? file.content : '';
+          return {
+            fileName: typeof file?.fileName === 'string' ? file.fileName : 'reference file',
+            content: content.slice(0, DIRECT_ASSIST_MAX_CONTEXT_FIELD_CHARS),
+            // The TRUNCATED notice quotes this, so it has to be the size on
+            // disk. Reporting the sliced length would tell the model a 590 KB
+            // attachment was 200 000 characters — understating what is missing,
+            // which is the one thing that notice exists to prevent.
+            totalChars: content.length,
+          };
+        });
       }
     } catch (error) {
       console.warn('[direct-assist] reference files unavailable, proceeding without them:', (error as Error)?.message);
@@ -6567,7 +7043,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       currentRequest: resolvedSkill.currentRequest,
       skill: resolvedSkill.skill ?? null,
       manualContext: request.manualContext,
-      referenceContext,
+      referenceFiles,
       pageContext: request.pageContext,
       history: request.history,
       transcript: request.transcript,
@@ -6618,9 +7094,46 @@ export function initializeIpcHandlers(appState: AppState): void {
             sendDirectAssistEvent(event.sender, streamEvent);
             continue;
           }
+          if (streamEvent.type === 'provider_switch') {
+            // NOT terminal — a rung failing over is not the end of the
+            // stream, it is what lets the stream continue. Its `sequence` is
+            // a SNAPSHOT of the delta counter, never a slot of its own (always
+            // 0, pre-commit only), so it must never reach the generic
+            // sequence accounting below: doing so would let this event fall
+            // through to the terminal branch and kill the stream the moment
+            // a fallback fired.
+            sendDirectAssistEvent(event.sender, streamEvent);
+            continue;
+          }
+          // LATENT TRAP: everything past this line treats an unrecognized
+          // streamEvent.type as terminal — it falls into the 'done' branch or
+          // the bare `else { sendTerminal(streamEvent) }` below and ends the
+          // stream. That is correct for today's actual terminal types
+          // ('done', 'cancel', 'error'), but it is NOT "unknown ⇒ ignore": a
+          // future non-terminal event added without its own branch ABOVE this
+          // line (next to 'start'/'delta'/'provider_switch') will be sent to
+          // the renderer as a terminal event and silently kill the stream,
+          // exactly like provider_switch would have without its branch above.
           lastSequence = Math.max(lastSequence, streamEvent.sequence);
           if (streamEvent.type === 'done') {
             sendTerminal({ ...streamEvent, fullText } as DirectAssistStreamEvent);
+            // ── TRANSCRIBE THIS TURN'S SCREENSHOT, AFTER the answer ─────────
+            // Direct Assist deliberately has no vision pre-pass: it is one
+            // dispatch with nothing in front of it, and a 6-second
+            // ScreenUnderstandingService call before the answer would undo the
+            // whole point of the path. So it runs AFTER the terminal event —
+            // the user already has their answer and is reading it — purely so
+            // that a follow-up two turns from now has text to read once the
+            // image is gone. Without this, Direct Assist could only ever carry
+            // BYTES forward, which die when ScreenshotHelper unlinks the file
+            // past its 5-deep queue.
+            //
+            // Fire-and-forget and fully guarded: nothing below may affect the
+            // answer that has already been delivered.
+            if (request.imagePaths?.length) {
+              void require('./services/screen/screenTranscription')
+                .transcribeScreenForMemory(request.imagePaths, request.currentRequest);
+            }
           } else {
             sendTerminal(streamEvent);
           }
@@ -7919,6 +8432,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       provider,
       openrouterModel: stored.openrouterModel ?? null,
       jinaModel: stored.jinaModel ?? null,
+      nativelyModel: stored.nativelyModel ?? null,
       hostedModel,
       candidateCount: stored.candidateCount ?? null,
       fallbackToLocal: stored.fallbackToLocal === true,
@@ -7935,9 +8449,10 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle('reranker:set-config', async (_evt, next: {
-    provider?: 'local' | 'openrouter' | 'jina';
+    provider?: 'local' | 'natively' | 'openrouter' | 'jina';
     openrouterModel?: string;
     jinaModel?: string;
+    nativelyModel?: string;
     candidateCount?: number;
     fallbackToLocal?: boolean;
   }) => {
@@ -7946,11 +8461,12 @@ export function initializeIpcHandlers(appState: AppState): void {
     const current = (settings.get('reranker') as any) || {};
 
     const merged: any = { ...current };
-    if (next.provider === 'local' || next.provider === 'openrouter' || next.provider === 'jina') {
+    if (next.provider === 'local' || next.provider === 'natively' || next.provider === 'openrouter' || next.provider === 'jina') {
       merged.provider = next.provider;
     }
     if (typeof next.openrouterModel === 'string') merged.openrouterModel = next.openrouterModel.trim() || undefined;
     if (typeof next.jinaModel === 'string') merged.jinaModel = next.jinaModel.trim() || undefined;
+    if (typeof next.nativelyModel === 'string') merged.nativelyModel = next.nativelyModel.trim() || undefined;
     if (typeof next.fallbackToLocal === 'boolean') merged.fallbackToLocal = next.fallbackToLocal;
     // Clamp rather than reject: a nonsensical depth should not be storable, and
     // silently keeping the old value is less confusing than an error toast.
@@ -7967,6 +8483,18 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('reranker:set-hosted-key', async (_evt, provider: string, key: string) => {
     const { CredentialsManager } = require('./services/CredentialsManager');
     const cm = CredentialsManager.getInstance();
+    // Natively is not bring-your-own-key: it runs on the API key the user
+    // already configured for the app. Falling through here would have written
+    // that key into the OPENROUTER credential slot — silently replacing a real
+    // OpenRouter key with one that cannot authenticate to OpenRouter, and
+    // breaking BYOK reranking, embeddings and generation together.
+    if (provider === 'natively') {
+      return {
+        success: false,
+        error: 'not_byok',
+        message: 'The Natively reranker uses your Natively API key. Set it in the Natively API section.',
+      };
+    }
     const saved = provider === 'jina'
       ? cm.setJinaApiKey(key || '')
       : cm.setOpenrouterApiKey(key || '');
@@ -8487,10 +9015,16 @@ export function initializeIpcHandlers(appState: AppState): void {
     return { ok: result.ok, entries: result.entries };
   });
 
+  // Every renderer consumer of this handler is a model PICKER, so it answers
+  // with generation-capable models only — an embedding model such as the
+  // nomic-embed-text Natively pulls for retrieval is not something you can chat
+  // with, and offering it produced a failure at generation time far from the
+  // setting that caused it. Liveness is a different question and has its own
+  // handler ('is-ollama-reachable'); do not re-derive it from this list.
   safeHandle('get-available-ollama-models', async () => {
     try {
       const llmHelper = appState.processingHelper.getLLMHelper();
-      const models = await llmHelper.getOllamaModels();
+      const models = await llmHelper.getOllamaGenerationModels();
       return models;
     } catch (error: any) {
       // console.error("Error getting Ollama models:", error);
@@ -9058,8 +9592,18 @@ export function initializeIpcHandlers(appState: AppState): void {
   // ── Usage cache (60-second TTL, keyed by API key) ──────────────────────────
   const _usageCache = new Map<string, { data: any; ts: number }>();
   const USAGE_CACHE_TTL_MS = 60_000;
-  const _pricingCache = new Map<string, { data: any; ts: number }>();
-  const PRICING_CACHE_TTL_MS = 5 * 60_000;
+  // The Natively API host. LLMHelper has honoured NATIVELY_API_URL since the
+  // chat endpoint was added; these seven call sites each hardcoded the
+  // production host instead, so the billing and trial surface was the one part
+  // of the app that could not be pointed at a local server. That is exactly the
+  // surface where "does the UI show what the server enforces?" needs answering
+  // before a release, not after.
+  const NATIVELY_API_BASE = (process.env.NATIVELY_API_URL || 'https://api.natively.software').replace(/\/+$/, '');
+  // The plan catalog. Unauthenticated and identical for every user, so it is
+  // cached per PROCESS rather than per key, and for far longer than usage —
+  // allowances change on a deploy, not on a request.
+  const _plansCache = new Map<string, { data: any; ts: number }>();
+  const PLANS_CACHE_TTL_MS = 15 * 60_000;
 
   safeHandle('set-natively-api-key', async (_, apiKey: string) => {
     // Set when the server REFUSES the key, so the handler can report the real
@@ -9230,14 +9774,23 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle('get-natively-pricing', async () => {
+  // The plan catalog: allowances and prices, straight from the server.
+  //
+  // This exists so the plan table stops carrying its own copy of the numbers.
+  // Those copies had already drifted — the cards hardcoded the prices and a
+  // comment beside them listed allowances ("AI 500/1k/2k/3k, STT 200/500/1k/2k
+  // min") that no longer matched anything the server enforced. Fetching them
+  // means a server-side retune needs no app release, which was the original
+  // reason the figures were left out of the UI in the first place.
+  //
+  // NO KEY REQUIRED, deliberately: a visitor deciding which plan to buy has no
+  // key yet, and that is exactly who the table is for.
+  safeHandle('get-natively-plans', async () => {
     try {
-      const cached = _pricingCache.get('pricing');
-      if (cached && Date.now() - cached.ts < PRICING_CACHE_TTL_MS) {
-        return cached.data;
-      }
+      const cached = _plansCache.get('plans');
+      if (cached && Date.now() - cached.ts < PLANS_CACHE_TTL_MS) return cached.data;
 
-      const res = await fetch('https://api.natively.software/v1/pricing', {
+      const res = await fetch(`${NATIVELY_API_BASE}/v1/plans`, {
         signal: AbortSignal.timeout(8000),
       });
       if (!res.ok) {
@@ -9246,9 +9799,15 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
       const data = (await res.json()) as any;
       const result = { ok: true, ...data };
-      _pricingCache.set('pricing', { data: result, ts: Date.now() });
+      _plansCache.set('plans', { data: result, ts: Date.now() });
       return result;
     } catch (error: any) {
+      // Serve a stale catalog over an error: the table degrades to whatever it
+      // last knew, and the card falls back to qualitative copy if it knows
+      // nothing. Prices are not enforcement — showing a slightly old allowance
+      // beats showing an empty plan chooser.
+      const stale = _plansCache.get('plans');
+      if (stale) return { ...stale.data, stale: true };
       return { ok: false, error: error.message || 'network_error' };
     }
   });
@@ -9270,7 +9829,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         return cached.data;
       }
 
-      const res = await fetch('https://api.natively.software/v1/usage', {
+      const res = await fetch(`${NATIVELY_API_BASE}/v1/usage`, {
         headers: { 'x-natively-key': key },
         signal: AbortSignal.timeout(8000),
       });
@@ -9333,7 +9892,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         return { ok: false, error: 'hardware_id_unavailable' };
       }
 
-      const res = await fetch('https://api.natively.software/v1/trial/start', {
+      const res = await fetch(`${NATIVELY_API_BASE}/v1/trial/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hwid }),
@@ -9347,8 +9906,14 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       const data = (await res.json()) as any;
 
+      let persisted = true;
       if (data.ok && data.trial_token && !data.expired) {
-        cm.setTrialToken(data.trial_token, data.expires_at, data.started_at);
+        // The trial is already spent server-side by this point (one row per
+        // hwid), so a store that cannot write must not silently swallow it.
+        // setTrialToken keeps the token in memory regardless and reports
+        // whether it reached disk; the renderer surfaces that as a warning
+        // rather than the trial simply not appearing.
+        persisted = cm.setTrialToken(data.trial_token, data.expires_at, data.started_at).persisted;
 
         // Auto-configure natively as the model + STT provider during trial
         const prevSttProvider = cm.getSttProvider();
@@ -9362,7 +9927,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
 
       const { trial_token, ...safeData } = data;
-      return { ok: true, ...safeData, hasToken: Boolean(data.trial_token) };
+      // `persisted:false` means "running now, gone after a restart" — a real
+      // state the UI has to be able to say out loud, and the reason the trial
+      // appeared not to start at all before.
+      return { ok: true, ...safeData, hasToken: Boolean(data.trial_token), persisted };
     } catch (error: any) {
       console.error('[IPC] trial:start failed:', error);
       return { ok: false, error: error.message || 'network_error' };
@@ -9376,7 +9944,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const token = CredentialsManager.getInstance().getTrialToken();
       if (!token) return { ok: false, error: 'no_trial_token' };
 
-      const res = await fetch('https://api.natively.software/v1/trial/status', {
+      const res = await fetch(`${NATIVELY_API_BASE}/v1/trial/status`, {
         headers: { 'x-trial-token': token },
         signal: AbortSignal.timeout(8_000),
       });
@@ -9420,7 +9988,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const token = CredentialsManager.getInstance().getTrialToken();
       if (!token) return { ok: true }; // no token to report
 
-      await fetch('https://api.natively.software/v1/trial/convert', {
+      await fetch(`${NATIVELY_API_BASE}/v1/trial/convert`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-trial-token': token },
         body: JSON.stringify({ choice }),
@@ -9608,7 +10176,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       // 1. Fire-and-forget analytics (non-blocking)
       const token = cm.getTrialToken();
       if (token) {
-        fetch('https://api.natively.software/v1/trial/convert', {
+        fetch(`${NATIVELY_API_BASE}/v1/trial/convert`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-trial-token': token },
           body: JSON.stringify({ choice: 'byok' }),
@@ -10741,8 +11309,8 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('onnx-reset-family', async (_: any, family: 'whisper' | 'intent' | 'embeddings' | 'reranker') => {
     try {
       if (family === 'intent') {
-        const { clearIntentClassifierPoison } = require('./llm/IntentClassifier');
-        clearIntentClassifierPoison();
+        // No model in this family since 2026-09-05 (MobileBERT classifier removed);
+        // kept so an older renderer sending 'intent' gets success, not an error.
         return { success: true };
       }
       if (family === 'embeddings') {
@@ -11014,6 +11582,22 @@ export function initializeIpcHandlers(appState: AppState): void {
                 {
                   model: candidate,
                   messages: [{ role: 'user', content: 'Hello' }],
+                  // Groq enforces output-tokens-per-minute, and with no cap it
+                  // reserves the MODEL's full completion budget up front: on the
+                  // on_demand tier that is 1113 expected output tokens against a
+                  // 1000 OTPM limit, so the test 413s before it ever reaches the
+                  // key — reported to the user as a failed connection.
+                  // Success here is only `status === 200`; the body is never
+                  // read, so ten tokens proves exactly as much as a thousand.
+                  // Matches the Claude and DeepSeek legs, which already cap at 10.
+                  //
+                  // A cap, NOT `reasoning_effort: 'none'`, even though the
+                  // preferred rung is a reasoning model that will spend these ten
+                  // tokens thinking: that param is HTTP 400 on openai/gpt-oss-120b
+                  // ("must be one of low, medium, high"), which is further down
+                  // this same ladder, and a 400 is not `isGroqModelGone`, so the
+                  // walk would stop dead on it.
+                  max_tokens: 10,
                 },
                 {
                   headers: { Authorization: `Bearer ${apiKey}` },
@@ -11330,6 +11914,30 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('codex-cli:logout', async (_, config?: any) => runCodexAuthAction('logout', config));
   safeHandle('codex-cli:login', async (_, config?: any) => runCodexAuthAction('login', config));
   safeHandle('codex-cli:doctor', async (_, config?: any) => runCodexAuthAction('doctor', config));
+
+  // Google Antigravity OAuth uses the existing encrypted store and model settings.
+  const antigravity = AntigravityService.getInstance();
+  initializeAntigravityLifecycle(app, (status) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) win.webContents.send('antigravity:status-changed', status);
+    }
+    broadcastCredentialsChanged();
+    void refreshRuntimeDefaultIfUnavailable();
+  }, broadcastCredentialsChanged);
+  safeHandle('antigravity:status', () => antigravity.getStatus());
+  safeHandle('antigravity:start-login', async () => {
+    try { await antigravity.startLogin(); return { success: true }; }
+    catch (error: any) { return { success: false, error: error.message }; }
+  });
+  safeHandle('antigravity:cancel-login', () => antigravity.cancelLogin());
+  safeHandle('antigravity:sign-out', async () => {
+    try { return await antigravity.signOut(); }
+    catch (error: any) { return { success: false, error: error.message }; }
+  });
+  safeHandle('antigravity:models', async (_, force?: boolean) => {
+    try { return { success: true, models: await antigravity.getModels(force === true) }; }
+    catch (error: any) { return { success: false, models: [], error: error.message }; }
+  });
 
   // ── ChatGPT OAuth (new — replaces `codex login` CLI subprocess) ──────────
   // The renderer calls codex:start-login, which kicks off the PKCE flow,
@@ -12138,6 +12746,16 @@ export function initializeIpcHandlers(appState: AppState): void {
             });
 
             screenContext = sur.status === 'available' ? sur : undefined;
+            // NO write-through here, deliberately. `screenContext` is the
+            // ANSWERING call's result — "analyze and answer concisely" — and
+            // writing it into the transcription cache poisoned that cache:
+            // transcribeScreenForMemory found a hit and never ran, so the stored
+            // text stayed a paraphrase ("Your build failed because you've
+            // exceeded your disk quota") with the error code the user later
+            // asked for nowhere in it. Verified live, twice.
+            //
+            // ONLY transcribeScreenForMemory writes this cache. One writer is
+            // what keeps "a cached description is a transcription" true.
             screenContextStatus =
               sur.status === 'available'
                 ? 'available'
@@ -12223,6 +12841,13 @@ export function initializeIpcHandlers(appState: AppState): void {
           },
         );
         if (answer) {
+          // The conversation-ring write lives in IntelligenceEngine.runWhatShouldISay
+          // now, not here. Placed at this IPC handler it only ever recorded a
+          // MANUAL press: Auto Answer calls runWhatShouldISay directly and never
+          // reaches this file, so every automatic answer — the common case in a
+          // live meeting — was missing from the history along with any
+          // screenshot attached to it. `screenContext` computed above is passed
+          // into runWhatShouldISay, so the engine records the screen text too.
           try {
             PhoneMirrorService.getInstance().publishAssistantMessage(
               crypto.randomUUID(),
@@ -12645,7 +13270,12 @@ export function initializeIpcHandlers(appState: AppState): void {
     'test-inject-transcript',
     async (_, segment: { speaker: string; text: string; timestamp?: number; final?: boolean }) => {
       try {
-        if (process.env.NODE_ENV !== 'test') return { success: false, error: 'test_only' };
+        // Both gates required, matching the sibling debug-inject-transcript
+        // handler above (structurally unreachable in any shipped build) — an
+        // env-only check is an environment-variable assumption, not a
+        // packaged-build guarantee.
+        const { app } = require('electron');
+        if (process.env.NODE_ENV !== 'test' || app.isPackaged) return { success: false, error: 'test_only' };
         const intelligenceManager = appState.getIntelligenceManager();
         intelligenceManager.addTranscript(
           {
@@ -12666,7 +13296,9 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('test-get-mode-context', async () => {
     try {
-      if (process.env.NODE_ENV !== 'test') return { success: false, error: 'test_only' };
+      // Both gates required — see test-inject-transcript above.
+      const { app } = require('electron');
+      if (process.env.NODE_ENV !== 'test' || app.isPackaged) return { success: false, error: 'test_only' };
       const { ModesManager } = require('./services/ModesManager');
       const manager = ModesManager.getInstance();
       return {
@@ -14910,6 +15542,155 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  /**
+   * Provider performance diagnostics — READ-ONLY.
+   *
+   * Phase 20 asks for a subtle status ("Fast", "Calibrated", "Large-context
+   * reliability is poor"), not a wall of numbers, and Phase 27 asks for enough
+   * detail to answer "why did this request time out?". Both are served from one
+   * handler: `grade` and `confidence` are the words a settings pane shows, and
+   * the raw profile beside them is what an advanced diagnostics view or a bug
+   * report needs.
+   *
+   * Nothing here can leak request content — a profile is durations, counts and
+   * ids by construction. The network id IS returned, because this never leaves
+   * the machine; the telemetry path deliberately sends only the coarse
+   * interface class instead.
+   */
+  safeHandle('provider-performance:get-diagnostics', async () => {
+    try {
+      const {
+        getProviderPerformanceStore, performanceGrade, getRuntimeSignals, confidenceFor,
+        streamIdleTimeoutMs, projectLargeContext, largeContextReliabilityWarning,
+        verdictFrom, secondaryStreamTallies, isStale, rankProvidersFor, ttftQuantiles,
+      } = require('./llm/performance');
+      const network = getRuntimeSignals().network();
+      const all = getProviderPerformanceStore().all();
+      const profiles = all.map((p: any) => {
+        const large = p.workloads?.large;
+        const largeAttempts = large
+          ? Object.values(large.reliability as Record<string, number>).reduce((a, b) => a + b, 0)
+          : 0;
+        const largeFailures = large
+          ? largeAttempts - (large.reliability.ok ?? 0)
+          : 0;
+        return {
+          providerId: p.providerId,
+          modelId: p.modelId,
+          networkProfileId: p.networkProfileId,
+          route: p.route,
+          // The words the UI shows. Phase 20 rules out surfacing a fabricated
+          // "P95 = 83.274s"; a grade and a confidence say what is actually known.
+          grade: performanceGrade(p),
+          confidence: confidenceFor(p.sampleCount),
+          sampleCount: p.sampleCount,
+          lastUpdated: p.lastUpdated,
+          stale: isStale(p),
+          // Capability FACTS, read from the existing registries — never inferred
+          // from any latency on this record. The verdict vocabulary keeps
+          // "we did not establish this" distinct from "unsupported".
+          capability: {
+            ...p.capability,
+            visionVerdict: verdictFrom(p.capability?.vision ?? 'unknown'),
+          },
+          // The live stall guard for this identity, and where the number came
+          // from. This is the field that answers "why did my stream get cut?".
+          streamIdle: streamIdleTimeoutMs(p.route, p),
+          // TRUE quantiles, and null until there are 50+ samples to support one.
+          // Phase 7's "do not claim a real P95 with n=5", enforced by the
+          // absence of a number rather than by a caveat next to one. Diagnostics
+          // only — no deadline is sized from a quantile; that is the decaying
+          // max's job.
+          quantiles: {
+            small: ttftQuantiles(p, 'small'),
+            medium: ttftQuantiles(p, 'medium'),
+            large: ttftQuantiles(p, 'large'),
+            vision: ttftQuantiles(p, 'vision'),
+          },
+          // 100K is a size we deliberately never benchmark. This is the estimate
+          // that replaces doing so, and it carries its own error — `actionable`
+          // is false when the fit explains less than it invents.
+          projected100k: projectLargeContext(p, 100_000),
+          // Transport retries banked from the adapters. A success rate alone
+          // hides a provider that always works on its third attempt.
+          retries: Object.values(p.workloads ?? {})
+            .reduce((n: number, w: any) => n + (w?.reliability?.retries ?? 0), 0),
+          largeContextWarning: largeContextReliabilityWarning({
+            attempts: largeAttempts,
+            failures: largeFailures,
+          }),
+          contextScaling: p.contextScaling,
+          stream: p.stream,
+          workloads: p.workloads,
+          isCurrentNetwork: p.networkProfileId === network.id,
+        };
+      });
+      return {
+        ok: true,
+        network: { id: network.id, interfaceClass: network.interfaceClass, offline: network.offline },
+        profiles,
+        // Phase 19 readiness, surfaced read-only. This is what the profile can
+        // already answer about routing — "which provider is best for a large
+        // request / for vision" — WITHOUT being wired into the fallback engine.
+        // It is not wired because the engine orders rungs by id and those ids
+        // are coarser than a profile key (two gateways share 'custom'), so
+        // there is no sound rung → profile mapping to seed from yet.
+        rankings: {
+          small: rankProvidersFor(all, 'small'),
+          large: rankProvidersFor(all, 'large'),
+          vision: rankProvidersFor(all, 'vision'),
+        },
+        // Repairs and regenerations, tallied separately because they reach no
+        // profile. A repair window that expires before the provider's first
+        // token can never land, and that failure is otherwise silent — the user
+        // simply never sees their answer improve.
+        secondaryStreams: secondaryStreamTallies(),
+      };
+    } catch (err: any) {
+      // A diagnostics read must never be able to look like an app failure.
+      return { ok: false, error: String(err?.message ?? err), profiles: [] };
+    }
+  });
+
+  /**
+   * Run calibration. THE ONLY BILLABLE ENTRY POINT IN THIS FEATURE.
+   *
+   * Manual trigger only — there is deliberately no provider-add hook, no app
+   * launch hook and no staleness auto-run, because anything that fires on its
+   * own is what "silently spend the user's money" means. Both flags default
+   * OFF, so a user who has not opted in gets `skippedReason: 'flag_off'` and
+   * zero requests. A 24h per-identity cooldown bounds repeated presses, and the
+   * engine caps one invocation at 3 text + 1 image request.
+   */
+  safeHandle('provider-performance:calibrate', async () => {
+    try {
+      const { runCalibration } = require('./llm/performance/calibration');
+      const helper = appState.processingHelper?.getLLMHelper?.();
+      const result = await runCalibration(helper as any);
+      console.log('[Perf] calibration finished', {
+        provider: result.providerId, model: result.modelId,
+        requests: result.requestsIssued, vision: result.vision,
+        skipped: result.skippedReason ?? null,
+      });
+      return { ok: true, result };
+    } catch (err: any) {
+      return { ok: false, error: String(err?.message ?? err) };
+    }
+  });
+
+  /** Forget everything measured for one provider — the manual "recalibrate". */
+  safeHandle('provider-performance:reset', async (_: any, providerId?: string) => {
+    try {
+      const { getProviderPerformanceStore } = require('./llm/performance');
+      const store = getProviderPerformanceStore();
+      if (providerId) store.invalidateProvider(providerId); else store.clear();
+      store.flush();
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, error: String(err?.message ?? err) };
+    }
+  });
+
   safeHandle('knowledge:get-card-history', async (_, cardId: string) => {
     try {
       const { isOkfUserEditableCardsEnabled } = require('./intelligence/intelligenceFlags');
@@ -15585,8 +16366,9 @@ export function initializeIpcHandlers(appState: AppState): void {
             hasProfileFacts: _pHasProfile,
             turnSourceDecision: _pTurnSourceDecision,
           });
-          if (_pOwn.shouldClarifyInsteadOfProfile && _phoneChatLatestId === myPhoneId) {
-            const clarify = buildSourceSwitchClarification(_pOwn.owner, _pExplicitSwitch);
+          if (_pOwn.shouldClarifyInsteadOfProfile && _phoneChatLatestId === myPhoneId
+              && require('./intelligence/context-os').clarificationShortCircuitEnabled()) {
+            const clarify = buildSourceSwitchClarification(_pOwn.owner, _pExplicitSwitch, { hasReferenceFiles: Boolean((_pMode as any)?.hasReferenceFiles) });
             try { phoneMirror.publishToken(String(myStreamId), clarify); } catch (_) {}
             try { phoneMirror.publishDone(String(myStreamId), clarify); } catch (_) {}
             win?.webContents.send('gemini-stream-token', clarify, { streamId: myStreamId, source: 'phone' });
@@ -15621,9 +16403,40 @@ export function initializeIpcHandlers(appState: AppState): void {
         //     on the phone path to zero tokens.
         const phoneUsingLocalLlm = llmHelper.isUsingOllama() || llmHelper.isUsingCodexCli();
         const phoneViaServerCascade = llmHelper.isUsingNativelyServerCascade?.() === true;
+        const phoneUsingUserEndpoint = llmHelper.isUsingUserEndpoint?.() === true;
+        const phoneObservedLatency = phoneUsingUserEndpoint
+          ? (llmHelper.observedAnswerLatency?.() ?? null)
+          : null;
+        const phoneStreamStartedAt = Date.now();
+        let phoneRecordedFirstToken = false;
+        const notePhoneFirstToken = () => {
+          if (phoneRecordedFirstToken || !phoneUsingUserEndpoint) return;
+          phoneRecordedFirstToken = true;
+          try { llmHelper.recordAnswerFirstToken?.(Date.now() - phoneStreamStartedAt); } catch { /* never break the answer */ }
+        };
+        // The THIRD primary answer surface. WTA and manual chat are the other
+        // two; a phone-mirror turn is a real answer a real person is waiting on,
+        // so it feeds the profile exactly like they do. Leaving it out would
+        // make one provider's evidence depend on which screen the user asked
+        // from, which is the silent-divergence failure this area keeps producing.
+        const phonePerf = performanceHooks({
+          llmHelper: llmHelper as any,
+          hasImages: false,
+          inputTokens: _estimatePerfTokens(`${message ?? ''}${context ?? ''}`),
+          isUserCancelled: () => phoneSuperseded,
+          onDiagnostics: (record) => {
+            if (record.terminationReason === 'done') return;
+            console.log('[Perf] phone-mirror turn ended early', record);
+          },
+        });
         await raceStreamWithDeadline({
           stream: stream as AsyncGenerator<string>,
-          firstUsefulDeadlineMs: firstUsefulDeadlineMs('general_meeting_answer', phoneUsingLocalLlm, phoneViaServerCascade),
+          observe: phonePerf.observe,
+          interTokenStallMs: phonePerf.interTokenStallMs,
+          firstUsefulDeadlineMs: applyAdaptiveTtft(
+            firstUsefulDeadlineMs('general_meeting_answer', phoneUsingLocalLlm, phoneViaServerCascade, phoneUsingUserEndpoint, phoneObservedLatency),
+            { llmHelper: llmHelper as any, hasImages: false, inputTokens: _estimatePerfTokens(`${message ?? ''}${context ?? ''}`) },
+          ),
           isUsefulYet: () => full.trim().length >= 5,
           shouldAbort: () => {
             if (_phoneChatLatestId !== myPhoneId) {
@@ -15635,6 +16448,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             return false;
           },
           onToken: (token: string) => {
+            notePhoneFirstToken();
             try { phoneMirror.publishToken(String(myStreamId), token); } catch (_) {}
             // streamId lets the desktop renderer drop tokens from a superseded
             // chat stream (audit finding #3); backward-compatible optional arg.
@@ -16054,7 +16868,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
     safeHandle('__e2e__:ask', async (
       _,
-      params: { question: string; context?: string; timeoutMs?: number; injectAsTranscript?: boolean; priorTurns?: Array<{ speaker: string; text: string }> },
+      params: { question: string; context?: string; timeoutMs?: number; injectAsTranscript?: boolean; priorTurns?: Array<{ speaker: string; text: string }>; hotkey?: boolean; imagePaths?: string[]; noReset?: boolean },
     ) => {
       const im = appState.getIntelligenceManager();
       const timeoutMs = params.timeoutMs ?? 60_000;
@@ -16064,7 +16878,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Jaccard similarity, and similarly-worded questions in a session would
       // otherwise reuse a stale/empty prior result). Follow-ups pass priorTurns to
       // rebuild just their parent's context after the reset.
-      try { im.reset?.(); } catch { /* non-fatal */ }
+      // `noReset` (2026-09-07): keep the session so a chained follow-up ("why?")
+      // is asked against the engine's OWN prior answer, as in a real meeting.
+      if (!params.noReset) { try { im.reset?.(); } catch { /* non-fatal */ } }
       // Build REAL session state: replay any prior turns, then the interviewer's
       // question as a finalized transcript segment — exactly as the STT path would.
       // This gives runWhatShouldISay a real transcript so extractLatestQuestion +
@@ -16127,9 +16943,9 @@ export function initializeIpcHandlers(appState: AppState): void {
           try { im.off?.('suggested_answer', onAnswer as any); } catch {}
           try { im.off?.('suggested_answer_token', onToken as any); } catch {}
           try { im.off?.('suggested_answer_discard', onDiscard as any); } catch {}
-          try { im.off?.('clarify_ready', onClarify as any); } catch {}
-          try { im.off?.('recap_ready', onRecap as any); } catch {}
-          try { im.off?.('follow_up_questions', onFollowUps as any); } catch {}
+          for (const ev of ['clarify_ready', 'clarify']) { try { im.off?.(ev, onClarify as any); } catch {} }
+          for (const ev of ['recap_ready', 'recap']) { try { im.off?.(ev, onRecap as any); } catch {} }
+          for (const ev of ['follow_up_questions', 'follow_up_questions_update']) { try { im.off?.(ev, onFollowUps as any); } catch {} }
           if (settleTimer) clearTimeout(settleTimer);
           clearTimeout(timer);
         };
@@ -16137,16 +16953,26 @@ export function initializeIpcHandlers(appState: AppState): void {
         im.on?.('suggested_answer', onAnswer as any);
         im.on?.('suggested_answer_token', onToken as any);
         im.on?.('suggested_answer_discard', onDiscard as any);
-        try { im.on?.('clarify_ready', onClarify as any); } catch {}
-        try { im.on?.('recap_ready', onRecap as any); } catch {}
-        try { im.on?.('follow_up_questions', onFollowUps as any); } catch {}
+        // The engine's real event names are 'recap', 'clarify' and
+        // 'follow_up_questions_update' (2026-09-07); the *_ready names were
+        // never emitted, so planner-routed turns settled as noDecision.
+        for (const ev of ['clarify_ready', 'clarify']) { try { im.on?.(ev, onClarify as any); } catch {} }
+        for (const ev of ['recap_ready', 'recap']) { try { im.on?.(ev, onRecap as any); } catch {} }
+        for (const ev of ['follow_up_questions', 'follow_up_questions_update']) { try { im.on?.(ev, onFollowUps as any); } catch {} }
         // Drive the real pipeline. handleSuggestionTrigger → runWhatShouldISay.
+        // `hotkey: true` (2026-09-07) mirrors the manual Cmd+Enter press instead
+        // — the same runWhatShouldISay call ipcHandlers makes for the hotkey,
+        // with skipCooldown/forceFresh and optional screenshot paths — so the
+        // harness can exercise the surface users actually report on, not only
+        // the planner-routed auto-answer path.
         Promise.resolve(
-          im.handleSuggestionTrigger({
-            context: builtContext,
-            lastQuestion: params.question,
-            confidence: 0.9,
-          }),
+          params.hotkey
+            ? im.runWhatShouldISay(params.question, 0.9, params.imagePaths, { skipCooldown: true, forceFresh: true })
+            : im.handleSuggestionTrigger({
+              context: builtContext,
+              lastQuestion: params.question,
+              confidence: 0.9,
+            }),
         ).then(() => {
           // The trigger has fully decided. Give streamed tokens a brief window to
           // flush into a suggested_answer; if none arrives, settle on whatever we
@@ -16201,7 +17027,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     // IPC event through a synthetic sender that collects tokens.
     safeHandle('__e2e__:manual-ask', async (
       event,
-      params: { question: string; timeoutMs?: number },
+      params: { question: string; timeoutMs?: number; imagePaths?: string[] },
     ) => {
       const timeoutMs = params.timeoutMs ?? 45000;
       return await new Promise((resolve) => {
@@ -16225,7 +17051,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         const timer = setTimeout(() => { if (!done) { done = true; resolve({ success: false, timedOut: true, streamedTokens: tokens }); } }, timeoutMs);
         const handler = (globalThis as any).__nativelyGeminiChatStream;
         Promise.resolve()
-          .then(() => handler ? handler(synthEvent, params.question, undefined, undefined, undefined) : Promise.reject(new Error('gemini-chat-stream handler not captured')))
+          .then(() => handler ? handler(synthEvent, params.question, params.imagePaths, undefined, undefined) : Promise.reject(new Error('gemini-chat-stream handler not captured')))
           .catch((e: any) => { if (!done) { done = true; resolve({ success: false, error: e?.message, streamedTokens: tokens }); } })
           .finally(() => clearTimeout(timer));
       });

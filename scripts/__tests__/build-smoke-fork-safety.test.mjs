@@ -36,7 +36,21 @@ test('trusted runs cannot silently downgrade when the premium credential is miss
 test('core smoke externalizes private runtime imports only behind an explicit opt-in', () => {
   assert.equal(packageJson.scripts['build:electron'], 'node scripts/build-electron.js');
   assert.match(packageJson.scripts['build:electron:core-smoke'], /NATIVELY_CORE_SMOKE=1/);
-  assert.match(buildScript, /const CORE_SMOKE = process\.env\.NATIVELY_CORE_SMOKE === '1'/);
+  // ANCHORED (^…;$ with /m), deliberately. The unanchored form of this
+  // assertion was a substring search, so it kept passing when PR #533 changed
+  // the line to `… === '1' || !premiumPresent;` — a test literally named "only
+  // behind an explicit opt-in" went green while the opt-in became implicit.
+  // The `$` after the semicolon is the whole guard: it rejects ANY additional
+  // disjunct. The doesNotMatch below is redundant with it, but it fails with a
+  // message that names the actual mistake instead of "no match found".
+  assert.match(buildScript, /^const CORE_SMOKE = process\.env\.NATIVELY_CORE_SMOKE === '1';$/m);
+  assert.doesNotMatch(
+    buildScript,
+    /^const CORE_SMOKE =.*\|\|/m,
+    'CORE_SMOKE must stay an explicit opt-in: no extra `||` condition may enable it. ' +
+      'Auto-enabling it (e.g. on a missing premium/ submodule) turns a hard build ' +
+      'failure into a silent success that ships an app with Pro features dead.'
+  );
   assert.match(buildScript, /plugins: CORE_SMOKE \? \[coreSmokePremiumExternalPlugin\] : \[\]/);
   assert.match(buildScript, /filter: \/\^\(\?:\\\.\\\.\\\/\)\+premium/);
 });

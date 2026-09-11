@@ -6,7 +6,6 @@ import {
   CheckCircle,
   ChevronDown,
   ChevronsRight,
-  Clock,
   Layers,
   Loader2,
   Mic,
@@ -14,7 +13,6 @@ import {
   Search,
   Sparkles,
   Trash2,
-  Zap,
 } from 'lucide-react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useT } from '../../i18n';
@@ -28,27 +26,23 @@ import { BEAT, EASE_ENTER, EASE_LEAVE, INK, SETTLE } from '../../lib/plansMotion
 // monochrome glyph, so on the light theme's pale plaque an <img> would be
 // invisible. See `.natively-key-mark` in index.css.
 import nativelyLogo from '../../assets/logo.webp';
+import {
+  formatCompact, formatMeter, formatUsd, normalizeQuota, TRIAL_FALLBACK_LIMITS,
+  type NativelyQuota, type NativelyPlanLimits, type TrialUsage, type TrialLimits, type UsageMeter,
+} from '../../types/nativelyUsage';
 
 // ─── Types ───────────────────────────────────────────────────
-interface QuotaBucket {
-  used: number;
-  limit: number;
-  remaining: number;
-}
+// Shapes come from src/types/nativelyUsage.ts, which the preload bridge shares.
+// This file used to declare its own QuotaBucket/UsageData pair describing three
+// request-counted buckets; the product now meters five resources and shows four
+// categories, and a second local description of that is how the panel and the
+// server end up disagreeing about what a number means.
 interface UsageData {
   plan: string;
   member_since: string;
-  quota: {
-    transcription: QuotaBucket;
-    ai: QuotaBucket;
-    search: QuotaBucket;
-    resets_at: string;
-  };
-}
-
-interface PricingProduct {
-  formattedPrice: string | null;
-  checkoutUrl: string;
+  quota: NativelyQuota;
+  /** The plan row the server enforced. Absent on a cache written by an older build. */
+  limits?: NativelyPlanLimits;
 }
 
 const PLAN_STANDARD_URL = 'https://checkout.dodopayments.com/buy/pdt_0NbFixGmD8CSeawb5qvVl';
@@ -81,8 +75,19 @@ function readUsageCache(): UsageData | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     // Shape-check before trusting: a partial write would otherwise throw inside
-    // the render path when QuotaBar reads `.used`/`.limit`.
-    if (!parsed?.quota?.transcription || !parsed.quota.ai || !parsed.quota.search) return null;
+    // the render path when a meter reads `.used`/`.limit`.
+    //
+    // Checks the CANONICAL keys, which also does the version check for free: an
+    // entry written by a build that predates the resource model has
+    // transcription/ai/search and no `knowledge`, so it is dropped and refetched
+    // rather than rendering four categories from three request counters.
+    // Checks what every meter needs to RENDER, not the full canonical set: the
+    // stored object has already been through normalizeQuota, and reranking is
+    // legitimately absent when the entry was written against a server that
+    // never metered it. Requiring it here would throw away a perfectly usable
+    // cache on every launch.
+    const q = parsed?.quota;
+    if (!q?.ai || !q?.voice || !q?.research || typeof q.ai.percent !== 'number') return null;
     const resets = Date.parse(parsed.quota.resets_at);
     if (Number.isFinite(resets) && resets < Date.now()) return null;
     return parsed as UsageData;
@@ -115,23 +120,34 @@ const TIER_GLOW = {
   Ultra: 'rgba(111, 37, 66, 0.34)',
 } as const;
 
+// The plan chooser.
+//
+// `price` here is a FALLBACK, not the source of truth: the live figure comes
+// from GET /v1/plans via `planCatalog` below, keyed by `planKey`. Keeping a
+// literal means the chooser still renders something sensible offline or before
+// the catalog arrives; letting it be the only value is what allowed the prices
+// and allowances in this file to drift away from the ones actually charged.
 const PLANS = [
   {
     id: 'natively_api_standard_monthly',
     name: 'Standard',
+    planKey: 'standard',
     price: '$8',
     url: PLAN_STANDARD_URL,
     badgeText: 'Basic',
     includesPro: false,
     description: 'Essential transcription and AI requests for light, everyday use.',
     note: 'Does not include Natively Pro desktop app license. Custom API key usage is supported.',
-    // Quotas are described qualitatively rather than as exact figures, so the
-    // per-tier limits aren't published in the UI and can be tuned server-side
-    // without shipping a copy change. Ordering must stay monotonic across the
-    // four tiers (light → regular → high → continuous) since that ladder is
-    // now the only signal a buyer has for relative capacity.
-    // Underlying limits at time of writing — AI 500/1k/2k/3k, STT 200/500/1k/2k
-    // min, search 20/100/200/300 — kept here for reference only, not rendered.
+    // The qualitative ladder (light -> regular -> high -> continuous) stays: it
+    // is what a buyer skims. The EXACT allowances now render underneath it from
+    // GET /v1/plans — see PlanAllowances.
+    //
+    // Those figures used to be left out on the grounds that publishing them
+    // meant a copy change whenever the server retuned a limit. Fetching them
+    // removes that objection entirely, and the comment that used to sit here
+    // listing them "for reference" proves the point: every number in it (AI
+    // 500/1k/2k/3k, STT 200/500/1k/2k min, search 20/100/200/300) was wrong by
+    // the time anyone read it.
     features: [
       'Light everyday AI usage',
       'Light transcription volume',
@@ -141,6 +157,7 @@ const PLANS = [
   {
     id: 'natively_api_pro_monthly',
     name: 'Pro',
+    planKey: 'pro',
     price: '$15',
     url: PLAN_PRO_URL,
     badgeText: 'Recommended',
@@ -157,6 +174,7 @@ const PLANS = [
   {
     id: 'natively_api_max_monthly',
     name: 'Max',
+    planKey: 'max',
     price: '$25',
     url: PLAN_MAX_URL,
     badgeText: 'Best Value',
@@ -173,6 +191,7 @@ const PLANS = [
   {
     id: 'natively_api_ultra_monthly',
     name: 'Ultra',
+    planKey: 'ultra',
     price: '$35',
     url: PLAN_ULTRA_URL,
     badgeText: 'Heavy Users',
@@ -232,37 +251,86 @@ const cardContainerVariants = {
 // emerald, which made three neutral facts read as three different *kinds* of
 // thing and put a third and fourth hue on a surface that should carry one
 // accent. Colour here now means exactly one thing — amber = running low.
-function QuotaBar({
+/**
+ * One usage meter: label, a figure, and a bar.
+ *
+ * ── TWO READINGS, AND WHY BOTH EXIST ────────────────────────────────────────
+ *
+ * `percentOnly` shows "63%"; the default shows "4.1M / 6.5M · 63%".
+ *
+ * The pair answers "can I index this repo?", which a proportion cannot — that
+ * needs tokens remaining, not a fraction of an allowance. But it also prints the
+ * plan's exact allowance on screen, and on the monthly panel Evin does not want
+ * the entitlement spelled out; the percentage carries the same "am I running
+ * low?" signal without it.
+ *
+ * So the trial panel keeps the figures (a trial's allowance is public, and a
+ * trial user is precisely the person deciding whether a task will fit), and the
+ * monthly panel takes the percentage. The two never render together — trial and
+ * saved-key states are mutually exclusive in practice — so this is one style per
+ * screen, not two on one.
+ *
+ * Note this is the shape KnowledgeUsage's headline already had, so the monthly
+ * card is now internally consistent rather than one bare percentage among three
+ * used/limit pairs.
+ */
+function ResourceMeter({
   label,
   icon: Icon,
-  bucket,
+  meter,
+  sub = false,
+  percentOnly = false,
 }: {
   label: string;
-  icon: React.ElementType;
-  bucket: QuotaBucket;
+  icon?: React.ElementType;
+  meter: UsageMeter | undefined;
+  /** Rendered smaller and unlabelled by icon, for the Knowledge breakdown. */
+  sub?: boolean;
+  /** Show only the percentage, never the plan's allowance. */
+  percentOnly?: boolean;
 }) {
-  const pct = bucket.limit > 0 ? Math.min(100, (bucket.used / bucket.limit) * 100) : 0;
-  const isHigh = pct >= 80;
-  // Percentage remaining, not the raw used/limit pair — a plan-agnostic
-  // number that reads the same way on Standard, Pro, Max, and Ultra instead
-  // of forcing a mental "45 / 500 vs 230 / 3000" comparison across tiers.
-  const pctRemaining = Math.max(0, Math.round(100 - pct));
+  // An absent meter is not zero usage — it is a response this build does not
+  // understand, or one that has not arrived. Render nothing rather than a
+  // confident 0%.
+  if (!meter) return null;
+  const pct = Number.isFinite(meter.visual_percent) ? meter.visual_percent : 0;
+  // The REAL percentage drives the warning colour, so a meter that has gone
+  // past its limit reads as over rather than as exactly full.
+  const real = Number.isFinite(meter.percent) ? meter.percent : 0;
+  const isHigh = real >= 80;
+  const isOver = real > 100;
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Icon size={12} className="text-text-tertiary" strokeWidth={1.75} />
-          <span className="text-[12px] text-text-secondary">{label}</span>
+    <div className={sub ? 'space-y-1.5' : 'space-y-2'}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 min-w-0">
+          {Icon && <Icon size={12} className="text-text-tertiary" strokeWidth={1.75} />}
+          <span className={`${sub ? 'text-[11px]' : 'text-[12px]'} text-text-secondary truncate`}>{label}</span>
         </div>
         <span
-          className={`text-[12px] tabular-nums ${isHigh ? 'text-amber-500 font-medium' : 'text-text-tertiary'}`}
+          className={`${sub ? 'text-[11px]' : 'text-[12px]'} tabular-nums shrink-0 ${
+            isHigh ? 'text-amber-500 font-medium' : 'text-text-tertiary'
+          }`}
         >
-          {pctRemaining}% left
+          {/* An unmetered resource has no percentage to show, so it says
+              "Unlimited" in both readings rather than rendering an empty slot
+              or a misleading 0%. */}
+          {percentOnly ? (
+            meter.limit == null ? 'Unlimited' : `${Math.round(real)}%`
+          ) : (
+            <>
+              {formatMeter(meter)}
+              {meter.limit != null && (
+                <span className="opacity-60"> · {Math.round(real)}%</span>
+              )}
+            </>
+          )}
         </span>
       </div>
-      <div className="h-[3px] w-full bg-bg-input rounded-full overflow-hidden">
+      <div className={`${sub ? 'h-[2px]' : 'h-[3px]'} w-full bg-bg-input rounded-full overflow-hidden`}>
         <div
-          className={`h-full rounded-full transition-[width] duration-700 ease-out motion-reduce:transition-none ${isHigh ? 'bg-amber-500' : 'bg-accent-primary'}`}
+          className={`h-full rounded-full transition-[width] duration-700 ease-out motion-reduce:transition-none ${
+            isOver ? 'bg-red-500' : isHigh ? 'bg-amber-500' : 'bg-accent-primary'
+          }`}
           style={{ width: `${pct}%` }}
         />
       </div>
@@ -270,8 +338,135 @@ function QuotaBar({
   );
 }
 
-// ─── Trial countdown (live, ticks every 500ms) ───────────────
-function TrialCountdown({ expiresAt }: { expiresAt: string }) {
+/**
+ * Knowledge Usage: one meter over two.
+ *
+ * The headline is the server's `knowledge.percent`: an even 50/50 blend of the
+ * two halves' percentages, so each capability has equal say. It is NOT a ratio
+ * of summed tokens — reranker allowances are ~2.5x the embedding ones, so that
+ * would have read ~29% for a customer who had spent every embedding token.
+ *
+ * The blend has its own blind spot, which is why the warning colour reads
+ * `max_half_percent` instead: 100% embeddings with reranking untouched blends
+ * to a mid-range 50%, and since the halves are enforced independently that
+ * customer's indexing is already dead. The number says how much is used; the
+ * colour says whether anything is blocked. The breakdown below says which.
+ *
+ * The breakdown is a disclosure rather than two more top-level rows: embeddings
+ * and reranking are one product concept to the person paying for them, and
+ * promoting both to peers of "AI Usage" implies four independent things to
+ * budget instead of three.
+ */
+function KnowledgeUsage({ knowledge, percentOnly = false }: { knowledge: NativelyQuota['knowledge'] | undefined; percentOnly?: boolean }) {
+  const [open, setOpen] = useState(false);
+  if (!knowledge) return null;
+  const pct = Number.isFinite(knowledge.percent) ? knowledge.percent : 0;
+  // The WORST half drives the warning, the blend drives the number. They answer
+  // different questions: "how much have I used" vs "is anything already
+  // blocked". Embeddings at 100% with reranking untouched blends to 50%, and
+  // the halves are enforced independently — so indexing is dead while the
+  // headline reads mid-range. Colouring on the blend would hide exactly the
+  // state someone opens this panel to diagnose.
+  const worstHalf = Number.isFinite(knowledge.max_half_percent as number)
+    ? (knowledge.max_half_percent as number)
+    : pct;
+  const isHigh = worstHalf >= 80;
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          className="flex items-center gap-2 min-w-0 cursor-pointer group"
+        >
+          <Layers size={12} className="text-text-tertiary" strokeWidth={1.75} />
+          <span className="text-[12px] text-text-secondary group-hover:text-text-primary transition-colors duration-150 motion-reduce:transition-none">
+            Knowledge Usage
+          </span>
+          <ChevronDown
+            size={11}
+            strokeWidth={2}
+            className={`text-text-tertiary transition-transform duration-200 motion-reduce:transition-none ${open ? 'rotate-180' : ''}`}
+          />
+        </button>
+        <span
+          className={`text-[12px] tabular-nums shrink-0 ${isHigh ? 'text-amber-500 font-medium' : 'text-text-tertiary'}`}
+        >
+          {Math.round(pct)}%
+        </span>
+      </div>
+      <div className="h-[3px] w-full bg-bg-input rounded-full overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-[width] duration-700 ease-out motion-reduce:transition-none ${
+            worstHalf > 100 ? 'bg-red-500' : isHigh ? 'bg-amber-500' : 'bg-accent-primary'
+          }`}
+          style={{ width: `${Math.min(100, Math.max(0, knowledge.visual_percent ?? 0))}%` }}
+        />
+      </div>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            key="knowledge-detail"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.18, ease: EASE_ENTER }}
+            style={{ overflow: 'hidden' }}
+          >
+            <div className="pl-5 pt-1 space-y-2.5">
+              <ResourceMeter label="Embeddings" meter={knowledge.embedding} sub percentOnly={percentOnly} />
+              <ResourceMeter label="Reranking" meter={knowledge.reranker} sub percentOnly={percentOnly} />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/**
+ * The exact monthly allowances for one tier, in the product's own vocabulary.
+ *
+ * Renders NOTHING until the catalog arrives. That is the point of it being a
+ * fetch rather than a constant: an empty block is honest about not knowing,
+ * where a compiled-in table is confidently wrong the first time someone retunes
+ * a limit server-side. The qualitative feature list above still carries the
+ * card on its own if this never loads.
+ *
+ * Knowledge is shown as its two halves rather than a single figure — they are
+ * different units of work with different quotas, and "4M embedding + 10M
+ * reranker" is information a buyer can act on where a summed number is not.
+ */
+function PlanAllowances({ limits }: { limits: NativelyPlanLimits | undefined }) {
+  if (!limits) return null;
+  const rows: Array<[string, string]> = [
+    ['AI', `${formatCompact(limits.ai_tokens)} tokens`],
+    ['Voice', `${limits.transcription_minutes.toLocaleString('en-US')} min`],
+    ['Knowledge', `${formatCompact(limits.embedding_tokens)} + ${formatCompact(limits.reranker_tokens)} tokens`],
+    ['Research', `${formatUsd(limits.research_credits_usd)}`],
+  ];
+  return (
+    <div className="mt-3">
+      <div className="natively-api-body-rule h-px mb-2.5" />
+      <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+        {rows.map(([label, value]) => (
+          <React.Fragment key={label}>
+            <dt className="natively-api-on-fill-dim text-[10px] leading-snug opacity-80">{label}</dt>
+            <dd className="natively-api-on-fill-dim text-[10px] leading-snug tabular-nums text-right">{value}</dd>
+          </React.Fragment>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
+// ─── Trial countdown ─────────────────────────────────────────
+// A hook, not a component. This was an 11px clock chip in the section label's
+// `aside` — the right size for a status pill sitting beside three usage
+// meters. With the meters gone (see the active-trial card) the time IS the
+// card's statement, so the caller needs the value, not a rendering of it.
+function useTrialRemaining(expiresAt: string) {
   const [remaining, setRemaining] = useState(() =>
     Math.max(0, new Date(expiresAt).getTime() - Date.now()),
   );
@@ -284,53 +479,85 @@ function TrialCountdown({ expiresAt }: { expiresAt: string }) {
   const totalSec = Math.ceil(remaining / 1000);
   const m = Math.floor(totalSec / 60);
   const s = totalSec % 60;
-  const isWarning = remaining < 2 * 60 * 1000;
-  return (
-    <div
-      className={`flex items-center gap-1.5 ${isWarning ? 'text-amber-500' : 'text-text-tertiary'}`}
-    >
-      <Clock size={11} strokeWidth={2} />
-      <span className="text-[11px] font-medium tabular-nums">
-        {remaining === 0 ? 'Ended' : `${m}:${s.toString().padStart(2, '0')}`}
-      </span>
-    </div>
-  );
+  return {
+    /** `19:04`. Seconds are zero-padded so the string never changes width. */
+    clock: `${m}:${s.toString().padStart(2, '0')}`,
+    ended: remaining === 0,
+    /** The last two minutes, where the number stops being background. */
+    isWarning: remaining < 2 * 60 * 1000,
+  };
 }
 
-// ─── Trial usage pill ─────────────────────────────────────────
-function TrialUsagePill({
-  icon: Icon,
-  used,
-  limit,
-  label,
-  unit,
-}: {
-  icon: React.ElementType;
-  used: number;
-  limit: number;
-  label: string;
-  unit: string;
-}) {
-  const pct = Math.min(100, (used / limit) * 100);
-  const isHigh = pct >= 80;
+// ─── Active trial card ───────────────────────────────────────
+// This card used to carry a three-up grid of usage meters — AI, Voice,
+// Research, each an icon, a label, a used-over-limit pair and a track. The
+// "Usage this trial" section at the foot of this panel renders THE SAME THREE
+// NUMBERS, forty pixels of scroll away, as ResourceMeter rows: the house row
+// idiom, with percentages, a Knowledge row, and a red over-limit state the
+// grid never had. Two renderings of one fact in two visual languages, and the
+// bespoke one was the weaker of the two.
+//
+// So the two surfaces split the trial's two resources instead of both trying
+// to show one of them: this card owns the TIME, and the usage table owns the
+// ALLOWANCE. Which also lets the clock stop being an 11px chip in the section
+// label and become the sentence the card is actually there to say.
+//
+// Anatomy is the offer card's, deliberately: one line of text on the left, one
+// compact control on the right, on the `natively-key-card` plaque. Two states
+// of one feature should not be two different shapes.
+function ActiveTrialCard({ expiresAt, onOptions }: { expiresAt: string; onOptions: () => void }) {
+  const { clock, ended, isWarning } = useTrialRemaining(expiresAt);
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          <Icon size={12} strokeWidth={2} className="text-text-tertiary" />
-          <span className="text-[12px] text-text-secondary">{label}</span>
+    <div>
+      <SectionLabel>Free trial active</SectionLabel>
+      <Card className="natively-key-card">
+        <div className="px-4 py-4">
+          <div className="flex items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-[15px] font-medium text-text-primary tracking-[-0.01em]">
+                {ended ? (
+                  'Your free trial has ended'
+                ) : (
+                  <>
+                    {/* The clock is the only part that moves, so it is the
+                        only part that gets weight and colour. `tabular-nums`
+                        keeps the sentence from reflowing every second, which
+                        a proportional 4 -> 1 does at this size. Amber in the
+                        last two minutes: the same threshold and the same hue
+                        the usage rows use when an allowance runs low, so one
+                        colour means one thing across the panel. */}
+                    <span className={`tabular-nums ${isWarning ? 'text-amber-500' : ''}`}>{clock}</span>
+                    {' left in your free trial'}
+                  </>
+                )}
+              </p>
+              <p className="text-[12px] text-text-secondary mt-1 leading-snug">
+                {ended
+                  ? 'Add a key or choose a plan to keep going.'
+                  : 'Your usage so far is below.'}
+              </p>
+            </div>
+
+            {/* Same control as Activate and as Start free trial, in its
+                `secondary` state: an achromatic ghost at rest that takes the
+                READY material on hover — the periwinkle clay, the specular
+                inset, the lift and the glow (see .natively-key-cta in
+                index.css, where `secondary` joins the ready:hover selector
+                list rather than getting a copy of it).
+                Ghost at rest is deliberate: the plan list below is the primary
+                action on this screen, and two saturated pills in one viewport
+                is no hierarchy at all. */}
+            <button
+              onClick={onOptions}
+              data-state="secondary"
+              className="natively-key-cta shrink-0 h-9 px-5 flex items-center justify-center gap-1.5 text-[13px] font-medium select-none cursor-pointer"
+            >
+              See your options
+              <ArrowUpRight size={14} strokeWidth={2.2} />
+            </button>
+          </div>
         </div>
-        <span className={`text-[12px] tabular-nums ${isHigh ? 'text-amber-500 font-medium' : 'text-text-tertiary'}`}>
-          {used}/{limit}
-          {unit}
-        </span>
-      </div>
-      <div className="h-[3px] w-full bg-bg-input rounded-full overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-[width] duration-500 ease-out motion-reduce:transition-none ${isHigh ? 'bg-amber-500' : 'bg-accent-primary'}`}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
+      </Card>
     </div>
   );
 }
@@ -359,6 +586,31 @@ function SectionLabel({ children, aside }: { children: React.ReactNode; aside?: 
       {aside}
     </div>
   );
+}
+
+// ─── Trial meter ─────────────────────────────────────────────
+// A trial's counters arrive as raw used/limit pairs from /v1/trial/status,
+// while ResourceMeter speaks the /v1/usage `UsageMeter` shape. This converts,
+// so both usage tables are literally the same component rather than a
+// look-alike written twice.
+//
+// `percent` is the real one and may exceed 100 (AI bills after a stream
+// completes); `visual_percent` is clamped, because a bar wider than its track
+// is a layout bug, not information. Same split the server applies for paid
+// plans — see buildResourceQuota in the API's lib/plans.js.
+function trialMeter(used: number, limit: number, unit: UsageMeter['unit']): UsageMeter {
+  const safeUsed = Number.isFinite(used) && used > 0 ? used : 0;
+  // A zero or missing limit would make percent Infinity/NaN and blank the row.
+  const safeLimit = Number.isFinite(limit) && limit > 0 ? limit : 0;
+  const percent = safeLimit > 0 ? (safeUsed / safeLimit) * 100 : 0;
+  return {
+    used: safeUsed,
+    limit: safeLimit > 0 ? safeLimit : null,
+    remaining: safeLimit > 0 ? Math.max(0, safeLimit - safeUsed) : null,
+    percent: Number(percent.toFixed(1)),
+    visual_percent: Math.min(100, Math.max(0, Number(percent.toFixed(1)))),
+    unit,
+  };
 }
 
 // ─── Price ───────────────────────────────────────────────────
@@ -423,7 +675,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
   const [justActivatedPro, setJustActivatedPro] = useState(false);
   const [usageData, setUsageData] = useState<UsageData | null>(() => usageCache);
   const [isLoadingUsage, setIsLoadingUsage] = useState(false);
-  const [pricingProducts, setPricingProducts] = useState<Record<string, PricingProduct>>({});
+  const [planCatalog, setPlanCatalog] = useState<Record<string, NativelyPlanLimits> | null>(null);
   const [selectedPlanId, setSelectedPlanId] = useState<string>('natively_api_pro_monthly');
   const [prevPlanId, setPrevPlanId] = useState<string>('natively_api_pro_monthly');
   // Selection is purely manual now — the tier selector used to auto-rotate
@@ -475,7 +727,9 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
     expired: boolean;
     expiresAt: string;
     startedAt: string;
-    usage: { ai: number; stt_seconds: number; search: number };
+    usage: TrialUsage;
+    /** The trial's own allowances, from the server. Absent until /trial/status answers. */
+    limits?: TrialLimits;
   } | null>(null);
   // True while getLocalTrial is in flight — prevents the "start trial" card
   // from flashing before we know whether a trial token exists.
@@ -527,9 +781,13 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
     if (!silent) setIsLoadingUsage(true);
     try {
       const r = await window.electronAPI.getNativelyUsage(force);
-      if (r.ok && r.quota) {
-        setUsageCache(r as UsageData);
-        setUsageData(r as UsageData);
+      // Normalized at the boundary, once, so every component below reads one
+      // shape — including when the server is a build older than this one.
+      const quota = r.ok ? normalizeQuota(r.quota) : null;
+      if (quota) {
+        const next = { ...r, quota } as UsageData;
+        setUsageCache(next);
+        setUsageData(next);
       }
     } catch {
       // no-op — see comment above
@@ -548,12 +806,17 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
     fetchUsage({ force: true, silent: !!usageCache });
   }, [isSaved, isLoading, fetchUsage]);
 
+  // The plan catalog — allowances and prices as the server enforces them.
+  //
+  // Unauthenticated and cached for 15 minutes in the main process, so this is
+  // cheap and runs whether or not a key is saved: the person who most needs to
+  // see what each tier includes is the one who has not bought yet.
   useEffect(() => {
-    window.electronAPI?.getNativelyPricing?.()
+    window.electronAPI?.getNativelyPlans?.()
       .then((res) => {
-        if (res?.ok && res.products) setPricingProducts(res.products);
+        if (res?.ok && res.plans) setPlanCatalog(res.plans);
       })
-      .catch(() => {});
+      .catch(() => { /* the cards fall back to their qualitative copy */ });
   }, []);
 
   // ── Trial init + polling ──────────────────────────────────
@@ -568,7 +831,11 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
       expired: res.expired ?? false,
       expiresAt: res.expires_at ?? '',
       startedAt: res.started_at ?? '',
-      usage: res.usage ?? { ai: 0, stt_seconds: 0, search: 0 },
+      usage: res.usage ?? { ai: 0, ai_tokens: 0, stt_seconds: 0, search: 0 },
+      // Carried rather than hardcoded: the pills below used to compare against
+      // literal 10 / 10m / 2, which is three numbers to miss when the trial is
+      // resized — and the AI one is now denominated in tokens, not requests.
+      limits: (res as { limits?: TrialLimits }).limits,
     });
     if (res.expired) {
       setShowTrialModal(true);
@@ -600,7 +867,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
             expired: true,
             expiresAt: local.expiresAt ?? '',
             startedAt: local.startedAt ?? '',
-            usage: { ai: 0, stt_seconds: 0, search: 0 },
+            usage: { ai: 0, ai_tokens: 0, stt_seconds: 0, search: 0 },
           });
           setShowTrialModal(true);
           refreshTrial(); // updates usage counters in the modal
@@ -615,7 +882,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
           expired: false,
           expiresAt: local.expiresAt ?? '',
           startedAt: local.startedAt ?? '',
-          usage: { ai: 0, stt_seconds: 0, search: 0 },
+          usage: { ai: 0, ai_tokens: 0, stt_seconds: 0, search: 0 },
         });
 
         // Fetch live usage + start 15s polling (was 30s — halved so counters
@@ -636,6 +903,18 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
     setTrialError(null);
     try {
       const res = await window.electronAPI?.startTrial?.();
+      // A trial that started but could not be written to disk is the failure
+      // behind "I pressed Start and got nothing": the server has spent this
+      // machine's one-per-hwid row either way, so say what happened rather
+      // than showing a card that looks untouched. The trial IS live for this
+      // session; only a restart loses it, and pressing Start again from a
+      // healthy session re-issues the same one (the API is idempotent).
+      if (res?.ok && res.persisted === false) {
+        setTrialError(
+          'Trial started, but it could not be saved — your credential store is locked, so it will end when you quit. '
+          + 'Reopen the app with your keychain unlocked and press Start again to keep it.',
+        );
+      }
       if (!res?.ok) {
         if (res?.error === 'trial_ip_limit' || res?.error === 'trial_start_rate_limited') {
           localStorage.setItem('natively_trial_claimed', 'true');
@@ -644,7 +923,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
             expired: true,
             expiresAt: '',
             startedAt: '',
-            usage: { ai: 0, stt_seconds: 0, search: 0 },
+            usage: { ai: 0, ai_tokens: 0, stt_seconds: 0, search: 0 },
           });
           return;
         }
@@ -668,7 +947,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
           expired: true,
           expiresAt: '',
           startedAt: '',
-          usage: { ai: 0, stt_seconds: 0, search: 0 },
+          usage: { ai: 0, ai_tokens: 0, stt_seconds: 0, search: 0 },
         });
         return;
       }
@@ -901,8 +1180,12 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
           ] as const
         ).map((tab) => {
           const isSel = selectedPlanId === tab.id;
-          const liveProduct = pricingProducts[tab.id];
-          const displayPrice = liveProduct?.formattedPrice || tab.price;
+          // The price is the literal above, full stop. It used to prefer a
+          // `formattedPrice` from getNativelyPricing, whose /v1/pricing route
+          // was never built on the server — three months of a call that always
+          // 404'd and a fallback that always won. /v1/plans (planCatalog) is
+          // the live source that does exist, and it agrees with these figures.
+          const displayPrice = tab.price;
           return (
             <button
               key={tab.id}
@@ -937,9 +1220,13 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
         const direction = currentIndex >= prevIndex ? 1 : -1;
 
         const plan = PLANS.find((p) => p.id === selectedPlanId)!;
-        const liveProduct = pricingProducts[plan.id];
-        const price = liveProduct?.formattedPrice || plan.price;
-        const checkoutUrl = liveProduct?.checkoutUrl || plan.url;
+        const limits = planCatalog?.[plan.planKey];
+        const price = plan.price;
+        // A verified-live Dodo link (all four checked 2026-09-08). These were
+        // the fallback behind getNativelyPricing; with that call removed they
+        // are simply the source, and changing a checkout link is now an app
+        // release. That was already the truth — it just looked otherwise.
+        const checkoutUrl = plan.url;
         const currentPlan = usageData?.plan?.toLowerCase();
         const rowPlan = plan.name.toLowerCase();
         const isActive =
@@ -1094,66 +1381,12 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
       )}
 
       {/* ── Active trial status card ──────────────────── */}
-      {trialState?.active &&
-        (() => {
-          const sttMin = (trialState.usage.stt_seconds / 60).toFixed(1);
-          return (
-            /* Ref B: instead of a hard gradient block, soft blurred colour
-               bleeds in from the card edges — a cool haze at the top, a warm
-               amber haze at the bottom-middle, both very diffuse, like light
-               behind frosted glass. It gives this transient state real warmth
-               and presence without introducing a competing hard-edged hue, and
-               without touching the trial state machine above it. */
-            <div>
-              <SectionLabel aside={<TrialCountdown expiresAt={trialState.expiresAt} />}>
-                Free trial active
-              </SectionLabel>
-              <div className="trial-bleed-card">
-                <div className="trial-bleed-content px-4 py-4 space-y-4">
-                  <div className="grid grid-cols-3 gap-4">
-                    <TrialUsagePill
-                      icon={Zap}
-                      used={trialState.usage.ai}
-                      limit={10}
-                      label="AI"
-                      unit=""
-                    />
-                    <TrialUsagePill
-                      icon={Mic}
-                      used={Math.round(trialState.usage.stt_seconds / 60)}
-                      limit={10}
-                      label="STT"
-                      unit="m"
-                    />
-                    <TrialUsagePill
-                      icon={Search}
-                      used={trialState.usage.search}
-                      limit={2}
-                      label="Search"
-                      unit=""
-                    />
-                  </div>
-
-                  {/* Secondary, not accent-filled: the plan list directly below
-                      is the primary action on this screen, and two full-width
-                      accent pills competing in one viewport is no hierarchy at
-                      all. */}
-                  <button
-                    onClick={() => setShowTrialModal(true)}
-                    className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-full text-[13px] font-medium bg-bg-input text-text-primary border border-border-muted hover:border-text-tertiary cursor-pointer active:scale-[0.985] transition-[border-color,transform] duration-150 ease-out motion-reduce:transition-none"
-                  >
-                    See your options
-                    <ArrowUpRight size={14} strokeWidth={2.2} />
-                  </button>
-                </div>
-              </div>
-              <p className="text-[11px] text-text-tertiary mt-2.5 px-1">
-                {trialState.usage.ai} AI · {sttMin} min STT · {trialState.usage.search} searches used
-                so far.
-              </p>
-            </div>
-          );
-        })()}
+      {trialState?.active && (
+        <ActiveTrialCard
+          expiresAt={trialState.expiresAt}
+          onOptions={() => setShowTrialModal(true)}
+        />
+      )}
 
       {/* ── Free trial start card (no key, no active trial) ── */}
       {!isLoading &&
@@ -1170,26 +1403,87 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
           }
 
           return (
-            <Card>
-              <div className="px-4 py-4">
-                <div className="flex items-center gap-3.5">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[15px] font-medium text-text-primary tracking-[-0.01em]">
-                      Try the Natively API free
-                    </p>
-                    <p className="text-[12px] text-text-secondary mt-1 leading-snug">
-                      30 min · 10 AI · 10m STT · 2 searches. No account needed
-                    </p>
-                  </div>
-                  <button
-                    onClick={handleStartTrial}
-                    disabled={trialLoading || isClaimed}
-                    className={`shrink-0 flex items-center justify-center gap-2 px-4 h-9 rounded-full text-[13px] font-medium transition-[background-color,transform] duration-150 ease-out motion-reduce:transition-none ${
-                      isClaimed
-                        ? 'bg-bg-input text-text-tertiary cursor-not-allowed'
-                        : 'bg-accent-primary hover:bg-accent-hover text-on-accent active:scale-[0.985] cursor-pointer'
-                    }`}
-                  >
+            /* Built from this tab's OWN parts, not its own set. It used to be
+               the one container here with no section label, on a plain Card,
+               with a small right-aligned pill in flat `bg-accent-primary` —
+               the only unmaterialised saturated control on a screen where
+               every other CTA is clay (specular inset, darkened foot, lift on
+               hover). Beside the key plaque below and the pricing cards under
+               that, it read as a different product's component.
+               Now it is the key card's structure exactly: section label as the
+               heading, `natively-key-card` material, the brand mark on a 12px
+               explainer line, and one full-width `natively-key-cta`. Its own
+               ACTIVE state ("Free trial active", ~line 1301) already had this
+               shape; the two halves of one feature no longer disagree. */
+            <div>
+              <SectionLabel>Free trial</SectionLabel>
+              <Card className="natively-key-card">
+                <div className="px-4 py-4 space-y-3">
+                  {/* The ORIGINAL shape: offer on the left, one compact action
+                      on the right, a single row. It reads as an offer rather
+                      than as a form, and it keeps the card to the height of its
+                      own text — a full-width CTA under two short lines made a
+                      three-row block out of a one-line proposition.
+                      What is NOT reverted is the paint: the plaque material,
+                      the mark, the section label and the clay CTA all stay, so
+                      the shape is the old one and the language is this tab's.
+                      `items-center` because the button is the visual anchor of
+                      the row; `min-w-0 flex-1` on the text so a long
+                      translation wraps instead of shoving the button off. */}
+                  {/* No mark. The key card earns one — it is the card you go
+                      to to hand Natively a credential, and the logo is what
+                      tells you WHOSE key it wants. This card is an offer, its
+                      section label already says FREE TRIAL, and a second copy of
+                      the same logo two rows apart just repeated the brand at
+                      the reader. Losing it also puts the offer back on the
+                      card's own left edge, which is the shape this had
+                      originally. */}
+                  <div className="flex items-center gap-3">
+                    <div className="min-w-0 flex-1">
+                      {/* The OFFER, at title weight. This line spent one
+                          revision as `natively-key-sub` — the 12px muted role
+                          the key card uses for an explainer — which is right
+                          for "Activate with a key or a license" (a caption
+                          under a section label that already says NATIVELY KEY)
+                          and wrong here: FREE TRIAL does not tell you what you
+                          get, so this line is the heading, not a footnote, and
+                          it was disappearing.
+                          30 is a literal: the real duration is
+                          TrialLimits.duration_ms, which only arrives from
+                          /v1/trial/status once a trial EXISTS — there is
+                          nothing to read before you start one. Same reason the
+                          allowances come from TRIAL_FALLBACK_LIMITS. */}
+                      <p className="text-[15px] font-medium text-text-primary tracking-[-0.01em]">
+                        Try the Natively API free for 30 minutes
+                      </p>
+                      {/* Allowances at the description weight the rest of this
+                          tab uses for a card's second line, not the 11px
+                          tertiary of a footnote — they are what the reader
+                          compares against the plans below. Tabular figures so
+                          the digits line up with the usage and price rows. */}
+                      <p className="text-[12px] text-text-secondary mt-1 leading-snug tabular-nums">
+                        {formatCompact(TRIAL_FALLBACK_LIMITS.ai_tokens)} AI tokens
+                        {' · '}{TRIAL_FALLBACK_LIMITS.stt_minutes} min voice
+                        {/* "research", not "searches": that is what the usage
+                            pill, the usage table and the plan copy all call
+                            this meter. One name per meter. */}
+                        {' · '}{TRIAL_FALLBACK_LIMITS.search_requests} research
+                      </p>
+                    </div>
+
+                    {/* Same control as Activate — same class, same states on the
+                        same `data-state` attribute — just sized to its label
+                        instead of the card. `ready` is saturated only because
+                        Activate is idle until you type: one primary on screen,
+                        which is the rule this section already follows. */}
+                    <button
+                      onClick={handleStartTrial}
+                      disabled={trialLoading || isClaimed}
+                      data-state={trialLoading ? 'saving' : isClaimed ? 'idle' : 'ready'}
+                      className={`natively-key-cta shrink-0 h-9 px-5 text-[13px] font-medium select-none flex items-center justify-center gap-2 ${
+                        trialLoading ? 'cursor-wait' : isClaimed ? 'cursor-not-allowed' : 'cursor-pointer'
+                      }`}
+                    >
                     {trialLoading ? (
                       <>
                         <Loader2 size={13} className="animate-spin" /> Starting…
@@ -1199,18 +1493,19 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
                     ) : (
                       'Start free trial'
                     )}
-                  </button>
-                </div>
-
-                {/* Error Handling */}
-                {trialError && !isClaimed && (
-                  <div className="flex items-center gap-2 mt-3">
-                    <AlertCircle size={13} className="text-[var(--text-danger)] shrink-0" strokeWidth={2} />
-                    <p className="text-[12px] text-[var(--text-danger)]">{trialError}</p>
+                    </button>
                   </div>
-                )}
-              </div>
-            </Card>
+
+                  {/* Error Handling */}
+                  {trialError && !isClaimed && (
+                    <div className="flex items-center gap-2">
+                      <AlertCircle size={13} className="text-[var(--text-danger)] shrink-0" strokeWidth={2} />
+                      <p className="text-[12px] text-[var(--text-danger)]">{trialError}</p>
+                    </div>
+                  )}
+                </div>
+              </Card>
+            </div>
           );
         })()}
 
@@ -1415,6 +1710,38 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
           both in the same tick made this unmount instantly no matter what it was
           wrapped in. The inner guard keeps the null-safety for the case where a
           saved key simply has no valid plan. */}
+      {/* ── Usage, for a TRIAL ────────────────────────────────────
+          A trial user never reached the section below: it is gated on
+          `usageData`, which comes from /v1/usage authenticated with a real
+          key, and a trial authenticates with `x-trial-token` against the
+          sentinel `__trial__` — so the whole usage table was simply absent
+          for exactly the people with the tightest allowances and the most
+          reason to watch them. The pills on the trial card show progress
+          bars; they do not show used-against-limit numbers.
+
+          Same ResourceMeter rows as the paid table, so the two read
+          identically. "this trial", not "this month": a trial does not
+          reset, it ends — the countdown for that is on the card above. */}
+      {trialState?.active && !trialState.expired && (
+        <div>
+          <SectionLabel>Usage this trial</SectionLabel>
+          <Card>
+            <div className="px-4 py-4 space-y-4">
+              <ResourceMeter label="AI Usage" icon={Brain} meter={trialMeter(trialState.usage.ai_tokens ?? 0, trialState.limits?.ai_tokens ?? TRIAL_FALLBACK_LIMITS.ai_tokens, 'tokens')} />
+              <ResourceMeter label="Voice Usage" icon={Mic} meter={trialMeter(Math.round(trialState.usage.stt_seconds / 60), trialState.limits?.stt_minutes ?? TRIAL_FALLBACK_LIMITS.stt_minutes, 'minutes')} />
+              <ResourceMeter label="Research" icon={Search} meter={trialMeter(trialState.usage.search, trialState.limits?.search_requests ?? TRIAL_FALLBACK_LIMITS.search_requests, 'requests')} />
+              {/* Knowledge only when the server actually reported it: an
+                  absent counter is an older API, not zero usage, and
+                  ResourceMeter's own rule is to render nothing rather than a
+                  confident 0%. */}
+              {trialState.usage.embedding_tokens !== undefined && trialState.limits?.embedding_tokens ? (
+                <ResourceMeter label="Knowledge Usage" icon={Layers} meter={trialMeter(trialState.usage.embedding_tokens, trialState.limits.embedding_tokens, 'tokens')} />
+              ) : null}
+            </div>
+          </Card>
+        </div>
+      )}
+
       <AnimatePresence mode="popLayout" initial={false} onExitComplete={() => setUsageData(null)}>
       {isSaved && usageData && (
         <motion.div
@@ -1475,9 +1802,19 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
 
           <Card>
             <div className="px-4 py-4 space-y-4">
-              <QuotaBar label="Transcription" icon={Mic} bucket={usageData.quota.transcription} />
-              <QuotaBar label="AI requests" icon={Brain} bucket={usageData.quota.ai} />
-              <QuotaBar label="Web searches" icon={Search} bucket={usageData.quota.search} />
+              {/* The four product categories, in the order they cost money.
+                  Names are the customer's, not the implementation's: "Voice
+                  Usage" rather than STT, "Research" rather than web searches.
+                  Every figure comes from the server response, so there is
+                  nothing in this file for a plan change to make stale.
+
+                  percentOnly: the monthly panel reports how much of the
+                  allowance is gone, not what the allowance IS. See ResourceMeter
+                  for why the trial panel above still shows the pair. */}
+              <ResourceMeter label="AI Usage" icon={Brain} meter={usageData.quota.ai} percentOnly />
+              <KnowledgeUsage knowledge={usageData.quota.knowledge} percentOnly />
+              <ResourceMeter label="Voice Usage" icon={Mic} meter={usageData.quota.voice} percentOnly />
+              <ResourceMeter label="Research" icon={Search} meter={usageData.quota.research} percentOnly />
             </div>
           </Card>
         </motion.div>

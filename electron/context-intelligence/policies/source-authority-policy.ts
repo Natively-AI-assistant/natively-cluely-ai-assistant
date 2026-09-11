@@ -148,6 +148,22 @@ const USER_CLAIM_DOCUMENT_WIDENING: Partial<Record<ClaimType, SourceType[]>> = {
   // "option (a) scoped to project-shaped claims", not an extension of it. It
   // was excluded only because a synthetic corpus never produced it.
   USER_PROJECT:    ['REFERENCE_FILE'],
+  // MEETING_STATEMENT / MEETING_DECISION added 2026-09-07. Measured in Team
+  // Meet with an incident postmortem and a launch checklist attached: "Who owns
+  // the launch checklist and when is it due?" and "What are the action items
+  // from the INC-119 postmortem?" both classified MEETING_FACT, planned
+  // [MEETING_TRANSCRIPT] alone, retrieved the right chunks (candidates 2,
+  // admitted 2) and dropped every one as PLANNED_TYPE_FILTER — evidence 0, and
+  // the user was told "I don't have the details in the meeting notes yet".
+  // The documents a user attaches to a meeting mode ARE its meeting notes,
+  // agendas, postmortems and checklists; a meeting-shaped question must be able
+  // to read them. Gated on the same "documents are attached" condition as the
+  // USER_* widening (claimToSource in turn-classifier.ts), so a mode with no
+  // files keeps the transcript-only authority and its honest "not said yet".
+  // Cross-meeting isolation is untouched: it is enforced by scope on
+  // MEETING_TRANSCRIPT evidence, not by this table.
+  MEETING_STATEMENT: ['REFERENCE_FILE'],
+  MEETING_DECISION:  ['REFERENCE_FILE'],
 };
 
 /**

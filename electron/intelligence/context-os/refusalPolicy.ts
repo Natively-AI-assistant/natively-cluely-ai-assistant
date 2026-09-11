@@ -73,9 +73,17 @@ export function packGovernsGeneration(input: {
   hasReferenceFiles?: boolean;
 }): boolean {
   if (input.answerPolicy !== 'refuse_insufficient_evidence') return true;
-  if (!sourceAuthorityPermitsRefusal(input.sourceAuthority)) return false;
-  if (input.sourceAuthority === 'transcript_only') return true;
-  return input.hasReferenceFiles === true;
+  // ALWAYS ANSWER (2026-09-07, owner's direction). A refusal pack used to
+  // govern generation for the four bounded-universe authorities (and only with
+  // files present), yielding "This is not directly mentioned in the uploaded
+  // material" WITHOUT calling the model. The owner's product decision is that
+  // the app answers regardless: the turn falls through to generation with
+  // whatever evidence was retrieved, and the composer's own absence framing
+  // (say what the material does not state, then answer from general knowledge,
+  // clearly marked) does the honest part. The authority classification below
+  // is kept exported because clarificationIsActionable and telemetry read it.
+  void sourceAuthorityPermitsRefusal;
+  return false;
 }
 
 /** The authorities whose universe is the mode's uploaded reference files. */
@@ -162,6 +170,21 @@ const KNOWN_SOURCE_AUTHORITIES: ReadonlySet<string> = new Set([
  * turns) — only the decision to answer-vs-decline yields to current-screen
  * evidence. The historical function name is retained for API compatibility.
  */
+/**
+ * ALWAYS ANSWER (2026-09-07, owner's direction). The source-switch
+ * clarification ("This mode only answers from your uploaded material, so I'm
+ * not pulling from your résumé here. Switch to a mode…") ended the turn with
+ * no model call at four sites (engine WTA, manual chat ×2, phone mirror).
+ * Measured live in Looking-for-Work with three files attached: "walk me through
+ * your background" got that line in 1.2s. The decision layer still computes
+ * `shouldClarifyInsteadOfProfile` (telemetry, tests, the contract that strips a
+ * denied source), but no surface short-circuits on it any more — generation
+ * proceeds with whatever the contract allows and the composer names the gap.
+ */
+export function clarificationShortCircuitEnabled(): boolean {
+  return false;
+}
+
 export function declineYieldsToAttachedImages(input: {
   /** The pack/validator verdict being considered. */
   answerPolicy: 'refuse_insufficient_evidence' | 'ask_clarification' | string;

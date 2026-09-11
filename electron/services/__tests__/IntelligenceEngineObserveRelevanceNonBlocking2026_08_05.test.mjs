@@ -90,14 +90,15 @@ describe('observe-only relevance check must not block the answer pipeline', () =
     // real NLI worker round-trip (cold model load here — seconds); the
     // pipeline tail after the guard is a few milliseconds, so a completed
     // check at this point means the pipeline awaited it (the bug).
-    let settled = false;
-    pending.then(() => { settled = true; }, () => { settled = true; });
-    await new Promise(resolve => setImmediate(resolve));
-    assert.equal(settled, false,
-      'pipeline resolution must not wait for the observe-only classifier');
-
-    // The detached check still completes (telemetry contract) and never
-    // mutates the answer or emits anything new.
+    // 2026-09-05: checkAnswerRelevance now resolves to null immediately (the
+    // shared MobileBERT session it reused was removed with the intent
+    // classifier), so "not yet settled one tick later" can no longer be
+    // constructed: there is no slow classifier to be pending. The contract that
+    // still matters is asserted above and below: the check is TRACKED on the
+    // engine, the pipeline resolved without it, and it never mutates the answer
+    // or requests a repair stream. The verdict is the unavailable one.
+    const verdict = await pending;
+    assert.equal(verdict ?? null, null, 'with the classifier removed the observe-only verdict is "unavailable" (null)');
     await pending;
     assert.deepEqual(finals, [hallucination]);
   });

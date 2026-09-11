@@ -2806,9 +2806,10 @@ body {
   user-select: none;
   -webkit-user-select: none;
 }
-.resize-handle-e { cursor: ew-resize; }
-.resize-handle-s { cursor: ns-resize; }
-.resize-handle-se { cursor: nwse-resize; }
+/* The cursors themselves cannot live here: the global cursor lock further down
+   this file is `!important` on universal selectors, so it wins from anywhere
+   above it. They are declared as its one documented exception — search
+   `@cursor-lock-exception`. */
 
 .resize-handle-se::after {
   content: '';
@@ -2864,8 +2865,9 @@ a {
 
 /* ─── Global cursor lock ─────────────────────────────────────────────────
    This is a desktop Electron app — the only cursor we ever show is the
-   default arrow. No I-beam on inputs, no pointer on buttons, no resize
-   handles, no text-select carets. This rule overrides:
+   default arrow. No I-beam on inputs, no pointer on buttons, no text-select
+   carets. The overlay's resize handles are the ONE exception, carved out
+   immediately below. This rule overrides:
      - Browser UA defaults (input → text, button → pointer, link → pointer)
      - Tailwind `cursor-*` utility classes used throughout the codebase
      - Any inline `style="cursor: …"` set by libraries/components
@@ -2889,6 +2891,39 @@ a,
 [contenteditable="true"] {
   cursor: default !important;
 }
+
+/* @cursor-lock-exception:start */
+/* The overlay's resize handles — the single exception to the lock above.
+   These strips are invisible (see the .resize-handle block earlier in this
+   file); the cursor is their entire affordance, so a handle that resolves to
+   `default` is a handle no user can find.
+
+   Both details here are load-bearing, and one of them is why the handles
+   shipped dead in PR #499:
+
+   · TWO classes, not one. `.resize-handle-e` is (0,1,0) and so is `*:hover`
+     above — an equal-specificity tie that the lock wins on source order, even
+     with `!important` added. `.resize-handle.resize-handle-e` is (0,2,0) and
+     clears every selector in the lock outright.
+   · `!important`, because the lock has it, and an important declaration beats
+     a normal one no matter how specific the normal one is. PR #499 declared
+     `.resize-handle-e { cursor: ew-resize }` with neither, five months after
+     this lock landed, so it never once took effect in a shipped build.
+
+   Pinned in both directions by tests/css/resize-handle-cursor.check.mjs, which
+   resolves the real cascade in Electron rather than grepping for `!important`
+   — reading the rule is what missed this the first time. */
+/* Gated on undetectable mode (NativelyInterface mirrors it onto the root as
+   data-undetectable). Content protection keeps the window's PIXELS out of a
+   capture, but the pointer is drawn by the OS and captured regardless — a
+   resize cursor over apparently empty desktop is a tell. With the mode on the
+   handles keep the arrow; they still work, they just don't advertise.
+   `:root:not([data-undetectable="true"])` also lifts specificity to (0,4,0),
+   comfortably above every selector in the lock. */
+:root:not([data-undetectable="true"]) .resize-handle.resize-handle-e { cursor: ew-resize !important; }
+:root:not([data-undetectable="true"]) .resize-handle.resize-handle-s { cursor: ns-resize !important; }
+:root:not([data-undetectable="true"]) .resize-handle.resize-handle-se { cursor: nwse-resize !important; }
+/* @cursor-lock-exception:end */
 
 /* Restore keyboard focus rings that Tailwind preflight removes */
 *:focus-visible {
@@ -6501,8 +6536,11 @@ html[data-platform="linux"] body {
 
      Ref A — iridescent holographic mesh header band + huge price + solid
              black pill CTA                        → .plan-tier-* below
-     Ref B — soft blurred colour bleeding in from the card edges, no hard
-             gradient block                        → .trial-bleed-card
+     Ref B — soft blurred colour bleeding in from the card edges — built as
+             .trial-bleed-card for the active-trial box and REMOVED with it:
+             that box now wears .natively-key-card, the same plaque as the
+             key card and the offer card it sits between. Ref B's haze was
+             the only weather in that column and read as a foreign part.
      Ref C — saturated periwinkle fill / frosted smoky glass, strikethrough
              pricing, circular icon badges         → .pro-license-*
 
@@ -6769,33 +6807,6 @@ html[data-platform="linux"] body {
   color: #10162e;
 }
 
-/* ── Ref B: soft colour bleed card (trial) ──────────────────────────── */
-.trial-bleed-card {
-  position: relative;
-  border-radius: 22px;
-  overflow: hidden;
-  background: var(--bg-item-surface);
-  border: 1px solid var(--border-subtle);
-}
-/* Diffuse cool haze at the top edge and warm amber haze at bottom-middle,
-   bleeding into the card surface — light behind frosted glass, per Ref B.
-   No hard gradient block. */
-.trial-bleed-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(90% 55% at 22% -8%, rgba(96, 165, 250, 0.32) 0%, rgba(96, 165, 250, 0) 70%),
-    radial-gradient(80% 55% at 62% 112%, rgba(251, 146, 60, 0.28) 0%, rgba(251, 146, 60, 0) 70%);
-  filter: blur(6px);
-}
-[data-theme='light'] .trial-bleed-card::before {
-  background:
-    radial-gradient(90% 55% at 22% -8%, rgba(59, 130, 246, 0.2) 0%, rgba(59, 130, 246, 0) 70%),
-    radial-gradient(80% 55% at 62% 112%, rgba(249, 115, 22, 0.16) 0%, rgba(249, 115, 22, 0) 70%);
-}
-.trial-bleed-content { position: relative; z-index: 1; }
 
 /* ── Reduced motion ─────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
@@ -7625,7 +7636,10 @@ html[data-platform="linux"] body {
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .natively-key-cta[data-state='ready']:hover {
+  /* `secondary` shares this hover paint by SELECTOR rather than by a copy of
+     the declarations — see the SECONDARY block below for what it rests as. */
+  .natively-key-cta[data-state='ready']:hover,
+  .natively-key-cta[data-state='secondary']:hover {
     background:
       linear-gradient(180deg, rgba(255, 255, 255, 0) 55%, rgba(0, 0, 0, 0.10) 100%),
       #656EE4 !important;
@@ -7637,7 +7651,8 @@ html[data-platform="linux"] body {
   }
 }
 
-.natively-key-cta[data-state='ready']:active {
+.natively-key-cta[data-state='ready']:active,
+.natively-key-cta[data-state='secondary']:active {
   transform: translateY(0) scale(0.97) !important;
   box-shadow:
     inset 0 2px 5px rgba(6, 8, 28, 0.38),
@@ -7659,7 +7674,8 @@ html[data-platform="linux"] body {
 }
 
 @media (hover: hover) and (pointer: fine) {
-  [data-theme='light'] .natively-key-cta[data-state='ready']:hover {
+  [data-theme='light'] .natively-key-cta[data-state='ready']:hover,
+  [data-theme='light'] .natively-key-cta[data-state='secondary']:hover {
     background:
       linear-gradient(180deg, rgba(255, 255, 255, 0) 55%, rgba(0, 0, 0, 0.10) 100%),
       #3E47AC !important;
@@ -7689,6 +7705,41 @@ html[data-platform="linux"] body {
 
 .natively-key-cta[data-state='saving'] {
   color: rgba(255, 255, 255, 0.78) !important;
+}
+
+/* SECONDARY — a pressable action that is NOT the primary on its card.
+   ("See your options", on the active-trial card.)
+   At rest it is the same achromatic ghost as `idle`, but with a readable
+   label, because unlike `idle` it can actually be pressed. On hover it takes
+   the READY material outright: same gradient, same lift, same specular inset,
+   same glow. That paint is inherited by adding this state to the `ready:hover`
+   selector lists above rather than by restating the declarations, so the two
+   cannot drift apart the way a copied gradient always eventually does.
+   The colour and edge live here because those hover rules only carry
+   background, transform and box-shadow — `ready` gets its white ink from its
+   own rest rule, which `secondary` deliberately does not share. */
+.natively-key-cta[data-state='secondary'] {
+  background: rgba(255, 255, 255, 0.07) !important;
+  border-color: rgba(255, 255, 255, 0.13) !important;
+  color: rgba(255, 255, 255, 0.86) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07) !important;
+}
+
+[data-theme='light'] .natively-key-cta[data-state='secondary'] {
+  background: rgba(0, 0, 0, 0.05) !important;
+  border-color: rgba(0, 0, 0, 0.14) !important;
+  color: rgba(0, 0, 0, 0.78) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .natively-key-cta[data-state='secondary']:hover {
+    color: #FFFFFF !important;
+    border-color: rgba(255, 255, 255, 0.22) !important;
+  }
+  [data-theme='light'] .natively-key-cta[data-state='secondary']:hover {
+    border-color: rgba(255, 255, 255, 0.26) !important;
+  }
 }
 
 /* DONE — "Saved" / "Pro activated". The SAME jelly clay as `ready` above, just

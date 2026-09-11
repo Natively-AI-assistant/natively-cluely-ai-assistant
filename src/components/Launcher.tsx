@@ -15,6 +15,7 @@ import { analytics } from '../lib/analytics/analytics.service'; // Added analyti
 import { useShortcuts } from '../hooks/useShortcuts';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { isMac } from '../utils/platformUtils';
+import { APP_FEATURE_VERSION } from '../utils/appVersion';
 import WindowControls from './WindowControls';
 import { emitOrchestratorEvent, setUserState as setOrchestratorUserState } from './onboarding/OrchestratedToasterHost';
 
@@ -987,7 +988,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                              : 'bg-emerald-400/10 hover:bg-emerald-400/20 border-emerald-500/20 text-emerald-400'
                                                      }`}
                                                  >
-                                                     <span>{t("What's New in 2.8")}</span>
+                                                     <span>{`${t("What's New in")} v${APP_FEATURE_VERSION}`}</span>
                                                      <ArrowUpRight size={12} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
                                                  </button>
                                              )}
@@ -1221,21 +1222,22 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                                                 onClick={async () => {
                                                                                     setActiveMenuId(null);
                                                                                     analytics.trackPdfExported();
-                                                                                    // Fetch full details if needed
-                                                                                    if (window.electronAPI && window.electronAPI.getMeetingDetails) {
-                                                                                        try {
-                                                                                            const fullMeeting = await window.electronAPI.getMeetingDetails(m.id);
-                                                                                            if (fullMeeting) {
-                                                                                                generateMeetingPDF(fullMeeting);
-                                                                                            } else {
-                                                                                                generateMeetingPDF(m);
-                                                                                            }
-                                                                                        } catch (e) {
-                                                                                            console.error("Failed to fetch details for PDF", e);
-                                                                                            generateMeetingPDF(m);
+                                                                                    // Resolve full details when available, else fall back to the
+                                                                                    // list item. Wrapped in one try/catch so a failure anywhere —
+                                                                                    // including the CJK-font load inside generateMeetingPDF — is
+                                                                                    // surfaced instead of becoming an unhandled rejection.
+                                                                                    let target = m;
+                                                                                    try {
+                                                                                        if (window.electronAPI && window.electronAPI.getMeetingDetails) {
+                                                                                            const fullMeeting = await window.electronAPI.getMeetingDetails(m.id).catch((e) => {
+                                                                                                console.error("Failed to fetch details for PDF", e);
+                                                                                                return null;
+                                                                                            });
+                                                                                            if (fullMeeting) target = fullMeeting;
                                                                                         }
-                                                                                    } else {
-                                                                                        generateMeetingPDF(m);
+                                                                                        await generateMeetingPDF(target);
+                                                                                    } catch (e) {
+                                                                                        console.error("Failed to export meeting PDF", e);
                                                                                     }
                                                                                 }}
                                                                             >

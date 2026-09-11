@@ -230,11 +230,14 @@ describe('T1 — what did NOT change', () => {
     }
   });
 
-  test('only the four project-shaped claims are widened at all', () => {
+  test('only the four project-shaped claims and the two meeting claims are widened at all', () => {
+    // MEETING_STATEMENT / MEETING_DECISION joined 2026-09-07: the documents a
+    // user attaches to a meeting mode are its notes/postmortems/checklists —
+    // see MeetingClaimsReachAttachedDocuments2026_09_07. Nothing else widens.
     const widened = Object.keys(CLAIM_AUTHORITY).filter((c) =>
       claimAuthority(c).authoritative.length > CLAIM_AUTHORITY[c].authoritative.length);
     assert.deepEqual(widened.sort(),
-      ['USER_EDUCATION', 'USER_EMPLOYMENT', 'USER_PROJECT', 'USER_SKILL']);
+      ['MEETING_DECISION', 'MEETING_STATEMENT', 'USER_EDUCATION', 'USER_EMPLOYMENT', 'USER_PROJECT', 'USER_SKILL']);
   });
 
   test('no mode gains a source its own policy does not authorize', () => {

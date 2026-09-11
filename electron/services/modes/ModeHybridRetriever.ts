@@ -10,7 +10,8 @@ import Database from 'better-sqlite3';
 import { buildDocumentMap, resolveTargetSections, sectionAwareChunksFromMap, selectTableOfContentsEntries, sentenceAwareWindows, tabularChunks } from './DocumentMap';
 import { wordsOf } from './lexicalTokens';
 import { CHUNKER_VERSION, semanticChunks } from './semanticChunker';
-import { resolveRerankBudgetMs, type RerankSurface } from '../reranking/rerankBudget';
+import { resolveRerankBudgetMs, rerankBudgetFitsDeadline, type RerankSurface } from '../reranking/rerankBudget';
+import { buildRerankPool } from './rerankPool';
 // Round-8 (seminar-fix-2): use the SHARED 6-clause evidence rule so the hybrid
 // (live) path gives the model the SAME completeness + off-topic-redirect guidance
 // as the lexical path. Previously formatContext had a stale 1-sentence copy.
@@ -35,6 +36,19 @@ export interface ModeRetrievedChunk {
     ftsScore: number;
     vectorScore: number;
     trustLevel: 'untrusted_reference';
+    /**
+     * Cross-encoder score when this pool was reranked; absent otherwise.
+     *
+     * CARRIED THROUGH SINCE 2026-09-07. It was computed, used to SELECT the
+     * pool, and dropped at this boundary — so every consumer that sorts
+     * evidence (the V3 legacy port, the context packer) re-ordered the
+     * reranker's picks by the hybrid score, and the debug event reported
+     * `rerankScore: null` on a turn whose telemetry showed a billed, HTTP 200
+     * rerank. Measured on a 23-turn live session with Voyage rerank-2.5-lite.
+     */
+    rerankScore?: number;
+    /** Structural/property answerability boost, same story as above. */
+    answerabilityScore?: number;
 }
 
 /**
@@ -83,6 +97,17 @@ export interface ModeReferenceIndexState {
     status: ModeReferenceIndexStatus;
     /** Composite embedding-space key the stored vectors were produced in. */
     embeddingSpace: string | null;
+    /**
+     * How many of `chunkCount` actually carry a vector.
+     *
+     * A partially embedded file is still `ready` — retrieval over an embedded
+     * prefix plus a lexical tail beats an all-lexical file, so serving it is
+     * correct. What was NOT correct was having no way to tell the two apart:
+     * `ready` alone made a half-indexed file look finished, so nothing ever
+     * completed it. This is the field that makes the difference visible, and
+     * therefore resumable.
+     */
+    embeddedChunkCount: number;
 }
 
 export type ModeReferenceIndexStatus = 'pending' | 'indexing' | 'ready' | 'failed' | 'lexical_only' | 'ocr_required';
@@ -134,6 +159,102 @@ const MODE_INDEX_EMBED_BATCH = Number(process.env.NATIVELY_MODE_INDEX_EMBED_BATC
  */
 const MODE_INDEX_EMBED_BATCH_LOCAL =
   Number(process.env.NATIVELY_MODE_INDEX_EMBED_BATCH_LOCAL) || 16;
+
+/**
+ * Character budget for ONE embedding request (GAP-3).
+ *
+ * A count alone describes the wrong thing: 32 chunks of a dense PDF and 32
+ * chunks of a sparse changelog are the same batch size and an order of magnitude
+ * apart in real work. The server bills tokens and the provider rate-limits
+ * tokens, so a batch bounded only by item count can be small and slow or huge
+ * and rate-limiting, unpredictably.
+ *
+ * SIZED SO IT NEVER SPLITS A NORMAL BATCH. semanticChunker targets ~350 tokens
+ * (~1,400 characters), so a full 32-item batch is ~45,000 characters. An earlier
+ * value of 24,000 was chosen to "keep requests small" and instead became the
+ * binding constraint on every ordinary document — it cut cloud batches from 100
+ * to 15, multiplying request count for no benefit and breaking the measured
+ * property LocalEmbedBatchF22 exists to protect ("a CLOUD provider keeps the
+ * large batch").
+ *
+ * 120,000 characters is roughly 30,000 tokens: comfortably above any batch the
+ * chunker can produce, while still bounding the pathological case a caller could
+ * construct by hand (32 inputs at the server's 32,000-char cap would otherwise be
+ * over a million characters in one request).
+ */
+const MODE_INDEX_EMBED_BATCH_CHARS =
+  Number(process.env.NATIVELY_MODE_INDEX_EMBED_BATCH_CHARS) || 120_000;
+
+/**
+ * How many files may be embedding at once, process-wide (GAP-4).
+ *
+ * Each file's index loop was independent, so uploading five files started five
+ * concurrent batch loops against a single API key that allows 120 requests per
+ * minute. Nothing bounded the total; ForegroundGate throttles by USER ACTIVITY,
+ * which is a different question from how many requests are in flight.
+ *
+ * Two is deliberate rather than tuned-for-throughput: indexing is background
+ * work whose competitor is the same app's interactive query embedding, and the
+ * measured server p50 for a 32-chunk batch is ~1.2s. Two concurrent loops keep
+ * the key comfortably under its limit while leaving headroom for the foreground
+ * query path, which is the latency a user actually feels.
+ */
+const MODE_INDEX_MAX_CONCURRENT_FILES =
+  Number(process.env.NATIVELY_MODE_INDEX_MAX_CONCURRENT_FILES) || 2;
+
+/** Bounded retry for a sub-batch the SERVER said is worth retrying. */
+const MODE_INDEX_BATCH_RETRIES =
+  Number(process.env.NATIVELY_MODE_INDEX_BATCH_RETRIES) || 2;
+const MODE_INDEX_RETRY_CAP_MS = 20_000;
+
+/**
+ * Split chunks into requests bounded by BOTH item count and characters.
+ *
+ * Exported for tests: the boundary rule is the thing that regresses, and it is
+ * pure, so it should be verifiable without a database or a provider.
+ */
+export function planEmbedBatches(chunks: string[], maxItems: number, maxChars: number): string[][] {
+  const batches: string[][] = [];
+  let current: string[] = [];
+  let chars = 0;
+  for (const c of chunks) {
+    const len = c.length;
+    // A single chunk over the budget still goes out ALONE rather than being cut:
+    // the server truncates at its own per-input cap and reports it, and silently
+    // splitting a semantic unit here would undo the chunker's whole purpose.
+    if (current.length > 0 && (current.length >= maxItems || chars + len > maxChars)) {
+      batches.push(current);
+      current = [];
+      chars = 0;
+    }
+    current.push(c);
+    chars += len;
+  }
+  if (current.length > 0) batches.push(current);
+  return batches;
+}
+
+/**
+ * Process-wide gate on concurrent file indexing. A plain counter with a waiter
+ * queue — a semaphore is exactly the primitive needed and pulling in a
+ * dependency for eight lines would be worse.
+ */
+class IndexConcurrencyGate {
+  private active = 0;
+  private waiters: Array<() => void> = [];
+  constructor(private readonly limit: number) {}
+  async acquire(): Promise<void> {
+    if (this.active < this.limit) { this.active++; return; }
+    await new Promise<void>((resolve) => this.waiters.push(resolve));
+    this.active++;
+  }
+  release(): void {
+    this.active = Math.max(0, this.active - 1);
+    const next = this.waiters.shift();
+    if (next) next();
+  }
+}
+const indexGate = new IndexConcurrencyGate(MODE_INDEX_MAX_CONCURRENT_FILES);
 const MIN_COMBINED_SCORE = 0.15;
 
 const FTS_WEIGHT = 0.4;  // alpha for combined score: alpha * fts + (1-alpha) * vector
@@ -364,6 +485,12 @@ export class ModeHybridRetriever {
             for (const col of [
                 "ALTER TABLE mode_reference_index_state ADD COLUMN status TEXT NOT NULL DEFAULT 'pending'",
                 'ALTER TABLE mode_reference_index_state ADD COLUMN embedding_space TEXT',
+                // How many of chunk_count actually carry a vector. Without it a
+                // PARTIALLY embedded file is indistinguishable from a complete
+                // one — both are `ready` — so nothing could detect the condition,
+                // let alone resume it. Defaults to 0; a row written before this
+                // column existed is treated as "unknown", see getIndexState.
+                'ALTER TABLE mode_reference_index_state ADD COLUMN embedded_chunk_count INTEGER NOT NULL DEFAULT 0',
             ]) {
                 try { this.db.exec(col); } catch { /* column exists */ }
             }
@@ -378,7 +505,7 @@ export class ModeHybridRetriever {
     private getIndexState(fileId: string): ModeReferenceIndexState | null {
         try {
             const row = this.db.prepare(
-                'SELECT file_id, file_hash, indexed_at, chunk_count, status, embedding_space FROM mode_reference_index_state WHERE file_id = ?'
+                'SELECT file_id, file_hash, indexed_at, chunk_count, status, embedding_space, embedded_chunk_count FROM mode_reference_index_state WHERE file_id = ?'
             ).get(fileId) as any;
             if (!row) return null;
             return {
@@ -388,6 +515,7 @@ export class ModeHybridRetriever {
                 chunkCount: row.chunk_count,
                 status: (row.status as ModeReferenceIndexStatus) || 'pending',
                 embeddingSpace: row.embedding_space ?? null,
+                embeddedChunkCount: typeof row.embedded_chunk_count === 'number' ? row.embedded_chunk_count : 0,
             };
         } catch (e) {
             return null;
@@ -397,12 +525,12 @@ export class ModeHybridRetriever {
     /**
      * Update the index state for a file after embedding its chunks
      */
-    private updateIndexState(fileId: string, contentHash: string, chunkCount: number, status: ModeReferenceIndexStatus = 'ready', embeddingSpace: string | null = null): void {
+    private updateIndexState(fileId: string, contentHash: string, chunkCount: number, status: ModeReferenceIndexStatus = 'ready', embeddingSpace: string | null = null, embeddedChunkCount: number = 0): void {
         try {
             this.db.prepare(`
-                INSERT OR REPLACE INTO mode_reference_index_state (file_id, file_hash, indexed_at, chunk_count, status, embedding_space)
-                VALUES (?, ?, ?, ?, ?, ?)
-            `).run(fileId, contentHash, Date.now(), chunkCount, status, embeddingSpace);
+                INSERT OR REPLACE INTO mode_reference_index_state (file_id, file_hash, indexed_at, chunk_count, status, embedding_space, embedded_chunk_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            `).run(fileId, contentHash, Date.now(), chunkCount, status, embeddingSpace, embeddedChunkCount);
         } catch (e) {
             console.warn('[ModeHybridRetriever] Failed to update index state:', e);
         }
@@ -422,16 +550,25 @@ export class ModeHybridRetriever {
     // ── PI v3 (W3): upload-time indexing ──────────────────────────────────
 
     /** Public view of a file's index status (for the Modes Manager UI badge). */
-    public getFileIndexStatus(fileId: string): { status: ModeReferenceIndexStatus; chunkCount: number } {
+    public getFileIndexStatus(fileId: string): { status: ModeReferenceIndexStatus; chunkCount: number; embeddedChunkCount: number } {
         const state = this.getIndexState(fileId);
-        if (!state) return { status: 'pending', chunkCount: 0 };
+        if (!state) return { status: 'pending', chunkCount: 0, embeddedChunkCount: 0 };
         // A space mismatch means the stored vectors are unusable with the
         // current provider — report as pending so the UI shows re-indexing.
         const activeSpace = this.embeddingPipeline.getActiveSpaceKey?.();
         if (state.status === 'ready' && activeSpace && state.embeddingSpace !== activeSpace) {
-            return { status: 'pending', chunkCount: state.chunkCount };
+            return { status: 'pending', chunkCount: state.chunkCount, embeddedChunkCount: 0 };
         }
-        return { status: state.status, chunkCount: state.chunkCount };
+        // A file whose tail never embedded is reported as pending for exactly the
+        // reason a space-mismatched one is: ModesManager.prewarmModeReferenceIndex
+        // re-indexes everything that is not `ready`, so `ready` is the one answer
+        // that guarantees nobody ever finishes it. Reporting the true state is
+        // what turns "a 429 cost this file its tail forever" into "the next mode
+        // activation completes it".
+        if (state.status === 'ready' && state.chunkCount > 0 && state.embeddedChunkCount < state.chunkCount) {
+            return { status: 'pending', chunkCount: state.chunkCount, embeddedChunkCount: state.embeddedChunkCount };
+        }
+        return { status: state.status, chunkCount: state.chunkCount, embeddedChunkCount: state.embeddedChunkCount };
     }
 
     /**
@@ -464,9 +601,59 @@ export class ModeHybridRetriever {
     public async indexFile(file: ModeReferenceFile): Promise<void> {
         const existing = this.inflightIndex.get(file.id);
         if (existing) return existing;
-        const job = this.indexFileInner(file).finally(() => this.inflightIndex.delete(file.id));
+        // Bounded process-wide (GAP-4). Five simultaneous uploads used to start
+        // five independent batch loops against one API key; the gate makes the
+        // extra ones wait rather than compete, and the single-flight map above
+        // still collapses a double-upload of the SAME file to one job.
+        const job = (async () => {
+            await indexGate.acquire();
+            try { await this.indexFileInner(file); }
+            finally { indexGate.release(); }
+        })().finally(() => this.inflightIndex.delete(file.id));
         this.inflightIndex.set(file.id, job);
         return job;
+    }
+
+    /**
+     * Embed one sub-batch, retrying only what the SERVER says is retryable.
+     *
+     * The index path had no retry at all: any failure abandoned the rest of the
+     * file. That was survivable when a failure was assumed fatal, but the server
+     * now distinguishes a rate limit (retryable, with a Retry-After it got from
+     * the provider) from a permanent rejection — so abandoning a whole document
+     * because the provider was briefly busy is simply wrong.
+     *
+     * Bounded and jittered: at most MODE_INDEX_BATCH_RETRIES attempts, honouring
+     * Retry-After up to a cap, with jitter so N files resuming after the same
+     * rate limit do not retry in lockstep and re-create it.
+     */
+    private async embedSubBatchWithRetry(
+        slice: string[],
+        label: string,
+    ): Promise<{ embeddings: number[][]; space: string | null }> {
+        let lastErr: any = null;
+        for (let attempt = 0; attempt <= MODE_INDEX_BATCH_RETRIES; attempt++) {
+            try {
+                const result = await this.embeddingPipeline.getEmbeddingsWithFallback(slice);
+                if (!Array.isArray(result.embeddings) || result.embeddings.length !== slice.length) {
+                    throw new Error(`returned ${result.embeddings?.length ?? 'none'} vectors for ${slice.length} chunks`);
+                }
+                return { embeddings: result.embeddings, space: result.space };
+            } catch (err: any) {
+                lastErr = err;
+                // `retryable === false` is the server's explicit verdict on a
+                // permanent rejection. Anything undefined is treated as
+                // retryable, which is the pre-existing assumption.
+                if (err?.retryable === false || err?.permanentAuthFailure) throw err;
+                if (attempt >= MODE_INDEX_BATCH_RETRIES) break;
+                const declared = Number(err?.retryAfter) > 0 ? Number(err.retryAfter) * 1000 : null;
+                const backoff = declared ?? Math.min(1000 * Math.pow(2, attempt), MODE_INDEX_RETRY_CAP_MS);
+                const wait = Math.min(backoff, MODE_INDEX_RETRY_CAP_MS) * (0.75 + Math.random() * 0.5);
+                console.warn(`[ModeHybridRetriever] ${label}: embed attempt ${attempt + 1} failed (${err?.message ?? err}); retrying in ${Math.round(wait)}ms`);
+                await new Promise((r) => setTimeout(r, wait));
+            }
+        }
+        throw lastErr;
     }
 
     private async indexFileInner(file: ModeReferenceFile): Promise<void> {
@@ -479,7 +666,26 @@ export class ModeHybridRetriever {
         const activeSpace = this.embeddingPipeline.getActiveSpaceKey?.() ?? null;
 
         const state = this.getIndexState(file.id);
-        if (state && state.status === 'ready' && state.fileHash === contentHash && state.embeddingSpace === activeSpace) {
+        // Up to date means fully embedded, not merely `ready`.
+        //
+        // A sub-batch failure (a 429, a timeout) keeps the embedded prefix, stores
+        // the tail as lexical-only and marks the file `ready` — deliberately, since
+        // a partly-vectorised file retrieves better than an all-lexical one. But
+        // `ready` was ALSO the skip condition here, and
+        // ModesManager.prewarmModeReferenceIndex only re-indexes files that are not
+        // `ready`. So the tail this code's own comment promised a later retry would
+        // finish was unreachable by every path that could have finished it: one
+        // rate limit left a large file permanently half-indexed, until its content
+        // or the embedding model changed.
+        //
+        // Requiring embeddedChunkCount to have caught up closes that. Rows written
+        // before the column existed report 0, which reads as "unknown" and costs at
+        // most one re-index of an already-complete file — the safe direction.
+        const fullyEmbedded = !!state
+            && state.embeddedChunkCount >= state.chunkCount
+            && state.chunkCount > 0;
+        if (state && state.status === 'ready' && state.fileHash === contentHash
+            && state.embeddingSpace === activeSpace && fullyEmbedded) {
             return; // up to date
         }
         // OCR_REQUIRED is terminal for this content hash — re-running cannot
@@ -522,8 +728,10 @@ export class ModeHybridRetriever {
         // already grades it unsupporting — but no vectors, no READY, and the
         // ingest event says exactly why the file cannot answer anything.
         if (isPlaceholderOnlyContent(content)) {
-            this.persistChunks(file.id, chunks, null, null);
-            this.updateIndexState(file.id, contentHash, chunks.length, 'ocr_required', null);
+            const wrote = this.persistChunks(file.id, chunks, null, null);
+            // A failed write means the chunk TEXT is absent too, so even lexical
+            // retrieval has nothing. 'failed' is retried; 'ocr_required' is terminal.
+            this.updateIndexState(file.id, contentHash, chunks.length, wrote ? 'ocr_required' : 'failed', null, 0);
             console.warn(`[ModeHybridRetriever] "${file.fileName}": no searchable text extracted (image-only PDF?) — marked OCR_REQUIRED; the file cannot be searched until it has text.`);
             emitIngestDebug('ocr_required', 0, 'no searchable text extracted — image-only or scanned PDF');
             return;
@@ -532,13 +740,13 @@ export class ModeHybridRetriever {
         if (!this.isEmbeddingAvailable() || !activeSpace) {
             // No embedder: persist chunk TEXT (lexical retrieval still wins a
             // re-chunk per query) and mark lexical_only so prewarm retries later.
-            this.persistChunks(file.id, chunks, null, null);
-            this.updateIndexState(file.id, contentHash, chunks.length, 'lexical_only', null);
+            const wrote = this.persistChunks(file.id, chunks, null, null);
+            this.updateIndexState(file.id, contentHash, chunks.length, wrote ? 'lexical_only' : 'failed', null, 0);
             emitIngestDebug('lexical_only', 0);
             return;
         }
 
-        this.updateIndexState(file.id, contentHash, chunks.length, 'indexing', activeSpace);
+        this.updateIndexState(file.id, contentHash, chunks.length, 'indexing', activeSpace, 0);
         try {
             // Large files (e.g. a 14k-row CSV → hundreds of chunks) can't be embedded
             // in ONE call: the pipeline wraps a single getEmbeddingsWithFallback in a
@@ -547,18 +755,35 @@ export class ModeHybridRetriever {
             // F22: provider-aware batch. The local ONNX path must stay small or a
             // large document takes the whole process down with a native SIGTRAP.
             const activeProvider = this.embeddingPipeline.getActiveProviderName?.();
-            const INDEX_BATCH = activeProvider === 'local'
+            const configuredBatch = activeProvider === 'local'
                 ? MODE_INDEX_EMBED_BATCH_LOCAL
                 : MODE_INDEX_EMBED_BATCH;
-            if (chunks.length <= INDEX_BATCH) {
-                const result = await this.embeddingPipeline.getEmbeddingsWithFallback(chunks);
+            // Never exceed the provider's own per-request ceiling. The Natively
+            // transport caps at 32 (the server refuses more) and SPLITS anything
+            // larger into sequential round trips — all of which then share the
+            // pipeline's single 30s deadline, and all of which are discarded
+            // together when any one fails. Sizing to the ceiling makes one
+            // sub-batch exactly one upstream request, so a failure costs the 32
+            // chunks that actually failed instead of the 100 that were sent.
+            const providerMax = this.embeddingPipeline.getActiveProviderMaxBatch?.();
+            const INDEX_BATCH = providerMax && providerMax > 0
+                ? Math.min(configuredBatch, providerMax)
+                : configuredBatch;
+            const plan = planEmbedBatches(chunks, INDEX_BATCH, MODE_INDEX_EMBED_BATCH_CHARS);
+            if (plan.length === 1) {
+                const result = await this.embedSubBatchWithRetry(chunks, file.fileName);
                 const embeddings = result.embeddings;
-                if (!Array.isArray(embeddings) || embeddings.length !== chunks.length) {
-                    throw new Error(`batch embed returned ${embeddings?.length ?? 'none'} vectors for ${chunks.length} chunks`);
+                const wrote = this.persistChunks(file.id, chunks, embeddings, result.space);
+                // Derived from the rows, not from what the loop believed it had.
+                const stored = wrote ? this.countPersistedVectors(file.id, result.space) : 0;
+                if (!wrote || stored === 0) {
+                    this.updateIndexState(file.id, contentHash, chunks.length, 'failed', null, 0);
+                    emitIngestDebug('failed', 0, 'chunk persistence failed — nothing was written');
+                    console.warn(`[ModeHybridRetriever] ${file.fileName}: embedding succeeded but persistence did not; marked failed so it is retried rather than reported ready over zero rows.`);
+                } else {
+                    this.updateIndexState(file.id, contentHash, chunks.length, 'ready', result.space, stored);
+                    emitIngestDebug('ready', stored);
                 }
-                this.persistChunks(file.id, chunks, embeddings, result.space);
-                this.updateIndexState(file.id, contentHash, chunks.length, 'ready', result.space);
-                emitIngestDebug('ready', chunks.length);
             } else {
                 // FAULT-TOLERANT batched indexing: a mid-file sub-batch failure (429
                 // rotation exhausted, timeout) must NOT discard the chunks already
@@ -569,19 +794,16 @@ export class ModeHybridRetriever {
                 const embeddedVectors: number[][] = [];
                 let embeddingSpace: string | null = null;
                 let failedOffset = -1;
-                for (let start = 0; start < chunks.length; start += INDEX_BATCH) {
-                    const slice = chunks.slice(start, start + INDEX_BATCH);
+                for (const slice of plan) {
+                    const start = embeddedVectors.length;
                     try {
-                        const result = await this.embeddingPipeline.getEmbeddingsWithFallback(slice);
-                        if (!Array.isArray(result.embeddings) || result.embeddings.length !== slice.length) {
-                            throw new Error(`returned ${result.embeddings?.length ?? 'none'} vectors for ${slice.length} chunks`);
-                        }
+                        const result = await this.embedSubBatchWithRetry(slice, file.fileName);
                         embeddedVectors.push(...result.embeddings);
                         embeddingSpace = result.space;
                         console.log(`[ModeHybridRetriever] ${file.fileName}: embedded ${embeddedVectors.length}/${chunks.length} chunks`);
                     } catch (batchErr) {
                         failedOffset = start;
-                        console.warn(`[ModeHybridRetriever] ${file.fileName}: sub-batch at offset ${start} failed (${batchErr instanceof Error ? batchErr.message : batchErr}); keeping ${embeddedVectors.length} embedded + rest lexical.`);
+                        console.warn(`[ModeHybridRetriever] ${file.fileName}: sub-batch at offset ${start} failed after retries (${batchErr instanceof Error ? batchErr.message : batchErr}); keeping ${embeddedVectors.length} embedded + rest lexical. embedded_chunk_count makes the tail resumable.`);
                         break;
                     }
                 }
@@ -589,36 +811,66 @@ export class ModeHybridRetriever {
                 if (embeddedCount === 0) {
                     // Nothing embedded — lexical only, mark failed so a later prewarm retries.
                     this.persistChunks(file.id, chunks, null, null);
-                    this.updateIndexState(file.id, contentHash, chunks.length, 'failed', null);
+                    // Already 'failed'; a persistence failure on top changes nothing.
+                    this.updateIndexState(file.id, contentHash, chunks.length, 'failed', null, 0);
                     emitIngestDebug('failed', 0, `embedding failed at offset ${failedOffset}`);
                 } else if (embeddedCount === chunks.length) {
-                    this.persistChunks(file.id, chunks, embeddedVectors, embeddingSpace);
-                    this.updateIndexState(file.id, contentHash, chunks.length, 'ready', embeddingSpace);
-                    emitIngestDebug('ready', embeddedCount);
+                    const wroteAll = this.persistChunks(file.id, chunks, embeddedVectors, embeddingSpace);
+                    const storedAll = wroteAll ? this.countPersistedVectors(file.id, embeddingSpace) : 0;
+                    if (storedAll === 0) {
+                        this.updateIndexState(file.id, contentHash, chunks.length, 'failed', null, 0);
+                        emitIngestDebug('failed', 0, 'chunk persistence failed — nothing was written');
+                    } else {
+                        this.updateIndexState(file.id, contentHash, chunks.length, 'ready', embeddingSpace, storedAll);
+                        emitIngestDebug('ready', storedAll);
+                    }
                 } else {
                     // Partial: persist the embedded prefix WITH vectors, and the tail as
                     // lexical-only text. persistChunks reads embeddings[i] per row and
                     // stores a null blob where the vector is absent, so a padded array
                     // (vectors for the prefix, null for the tail) gives a mixed index.
                     const padded = chunks.map((_, i) => (i < embeddedCount ? embeddedVectors[i] : null)) as unknown as number[][];
-                    this.persistChunks(file.id, chunks, padded, embeddingSpace);
-                    // 'ready' — retrieval works over the embedded prefix + lexical tail.
-                    // A follow-up prewarm/retry can complete the tail when quota frees up.
-                    this.updateIndexState(file.id, contentHash, chunks.length, 'ready', embeddingSpace);
-                    console.log(`[ModeHybridRetriever] ${file.fileName}: partial index READY (${embeddedCount}/${chunks.length} vectors, tail lexical; failed@${failedOffset})`);
-                    emitIngestDebug('ready', embeddedCount, `embedding stopped at offset ${failedOffset}; tail lexical-only`);
+                    const wrotePartial = this.persistChunks(file.id, chunks, padded, embeddingSpace);
+                    const storedPartial = wrotePartial ? this.countPersistedVectors(file.id, embeddingSpace) : 0;
+                    // 'ready' — retrieval works over the embedded prefix + lexical
+                    // tail. Recording the DERIVED count is what makes the promised
+                    // follow-up possible: the skip check above and
+                    // prewarmModeReferenceIndex both then see this file as
+                    // unfinished. A failed write records nothing embedded, so the
+                    // file is retried rather than frozen mid-way.
+                    if (storedPartial === 0) {
+                        this.updateIndexState(file.id, contentHash, chunks.length, 'failed', null, 0);
+                        emitIngestDebug('failed', 0, 'chunk persistence failed — nothing was written');
+                    } else {
+                        this.updateIndexState(file.id, contentHash, chunks.length, 'ready', embeddingSpace, storedPartial);
+                        console.log(`[ModeHybridRetriever] ${file.fileName}: partial index READY (${storedPartial}/${chunks.length} vectors, tail lexical; failed@${failedOffset})`);
+                        emitIngestDebug('ready', storedPartial, `embedding stopped at offset ${failedOffset}; tail lexical-only`);
+                    }
                 }
             }
         } catch (e) {
             console.warn(`[ModeHybridRetriever] indexFile failed for ${file.fileName}:`, e instanceof Error ? e.message : e);
             // Keep the chunk text for lexical retrieval; mark failed for retry.
             this.persistChunks(file.id, chunks, null, null);
-            this.updateIndexState(file.id, contentHash, chunks.length, 'failed', null);
+            this.updateIndexState(file.id, contentHash, chunks.length, 'failed', null, 0);
             emitIngestDebug('failed', 0, e instanceof Error ? e.message : String(e));
         }
     }
 
-    private persistChunks(fileId: string, chunks: string[], embeddings: number[][] | null, space: string | null): void {
+    /**
+     * Write a file's chunks (and vectors, where present) in one transaction.
+     *
+     * Returns whether the write actually landed. It used to return void and
+     * swallow the exception, which meant a failed transaction — a locked
+     * database, a full disk — was followed immediately by updateIndexState
+     * marking the file `ready` with a full embedded count over ZERO rows. The
+     * file then reported itself completely indexed and retrieved nothing, and
+     * once the skip condition started checking embeddedChunkCount that lie
+     * satisfied it, so nothing ever revisited the file.
+     *
+     * The caller must not record success it did not get.
+     */
+    private persistChunks(fileId: string, chunks: string[], embeddings: number[][] | null, space: string | null): boolean {
         try {
             const del = this.db.prepare('DELETE FROM mode_reference_chunks WHERE file_id = ?');
             const ins = this.db.prepare(`
@@ -635,8 +887,36 @@ export class ModeHybridRetriever {
                 }
             });
             txn();
+            return true;
         } catch (e) {
             console.warn('[ModeHybridRetriever] persistChunks failed:', e);
+            return false;
+        }
+    }
+
+    /**
+     * How many of this file's chunks actually carry a usable vector, read from
+     * the ROWS rather than from anything we remembered writing.
+     *
+     * embedded_chunk_count is a cache of this query. A cache can drift from the
+     * thing it caches — that is the entire failure this closes — so the number
+     * persisted into the state row is derived here, after the write, instead of
+     * being the count the embedding loop believed it had.
+     *
+     * Filters on the space for the same reason retrieval does: a vector from a
+     * different embedding space is not a usable vector, so counting it would
+     * report a file as indexed for a space in which it cannot be searched.
+     */
+    private countPersistedVectors(fileId: string, space: string | null): number {
+        if (!space) return 0;
+        try {
+            const row = this.db.prepare(
+                'SELECT COUNT(*) AS n FROM mode_reference_chunks WHERE file_id = ? AND embedding IS NOT NULL AND embedding_space = ?'
+            ).get(fileId, space) as { n?: number } | undefined;
+            return typeof row?.n === 'number' ? row.n : 0;
+        } catch (e) {
+            console.warn('[ModeHybridRetriever] countPersistedVectors failed:', e);
+            return 0;
         }
     }
 
@@ -1085,6 +1365,16 @@ export class ModeHybridRetriever {
          * itself must never be handed the manual budget on a live turn.
          */
         rerankSurface?: RerankSurface;
+        /**
+         * The CALLER's own deadline for the whole retrieval, when it races
+         * retrieval against a timer (the legacy streamChat path: 1000ms, 2000ms
+         * doc-grounded). A rerank whose budget cannot fit inside it is not
+         * started — see rerankBudgetFitsDeadline for the measured waste.
+         */
+        rerankDeadlineMs?: number;
+        /** Exhaustive request: rerank pool = the user's candidateCount × this,
+         *  capped at 2×RERANK_CANDIDATE_POOL. Absent/1 = the setting exactly. */
+        rerankPoolMultiplier?: number;
     }): Promise<ModeRetrievedContext> {
         const {
             query,
@@ -1095,6 +1385,8 @@ export class ModeHybridRetriever {
             allowRerank = false,
             forceDocumentGrounding = false,
             rerankSurface,
+            rerankDeadlineMs,
+            rerankPoolMultiplier,
         } = params;
         // Unsearchable placeholder files (deep-run 2, issue 12): an image-only
         // PDF's "[Page 1] [Page 2]" extraction is not evidence — served as a
@@ -1196,6 +1488,18 @@ export class ModeHybridRetriever {
                 markH4HybridStage('perform_hybrid_enter', { candidateCount: allCandidates.length });
                 candidates = await this.performHybridRetrieval(allCandidates, queryWords, queryText, adaptiveThreshold, files);
                 markH4HybridStage('perform_hybrid_exit', { candidateCount: candidates.length });
+                // EMPTY-HYBRID FLOOR (2026-09-07, always answer). A paraphrased live
+                // question ("did we get paged or did a customer tell us") against a
+                // two-chunk mode scored every chunk under MIN_COMBINED_SCORE and the
+                // turn went to the model with NO evidence — while the answer sat in
+                // the only chunk that mentioned "pager". When the corpus has
+                // candidates and the threshold kept none, lexical retrieval at a zero
+                // threshold returns the best-overlapping chunks; downstream selection
+                // still caps them and the composer still judges answerability.
+                if (candidates.length === 0 && allCandidates.length > 0) {
+                    candidates = this.performLexicalRetrieval(allCandidates, queryWords, 0);
+                    markH4HybridStage('empty_hybrid_floor', { candidateCount: candidates.length, pool: allCandidates.length });
+                }
             } catch (error) {
                 markH4HybridStage('perform_hybrid_error', { message: error instanceof Error ? error.message : String(error) });
                 console.warn('[ModeHybridRetriever] Hybrid retrieval failed, falling back to lexical:', error);
@@ -1454,7 +1758,16 @@ export class ModeHybridRetriever {
                 lowConfidence, explicitlySelected, shouldRerank,
                 candidateCount: candidates.length, hasOverride: Boolean(this.rerankerOverride),
             });
-            if (shouldRerank) {
+            // The budget follows the CHOICE, not just the surface (rerankBudget.ts).
+            // Resolved BEFORE the gate below so a caller's deadline can be
+            // compared against it.
+            const RERANK_BUDGET_MS = resolveRerankBudgetMs({ explicitlySelected, surface: rerankSurface });
+            if (shouldRerank && !rerankBudgetFitsDeadline({ budgetMs: RERANK_BUDGET_MS, deadlineMs: rerankDeadlineMs })) {
+                // The caller will have stopped waiting before this rerank's own
+                // budget elapses. Starting it anyway bills a hosted reranker for
+                // a result nobody reads (measured: the recap hotkey, 2026-09-07).
+                markH4HybridStage('rerank_skipped_deadline', { budgetMs: RERANK_BUDGET_MS, deadlineMs: rerankDeadlineMs, candidateCount: candidates.length });
+            } else if (shouldRerank) {
                 // A manual-chat answer has a fixed first-useful deadline. The local
                 // cross-encoder is optional ranking refinement, so it must never
                 // consume that whole deadline and prevent a lexical/evidence-pack
@@ -1464,9 +1777,8 @@ export class ModeHybridRetriever {
                 // the user selected gets time to finish, while the bundled
                 // default keeps the 1200ms that protects a first-useful token.
                 // See rerankBudget.ts for the measured case this fixes.
-                const RERANK_BUDGET_MS = resolveRerankBudgetMs({ explicitlySelected, surface: rerankSurface });
                 markH4HybridStage('rerank_enter', { candidateCount: candidates.length, budgetMs: RERANK_BUDGET_MS });
-                const rerankPromise = this.maybeRerankCandidates(queryText, candidates);
+                const rerankPromise = this.maybeRerankCandidates(queryText, candidates, rerankPoolMultiplier);
                 let rerankTimer: NodeJS.Timeout | undefined;
                 const raced = await Promise.race([
                     rerankPromise.then((value) => ({ value, timedOut: false })),
@@ -1554,6 +1866,8 @@ export class ModeHybridRetriever {
                     score: this.reportedDocGroundedScore(c),
                     ftsScore: c.ftsScore,
                     vectorScore: c.vectorScore,
+                    ...(typeof c.rerankScore === 'number' ? { rerankScore: c.rerankScore } : {}),
+                    ...(typeof c.answerabilityScore === 'number' ? { answerabilityScore: c.answerabilityScore } : {}),
                     trustLevel: 'untrusted_reference',
                 })),
                 formattedContext: finalContext,
@@ -1572,6 +1886,8 @@ export class ModeHybridRetriever {
                 score: this.combinedScore(c.ftsScore, c.vectorScore, FTS_WEIGHT),
                 ftsScore: c.ftsScore,
                 vectorScore: c.vectorScore,
+                ...(typeof c.rerankScore === 'number' ? { rerankScore: c.rerankScore } : {}),
+                ...(typeof c.answerabilityScore === 'number' ? { answerabilityScore: c.answerabilityScore } : {}),
                 trustLevel: 'untrusted_reference'
             })),
             formattedContext,
@@ -1597,6 +1913,7 @@ export class ModeHybridRetriever {
     private async maybeRerankCandidates(
         queryText: string,
         sorted: ChunkCandidate[],
+        poolMultiplier: number = 1,
     ): Promise<ChunkCandidate[] | null> {
         let enabled = false;
         try {
@@ -1670,8 +1987,14 @@ export class ModeHybridRetriever {
             // How many candidates the user chose to rerank. Until now this
             // setting was written by Settings > Reranker and read by nothing,
             // so the control looked live and did nothing.
-            const poolSize = resolveRerankPoolSize();
-            const pool = sorted.slice(0, poolSize);
+            // An exhaustive request (RetrievalPlan.exhaustive) widens the pool so
+            // the reranker can SEE the occurrences it is asked to surface; the
+            // 2× ceiling keeps the ONNX arena reasoning above intact.
+            const mult = Number.isFinite(poolMultiplier) && poolMultiplier > 1 ? Math.floor(poolMultiplier) : 1;
+            const poolSize = Math.min(2 * RERANK_CANDIDATE_POOL, resolveRerankPoolSize() * mult);
+            // Per-file floor before the global fill — see rerankPool.ts for the
+            // measured case (a padding file monopolised the whole pool).
+            const pool = buildRerankPool(sorted, poolSize, { balanced: mult > 1 });
             const poolTexts = pool.map((c: ChunkCandidate) => c.text);
             // Chunked inference — see RERANK_BATCH_SIZE for the crash-forensics
             // rationale. Each batch returns results with INDEXES RELATIVE TO THE
@@ -1757,9 +2080,11 @@ export class ModeHybridRetriever {
                 if (!used.has(i)) reordered.push({ ...pool[i] });
             }
             // Append the un-pooled tail unchanged so we never DROP candidates
-            // the budget step might still want.
-            for (let i = poolSize; i < sorted.length; i++) {
-                reordered.push(sorted[i]);
+            // the budget step might still want. The pool is no longer a prefix
+            // of `sorted` (per-file floor), so membership, not index, decides.
+            const pooled = new Set<ChunkCandidate>(pool);
+            for (const c of sorted) {
+                if (!pooled.has(c)) reordered.push(c);
             }
             return reordered;
         } catch (e) {
@@ -2369,7 +2694,7 @@ export class ModeHybridRetriever {
         const stats = new Map<string, ModeReferenceIndexState>();
         try {
             const rows = this.db.prepare(
-                'SELECT file_id, file_hash, indexed_at, chunk_count, status, embedding_space FROM mode_reference_index_state'
+                'SELECT file_id, file_hash, indexed_at, chunk_count, status, embedding_space, embedded_chunk_count FROM mode_reference_index_state'
             ).all() as any[];
             for (const row of rows) {
                 stats.set(row.file_id, {
@@ -2379,6 +2704,7 @@ export class ModeHybridRetriever {
                     chunkCount: row.chunk_count,
                     status: (row.status as ModeReferenceIndexStatus) || 'pending',
                     embeddingSpace: row.embedding_space ?? null,
+                    embeddedChunkCount: typeof row.embedded_chunk_count === 'number' ? row.embedded_chunk_count : 0,
                 });
             }
         } catch (e) {

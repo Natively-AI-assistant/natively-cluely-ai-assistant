@@ -5,13 +5,14 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AlertTriangle, X, ArrowUpRight } from 'lucide-react';
-
-interface QuotaBucket { used: number; limit: number; remaining: number; }
+import { formatMeter, normalizeQuota, type UsageMeter } from '../types/nativelyUsage';
 
 interface NearLimitBucket {
     label: string;
-    used: number;
-    limit: number;
+    /** Pre-formatted "4.1M / 6.5M" — the unit differs per resource, so the
+     *  banner cannot render a raw pair and get minutes, tokens and dollars all
+     *  right with one toLocaleString. */
+    detail: string;
     pct: number;
 }
 
@@ -39,25 +40,40 @@ export const NativelyQuotaBanner: React.FC = () => {
                     return;
                 }
 
-                const { transcription, ai, search } = result.quota as {
-                    transcription: QuotaBucket;
-                    ai: QuotaBucket;
-                    search: QuotaBucket;
-                };
+                const quota = normalizeQuota(result.quota);
+                if (!quota) {
+                    console.log('[NativelyQuotaBanner] unrecognised quota shape — skipping');
+                    return;
+                }
 
-                const near: NearLimitBucket[] = (
-                    [
-                        { label: 'AI requests',   bucket: ai            },
-                        { label: 'Transcription', bucket: transcription },
-                        { label: 'Web searches',  bucket: search        },
-                    ] as Array<{ label: string; bucket: QuotaBucket }>
-                )
-                    .filter(({ bucket }) => bucket.limit > 0 && (bucket.used / bucket.limit) * 100 >= THRESHOLD_PCT)
-                    .map(({ label, bucket }) => ({
+                // The FIVE metered resources, named the way the product names
+                // them. Knowledge is split here rather than shown as one line:
+                // a warning exists to tell someone what to do next, and
+                // "Knowledge Usage 94%" does not distinguish "stop indexing"
+                // from "stop retrieving".
+                //
+                // The server already computed each percentage — including ones
+                // above 100 — so this does not recompute them. Recomputing is
+                // how the banner and the settings panel end up disagreeing by a
+                // rounding step about whether someone is at their limit.
+                const candidates: Array<{ label: string; meter: UsageMeter | undefined }> = [
+                    { label: 'AI Usage',   meter: quota.ai },
+                    { label: 'Embeddings', meter: quota.knowledge?.embedding },
+                    { label: 'Reranking',  meter: quota.knowledge?.reranker },
+                    { label: 'Voice Usage', meter: quota.voice },
+                    { label: 'Research',   meter: quota.research },
+                ];
+
+                const near: NearLimitBucket[] = candidates
+                    // `limit == null` is UNMETERED, not exhausted — warning on
+                    // it would nag every customer whose plan does not yet meter
+                    // a resource.
+                    .filter((c): c is { label: string; meter: UsageMeter } =>
+                        !!c.meter && c.meter.limit != null && c.meter.percent >= THRESHOLD_PCT)
+                    .map(({ label, meter }) => ({
                         label,
-                        used:  bucket.used,
-                        limit: bucket.limit,
-                        pct:   Math.round((bucket.used / bucket.limit) * 100),
+                        detail: formatMeter(meter),
+                        pct: Math.round(meter.percent),
                     }));
 
                 console.log('[NativelyQuotaBanner] near-limit:', near);
@@ -103,11 +119,11 @@ export const NativelyQuotaBanner: React.FC = () => {
 
                     {/* Bucket list */}
                     <div className="flex flex-col gap-1.5">
-                        {nearLimitBuckets.map(({ label, used, limit, pct }) => (
-                            <div key={label} className="flex items-center justify-between">
-                                <span className="text-[12px] text-white/50">{label}</span>
-                                <span className={`text-[12px] font-medium tabular-nums ${pct >= 100 ? 'text-red-400' : 'text-amber-400'}`}>
-                                    {used.toLocaleString()} / {limit.toLocaleString()} ({pct}%)
+                        {nearLimitBuckets.map(({ label, detail, pct }) => (
+                            <div key={label} className="flex items-center justify-between gap-2">
+                                <span className="text-[12px] text-white/50 shrink-0">{label}</span>
+                                <span className={`text-[12px] font-medium tabular-nums text-right ${pct >= 100 ? 'text-red-400' : 'text-amber-400'}`}>
+                                    {detail} ({pct}%)
                                 </span>
                             </div>
                         ))}

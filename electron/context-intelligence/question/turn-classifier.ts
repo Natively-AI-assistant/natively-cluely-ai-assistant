@@ -66,6 +66,9 @@ export interface Classification {
   path: RetrievalPath;
   shouldRetrieve: boolean;
   requiredSourceTypes: SourceType[];
+  /** The question asks for EVERY occurrence across the material — see
+   *  RetrievalPlan.exhaustive. */
+  exhaustive: boolean;
   /**
    * The question needs a source the ACTIVE MODE does not authorize.
    *
@@ -85,7 +88,48 @@ export interface Classification {
   reason: string;
 }
 
-const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+// STT fillers and stutters are stripped BEFORE any rule sees the question
+// (2026-09-07, measured in a 1,000-turn live campaign): "What is erm the erm
+// basically period for churn pct?" went GENERAL_TECHNICAL → FAST while the clean
+// "What is the period for churn pct?" was a document lookup, because the
+// definite-value patterns look for "what is the <noun>". Live transcripts
+// arrive like this on every turn. Only unambiguous fillers are removed ("like",
+// "so", "right" are real words too); an immediately repeated word ("the the",
+// "5 5") collapses to one.
+const FILLER_RE = /\b(?:um+|uh+|uhm|erm+|hmm+|hm+|arh+|ah+|er+|basically|you know|i mean)\b[,]?\s*/g;
+const STUTTER_RE = /\b(\w+)(?:\s+\1\b)+/g;
+// "right", "okay", "so", "like", "you know" are real words, so they are only
+// fillers when WEDGED between a function word and what it governs: "what is
+// right the annual discount pct", "for okay so proposal, what is the acv"
+// (2026-09-08, measured: the first went FAST and the sales persona invented a
+// 20 percent discount over a file that says 12).
+const MID_FILLER_RE = /\b(is|are|was|were|what|which|how|does|did|do|for|about|of|in|on|to|the)\s+(?:(?:right|okay|ok|so|like|you know|i mean)[,\s]+)+(?=[a-z0-9$])/gi;
+// Transcriber spellings of things people SAY as letters or symbols
+// (2026-09-08, measured): "queue two 2026" for Q2 2026, "p ninety five" for
+// p95, "n d c g" for nDCG. The files hold the written form; the model was told
+// "queue two" is not a term in any file. Canonicalised once, here.
+type SttReplacer = string | ((match: string, ...groups: string[]) => string);
+const QUARTER_WORDS: Record<string, string> = { one: '1', two: '2', three: '3', four: '4' };
+const STT_CANON: ReadonlyArray<[RegExp, SttReplacer]> = [
+  [/\bqueue\s+(one|two|three|four|1|2|3|4)\b/gi, (_m: string, n: string) => 'Q' + (QUARTER_WORDS[n.toLowerCase()] ?? n)],
+  [/\bp\s+(?:fifty|50)\b/gi, 'p50'], [/\bp\s+(?:ninety\s+five|95)\b/gi, 'p95'], [/\bp\s+(?:ninety\s+nine|99)\b/gi, 'p99'], [/\bp\s+(?:ninety|90)\b/gi, 'p90'],
+  [/\bn\s+d\s+c\s+g\b/gi, 'nDCG'], [/\bm\s+r\s+r\b/gi, 'MRR'], [/\bs\s+l\s+a\b/gi, 'SLA'], [/\ba\s+p\s+i\b/gi, 'API'], [/\ba\s+r\s+r\b/gi, 'ARR'],
+  [/\bg\s+p\s+u\b/gi, 'GPU'], [/\bo\s+k\s+r\b/gi, 'OKR'], [/\bs\s+o\s+w\b/gi, 'SOW'], [/\bj\s+d\b/gi, 'JD'], [/\bbat\s+na\b/gi, 'BATNA'], [/\bL\s+([3-7])\b/g, 'L$1'],
+];
+export const canonicalizeSttSpellings = (s: string): string => {
+  let out = s;
+  for (const [re, rep] of STT_CANON) out = typeof rep === 'string' ? out.replace(re, rep) : out.replace(re, rep);
+  return out;
+};
+export const normalizeSttQuestion = (s: string): string =>
+  canonicalizeSttSpellings(s).toLowerCase().replace(FILLER_RE, ' ').replace(MID_FILLER_RE, '$1 ').replace(STUTTER_RE, '$1').replace(/\s+([,.?!])/g, '$1').replace(/\s+/g, ' ').trim();
+/** Case-preserving variant for the question the model and the retriever see:
+ *  "What is arh the discount pct?" reached the model verbatim and it answered
+ *  about an "ARH percentage"; "what is arh so due for" became an "ARIS chart".
+ *  Fillers are noise from the transcriber, never content. */
+export const stripSttFillers = (s: string): string =>
+  canonicalizeSttSpellings(s).replace(new RegExp(FILLER_RE.source, 'gi'), ' ').replace(new RegExp(MID_FILLER_RE.source, 'gi'), '$1 ').replace(new RegExp(STUTTER_RE.source, 'gi'), '$1').replace(/\s+([,.?!])/g, '$1').replace(/\s+/g, ' ').trim();
+const norm = (s: string) => normalizeSttQuestion(s);
 
 // ── signals ─────────────────────────────────────────────────────────────────
 // Second person addressed to the candidate ("your project"), or explicit
@@ -174,7 +218,11 @@ const PERSONAL_RE = /\b(your|your own|you have|have you|did you|do you|tell me a
 // you build a rate limiter?", "how do you test this?") and must keep their
 // general-knowledge route. The distinction is grammatical rather than a keyword
 // list, so it does not need maintaining as vocabulary drifts.
-const SECOND_PERSON_PAST_RE = /\byou (?:built|owned|designed|led|created|developed|implemented|shipped|wrote|architected|ran|managed|handled|delivered|deployed|migrated|debugged|tested|monitored|scaled|refactored|chose|picked|solved|fixed|added|removed|introduced|maintained|supported|integrated|automated|configured|launched|rolled out|worked on)\b/;
+// got/achieved/reached/hit/measured/reduced/improved/cut/saw/used added
+// 2026-09-07: "what was the latency you got on the FastAPI backend" carried
+// no second-person cue at all and planned document pools only, so the fact —
+// which lived in the profile résumé — was never retrieved.
+const SECOND_PERSON_PAST_RE = /\byou (?:built|owned|designed|led|created|developed|implemented|shipped|wrote|architected|ran|managed|handled|delivered|deployed|migrated|debugged|tested|monitored|scaled|refactored|chose|picked|solved|fixed|added|removed|introduced|maintained|supported|integrated|automated|configured|launched|rolled out|worked on|got|achieved|reached|hit|measured|reduced|improved|increased|cut|saw|used|optimi[sz]ed|did|done|dealt with|faced|encountered|experienced|troubleshot|investigated|diagnosed|resolved|contributed|participated|helped|spent|took|joined)\b/;
 // FIRST person is personal too (2026-07-31): manual chat is the USER asking
 // about THEMSELF — "Do I have Kubernetes experience?", "Which required
 // languages do I not list?" — and a second/third-person-only pattern classified
@@ -551,10 +599,24 @@ const RESPONSE_REQUEST_RE =
 // happens to pre-lower before calling while the orchestrator passes the raw
 // resolved question. The first external caller silently never matched "Why?" —
 // capital W — so the referent cap it guarded was dead on arrival.
+// Content-free imperative fragments (2026-09-07, always-answer): "explain",
+// "walk me through it", "elaborate", "summarize that". Measured: "explain" with
+// two files attached took GENERAL_TECH_RE ("explain") → GENERAL_TECHNICAL →
+// FAST → no retrieval, and "walk me through it" → AMBIGUOUS with retrieval
+// off; both surfaces then asked "what would you like me to explain?". A
+// fragment whose whole text is such a verb phrase has no subject of its own —
+// it is a follow-up, and the orchestrator lends it the attachments as subject.
+// Imperative generative asks are not lookups (2026-09-07 fragment rule).
+const GENERATIVE_ASK_RE = /^(?:please\s+)?(?:write|draft|generate|compose|create|make|craft|prepare|suggest|brainstorm|come up with|give me (?:a|an|some|three|five|\d+)|propose|outline|rewrite|rephrase|translate|improve|polish|shorten|expand on)\b/;
+
+const BARE_VERB_FRAGMENT_RE =
+  /^(?:(?:please|ok(?:ay)?|so|and|just),?\s+)*(?:explain|elaborate|expand|continue|go on|keep going|say more|more|tell me more|(?:more|further) details?|details?|next|walk (?:me|us) through (?:it|that|this)|break (?:it|that|this) down|summari[sz]e(?: (?:it|that|this))?|clarify(?: (?:it|that|this))?|show me|(?:can|could) you (?:explain|elaborate|expand|clarify)(?: (?:it|that|this))?)(?:\s+(?:please|again))?$/;
+
 export const isBareFollowUp = (raw: string): boolean => {
   const q = String(raw).toLowerCase();
   if (RESPONSE_REQUEST_RE.test(q)) return true;
   if (isContinuationFragment(q)) return true;
+  if (BARE_VERB_FRAGMENT_RE.test(q.replace(/[?!.,]+$/, '').trim())) return true;
   return FOLLOW_UP_RE.test(q) && q.split(/\s+/).filter(Boolean).length <= FOLLOW_UP_MAX_WORDS;
 };
 
@@ -577,7 +639,7 @@ export const isResponseRequest = (raw: string): boolean => RESPONSE_REQUEST_RE.t
 const splitClauses = (q: string): string[] =>
   q.split(/\band\b|\balso\b|[;.]/).map((c) => c.trim()).filter(Boolean);
 
-function detectTypes(q: string, input: ClassificationInput): { types: QuestionType[]; claims: ClaimType[]; clauses: Partial<Record<ClaimType, string>> } {
+function detectTypes(q: string, input: ClassificationInput): { types: QuestionType[]; claims: ClaimType[]; clauses: Partial<Record<ClaimType, string>>; exhaustive: boolean } {
   const types = new Set<QuestionType>();
   const claims = new Set<ClaimType>();
   const clauses: Partial<Record<ClaimType, string>> = {};
@@ -726,8 +788,16 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
     // exact catch-all is what planned the résumé for a fan question. Whole-
     // question signal, because the artifact and the ask usually sit in
     // different clauses.
+    // The tech-self-talk veto must not fire on the very verb that made the
+    // clause second person (2026-09-07, measured with a teleprompter mode
+    // prompt): "Tell me about a real production failure you debugged" is a
+    // story ask about the candidate's history, but "debugged" matched
+    // TECH_SELF_TALK_RE and the clause went GENERAL_TECHNICAL → FAST, so the
+    // model denied a project the résumé states. Self-talk is FIRST-person
+    // ("why do I get a segfault"); a lexical second-person verb is the
+    // interviewer asking what YOU did, and the tech noun is its object.
     if (personal && !namedAnAspect && !deviceTroubleshoot
-        && !codingTask && !SYSTEM_DESIGN_RE.test(clause) && !TECH_SELF_TALK_RE.test(clause)) {
+        && !codingTask && !SYSTEM_DESIGN_RE.test(clause) && (!TECH_SELF_TALK_RE.test(clause) || secondPersonPast)) {
       types.add('PERSONAL_EXPERIENCE'); noteClaim('USER_EMPLOYMENT', clause);
     }
 
@@ -934,6 +1004,7 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
   // (2026-08-02): both are questions no private source can improve, and both
   // were measured reaching the primary-source fallback — the fan question via
   // "what should I check" and the discount exercise via its own digits.
+  let exhaustive = false; // set by the exhaustive-request rule below (RetrievalPlan.exhaustive)
   const techTask = TECH_SELF_TALK_RE.test(q) || CODING_TASK_RE.test(q)
     || (Boolean(input.hasScreenContext) && SCREEN_CODE_ASK_RE.test(q)) || SYSTEM_DESIGN_RE.test(q)
     || deviceTroubleshoot || selfContainedMath;
@@ -956,8 +1027,16 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
   // conceptual sent it to the FAST path and the model invented the weight.
   // `of/behind/between/to-verb` complements remain conceptual ("the goal of
   // dependency injection", "the difference between TCP and UDP").
+  // `to` counts as a conceptual complement only before a VERB ("the best way to
+  // learn", "the fastest way to scale it"). A compound noun that happens to
+  // contain "to" — "the free to paid conversion", "the end to end latency",
+  // "the peer to peer sync" — is a value lookup (2026-09-08, measured in a
+  // 1,000-turn live campaign: "What is the free to paid conversion?" went FAST
+  // with the metrics file attached and shipped a textbook definition).
   const conceptComplement =
-    /\bthe (?:[\w-]+ ){0,3}[\w-]+ (?:of|behind|between|to [a-z])/.test(q);
+    /\bthe (?:[\w-]+ ){0,3}[\w-]+ (?:of|behind|between)\b/.test(q)
+    || /\bthe (?:[\w-]+ ){0,3}[\w-]+ to (?:a|an|the|my|your|our|their|his|her|someone|anyone|everyone|people|users|customers|me|us|you|them|him|it)\b/.test(q)
+    || /\bthe (?:[\w-]+ ){0,3}[\w-]+ to (?:learn|scale|build|handle|improve|reduce|avoid|achieve|get|make|use|write|run|test|deploy|debug|fix|do|solve|design|implement|measure|manage|start|stop|prevent|migrate|convert|choose|decide|explain|compare|optimi[sz]e|approach|structure|set|configure|ship|grow|hire|sell|pitch|negotiate|answer|respond|deal|say|tell|think|know|find|keep|become|be|go|have|reach|win|close|open|store|cache|index|retrieve|rank|train|evaluate|describe|present|introduce|prepare|estimate|price|discount)\b/.test(q);
   // Grounding a definite lookup only makes sense where documents can hold the
   // value: document-first modes always qualify; an OPEN_KNOWLEDGE mode
   // qualifies only when this turn actually has documents (attachments or a
@@ -999,6 +1078,47 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
       && /\b(threshold\w*|frequenc\w*|rates?|formulas?|calculat\w*|weights?|coefficients?|detect\w*)\b/.test(q)) {
     types.add('DOCUMENT_FACT'); noteWholeQ('DOCUMENT_FACT');
   }
+  // ── Attached-document deixis (2026-09-07) ─────────────────────────────────
+  //
+  // The question NAMES an attached file, or points at a document with a
+  // definite article ("in the error log", "the array problem", "the
+  // postmortem", "the attached spec"), while documents are attached. Measured
+  // in technical-interview with tech_error_log.txt attached: "Which function
+  // threw the uncaught exception in the error log?" — TECH_SELF_TALK_RE
+  // ("error", "exception") made it GENERAL_TECHNICAL → FAST → no retrieval, and
+  // the app answered "I cannot answer that without seeing the log" about a log
+  // it had indexed; on the manual surface it invented a function name.
+  //
+  // Runs BEFORE the claimless-techTask branch so a document-deictic question is
+  // a document question first: retrieval is cheap and the evidence gate still
+  // has the last word, whereas skipping retrieval here is unrecoverable. The
+  // generic-noun list is deliberately document-shaped (log/spec/notes/…); bare
+  // "this problem" stays coding self-talk unless an attached file is named.
+  if (modeHoldsDocuments && !isBareFollowUp(q)
+      && (mentionsAttachedFile(q, input.attachedFileNames) || DOC_DEIXIS_RE.test(q) || namesTitledTask(q))) {
+    types.add('DOCUMENT_FACT'); noteWholeQ('DOCUMENT_FACT');
+  }
+  // A REMINDER is a lookup in the material, whatever words it contains
+  // (2026-09-08, measured): "Remind me, failures 1 error, what was it?" went
+  // GENERAL_TECHNICAL because "error" is tech self-talk, retrieval never ran,
+  // and the model invented a test failure. "Remind me …", "… what was it
+  // (again)?", "… again?" ask for something ALREADY recorded — with documents
+  // attached that is the documents, and the evidence gate keeps the last word.
+  const reminderAsk = /^(?:(?:so|okay|ok|and|right|um|uh)[,\s]+)*remind (?:me|us)\b|\bwhat (?:was|is) (?:it|that|the \w+(?: \w+){0,3}) again\b|\bwhat was (?:it|that)\s*\??$/i.test(q);
+  if (modeHoldsDocuments && reminderAsk && !isBareFollowUp(q)) {
+    types.add('DOCUMENT_FACT'); noteWholeQ('DOCUMENT_FACT');
+  }
+  // An exhaustive request over the material (2026-09-07). "Find every place a
+  // latency number appears" listed 8 of ~20 values live: the plan capped
+  // evidence at 6 chunks and the reranker pool at the user's 15. The flag is
+  // only meaningful when there is material to scan; the orchestrator widens
+  // the plan and the ports/composer widen with it.
+  exhaustive = modeHoldsDocuments && !isBareFollowUp(q) && EXHAUSTIVE_RE.test(q);
+  // "Give me every metric for reranker A and B" with documents attached IS a
+  // question about the documents even without a pointer word: an enumeration
+  // over "everything" has nothing to enumerate but the material. Retrieval is
+  // cheap and the evidence gate keeps the last word.
+  if (exhaustive) { types.add('DOCUMENT_FACT'); noteWholeQ('DOCUMENT_FACT'); }
   // A technical/computational turn that produced NO claim at all is a
   // general-knowledge turn, and must SAY so (2026-08-02). Left claimless it
   // classified AMBIGUOUS → grounded-without-retrieval → answerability NONE,
@@ -1062,6 +1182,26 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
       }
     }
   }
+  // ── STT fragment lookup (2026-09-07, always-answer) ──────────────────────
+  //
+  // Live transcripts hand the engine fragments with no question word: "l four
+  // base", "rate per hour and and the cap", "the sev". In a mode holding
+  // documents those are lookups — measured: both classified GENERAL_TECHNICAL,
+  // took the FAST path with no retrieval, and the answer was a market-rate
+  // guess ("typically $130k–$170k") or "the material does not specify". A short
+  // claimless fragment that is not coding/design self-talk, not arithmetic and
+  // not a bare follow-up retrieves against the documents; the composer's
+  // absence framing still answers from general knowledge when nothing matches.
+  // Runs AFTER the primary-source fallback so an entity question keeps its
+  // résumé claim, and skips generative asks ("write a cover letter").
+  if (modeHoldsDocuments && claims.size === 0 && !isBareFollowUp(q) && !techTask
+      && !GENERATIVE_ASK_RE.test(q)
+      && q.split(/\s+/).filter(Boolean).length <= 8
+      && !CODING_TASK_RE.test(q) && !SYSTEM_DESIGN_RE.test(q) && !TECH_SELF_TALK_RE.test(q)
+      && !deviceTroubleshoot && !/\d\s*(?:\+|−|-|\*|×|\/|÷|%)\s*\d/.test(q)
+      && !META_REQUEST_RE.test(input.resolvedQuestion)) {
+    types.add('DOCUMENT_FACT'); noteWholeQ('DOCUMENT_FACT');
+  }
   // LAST-RESORT document claim (deep-run 2, issue 1): a question-shaped input
   // that STILL produced zero claims in a mode holding documents ("How does a
   // heartbeat failure get detected?") previously became AMBIGUOUS → zero
@@ -1078,7 +1218,7 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
   // and needs no retrieval. Returning early keeps prompt-shaped document text
   // out of the candidate pool entirely.
   if (META_REQUEST_RE.test(input.resolvedQuestion)) {
-    return { types: ['META_REQUEST'], claims: [], clauses: {} };
+    return { types: ['META_REQUEST'], claims: [], clauses: {}, exhaustive: false };
   }
 
   // LAST-RESORT general-knowledge claim (2026-08-02). Every claim branch above
@@ -1115,7 +1255,7 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
   if (hasPrivate && hasGeneral) types.add('MIXED');
 
   if (types.size === 0) types.add('AMBIGUOUS');
-  return { types: [...types], claims: [...claims], clauses };
+  return { types: [...types], claims: [...claims], clauses, exhaustive };
 }
 
 /** Capitalised tokens that are ordinary technical vocabulary, not references to
@@ -1248,9 +1388,79 @@ const claimToSource = (claim: ClaimType, hasDocuments: boolean): SourceType[] =>
 // at the résumé/JD claim those sides explicitly (deictic side-claims above).
 const DOCUMENT_FACT_RETRIEVAL_SOURCES: SourceType[] = ['REFERENCE_FILE', 'PROJECT_FILE', 'CODING_SAMPLE'];
 
+// Document nouns a definite/possessive determiner turns into a pointer at an
+// attached file. "problem"/"question"/"policy"/"contract" are NOT here on
+// purpose: "this problem" is coding self-talk and "your retry policy" is a
+// question about the user's practice, not a pointer at a document. An attached
+// problem statement, policy or contract is reached by NAME below.
+const DOC_DEIXIS_RE = /\b(?:the|this|that|my|our|your|attached|uploaded)\s+(?:[\w-]+\s+){0,2}(?:logs?|error\s+logs?|documents?|docs?|files?|notes|spec(?:ification)?s?|briefs?|reports?|post-?mortems?|checklists?|playbooks?|battlecards?|syllabus|syllabi|handbooks?|agendas?|sow|pdfs?|decks?|slides?|stack\s*traces?|readme|attachments?|write-?ups?|memos?)\b/i;
+
+const FILE_NAME_STOP = new Set(['the', 'and', 'for', 'with', 'from', 'copy', 'final', 'draft', 'new', 'old', 'sample', 'file', 'doc', 'docs', 'notes', 'tech', 'test', 'v1', 'v2', 'v3']);
+
+// A TITLED task ("the debounce problem", "the two-sum question", "the LRU
+// exercise") is a pointer at an attached question bank even though "problem"
+// and "question" are kept out of DOC_DEIXIS_RE: bare "this problem" is coding
+// self-talk, but a problem that has a NAME is one the user expects the app to
+// look up. Measured 2026-09-07: "Implement the debounce problem and explain…"
+// went FAST with 01_coding_questions.md attached (CODING-ANCHOR-009 was the
+// debounce problem) — right answer, wrong path. Generic modifiers are excluded
+// so "the same problem" / "the main question" stay self-talk.
+const TITLED_TASK_RE = /\b(?:the|this|that)\s+([a-z][\w-]{2,})\s+(?:problem|question|exercise|task|scenario|challenge|puzzle|kata|prompt)s?\b/gi;
+const TITLED_TASK_STOP = new Set([
+  'same', 'main', 'only', 'real', 'first', 'next', 'last', 'other', 'biggest', 'core', 'root', 'whole', 'key',
+  'hard', 'easy', 'new', 'old', 'second', 'third', 'coding', 'technical', 'interview', 'design', 'current',
+  'above', 'below', 'previous', 'following', 'original', 'actual', 'bigger', 'smaller', 'general', 'exact',
+  'specific', 'right', 'wrong', 'entire', 'full', 'simple', 'basic', 'harder', 'easier', 'typical', 'common',
+  'usual', 'obvious', 'underlying', 'central', 'open', 'remaining', 'final', 'initial', 'related', 'broader',
+]);
+export function namesTitledTask(question: string): boolean {
+  TITLED_TASK_RE.lastIndex = 0;
+  for (const m of question.matchAll(TITLED_TASK_RE)) {
+    const mod = m[1].toLowerCase();
+    if (!TITLED_TASK_STOP.has(mod) && !/^\d+$/.test(mod)) return true;
+  }
+  return false;
+}
+
+// The question asks for EVERY occurrence, value or place — an enumeration over
+// the whole material rather than one fact from it. Deliberately narrow: an
+// ordinary "what are all the fallbacks?" matches ("all the … fallbacks"), but a
+// plain value lookup never does.
+const EXHAUSTIVE_RE = new RegExp([
+  '\\b(?:every|all|each)\\s+(?:the\\s+|of\\s+the\\s+)?(?:[\\w-]+\\s+){0,2}(?:places?|times?|occurrences?|instances?|mentions?|sections?|values?|numbers?|figures?|metrics?|items?|entries?|references?|files?|documents?|lines?|spots?|dates?|names?|steps?|milestones?|anchors?|scenarios?|questions?|fallbacks?|thresholds?|limits?|budgets?|timeouts?|rates?|latenc(?:y|ies)|scores?)\\b',
+  '\\b(?:list|find|show|give me|enumerate|collect|gather|extract|pull out|cite)\\s+(?:me\\s+)?(?:all|every|each|everything|everywhere)\\b',
+  '\\bexhaustive(?:ly)?\\b',
+  '\\bcomplete (?:list|inventory|set|table)\\b',
+  '\\beverywhere\\b',
+  '\\bhow many (?:places|times)\\b',
+  '\\bwherever\\b',
+].join('|'), 'i');
+
+/**
+ * Does the question name one of the attached files? A run of two consecutive
+ * filename words ("error log", "array problem", "launch checklist") or one
+ * distinctive word of six+ letters ("postmortem", "battlecard", "syllabus").
+ * Filenames are the user's own labels for what they attached, so a match is a
+ * deterministic routing signal — the same reasoning as the glossary/formula
+ * routing above, generalised. Names only, never content.
+ */
+export function mentionsAttachedFile(question: string, fileNames: readonly string[] | undefined): boolean {
+  if (!fileNames?.length) return false;
+  const q = ` ${question.toLowerCase().replace(/[^a-z0-9]+/g, ' ')} `;
+  for (const name of fileNames) {
+    const stem = String(name ?? '').toLowerCase().replace(/\.[a-z0-9]{1,5}$/i, '');
+    const words = stem.split(/[^a-z0-9]+/).filter((w) => w.length >= 3 && !FILE_NAME_STOP.has(w));
+    for (let i = 0; i < words.length; i++) {
+      if (words[i].length >= 6 && q.includes(` ${words[i]} `)) return true;
+      if (i + 1 < words.length && q.includes(` ${words[i]} ${words[i + 1]} `)) return true;
+    }
+  }
+  return false;
+}
+
 export function classifyTurn(input: ClassificationInput): Classification {
   const q = norm(input.resolvedQuestion);
-  const { types, claims, clauses } = detectTypes(q, input);
+  const { types, claims, clauses, exhaustive } = detectTypes(q, input);
 
   // Required sources = union of what the detected claims need, INTERSECTED with
   // what the mode authorizes. A mode never has sources forced into it.
@@ -1349,5 +1559,5 @@ export function classifyTurn(input: ClassificationInput): Classification {
     reason = 'mode disables retrieval';
   }
 
-  return { questionTypes: types, claimTypes: claims, claimClauses: clauses, path, shouldRetrieve, requiredSourceTypes, unsupportedInMode, reason };
+  return { questionTypes: types, claimTypes: claims, claimClauses: clauses, path, shouldRetrieve, requiredSourceTypes, exhaustive, unsupportedInMode, reason };
 }

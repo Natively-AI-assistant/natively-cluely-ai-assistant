@@ -203,7 +203,7 @@ jobs:
           done
 
       # Required packaged local-fallback assets (ONNX/Transformers deps + bundled
-      # MiniLM/MobileBERT models + local ONNX worker scripts). The packaged app
+      # MiniLM/ms-marco models + local ONNX worker scripts). The packaged app
       # must work on a clean machine with no Ollama, no API keys, no internet.
       - name: Verify packaged local fallback assets (per-arch)
         run: |

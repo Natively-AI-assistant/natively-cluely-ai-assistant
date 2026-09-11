@@ -69,7 +69,10 @@ const body = stripLineComments(extractOnSessionResetBody());
 
 test('onSessionReset snaps shellWidth back to the collapsed baseline (imperative set, not animate)', () => {
   assert.ok(
-    /shellWidth\.set\(\s*SHELL_WIDTH_COLLAPSED\s*\)/.test(body),
+    // Either the render's collapsed width or the DEFAULT collapsed width — the
+    // latter since the reset also forgets a width pinned in the previous
+    // meeting, which SHELL_WIDTH_COLLAPSED would still reflect.
+    /shellWidth\.set\(\s*(?:SHELL_WIDTH_COLLAPSED|collapsedWidthFor\(\s*OVERLAY_DEFAULT_WINDOW_WIDTH\s*\))\s*\)/.test(body),
     'BUG: onSessionReset must imperatively `shellWidth.set(SHELL_WIDTH_COLLAPSED)` so the OS window contracts to the collapsed width on the first paint of the new meeting — otherwise the previous meeting\'s expanded width is shown until the deferred checkCodeVisibility collapse fires ~1-2s later.',
   );
   // Must be an imperative set, NOT an animate() (which would play a visible

@@ -14,6 +14,7 @@
 // never "no answer".
 
 import { isContextIntelligenceV3Enabled } from '../contracts/flag';
+import { MAX_TURN_SCREEN_CHARS } from '../question/conversation-state';
 import { orchestrate, type AnswerRequest, type RetrievalPort } from './orchestrator';
 import { composePrompt } from '../generation/prompt-composer';
 import { resolveModePolicy, isModeId, type ModeId } from '../policies/mode-policy-registry';
@@ -346,16 +347,33 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
           // that is then dropped — so denying the `screenshots` scope silently
           // shortened a user's history as well as redacting it.
           const screensDenied = isScopeDenied('screenshots', readProviderScopePolicy());
+          // Screen text gets its OWN allowance rather than competing with the
+          // exchanges for the conversation budget. Sharing one budget meant a
+          // single screenshot (up to MAX_TURN_SCREEN_CHARS) consumed the whole
+          // ~2400-char conversation allowance and evicted every older turn — so
+          // attaching a screenshot silently shortened the user's history, and a
+          // second screenshot evicted the first. They are different content
+          // answering different questions; one budget could only trade them off.
+          const screenBudgetChars = MAX_TURN_SCREEN_CHARS * 2;
           let spent = 0;
+          let screenSpent = 0;
           const kept: typeof turns = [];
           for (let i = turns.length - 1; i >= 0; i--) {
             const t = turns[i];
-            const screenCost = screensDenied ? 0 : (t.screen?.length ?? 0);
-            const cost = t.q.length + t.a.length + screenCost + 32;
+            const cost = t.q.length + t.a.length + 32;
             // Always keep the most recent exchange, even if it alone overruns:
             // dropping it would leave a follow-up with no antecedent at all.
             if (kept.length && spent + cost > budgetChars) break;
             spent += cost;
+            // Newest-first, so the most recent screens win the screen budget.
+            // A turn whose screen does not fit still keeps its q/a — losing the
+            // picture must not cost the user the exchange as well.
+            const screenCost = screensDenied ? 0 : (t.screen?.length ?? 0);
+            if (screenCost && screenSpent + screenCost > screenBudgetChars) {
+              kept.unshift({ q: t.q, a: t.a });
+              continue;
+            }
+            screenSpent += screenCost;
             kept.unshift(t);
           }
           turns = kept;
@@ -398,6 +416,64 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
           // without ever recording an answer.
           convoSummary = `Previous question: ${cs.previousQuestion}`
             + (cs.previousAnswerSummary ? `\nPrevious answer (referent only, NOT evidence): ${cs.previousAnswerSummary}` : '');
+        }
+      } catch { /* continuity must never break a turn */ }
+    } else if (input.multiTurnHistory !== false) {
+      // ── MERGE, DO NOT CHOOSE ────────────────────────────────────────────
+      // A caller-supplied summary used to SUPPRESS the ring entirely, and the
+      // live surfaces always supply one — IntelligenceEngine passes
+      // conversationWindow(90|60), SessionTracker's rolling window of
+      // "[ME]: …" / "[INTERVIEWER]: …" SPEECH. So on what-to-answer and assist
+      // the ring was unreachable no matter what was in it.
+      //
+      // The two are not competing versions of one thing. A speech window is
+      // what was SAID; it structurally cannot contain what was on SCREEN,
+      // because no microphone records a screenshot. Choosing between them threw
+      // away the only record of every screenshot the user ever attached.
+      //
+      // Only the screen-bearing turns are merged, each anchored to its own
+      // question. The q/a text is deliberately NOT merged: the speech window
+      // already covers the conversation, and appending the ring's copy would
+      // duplicate every exchange and spend the conversation budget twice.
+      try {
+        const { getConversationState } = require('../question/conversation-state-store');
+        const cs = getConversationState(req.sessionId);
+        const screenTurns = (cs?.turns ?? []).filter((t: { screen?: string }) => t.screen);
+        if (screenTurns.length) {
+          const screensDenied = isScopeDenied('screenshots', readProviderScopePolicy());
+          historyScreenWithheld = screensDenied;
+          if (!screensDenied) {
+            // BUDGETED, newest-first — the same allowance the ring branch above
+            // enforces for the same content. Without it this mapped EVERY
+            // screen-bearing turn: measured, 10 turns at MAX_TURN_SCREEN_CHARS
+            // put 80,000 characters of screen text into an 83,072-character
+            // prompt, five times the allowance this file declares a few lines
+            // up, on every what-to-answer and assist turn of the session.
+            const screenBudgetChars = MAX_TURN_SCREEN_CHARS * 2;
+            let screenSpent = 0;
+            const keptScreens: Array<{ q: string; screen?: string }> = [];
+            for (let i = screenTurns.length - 1; i >= 0; i--) {
+              const t = screenTurns[i];
+              const cost = (t.screen?.length ?? 0) + (t.q?.length ?? 0) + 32;
+              // Always keep the most recent screen even if it alone overruns:
+              // dropping it would answer a follow-up about the screen the user
+              // is most likely to mean with nothing at all.
+              if (keptScreens.length && screenSpent + cost > screenBudgetChars) break;
+              screenSpent += cost;
+              keptScreens.unshift(t);
+            }
+            // Same per-turn shape the ring branch renders, so the composer's
+            // "[screen attached that turn]" exception recognizes both.
+            const merged = keptScreens.map((t: { q: string; screen?: string }) => [
+              `User: ${t.q}`,
+              `[screen attached that turn] ${t.screen}`,
+            ].join('\n')).join('\n\n');
+            convoSummary = `${convoSummary}\n\n${merged}`;
+            historyCarriesScreenText = true;
+            // The merged block IS a completed observation to answer from, which
+            // a bare speech window is not.
+            convoHasContent = true;
+          }
         }
       } catch { /* continuity must never break a turn */ }
     }

@@ -7,10 +7,37 @@
 // card-level hover lift + accent glow, benefit-oriented copy, single
 // dominant CTA, trust footer — all tuned for maximum conversion.
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Zap, Key, ArrowRight, Loader2, CheckCircle, Brain, Mic, Flame, ShieldCheck } from 'lucide-react';
 import nativelyLogo from '../../assets/logo.webp';
+import {
+  formatCompact, formatUsd,
+  type NativelyPlanLimits, type TrialUsage,
+} from '../../types/nativelyUsage';
+
+/**
+ * The one-line allowance summary on a plan card.
+ *
+ * Built from the plan catalog rather than written out, because the four strings
+ * this replaced ("1,000 AI answers · 500 min live STT · 100 searches", and three
+ * siblings) were the last hardcoded copy of the plan table in the app — and by
+ * the time anyone read them, every number was wrong. This modal is the
+ * end-of-trial upsell, so it is the worst place in the product to quote an
+ * allowance the customer will not actually receive.
+ *
+ * Returns null until the catalog arrives; the caller shows qualitative copy
+ * instead. Saying nothing is better than saying a number we are guessing at.
+ */
+function planSpec(limits: NativelyPlanLimits | undefined, includesPro: boolean): string | null {
+  if (!limits) return null;
+  return [
+    `${formatCompact(limits.ai_tokens)} AI tokens`,
+    `${limits.transcription_minutes.toLocaleString('en-US')} min voice`,
+    `${formatUsd(limits.research_credits_usd)} research`,
+    ...(includesPro ? ['Pro App included'] : []),
+  ].join(' · ');
+}
 
 const PLAN_STANDARD_URL = 'https://checkout.dodopayments.com/buy/pdt_0NbFixGmD8CSeawb5qvVl';
 const PLAN_PRO_URL      = 'https://checkout.dodopayments.com/buy/pdt_0NcM6Aw0IWdspbsgUeCLA';
@@ -96,7 +123,7 @@ const ACC = {
 // ─────────────────────────────────────────────────────────────
 
 interface TrialModalProps {
-  usage:      { ai: number; stt_seconds: number; search: number };
+  usage:      TrialUsage;
   onByok:     () => Promise<void>;
   onStandard?: () => Promise<void>;
   onDone?:    () => void;
@@ -108,6 +135,14 @@ export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onSta
   const [step,  setStep]  = useState<Step>('choose');
   const [error, setError] = useState<string | null>(null);
   const reduced = useReducedMotion() ?? false;
+  // Unauthenticated and cached in the main process, so this is a cheap call
+  // even on the modal that opens the instant a trial ends.
+  const [plans, setPlans] = useState<Record<string, NativelyPlanLimits> | null>(null);
+  useEffect(() => {
+    window.electronAPI?.getNativelyPlans?.()
+      .then((r) => { if (r?.ok && r.plans) setPlans(r.plans); })
+      .catch(() => { /* cards fall back to qualitative copy */ });
+  }, []);
 
   const openUrl = (url: string) => (window.electronAPI as any)?.openExternal?.(url);
 
@@ -179,7 +214,7 @@ export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onSta
               {step==='done'   && <DoneState onDone={onDone} />}
               {step==='choose' && (
                 <ChooseState
-                  usage={usage} error={error} reduced={reduced}
+                  usage={usage} plans={plans} error={error} reduced={reduced}
                   onPro={()=>{ window.electronAPI?.convertTrial?.('pro')?.catch(()=>{}); openUrl(PLAN_PRO_URL); }}
                   onMax={()=>{ window.electronAPI?.convertTrial?.('max')?.catch(()=>{}); openUrl(PLAN_MAX_URL); }}
                   onUltra={()=>{ window.electronAPI?.convertTrial?.('ultra')?.catch(()=>{}); openUrl(PLAN_ULTRA_URL); }}
@@ -201,12 +236,16 @@ export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onSta
 
 // ─── Choose ──────────────────────────────────────────────────
 
-function ChooseState({ usage, error, reduced, onPro, onMax, onUltra, onStandard, onByok }: {
-  usage: {ai:number;stt_seconds:number;search:number};
+function ChooseState({ usage, plans, error, reduced, onPro, onMax, onUltra, onStandard, onByok }: {
+  usage: TrialUsage;
+  plans: Record<string, NativelyPlanLimits> | null;
   error: string|null; reduced:boolean;
   onPro:()=>void; onMax:()=>void; onUltra:()=>void; onStandard:()=>void; onByok:()=>void;
 }) {
   const sttMin = (usage.stt_seconds/60).toFixed(1);
+  // Qualitative until the catalog lands — see planSpec.
+  const spec = (key: string, includesPro: boolean, fallback: string) =>
+    planSpec(plans?.[key], includesPro) ?? fallback;
   return (
     <div style={{display:'flex',flexDirection:'column',gap:'10px'}}>
 
@@ -218,7 +257,7 @@ function ChooseState({ usage, error, reduced, onPro, onMax, onUltra, onStandard,
         <div>
           <div style={{fontSize:'14px',fontWeight:650,color:C.t1,letterSpacing:'-.02em',lineHeight:1.2}}>Keep the momentum going</div>
           <div style={{fontSize:'11.5px',color:C.t4,marginTop:'2px'}}>
-            {usage.ai} AI · {sttMin} min · {usage.search} searches used in your trial
+            {formatCompact(usage.ai_tokens ?? 0)} AI tokens · {sttMin} min voice · {usage.search} research runs used in your trial
           </div>
         </div>
       </div>

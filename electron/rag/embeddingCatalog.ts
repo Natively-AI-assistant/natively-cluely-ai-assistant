@@ -95,7 +95,11 @@ export const STATIC_EMBEDDING_MODELS = Object.freeze({
     Object.freeze({ id: 'gemini-embedding-001', label: 'gemini-embedding-001', dimensions: 3072, dimensionsVerified: true, supportedDimensions: [768, 1536, 3072], note: 'Text only. Supports 128-3072 dimensions; 768, 1536 and 3072 are recommended.' }),
   ]),
   natively: Object.freeze([
-    Object.freeze({ id: 'gemini-embedding-2', label: 'gemini-embedding-2', dimensions: 3072, dimensionsVerified: true, recommended: true, note: 'Managed by Natively. Nothing to configure.' }),
+    // Must match NativelyEmbeddingProvider — this is what the settings panel
+    // tells the user they are storing vectors in, and a catalogue that names a
+    // different model or width than the provider actually uses is a label on the
+    // wrong box.
+    Object.freeze({ id: 'voyage-4', label: 'voyage-4', dimensions: 2048, dimensionsVerified: true, recommended: true, note: 'Managed by Natively. Nothing to configure.' }),
   ]),
   /** The model bundled with the app — always present, needs no network. */
   local: Object.freeze([

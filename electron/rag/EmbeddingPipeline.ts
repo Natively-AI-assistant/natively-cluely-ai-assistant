@@ -19,6 +19,11 @@ const RETRY_DELAY_BASE_MS = 2000;
 // forever, silently stalling the entire pipeline until app restart.
 // 30s is generous for large chunks on slow connections (typical: 200-800ms).
 const EMBED_TIMEOUT_MS = 30_000;
+// A QUERY embedding sits on the live answer path (2026-09-07): a hosted
+// embedder that stalled for 12.5s held the whole turn, and the caller's
+// lexical fallback never fired because the call eventually succeeded. Ingest
+// keeps the 30s budget; a query gets 3s and then lexical retrieval answers.
+const QUERY_EMBED_TIMEOUT_MS = 3_000;
 
 // ── T13 / RC12: query-path hysteresis (2026-08-28) ──────────────────────────
 //
@@ -306,6 +311,19 @@ export class EmbeddingPipeline {
     /**
      * Get the currently active provider name (used for dimension safety checks)
      */
+    /**
+     * The active provider's upstream per-request batch ceiling, if it has one.
+     *
+     * Exposed so an indexing caller can size its sub-batches to ONE upstream
+     * round trip. Without it a caller picks a batch size blind, the provider
+     * silently splits it into N sequential requests, and the caller's single
+     * deadline has to cover all N — which is how one 429 discarded a 100-chunk
+     * batch instead of the 32 that actually failed.
+     */
+    getActiveProviderMaxBatch(): number | undefined {
+        return this.provider?.maxBatchSize;
+    }
+
     getActiveProviderName(): string | undefined {
         return this.provider?.name;
     }
@@ -845,9 +863,9 @@ export class EmbeddingPipeline {
         const runQuery = (p: IEmbeddingProvider, label: string) => new Promise<number[]>((resolve, reject) => {
             const timer = setTimeout(() => {
                 reject(new Error(
-                    `[EmbeddingPipeline] embedQuery() timed out after ${EMBED_TIMEOUT_MS}ms for ${label} via ${p.name}`
+                    `[EmbeddingPipeline] embedQuery() timed out after ${QUERY_EMBED_TIMEOUT_MS}ms for ${label} via ${p.name}`
                 ));
-            }, EMBED_TIMEOUT_MS);
+            }, QUERY_EMBED_TIMEOUT_MS);
             p.embedQuery(text).then(
                 (result) => { clearTimeout(timer); resolve(result); },
                 (err)    => { clearTimeout(timer); reject(err); }

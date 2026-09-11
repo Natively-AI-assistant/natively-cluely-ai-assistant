@@ -316,7 +316,16 @@ test('welded mode stands down the manual move mirroring in BOTH directions', () 
 });
 
 test('welded mode does not clamp the pill independently of the shell', () => {
-  const body = extractMethodBody('positionOverlayAuxWindows');
+  // The pill's placement moved into its own method when it began riding the
+  // renderer-streamed panel centre (so it moves in the same frame as a resize
+  // drag). The guard follows it there; the aux entry point must still route
+  // through it, or the guard would be protecting dead code.
+  assert.match(
+    extractMethodBody('positionOverlayAuxWindows'),
+    /this\.positionPillWindow\(\)/,
+    'positionOverlayAuxWindows must place the pill via positionPillWindow',
+  );
+  const body = extractMethodBody('positionPillWindow');
   assert.match(
     body,
     /const rigidToShell = this\.overlayGroupWelded \|\| this\.overlayGroupDragging;/,

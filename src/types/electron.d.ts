@@ -42,7 +42,14 @@ export interface DirectAssistRequest {
   manualContext?: string
   referenceContext?: string
   pageContext?: { dom?: string; ocr?: string; url?: string; title?: string } | null
-  history?: Array<{ role: 'user' | 'assistant'; content: string }>
+  history?: Array<{
+    role: 'user' | 'assistant'
+    content: string
+    /** Screenshots that turn was sent with, so a follow-up question can still
+     *  see them. Main re-validates each path and silently skips any the
+     *  screenshot queue has unlinked. */
+    imagePaths?: string[]
+  }>
   transcript?: string
   imagePaths?: string[]
   requestedLanguage?: string
@@ -57,8 +64,17 @@ export interface DirectAssistError {
 }
 
 export type DirectAssistEvent =
-  | { type: 'start'; requestId: string; provider: string; model: string; trimmedFields: string[] }
+  | { type: 'start'; requestId: string; provider: string; model: string; trimmedFields: string[]; shortenedFields: string[] }
   | { type: 'delta'; requestId: string; sequence: number; text: string }
+  | {
+      type: 'provider_switch'
+      requestId: string
+      /** SNAPSHOT of the delta counter, never a slot of its own — always 0. */
+      sequence: number
+      from: { provider: string; model: string }
+      to: { provider: string; model: string }
+      reason: string
+    }
   | { type: 'done'; requestId: string; sequence: number; provider: string; model: string; fullText?: string }
   | { type: 'error'; requestId: string; sequence: number; partial: boolean; error: DirectAssistError }
   | { type: 'cancel'; requestId: string; sequence: number }
@@ -90,7 +106,12 @@ export interface ElectronAPI {
   }) => Promise<void>
   isOverlayGroupDragManaged?: () => Promise<boolean>
   onOverlayUiAction?: (callback: (action: { type: string }) => void) => () => void
-  sendOverlayToggleAnchor?: (payload: { panelRight: number }) => Promise<void>
+  sendOverlayToggleAnchor?: (payload: { panelRight: number; panelLeft?: number }) => Promise<void>
+  overlayResizeEnvelope?: (
+    payload:
+      | { phase: 'begin'; drag?: { direction: string; startWidth: number; startHeight: number; minWidth: number; minHeight: number; panelLeft: number } }
+      | { phase: 'end'; final?: { width: number; height: number } },
+  ) => Promise<{ width: number; height: number } | undefined>
   setOverlayHoverInteractive?: (interactive: boolean) => Promise<void>
   dismissOverlayPopovers?: (opts?: { settings?: boolean; model?: boolean }) => Promise<void>
   onToggleExpand: (callback: () => void) => () => void
@@ -183,7 +204,7 @@ export interface ElectronAPI {
   onOpenSettingsTab: (callback: (tab: string) => void) => () => void
 
   // LLM Model Management
-  getCurrentLlmConfig: () => Promise<{ provider: "ollama" | "gemini" | "custom" | "codex-cli"; /** @deprecated use `modelId` for selection, `displayName` for UI */ model: string; modelId: string; displayName: string; isOllama: boolean }>
+  getCurrentLlmConfig: () => Promise<{ provider: "ollama" | "gemini" | "custom" | "codex-cli" | "antigravity"; /** @deprecated use `modelId` for selection, `displayName` for UI */ model: string; modelId: string; displayName: string; isOllama: boolean }>
   getAvailableOllamaModels: () => Promise<string[]>
   /** Whether a denied data scope would actually be handled on-device. */
   getLocalFallbackStatus: () => Promise<{ text: boolean; vision: boolean }>
@@ -248,8 +269,10 @@ export interface ElectronAPI {
     can_use_publicly: boolean;
     display_name_publicly: boolean;
   }) => Promise<{ ok: boolean; error?: string; status?: number }>
-  getNativelyPricing: () => Promise<{ ok: boolean; currency?: string; fetchedAt?: string; stale?: boolean; products?: Record<string, { id: string; dodoProductId: string; name: string; amount: number | null; currency: string; formattedPrice: string | null; interval: 'month' | 'year' | 'lifetime'; checkoutUrl: string; coupon: { code: string; eligible: boolean; discountPercent: number; reason?: string } }>; error?: string; status?: number }>
-  getNativelyUsage: (force?: boolean) => Promise<{ ok: boolean; error?: string; plan?: string; quota?: { transcription: { used: number; limit: number; remaining: number }; ai: { used: number; limit: number; remaining: number }; search: { used: number; limit: number; remaining: number }; resets_at: string }; member_since?: string }>
+  // See src/types/nativelyUsage.ts — one definition, shared with the preload
+  // bridge. Four user-facing categories over five server-side meters.
+  getNativelyUsage: (force?: boolean) => Promise<import('./nativelyUsage').NativelyUsageResponse>
+  getNativelyPlans: () => Promise<import('./nativelyUsage').NativelyPlansResponse>
   getStoredCredentials: () => Promise<{ hasNativelyKey?: boolean; hasGeminiKey: boolean; hasGroqKey: boolean; hasOpenaiKey: boolean; hasClaudeKey: boolean; hasDeepseekKey: boolean; hasNvidiaNimKey?: boolean; hasLitellmBaseURL?: boolean; litellmBaseURL?: string | null; litellmMaxTokens?: number | null; googleServiceAccountPath: string | null; sttProvider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively'; hasSttGroqKey: boolean; hasSttOpenaiKey: boolean; hasDeepgramKey: boolean; hasElevenLabsKey: boolean; hasAzureKey: boolean; azureRegion: string; hasIbmWatsonKey: boolean; ibmWatsonRegion: string; groqSttModel?: string; hasSonioxKey?: boolean; hasTavilyKey?: boolean; geminiPreferredModel?: string; groqPreferredModel?: string; openaiPreferredModel?: string; claudePreferredModel?: string; deepseekPreferredModel?: string; nvidia_nimPreferredModel?: string; litellmPreferredModel?: string; disabledProviders?: string[]; cloudEnabledModels?: Record<string, string[]>; sttGroqKey?: string; sttOpenaiKey?: string; sttDeepgramKey?: string; sttElevenLabsKey?: string; sttAzureKey?: string; sttIbmKey?: string; sttSonioxKey?: string; openAiSttBaseUrl?: string }>
   // R-10 resolution flow: ambiguous credential stores (names + last-4 only; null when nothing to resolve).
   getAmbiguousCredentialStores: () => Promise<{
@@ -268,7 +291,8 @@ export interface ElectronAPI {
   openMicSettings:      () => Promise<{ ok: boolean; reason?: string }>
 
   // Free Trial
-  startTrial:     () => Promise<{ ok: boolean; hasToken?: boolean; started_at?: string; expires_at?: string; expired?: boolean; already_used?: boolean; converted_to?: string | null; usage?: { ai: number; stt_seconds: number; search: number }; limits?: { duration_ms: number; ai_requests: number; stt_minutes: number; search_requests: number }; error?: string; status?: number }>
+  /** `persisted: false` = started and live for THIS session, but the credential store could not write it, so a restart loses it. The server keeps the trial and re-issues it (idempotent per hardware id). */
+  startTrial:     () => Promise<{ ok: boolean; hasToken?: boolean; persisted?: boolean; started_at?: string; expires_at?: string; expired?: boolean; already_used?: boolean; converted_to?: string | null; usage?: { ai: number; stt_seconds: number; search: number }; limits?: { duration_ms: number; ai_requests: number; stt_minutes: number; search_requests: number }; error?: string; status?: number }>
   getTrialStatus: () => Promise<{ ok: boolean; expired?: boolean; remaining_ms?: number; started_at?: string; expires_at?: string; converted_to?: string | null; usage?: { ai: number; stt_seconds: number; search: number }; limits?: object; error?: string }>
   getLocalTrial:  () => Promise<{ hasToken: boolean; trialClaimed?: boolean; expiresAt?: string; startedAt?: string; expired?: boolean }>
   convertTrial:   (choice: string) => Promise<{ ok: boolean }>
@@ -401,6 +425,13 @@ export interface ElectronAPI {
   knowledgeApproveCard: (cardId: string) => Promise<{ success: boolean; card?: any; error?: string }>
   knowledgeRejectCard: (cardId: string) => Promise<{ success: boolean; card?: any; error?: string }>
   knowledgeRestoreCardVersion: (params: { cardId: string; versionId: string }) => Promise<{ success: boolean; card?: any; error?: string }>
+  // Provider Performance Profile — read-only diagnostics, plus the manual
+  // "forget what you measured" reset. There is deliberately no "start
+  // calibration" call: calibration is passive, so nothing can be billed.
+  providerPerformanceGetDiagnostics?: () => Promise<any>;
+  providerPerformanceReset?: (providerId?: string) => Promise<any>;
+  providerPerformanceCalibrate?: () => Promise<any>;
+
   knowledgeGetCardHistory: (cardId: string) => Promise<{ success: boolean; versions: any[]; error?: string }>
   modesGetNoteSections: (modeId: string) => Promise<Array<{ id: string; modeId: string; title: string; description: string; sortOrder: number }>>
   modesAddNoteSection: (modeId: string, title: string, description: string) => Promise<{ success: boolean; section?: any; error?: string }>
@@ -495,9 +526,10 @@ export interface ElectronAPI {
     error?: string
   }>
   setRerankerConfig: (next: {
-    provider?: 'local' | 'openrouter' | 'jina'
+    provider?: 'local' | 'natively' | 'openrouter' | 'jina'
     openrouterModel?: string
     jinaModel?: string
+    nativelyModel?: string
     candidateCount?: number
     fallbackToLocal?: boolean
   }) => Promise<{ success: boolean; reranker?: unknown; error?: string }>
@@ -685,6 +717,12 @@ export interface ElectronAPI {
   codexCliDoctor: (config?: any) => Promise<{ success: boolean; action: string; output?: string; error?: string; resolvedPath?: string; config?: any }>;
   // ChatGPT OAuth (PKCE) — replaces the old `codex login` CLI subprocess.
   codexLoginStatus: () => Promise<{ success: boolean; signedIn: boolean; email?: string; expiresAt?: number; error?: string }>;
+  antigravityStatus: () => Promise<{ signedIn: boolean; inProgress: boolean; expiresAt?: number; projectId?: string; error?: string }>;
+  antigravityStartLogin: () => Promise<{ success: boolean; error?: string }>;
+  antigravityCancelLogin: () => Promise<void>;
+  antigravitySignOut: () => Promise<{ success: boolean; error?: string }>;
+  antigravityModels: (force?: boolean) => Promise<{ success: boolean; models: { id: string; label: string }[]; error?: string }>;
+  onAntigravityStatusChanged: (callback: (status: { signedIn: boolean; inProgress: boolean; expiresAt?: number; projectId?: string; error?: string }) => void) => () => void;
   codexStartLogin: () => Promise<{ success: boolean; email?: string; expiresAt?: number; error?: string }>;
   codexSignOut: () => Promise<{ success: boolean; error?: string }>;
   codexRefreshTokens: () => Promise<{ success: boolean; email?: string; expiresAt?: number; error?: string }>;
@@ -878,6 +916,9 @@ export interface ElectronAPI {
   getDirectAssistEnabled: () => Promise<boolean>;
   setDirectAssistEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
   onDirectAssistEnabledChanged: (callback: (enabled: boolean) => void) => () => void;
+  getDirectAssistFallbackEnabled: () => Promise<boolean>;
+  setDirectAssistFallbackEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
+  onDirectAssistFallbackEnabledChanged: (callback: (enabled: boolean) => void) => () => void;
 
   getCodeVerification: () => Promise<boolean>;
   setCodeVerification: (enabled: boolean) => Promise<{ success: boolean }>;

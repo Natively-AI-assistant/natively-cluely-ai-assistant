@@ -431,6 +431,12 @@ scripts/combine_*_single_file.py
 # Autopilot campaign prompts — internal docs, not source
 /HANDOFF*.md
 /NATIVELY_CONTEXT_SYSTEM_SIMPLIFICATION_PROMPT.md
+# Evidence/data-access briefing for investigation agents. Carries no secret
+# VALUES, but in a PUBLIC repo it is still a map of the admin surface: which
+# /admin/* endpoints exist, that x-admin-secret gates them, the prod API and
+# Dodo base URLs, the Supabase table names, and which .env variable unlocks
+# each one. That is reconnaissance, so it stays local.
+/NATIVELY-EVIDENCE-ACCESS-REFERENCE.md
 # Generated Vite build output that mirrors src/**/*.{tsx,ts}
 /src/**/*.js
 
@@ -568,3 +574,22 @@ models/Xenova/*
 !models/Xenova/bge-reranker-base/
 models/Xenova/bge-reranker-base/*
 !models/Xenova/bge-reranker-base/*.json
+
+# Router benchmark training checkpoints (PyTorch .pt, up to 570 MB each). Artifacts, never source.
+scripts/intent-benchmark/trained/
+
+# Router benchmark SLM baseline: Qwen3-0.6B Q4_0, 409 MB in ONE file — well over
+# GitHub's 100 MB blob limit, so a stray `git add -A` here does not just bloat the
+# repo, it produces a history that cannot be pushed at all. Downloaded for the
+# `slm-qwen3-06b` provider in scripts/intent-benchmark/run.mjs and measured at p95
+# 939ms (66x the leading encoder), i.e. evidence for a rejected approach, never a
+# shipped dependency. Nothing under this directory is tracked.
+resources/models/gguf/
+
+# Router benchmark model downloads (NLI, GLiClass, potion, bge-small). Weights, never source.
+resources/models/MoritzLaurer/
+resources/models/Xenova/nli-deberta-v3-base/
+resources/models/Xenova/nli-deberta-v3-small/
+resources/models/Xenova/bge-small-en-v1.5/
+resources/models/knowledgator/
+resources/models/minishlab/

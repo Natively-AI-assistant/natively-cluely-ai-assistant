@@ -5,6 +5,7 @@ import { useT } from '../../i18n';
 import { Disclosure, DisclosureChevron } from '../ui/AccordionSection';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { SettingsToggle } from './SettingsToggle';
+import { ProviderPerformanceSettings } from './ProviderPerformanceSettings';
 
 // Label + one-line description + group + TIER for each USER-FACING Intelligence OS flag.
 // Keyed by flag key.
@@ -48,6 +49,15 @@ const FLAG_META: Record<string, { label: string; desc: string; group: string; ti
   // not re-add an entry here without also removing `settingIgnored` from the registry
   // (otherwise the toggle would render but silently do nothing).
   speakerLabelsV1: { label: 'Speaker labels', desc: 'Lets you rename speakers (e.g. “John from Client”) and uses those names in notes and action items.', group: 'Meeting notes', tier: 'core' },
+  // ── Provider performance (2026-09-08) ────────────────────────────────────────────────
+  // Only the three a user can meaningfully DECIDE appear here. The rest of the set
+  // (providerPerformanceProfile, adaptiveStreamIdle, adaptiveTtft,
+  // adaptiveConnectTimeout) are deliberately absent: they are bounded so that ON is
+  // safer than or equal to today's behaviour, so a switch whose best outcome is
+  // "no visible change" would be noise — exactly what this map's header rules out.
+  calibration: { label: 'Measure provider speed directly', desc: 'Lets the "Run calibration" button send a few small test requests to measure large-context speed. These use your API key. Off, Natively still learns from your normal answers — this only adds direct measurement.', group: 'Provider performance', tier: 'advanced' },
+  capabilityProbe: { label: 'Check image support directly', desc: 'Lets calibration send one tiny image to confirm your model accepts images, instead of relying on its published capabilities. Uses your API key once.', group: 'Provider performance', tier: 'advanced' },
+  adaptiveImageQuality: { label: 'Shrink screenshots when the provider is slow', desc: 'Sends screenshots at a lower resolution when your provider is measured to be too slow to answer in time. Trades image detail for a usable answer. Code screenshots are never shrunk.', group: 'Provider performance', tier: 'advanced' },
   // ── Advanced: real opt-in tradeoffs (cost / scope / niche) → inside "Customize" ──────
   // Descriptions corrected 2026-08-05 (settings-surface audit): each now states what the
   // toggle ADDS on top of what already ships unconditionally, rather than describing the
@@ -76,7 +86,11 @@ const FLAG_META: Record<string, { label: string; desc: string; group: string; ti
 const HINDSIGHT_FLAG_KEYS = new Set(['hindsightMemory', 'hindsightPostMeetingRetain', 'hindsightLiveRecall']);
 
 // Order for the per-group rendering inside the "Customize" disclosure (advanced tier).
-const ADVANCED_GROUP_ORDER = ['Memory', 'Answer quality', 'Search', 'Lecture & diagrams'];
+// NOTE: this list is a FILTER, not just an order — line ~1070 renders only the
+// groups named here, so a FLAG_META entry whose group is missing from it is
+// silently dropped and its toggle never appears. Adding a group to FLAG_META
+// without adding it here is a no-op that typechecks.
+const ADVANCED_GROUP_ORDER = ['Memory', 'Answer quality', 'Search', 'Lecture & diagrams', 'Provider performance'];
 
 // Single source of truth for what the master "Smart features" switch controls: every
 // core-tier flag. Derived from FLAG_META so it can't drift.
@@ -1135,6 +1149,13 @@ export const IntelligenceSettings: React.FC = () => {
           </button>
         </div>
         <TryResult out={tryOut} />
+      </section>
+
+      {/* What Natively has learned about each provider's speed, and what it does
+          with it. Lives here rather than in AI Providers because it is a
+          DIAGNOSTIC read-out, not configuration — there is nothing to set. */}
+      <section className="space-y-3 border-t border-border-subtle pt-6">
+        <ProviderPerformanceSettings />
       </section>
     </div>
   );

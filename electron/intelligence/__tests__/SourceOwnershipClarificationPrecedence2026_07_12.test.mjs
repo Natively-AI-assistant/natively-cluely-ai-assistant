@@ -180,7 +180,11 @@ describe('FIX: manual-chat and WTA short-circuits prefer the specific legacy mes
     const shortCircuitBlock = ipcSource.slice(clarifyIdx, clarifyIdx + 400);
     assert.match(
       shortCircuitBlock,
-      /manualOwnership\?\.shouldClarifyInsteadOfProfile\s*\?\s*require\('\.\/llm\/sourceOwnership'\)\.buildSourceSwitchClarification\(manualOwnership\.owner\)\s*:\s*buildSourceClarification/,
+      // 2026-09-05: the call gained arguments (the requested source and file
+      // availability, so the message names what was asked for). The invariant
+      // is the ORDER — specific legacy message first, generic kernel builder
+      // second — so the pattern admits arguments after `.owner`.
+      /manualOwnership\?\.shouldClarifyInsteadOfProfile\s*\?[\s\S]*?require\('\.\/llm\/sourceOwnership'\)\.buildSourceSwitchClarification\(\s*manualOwnership\.owner[\s\S]*?\)\s*:\s*buildSourceClarification/,
       'manual-chat short-circuit must prefer manualOwnership.shouldClarifyInsteadOfProfile\'s specific message over the kernel\'s generic buildSourceClarification',
     );
   });
@@ -188,12 +192,22 @@ describe('FIX: manual-chat and WTA short-circuits prefer the specific legacy mes
   test('WIRING (WTA): the clarification short-circuit checks wtaOwnershipDecision.shouldClarifyInsteadOfProfile before buildSourceClarification', () => {
     const shortCircuitStart = engineSource.indexOf("wtaTurnContract.sourceOwner === 'clarify'");
     assert.ok(shortCircuitStart >= 0, 'WTA clarification short-circuit not found');
-    const shortCircuitBlock = engineSource.slice(shortCircuitStart, shortCircuitStart + 2500);
-    assert.match(
-      shortCircuitBlock,
-      /wtaOwnershipDecision\?\.shouldClarifyInsteadOfProfile\s*\?\s*require\('\.\/llm\/sourceOwnership'\)\.buildSourceSwitchClarification\(wtaOwnershipDecision\.owner\)\s*:\s*buildSourceClarification/,
-      'WTA short-circuit must prefer wtaOwnershipDecision.shouldClarifyInsteadOfProfile\'s specific message over the kernel\'s generic buildSourceClarification',
-    );
+    // Ordered indices, not a shape regex (2026-09-05). The invariant is the
+    // ORDER inside the short-circuit block: the specific legacy decision is
+    // consulted, its message builder is called, and only then does the generic
+    // kernel builder appear as the fallback. A regex over the call shape failed
+    // twice for reasons unrelated to the invariant (a grown block, then
+    // arguments added to the call).
+    const blockEnd = engineSource.indexOf('this.session.addAssistantMessage(clarify', shortCircuitStart);
+    assert.ok(blockEnd > shortCircuitStart, 'WTA short-circuit must end by emitting the clarification');
+    const block = engineSource.slice(shortCircuitStart, blockEnd);
+    const iCheck = block.indexOf('wtaOwnershipDecision?.shouldClarifyInsteadOfProfile');
+    const iSpecific = block.indexOf('buildSourceSwitchClarification(');
+    const iGeneric = block.indexOf(': buildSourceClarification({');
+    assert.ok(iCheck >= 0, 'must consult wtaOwnershipDecision.shouldClarifyInsteadOfProfile');
+    assert.ok(iSpecific > iCheck, 'the specific legacy message must follow the check');
+    assert.ok(iGeneric > iSpecific, 'the generic kernel builder must be the fallback, after the specific message');
+    assert.ok(block.slice(iSpecific, iGeneric).includes('wtaOwnershipDecision.owner'), 'the specific message must be built from the legacy decision\'s owner');
   });
 
   test('WIRING (WTA): wtaOwnershipDecision is populated from the SAME _wtaOwn the profile-fast-path gate above already computes (no second, divergent resolver call)', () => {

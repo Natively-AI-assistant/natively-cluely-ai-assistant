@@ -19,7 +19,7 @@
  * Jina's own API is the only way to actually use it.
  */
 
-export type HostedRerankProviderId = 'openrouter' | 'jina';
+export type HostedRerankProviderId = 'natively' | 'openrouter' | 'jina';
 
 export interface HostedRerankModel {
   id: string;
@@ -47,7 +47,40 @@ export interface HostedRerankProvider {
   staticCatalogue: boolean;
 }
 
+/**
+ * Where the managed reranker lives. Same resolution NativelyEmbeddingProvider
+ * uses, so pointing the app at a local server moves BOTH managed routes together
+ * — a split base is how you end up testing embeddings locally while reranking
+ * silently bills production.
+ */
+const NATIVELY_RERANK_BASE_URL =
+  `${(process.env.NATIVELY_API_URL || 'https://api.natively.software').replace(/\/+$/, '')}/v1`;
+
 export const HOSTED_RERANK_PROVIDERS: Record<HostedRerankProviderId, HostedRerankProvider> = {
+  /**
+   * The one entry here that is NOT bring-your-own-key: it runs on the Natively
+   * API key the user already has, is billed against their plan's Knowledge
+   * allowance, and needs no second signup. That is the whole reason it exists —
+   * before it, a Natively customer who wanted hosted reranking had to go get an
+   * OpenRouter account.
+   *
+   * `POST /v1/rerank` on natively-api speaks the same Cohere-shaped contract as
+   * the other two, which is why this is a table entry rather than a second
+   * client.
+   */
+  natively: {
+    id: 'natively',
+    name: 'Natively',
+    baseUrl: NATIVELY_RERANK_BASE_URL,
+    keyUrl: 'https://natively.software',
+    keyPlaceholder: 'natively_sk_…',
+    // One managed model, chosen and served by the API. Nothing to discover and
+    // nothing to pick, so the card shows no model list.
+    models: [
+      { id: 'rerank-2.5-lite', label: 'Voyage Rerank 2.5 Lite', recommended: true },
+    ],
+    staticCatalogue: true,
+  },
   openrouter: {
     id: 'openrouter',
     name: 'OpenRouter',
@@ -81,7 +114,7 @@ export const HOSTED_RERANK_PROVIDERS: Record<HostedRerankProviderId, HostedReran
 };
 
 export function hostedRerankProvider(id: string | undefined): HostedRerankProvider | null {
-  if (id !== 'openrouter' && id !== 'jina') return null;
+  if (id !== 'natively' && id !== 'openrouter' && id !== 'jina') return null;
   return HOSTED_RERANK_PROVIDERS[id];
 }
 

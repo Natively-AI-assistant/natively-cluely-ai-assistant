@@ -66,6 +66,18 @@ export interface ModeRetrievalOptions {
      */
     rerankSurface?: 'live' | 'manual';
     /**
+     * The caller's own race deadline for the whole retrieval, in ms. A rerank
+     * whose budget cannot fit inside it is skipped rather than started and
+     * discarded (rerankBudget.ts → rerankBudgetFitsDeadline). Absent = not raced.
+     */
+    rerankDeadlineMs?: number;
+    /**
+     * Widen the rerank pool for an exhaustive request (RetrievalPlan.exhaustive):
+     * the user's candidateCount × this, capped by the retriever. 1/absent =
+     * the user's setting exactly.
+     */
+    rerankPoolMultiplier?: number;
+    /**
      * Follow-up referent hint (round-7 Failure-2). A short/anaphoric follow-up
      * ("What processor controls it?", "What throughput does that give?") loses
      * the subject — the bare query has no referent, so retrieval can't find the
@@ -1738,9 +1750,9 @@ export class ModeContextRetriever {
     }
 
     /** Index status for the Modes Manager UI badge. */
-    getReferenceFileIndexStatus(fileId: string): { status: string; chunkCount: number } {
+    getReferenceFileIndexStatus(fileId: string): { status: string; chunkCount: number; embeddedChunkCount: number } {
         const retriever = this.ensureHybridRetriever();
-        if (!retriever) return { status: 'pending', chunkCount: 0 };
+        if (!retriever) return { status: 'pending', chunkCount: 0, embeddedChunkCount: 0 };
         return retriever.getFileIndexStatus(fileId);
     }
 
@@ -1805,6 +1817,11 @@ export class ModeContextRetriever {
             // default 1800/6 — grounded answers were retrieving too small a window.
             forceDocumentGrounding: options.forceDocumentGrounding,
             rerankSurface: options.rerankSurface,
+            // The caller's race deadline (rerankBudget.ts → rerankBudgetFitsDeadline).
+            // Measured 2026-09-07: without this hop the recap's 1000ms race still
+            // started an 8000ms-budget hosted rerank and discarded it.
+            rerankDeadlineMs: options.rerankDeadlineMs,
+            rerankPoolMultiplier: options.rerankPoolMultiplier,
         });
 
         diagLog('retrieveHybrid() return', { usedFallback: result.usedFallback, usedHybrid: result.usedHybrid, chunkCount: result.chunks?.length, hasContext: !!result.formattedContext });

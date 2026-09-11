@@ -12,7 +12,11 @@
  * panel would let a user configure two things that cannot both be active.
  */
 
-export type RerankerProvider = 'local' | 'openrouter' | 'jina';
+// A plain constant module — no singletons, so this is safe as a top-level
+// import despite the note above about esbuild inlining a second copy of each.
+import { TRIAL_SENTINEL_KEY } from '../../config/constants';
+
+export type RerankerProvider = 'local' | 'natively' | 'openrouter' | 'jina';
 
 export interface RerankerSettings {
   /**
@@ -22,6 +26,13 @@ export interface RerankerSettings {
   provider?: RerankerProvider;
   /** OpenRouter model id. No default is hard-coded — see defaultRerankModel(). */
   openrouterModel?: string;
+  /**
+   * Managed Natively rerank model. Absent means the one model the API serves —
+   * unlike the BYOK providers there is nothing for the user to choose, so this
+   * exists only so a future second managed model does not need a settings
+   * migration.
+   */
+  nativelyModel?: string;
   /** Jina AI model id, e.g. jina-reranker-v3.5. */
   jinaModel?: string;
   /**
@@ -94,7 +105,7 @@ export interface EligibilityInputs {
  * than being invited to fix a key that would still not be used.
  */
 export function evaluateHostedEligibility(input: EligibilityInputs): HostedEligibility {
-  if (input.provider !== 'openrouter' && input.provider !== 'jina') {
+  if (input.provider !== 'natively' && input.provider !== 'openrouter' && input.provider !== 'jina') {
     return { eligible: false, reason: 'provider-not-selected' };
   }
   if (input.localOnly) return { eligible: false, reason: 'local-only-mode' };
@@ -114,10 +125,13 @@ export function describeIneligibility(reason: HostedIneligibility): string {
       return 'Reference-file content is not allowed to leave this machine '
         + '(Settings > Privacy). Hosted reranking would send retrieved document text, '
         + 'so it is unavailable.';
+    // Provider-neutral: these are reached for Natively and Jina too, and naming
+    // OpenRouter to a user who picked one of the others sends them to fix a
+    // credential they never configured.
     case 'no-api-key':
-      return 'No OpenRouter API key is configured.';
+      return 'No API key is configured for the selected rerank provider.';
     case 'no-model':
-      return 'No OpenRouter rerank model is selected.';
+      return 'No rerank model is selected.';
   }
 }
 
@@ -143,6 +157,22 @@ export function readRerankerSettings(): RerankerSettings {
 
 /** The key for a hosted provider. One credential per provider, shared app-wide. */
 export function readHostedApiKey(provider: RerankerProvider): string | undefined {
+  if (provider === 'natively') {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { CredentialsManager } = require('../CredentialsManager');
+      const stored = CredentialsManager.getInstance().getNativelyApiKey?.();
+      const key = (stored || '').trim();
+      // The trial sentinel is NOT a credential. A trial authenticates with a
+      // paired x-trial-token header, and the shared hosted client sends only
+      // `Authorization: Bearer`, so sending the sentinel would produce a
+      // guaranteed 401 on every rerank. Reporting 'no-api-key' instead states
+      // the real situation and costs no network call.
+      if (key && key !== TRIAL_SENTINEL_KEY) return key;
+    } catch { /* fall through to env */ }
+    const env = (process.env.NATIVELY_API_KEY || '').trim();
+    return env && env !== TRIAL_SENTINEL_KEY ? env : undefined;
+  }
   if (provider === 'jina') {
     try {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -158,6 +188,14 @@ export function readHostedApiKey(provider: RerankerProvider): string | undefined
 
 /** The model id for whichever hosted provider is selected. */
 export function readHostedModel(settings: RerankerSettings): string | undefined {
+  if (settings.provider === 'natively') {
+    // Falls back to the managed model rather than to undefined: with one model
+    // served and nothing to pick, an unset setting must mean "the managed one",
+    // not 'no-model' ineligibility on a provider the user just selected.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { defaultHostedModel } = require('../../rag/hostedRerankProviders') as typeof import('../../rag/hostedRerankProviders');
+    return settings.nativelyModel || defaultHostedModel('natively') || undefined;
+  }
   return settings.provider === 'jina' ? settings.jinaModel : settings.openrouterModel;
 }
 

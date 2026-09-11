@@ -23,8 +23,10 @@ export class ProcessingHelper {
   constructor(appState: AppState) {
     this.appState = appState
 
-    // Check if user wants to use Ollama
-    const useOllama = process.env.USE_OLLAMA === "true"
+    // Check if user wants to use Ollama. DEVELOPMENT ONLY, like the key reads
+    // below — see that comment for why a packaged build must not consult
+    // process.env here.
+    const useOllama = !app.isPackaged && process.env.USE_OLLAMA === "true"
     const ollamaModel = process.env.OLLAMA_MODEL // Don't set default here, let LLMHelper auto-detect
     const ollamaUrl = process.env.OLLAMA_URL || "http://localhost:11434"
 
@@ -32,17 +34,28 @@ export class ProcessingHelper {
       // console.log("[ProcessingHelper] Initializing with Ollama")
       this.llmHelper = new LLMHelper(undefined, true, ollamaModel, ollamaUrl)
     } else {
-      // Try environment first (for development)
-      let apiKey = process.env.GEMINI_API_KEY
-      let groqApiKey = process.env.GROQ_API_KEY
-      let openaiApiKey = process.env.OPENAI_API_KEY
-      let claudeApiKey = process.env.CLAUDE_API_KEY
-      let deepseekApiKey = process.env.DEEPSEEK_API_KEY
-      let nvidiaNimApiKey = process.env.NVIDIA_NIM_API_KEY
+      // Try environment first — DEVELOPMENT ONLY. A packaged build must not
+      // consult process.env here: loadStoredCredentials() (called right after
+      // app.whenReady(), see main.ts) is the sole source of truth once
+      // CredentialsManager is ready, mirroring the app.isPackaged gate in
+      // CredentialsManager.storedOrEnv. Without this gate, a packaged build
+      // would resurrect a key the user cleared in Settings (CredentialsManager
+      // correctly returns undefined, but the env-derived key set here stays
+      // live because loadStoredCredentials only overrides truthy keys), and on
+      // Windows a stray *_API_KEY inherited from another tool's user-level env
+      // var would silently become an active credential. See
+      // CredentialEnvFallbackScope2026_09_08.test.mjs for the other half of
+      // this bug class.
+      let apiKey = app.isPackaged ? undefined : process.env.GEMINI_API_KEY
+      let groqApiKey = app.isPackaged ? undefined : process.env.GROQ_API_KEY
+      let openaiApiKey = app.isPackaged ? undefined : process.env.OPENAI_API_KEY
+      let claudeApiKey = app.isPackaged ? undefined : process.env.CLAUDE_API_KEY
+      let deepseekApiKey = app.isPackaged ? undefined : process.env.DEEPSEEK_API_KEY
+      let nvidiaNimApiKey = app.isPackaged ? undefined : process.env.NVIDIA_NIM_API_KEY
 
       // Allow initializing without key (will be loaded in loadStoredCredentials or via Settings)
       if (!apiKey) {
-        console.warn("[ProcessingHelper] GEMINI_API_KEY not found in env. Will try CredentialsManager after ready.")
+        console.warn("[ProcessingHelper] GEMINI_API_KEY not found in env (or running packaged). Will try CredentialsManager after ready.")
       }
 
       this.llmHelper = new LLMHelper(apiKey, false, undefined, undefined, groqApiKey, openaiApiKey, claudeApiKey, deepseekApiKey, nvidiaNimApiKey)

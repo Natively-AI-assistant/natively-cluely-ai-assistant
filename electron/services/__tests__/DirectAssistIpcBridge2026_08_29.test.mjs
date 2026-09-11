@@ -4,10 +4,12 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '../../..');
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), 'utf8');
+const require = createRequire(import.meta.url);
 
 const ipc = read('electron/ipcHandlers.ts');
 const preload = read('electron/preload.ts');
@@ -52,6 +54,13 @@ test('preload and renderer declarations expose one correlated Direct Assist brid
     // in sync while preload.ts's own local duplicate was missed — no compile
     // error, since onDirectAssistEvent forwards the raw IPC object untouched.
     assert.match(source, /type: 'start'[\s\S]{0,140}trimmedFields: string\[\]/);
+    // provider_switch mirrors electron/direct-assist/types.ts field for field
+    // (from/to/reason), so the renderer is told which provider actually
+    // answered whenever the ladder fails over mid-request.
+    assert.match(
+      source,
+      /type: 'provider_switch'[\s\S]{0,220}from: \{ provider: string; model: string \}[\s\S]{0,80}to: \{ provider: string; model: string \}[\s\S]{0,80}reason: string/,
+    );
   }
   assert.match(preload, /ipcRenderer\.invoke\('direct-assist-stream', request\)/);
   assert.match(preload, /ipcRenderer\.invoke\('direct-assist-cancel', requestId, source\)/);
@@ -88,6 +97,39 @@ test('stream relay enforces correlation, monotonic deltas, and one terminal even
   assert.match(streamBlock, /terminalSent = true/);
   assert.match(streamBlock, /INCOMPLETE_STREAM/);
   assert.match(streamBlock, /controller\.signal\.aborted/);
+});
+
+test('provider_switch is forwarded in order without being swallowed into the terminal fall-through', () => {
+  // Before this, any streamEvent.type other than 'start'/'delta' fell through
+  // to `lastSequence = Math.max(...)` and then sendTerminal — so a
+  // provider_switch (a mid-stream event, not an end-of-stream one) would have
+  // been sent as a TERMINAL event and killed the stream the moment a rung
+  // failed over. The forward + continue branch must sit strictly between the
+  // 'delta' branch and that generic Math.max/terminal fall-through.
+  const deltaAt = streamBlock.indexOf("if (streamEvent.type === 'delta') {");
+  const switchAt = streamBlock.indexOf("if (streamEvent.type === 'provider_switch') {");
+  const fallThroughAt = streamBlock.indexOf('lastSequence = Math.max(lastSequence, streamEvent.sequence);');
+  assert.ok(deltaAt >= 0 && switchAt > deltaAt, 'provider_switch branch must follow the delta branch');
+  assert.ok(fallThroughAt > switchAt, 'provider_switch branch must precede the terminal fall-through');
+
+  const switchBlock = streamBlock.slice(switchAt, fallThroughAt);
+  assert.match(switchBlock, /sendDirectAssistEvent\(event\.sender, streamEvent\)/);
+  assert.match(switchBlock, /continue;/);
+  // It must never touch lastSequence: a switch's sequence is a snapshot of
+  // the delta counter (always 0), not a slot of its own.
+  assert.doesNotMatch(switchBlock, /lastSequence\s*=/);
+  // The branch must forward streamEvent ITSELF, not a reconstructed object
+  // literal — the 'start' event's trimmedFields field (see the comment above,
+  // ~line 49-53) drifted undetected once before precisely because a copy
+  // diverged from the source shape. Passing streamEvent wholesale makes field
+  // preservation structural: `from`/`to` cannot be silently dropped or
+  // renamed without rewriting this call into an object literal, and that
+  // rewrite is exactly what this assertion catches.
+  assert.doesNotMatch(
+    switchBlock,
+    /sendDirectAssistEvent\([^)]*\{/,
+    'provider_switch must forward the streamEvent object itself, not a hand-rebuilt payload',
+  );
 });
 
 test('main resolves and strips enabled skills, including underscore IDs', () => {
@@ -204,11 +246,248 @@ test('referenceContext and meetingTranscript are always server-populated, ignori
   // chunking, embedding, or ranking involved.
   assert.doesNotMatch(
     streamBlock,
-    /referenceContext: request\.referenceContext/,
-    'referenceContext must be server-computed, not passed through from the renderer',
+    /referenceFiles: request\.referenceFiles/,
+    'reference files must be server-computed, not passed through from the renderer',
   );
-  assert.match(streamBlock, /ModesManager\.getInstance\(\)[\s\S]{0,20}\.getReferenceFiles\(/);
-  assert.match(streamBlock, /\n\s*referenceContext,\n/);
+  assert.match(streamBlock, /ModesManager\.getInstance\(\)[\s\S]{0,400}\.getReferenceFiles\(/);
+  // STRUCTURED, not pre-rendered: the per-file budget share happens downstream
+  // against the real prompt limit, so one oversized attachment cannot starve
+  // the rest (allocateDirectAssistReferenceFiles).
+  assert.match(streamBlock, /\n\s*referenceFiles,\n/);
+  assert.doesNotMatch(
+    streamBlock,
+    /buildDirectAssistReferenceContext\(/,
+    'flattening the files here would re-introduce the first-file-wins starvation',
+  );
+  // main slices each file before handing it over, so it has to carry the size
+  // it sliced FROM — otherwise the TRUNCATED notice understates what is missing.
+  assert.match(streamBlock, /totalChars: content\.length/);
   assert.match(streamBlock, /getFormattedContext\??\.?\(180\)/);
   assert.match(streamBlock, /\n\s*meetingTranscript,\n/);
+});
+
+test('history attachments are validated by the SAME boundary, but a missing one is skipped instead of rejecting the turn', () => {
+  // One resolver, so the containment rules can never diverge between the
+  // current turn's attachments and the ones carried from earlier turns.
+  const resolverStart = ipc.indexOf('const resolveDirectAssistImagePath =');
+  assert.ok(resolverStart >= 0, 'the shared attachment resolver must exist');
+  const resolverEnd = ipc.indexOf('const normalizeDirectAssistRequest =', resolverStart);
+  const resolver = ipc.slice(resolverStart, resolverEnd);
+  assert.match(resolver, /fs\.realpathSync\.native\(rendererPath\)/);
+  assert.match(resolver, /isDirectAssistCanonicalPathInsideRoot\(canonicalUserDataDir, canonicalPath\)/);
+  assert.match(resolver, /validateImagePath\(rendererPath, userDataDir\)/);
+  assert.match(resolver, /sniffDirectAssistImage\(canonicalPath\)/);
+
+  // The current turn still fails the whole request on a bad attachment...
+  assert.match(
+    normalizeBlock,
+    /resolveDirectAssistImagePath\(rendererPath, userDataDir, canonicalUserDataDir\)[\s\S]{0,200}?if \(!resolved\.ok\)[\s\S]{0,120}?directAssistError\('INVALID_ATTACHMENT', resolved\.rejection\)/,
+  );
+  // ...while a carried one is recorded as absent. An evicted screenshot is the
+  // EXPECTED case (ScreenshotHelper unlinks past its 5-deep queue), so failing
+  // the request would make follow-up questions worse, not safer.
+  assert.match(normalizeBlock, /validated\.set\(rendererPath, resolved\.ok \? resolved\.canonicalPath : null\)/);
+  assert.match(normalizeBlock, /imageCount: turn\.imagePaths\.length/);
+
+  // Bounded sync IO: main must not walk 64 turns x 5 images of realpath +
+  // stat + header read when only DIRECT_ASSIST_MAX_IMAGES can be dispatched.
+  assert.match(normalizeBlock, /let validationBudget = Math\.max\(0, DIRECT_ASSIST_MAX_IMAGES - \(/);
+  assert.match(normalizeBlock, /for \(let i = rawTurns\.length - 1; i >= 0 && validationBudget > 0; i -= 1\)/);
+});
+
+test('carried screenshots travel as their own dispatch field, never merged into the current turn', () => {
+  const builder = read('electron/direct-assist/requestBuilder.ts');
+  const service = read('electron/direct-assist/DirectAssistService.ts');
+  const llm = read('electron/LLMHelper.ts');
+
+  // Separate field end to end: the text that explains each carried image lives
+  // in <recent_transcript>, and LLMHelper strips that block when the transcript
+  // scope is denied — merging the images in the builder would leave them behind.
+  assert.match(builder, /historyImagePaths: Object\.freeze\(\s*selectCarriedHistoryImages\(parts\.history, request\.imagePaths\.length\)\.paths,\s*\)/);
+  assert.match(service, /historyImagePaths: prepared\.historyImagePaths/);
+  // A denied transcript scope strips the breadcrumb, so the images go with it.
+  assert.match(llm, /if \(deniedScopes\.includes\('transcript'\)\) \{[\s\S]{0,80}carriedImagePaths = \[\];/);
+  // And the screenshots scope is re-evaluated with the carried images IN the
+  // set — scopesForPayload only tags 'screenshots' when imagePaths is non-empty,
+  // so the current-turn decision could not see them.
+  assert.match(llm, /const deniedWithCarried = this\.getDeniedOutboundScopes\(\s*\n\s*request\.userPrompt, \[\.\.\.imagePaths, \.\.\.carriedImagePaths\], directScopes,/);
+});
+
+test('Direct Assist transcribes its own screenshot AFTER the answer, never before it', () => {
+  // Direct Assist has no vision pre-pass by design — one dispatch with nothing
+  // in front of it. So the transcription runs off the terminal event: the user
+  // already has their answer, and this exists purely so a follow-up two turns
+  // later has text to read once ScreenshotHelper has unlinked the image.
+  // Without it Direct Assist could only carry BYTES, which die with the file.
+  const doneAt = streamBlock.indexOf("if (streamEvent.type === 'done')");
+  const sendAt = streamBlock.indexOf('sendTerminal(', doneAt);
+  const describeAt = streamBlock.indexOf('transcribeScreenForMemory', doneAt);
+  assert.ok(doneAt >= 0 && sendAt > doneAt, 'terminal event must be reachable');
+  assert.ok(describeAt > sendAt,
+    'the transcription must run AFTER sendTerminal, or it delays the answer it exists to outlive');
+
+  // The SHARED helper, not a fourth inline copy — Direct Assist, what-to-answer
+  // and the typed path all transcribe the same way or they drift.
+  const helper = read('electron/services/screen/screenTranscription.ts');
+  // Skipped entirely when these exact bytes are already described. The cache is
+  // the point: a re-captured screen costs nothing.
+  assert.match(helper, /if \(cached\?\.description\) return cached\.description;/);
+  // Reaches the extraction prompt. Every pre-existing call site passed an action
+  // that took the "answer concisely" branch instead.
+  assert.match(helper, /userAction: 'transcribe'/);
+  // ONE policy, never a third policy: a transcription is still a screenshot
+  // leaving the device.
+  assert.match(helper, /localOnly: settings\.getScreenUnderstandingMode\(\) === 'private_vision'/);
+  assert.match(helper, /allowScreenshots: providerScopes\.screenshots !== false/);
+});
+
+// ── Task 8: directAssistFallbackEnabled ──────────────────────────────────
+//
+// Task 4 already added the interface field and getDirectAssistFallbackEnabled()
+// (listDirectAssistRungs calls it). This task adds only the IPC setter and the
+// UI toggle, so these tests cover: the setter handler mirrors the existing
+// directAssistEnabled handler's shape, the preload/renderer-type bridge is
+// wired, and — the real behavioural proof, not just a text match — a fresh
+// SettingsManager instance actually defaults the accessor to true and honours
+// an explicit false.
+
+test('the fallback setting is present without duplicating a second accessor for it', () => {
+  assert.match(settings, /directAssistFallbackEnabled\?: boolean/);
+  assert.match(
+    settings,
+    /getDirectAssistFallbackEnabled\(\): boolean \{\s*return this\.settings\.directAssistFallbackEnabled !== false;\s*\}/,
+  );
+  // Exactly one interface field and one accessor — Task 8 must not add a
+  // second competing definition alongside Task 4's.
+  assert.equal((settings.match(/directAssistFallbackEnabled\?: boolean/g) ?? []).length, 1);
+  assert.equal((settings.match(/getDirectAssistFallbackEnabled\(\): boolean/g) ?? []).length, 1);
+});
+
+test('set-direct-assist-fallback-enabled mirrors the set-direct-assist-enabled handler shape', () => {
+  const getStart = ipc.indexOf("safeHandle('get-direct-assist-fallback-enabled'");
+  const setStart = ipc.indexOf("safeHandle('set-direct-assist-fallback-enabled'", getStart);
+  assert.ok(getStart >= 0, 'get-direct-assist-fallback-enabled handler must exist');
+  assert.ok(setStart > getStart, 'set-direct-assist-fallback-enabled handler must follow the getter');
+
+  const setEnd = ipc.indexOf('\n  safeHandle(', setStart + 1);
+  const setBlock = ipc.slice(setStart, setEnd);
+
+  assert.match(ipc.slice(getStart, setStart), /getDirectAssistFallbackEnabled\(\)/);
+  assert.match(setBlock, /typeof enabled !== 'boolean'/);
+  assert.match(setBlock, /error: 'invalid_type'/);
+  assert.match(setBlock, /settings\.set\('directAssistFallbackEnabled', enabled\)/);
+  assert.match(setBlock, /error: 'settings_store_degraded'/);
+  assert.match(setBlock, /getDirectAssistFallbackEnabled\(\)/);
+  assert.match(setBlock, /direct-assist-fallback-enabled-changed/);
+  assert.match(setBlock, /return \{ success: true \};/);
+
+  // Unlike directAssistEnabled, there is no operator kill switch for the
+  // fallback preference and no in-flight requests to abort when it is turned
+  // off — flipping it only changes eligibility for the NEXT failure, so it
+  // must not reach into activeDirectAssistByRequest.
+  assert.doesNotMatch(setBlock, /isDirectAssistKilledByOperator/);
+  assert.doesNotMatch(setBlock, /activeDirectAssistByRequest/);
+});
+
+test('preload and renderer declarations expose the fallback bridge', () => {
+  for (const source of [preload, rendererTypes]) {
+    assert.match(source, /getDirectAssistFallbackEnabled/);
+    assert.match(source, /setDirectAssistFallbackEnabled/);
+    assert.match(source, /onDirectAssistFallbackEnabledChanged/);
+  }
+  assert.match(preload, /ipcRenderer\.invoke\('get-direct-assist-fallback-enabled'\)/);
+  assert.match(preload, /ipcRenderer\.invoke\('set-direct-assist-fallback-enabled', enabled\)/);
+  assert.match(preload, /ipcRenderer\.on\('direct-assist-fallback-enabled-changed', subscription\)/);
+});
+
+test('the UI toggle is disabled whenever Direct Assist itself is off', () => {
+  const uiSource = read('src/components/settings/AIProvidersSettings.tsx');
+  assert.match(uiSource, /Fall back to another provider/);
+  const cardStart = uiSource.indexOf('Fall back to another provider');
+  const cardEnd = uiSource.indexOf('AipSwitch', cardStart);
+  const switchStart = cardEnd;
+  const switchEnd = uiSource.indexOf('/>', switchStart);
+  const switchBlock = uiSource.slice(switchStart, switchEnd);
+  assert.match(switchBlock, /checked=\{directAssistFallbackEnabled\}/);
+  assert.match(switchBlock, /disabled=\{directAssistFallbackBusy \|\| !directAssistEnabled\}/);
+  assert.match(uiSource, /setDirectAssistFallbackEnabled\?\.\(next\)/);
+});
+
+test('directAssistFallbackEnabled really defaults to true and really honours an explicit false', (t) => {
+  // Instantiate the REAL, built SettingsManager against a temp profile, the
+  // same way SettingsDegradedStoreMutators2026_08_22.test.mjs does — a plain
+  // regex match on the source can't tell a correct `!== false` from an
+  // inverted `=== true` that happens to appear near the right words.
+  const distPath = path.join(root, 'dist-electron/electron/services/SettingsManager.js');
+  if (!fs.existsSync(distPath)) {
+    t.skip('dist-electron build not present; run npm run build:electron first');
+    return;
+  }
+
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'da-fallback-settings-'));
+  try {
+    const electronPath = require.resolve('electron');
+    const previousCacheEntry = require.cache[electronPath];
+    require.cache[electronPath] = {
+      id: electronPath, filename: electronPath, loaded: true,
+      exports: {
+        app: { isReady: () => true, getPath: () => userData, getVersion: () => '0.0.0-test' },
+        safeStorage: { isEncryptionAvailable: () => false },
+      },
+    };
+
+    // Force a fresh module load so this test doesn't inherit another test
+    // file's cached class/singleton.
+    delete require.cache[require.resolve(distPath)];
+    const { SettingsManager } = require(distPath);
+    const SLOT = '__nativelySettingsManagerV1__';
+    delete globalThis[SLOT];
+    SettingsManager.instance = undefined;
+    const freshSettingsManager = () => {
+      delete globalThis[SLOT];
+      SettingsManager.instance = undefined;
+      return SettingsManager.getInstance();
+    };
+
+    try {
+      const settingsManager = freshSettingsManager();
+      assert.equal(
+        settingsManager.getDirectAssistFallbackEnabled(),
+        true,
+        'a profile that has never seen the key must default to fallback ON',
+      );
+      const setResult = settingsManager.set('directAssistFallbackEnabled', false);
+      assert.equal(setResult, true, 'the write itself must succeed against a healthy store');
+      assert.equal(
+        settingsManager.getDirectAssistFallbackEnabled(),
+        false,
+        'an explicit false must be honoured, not coerced back to the default',
+      );
+    } finally {
+      delete globalThis[SLOT];
+      SettingsManager.instance = undefined;
+      if (previousCacheEntry) {
+        require.cache[electronPath] = previousCacheEntry;
+      } else {
+        delete require.cache[electronPath];
+      }
+    }
+  } finally {
+    fs.rmSync(userData, { recursive: true, force: true });
+  }
+});
+
+test('a transcribed history turn does not consume the image-validation budget', () => {
+  // selectCarriedHistoryImages skips every turn that has a description, but the
+  // budget was description-blind. With more images than the budget and the
+  // NEWEST turns transcribed, the whole budget went on images that would never
+  // be dispatched, and the older untranscribed turn — the only one whose bytes
+  // were needed — arrived with no imagePaths and was silently uncarried.
+  const preAt = normalizeBlock.indexOf('const describedByTurn = new Map<number, string>()');
+  const budgetAt = normalizeBlock.indexOf('let validationBudget');
+  assert.ok(preAt >= 0, 'the description pre-pass must exist');
+  assert.ok(preAt < budgetAt, 'descriptions must be resolved BEFORE the budget is spent');
+  assert.match(normalizeBlock, /if \(describedByTurn\.has\(i\)\) continue;/);
+  // And the per-turn record reuses that result rather than hashing again.
+  assert.match(normalizeBlock, /imageDescription: describedByTurn\.get\(index\) \?\? '',/);
 });

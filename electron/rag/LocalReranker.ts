@@ -5,8 +5,8 @@
 // A cross-encoder scores (query, passage) JOINTLY and is far more accurate than
 // the bi-encoder cosine fusion used on the hot path — at the cost of running one
 // model pass per candidate. We run it ON-DEVICE via @huggingface/transformers
-// (the SAME ONNX runtime already loaded for the MiniLM embedder and the
-// mobilebert intent classifier), so the escalation costs $0, hits no API, and is
+// (the SAME ONNX runtime already loaded for the MiniLM embedder), so the
+// escalation costs $0, hits no API, and is
 // immune to the Gemini 429s that are routine in this app.
 //
 // LOAD POSTURE:
@@ -25,7 +25,7 @@
 // cross-encoder model/tokenizer load and inference (the forward pass in
 // rerank()) now run inside a dedicated worker_threads.Worker, NOT on the
 // Electron main thread — mirroring the isolation already applied to
-// LocalEmbeddingProvider, Whisper's worker, and IntentClassifier's zero-shot
+// LocalEmbeddingProvider and Whisper's worker
 // worker. See localEmbeddingWorker.ts for the full crash-forensics writeup:
 // this file previously had the identical unsafe main-thread ONNX pattern,
 // fixed now while the reranker is still inert rather than waiting for it to
@@ -457,9 +457,11 @@ class LocalRerankerImpl {
         // Acquire the shared slot. Held for the lifetime of this worker — the
         // release function is wired into worker `error`/`exit` handlers in
         // getWorker() so the slot frees automatically when the worker dies.
-        const releaseSlot = await acquireOnnxSlot('normal');
-
+        // Slot acquired INSIDE the load promise so the `loadingPromise` guard
+        // holds for concurrent callers — see LocalEmbeddingProvider.ensureLoaded
+        // (2026-09-07) for the leaked-slot failure this prevents.
         this.loadingPromise = (async () => {
+            const releaseSlot = await acquireOnnxSlot('normal');
             try {
                 await this.postToWorker({ type: 'init', ...this.workerConfig() }, WORKER_INIT_TIMEOUT_MS);
                 this.loaded = true;

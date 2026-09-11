@@ -35,6 +35,25 @@ const DECRYPT_FAIL_PATH = path.join(app.getPath('userData'), 'credentials.decryp
 // install last wrote to each. It is the only way to tell a store we wrote from
 // one we merely found — see the recovery re-key decision in loadCredentials().
 const PROVENANCE_PATH = path.join(app.getPath('userData'), 'credentials.provenance.json');
+/**
+ * Plaintext of the KEY CANARY stored in provenance beside the credential hash.
+ *
+ * safeStorage can hand two different launches two different KEYS while reporting
+ * isEncryptionAvailable() === true to both, so the app has no way to notice it is
+ * holding the wrong key until a decrypt fails — and a path that writes before it
+ * reads never finds out at all. Reproduced 2026-09-08 on macOS: a blob written
+ * under an automated (Playwright-driven) launch could not be decrypted by a
+ * normal `electron .` launch, and vice versa, with the Keychain item untouched.
+ * Chromium's OSCrypt falls back to a well-known key when the Keychain item is not
+ * reachable by the calling process; both keys are stable, so each launcher
+ * happily reads its OWN writes and silently cannot read the other's.
+ *
+ * The canary makes that difference observable BEFORE anything is overwritten:
+ * whoever writes the credential file also writes this string encrypted with the
+ * key it used, and a later session that cannot decrypt it back is provably
+ * holding a different key.
+ */
+const KEY_CANARY_PLAINTEXT = 'natively.safe-storage.key-canary.v1';
 const DECRYPT_FAIL_PERMANENT_THRESHOLD = 3;
 
 export interface CustomProvider {
@@ -230,6 +249,13 @@ export interface StoredCredentials {
          */
         lastRefreshAt?: number;
     };
+    /** Google Antigravity OAuth bundle, persisted through the same encrypted store. */
+    antigravityOAuthTokens?: {
+        accessToken: string;
+        refreshToken: string;
+        expiresAt: number;
+        projectId: string;
+    };
 }
 
 export class CredentialsManager {
@@ -259,6 +285,15 @@ export class CredentialsManager {
      * `needsCredentialReentry`).
      */
     private keyringUnreadable = false;
+    /**
+     * True when the provenance canary proves this session's safeStorage key is
+     * NOT the key that wrote the stored credential file. Distinct from
+     * `keyringUnreadable`, which is only reached when a decrypt is actually
+     * ATTEMPTED and fails — this latches even on a path that would have written
+     * first, which is how a credential file gets replaced by a session that
+     * could never have read it.
+     */
+    private keyIdentityMismatch = false;
 
     /**
      * True once DECRYPT_FAIL_PERMANENT_THRESHOLD distinct cold starts have each
@@ -337,7 +372,7 @@ export class CredentialsManager {
      * rather than user-intended.
      */
     public wasExistingStoreUnreadable(): boolean {
-        return this.keyringUnreadable;
+        return this.keyringUnreadable || this.keyMismatchWouldDestroy();
     }
 
     /**
@@ -536,6 +571,52 @@ export class CredentialsManager {
         this.writeProvenance(next);
     }
 
+    /** Stamp the canary with the key THIS session holds. Always paired with an
+     *  'enc' stamp, so the record can never describe a different write. */
+    private stampKeyCanary(): void {
+        try {
+            const next = this.readProvenance();
+            next.keyCanary = safeStorage.encryptString(KEY_CANARY_PLAINTEXT).toString('base64');
+            this.writeProvenance(next);
+        } catch {
+            // Best-effort, exactly like the hash stamp: a missing canary reads as
+            // UNKNOWN below, which is the conservative branch, never the
+            // destructive one.
+        }
+    }
+
+    /**
+     * Is this session's safeStorage key the one that wrote the stored file?
+     *
+     *   'same'      — the canary decrypts to its known plaintext.
+     *   'different' — a canary exists and does NOT come back. Provable mismatch.
+     *   'unknown'   — no canary (a store written before this existed), or
+     *                 safeStorage is unavailable so the question is meaningless.
+     *
+     * 'unknown' must never be treated as 'different': a legacy store predates the
+     * canary through no fault of its own, and blocking those users from saving
+     * would be a worse bug than the one this prevents.
+     */
+    private probeKeyIdentity(): 'same' | 'different' | 'unknown' {
+        let canary: string | undefined;
+        try {
+            if (!safeStorage.isEncryptionAvailable()) return 'unknown';
+            canary = this.readProvenance().keyCanary;
+        } catch {
+            return 'unknown';
+        }
+        if (typeof canary !== 'string' || !canary) return 'unknown';
+        try {
+            return safeStorage.decryptString(Buffer.from(canary, 'base64')) === KEY_CANARY_PLAINTEXT
+                ? 'same'
+                : 'different';
+        } catch {
+            // A canary that will not decrypt is the whole point: this session holds
+            // a different key. It is NOT 'unknown' — something did write one.
+            return 'different';
+        }
+    }
+
     private clearProvenance(key: 'enc' | 'fallback'): void {
         const next = this.readProvenance();
         if (key in next) {
@@ -626,6 +707,13 @@ export class CredentialsManager {
                 mode: this.credentialStoresAmbiguous ? 'fallback' : (available ? 'keyring' : 'fallback'),
                 usedFallback: !available || this.credentialStoresAmbiguous,
                 storesAmbiguous: this.credentialStoresAmbiguous,
+                // The gap this event had. It reported available:true, mode:'keyring'
+                // on every startup of an outage where safeStorage handed the session
+                // the WRONG key — true and useless. `available` says a key exists;
+                // this says whether it is the RIGHT one.
+                keyIdentity: this.probeKeyIdentity(),
+                keyIdentityMismatch: this.keyIdentityMismatch,
+                keyringUnreadable: this.keyringUnreadable,
             };
 
             // Linux is the only platform where the backend enum is meaningful and
@@ -650,27 +738,74 @@ export class CredentialsManager {
     // Getters
     // =========================================================================
 
+    /**
+     * The stored key, falling back to the SAME environment variable
+     * ProcessingHelper already builds LLMHelper from.
+     *
+     * TWO SUBSYSTEMS, TWO KEY SOURCES — verified live, on a real profile.
+     * ProcessingHelper reads `process.env.GEMINI_API_KEY` (and siblings) at
+     * construction; this class read the encrypted store and NOTHING else. On any
+     * machine whose keys arrive through the environment rather than Settings —
+     * every developer with a .env, which injects them at boot — the answering
+     * path had working providers while VisionProviderRegistry, which builds its
+     * chain from these getters, reported `no_vision_provider` with all twelve
+     * rungs `skipped(not_configured)`.
+     *
+     * The user-visible effect was silent and specific: a screenshot turn still
+     * answered correctly, because the raw image bytes reach the answering model
+     * on a separate path, so nothing looked wrong. But ScreenUnderstandingService
+     * produced nothing, so no screen text was ever recorded, and every follow-up
+     * about that screenshot failed.
+     *
+     * The STORE STILL WINS. This is a fallback for a key that is otherwise
+     * absent, not an override: a key entered in Settings is never shadowed by a
+     * stale shell variable.
+     */
+    private storedOrEnv(stored: string | undefined, envKey: string): string | undefined {
+        const value = (stored ?? '').trim();
+        if (value) return value;
+        // DEVELOPMENT ONLY. The fallback exists because ProcessingHelper builds
+        // LLMHelper from process.env — a dev-time mechanism (a repo .env), and the
+        // reason the two subsystems disagreed. It must not reach a packaged user:
+        //
+        //   * "cleared by the user" and "never set" are the same empty value here,
+        //     so in a packaged build this resurrected a key someone had just
+        //     deleted in Settings to stop sending data to that provider. The key
+        //     stayed active and invisible — Settings cannot show or remove it.
+        //   * On Windows, user-level environment variables are inherited by
+        //     GUI-launched apps, so an OPENAI_API_KEY set for any other tool would
+        //     silently become an active Natively credential.
+        //
+        // A packaged install configures keys in Settings, where CredentialsManager
+        // is already the source of truth, so nothing there needs this.
+        if (app.isPackaged) return undefined;
+        const fromEnv = (process.env[envKey] ?? '').trim();
+        return fromEnv || undefined;
+    }
+
     public getGeminiApiKey(): string | undefined {
-        return this.credentials.geminiApiKey;
+        return this.storedOrEnv(this.credentials.geminiApiKey, 'GEMINI_API_KEY');
     }
 
     public getGroqApiKey(): string | undefined {
-        return this.credentials.groqApiKey;
+        return this.storedOrEnv(this.credentials.groqApiKey, 'GROQ_API_KEY');
     }
 
     public getOpenaiApiKey(): string | undefined {
-        return this.credentials.openaiApiKey;
+        return this.storedOrEnv(this.credentials.openaiApiKey, 'OPENAI_API_KEY');
     }
 
     public getClaudeApiKey(): string | undefined {
-        return this.credentials.claudeApiKey;
+        return this.storedOrEnv(this.credentials.claudeApiKey, 'CLAUDE_API_KEY');
     }
 
     public getDeepseekApiKey(): string | undefined {
-        return this.credentials.deepseekApiKey;
+        return this.storedOrEnv(this.credentials.deepseekApiKey, 'DEEPSEEK_API_KEY');
     }
 
-    public getNvidiaNimApiKey(): string | undefined { return this.credentials.nvidiaNimApiKey; }
+    public getNvidiaNimApiKey(): string | undefined {
+        return this.storedOrEnv(this.credentials.nvidiaNimApiKey, 'NVIDIA_NIM_API_KEY');
+    }
 
     /** Persisted loopback-scoped companion-extension token (stable across restarts). */
     public getPhoneMirrorToken(): string | undefined {
@@ -704,6 +839,58 @@ export class CredentialsManager {
         this.credentials.codexOAuthTokens = undefined;
         this.saveCredentials();
         console.log('[CredentialsManager] Codex OAuth tokens cleared');
+    }
+
+    /**
+     * Persisted Google Antigravity OAuth tokens. The service never exposes this
+     * bundle to the renderer; it reads it only to refresh and call Code Assist.
+     */
+    public getAntigravityOAuthTokens(): {
+        accessToken: string;
+        refreshToken: string;
+        expiresAt: number;
+        projectId: string;
+    } | null {
+        const tokens = this.credentials.antigravityOAuthTokens;
+        if (!tokens || typeof tokens.accessToken !== 'string' || !tokens.accessToken.trim() ||
+            typeof tokens.refreshToken !== 'string' || !tokens.refreshToken.trim() ||
+            !Number.isFinite(tokens.expiresAt) || typeof tokens.projectId !== 'string' || !tokens.projectId.trim()) {
+            return null;
+        }
+        return { ...tokens, projectId: tokens.projectId.trim() };
+    }
+
+    /** Checked write: failed/degraded storage leaves memory unchanged. */
+    public setAntigravityOAuthTokens(tokens: {
+        accessToken: string;
+        refreshToken: string;
+        expiresAt: number;
+        projectId: string;
+    }): boolean {
+        if (this.refuseWriteWhileDegraded('set Antigravity OAuth tokens')) return false;
+        if (!tokens.accessToken || !tokens.refreshToken || !tokens.projectId?.trim()) return false;
+        const previous = this.credentials.antigravityOAuthTokens;
+        this.credentials.antigravityOAuthTokens = { ...tokens, projectId: tokens.projectId.trim() };
+        if (this.saveCredentials()) {
+            console.log('[CredentialsManager] Antigravity OAuth tokens updated');
+            return true;
+        }
+        this.credentials.antigravityOAuthTokens = previous;
+        return false;
+    }
+
+    /** Checked clear: failed/degraded storage leaves the in-memory store intact. */
+    public clearAntigravityOAuthTokens(): boolean {
+        if (this.refuseWriteWhileDegraded('clear Antigravity OAuth tokens')) return false;
+        const previous = this.credentials.antigravityOAuthTokens;
+        if (!previous) return true;
+        this.credentials.antigravityOAuthTokens = undefined;
+        if (this.saveCredentials()) {
+            console.log('[CredentialsManager] Antigravity OAuth tokens cleared');
+            return true;
+        }
+        this.credentials.antigravityOAuthTokens = previous;
+        return false;
     }
 
     public getLitellmApiKey(): string | undefined {
@@ -949,11 +1136,11 @@ export class CredentialsManager {
      * Used by ScreenUnderstandingService to gate vision_only / decide fallback.
      */
     public anyVisionProviderConfigured(): boolean {
-        if (this.credentials.nativelyApiKey) return true;       // Natively API supports vision
-        if (this.credentials.openaiApiKey) return true;          // gpt-4o / gpt-5 vision
-        if (this.credentials.claudeApiKey) return true;          // Claude vision
-        if (this.credentials.geminiApiKey) return true;          // Gemini vision
-        if (this.credentials.groqApiKey) return true;            // Groq qwen3.6-27b vision
+        if (this.getNativelyApiKey()) return true;              // Natively API supports vision
+        if (this.getOpenaiApiKey()) return true;                 // gpt-4o / gpt-5 vision
+        if (this.getClaudeApiKey()) return true;                 // Claude vision
+        if (this.getGeminiApiKey()) return true;                 // Gemini vision
+        if (this.getGroqApiKey()) return true;                   // Groq qwen3.6-27b vision
         // Custom providers. TWO fixes over the previous `customProviders.some(
         // p => p.multimodal === true)`:
         //   • getAllCustomProviders() — the old read missed the store the
@@ -1292,8 +1479,8 @@ export class CredentialsManager {
      * Returns what actually changed so a caller can re-sync the runtime (LLMHelper
      * model, STT pipeline) instead of guessing.
      */
-    private applyNativelyAutoDefaultRevert(reason: string): { defaultModel?: string; sttProvider?: string } {
-        const changed: { defaultModel?: string; sttProvider?: string } = {};
+    private applyNativelyAutoDefaultRevert(reason: string): { defaultModel?: string; sttProvider?: string; rerankerProvider?: string } {
+        const changed: { defaultModel?: string; sttProvider?: string; rerankerProvider?: string } = {};
         if (this.credentials.defaultModel === 'natively') {
             this.credentials.defaultModel = 'gemini-3.1-flash-lite';
             changed.defaultModel = this.credentials.defaultModel;
@@ -1304,7 +1491,71 @@ export class CredentialsManager {
             changed.sttProvider = 'none';
             console.log(`[CredentialsManager] ${reason} — reset STT provider to none`);
         }
+        // The reranker lives in SettingsManager, not in credentials, so this
+        // reaches across. It has to: this same function is what runs when a key
+        // is CLEARED and when the server REFUSES one, and leaving a user pointed
+        // at a managed reranker they cannot authenticate to would fail every
+        // rerank silently (a failed rerank keeps the existing order, so there is
+        // no symptom to notice).
+        if (this.setRerankerProviderIfManaged('local', reason)) {
+            changed.rerankerProvider = 'local';
+        }
         return changed;
+    }
+
+    /**
+     * Move the reranker between 'local' and 'natively', and ONLY between those.
+     *
+     * Returns whether anything changed. Never throws: a settings store that
+     * cannot be read must not take down key storage, and the reranker falling
+     * back to 'local' is already the safe outcome.
+     *
+     * `to: 'natively'` promotes only from an auto-default ('local' or unset).
+     * `to: 'local'` reverts only from 'natively'.
+     *
+     * An explicit 'openrouter' or 'jina' is a DELIBERATE CHOICE and is never
+     * touched. See AUTO_ASSIGNED_MODEL_IDS below for the same bug being fixed
+     * once already on the model side — a user's explicit pick was silently
+     * replaced the moment they added a key.
+     */
+    private setRerankerProviderIfManaged(to: 'natively' | 'local', reason: string): boolean {
+        try {
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const { SettingsManager } = require('./SettingsManager');
+            const settings = SettingsManager.getInstance();
+            const current = (settings.get('reranker') as { provider?: string } | undefined) ?? {};
+            const provider = current.provider;
+
+            if (to === 'natively') {
+                const isAutoDefault = !provider || provider === 'local';
+                if (!isAutoDefault) return false;
+                // A hosted reranker sends RETRIEVED DOCUMENT TEXT off this
+                // machine, and unlike the model and STT promotions it does so
+                // without the user invoking anything — the next background query
+                // ships file contents. So this promotion, alone among the three,
+                // asks the privacy policy first.
+                //
+                // Skipping when the scope is denied is not just belt-and-braces:
+                // the runtime gate would make the selection inert today, and then
+                // ARM IT the moment the user allowed the scope for some unrelated
+                // reason — a change they never consented to and would not connect
+                // to a key they pasted weeks earlier.
+                const scopes = settings.get('providerDataScopes') as { reference_files?: boolean } | undefined;
+                if (scopes?.reference_files === false) {
+                    console.log(`[CredentialsManager] ${reason} — reranker NOT promoted: reference-file content may not leave this device`);
+                    return false;
+                }
+            } else if (provider !== 'natively') {
+                return false;
+            }
+
+            settings.set('reranker', { ...current, provider: to });
+            console.log(`[CredentialsManager] ${reason} — reranker provider set to ${to}`);
+            return true;
+        } catch (err: any) {
+            console.warn(`[CredentialsManager] reranker provider not updated (${reason}):`, err?.message);
+            return false;
+        }
     }
 
     /**
@@ -1322,9 +1573,12 @@ export class CredentialsManager {
      * state. Falling back to the same safe defaults the key-cleared path uses
      * always lands somewhere that can actually serve a request.
      */
-    public revertNativelyAutoDefaults(reason: string): { defaultModel?: string; sttProvider?: string } {
+    public revertNativelyAutoDefaults(reason: string): { defaultModel?: string; sttProvider?: string; rerankerProvider?: string } {
         if (this.refuseWriteWhileDegraded('revert natively auto defaults')) return {};
         const changed = this.applyNativelyAutoDefaultRevert(reason);
+        // rerankerProvider is deliberately NOT part of this condition: it lives
+        // in SettingsManager and has already persisted itself. Adding it here
+        // would write the credentials file for a change that is not in it.
         if (changed.defaultModel || changed.sttProvider) this.saveCredentials();
         return changed;
     }
@@ -1367,6 +1621,14 @@ export class CredentialsManager {
                 this.credentials.sttProvider = 'natively';
                 console.log('[CredentialsManager] Auto-set STT provider to natively');
             }
+
+            // Same promotion for the managed reranker, so a pasted key makes
+            // Natively the active provider for generation, speech, embeddings
+            // and reranking alike. (Embeddings need nothing here — the resolver
+            // already probes Natively FIRST whenever a key exists, and pinning
+            // embeddingMode:'manual' would replace that preference with "Natively
+            // or nothing", deleting the fallback chain.)
+            this.setRerankerProviderIfManaged('natively', 'Natively key stored');
         } else {
             // Key cleared — revert natively-auto-set defaults back to safe fallbacks
             this.applyNativelyAutoDefaultRevert('Natively key cleared');
@@ -1482,14 +1744,50 @@ export class CredentialsManager {
         return this.credentials.trialClaimed === true;
     }
 
-    public setTrialToken(token: string, expiresAt: string, startedAt: string): void {
-        if (this.refuseWriteWhileDegraded('set trial token')) return;
+    /**
+     * Store a started trial.
+     *
+     * Returns whether the token reached DISK, which is not the same as whether
+     * the trial works. The two are separated because a trial is unlike every
+     * other credential here: the server has already burned this machine's
+     * one-per-HWID row by the time we are called, so a write we cannot perform
+     * must not also throw the trial away.
+     *
+     * What this used to do — `if (refuseWriteWhileDegraded(...)) return;` — was
+     * the exact shape of the "I pressed Start and got no trial" reports. In a
+     * degraded session (unreadable keyring, or this launch holding a different
+     * encryption key) it returned BEFORE assigning, so the token never reached
+     * memory either. `trial:start` ignored the void return and answered ok, the
+     * renderer then polled `trial:status`, CredentialsManager had no token, and
+     * the user was left with a spent trial and no sign of it.
+     *
+     * So: memory ALWAYS gets the token, disk only when the store is healthy.
+     * Memory-only still gives a working trial for this session, and the caller
+     * is told it will not survive a restart. The degraded guard still gates the
+     * WRITE, which is the part that could clobber intact stored keys with a
+     * partially-loaded object — that protection is untouched.
+     */
+    public setTrialToken(token: string, expiresAt: string, startedAt: string): { persisted: boolean } {
         this.credentials.trialToken = token;
         this.credentials.trialExpiresAt = expiresAt;
         this.credentials.trialStartedAt = startedAt;
         this.credentials.trialClaimed = true;
-        this.saveCredentials();
-        console.log('[CredentialsManager] Trial token stored, expires:', expiresAt);
+
+        if (this.refuseWriteWhileDegraded('persist trial token')) {
+            console.warn('[CredentialsManager] Trial token held in MEMORY ONLY — the credential store is degraded, '
+                + 'so this trial will not survive a restart. It remains valid on the server: pressing Start again '
+                + 'from a healthy session re-issues the same trial (the API is idempotent per hardware id).');
+            return { persisted: false };
+        }
+
+        const persisted = this.saveCredentials();
+        if (persisted) {
+            console.log('[CredentialsManager] Trial token stored, expires:', expiresAt);
+        } else {
+            console.error('[CredentialsManager] Trial token could NOT be written to disk. It is live for this '
+                + 'session only; the server still holds the trial and will re-issue the same one.');
+        }
+        return { persisted };
     }
 
     public clearTrialToken(): void {
@@ -1651,6 +1949,19 @@ export class CredentialsManager {
         // launch" has stopped being advice and become a dead end. At that point
         // refusing the write leaves the user with no way to use the app at all,
         // which is strictly worse than overwriting a file nothing can read.
+        // Same contract as keyringUnreadable, on the earlier signal: a session
+        // provably holding a different key must not replace the file, whether or
+        // not it ever attempted a decrypt. reentryRequired is honoured here too —
+        // once the store is classified unrecoverable, refusing writes only leaves
+        // the user with no way to use the app.
+        if (this.keyMismatchWouldDestroy() && !this.reentryRequired) {
+            console.error(
+                '[CredentialsManager] Refusing to save: this session holds a different encryption key than the one '
+                + 'that wrote the stored credentials, so saving would replace a file this session could never have '
+                + 'read. RECOVERY: start the app the same way it was started when the credentials were saved.',
+            );
+            return false;
+        }
         if (this.keyringUnreadable && !this.reentryRequired) {
             console.error(
                 '[CredentialsManager] Refusing to save: the stored credential file could not be read this '
@@ -1667,6 +1978,7 @@ export class CredentialsManager {
             // Clear the degraded state so the rest of the session behaves normally
             // and the banner drops immediately rather than after a restart.
             this.keyringUnreadable = false;
+            this.keyIdentityMismatch = false;
             this.clearDecryptFailCount();
             console.log('[CredentialsManager] Re-entered credentials persisted — degraded state cleared');
         }
@@ -1690,17 +2002,46 @@ export class CredentialsManager {
      * what keeps memory and disk in agreement on every path, including the ones
      * that cannot report a failure.
      */
+    /**
+     * The canary refuses a write ONLY when this session also has nothing loaded.
+     *
+     * The flag says "my key is not the key that wrote the file". On its own that
+     * is not a reason to refuse: a session can legitimately hold a different key
+     * and still have a perfectly good credential set — the app-managed fallback
+     * exists for exactly that, and `preferFallbackThisLoad` (keyring read SKIPPED
+     * because the fallback is newer) reaches write time with keyringUnreadable
+     * false and writes allowed. Blanket-refusing on the flag alone would have
+     * broken those sessions, which is a worse bug than the one being fixed.
+     *
+     * What must never happen is replacing a file this session could not read with
+     * an EMPTY set. That is the conjunction below, and it is also exactly the
+     * shape of the observed outage: keyring unreadable, no fallback, credentials
+     * empty, and a startup token-write about to overwrite it.
+     */
+    private keyMismatchWouldDestroy(): boolean {
+        return this.keyIdentityMismatch && Object.keys(this.credentials).length === 0;
+    }
+
     private refuseWriteWhileDegraded(op: string): boolean {
-        if (!this.keyringUnreadable) return false;
+        if (!this.keyringUnreadable && !this.keyMismatchWouldDestroy()) return false;
         // Permanent failure: the user is re-entering by hand and must be allowed
         // to. Mirrors the same escape hatch in saveCredentials() — the two have to
         // agree or the setter would reject a mutation the save would have accepted.
         if (this.reentryRequired) return false;
+        // The two degraded states need DIFFERENT recovery advice. "Unlock your
+        // keychain" is useless when the keychain is unlocked and simply handed
+        // this launch a different key — the user has to start the app the way it
+        // was started when the credentials were saved.
         console.error(
-            `[CredentialsManager] Refusing "${op}": the stored credential file could not be read this session. `
-            + 'The change was NOT applied in memory either, so what you see still matches what is on disk. '
-            + 'RECOVERY: quit and reopen the app with your keychain unlocked (on Windows, signed in to the '
-            + 'profile that saved the keys).',
+            this.keyMismatchWouldDestroy()
+                ? `[CredentialsManager] Refusing "${op}": this session holds a different encryption key than the `
+                  + 'one that wrote the stored credentials, so the change was NOT applied and the stored file is '
+                  + 'untouched. RECOVERY: start the app the same way it was started when the credentials were '
+                  + 'saved (an automated/test launcher and a normal launch do not share a key).'
+                : `[CredentialsManager] Refusing "${op}": the stored credential file could not be read this session. `
+                  + 'The change was NOT applied in memory either, so what you see still matches what is on disk. '
+                  + 'RECOVERY: quit and reopen the app with your keychain unlocked (on Windows, signed in to the '
+                  + 'profile that saved the keys).',
         );
         return true;
     }
@@ -1731,6 +2072,10 @@ export class CredentialsManager {
                 // Record that these exact bytes are OURS, so a later unreadable
                 // load can tell a transient decrypt failure from a foreign file.
                 this.stampProvenance('enc', Buffer.from(encrypted));
+                // Paired with the hash above so the canary always describes the key
+                // that wrote THIS file — that pairing is what makes the mismatch
+                // check below trustworthy.
+                this.stampKeyCanary();
                 // Keyring is the source of truth now — drop any stale fallback file.
                 //
                 // EXCEPT during a recovery re-key. There, the keyring item we just
@@ -1845,15 +2190,27 @@ export class CredentialsManager {
      * shows up in the wild — a Settings banner explaining why saving is off.
      */
     public resetDegradedCredentialStore(): void {
-        if (!this.keyringUnreadable) return;
+        // BOTH signals, or the reset is a half-reset: clearing keyringUnreadable
+        // while leaving keyIdentityMismatch latched left writes refused after an
+        // explicit user request to discard the file — caught by the existing
+        // degraded-store guard test, which is exactly what it is there for.
+        if (!this.keyringUnreadable && !this.keyIdentityMismatch) return;
         console.warn('[CredentialsManager] Discarding the unreadable keyring file at explicit user request');
         this.removeKeyringFile();
         this.keyringUnreadable = false;
+        // The discarded file's canary described a key we are deliberately walking
+        // away from; keeping it would re-latch the mismatch on the next load.
+        this.keyIdentityMismatch = false;
+        try {
+            const prov = this.readProvenance();
+            delete prov.keyCanary;
+            this.writeProvenance(prov);
+        } catch { /* best-effort, same as every other provenance write */ }
     }
 
     /** True when the credential store could not be read this session and writes are being refused. */
     public isCredentialStoreDegraded(): boolean {
-        return this.keyringUnreadable;
+        return this.keyringUnreadable || this.keyMismatchWouldDestroy();
     }
 
     private loadCredentials(): void {
@@ -1866,6 +2223,27 @@ export class CredentialsManager {
         // Recomputed from scratch on every load (init() may run more than once).
         this.keyringUnreadable = false;
         this.credentialStoresAmbiguous = false;
+        // KEY IDENTITY, checked BEFORE anything can be written.
+        //
+        // Every other protection here reacts to a decrypt that was attempted and
+        // failed. That is one step too late for a session which writes before it
+        // reads — setPhoneMirrorToken on startup, for instance — because by then
+        // the file it could never have read has already been replaced. The canary
+        // answers "is my key the key that wrote this?" without needing to touch
+        // the credential file at all.
+        this.keyIdentityMismatch = false;
+        try {
+            if (fs.existsSync(CREDENTIALS_PATH) && this.probeKeyIdentity() === 'different') {
+                this.keyIdentityMismatch = true;
+                console.warn(
+                    '[CredentialsManager] This session\'s encryption key is NOT the key that wrote the stored '
+                    + 'credential file — saves are DISABLED so it cannot be overwritten. The file is intact and a '
+                    + 'launch holding the original key will read it normally. This is usually the app being started '
+                    + 'a different way than it was when the credentials were saved (an automated/test launcher, a '
+                    + 'different signing context, or a second copy of the app).',
+                );
+            }
+        } catch { /* probe is advisory; never let it break a load */ }
         // R-10: prefer the newer fallback for THIS load without deleting anything.
         let preferFallbackThisLoad = false;
         try {

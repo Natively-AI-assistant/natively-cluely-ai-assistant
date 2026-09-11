@@ -31,6 +31,23 @@ export type PiTelemetryEvent =
   // canonical plan classified one turn differently. MARKER-ONLY: enums.
   | 'wta_plan_divergence'
   | 'wta_context_free_clarification'
+  // Interaction-router campaign Phase 1b (2026-09-04): how often a live WTA
+  // turn ends in the mode's silence string instead of an answer. Emitted ONCE
+  // per completed generation at the single post-generation point in
+  // runWhatShouldISay, carrying both outcomes, so the ring yields a rate and
+  // not just a count. Answers the "silence share" question the routing audit
+  // could not: the decision costs a full generation today, and the proposed
+  // router's `needs_response` axis is meant to make it cost nothing.
+  // MARKER-ONLY: booleans + enums. Never the question, never the answer.
+  | 'wta_turn_silence_outcome'
+  // Interaction-router campaign PR 7 and PR 9 (2026-09-05). `router_precheck_decision`
+  // records every consultation of the router's pre-check and whether it actually
+  // skipped a generation, so the ring yields a rate rather than a count of skips.
+  // `router_shadow_turn` records what the router WOULD have decided beside what
+  // shipped, which is the evidence for removing MobileBERT.
+  // MARKER-ONLY: enums, booleans and small numbers. Never the turn, never the answer.
+  | 'router_precheck_decision'
+  | 'router_shadow_turn'
   | 'session_memory_recall_attempted'
   | 'session_memory_recall_succeeded'
   | 'session_memory_recall_blocked_by_mode'
@@ -49,6 +66,7 @@ export type PiTelemetryEvent =
   | 'pi_doc_grounded_validation_failed'
   | 'pi_doc_grounded_regenerated'
   | 'pi_doc_grounded_safe_failure'
+  | 'pi_doc_grounded_kept_original'
   // Round-7 Failure-3: completeness re-ask kept the original (valid but partial) answer.
   | 'pi_doc_grounded_completeness_kept_original'
   // Root-cause fix (2026-07-23): a substantial original answer classified as a
@@ -106,11 +124,26 @@ const ALLOWED_KEYS = new Set<string>([
   'sanitizerApplied', 'repaired', 'needsFallback', 'markerCount', 'violationCode',
   // speakability markers (coarse class only — never raw answer text)
   'speakabilityClass',
+  // silence-outcome marker (Phase 1b): boolean only. The mechanism travels
+  // on the existing 'reason' key, the surface on 'surface', the mode on 'mode'.
+  'silenced',
   // OKF Profile Intelligence markers (2026-07-02): COUNTS + coarse reasons /
   // states only — never card titles, bodies, quotes, or any profile content.
   'cardCount', 'nodeCount', 'entityCount', 'relationCount', 'rejectedCount',
   'fastPathUsed', 'blockedReason', 'evidenceTier', 'packVersion', 'docType',
   'conformant', 'fileCount', 'generatedMs',
+  // Interaction-router markers (2026-09-05). Enums, booleans and small numbers
+  // only. The turn text, the history and the answer are never emitted, and could
+  // not pass anyway: they are neither allow-listed nor marker-shaped.
+  //
+  // These had to be added. The allowlist drops unknown keys OUTRIGHT, so the
+  // shadow run would have emitted two weeks of events carrying nothing but
+  // `mode` and `surface`, and the omission would have surfaced only when the
+  // analysis found no data to read.
+  'needs_response', 'dialogue_act', 'confidence', 'acted', 'outcome', 'cell',
+  'router_needs_response', 'router_dialogue_act', 'router_confidence',
+  'live_was_silent', 'legacy_intent', 'legacy_confidence', 'legacy_agrees',
+  'shim_intent', 'shim_ambiguous', 'shim_via', 'elapsed_ms',
 ]);
 // Even for an allowed key, a string value is bounded + must look like a marker label
 // (no free-text, no salary/PII numbers). Defense-in-depth on top of the allowlist.

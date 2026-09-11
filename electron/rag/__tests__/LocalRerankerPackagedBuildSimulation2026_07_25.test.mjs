@@ -98,7 +98,8 @@ describe('electron-builder config actually bundles the reranker model (source-pi
     // The two models that ARE still bundled must keep their gate, or this
     // change quietly removes the protection for all three.
     assert.match(script, /Xenova\/all-MiniLM-L6-v2\/onnx\/model_quantized\.onnx/);
-    assert.match(script, /Xenova\/mobilebert-uncased-mnli\/onnx\/model_quantized\.onnx/);
+    // MobileBERT removed 2026-09-05 with the intent classifier; the build must not download it.
+    assert.doesNotMatch(script, /mobilebert-uncased-mnli/);
     assert.match(script, /process\.exit\(1\)/, 'verifyModels must still fail the build on a missing required file');
   });
 

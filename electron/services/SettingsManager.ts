@@ -38,6 +38,13 @@ export interface AppSettings {
     // Keep the persisted default OFF during rollout; the operator kill switch
     // (NATIVELY_DIRECT_ASSIST_KILL_SWITCH) always wins over this preference.
     directAssistEnabled?: boolean;
+    /**
+     * Whether a failed Direct Assist provider may fall back to another
+     * configured provider. Unlike directAssistEnabled the persisted default is
+     * ON: it only ever converts a failure into an answer, and every switch is
+     * announced in the UI, so it can never route silently.
+     */
+    directAssistFallbackEnabled?: boolean;
     actionButtonMode?: 'recap' | 'brainstorm';
     groqFastTextMode?: boolean;
     codexCliEnabled?: boolean;
@@ -154,7 +161,7 @@ export interface AppSettings {
      * This file is plaintext on disk.
      */
     reranker?: {
-        provider?: 'local' | 'openrouter' | 'jina';
+        provider?: 'local' | 'natively' | 'openrouter' | 'jina';
         /**
          * A catalogue id from rag/rerankerModelCatalog.ts, or absent for the
          * bundled model (ms-marco-MiniLM-L-6-v2 as of 2026-09-04 — see
@@ -165,6 +172,12 @@ export interface AppSettings {
         openrouterModel?: string;
         /** Model id for the Jina AI hosted reranker (jina-reranker-v3.5 and friends). */
         jinaModel?: string;
+        /**
+         * Model id for the Natively-managed reranker. Absent means the one model
+         * the API serves — unlike the BYOK providers there is nothing to choose,
+         * so this exists only so a second managed model needs no migration.
+         */
+        nativelyModel?: string;
         candidateCount?: number;
         fallbackToLocal?: boolean;
         lastTest?: {
@@ -185,7 +198,7 @@ export interface AppSettings {
      */
     customEmbeddingEndpoint?: string;
     /**
-     * The user chose "Continue with MiniLM". Suppresses the lightweight-embedding
+     * The user chose "Keep MiniLM". Suppresses the lightweight-embedding
      * warning permanently — an unstoppable warning is worse than none, and this
      * one must not become something to click past.
      */
@@ -247,6 +260,21 @@ export interface AppSettings {
     sttMaxSampleRate?: number;
     sttMaxChannels?: number;
     sttAllowDualStream?: boolean;
+    // ── Provider Performance Profile ─────────────────────────────────────
+    // Persisted opt-ins for the intelligenceFlags entries of the same name.
+    // The flag registry documents each one's default and precedence; these keys
+    // exist so the Settings UI has somewhere to write, exactly as
+    // `hindsightMemoryEnabled` does for the `hindsightMemory` flag.
+    providerPerformanceProfileEnabled?: boolean;
+    adaptiveStreamIdleEnabled?: boolean;
+    adaptiveTtftEnabled?: boolean;
+    providerPerformanceDiagnosticsEnabled?: boolean;
+    // The two billable opt-ins. Default OFF in the flag registry; these exist so
+    // a user who turns calibration on in Settings keeps it on across restarts.
+    providerCalibrationEnabled?: boolean;
+    capabilityProbeEnabled?: boolean;
+    adaptiveConnectTimeoutEnabled?: boolean;
+    adaptiveImageQualityEnabled?: boolean;
 }
 
 export const VALID_CONTEXT_DEBUG_LEVELS = ['off', 'standard', 'verbose'] as const;
@@ -401,6 +429,11 @@ export class SettingsManager {
     public getDirectAssistEnabled(): boolean {
         if (this.isDirectAssistKilledByOperator()) return false;
         return this.settings.directAssistEnabled === true;
+    }
+
+    /** Effective Direct Assist fallback state. Persisted default is TRUE. */
+    public getDirectAssistFallbackEnabled(): boolean {
+        return this.settings.directAssistFallbackEnabled !== false;
     }
 
     // ── Smart Browser Context v2 — resolved settings (single default source) ──

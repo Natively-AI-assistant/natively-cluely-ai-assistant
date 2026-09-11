@@ -138,6 +138,29 @@ const EXPECTED_KEYS = [
   // The doc-grounded validator checks the block that was SENT (2026-08-28) —
   // default ON, literal (never isInternalDevTestContext).
   'docGroundedValidatorUsesSentEvidence',
+  // Provider Performance Profile (2026-09-08). All four default ON:
+  //   providerPerformanceProfile      observe-only recording; changes no deadline
+  //   adaptiveStreamIdle              derives the stall guard from observed gaps,
+  //                                   clamped to [2500, 8000] so nothing ever waits
+  //                                   LONGER than the shipped constant
+  //   adaptiveTtft                    may only WIDEN the shipped first-token ceiling
+  //   providerPerformanceDiagnostics  read-only surface; no request behaviour
+  'providerPerformanceProfile',
+  'adaptiveStreamIdle',
+  'adaptiveTtft',
+  'providerPerformanceDiagnostics',
+  // The two BILLABLE flags (2026-09-08), default OFF — deliberately unlike the
+  // four Provider Performance flags above, which default ON because nothing
+  // they do can spend money. These can, so they wait for an explicit opt-in.
+  'calibration',
+  'capabilityProbe',
+  // Provider performance, second wave (2026-09-08).
+  //   adaptiveConnectTimeout  widen-only connect timeout; its own flag so it is
+  //                           not coupled to adaptiveTtft. Default ON.
+  //   adaptiveImageQuality    the only adaptive consumer that visibly DEGRADES
+  //                           output, so unlike the rest it defaults OFF.
+  'adaptiveConnectTimeout',
+  'adaptiveImageQuality',
 ];
 
 // All NATIVELY_* env vars these flags read — cleared before/after so a leaked env from the
@@ -187,6 +210,16 @@ const DEFAULT_ON_KEYS = new Set([
   // The doc-grounded validator checks the block that was SENT (2026-08-28) —
   // default ON, literal (never isInternalDevTestContext).
   'docGroundedValidatorUsesSentEvidence',
+  // Provider Performance Profile (2026-09-08) — all four ON by plain literals.
+  // The two that change behaviour are bounded so that ON can only ever be safer
+  // or equal: the stall guard is clamped at or below today's constant, and the
+  // TTFT filter may only widen.
+  'providerPerformanceProfile',
+  'adaptiveStreamIdle',
+  'adaptiveTtft',
+  'providerPerformanceDiagnostics',
+  // Widen-only, so ON can only ever buy a slow network more room.
+  'adaptiveConnectTimeout',
   // Promoted to unconditional `true` (2026-08-30, dev/prod parity audit):
   // both are pure shadow-observation side channels (divergence logging only,
   // zero change to any real return value), so there is no risk to running

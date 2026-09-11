@@ -198,7 +198,13 @@ describe('T2 — the kill switch restores the pre-fix behaviour exactly', () => 
     try {
       const off = classify(q, 'technical-interview');
       assert.equal(on.shouldRetrieve, true, 'flag ON must retrieve');
-      assert.equal(off.shouldRetrieve, false, 'flag OFF must reproduce the legacy stall');
+      assert.equal(on.claimTypes.includes('MEETING_STATEMENT'), false, 'flag ON must not read `sync` as a meeting');
+      // The misroute itself is what the kill switch restores: `sync` becomes a
+      // meeting claim again. It no longer STALLS the turn, because since
+      // 2026-09-07 a meeting claim in a mode holding documents also plans the
+      // reference file (MeetingClaimsReachAttachedDocuments2026_09_07) — that
+      // is an independent fix, and this switch must not be able to undo it.
+      assert.equal(off.claimTypes.includes('MEETING_STATEMENT'), true, 'flag OFF must reproduce the legacy meeting misroute');
     } finally {
       delete process.env[ENV];
     }

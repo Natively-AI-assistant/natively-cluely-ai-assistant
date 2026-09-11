@@ -79,11 +79,32 @@ test('site-1 style (no race) and site-2 style (raced) hand the wrapper IDENTICAL
 
   assert.equal(site1.calls.length, 1);
   assert.equal(site2.calls.length, 1);
-  assert.deepEqual(site1.calls[0], site2.calls[0],
-    'both entry-point styles must produce byte-identical wrapper arguments');
+  // Since 2026-09-07 the raced site forwards its budget to the retriever as
+  // `rerankDeadlineMs` (so a rerank it cannot wait for is never started —
+  // rerankBudget.ts). That is the ONE documented divergence between the two
+  // invocation styles; everything else must stay byte-identical.
+  const stripDeadline = (args) => args.map((a, i) => {
+    if (i !== 7 || !a || typeof a !== 'object') return a;
+    const { rerankDeadlineMs: _d, ...rest } = a;
+    return rest;
+  });
+  assert.deepEqual(stripDeadline(site1.calls[0]), stripDeadline(site2.calls[0]),
+    'both entry-point styles must produce byte-identical wrapper arguments (deadline aside)');
   assert.equal(r1.block, r2.block, 'identical inputs → identical retrieved block');
   assert.equal(r1.timedOut, false);
   assert.equal(r2.timedOut, false);
+});
+
+test('the raced site carries its deadline as rerankDeadlineMs; the un-raced site carries none (2026-09-07)', async () => {
+  const raced = capturingModesMgr();
+  const unraced = capturingModesMgr();
+  await runHybridModeRetrieval(raced, { ...SAME_ARGS, budgetMs: 1000 });
+  await runHybridModeRetrieval(unraced, { ...SAME_ARGS, budgetMs: null });
+  assert.equal(raced.calls[0][7]?.rerankDeadlineMs, 1000,
+    'the retriever must learn the race deadline so it can skip a rerank that cannot finish inside it');
+  assert.equal(Object.prototype.hasOwnProperty.call(unraced.calls[0][7] ?? {}, 'rerankDeadlineMs'), false,
+    'an un-raced call must not invent a deadline — its rerank is awaited to completion');
+  assert.equal(raced.calls[0][7]?.rerankSurface, 'manual');
 });
 
 test('retrievalOptions.forceDocumentGrounding is threaded (the chatWithGemini fix)', async () => {

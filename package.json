@@ -1,6 +1,6 @@
 {
   "name": "natively",
-  "version": "2.8.8",
+  "version": "2.9.0",
   "main": "dist-electron/electron/main.js",
   "engines": {
     "node": ">=22.6.0"
@@ -24,7 +24,7 @@
     "prepare": "husky",
     "electron:dev": "npm run build && npm run build:electron && cross-env NODE_ENV=development electron .",
     "electron:build": "npm run build:electron && cross-env NODE_ENV=production electron .",
-    "app:dev": "concurrently --kill-others --kill-signal SIGKILL \"npm run dev -- --port 5180 --strictPort\" \"wait-on http://localhost:5180 && npm run electron:dev\"",
+    "app:dev": "concurrently --kill-others --kill-signal SIGKILL \"npm run dev -- --host 127.0.0.1 --port 5180 --strictPort\" \"wait-on http://127.0.0.1:5180 && npm run electron:dev\"",
     "app:build": "npm run build && npm run typecheck:electron && npm run build:electron && cross-env NATIVELY_BUILD_ALL_MAC_ARCHES=1 npm run build:native && node scripts/ensure-sharp-mac-deps.js && node scripts/ensure-napi-canvas-mac-deps.js && node scripts/ensure-sqlite-vec.js && npm run verify:packaged-local-assets && node scripts/package-app.js",
     "app:build:signed": "node scripts/preflight-notary.cjs && npm run build && npm run typecheck:electron && npm run build:electron && cross-env NATIVELY_BUILD_ALL_MAC_ARCHES=1 npm run build:native && node scripts/ensure-sharp-mac-deps.js && node scripts/ensure-napi-canvas-mac-deps.js && node scripts/ensure-sqlite-vec.js && npm run verify:packaged-local-assets && node scripts/package-app.js --config electron-builder.signed.cjs",
     "watch": "node scripts/build-electron.js --watch",
@@ -45,7 +45,10 @@
     "test:modes:collect-fixtures": "cross-env RUN_INTERNET_FIXTURE_COLLECTION=1 node --test electron/services/__tests__/ModeFixtureIntegrity.test.mjs",
     "test:modes:e2e": "cross-env RUN_NATIVELY_API_E2E=1 npm run test:modes",
     "test:modes:long": "node --test electron/services/__tests__/ModeLongSession.test.mjs",
-    "test:css": "./node_modules/.bin/electron tests/css/table-scrollbar.check.mjs",
+    "test:css": "npm run test:css:table && npm run test:css:resize-handle && npm run test:css:split-audio-select",
+    "test:css:table": "electron tests/css/table-scrollbar.check.mjs",
+    "test:css:resize-handle": "electron tests/css/resize-handle-cursor.check.mjs",
+    "test:css:split-audio-select": "electron tests/css/split-audio-model-select.check.mjs",
     "test:e2e": "npx playwright test",
     "test:e2e:headed": "npx playwright test --headed",
     "test:e2e:parity": "node scripts/run-with-env.mjs --set ELECTRON_E2E=1 --default ELECTRON_APP_PORT=5173 -- playwright test tests/e2e/parity-gaps-evidence.spec.ts",
@@ -135,10 +138,10 @@
       "**/*.node",
       "**/*.dylib",
       "**/whisperWorker.js",
-      "**/intentClassifierWorker.js",
       "**/localEmbeddingWorker.js",
       "**/localRerankerWorker.js",
       "**/ggufRerankerWorker.js",
+      "**/routerWorker.js",
       "**/host/bootstrap.js",
       "**/node_modules/better-sqlite3/**",
       "**/node_modules/keytar/**",
@@ -175,7 +178,6 @@
         "to": "models/",
         "filter": [
           "Xenova/all-MiniLM-L6-v2/**",
-          "Xenova/mobilebert-uncased-mnli/**",
           "Xenova/ms-marco-MiniLM-L-6-v2/**",
           "pipecat-ai/**"
         ]

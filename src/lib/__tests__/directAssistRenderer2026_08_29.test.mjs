@@ -31,6 +31,16 @@ function section(startMarker, endMarker) {
   return interfaceSource.slice(start, end);
 }
 
+// Strip `//` line comments so wording assertions ("must never claim X") test
+// what the code actually DOES, not what an adjacent comment happens to say
+// while explaining it.
+function stripLineComments(text) {
+  return text
+    .split('\n')
+    .map((line) => line.replace(/\/\/.*$/, ''))
+    .join('\n');
+}
+
 test('Direct Assist uses the shared SettingsManager IPC flag and defaults renderer state off', () => {
   assert.match(interfaceSource, /const \[directAssistEnabled, setDirectAssistEnabled\] = useState\(false\)/);
   assert.match(interfaceSource, /getDirectAssistEnabled/);
@@ -219,4 +229,202 @@ test('Direct history is appended only in the successful done branch', () => {
   assert.match(listener.slice(doneStart, errorStart), /directAssistHistoryRef\.current = completedTurns\.slice/);
   assert.doesNotMatch(listener.slice(errorStart), /directAssistHistoryRef\.current\s*=/);
   assert.match(interfaceSource, /directAssistHistoryRef\.current = \[\]/, 'explicit chat reset must clear Direct history');
+});
+
+test('provider_switch is handled before the terminal-sequence guard and words the notice as an attempt, never an outcome', () => {
+  // The provider_switch member must exist locally (mirroring
+  // electron/direct-assist/types.ts, preload.ts and src/types/electron.d.ts
+  // field for field) or the listener switch below is dead code.
+  assert.match(
+    interfaceSource,
+    /type: 'provider_switch';[\s\S]{0,220}from: \{ provider: string; model: string \};[\s\S]{0,80}to: \{ provider: string; model: string \};[\s\S]{0,80}reason: string;/,
+  );
+
+  const listener = section(
+    'window.electronAPI.onDirectAssistEvent((event: DirectAssistRendererEvent) => {',
+    'const beginDirectAssist = useCallback(async ({',
+  );
+  const deltaStart = listener.indexOf("if (event.type === 'delta') {");
+  const switchStart = listener.indexOf("if (event.type === 'provider_switch') {");
+  const terminalGuard = listener.indexOf('if (event.sequence < active.lastSequence) return;');
+  assert.ok(deltaStart >= 0 && switchStart > deltaStart, 'provider_switch must be handled after delta');
+  assert.ok(terminalGuard > switchStart, 'provider_switch must be handled BEFORE the terminal-sequence guard');
+
+  const switchBlock = listener.slice(switchStart, terminalGuard);
+  // Not terminal, and its sequence (always 0, pre-commit only) must never
+  // reach active.lastSequence — a delta-counter snapshot is not a slot of
+  // its own. Reaching the terminal guard below with sequence 0 would read as
+  // a stale terminal event against the -1 initial value and settle the
+  // whole request as "Request cancelled."
+  assert.doesNotMatch(switchBlock, /active\.lastSequence\s*=/);
+  // No provider-label mapping table: render the ids verbatim.
+  assert.match(switchBlock, /event\.from\.provider/);
+  assert.match(switchBlock, /event\.to\.provider/);
+  assert.doesNotMatch(switchBlock, /providerLabel\(/);
+  // Lands on the answer card (active.placeholderId), not the question card.
+  assert.match(switchBlock, /message\.id === placeholderId/);
+  assert.match(switchBlock, /fallbackNotice: noticeText/);
+
+  // CASE 1 (finding, worse-than-reported half): provider_switch fires when a
+  // rung is OPENED, not when it answers — so at this point the target
+  // provider has produced zero tokens. The notice text built here must read
+  // as an attempt in flight, never assert that anyone answered. This is the
+  // regression guard for "answered by" being asserted a rung too early.
+  assert.match(switchBlock, /const noticeText = `\$\{event\.from\.provider\}[^`]*\$\{event\.to\.provider\}[^`]*`;/);
+  assert.doesNotMatch(
+    stripLineComments(switchBlock),
+    /answered/i,
+    'provider_switch must never claim an outcome — only done may',
+  );
+
+  // CASE 2 (A -> B -> C multi-switch): main queues switches and drains them
+  // back to back before the first delta, so the renderer can process
+  // switch(A->B) then switch(B->C) with B never having answered. Because
+  // this handler is the ONLY place fallbackNotice is set before 'done', and
+  // it is proven above to never contain "answered", no number of queued
+  // switches processed back to back can ever leave an intermediate provider
+  // credited with an answer it didn't give.
+  assert.match(switchBlock, /active\.hasSwitched = true;/);
+
+  assert.match(interfaceSource, /fallbackNotice\?: string;/);
+  assert.match(
+    interfaceSource,
+    /msg\.role === 'system' && msg\.fallbackNotice[\s\S]{0,320}\{msg\.fallbackNotice\}/,
+  );
+});
+
+test('start captures the ORIGINAL provider selection before any switch can overwrite it', () => {
+  const startBlock = section(
+    "if (event.type === 'start') {",
+    "if (event.type === 'delta') {",
+  );
+  assert.match(startBlock, /active\.originalProvider = event\.provider;/);
+
+  // ActiveDirectAssistRequest must carry originalProvider/hasSwitched so the
+  // final notice can be built without restructuring the reducer.
+  assert.match(
+    interfaceSource,
+    /interface ActiveDirectAssistRequest \{[\s\S]{0,900}?originalProvider\?: string;[\s\S]{0,200}?hasSwitched\?: boolean;/,
+  );
+
+  // 'start' is the ONLY writer of active.originalProvider in the whole file.
+  // On an A -> B -> C walk this is what guarantees the final notice still
+  // names A (the user's real choice) rather than whichever rung a later
+  // switch opened.
+  const originalProviderWrites = (interfaceSource.match(/active\.originalProvider\s*=\s*event\.provider/g) || []).length;
+  assert.equal(originalProviderWrites, 1, 'active.originalProvider must be written exactly once, from start');
+});
+
+test("done upgrades the notice to an outcome ONLY when a switch occurred, naming the original selection and the actual answerer", () => {
+  const doneBlock = section(
+    "if (event.type === 'done') {",
+    "if (event.type === 'error') {",
+  );
+
+  const noAnswerReturn = doneBlock.indexOf('return;');
+  const upgradeGuard = doneBlock.indexOf('if (active.hasSwitched && active.originalProvider)');
+  assert.ok(noAnswerReturn >= 0 && upgradeGuard > noAnswerReturn,
+    'the empty-answer early return must precede the upgrade so a failed/empty done cannot upgrade the notice');
+
+  // CASE 1 & CASE 2's resolving half: the upgrade is gated on hasSwitched —
+  // a request that never switched must never grow a fallbackNotice out of
+  // thin air at done.
+  const upgradeBlock = doneBlock.slice(upgradeGuard, doneBlock.indexOf('// The ONLY Direct history write'));
+  assert.match(upgradeBlock, /finalNoticeText = `\$\{active\.originalProvider\}[^`]*answered by \$\{event\.provider\}[^`]*`;/);
+  // Must name the ORIGINAL selection (active.originalProvider, unaffected by
+  // intermediate switches) and the ACTUAL answerer (done's own event.provider,
+  // not a switch's event.to.provider snapshot).
+  assert.doesNotMatch(upgradeBlock, /event\.to\.provider/);
+  assert.match(upgradeBlock, /message\.id === finalPlaceholderId/);
+
+  // "answered by" may appear literally nowhere else in the listener — it is
+  // the one and only place a Direct Assist notice is permitted to claim an
+  // outcome.
+  const listener = section(
+    'window.electronAPI.onDirectAssistEvent((event: DirectAssistRendererEvent) => {',
+    'const beginDirectAssist = useCallback(async ({',
+  );
+  const answeredByLiterals = (listener.match(/`\$\{[^`]*answered by[^`]*`/g) || []).length;
+  assert.equal(answeredByLiterals, 1, 'exactly one template literal in the listener may assert "answered by"');
+});
+
+test('CASE 3 — a ladder that switches then fails entirely never leaves an "answered by" notice', () => {
+  const doneBlock = section(
+    "if (event.type === 'done') {",
+    "if (event.type === 'error') {",
+  );
+  // Empty/failed done: settleDirectAssistIncomplete runs and returns BEFORE
+  // the hasSwitched upgrade is reachable (proven by the ordering assertion
+  // above), so the message keeps whatever attempt-worded fallbackNotice a
+  // prior provider_switch left — never an "answered by" — and settle itself
+  // does not fabricate one.
+  const emptyAnswerBranch = doneBlock.slice(0, doneBlock.indexOf('// Content actually arrived'));
+  assert.match(emptyAnswerBranch, /if \(!answer\) \{/);
+  assert.doesNotMatch(stripLineComments(emptyAnswerBranch), /fallbackNotice/);
+
+  const errorBlock = section(
+    "if (event.type === 'error') {",
+    'activeDirectAssistRef.current = null;\n      settleDirectAssistIncomplete(active, \'Request cancelled.\');',
+  );
+  // The error path (ladder exhausted, or any unrecognized/terminal fallthrough)
+  // must not touch fallbackNotice at all — it only ever settles the answer
+  // text/streaming state, leaving the last attempt-worded notice in place.
+  assert.doesNotMatch(stripLineComments(errorBlock), /fallbackNotice/);
+
+  const settleFn = section(
+    'const settleDirectAssistIncomplete = useCallback((',
+    "window.electronAPI.onDirectAssistEvent((event: DirectAssistRendererEvent) => {",
+  );
+  assert.doesNotMatch(stripLineComments(settleFn), /fallbackNotice/, 'settleDirectAssistIncomplete must never write fallbackNotice');
+});
+
+test('the question card distinguishes context that was shortened from context that was dropped', () => {
+  // "reference files omitted" and "reference files shortened to fit" mean very
+  // different things to someone judging whether an answer used their document.
+  assert.match(interfaceSource, /shortenedFields\?: string\[\]/);
+  assert.match(
+    interfaceSource,
+    /type: 'start';[^}]*trimmedFields: string\[\]; shortenedFields\?: string\[\]/,
+  );
+  const notice = section("{t('Context trimmed')}", '</div>');
+  assert.match(notice, /msg\.shortenedFields/);
+  assert.match(notice, /shortened to fit/);
+  assert.match(notice, /omitted \(over context limit\)/);
+  assert.match(
+    interfaceSource,
+    /event\.trimmedFields\?\.length \|\| event\.shortenedFields\?\.length/,
+    'a start event carrying only shortenedFields must still stamp the card',
+  );
+});
+
+test('the history write records the screenshots the turn was sent with, after the tray is cleared', () => {
+  // beginDirectAssist snapshots the paths onto the in-flight request because
+  // every submit handler calls setAttachedContext([]) immediately after
+  // dispatch — by the time the done branch runs, component state has none.
+  assert.match(interfaceSource, /interface ActiveDirectAssistRequest \{[\s\S]{0,400}?imagePaths: string\[\];/);
+  assert.match(interfaceSource, /imagePaths: imagePaths \? \[\.\.\.imagePaths\] : \[\],/);
+  assert.match(interfaceSource, /interface DirectAssistHistoryTurn \{[\s\S]{0,500}?imagePaths\?: string\[\];/);
+
+  const doneBranch = section("const completedTurns: DirectAssistHistoryTurn[]", 'directAssistHistoryRef.current = completedTurns');
+  assert.match(doneBranch, /role: 'user',\s*content: active\.currentRequest,\s*\.\.\.\(active\.imagePaths\.length \? \{ imagePaths: active\.imagePaths \} : \{\}\)/);
+
+  // Still the only history write, and still only on a successful terminal.
+  assert.equal((interfaceSource.match(/directAssistHistoryRef\.current = completedTurns/g) ?? []).length, 1);
+});
+
+test('every Direct surface hands beginDirectAssist its attachments, or that surface loses screenshots', () => {
+  // The history write can only record what the caller passed. A surface that
+  // omits imagePaths still dispatches the screenshot on ITS turn and looks
+  // fine, then silently cannot answer about it two turns later — the exact
+  // failure this contract exists to prevent, and one no builder-level test
+  // can see. Typed submit, What-to-Say, and the STT/screenshot path.
+  const callSites = interfaceSource.match(/await beginDirectAssist\(\{[\s\S]*?\n\s*\}\);/g) ?? [];
+  assert.equal(callSites.length, 3, 'a new Direct surface must be added to this check');
+  for (const callSite of callSites) {
+    assert.match(
+      callSite,
+      /imagePaths: currentAttachments\.map\(\(attachment\) => attachment\.path\)/,
+      `a beginDirectAssist call site does not forward its attachments:\n${callSite}`,
+    );
+  }
 });
