@@ -20,7 +20,7 @@
  */
 
 import { Worker } from 'worker_threads';
-import { acquireOnnxSlot } from '../../../utils/onnxThreadConfig';
+import { acquireOnnxSlotWithin } from '../../../utils/onnxThreadConfig';
 
 interface PendingReady {
   resolve: () => void;
@@ -195,7 +195,7 @@ export async function acquireSharedNemotronWorker(
       state.refCount++;
       console.log(`[sharedWorkerRegistry] channel "${channelId}" JOINED existing worker (refCount=${state.refCount})`);
     } else {
-      console.log(`[sharedWorkerRegistry] channel "${channelId}" COLD START — awaiting ONNX slot (weight 1, 15s deadline)...`);
+      console.log(`[sharedWorkerRegistry] channel "${channelId}" COLD START — awaiting ONNX slot (weight 1, 20s deadline)...`);
       const slotWaitStartedAt = Date.now();
       // Cold start — this registry owns the ONE ONNX slot acquisition for
       // Nemotron; LocalWhisperSTT no longer calls acquireOnnxSlot directly
@@ -226,7 +226,12 @@ export async function acquireSharedNemotronWorker(
       // reports the gate exists to prevent). Weight 1 restores the same
       // coexistence contract the pre-Nemotron catalog always had: local STT
       // plus one background ONNX consumer, capped at 2 workers.
-      const slotRelease = await acquireOnnxSlot('high', 1);
+      // Bounded (2026-09-11): the local embedding + reranker workers hold the
+      // whole default gate for the app lifetime, so an unbounded wait here was
+      // a silent dead channel with no log. The rejection propagates to
+      // LocalWhisperSTT.start()'s spawnWorker catch, which tears the instance
+      // down and emits 'error'.
+      const slotRelease = await acquireOnnxSlotWithin('high', 1, 20_000, 'sharedWorkerRegistry/nemotron');
       console.log(`[sharedWorkerRegistry] ONNX slot acquired after ${Date.now() - slotWaitStartedAt}ms — spawning worker for ${modelId}`);
       capturedWorker = new Worker(workerPath);
       state.worker = capturedWorker;

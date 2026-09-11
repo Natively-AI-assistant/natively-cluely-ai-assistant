@@ -3,6 +3,7 @@ use super::sck;
 use anyhow::Result;
 use ringbuf::HeapCons;
 
+pub use super::sck::active_display_count;
 pub use super::sck::list_output_devices;
 
 pub struct SpeakerInput {
@@ -82,6 +83,25 @@ impl SpeakerStream {
         match &mut self.backend {
             BackendStream::CoreAudio(s) => s.take_consumer(),
             BackendStream::Sck(s) => s.take_consumer(),
+        }
+    }
+
+    /// The reason the platform stopped the stream underneath us, once.
+    /// `None` while healthy. CoreAudio taps have no stop callback of their own;
+    /// their route changes are handled by main.ts's default-output watcher.
+    pub fn take_stop_error(&self) -> Option<String> {
+        match &self.backend {
+            BackendStream::CoreAudio(_) => None,
+            BackendStream::Sck(s) => s.take_stop_error(),
+        }
+    }
+
+    /// Which backend actually ended up capturing — the JS side compares this
+    /// with what the user requested ("sck") to notice a silent fallback.
+    pub fn backend_name(&self) -> &'static str {
+        match &self.backend {
+            BackendStream::CoreAudio(s) => s.backend_name(),
+            BackendStream::Sck(s) => s.backend_name(),
         }
     }
 
