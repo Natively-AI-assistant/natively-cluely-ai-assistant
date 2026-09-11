@@ -97,3 +97,16 @@ describe('rag:query-live records its turn', () => {
     assert.doesNotMatch(live, /'live-meeting-current'/);
   });
 });
+
+describe('renderer typed chat', () => {
+  const ui = read('src/components/NativelyInterface.tsx');
+  const submit = between(ui, 'const handleManualSubmit = async () => {', '// Refresh the latest-handler ref on every render');
+  test('typed submit goes straight to streamGeminiChat with the conversation context — no RAG pre-flight', () => {
+    assert.doesNotMatch(submit, /ragQueryLive/);
+    assert.match(submit, /streamGeminiChat\(\s*userText \|\| 'Analyze this screenshot',[\s\S]*conversationContextForSubmit/);
+  });
+  test('the voice path still queries live RAG (it is legacy-owned via skipSystemPrompt)', () => {
+    const voice = between(ui, 'const handleAnswerNow = async () => {', 'const selectSkill = useCallback');
+    assert.match(voice, /ragQueryLive\?\.\(question\)/);
+  });
+});

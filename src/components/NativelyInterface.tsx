@@ -7922,14 +7922,14 @@ Provide only the answer, nothing else.`;
     const conversationContextForSubmit = buildConversationContextFromMessages(messages);
 
     try {
-      // JIT RAG pre-flight: try to use indexed meeting context first
-      if (currentAttachments.length === 0) {
-        const ragResult = await window.electronAPI.ragQueryLive?.(userText || '');
-        if (ragResult?.success) {
-          // JIT RAG handled it — response streamed via rag:stream-chunk events
-          return;
-        }
-      }
+      // No RAG pre-flight here (issue #552). It used to intercept every typed
+      // message during a live meeting and answer from transcript chunks alone,
+      // returning before conversationContextForSubmit was ever sent — so a
+      // follow-up like "do via stack" reached the model with no referent. The
+      // V3 chat path now carries the conversation ring AND live-meeting
+      // evidence (JIT semantic + raw transcript), so one transport serves
+      // both the first question and the follow-up. The voice path keeps its
+      // RAG query; its answers are recorded in main so this path can see them.
 
       // Pass imagePath if attached, AND conversation context
       // R-17: claim the desktop surface before the round-trip (see the note at
