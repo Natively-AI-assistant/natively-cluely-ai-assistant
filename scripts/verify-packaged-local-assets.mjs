@@ -129,16 +129,18 @@ const REQUIRED_UNPACKED_NATIVE_DARWIN = [
 ];
 // Windows entries are UNVERIFIED against a real packaged artifact — this repo
 // has no Windows machine to build and check one from. They are derived from
-// each dependency's own published package layout (sharp/package.json lists
-// @img/sharp-win32-{arch} and @img/sharp-libvips-win32-{arch}; sqlite-vec-
-// windows-x64 ships vec0.dll at its package root, confirmed locally; the Rust
-// native-module's win32 binary name comes from native-module/index.js's own
-// require() fallback chain, msvc-first). Requires physical Windows
-// verification before this list can be trusted the way the DARWIN one is.
+// each dependency's own published package layout (sharp 0.34.5's package.json
+// lists @img/sharp-win32-{arch} but NO @img/sharp-libvips-win32-{arch} — unlike
+// darwin, the win32 package carries libvips-42.dll in its own lib/, so a
+// separate libvips entry here named a directory no Windows build contains;
+// sqlite-vec-windows-x64 ships vec0.dll at its package root, confirmed
+// locally; the Rust native-module's win32 binary name comes from
+// native-module/index.js's own require() fallback chain, msvc-first).
+// Requires physical Windows verification before this list can be trusted the
+// way the DARWIN one is.
 const REQUIRED_UNPACKED_NATIVE_WIN32 = [
   'node_modules/onnxruntime-node/bin/napi-v6/win32',
   'node_modules/@img/sharp-win32-x64/lib',
-  'node_modules/@img/sharp-libvips-win32-x64/lib',
   'node_modules/sqlite-vec-windows-x64/vec0.dll',
 ];
 // native-module ships one of two ABI variants per arch (index.js tries msvc
