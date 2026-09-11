@@ -1122,6 +1122,9 @@ function extractResponsesErrorMessage(text: string): string {
     const json = JSON.parse(text);
     if (json?.error?.message) return String(json.error.message);
     if (typeof json?.message === 'string') return json.message;
+    // The ChatGPT backend's own envelope, e.g. an unentitled model:
+    // {"detail":"The '<model>' model is not supported when using Codex with a ChatGPT account."}
+    if (typeof json?.detail === 'string') return json.detail;
   } catch { /* not JSON */ }
   return text;
 }
