@@ -1098,7 +1098,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle('finalize-mic-stt', async () => {
-    appState.finalizeMicSTT();
+    return appState.finalizeMicSTT();
   });
 
   // IPC handler for analyzing image from file path

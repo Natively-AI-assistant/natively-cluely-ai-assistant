@@ -77,6 +77,23 @@ export class SystemAudioCapture extends EventEmitter {
     }
 
     /**
+     * Which native backend is actually capturing: 'sck' | 'coreaudio' |
+     * 'wasapi', or '' while the background init is still running (and after
+     * the monitor has been retired). main.ts compares it with the backend the
+     * user asked for to notice a silent fallback (see startSckReprobeWatcher).
+     */
+    public getActiveBackend(): string {
+        try {
+            if (this.monitor && typeof this.monitor.getActiveBackend === 'function') {
+                return String(this.monitor.getActiveBackend() ?? '');
+            }
+        } catch (e) {
+            console.warn('[SystemAudioCapture] getActiveBackend failed:', e);
+        }
+        return '';
+    }
+
+    /**
      * Start capturing audio
      */
     public start(): void {
@@ -117,6 +134,33 @@ export class SystemAudioCapture extends EventEmitter {
                 if (err) {
                     console.error('[SystemAudioCapture] Callback error:', err);
                     this.isRecording = false; // Allow recovery via restart
+                    // The Rust DSP thread has exited (a fatal init failure, or the
+                    // platform stopped the stream — see speaker/stop_signal.rs),
+                    // but its handle is still Some inside the monitor. A later
+                    // start() on this same instance would hit "Capture already
+                    // running". Retire the monitor now so the next start() takes
+                    // the lazy-init branch; stop() is deferred as in the failed-
+                    // start path below. isRecording is already false, so stop()
+                    // would otherwise skip the native teardown entirely.
+                    const dying = this.monitor;
+                    this.monitor = null;
+                    if (dying) {
+                        // Published as the teardown promise so the recovery
+                        // handler's `await destroy()` still means "native side
+                        // released" (F-104) even though stop() short-circuits.
+                        const retire = new Promise<void>((resolve) => {
+                            setImmediate(() => {
+                                try { dying.stop(); } catch (e) {
+                                    console.error('[SystemAudioCapture] Error retiring monitor after callback error:', e);
+                                }
+                                resolve();
+                            });
+                        });
+                        this._teardownPromise = retire;
+                        void retire.then(() => {
+                            if (this._teardownPromise === retire) this._teardownPromise = null;
+                        });
+                    }
                     this.emit('error', err);
                     return;
                 }

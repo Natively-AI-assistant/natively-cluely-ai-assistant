@@ -490,7 +490,8 @@ interface ElectronAPI {
    *  is unpackaged — the gate lives in the main-process handler. */
   debugInjectTranscript: (segments: Array<{ speaker?: string; text: string; timestamp?: number; confidence?: number }>)
     => Promise<{ success: boolean; injected?: number; error?: string }>;
-  finalizeMicSTT: () => Promise<void>;
+  /** Resolves with `{ pending }` — true when the mic provider reports a trailing final in flight. Older mains resolve void. */
+  finalizeMicSTT: () => Promise<{ pending: boolean } | void>;
   getRecentMeetings: () => Promise<
     Array<{ id: string; title: string; date: string; duration: string; summary: string }>
   >;
