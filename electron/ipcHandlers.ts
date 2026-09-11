@@ -1207,6 +1207,55 @@ export function initializeIpcHandlers(appState: AppState): void {
   // against the prior turn instead. Same-session only (no Hindsight). Bounded per session.
   const { ConversationMemoryService } = require('./intelligence/ConversationMemoryService') as typeof import('./intelligence/ConversationMemoryService');
   const _manualConversationMemory = new ConversationMemoryService();
+
+  /**
+   * Write a RAG-answered live turn to the same sinks the V3 manual-chat path
+   * writes (issue #552), so a later typed turn can resolve a follow-up against
+   * it and Meeting Notes lists it. Mirrors the V3 site's split: the USER turn
+   * is always recorded; the ANSWER-side sinks are skipped when the stream was
+   * truncated (RAGManager appends its "Answer incomplete" coda), because a
+   * partial answer must never become the antecedent of the next question.
+   * Every sink is best-effort — recording must not fail the answer.
+   */
+  function recordLiveRagTurn(senderId: number, query: string, answer: string): void {
+    const ragLiveAnswer = answer.trim();
+    if (!query.trim() || !ragLiveAnswer) return;
+    const ragLiveTruncated = /Answer incomplete — the model stream ended early\.\)_\s*$/.test(ragLiveAnswer);
+    const im = appState.getIntelligenceManager?.();
+    try {
+      im?.addTranscript?.({ text: query, speaker: 'user', timestamp: Date.now(), final: true, origin: 'manual_chat' }, true);
+    } catch { /* continuity only */ }
+    try {
+      im?.logUsage?.('rag_live', query, ragLiveAnswer);
+    } catch { /* usage only */ }
+    if (ragLiveTruncated) {
+      console.warn('[RAG] truncated live answer — recording the user turn but skipping answer-side history sinks');
+      return;
+    }
+    try {
+      const { recordAnswerSummary } = require('./context-intelligence/question/conversation-state-store');
+      recordAnswerSummary(
+        v3ConversationSessionId(appState, senderId),
+        ragLiveAnswer,
+        undefined,
+        // Seeds state for a turn that never went through orchestrate(); see
+        // recordAnswerSummary's `question` docblock.
+        query,
+      );
+    } catch { /* continuity only */ }
+    try {
+      _manualConversationMemory.record({
+        sessionId: String(senderId),
+        userMessage: query,
+        assistantAnswer: ragLiveAnswer,
+        timestamp: Date.now(),
+      });
+    } catch { /* memory only */ }
+    try {
+      im?.addAssistantMessage?.(ragLiveAnswer, undefined, 'manual_chat');
+    } catch { /* continuity only */ }
+  }
+
   // Coding thread state (spoken-answer-quality sprint 2026-06-15): tracks original vs
   // current problem across a multi-turn coding session so "what was the ORIGINAL problem?"
   // resolves to the first problem, and complexity/dry-run/optimize follow-ups resolve to
@@ -13687,8 +13736,16 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const stream = ragManager.queryMeeting(liveMeetingId, query, abortController.signal);
 
+      // Accumulated so the turn can be RECORDED (issue #552). A RAG-answered
+      // turn used to leave no trace in main: not in the conversation ring V3
+      // reads for follow-ups, not in conversation memory, not in the session
+      // transcript, not in the usage log. The renderer's bubble history looked
+      // complete, but the next turn to reach V3 had no antecedent — "do via
+      // stack" after a RAG-answered "lc 573" had nothing to refer to.
+      let ragLiveAnswer = '';
       for await (const chunk of stream) {
         if (abortController.signal.aborted) break;
+        ragLiveAnswer += chunk;
         event.sender.send('rag:stream-chunk', { live: true, chunk });
       }
 
@@ -13697,6 +13754,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       // the NEW placeholder as done before its first real chunk arrives.
       if (!abortController.signal.aborted) {
         event.sender.send('rag:stream-complete', { live: true });
+        recordLiveRagTurn(event.sender.id, query, ragLiveAnswer);
       }
       return { success: true };
     } catch (error: any) {
