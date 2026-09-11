@@ -593,3 +593,8 @@ resources/models/Xenova/nli-deberta-v3-small/
 resources/models/Xenova/bge-small-en-v1.5/
 resources/models/knowledgator/
 resources/models/minishlab/
+
+# Live RAG probe scratch userdata — the probes mkdir these and the app fills
+# them with a multi-MB natively.db. Generated output, not a fixture.
+tests/e2e-modes/live-userdata/
+tests/e2e-modes/hosted-userdata-*/
