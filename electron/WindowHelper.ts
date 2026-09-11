@@ -593,11 +593,22 @@ export class WindowHelper {
       // translucent material by default.
       transparent: true,
       hasShadow: true,
-      // The launcher starts with the black logo splash. Use a black native
-      // background too so the OS doesn't show a grey/white transparent-window
-      // flash before the renderer paints (applies on macOS and Windows, both
-      // of which now create the window with `transparent: true`).
-      backgroundColor: '#000000',
+      // The launcher starts with the black logo splash. On macOS a black
+      // native background hides any grey/white transparent-window flash
+      // before the renderer paints, and the OS rounds the window frame itself
+      // (titleBarStyle: 'hiddenInset'), so the black never squares off the
+      // corners.
+      //
+      // WINDOWS/LINUX HAVE NO NATIVE ROUNDING for a frameless transparent
+      // window — the corner radius is CSS on <body> (see index.css,
+      // html[data-platform="win32"][data-window="launcher"]). An OPAQUE native
+      // backgroundColor paints the window's full square rect *behind* that
+      // rounded content, so the corners read as square no matter what the CSS
+      // says. Transparent here, like every other window in the app
+      // (settings/model-selector/overlay/cropper all use #00000000); the
+      // flash it guarded against can't occur anyway, since the launcher is
+      // created `show: false` and only revealed after the renderer paints.
+      backgroundColor: isMac ? '#000000' : '#00000000',
       focusable: true,
       resizable: true,
       movable: true,
@@ -2323,7 +2334,7 @@ export class WindowHelper {
     } else {
       // Must match the values createWindow() applies at construction.
       if (isMac) this.launcherWindow.setVibrancy('under-window');
-      this.launcherWindow.setBackgroundColor('#000000');
+      this.launcherWindow.setBackgroundColor(isMac ? '#000000' : '#00000000');
       this.launcherWindow.setHasShadow(true);
     }
     this.launcherOpacityPreviewActive = active;

@@ -2989,6 +2989,14 @@ html[data-platform="linux"] body {
   overflow: hidden;
 }
 
+/* The launcher matches the 16px macOS gives its window natively (where the
+   rounding comes from the OS, not from CSS — nothing to change there). Only
+   the launcher: the aux windows keep 8px. */
+html[data-platform="win32"][data-window="launcher"] body,
+html[data-platform="linux"][data-window="launcher"] body {
+  border-radius: 16px !important;
+}
+
 /* ───────────────────────────────────────────────────────────────────────
    Natively API - New Interactive Pricing switchboard (Liquid Glass)
    ─────────────────────────────────────────────────────────────────────── */
