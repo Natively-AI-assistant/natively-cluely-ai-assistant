@@ -18,6 +18,7 @@ import type { EvidenceScope, PriorTurnDecision, SourceType } from '../contracts/
 import { scopeKey } from '../contracts/types';
 import { isRetrievalFixEnabled } from '../contracts/retrieval-flags';
 import { isBareFollowUp, isResponseRequest, isContinuationFragment } from './turn-classifier';
+import { isRefinementFollowUp } from '../../llm/FollowUpResolver';
 
 export interface ConversationTurn {
   role: 'user' | 'interviewer' | 'assistant';
@@ -578,7 +579,40 @@ export interface ResolvedReference {
     | 'PERSONAL_PRONOUN_NO_KNOWN_PERSON'
     | 'CURRENT_TURN_SELF_CONTAINED'
     // T7 (2026-08-28): the state belongs to a DIFFERENT scope than this turn.
-    | 'SCOPE_CHANGED';
+    | 'SCOPE_CHANGED'
+    // 2026-09-11: "repeat the number" resolved to the most recent answer in the
+    // ring that actually carries one, not to the immediately previous answer.
+    | 'VALUE_RECALL_FROM_HISTORY';
+}
+
+// "can you repeat the number" / "what was the percentage again" / "remind me
+// of the date" ask for a VALUE the assistant already gave. Measured in a
+// looking-for-work chain (2026-09-11): after "explain the second point again"
+// (a fencing-token answer with no number in it), "can you repeat the number"
+// anchored to that answer and the model repeated it, number-less — while the
+// 0.8% / 24-hour answers sat two turns back in the same ring. The referent of
+// a value-recall is the most recent answer that HOLDS such a value.
+const VALUE_RECALL_RE = /\b(?:repeat|say (?:that )?again|remind me(?: of)?|what was|what were|recall|give me|tell me)\b[\s\S]{0,40}?\b(?:number|numbers|figure|figures|percentage|percent|amount|date|dates|value|rate|count|ttl|timeline|cost|price|salary|range|total|deadline|year|years|version)\b/i;
+const VALUE_RECALL_MAX_WORDS = 9;
+const CARRIES_VALUE_RE = /\d/;
+export function valueRecallReferent(question: string, turns: readonly HistoryTurn[] | undefined): string | null {
+  const q = question.trim();
+  if (!q || !VALUE_RECALL_RE.test(q)) return null;
+  if (q.split(/\s+/).filter(Boolean).length > VALUE_RECALL_MAX_WORDS) return null;
+  if (!turns?.length) return null;
+  const last = turns[turns.length - 1];
+  // The immediately previous answer carries a value: the ordinary anchoring
+  // below already points at it, and nothing here should second-guess that.
+  if (CARRIES_VALUE_RE.test(last.a)) return null;
+  for (let i = turns.length - 2; i >= 0; i--) {
+    const a = turns[i].a;
+    if (!CARRIES_VALUE_RE.test(a)) continue;
+    // The first sentence that carries the value, so the referent stays a
+    // pointer rather than a second copy of the answer.
+    const sentence = a.split(/(?<=[.!?])\s+/).find((t) => CARRIES_VALUE_RE.test(t)) ?? a;
+    return sentence.replace(/\s+/g, ' ').trim().slice(0, 200);
+  }
+  return null;
 }
 
 /**
@@ -634,7 +668,14 @@ export function resolveReference(
   const personal = PERSONAL_PRONOUN_RE.test(qForPronouns) && shortTurn;
   const pronoun = pronounAnywhere && shortTurn;
   const bare = isBareFollowUp(q);
-  const rephrase = isResponseRequest(q);
+  // A REFINEMENT of the previous answer ("in simple words", "shorter", "as a
+  // one-liner") is a rephrasing request too (2026-09-11). Measured in a
+  // negotiation chain: "in simple words" after the net-45 answer carried no
+  // trigger this resolver knew, retrieved on its own three words, and the
+  // model summarised unrelated MSA clauses. The manual surface already knows
+  // the shape (FollowUpResolver); sharing it anchors the turn to the previous
+  // question so the same sources ground the simpler wording.
+  const rephrase = isResponseRequest(q) || isRefinementFollowUp(q);
   const fragment = isContinuationFragment(q);
 
   // A QUOTED subject beats inherited state UNCONDITIONALLY (2026-08-09), so it
@@ -652,6 +693,13 @@ export function resolveReference(
   // reason that says why rather than "no trigger".
   if (hasQuotedSubject(q)) {
     return { resolved: q, usedState: false, reason: 'CURRENT_QUESTION_CONTAINS_EXPLICIT_ENTITY' };
+  }
+  // A value-recall points at the most recent answer that HOLDS a value.
+  {
+    const valueRef = valueRecallReferent(q, state.turns);
+    if (valueRef) {
+      return { resolved: `${q} (referring to: ${valueRef})`, usedState: true, referent: valueRef, reason: 'VALUE_RECALL_FROM_HISTORY' };
+    }
   }
   // A pronoun that points at the DOCUMENT, not the previous topic (2026-09-07,
   // measured in a 1,000-turn live campaign): "What does it say about the Step

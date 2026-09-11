@@ -161,7 +161,7 @@ describe('EmbeddingProviderResolver permanent auth probing', () => {
     };
 
     const ok = await probeAvailable(provider);
-    assert.equal(ok, false);
+    assert.equal(ok, 'permanent', 'a permanent auth failure is reported as such (2026-09-11: outcomes are named so a startup demotion can tell transient from permanent)');
     assert.equal(calls, 1, 'permanent auth failures should demote immediately, not consume hysteresis retries');
   });
 });

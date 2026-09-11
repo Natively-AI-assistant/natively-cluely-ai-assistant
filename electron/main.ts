@@ -14,9 +14,9 @@ import * as crypto from "crypto"
 import path from "path"
 import fs from "fs"
 import os from "os"
-import dns from "dns"
 import { SystemAudioHealthClassifier } from "./audio/systemAudioHealthClassifier.mjs"
 import { FatalMainProcessCoordinator } from "./utils/fatalMainProcess"
+import { installResilientDnsLookup } from "./utils/resilientDnsLookup"
 import { MeetingLifecycleQueue, type MeetingLifecycleState } from "./audio/meetingLifecycleQueue"
 import { autoUpdater } from "electron-updater"
 
@@ -26,30 +26,16 @@ import {
   type ServiceAccountVerdict,
 } from "./services/googleServiceAccount"
 
-// Override global dns.lookup to resolve macOS system resolver issues with api.natively.software
-const originalLookup = dns.lookup;
-dns.lookup = function(hostname: any, options: any, callback: any) {
-  if (typeof options === 'function') {
-    callback = options;
-    options = {};
-  }
-  if (hostname === 'api.natively.software') {
-    dns.resolve4(hostname, (err, addresses) => {
-      if (err || !addresses.length) {
-        originalLookup(hostname, options, callback);
-      } else {
-        const addr = addresses[0];
-        if (options && (options as any).all) {
-          callback(null, [{ address: addr, family: 4 }] as any);
-        } else {
-          callback(null, addr, 4);
-        }
-      }
-    });
-  } else {
-    originalLookup(hostname, options, callback);
-  }
-} as any;
+// Process-wide resilient DNS (2026-09-10). This used to route
+// api.natively.software through c-ares `resolve4` FIRST, unbounded and
+// uncached, as a workaround for a macOS getaddrinfo ENOTFOUND. Measured on an
+// iPhone-hotspot (IPv6/NAT64) network: resolve4 took 8,009 ms while the
+// system lookup took 11 ms, so every Natively request blew its 4 s connect
+// budget and the user saw "The model did not produce an answer in time" with
+// the server answering curl in 0.45 s. The workaround is kept — as the
+// bounded FALLBACK behind a cached system lookup. See
+// electron/utils/resilientDnsLookup.ts for the contract and its tests.
+installResilientDnsLookup();
 
 if (!app.isPackaged) {
   require('dotenv').config();

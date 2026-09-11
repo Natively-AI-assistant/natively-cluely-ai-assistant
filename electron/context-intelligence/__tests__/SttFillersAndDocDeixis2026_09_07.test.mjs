@@ -126,4 +126,19 @@ describe('transcriber spellings are canonicalised (2026-09-08)', () => {
   test('ordinary words are untouched', () => {
     assert.equal(canonicalizeSttSpellings('the queue depth alert and the p value'), 'the queue depth alert and the p value');
   });
+
+  // 2026-09-10, live interview simulation: "DEBUG two oh six" never matched
+  // DEBUG-206 in the attached pack and the answer opened with "There's no
+  // DEBUG 206 record in what I have here".
+  test('spoken identifier digits are written as digits; ordinary counts are not', () => {
+    assert.equal(canonicalizeSttSpellings('from the debugging set, DEBUG two oh six. what would your first step be'), 'from the debugging set, DEBUG 206. what would your first step be');
+    assert.equal(canonicalizeSttSpellings('ARCH one oh four, do you remember'), 'ARCH 104, do you remember');
+    assert.equal(canonicalizeSttSpellings('the redis pool one, INC twenty six oh one, we raised the pool'), 'the redis pool one, INC 2601, we raised the pool');
+    assert.equal(canonicalizeSttSpellings('incident twenty six oh nine was the cert one'), 'incident 2609 was the cert one');
+    assert.equal(canonicalizeSttSpellings('ticket one hundred four is open'), 'ticket 104 is open');
+    assert.equal(canonicalizeSttSpellings('question three on the sheet'), 'question 3 on the sheet');
+    assert.equal(canonicalizeSttSpellings('I have two kids and the two of us went'), 'I have two kids and the two of us went');
+    assert.equal(canonicalizeSttSpellings('take one more look at mode two'), 'take one more look at mode two');
+    assert.equal(canonicalizeSttSpellings('we hired five engineers last year'), 'we hired five engineers last year');
+  });
 });

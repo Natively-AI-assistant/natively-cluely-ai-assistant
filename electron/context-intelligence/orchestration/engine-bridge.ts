@@ -61,6 +61,10 @@ export interface BridgeInput {
    *  formula sheet, deep-run 2 issue 9). Always populated by call sites;
    *  never gated on debug level (routing must not depend on logging). */
   attachedFileNames?: readonly string[];
+  /** The screen-understanding description for THIS turn, when a screenshot
+   *  was attached — lends its question/terms to retrieval when the spoken
+   *  question only points at the screen ("what he is asking", "this"). */
+  screenText?: string;
   /** How many Profile Intelligence sources hydrated this turn's retrieval
    *  (active résumé / target JD). Composer wording + telemetry — a zero-
    *  attachment turn with a live profile must NOT claim nothing was searched. */
@@ -258,6 +262,7 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
       hasAttachedDocuments: (input.attachedSourceCount ?? 0) > 0
         || (input.profileSourceCount ?? 0) > 0,
       attachedFileNames: input.attachedFileNames,
+      screenText: input.screenText,
       extraAllowedSourceTypes: input.extraAllowedSourceTypes,
     };
 

@@ -59,6 +59,13 @@ const PROMOTE_AFTER_CONSECUTIVE_FAILURES = 5;
 const FAILURE_WINDOW_MS = 5 * 60_000;
 /** How often to re-probe the primary after a promotion, so it can be demoted. */
 const PRIMARY_REPROBE_INTERVAL_MS = 60_000;
+/**
+ * First re-probe after a STARTUP demotion (2026-09-11). Deliberately inside
+ * RAGManager.AUTO_REINDEX_DEFER_MS (15 s): a launch-time blip that has already
+ * cleared restores the pinned space before the deferred re-index would start
+ * re-embedding the corpus into the bundled model's space.
+ */
+export const BOOT_REPROBE_FIRST_DELAY_MS = 5_000;
 
 /** `Retry-After` in seconds or as an HTTP date, when the provider sent one. */
 function retryAfterMs(err: unknown): number | null {
@@ -197,8 +204,23 @@ export class EmbeddingPipeline {
         // local, the resolver's instance becomes both primary and fallback so the model
         // is loaded at most once in local-only mode.
         try {
-            this.provider = await EmbeddingProviderResolver.resolve(config);
+            const resolution = await EmbeddingProviderResolver.resolveWithDemotion(config);
+            this.provider = resolution.provider;
             console.log(`[EmbeddingPipeline] Ready with provider: ${this.provider.name} (${this.provider.dimensions}d)`);
+            if (resolution.demotedPinned) {
+                // A startup demotion is NOT permanent for the session: the
+                // pinned provider is asked again shortly, then every minute,
+                // and its space is restored the moment it answers — the same
+                // recovery a mid-session promotion already had.
+                const pinned = resolution.demotedPinned;
+                console.warn(
+                    `[EmbeddingPipeline] ${pinned.name} failed its startup probe (transient); running on the bundled model `
+                    + `and re-probing it (first in ${BOOT_REPROBE_FIRST_DELAY_MS / 1000}s) so the ${pinned.space} space comes back without a restart.`
+                );
+                const first = setTimeout(() => { void this.reprobePrimaryOnce(pinned); }, BOOT_REPROBE_FIRST_DELAY_MS);
+                (first as unknown as { unref?: () => void }).unref?.();
+                this.schedulePrimaryReprobe(pinned);
+            }
 
             // If the primary IS local, point fallbackProvider at the same instance to avoid
             // loading the model twice.
@@ -849,11 +871,29 @@ export class EmbeddingPipeline {
      * Get embedding for a search query (may use different prefix for asymmetric models).
      * Routes through embedWithTimeout() so a frozen API cannot stall the query path.
      */
-    async getEmbeddingForQuery(text: string): Promise<number[]> {
+    async getEmbeddingForQuery(
+        text: string,
+        opts?: {
+            /**
+             * The caller's own budget for this query embedding, in ms. Attempt 1
+             * always runs (it has its own QUERY_EMBED_TIMEOUT_MS); a RETRY is
+             * started only when its backoff plus its timeout still fit inside
+             * the budget. Absent = the historical 3-attempt ladder.
+             *
+             * Measured 2026-09-10 on a live turn while the hosted embed route
+             * was slow: 3 s + 1.1 s + 3 s + 3.2 s + 3 s = 13.3 s inside a
+             * retrieval the V3 orchestrator plans at 1200 ms, before the model
+             * was even asked. A live turn cannot spend four times its retrieval
+             * plan waiting for a retry that the lexical arm makes unnecessary.
+             */
+            retryBudgetMs?: number;
+        },
+    ): Promise<number[]> {
         const provider = this.provider;
         if (!provider) {
             throw new Error('Embedding provider not initialized');
         }
+        const queryStartedAt = Date.now();
         // Capture `provider` before the await boundary — if a concurrent
         // getEmbeddingsWithFallback() promotes the fallback while this call is
         // pending, the captured reference still points to the provider that was
@@ -891,6 +931,17 @@ export class EmbeddingPipeline {
                 if (attempt === QUERY_RETRY_ATTEMPTS) break;
                 const base = retryAfterMs(err) ?? this.queryRetryBackoffMs[attempt] ?? 3_000;
                 const wait = base + Math.floor(Math.random() * QUERY_RETRY_JITTER_MS);
+                const budget = opts?.retryBudgetMs;
+                if (typeof budget === 'number' && Number.isFinite(budget)
+                    && (Date.now() - queryStartedAt) + wait + QUERY_EMBED_TIMEOUT_MS > budget) {
+                    console.warn(
+                        `[EmbeddingPipeline] Primary query embedding failed via ${provider.name} `
+                        + `(attempt ${attempt + 1}/${QUERY_RETRY_ATTEMPTS + 1}); no retry — the next attempt `
+                        + `(${wait}ms backoff + ${QUERY_EMBED_TIMEOUT_MS}ms) would not fit the caller's ${budget}ms budget:`,
+                        err instanceof Error ? err.message : err,
+                    );
+                    break;
+                }
                 console.warn(
                     `[EmbeddingPipeline] Primary query embedding failed via ${provider.name} `
                     + `(attempt ${attempt + 1}/${QUERY_RETRY_ATTEMPTS + 1}); retrying in ${wait}ms:`,
@@ -980,29 +1031,35 @@ export class EmbeddingPipeline {
      */
     private schedulePrimaryReprobe(primary: IEmbeddingProvider): void {
         if (this.primaryReprobeTimer) return;
-        this.primaryReprobeTimer = setInterval(() => {
-            void (async () => {
-                if (this.provider === primary) {          // already demoted
-                    this.stopPrimaryReprobe();
-                    return;
-                }
-                try {
-                    await primary.embedQuery('probe');
-                } catch {
-                    return;                                // still down; try again later
-                }
-                console.log(
-                    `[EmbeddingPipeline] ${primary.name} recovered — demoting the fallback and `
-                    + `restoring the ${primary.space} space (no re-index: the persisted vectors `
-                    + `are already in it).`
-                );
-                this.promoteFallbackProvider(primary);     // idempotent; persists the space
-                this.queryFailureHistory = [];
-                this.stopPrimaryReprobe();
-            })();
-        }, PRIMARY_REPROBE_INTERVAL_MS);
+        this.primaryReprobeTimer = setInterval(() => { void this.reprobePrimaryOnce(primary); }, PRIMARY_REPROBE_INTERVAL_MS);
         // Never hold the event loop open for a background probe.
         (this.primaryReprobeTimer as unknown as { unref?: () => void }).unref?.();
+    }
+
+    /**
+     * One probe of a demoted primary. Restores it — and the space the persisted
+     * vectors are already in — the moment it answers. Shared by the interval
+     * re-probe and the early startup re-probe; returns whether it was restored.
+     */
+    private async reprobePrimaryOnce(primary: IEmbeddingProvider): Promise<boolean> {
+        if (this.provider === primary) {          // already demoted
+            this.stopPrimaryReprobe();
+            return true;
+        }
+        try {
+            await primary.embedQuery('probe');
+        } catch {
+            return false;                          // still down; try again later
+        }
+        console.log(
+            `[EmbeddingPipeline] ${primary.name} recovered — demoting the fallback and `
+            + `restoring the ${primary.space} space (no re-index: the persisted vectors `
+            + `are already in it).`
+        );
+        this.promoteFallbackProvider(primary);     // idempotent; persists the space
+        this.queryFailureHistory = [];
+        this.stopPrimaryReprobe();
+        return true;
     }
 
     private stopPrimaryReprobe(): void {
