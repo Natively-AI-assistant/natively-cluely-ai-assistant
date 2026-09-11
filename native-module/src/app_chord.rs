@@ -15,13 +15,10 @@
 //!
 //! # Scope (deliberately narrow)
 //!
-//! Only chords in the "printable-leak" subset are matched here: `Ctrl` (or
-//! `Ctrl+Shift`) plus a completing key that would type a visible character —
-//! letters, digits, Enter, Space. Chords involving `Alt` (AltGr ambiguity) or
-//! `Win`, and nav/function completing keys (arrows, F-keys) are intentionally
-//! NOT matched: they either can't leak a character or ride delicate
-//! pass-through paths the hook already handles. Those keep their existing
-//! `RegisterHotKey` behaviour untouched.
+//! The supported set is Natively's default Windows chords: `Ctrl` (optionally
+//! with `Shift`) plus letters, digits, Enter, Space, or arrows. `Ctrl+Alt` is
+//! accepted only for arrows (the horizontal-scroll defaults), keeping AltGr
+//! text outside this matcher. `Win` and function-key chords remain untouched.
 //!
 //! # No winapi here on purpose
 //!
@@ -75,19 +72,18 @@ pub fn app_chords_from_inputs(inputs: Vec<AppChordInput>) -> Vec<AppChord> {
     inputs.into_iter().map(AppChordInput::into_app_chord).collect()
 }
 
-/// True if `vk` is a completing key we allow in the printable-leak subset:
-/// A–Z (0x41..=0x5A), 0–9 (0x30..=0x39), Enter (0x0D), Space (0x20).
-/// Everything else (arrows, F-keys, nav, punctuation-by-scancode) is excluded.
-pub fn is_printable_leak_vk(vk: u32) -> bool {
-    matches!(vk, 0x30..=0x39 | 0x41..=0x5A | 0x0D | 0x20)
+/// True if `vk` is a completing key used by Natively's default Windows binds.
+pub fn is_supported_app_vk(vk: u32) -> bool {
+    matches!(vk, 0x30..=0x39 | 0x41..=0x5A | 0x0D | 0x20 | 0x25..=0x28)
 }
 
 /// True if `mods` is a modifier set we are willing to swallow: `Ctrl` present,
-/// `Alt` and `Win` absent. `Shift` is allowed. This mirrors the hook's own
-/// insertion point (`ctrl && !alt`, before the Win pass-through has already
-/// returned) so a match here can never override Alt/AltGr/Win handling.
-pub fn is_safe_mods(mods: u32) -> bool {
-    (mods & MOD_CTRL) != 0 && (mods & MOD_ALT) == 0 && (mods & MOD_WIN) == 0
+/// `Win` absent. `Shift` is allowed; `Alt` is allowed only with an arrow so
+/// AltGr-generated text can never be swallowed.
+pub fn is_safe_mods(vk: u32, mods: u32) -> bool {
+    (mods & MOD_CTRL) != 0
+        && (mods & MOD_WIN) == 0
+        && ((mods & MOD_ALT) == 0 || matches!(vk, 0x25..=0x28))
 }
 
 /// Find the app chord matching `(vk, mods)` exactly, or `None`.
@@ -97,12 +93,12 @@ pub fn is_safe_mods(mods: u32) -> bool {
 /// are distinct shortcuts. A non-match falls through to the hook's existing
 /// pass-through, so a miss degrades gracefully to today's behaviour.
 ///
-/// Returns `None` unless the key is in the printable-leak subset AND the
-/// modifiers are in the safe set — a defence-in-depth guard so a malformed
+/// Returns `None` unless the key is in the supported app set AND the modifiers
+/// are safe — a defence-in-depth guard so a malformed
 /// chord table (e.g. an `Alt` chord that slipped past the JS filter) can never
 /// make the hook swallow something it shouldn't.
 pub fn match_app_chord(chords: &[AppChord], vk: u32, mods: u32) -> Option<&str> {
-    if !is_printable_leak_vk(vk) || !is_safe_mods(mods) {
+    if !is_supported_app_vk(vk) || !is_safe_mods(vk, mods) {
         return None;
     }
     chords
@@ -153,11 +149,16 @@ mod tests {
     }
 
     #[test]
-    fn alt_chords_are_never_matched_even_if_in_table() {
-        // Defence in depth: an Alt chord that slipped past the JS filter must
-        // NOT be swallowed (AltGr on EU layouts produces real text).
+    fn alt_printable_chords_are_never_matched_even_if_in_table() {
+        // Defence in depth: AltGr-capable printable chords stay outside the hook.
         let table = vec![chord(0x0D, MOD_CTRL | MOD_ALT, "bogus")];
         assert_eq!(match_app_chord(&table, 0x0D, MOD_CTRL | MOD_ALT), None);
+    }
+
+    #[test]
+    fn ctrl_alt_arrow_matches_horizontal_scroll() {
+        let table = vec![chord(0x25, MOD_CTRL | MOD_ALT, "chat:scrollLeft")];
+        assert_eq!(match_app_chord(&table, 0x25, MOD_CTRL | MOD_ALT), Some("chat:scrollLeft"));
     }
 
     #[test]
@@ -175,10 +176,9 @@ mod tests {
     }
 
     #[test]
-    fn nav_and_function_keys_excluded() {
-        // Arrow (VK_LEFT 0x25) / F1 (0x70): not printable-leak keys, never matched.
+    fn arrows_match_but_function_keys_stay_excluded() {
         let table = vec![chord(0x25, MOD_CTRL, "nav"), chord(0x70, MOD_CTRL, "fkey")];
-        assert_eq!(match_app_chord(&table, 0x25, MOD_CTRL), None);
+        assert_eq!(match_app_chord(&table, 0x25, MOD_CTRL), Some("nav"));
         assert_eq!(match_app_chord(&table, 0x70, MOD_CTRL), None);
     }
 

@@ -45,7 +45,7 @@ export class StealthKeyboardManager {
     private active = false;
     // Shortcut-guard: an always-on shortcut-only use of the SAME native hook
     // that swallows the app's own chords even when full stealth typing is off.
-    // Opt-in (default off) — see setShortcutGuardEnabled. Windows only.
+    // Default on (explicit false opts out) — see setShortcutGuardEnabled. Windows only.
     private shortcutGuardEnabled = false;
     private guardRunning = false;
     private nativeAvailable = false;
@@ -422,7 +422,7 @@ export class StealthKeyboardManager {
         this.maybeStartGuard();
     }
 
-    // ─── Shortcut-guard (opt-in, Windows only) ───────────────────────────
+    // ─── Shortcut-guard (Windows only) ───────────────────────────────────
 
     /**
      * Enable/disable the always-on shortcut-guard. Persisted by the caller

@@ -63,7 +63,7 @@ use std::thread;
 use std::time::Duration;
 
 use crate::app_chord::{
-    app_chords_from_inputs, match_app_chord, AppChord, AppChordInput, MOD_CTRL, MOD_SHIFT,
+    app_chords_from_inputs, match_app_chord, AppChord, AppChordInput, MOD_ALT, MOD_CTRL, MOD_SHIFT,
 };
 use napi::bindgen_prelude::*;
 use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
@@ -85,9 +85,9 @@ use windows::Win32::UI::WindowsAndMessaging::{
     GetWindowThreadProcessId, PeekMessageW, PostThreadMessageW, SetWindowsHookExW,
     TranslateMessage, UnhookWindowsHookEx, WindowFromPoint,
     EVENT_SYSTEM_FOREGROUND, GA_ROOT, HHOOK, KBDLLHOOKSTRUCT, MSG, MSLLHOOKSTRUCT,
-    PM_NOREMOVE, WH_KEYBOARD_LL, WH_MOUSE_LL, WINEVENT_OUTOFCONTEXT, WM_KEYDOWN, WM_KEYUP,
-    WM_LBUTTONDOWN, WM_MBUTTONDOWN, WM_QUIT, WM_RBUTTONDOWN, WM_SYSKEYDOWN, WM_SYSKEYUP,
-    WM_USER, WM_XBUTTONDOWN,
+    PM_NOREMOVE, WH_KEYBOARD_LL, WH_MOUSE_LL, WINEVENT_OUTOFCONTEXT,
+    WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN, WM_MBUTTONDOWN, WM_QUIT, WM_RBUTTONDOWN,
+    WM_SYSKEYDOWN, WM_SYSKEYUP, WM_USER, WM_XBUTTONDOWN,
 };
 
 // ─── napi objects shared with the macOS module's JS surface ──────────────────
@@ -161,7 +161,7 @@ struct HookState {
     num_on: AtomicBool,
     /// Threadsafe callback into V8. Set on start(), cleared on stop().
     callback: Mutex<Option<Arc<ThreadsafeFunction<CapturedKey>>>>,
-    /// The app's own global shortcuts (printable-leak subset) the hook swallows
+    /// The app's supported Ctrl-based global shortcuts the hook swallows
     /// and self-dispatches. Populated at start() from the JS-supplied table;
     /// empty ⟹ the feature is inert and every chord passes through exactly as
     /// before. See app_chord.rs for why and the scope.
@@ -321,13 +321,13 @@ unsafe fn keyboard_hook_inner(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRES
     // registrations on sleep/wake, display/workspace change, etc.; during the
     // recovery window the chord would otherwise leak its completing character
     // into the focused field (a newline from Ctrl+Enter, a digit from Ctrl+1…).
-    // Only the printable-leak subset is eligible: Ctrl (optionally +Shift) —
-    // Alt/AltGr and Win combos are excluded here (`ctrl && !alt`, and Win already
-    // returned above) AND re-excluded inside match_app_chord. An empty table or
-    // a miss falls straight through to the unchanged pass-through below, so this
-    // is fully inert unless JS supplied chords and one matches exactly.
-    if is_key_down && ctrl && !alt {
-        let mods = MOD_CTRL | if modifier_held(VK_SHIFT) { MOD_SHIFT } else { 0 };
+    // Win combos already returned above. Alt is accepted by match_app_chord only
+    // for the arrow-key horizontal-scroll binds, so AltGr text still falls
+    // through: an Alt chord with a printable completing key never matches.
+    if is_key_down && ctrl {
+        let mods = MOD_CTRL
+            | if modifier_held(VK_SHIFT) { MOD_SHIFT } else { 0 }
+            | if alt { MOD_ALT } else { 0 };
         let matched = {
             let chords = state.app_chords.lock().unwrap_or_else(|p| p.into_inner());
             match_app_chord(chords.as_slice(), vk, mods).map(|s| s.to_string())
@@ -345,11 +345,8 @@ unsafe fn keyboard_hook_inner(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRES
                 app_chord_id: id,
             });
             if delivered {
-                state
-                    .swallowed_ups
-                    .lock()
-                    .unwrap_or_else(|p| p.into_inner())
-                    .insert(vk);
+                let mut ups = state.swallowed_ups.lock().unwrap_or_else(|p| p.into_inner());
+                ups.insert(vk);
                 return LRESULT(1);
             }
             // No live callback ⟹ nowhere to dispatch. Fall through so the OS /
@@ -1085,7 +1082,7 @@ impl StealthKeyboardTap {
 
     /// Engage the hook. Every plain-text keystroke fires `callback` and is
     /// swallowed from the foreground app. `app_chords` is the app's OWN global
-    /// shortcuts (printable-leak subset) the hook should swallow + self-dispatch
+    /// supported shortcuts the hook should swallow + self-dispatch
     /// so they can never leak into the foreground app while a `RegisterHotKey`
     /// registration is temporarily dropped; pass `[]` to disable that (fully
     /// inert — every chord passes through as before). `overlay_bounds` is
