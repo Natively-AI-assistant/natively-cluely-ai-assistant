@@ -9,6 +9,8 @@
 //
 // No I/O, no LLM. Inspects an error object and/or the produced text.
 
+import { redactSecretsOnly } from '../utils/redactForLog';
+
 export type ProviderErrorKind =
   | 'rate_limit'        // 429 / RESOURCE_EXHAUSTED / "rate limit"
   | 'auth'              // 401 / 403 / API_KEY / permission
@@ -147,6 +149,8 @@ export function classifyProviderError(err: any, text?: string): ProviderErrorCla
  */
 export function providerFailureUserMessage(err: unknown): string | null {
   if (!err) return null;
+  const rejection = providerRejectionUserMessage(err);
+  if (rejection) return rejection;
   const c = classifyProviderError(err);
   const msg = String((err as { message?: unknown })?.message ?? err ?? '').toLowerCase();
   const status = statusOf(err);
@@ -170,4 +174,42 @@ export function providerFailureUserMessage(err: unknown): string | null {
     default:
       return null;
   }
+}
+
+// A request the provider refuses PERMANENTLY for this account/model: a model the
+// plan does not include, a model id that does not exist, a parameter value the
+// model rejects. Retrying cannot succeed, so the provider's own explanation is
+// the answer (issue #543: a ChatGPT-plan Codex user pressed "What to answer"
+// and saw "could you ask that once more?" while the backend was saying
+// "The '<model>' model is not supported when using Codex with a ChatGPT account").
+const PROVIDER_REJECTION_RE = /\bmodels?\b[^\n]{0,120}?\b(?:is not supported|not supported|is not available|not available|is not found|not found|does not exist|is not enabled|unsupported)\b|\bunsupported (?:value|parameter|model)\b|\bmodel_not_found\b|\binvalid[_ ]model\b/i;
+
+/** Fixed start of the rejection line, so downstream guards can recognise it
+ *  as a provider error (shown, never stored as session history). */
+export const PROVIDER_REJECTION_PREFIX = 'The AI provider rejected this request: ';
+
+const PROVIDER_REJECTION_DETAIL_MAX = 240;
+
+/**
+ * The user-facing line for a permanent provider rejection, or null. Auth and
+ * rate-limit failures keep their own lines (providerFailureUserMessage).
+ */
+export function providerRejectionUserMessage(err: unknown): string | null {
+  if (!err) return null;
+  const raw = String((err as { message?: unknown })?.message ?? err ?? '');
+  if (!PROVIDER_REJECTION_RE.test(raw)) return null;
+  const kind = classifyProviderError(err).kind;
+  if (kind === 'auth' || kind === 'rate_limit') return null;
+  let detail = String(redactSecretsOnly(raw.replace(/\s+/g, ' ').trim()));
+  if (detail.length > PROVIDER_REJECTION_DETAIL_MAX) {
+    detail = `${detail.slice(0, PROVIDER_REJECTION_DETAIL_MAX).trimEnd()}…`;
+  } else if (!/[.!?]$/.test(detail)) {
+    detail += '.';
+  }
+  return `${PROVIDER_REJECTION_PREFIX}${detail} Choose a different model in Settings → AI Providers.`;
+}
+
+/** Is `text` a line produced by providerRejectionUserMessage? */
+export function isProviderRejectionLine(text: string | null | undefined): boolean {
+  return (text || '').trim().startsWith(PROVIDER_REJECTION_PREFIX);
 }
