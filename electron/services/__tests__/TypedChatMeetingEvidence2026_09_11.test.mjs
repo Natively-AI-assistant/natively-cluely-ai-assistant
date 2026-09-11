@@ -60,7 +60,9 @@ describe('manual-chat V3 meeting evidence', () => {
   });
   test('the V3 block resolves meeting evidence through the shared resolver with the ring session id', () => {
     assert.match(v3, /resolveMeetingEvidence\(\{/);
-    assert.match(v3, /sessionId: v3ConversationSessionId\(appState, senderId\)/);
+    const call = between(v3, 'resolveMeetingEvidence({', '});');
+    assert.match(call, /sessionId: v3ConversationKey,/, 'the resolver must be scoped to the ring session id');
+    assert.match(v3, /const v3ConversationKey = v3ConversationSessionId\(appState, senderId\);/);
     assert.match(v3, /segments: .*getCurrentMeetingTranscript/);
     assert.doesNotMatch(v3, /wantsMeeting/, 'the availability flag that was always false must not survive');
   });
