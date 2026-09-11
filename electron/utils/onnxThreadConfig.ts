@@ -169,19 +169,40 @@ export type OnnxSlotPriority = 'normal' | 'high';
 interface OnnxSemaphore {
     inFlightNormal: number;
     inFlightHigh: number;
+    /** Weight-exceeds-cap holders currently running (they must run alone). */
+    exclusiveInFlight: number;
     waitersNormal: Array<() => void>;
     waitersHigh: Array<() => void>;
 }
 const _sem: OnnxSemaphore = (() => {
     const g = globalThis as unknown as Record<string, OnnxSemaphore | undefined>;
     if (!g.__nativelyOnnxSemaphoreV1__) {
-        g.__nativelyOnnxSemaphoreV1__ = { inFlightNormal: 0, inFlightHigh: 0, waitersNormal: [], waitersHigh: [] };
+        g.__nativelyOnnxSemaphoreV1__ = { inFlightNormal: 0, inFlightHigh: 0, exclusiveInFlight: 0, waitersNormal: [], waitersHigh: [] };
     }
     return g.__nativelyOnnxSemaphoreV1__;
 })();
 
 function readMaxConcurrent(): number {
     return readIntEnv('NATIVELY_ONNX_MAX_CONCURRENT_SESSIONS', 2);
+}
+
+/**
+ * Budget for latency-critical (`'high'`) sessions — the local STT channels —
+ * SEPARATE from the background cap above. Default 2: one worker per audio
+ * channel (mic + system).
+ *
+ * Why separate (2026-09-11, live-reproduced): the local embedding and
+ * reranker workers each hold a background slot for the app lifetime, which
+ * is the whole default cap. Counting STT against the same pool meant a
+ * per-channel local STT worker could NEVER be admitted while local RAG was
+ * on — the channel waited forever (now: fails after 20s). STT is the
+ * feature the user is looking at during a meeting; the RAG workers already
+ * run with the CPU arena disabled and every session passes the
+ * available-memory gate, so the worst case is cap + budget = 4 workers,
+ * only when the user explicitly enabled per-channel local models.
+ */
+function readHighPriorityBudget(): number {
+    return readIntEnv('NATIVELY_ONNX_HIGH_PRIORITY_SESSIONS', 2);
 }
 
 function readMinFreeGB(): number {
@@ -211,20 +232,27 @@ function readExclusiveTimeoutMs(): number {
 function canAcquireNow(priority: OnnxSlotPriority, weight: number): boolean {
     const cap = readMaxConcurrent();
     const current = _sem.inFlightNormal + _sem.inFlightHigh;
+    // An exclusive holder (weight > cap) runs alone: nobody else is admitted
+    // — from either pool — until it releases.
+    if ((_sem.exclusiveInFlight ?? 0) > 0) return false;
     // A request whose own weight exceeds the cap (Nemotron's 3 sessions
     // against the default cap of 2) can never satisfy "current + weight <=
     // cap" — that would deadlock forever. Treat it as exclusive: admit only
     // when nothing else is in flight, then let it run alone even though it
     // temporarily exceeds the nominal cap.
     if (weight > cap) {
-        if (current > 0) return false;
-    } else if (current + weight > cap) {
-        return false;
+        return current === 0;
     }
-    if (priority === 'high') return true;
-    // Normal priority: only acquire when there are no high-priority waiters
-    // queued (so Whisper can grab the next slot promptly).
-    return _sem.waitersHigh.length === 0;
+    if (priority === 'high') {
+        // Latency-critical STT channels draw on their OWN budget — see
+        // readHighPriorityBudget for why they must not queue behind the
+        // lifetime-held background slots.
+        return _sem.inFlightHigh + weight <= readHighPriorityBudget();
+    }
+    // Background consumers: their own cap. High-priority waiters no longer
+    // block them — the pools are disjoint, so a queued STT channel is waiting
+    // on ITS budget, not on this slot.
+    return _sem.inFlightNormal + weight <= cap;
 }
 
 function removeFromQueue(queue: Array<() => void>, resolver: () => void): void {
@@ -302,6 +330,7 @@ export async function acquireOnnxSlot(priority: OnnxSlotPriority = 'normal', wei
 
     if (priority === 'high') _sem.inFlightHigh += weight;
     else _sem.inFlightNormal += weight;
+    if (exclusive) _sem.exclusiveInFlight = (_sem.exclusiveInFlight ?? 0) + 1;
 
     let released = false;
     return () => {
@@ -309,6 +338,7 @@ export async function acquireOnnxSlot(priority: OnnxSlotPriority = 'normal', wei
         released = true;
         if (priority === 'high') _sem.inFlightHigh -= weight;
         else _sem.inFlightNormal -= weight;
+        if (exclusive) _sem.exclusiveInFlight = Math.max(0, (_sem.exclusiveInFlight ?? 0) - 1);
         // Wake EVERY waiter, not just one: a multi-unit release (weight > 1)
         // can free capacity for more than one queued weight-1 waiter, and a
         // single-wake design (correct when every release always freed
@@ -375,6 +405,71 @@ function readLinuxAvailableGB(): number | null {
     return (kb * 1024) / 1024 ** 3;
 }
 
+/** One-line picture of who holds the gate, for logs and actionable errors. */
+export function describeOnnxGate(): string {
+    const cap = readMaxConcurrent();
+    const budget = readHighPriorityBudget();
+    return `${_sem.inFlightNormal}/${cap} background ONNX sessions and ${_sem.inFlightHigh}/${budget} ` +
+        `high-priority (STT) sessions in use` +
+        `${(_sem.exclusiveInFlight ?? 0) > 0 ? ', an exclusive holder is running' : ''}; ` +
+        `${_sem.waitersHigh.length} high-priority + ${_sem.waitersNormal.length} normal-priority waiting`;
+}
+
+/**
+ * `acquireOnnxSlot` with a deadline. Rejects with an actionable message when
+ * no slot frees within `timeoutMs`; a slot that arrives after the deadline is
+ * released immediately so the abandoned waiter can never hold the gate.
+ *
+ * Why this exists (2026-09-11, live-reproduced): the local embedding and
+ * reranker workers each hold a slot for the app lifetime. With the default cap
+ * of 2 that is the whole gate, so a per-channel local STT worker's plain
+ * `acquireOnnxSlot('high')` waited FOREVER — no log, no error — and that
+ * channel transcribed nothing for the entire meeting (the interviewer channel
+ * never even logged "Cold-starting worker"). A bounded wait turns a silent
+ * dead channel into a visible STT failure the user can act on.
+ */
+export function acquireOnnxSlotWithin(
+    priority: OnnxSlotPriority,
+    weight: number,
+    timeoutMs: number,
+    label: string = 'onnx',
+): Promise<() => void> {
+    return new Promise((resolve, reject) => {
+        let settled = false;
+        const slowLog = setTimeout(() => {
+            if (!settled) console.warn(`[OnnxGate] ${label} has waited ${Math.min(3000, timeoutMs)}ms for an ONNX session — ${describeOnnxGate()}`);
+        }, Math.min(3000, timeoutMs));
+        (slowLog as any).unref?.();
+        const timer = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(slowLog);
+            reject(new Error(
+                `${label}: no ONNX session slot became free within ${timeoutMs}ms — ${describeOnnxGate()}. ` +
+                `Raise NATIVELY_ONNX_HIGH_PRIORITY_SESSIONS (STT channels) or NATIVELY_ONNX_MAX_CONCURRENT_SESSIONS ` +
+                `(background models), or use a cloud STT provider.`,
+            ));
+        }, timeoutMs);
+        (timer as any).unref?.();
+        acquireOnnxSlot(priority, weight).then(
+            (release) => {
+                if (settled) { release(); return; } // too late — never hold the gate from an abandoned wait
+                settled = true;
+                clearTimeout(timer);
+                clearTimeout(slowLog);
+                resolve(release);
+            },
+            (err) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timer);
+                clearTimeout(slowLog);
+                reject(err);
+            },
+        );
+    });
+}
+
 /**
  * Best-effort AVAILABLE (not merely free) system memory in GB. Falls back to
  * `os.freemem()` when the platform-specific probe is unavailable or throws.
@@ -437,6 +532,10 @@ export function getMinFreeGBForOnnxSession(): number {
 }
 
 /** Returns the current max-concurrent cap (live, env-aware). */
+export function getHighPriorityOnnxBudget(): number {
+    return readHighPriorityBudget();
+}
+
 export function getMaxConcurrentOnnxSessions(): number {
     return readMaxConcurrent();
 }
@@ -449,6 +548,7 @@ export function getMaxConcurrentOnnxSessions(): number {
 export function __resetOnnxGateForTests(): void {
     _sem.inFlightNormal = 0;
     _sem.inFlightHigh = 0;
+    _sem.exclusiveInFlight = 0;
     _sem.waitersNormal.length = 0;
     _sem.waitersHigh.length = 0;
 }

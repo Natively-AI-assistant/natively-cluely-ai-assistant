@@ -1,4 +1,5 @@
 // Ported logic
+use super::stop_signal::StopSignal;
 use crate::audio_config::RING_BUFFER_SAMPLES;
 use anyhow::Result;
 use ringbuf::{
@@ -6,11 +7,15 @@ use ringbuf::{
     HeapCons, HeapProd, HeapRb,
 };
 use std::collections::VecDeque;
+use std::rc::Rc;
 use std::sync::{mpsc, Arc, Condvar, Mutex};
 use std::thread;
 use std::time::Duration;
 use tracing::error;
-use wasapi::{get_default_device, DeviceCollection, Direction, SampleType, ShareMode, WaveFormat};
+use wasapi::{
+    get_default_device, DeviceCollection, Direction, DisconnectReason, EventCallbacks, SampleType,
+    ShareMode, WaveFormat,
+};
 
 struct WakerState {
     shutdown: bool,
@@ -20,12 +25,21 @@ pub struct SpeakerInput {
     device_id: Option<String>,
 }
 
+/// Consecutive `IAudioCaptureClient` read failures before the loop gives up
+/// and surfaces the stream as stopped. A single failure can be transient; a
+/// run of them is the signature of AUDCLNT_E_DEVICE_INVALIDATED (headset
+/// unplugged, driver reset, Windows switching the endpoint) — which until
+/// 2026-09-11 was logged and then `continue`d forever, so JS saw a quiet
+/// ring buffer indistinguishable from a silent meeting.
+const MAX_CONSECUTIVE_READ_FAILURES: u32 = 5;
+
 pub struct SpeakerStream {
     consumer: Option<HeapCons<f32>>,
     waker_state: Arc<Mutex<WakerState>>,
     capture_thread: Option<thread::JoinHandle<()>>,
     actual_sample_rate: u32,
     data_ready: Arc<(Mutex<bool>, Condvar)>,
+    stop_signal: Arc<StopSignal>,
 }
 
 impl SpeakerStream {
@@ -35,6 +49,16 @@ impl SpeakerStream {
 
     pub fn take_consumer(&mut self) -> Option<HeapCons<f32>> {
         self.consumer.take()
+    }
+
+    /// The reason the capture loop stopped on its own (device invalidated),
+    /// once. `None` while healthy.
+    pub fn take_stop_error(&self) -> Option<String> {
+        self.stop_signal.take()
+    }
+
+    pub fn backend_name(&self) -> &'static str {
+        "wasapi"
     }
 
     pub fn data_ready_signal(&self) -> Arc<(Mutex<bool>, Condvar)> {
@@ -133,10 +157,12 @@ impl SpeakerInput {
 
         let waker_state = Arc::new(Mutex::new(WakerState { shutdown: false }));
         let data_ready = Arc::new((Mutex::new(false), Condvar::new()));
+        let stop_signal = Arc::new(StopSignal::new());
         let (init_tx, init_rx) = mpsc::channel();
 
         let waker_clone = waker_state.clone();
         let data_ready_clone = data_ready.clone();
+        let stop_signal_clone = stop_signal.clone();
         let device_id = self.device_id;
 
         let capture_thread = thread::spawn(move || {
@@ -144,6 +170,7 @@ impl SpeakerInput {
                 producer,
                 waker_clone,
                 data_ready_clone,
+                stop_signal_clone,
                 init_tx,
                 device_id,
             ) {
@@ -180,6 +207,7 @@ impl SpeakerInput {
             capture_thread: Some(capture_thread),
             actual_sample_rate,
             data_ready,
+            stop_signal,
         })
     }
 
@@ -187,6 +215,7 @@ impl SpeakerInput {
         mut producer: HeapProd<f32>,
         waker_state: Arc<Mutex<WakerState>>,
         data_ready: Arc<(Mutex<bool>, Condvar)>,
+        stop_signal: Arc<StopSignal>,
         init_tx: mpsc::Sender<Result<u32>>,
         device_id: Option<String>,
     ) -> Result<()> {
@@ -241,13 +270,55 @@ impl SpeakerInput {
                 .start_stream()
                 .map_err(|e| anyhow::anyhow!("{}", e))?;
 
-            Ok((h_event, render_client, actual_rate, audio_client))
+            // Session-disconnect notification (IAudioSessionEvents::
+            // OnSessionDisconnected). This is the signal that fires when the
+            // endpoint is removed or the format changes REGARDLESS of buffer
+            // activity — an invalidated endpoint that simply stops pulsing
+            // its event never reaches the read-failure counter below, because
+            // the 3s wait timeout is also what silence looks like. Both the
+            // control and the callbacks must stay alive for the loop's
+            // lifetime (the registration holds only a Weak). Registration
+            // failure is non-fatal: the read-failure counter still applies.
+            let session_notification = (|| -> Result<(wasapi::AudioSessionControl, Rc<EventCallbacks>)> {
+                let control = audio_client
+                    .get_audiosessioncontrol()
+                    .map_err(|e| anyhow::anyhow!("{}", e))?;
+                let mut callbacks = EventCallbacks::new();
+                let signal = stop_signal.clone();
+                callbacks.set_disconnected_callback(move |reason: DisconnectReason| {
+                    let msg = format!("WASAPI audio session disconnected ({:?})", reason);
+                    eprintln!("[SystemAudio-WASAPI] {}", msg);
+                    signal.raise(msg);
+                });
+                let callbacks = Rc::new(callbacks);
+                control
+                    .register_session_notification(Rc::downgrade(&callbacks))
+                    .map_err(|e| anyhow::anyhow!("{}", e))?;
+                Ok((control, callbacks))
+            })();
+            let session_notification = match session_notification {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    error!("[SystemAudio-WASAPI] session notification unavailable ({}); relying on read failures only", e);
+                    None
+                }
+            };
+
+            Ok((h_event, render_client, actual_rate, audio_client, session_notification))
         })();
 
         match init_result {
-            Ok((h_event, render_client, sample_rate, audio_client)) => {
+            Ok((h_event, render_client, sample_rate, audio_client, session_notification)) => {
                 let _ = init_tx.send(Ok(sample_rate));
+                let mut consecutive_read_failures: u32 = 0;
                 loop {
+                    // The session-disconnect callback (above) raised the signal
+                    // from the COM notification thread; leave promptly so the
+                    // DSP loop surfaces it instead of waiting on a dead event.
+                    if stop_signal.is_raised() {
+                        let _ = audio_client.stop_stream();
+                        break;
+                    }
                     {
                         let state = waker_state.lock().unwrap();
                         if state.shutdown {
@@ -269,8 +340,20 @@ impl SpeakerInput {
                         render_client.read_from_device_to_deque(bytes_per_frame, &mut temp_queue)
                     {
                         error!("Failed to read audio data: {}", e);
+                        consecutive_read_failures += 1;
+                        if consecutive_read_failures >= MAX_CONSECUTIVE_READ_FAILURES {
+                            let reason = format!(
+                                "WASAPI loopback read failed {} times in a row (device invalidated or endpoint changed): {}",
+                                consecutive_read_failures, e
+                            );
+                            eprintln!("[SystemAudio-WASAPI] {}", reason);
+                            stop_signal.raise(reason);
+                            let _ = audio_client.stop_stream();
+                            break;
+                        }
                         continue;
                     }
+                    consecutive_read_failures = 0;
 
                     if temp_queue.is_empty() {
                         continue;
@@ -298,6 +381,8 @@ impl SpeakerInput {
                         cvar.notify_all();
                     }
                 }
+                // Keep the registration alive for the whole loop; dropped here.
+                drop(session_notification);
             }
             Err(e) => {
                 let _ = init_tx.send(Err(e));

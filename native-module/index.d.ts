@@ -59,6 +59,8 @@ export declare class StealthKeyboardTap {
 
 export declare class SystemAudioCapture {
   constructor(deviceId?: string | undefined | null)
+  /** "sck" | "coreaudio" | "wasapi", or "" until the background init finished. */
+  getActiveBackend(): string
   /**
    * EMITTED sample rate — the rate of the PCM handed to STT (16000 when the
    * resampler is active). This is what callers must declare to STT providers.
@@ -194,6 +196,14 @@ export interface OverlayBoundsInput {
   width: number
   height: number
 }
+
+/**
+ * macOS: whether ScreenCaptureKit can currently enumerate a display (false
+ * while every display is asleep — the state in which an SCK stream stops
+ * with -3815 and a rebuild would fail "No displays found"). Always true on
+ * other platforms, whose backends are not display-bound.
+ */
+export declare function screenCaptureDisplaysAvailable(): boolean
 
 /**
  * One joint-state transition from the dual-channel tracker

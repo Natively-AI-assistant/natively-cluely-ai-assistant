@@ -4,7 +4,7 @@
 extern crate napi_derive;
 
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
@@ -195,6 +195,10 @@ pub struct SystemAudioCapture {
     /// HFP/Bluetooth-degradation detection — distinct from the emitted rate above.
     native_sample_rate: Arc<AtomicU32>,
     device_id: Option<String>,
+    /// Which backend the background thread actually ended up on ("sck",
+    /// "coreaudio", "wasapi"); empty until init completes. main.ts compares
+    /// it with the requested backend to notice a silent fallback.
+    active_backend: Arc<Mutex<String>>,
 }
 
 #[napi]
@@ -212,7 +216,17 @@ impl SystemAudioCapture {
             // background thread reports the real hardware rate.
             native_sample_rate: Arc::new(AtomicU32::new(48000)),
             device_id,
+            active_backend: Arc::new(Mutex::new(String::new())),
         })
+    }
+
+    /// "sck" | "coreaudio" | "wasapi", or "" until the background init finished.
+    #[napi]
+    pub fn get_active_backend(&self) -> String {
+        match self.active_backend.lock() {
+            Ok(s) => s.clone(),
+            Err(poisoned) => poisoned.into_inner().clone(),
+        }
     }
 
     /// EMITTED sample rate — the rate of the PCM handed to STT (16000 when the
@@ -251,6 +265,7 @@ impl SystemAudioCapture {
         let stop_signal = self.stop_signal.clone();
         let sample_rate_shared = self.sample_rate.clone();
         let native_rate_shared = self.native_sample_rate.clone();
+        let active_backend_shared = self.active_backend.clone();
         let device_id = self.device_id.clone();
 
         // ALL init + DSP runs in background thread — start() returns INSTANTLY
@@ -295,6 +310,11 @@ impl SystemAudioCapture {
                     return;
                 }
             };
+            if let Ok(mut b) = active_backend_shared.lock() {
+                *b = stream.backend_name().to_string();
+            }
+            println!("[SystemAudioCapture] Active backend: {}", stream.backend_name());
+
             let mut consumer = match stream.take_consumer() {
                 Some(c) => c,
                 None => {
@@ -355,6 +375,26 @@ impl SystemAudioCapture {
 
             loop {
                 if stop_signal.load(Ordering::Relaxed) {
+                    break;
+                }
+
+                // The platform stopped the stream underneath us (SCK delegate on
+                // macOS, WASAPI read failures on Windows; the CoreAudio tap has
+                // no stop callback and relies on main.ts's route watcher). A
+                // quiet ring buffer is exactly what a silent meeting looks like,
+                // so for those backends this is the only signal that tells the
+                // two apart. Flush what we have, hand
+                // the reason to JS as a capture error (the SystemAudioCapture
+                // wrapper emits 'error' → main.ts rebuilds the capture), and
+                // end this thread.
+                if let Some(reason) = stream.take_stop_error() {
+                    let msg = format!("[SystemAudioCapture] Capture stream stopped by the system: {}", reason);
+                    eprintln!("{}", msg);
+                    emitter.flush(&tsfn);
+                    tsfn.call(
+                        Err(napi::Error::from_reason(msg)),
+                        ThreadsafeFunctionCallMode::NonBlocking,
+                    );
                     break;
                 }
 
@@ -761,6 +801,22 @@ pub fn get_output_devices() -> Vec<AudioDeviceInfo> {
             eprintln!("[get_output_devices] Error: {}", e);
             Vec::new()
         }
+    }
+}
+
+/// macOS: whether ScreenCaptureKit can currently enumerate a display (false
+/// while every display is asleep — the state in which an SCK stream stops
+/// with -3815 and a rebuild would fail "No displays found"). Always true on
+/// other platforms, whose backends are not display-bound.
+#[napi]
+pub fn screen_capture_displays_available() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        speaker::active_display_count() > 0
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        true
     }
 }
 

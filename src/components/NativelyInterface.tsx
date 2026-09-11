@@ -243,6 +243,7 @@ import {
 import { shouldDedupeManualSubmit } from '../lib/overlaySubmitDedup.mjs';
 import { decideScrollInterrupt } from '../lib/scrollInterruptDecision.mjs';
 import { mergeTranscriptChunks } from '../lib/transcriptMerge.mjs';
+import { createTranscriptTailWaiter } from '../lib/answerTailWait.mjs';
 import {
   applyWhatToAnswerNullFeedbackMessages,
   finalizeStreamingByIntentMessages,
@@ -1254,6 +1255,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const [conversationContext, setConversationContext] = useState<string>('');
   const [isManualRecording, setIsManualRecording] = useState(false);
   const isRecordingRef = useRef(false); // Ref to track recording state (avoids stale closure)
+  // Answer/Stop tail collection — see answerTailWait.mjs. The recording ref
+  // stays open after the Stop press until the STT final lands (or a bounded
+  // window elapses); answerStopInFlightRef blocks a new Start meanwhile so it
+  // cannot reset the buffers mid-snapshot.
+  const answerTailWaiterRef = useRef<ReturnType<typeof createTranscriptTailWaiter> | null>(null);
+  if (answerTailWaiterRef.current === null) answerTailWaiterRef.current = createTranscriptTailWaiter();
+  const answerStopInFlightRef = useRef(false);
   const [manualTranscript, setManualTranscript] = useState('');
   const manualTranscriptRef = useRef<string>('');
   const [showTranscript, setShowTranscript] = useState(() => {
@@ -4349,6 +4357,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       setAttachedContext([]);
       setManualTranscript('');
       setVoiceInput('');
+      // The refs are the dictation source of truth (the final-transcript
+      // merge reads voiceInputRef, not React state); a meeting ended mid-
+      // recording must not prepend its words to the next meeting's question.
+      manualTranscriptRef.current = '';
+      voiceInputRef.current = '';
+      isRecordingRef.current = false;
+      answerStopInFlightRef.current = false;
+      setIsManualRecording(false);
       setIsProcessing(false);
       if (rollingPartialDebounceRef.current !== null) {
         clearTimeout(rollingPartialDebounceRef.current);
@@ -6083,13 +6099,21 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
             // Accumulate final transcripts, collapsing STT overlap/re-transcription
             // races (RC5, docs/context-rebuild/03_LIVE_REPRO_FINDINGS.md item 4)
             // instead of blindly concatenating.
-            setVoiceInput((prev) => {
-              const updated = mergeTranscriptChunks(prev, transcript.text);
-              voiceInputRef.current = updated;
-              return updated;
-            });
+            //
+            // The ref is the source of truth and is written SYNCHRONOUSLY, with
+            // the state set from the same value. It used to be written inside
+            // the setVoiceInput updater, which React runs lazily on the next
+            // render — so a Stop press woken by notifyFinal() below snapshotted
+            // the ref before React had applied the merge and still saw ''
+            // (live-reproduced 2026-09-11 with an injected final: the waiter
+            // resolved 'final' with voice "").
+            const updated = mergeTranscriptChunks(voiceInputRef.current, transcript.text);
+            voiceInputRef.current = updated;
+            setVoiceInput(updated);
             setManualTranscript(''); // Clear partial preview
             manualTranscriptRef.current = '';
+            // A Stop press may be waiting for exactly this chunk.
+            answerTailWaiterRef.current!.notifyFinal();
           } else {
             // Show live partial transcript
             setManualTranscript(transcript.text);
@@ -7502,23 +7526,47 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     if (isManualRecording) {
       if (!tryBeginOverlayAction('answer_now')) return;
       try {
-        // Stop recording - send accumulated voice input to Gemini
-        isRecordingRef.current = false;
-        setIsManualRecording(false);
-        setManualTranscript('');
+        // Stop recording - send accumulated voice input to Gemini.
+        //
+        // The button flips to "Answer" immediately, but the recording gate
+        // (isRecordingRef) stays OPEN until the STT tail has landed: the
+        // transcript for the last second or two of speech arrives AFTER the
+        // Stop press (cloud finals 0.5–2s later, local models 1.5–7s), and the
+        // onNativeAudioTranscript handler drops every user chunk while the gate
+        // is closed. Closing it first — as this code did until 2026-09-11 —
+        // threw away exactly the chunk being waited for, so a short question
+        // came back as "No speech detected" (live-reproduced; see
+        // src/lib/__tests__/AnswerNowTranscriptTail2026_09_11.test.mjs).
+        // The button keeps reading "Stop" until the tail has landed: the state
+        // is truthful (the gate IS still open) and a second press in that window
+        // is absorbed by tryBeginOverlayAction instead of silently ignored.
+        answerStopInFlightRef.current = true;
 
-        // Wait for the final STT flush acknowledgement before snapshotting refs.
-        // Older preloads may never acknowledge, so cap the wait and allow one
-        // short renderer turn for the final transcript IPC to land.
+        // Ask main to flush the provider (a no-op for providers that finalize
+        // server-side). Local models report whether a final is now in flight.
+        // Older preloads may never acknowledge, so cap the wait.
+        let providerReportsPending = false;
         try {
-          await Promise.race([
+          const finalizeResult: unknown = await Promise.race([
             window.electronAPI.finalizeMicSTT(),
             new Promise<void>((resolve) => setTimeout(resolve, 750)),
           ]);
-          await new Promise<void>((resolve) => setTimeout(resolve, 50));
+          providerReportsPending = typeof finalizeResult === 'object' && finalizeResult !== null
+            && (finalizeResult as { pending?: boolean }).pending === true;
         } catch (err) {
           console.error('[NativelyInterface] Failed to finalize mic STT:', err);
         }
+
+        // Event-driven: resolves the moment a FINAL user chunk is merged, and
+        // is bounded so an empty recording still returns promptly.
+        await answerTailWaiterRef.current!.wait({
+          hasCapturedFinal: voiceInputRef.current.trim().length > 0,
+          hasPendingInterim: manualTranscriptRef.current.trim().length > 0 || providerReportsPending,
+        });
+        isRecordingRef.current = false;
+        answerStopInFlightRef.current = false;
+        setIsManualRecording(false);
+        setManualTranscript('');
 
         const currentAttachments = attachedContext;
         setAttachedContext([]);
@@ -7708,10 +7756,14 @@ Provide only the answer, nothing else.`;
           });
         }
       } finally {
+        answerStopInFlightRef.current = false;
         endOverlayAction('answer_now');
       }
     } else {
-      // Start recording - reset voice input state
+      // Start recording - reset voice input state.
+      // A previous Stop may still be collecting its transcript tail; starting
+      // now would wipe voiceInput while that snapshot is being taken.
+      if (answerStopInFlightRef.current) return;
       setVoiceInput('');
       voiceInputRef.current = '';
       setManualTranscript('');
