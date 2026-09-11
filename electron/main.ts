@@ -2058,14 +2058,17 @@ export class AppState {
         llmHelper.setGroqFastTextMode(true);
         console.log('[AppState] Fast mode restored from settings');
       }
+      // Unset fields are filled by CodexCliService.normalizeConfig from
+      // DEFAULT_CODEX_CLI_CONFIG. No literals here: a second copy of the
+      // defaults is how a ChatGPT-rejected fast model shipped (issue #558).
       llmHelper.setCodexCliConfig({
         enabled: !!settingsManager.get('codexCliEnabled'),
-        path: settingsManager.get('codexCliPath') || 'codex',
-        model: settingsManager.get('codexCliModel') || 'gpt-5.4',
-        fastModel: settingsManager.get('codexCliFastModel') || 'gpt-5.3-codex-spark',
-        timeoutMs: settingsManager.get('codexCliTimeoutMs') || 60_000,
-        sandboxMode: settingsManager.get('codexCliSandboxMode') || 'read-only',
-        serviceTier: settingsManager.get('codexCliServiceTier') || 'default',
+        path: settingsManager.get('codexCliPath'),
+        model: settingsManager.get('codexCliModel'),
+        fastModel: settingsManager.get('codexCliFastModel'),
+        timeoutMs: settingsManager.get('codexCliTimeoutMs'),
+        sandboxMode: settingsManager.get('codexCliSandboxMode'),
+        serviceTier: settingsManager.get('codexCliServiceTier'),
         modelReasoningEffort: settingsManager.get('codexCliModelReasoningEffort'),
       });
     }

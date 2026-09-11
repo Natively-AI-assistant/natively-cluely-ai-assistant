@@ -12,7 +12,7 @@ import * as path from 'path';
 import { AudioDevices } from './audio/AudioDevices';
 import { DatabaseManager } from './db/DatabaseManager'; // Import Database Manager
 import { AppState } from './main';
-import { CodexCliService, isCodexAuthError } from './services/CodexCliService';
+import { CodexCliService, getCodexAuthStatus, isCodexAuthError } from './services/CodexCliService';
 import { describeServiceAccountRejection } from './services/googleServiceAccount';
 import { PhoneMirrorService } from './services/PhoneMirrorService';
 import { sanitizeContextEnvelope } from './services/browser-context/sanitize';
@@ -317,8 +317,8 @@ export function initializeIpcHandlers(appState: AppState): void {
       const codexConfig = llmHelper.getCodexCliConfig();
       let codexSignedIn = false;
       try {
-        const { CodexOAuthService } = require('./services/CodexOAuthService');
-        codexSignedIn = CodexOAuthService.getInstance().getStatus().signedIn === true;
+        // Natively's own ChatGPT sign-in OR the Codex CLI's `codex login`.
+        codexSignedIn = getCodexAuthStatus().signedIn;
       } catch { /* optional */ }
 
       const has = (value?: string) => !!(value && value.trim().length > 0);
@@ -1252,6 +1252,15 @@ export function initializeIpcHandlers(appState: AppState): void {
         }
         myController = new AbortController();
         _chatStreamsBySender.set(senderId, { streamId: myStreamId, controller: myController });
+
+        // Issue #558: Codex is the selected model but there is no usable
+        // ChatGPT sign-in. Say so, instead of answering from another provider
+        // while the model chip still says Codex.
+        const codexAuthError = llmHelper.getCodexSelectionAuthError();
+        if (codexAuthError) {
+          event.sender.send('gemini-stream-error', codexAuthError, { streamId: myStreamId });
+          return null;
+        }
 
         // Skill invocation parsed EARLY (PR #429 Bug 003). It used to live ~35k
         // characters below, after the Context Intelligence V3 short-circuit had
@@ -11819,6 +11828,14 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  // The installed Codex CLI's model catalogue, for the model pickers. Reads the
+  // CLI's models_cache.json only — never its credentials. 'unavailable' (no CLI)
+  // tells the renderer to use its built-in presets.
+  safeHandle('codex-cli:models', async () => {
+    const { readCodexModelCatalog } = require('./services/CodexModelCatalog') as typeof import('./services/CodexModelCatalog');
+    return readCodexModelCatalog();
+  });
+
   safeHandle('set-codex-cli-config', (_, config: any) => {
     try {
       const normalized = CodexCliService.normalizeConfig(config || {});
@@ -11854,8 +11871,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       // working without an error state.
       const current = appState.processingHelper.getLLMHelper().getCodexCliConfig();
       const normalized = CodexCliService.normalizeConfig({ ...current, ...(config || {}) });
-      const { CodexOAuthService } = require('./services/CodexOAuthService');
-      const status = CodexOAuthService.getInstance().getStatus();
+      const status = getCodexAuthStatus();
       return {
         success: true,
         resolvedPath: normalized.path, // legacy field; ignored
@@ -11879,11 +11895,13 @@ export function initializeIpcHandlers(appState: AppState): void {
       const current = appState.processingHelper.getLLMHelper().getCodexCliConfig();
       const normalized = CodexCliService.normalizeConfig({ ...current, ...(config || {}) });
       if (action === 'status') {
-        const status = oauth.getStatus();
+        const status = getCodexAuthStatus();
         return {
           success: status.signedIn,
           action,
-          output: status.signedIn ? `Logged in with ChatGPT account (${status.email || 'unknown'})` : 'Not signed in',
+          output: status.signedIn
+            ? `Logged in with ChatGPT account (${status.email || 'unknown'})${status.source === 'codex-cli' ? ' via your Codex CLI login' : ''}`
+            : 'Not signed in',
           config: normalized,
         };
       }
@@ -11909,13 +11927,15 @@ export function initializeIpcHandlers(appState: AppState): void {
         }
       }
       if (action === 'doctor') {
-        const status = oauth.getStatus();
+        const status = getCodexAuthStatus();
         return {
           success: true,
           action,
           output: status.signedIn
-            ? `Codex doctor OK — signed in as ${status.email || 'unknown'}`
-            : 'Codex doctor OK — not signed in (run `codex:start-login`)',
+            ? `Codex doctor OK — signed in as ${status.email || 'unknown'}${status.source === 'codex-cli' ? ' (Codex CLI login)' : ''}`
+            : status.cliLogin === 'expired'
+              ? 'Codex doctor — your Codex CLI login has expired; run any `codex` command to refresh it, or sign in from Settings → AI Providers → OpenAI Codex'
+              : 'Codex doctor OK — not signed in (Settings → AI Providers → OpenAI Codex, or `codex login` in a terminal)',
           config: normalized,
         };
       }
@@ -11982,7 +12002,9 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('codex:login-status', () => {
     try {
-      return { success: true, ...codexOAuth.getStatus() };
+      // Unified status — Natively's own sign-in or the Codex CLI's login.
+      // getCodexAuthStatus() never carries a token.
+      return { success: true, ...getCodexAuthStatus() };
     } catch (error: any) {
       return { success: false, error: error.message };
     }
