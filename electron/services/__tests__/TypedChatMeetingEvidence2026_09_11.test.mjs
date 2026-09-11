@@ -38,6 +38,39 @@ describe('what-to-answer meeting evidence', () => {
     assert.match(ctx, /scopeMeetingId = meeting\.scopeMeetingId/);
     assert.match(ctx, /meetingId: scopeMeetingId \?\? meetingId/);
   });
+  test('v3ModeRetrievalContext also exposes inLiveMeeting (task 7b)', () => {
+    const ctx = between(engine, 'private v3ModeRetrievalContext(', 'private async buildV3ForTranscriptSurface(');
+    assert.match(ctx, /inLiveMeeting = meeting\.inLiveMeeting/);
+    assert.match(ctx, /inLiveMeeting,\s*\n\s*port,/, 'inLiveMeeting must be on the returned context object');
+  });
+  // EVERY buildV3Prompt call built from v3ModeRetrievalContext()/_ctx passes
+  // inLiveMeeting through — not just one surface. There are three such call
+  // sites in this file (assist/clarify/brainstorm/code-hint via
+  // buildV3ForTranscriptSurface, the WTA surface in
+  // runWhatShouldISayInner, and the engine's own manual-chat surface in
+  // runManualAnswerInner) and the brief's quoted scope shape
+  // (`meetingId: ctx.meetingId ?? undefined`) does not discriminate between
+  // two of them, so all three are pinned rather than guessing which one was
+  // meant.
+  test('the transcript-surface builder (assist/clarify/brainstorm/code-hint) passes inLiveMeeting through (task 7b)', () => {
+    const builder = between(engine, 'private async buildV3ForTranscriptSurface(', 'async runFollowUp(');
+    assert.match(builder, /inLiveMeeting: ctx\.inLiveMeeting,/);
+  });
+  test('the WTA surface (runWhatShouldISayInner) passes inLiveMeeting through (task 7b)', () => {
+    const marker = 'meetingId: _ctx.meetingId ?? meetingMarker ?? undefined,';
+    const idx = engine.indexOf(marker);
+    assert.ok(idx >= 0, 'WTA scope construction must exist');
+    assert.match(engine.slice(Math.max(0, idx - 400), idx), /inLiveMeeting: _ctx\.inLiveMeeting,/);
+  });
+  test("the engine's own manual-chat surface (runManualAnswerInner) passes inLiveMeeting through (task 7b)", () => {
+    // This call's scope comment names itself explicitly ("like every other
+    // surface"), making it a unique, stable anchor distinct from the WTA
+    // scope above.
+    const marker = 'THE resolver, like every other surface.';
+    const idx = engine.indexOf(marker);
+    assert.ok(idx >= 0, 'the manual-chat scope comment must exist');
+    assert.match(engine.slice(Math.max(0, idx - 1000), idx), /inLiveMeeting: _ctx\.inLiveMeeting,/);
+  });
   test('IntelligenceManager exposes the renamed provider, and dropped the dead getMeetingMetadata passthrough', () => {
     const im = read('electron/IntelligenceManager.ts');
     // I3 (final review pass on #552): nothing called this passthrough — WTA
@@ -73,6 +106,10 @@ describe('manual-chat V3 meeting evidence', () => {
     const scope = between(ipc, 'const composed = await buildV3Prompt({', 'retrieval: port,');
     assert.match(scope, /v3MeetingEvidence\.scopeMeetingId \? \{ meetingId: v3MeetingEvidence\.scopeMeetingId \} : \{\}/);
   });
+  test('the turn tells the classifier it is inside a live meeting (task 7b)', () => {
+    const scope = between(ipc, 'const composed = await buildV3Prompt({', 'retrieval: port,');
+    assert.match(scope, /inLiveMeeting: v3MeetingEvidence\.inLiveMeeting,/);
+  });
 });
 
 describe('rag:query-live records its turn', () => {
@@ -93,6 +130,16 @@ describe('rag:query-live records its turn', () => {
     assert.match(helper, /addAssistantMessage\?\.\(ragLiveAnswer, undefined, 'manual_chat'\)/);
     assert.match(helper, /_manualConversationMemory\.record\(\{/);
     assert.match(helper, /logUsage\?\.\('rag_live', query, ragLiveAnswer\)/);
+  });
+  test('the recorded turn is ANCHORED — it moves the follow-up anchor (task 7b)', () => {
+    // This turn completed synchronously and is certainly the newest, unlike
+    // the deferred what-to-answer writer — see recordAnswerSummary's `opts`
+    // docblock for why only this call site may anchor. Sliced from the call
+    // site itself (not `between(..., ');')`) because the call's own comments
+    // contain "orchestrate();", which would end the slice early.
+    const idx = helper.indexOf('recordAnswerSummary(');
+    assert.ok(idx >= 0, 'recordAnswerSummary call must exist in the helper');
+    assert.match(helper.slice(idx, idx + 1200), /\{\s*anchor:\s*true\s*\}/);
   });
   test('a truncated stream (RAGManager coda) records the user turn but not the answer', () => {
     assert.match(helper, /ragLiveTruncated/);

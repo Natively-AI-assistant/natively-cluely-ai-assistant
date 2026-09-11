@@ -44,32 +44,35 @@ const decision = (q, scope) => decide({
 });
 
 describe('resolveMeetingEvidence', () => {
-  test('no MEETING_TRANSCRIPT in the policy → no ports, no scope id', () => {
+  test('no MEETING_TRANSCRIPT in the policy → no ports, no scope id, not in a live meeting', () => {
     const r = resolveMeetingEvidence(input({ rag: rag(jitRetriever()), allowedSourceTypes: ['REFERENCE_FILE'] }));
-    assert.deepEqual(r, { ports: [], scopeMeetingId: null });
+    assert.deepEqual(r, { ports: [], scopeMeetingId: null, inLiveMeeting: false });
   });
 
-  test('no live chunks → only the BM25 live-transcript port, scope id null', () => {
+  test('no live chunks → only the BM25 live-transcript port, scope id null, but still in a live meeting (segments only)', () => {
     const r = resolveMeetingEvidence(input({ rag: rag(jitRetriever(), null) }));
     assert.equal(r.ports.length, 1);
     assert.equal(r.scopeMeetingId, null);
+    assert.equal(r.inLiveMeeting, true, 'a built live-transcript port is still live-meeting evidence');
   });
 
-  test('no RAG manager at all → still the live-transcript port', () => {
+  test('no RAG manager at all → still the live-transcript port, still in a live meeting', () => {
     const r = resolveMeetingEvidence(input({ rag: null }));
     assert.equal(r.ports.length, 1);
+    assert.equal(r.inLiveMeeting, true);
   });
 
-  test('nothing spoken and no chunks → no ports', () => {
+  test('nothing spoken and no chunks → no ports, not in a live meeting', () => {
     const r = resolveMeetingEvidence(input({ segments: [] }));
-    assert.deepEqual(r, { ports: [], scopeMeetingId: null });
+    assert.deepEqual(r, { ports: [], scopeMeetingId: null, inLiveMeeting: false });
   });
 
-  test('live chunks → JIT port scoped to the live id PLUS the live-transcript port; scope id is the live id', async () => {
+  test('live chunks → JIT port scoped to the live id PLUS the live-transcript port; scope id is the live id; in a live meeting', async () => {
     const calls = [];
     const r = resolveMeetingEvidence(input({ rag: rag(jitRetriever(calls)) }));
     assert.equal(r.ports.length, 2);
     assert.equal(r.scopeMeetingId, LIVE_ID);
+    assert.equal(r.inLiveMeeting, true);
     await r.ports[0].retrieve({ decision: decision('what happened with kafka', { userId: 'local', sessionId: 'sess-1', meetingId: LIVE_ID }) });
     assert.equal(calls.length, 1);
     assert.equal(calls[0].meetingId, LIVE_ID, 'the vector query must be scoped to the live index id');

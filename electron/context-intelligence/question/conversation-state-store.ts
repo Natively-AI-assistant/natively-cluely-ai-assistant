@@ -132,6 +132,21 @@ export function recordAnswerSummary(
    *  question-less turn, and seeding one with '' would create a permanently
    *  unappendable state rather than fixing anything. */
   question?: string,
+  opts?: {
+    /**
+     * True when this write is a turn that completed SYNCHRONOUSLY and is
+     * certainly the newest — the live RAG turn (task 7b, issue #552,
+     * live-verified). An anchored write moves `previousQuestion` too, so the
+     * next follow-up ("expand on that") resolves against THIS turn instead
+     * of whichever typed question happened to advance the state last.
+     *
+     * The deferred what-to-answer writer (IntelligenceEngine ~1491) must
+     * NEVER anchor: it awaits a transcription and can land after the NEXT
+     * turn has already advanced the state, so treating it as "certainly
+     * newest" would move the anchor BACKWARDS onto a stale question.
+     */
+    anchor?: boolean;
+  },
 ): void {
   const s = store();
   let cur = s.get(sessionId);
@@ -164,6 +179,15 @@ export function recordAnswerSummary(
     // turn N-2. A turn whose stream was truncated never reaches this call, so
     // it correctly leaves no half-turn behind.
     turns: appendTurn(cur.turns ?? [], turnQuestion, text, screenContext),
+    // An ANCHORED write also moves the follow-up anchor (task 7b, issue #552,
+    // live-verified): a voice turn answered and recorded via the live RAG
+    // path, but the next TYPED "expand on that" resolved against whichever
+    // typed question had last gone through orchestrate() — because only
+    // advance() ever set `previousQuestion`, and this call never reached it.
+    // Only a caller passing `{ anchor: true }` may do this — see the
+    // parameter's docblock for why the deferred what-to-answer writer must
+    // not.
+    ...(opts?.anchor && turnQuestion ? { previousQuestion: turnQuestion } : {}),
   });
 }
 

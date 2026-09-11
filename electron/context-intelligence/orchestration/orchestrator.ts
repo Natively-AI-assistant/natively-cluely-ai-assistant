@@ -60,6 +60,10 @@ export interface AnswerRequest {
   hasAttachedDocuments?: boolean;
   /** Attached file names — filename-role routing (glossary/formula). */
   attachedFileNames?: readonly string[];
+  /** The turn is inside a live meeting with transcript evidence available
+   *  (issue #552, task 7b) — see ClassificationInput.inLiveMeeting. Passed
+   *  straight through to the classifier; never widens `policy` itself. */
+  inLiveMeeting?: boolean;
   /** The screen-understanding description for this turn, when a screenshot
    *  was attached. Lends its terms to the retrieval query when the spoken
    *  question only points at the screen — see screenEnrichedQuery. */
@@ -205,6 +209,7 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
     hasScreenContext: req.hasScreenContext,
     hasAttachedDocuments: req.hasAttachedDocuments,
     attachedFileNames: req.attachedFileNames,
+    inLiveMeeting: Boolean(req.inLiveMeeting),
   });
 
   const optional = policy.allowedSourceTypes.filter((s) => !cls.requiredSourceTypes.includes(s));

@@ -53,6 +53,16 @@ export interface ClassificationInput {
    * formula lookup. Names only, never content.
    */
   attachedFileNames?: readonly string[];
+  /**
+   * The turn is happening inside a live meeting with transcript evidence
+   * available (issue #552). True when resolveMeetingEvidence() actually built
+   * at least one meeting port for this turn — never merely "the mode allows
+   * MEETING_TRANSCRIPT". Lets an unclassified factual question in a
+   * document-primary mode (General) claim the transcript as an ALTERNATIVE
+   * to its primary source, the way the deleted typed-chat RAG pre-flight
+   * used to.
+   */
+  inLiveMeeting?: boolean;
 }
 
 export interface Classification {
@@ -448,7 +458,15 @@ const MEETING_EVENT_RE = /\b(we (decided|agreed|discussed|assigned|concluded)|di
 // distinction is per-clause and worth reading: that pattern is a list of things
 // that ARE meeting events, this one is a list of things that only sometimes are.
 const MEETING_EVENT_NOUN_RE = /\b(?:(?:daily|weekly|nightly|morning|afternoon|team|our|sprint|scrum|monday|tuesday|wednesday|thursday|friday)\s+(?:\S+\s+)?stand-?ups?|stand-?ups?\s+(?:meetings?|calls?|notes?|minutes?|recaps?)|(?:in|at|during|after|before|from)\s+(?:the|our|this|that|last|next|(?:today|yesterday|tomorrow)['’]?s)\s+(?:\S+\s+)?stand-?ups?|sync-?ups?|syncs?\s+(?:meetings?|calls?|notes?|minutes?|recaps?))\b/;
-const MEETING_ATTRIBUTION_RE = /\b(who owns|owns the|owner\b|who (agreed|committed|said|is responsible)|assigned to|was (decided|agreed|assigned))\b/;
+// Named-speaker attribution ADDED (task 7b, issue #552, live-verified miss):
+// "what did jonas say about the elasticsearch window" matched none of the
+// alternatives above — none of them recognise "what did <name> say" — so a
+// typed question with the right answer sitting in an admitted transcript
+// chunk was classified DOCUMENT_FACT only and planned REFERENCE_FILE alone.
+// Each new alternative excludes a determiner/pronoun subject right after the
+// verb so a DOCUMENT question ("what did the brief say about scope") keeps
+// its document routing instead of being misread as meeting attribution.
+const MEETING_ATTRIBUTION_RE = /\b(who owns|owns the|owner\b|who (agreed|committed|said|is responsible)|assigned to|was (decided|agreed|assigned)|what did (?!the |this |that |our |my |your |it )\S+ (say|mention|suggest|propose|ask|recommend|talk about)|what was (?!the |this |that |our |my |your |it )\S+ (saying|talking about))\b/;
 // DECISION-STATUS — "is it decided whether…" asks whether a decision EXISTS.
 // The brief can state it (pre-made decisions, open questions) and the
 // transcript can contain it, so both sides are claimed.
@@ -1334,6 +1352,25 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
       if (inferred === 'MEETING_STATEMENT'
           && input.policy.allowedSourceTypes.includes('REFERENCE_FILE')) {
         claims.add('DOCUMENT_FACT'); types.add('DOCUMENT_FACT');
+      }
+      // Mirror of Defect A for a LIVE MEETING (task 7b, issue #552,
+      // live-verified): the rule above widens a transcript-PRIMARY mode to
+      // also claim the reference side. General is the opposite shape — its
+      // primary source is REFERENCE_FILE — and a live run showed the exact
+      // failure Defect A was written for, just on the other source: "what did
+      // jonas say about the elasticsearch window" inferred DOCUMENT_FACT
+      // only, both meeting ports admitted the right chunk, and the answer
+      // said nothing was said because MEETING_TRANSCRIPT was never planned.
+      // `inLiveMeeting` is true only when resolveMeetingEvidence() actually
+      // built a port for this turn — not merely "the mode allows it" — so a
+      // meeting-authorized mode with nothing spoken yet still gets its
+      // ordinary primary-source routing. The deleted typed-chat RAG
+      // pre-flight used to cover General in a live meeting; the claim stays
+      // an ALTERNATIVE so answerability grades each side honestly.
+      if (input.inLiveMeeting
+          && input.policy.allowedSourceTypes.includes('MEETING_TRANSCRIPT')
+          && inferred !== 'MEETING_STATEMENT') {
+        types.add('MEETING_FACT'); noteWholeQ('MEETING_STATEMENT');
       }
       // Deep-test D2/D3 (2026-08-01): a definite value can live in ANY attached
       // document, not only the primary source's pool. In technical-interview
