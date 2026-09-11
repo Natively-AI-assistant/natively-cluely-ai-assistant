@@ -1208,54 +1208,6 @@ export function initializeIpcHandlers(appState: AppState): void {
   const { ConversationMemoryService } = require('./intelligence/ConversationMemoryService') as typeof import('./intelligence/ConversationMemoryService');
   const _manualConversationMemory = new ConversationMemoryService();
 
-  /**
-   * Write a RAG-answered live turn to the same sinks the V3 manual-chat path
-   * writes (issue #552), so a later typed turn can resolve a follow-up against
-   * it and Meeting Notes lists it. Mirrors the V3 site's split: the USER turn
-   * is always recorded; the ANSWER-side sinks are skipped when the stream was
-   * truncated (RAGManager appends its "Answer incomplete" coda), because a
-   * partial answer must never become the antecedent of the next question.
-   * Every sink is best-effort — recording must not fail the answer.
-   */
-  function recordLiveRagTurn(senderId: number, query: string, answer: string): void {
-    const ragLiveAnswer = answer.trim();
-    if (!query.trim() || !ragLiveAnswer) return;
-    const ragLiveTruncated = /Answer incomplete — the model stream ended early\.\)_\s*$/.test(ragLiveAnswer);
-    const im = appState.getIntelligenceManager?.();
-    try {
-      im?.addTranscript?.({ text: query, speaker: 'user', timestamp: Date.now(), final: true, origin: 'manual_chat' }, true);
-    } catch { /* continuity only */ }
-    try {
-      im?.logUsage?.('rag_live', query, ragLiveAnswer);
-    } catch { /* usage only */ }
-    if (ragLiveTruncated) {
-      console.warn('[RAG] truncated live answer — recording the user turn but skipping answer-side history sinks');
-      return;
-    }
-    try {
-      const { recordAnswerSummary } = require('./context-intelligence/question/conversation-state-store');
-      recordAnswerSummary(
-        v3ConversationSessionId(appState, senderId),
-        ragLiveAnswer,
-        undefined,
-        // Seeds state for a turn that never went through orchestrate(); see
-        // recordAnswerSummary's `question` docblock.
-        query,
-      );
-    } catch { /* continuity only */ }
-    try {
-      _manualConversationMemory.record({
-        sessionId: String(senderId),
-        userMessage: query,
-        assistantAnswer: ragLiveAnswer,
-        timestamp: Date.now(),
-      });
-    } catch { /* memory only */ }
-    try {
-      im?.addAssistantMessage?.(ragLiveAnswer, undefined, 'manual_chat');
-    } catch { /* continuity only */ }
-  }
-
   // Coding thread state (spoken-answer-quality sprint 2026-06-15): tracks original vs
   // current problem across a multi-turn coding session so "what was the ORIGINAL problem?"
   // resolves to the first problem, and complexity/dry-run/optimize follow-ups resolve to
@@ -1633,7 +1585,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                     // measured on a manual "fix" with a stack trace on screen:
                     // 7 screen candidates, 7 rejected, and the answer came from
                     // an attached error-log fixture instead of the screenshot.
-                    sessionId: v3ConversationSessionId(appState, senderId),
+                    sessionId: v3ConversationKey,
                   })
               : null;
 
@@ -2186,14 +2138,27 @@ export function initializeIpcHandlers(appState: AppState): void {
         // Capture rolling context BEFORE adding the new user message — otherwise the
         // 100s window would echo back the user's just-typed message as both context and
         // question, confusing small models (the "20-char context" log line was just an echo).
+        //
+        // Issue #552 (final review pass, I4): this used to run ONLY when `context`
+        // was absent, because on the legacy path a non-empty `context` meant a
+        // caller-composed prompt that had no need for the rolling window. That
+        // stopped being true once typed chat started sending its own conversation
+        // history as `context` from the second turn on — the deleted renderer
+        // pre-flight (`ragQueryLive`) used to be the only live-transcript
+        // grounding that surface had. With the old `if (!context)` gate,
+        // `autoContextSnapshot` stayed permanently undefined for every typed
+        // follow-up during a meeting, so the merge a few hundred lines below
+        // (the `context && autoContextSnapshot` sibling of the pre-existing
+        // `!context && autoContextSnapshot` branch) could never fire — the
+        // legacy path (V3's rollback lever) silently lost meeting grounding.
+        // Always capturing here is what makes that merge possible; it is a
+        // cheap in-memory read regardless of whether `context` is set.
         let autoContextSnapshot: string | undefined;
-        if (!context) {
-          try {
-            const snap = intelligenceManager.getFormattedContext(100);
-            if (snap && snap.trim().length > 0) autoContextSnapshot = snap;
-          } catch (ctxErr) {
-            console.warn('[IPC] Failed to capture pre-turn context:', ctxErr);
-          }
+        try {
+          const snap = intelligenceManager.getFormattedContext(100);
+          if (snap && snap.trim().length > 0) autoContextSnapshot = snap;
+        } catch (ctxErr) {
+          console.warn('[IPC] Failed to capture pre-turn context:', ctxErr);
         }
 
         // Now add USER message to IntelligenceManager (after context snapshot)
@@ -3381,6 +3346,24 @@ export function initializeIpcHandlers(appState: AppState): void {
               `[IPC] Auto-injected 100s context for gemini-chat-stream (${context.length} chars${snapshotForContext !== autoContextSnapshot ? ', prior-assistant turns stripped for document-grounded mode' : ''})`,
             );
           }
+        } else if (context && autoContextSnapshot) {
+          // Issue #552 (final review pass, I4): the sibling branch above is
+          // the ONLY place this rolling live-transcript snapshot reaches the
+          // prompt, and it requires an ABSENT `context`. Typed chat sends its
+          // own non-empty `context` (conversation history) from the second
+          // turn on, so on the legacy path (V3 off) that branch never fired
+          // past the first turn — the deleted renderer pre-flight used to be
+          // the only meeting-transcript grounding a typed question had, and
+          // turning V3 off (the intended rollback lever) silently dropped it.
+          // Merge rather than replace: the renderer's own history is still
+          // what a bare follow-up's pronoun resolution needs, so it stays
+          // LAST — same idiom as every other additive block in this handler
+          // (`context = context ? \`${block}\n\n${context}\` : block`), just
+          // with `context` known truthy here so the ternary collapses.
+          context = `${autoContextSnapshot}\n\n${context}`;
+          console.log(
+            `[IPC] Merged 100s live-transcript snapshot alongside existing chat context for gemini-chat-stream (${autoContextSnapshot.length} chars, issue #552)`,
+          );
         }
         // MANUAL REGRESSION FIX (release 2026-06-08): for ANY profile-required
         // candidate answer type (jd_fit / skill / behavioral / project / experience /
@@ -13697,6 +13680,100 @@ export function initializeIpcHandlers(appState: AppState): void {
     },
   );
 
+  /**
+   * Write a RAG-answered live turn to the same sinks the V3 manual-chat path
+   * writes (issue #552), so a later typed turn can resolve a follow-up against
+   * it and Meeting Notes lists it. Mirrors the V3 site's split: the USER turn
+   * is always recorded; the ANSWER-side sinks are skipped when the stream was
+   * truncated (RAGManager appends RAG_STREAM_INCOMPLETE_CODA) or when the
+   * active mode changed mid-stream, because a partial or wrong-mode answer
+   * must never become the antecedent of the next question. Every sink is
+   * best-effort — recording must not fail the answer.
+   *
+   * BUG-MODE-BLEEDING (final review pass on #552): this helper used to write
+   * straight into `_manualConversationMemory` and the conversation ring with
+   * NO mode check, unlike the V3 site above which has carried this guard
+   * since the original mode-bleeding fix. `modes:set-active` clears
+   * `_manualConversationMemory` and the ring for the OUTGOING mode but does
+   * NOT abort an in-flight `rag:query-live` stream, so a mode switch
+   * mid-stream let this helper re-populate both with the OLD mode's Q/A pair
+   * right after the switch had cleared them for the NEW one. `manualActiveMode`
+   * is the mode captured by the caller before the stream started;
+   * `liveModeIdAtRecord` reads it again here, and a mismatch skips the
+   * answer-side sinks exactly like the V3 guard does.
+   *
+   * Deliberate divergences from the V3 site (M9, review): no `mode` field on
+   * the `_manualConversationMemory.record()` call — this surface has no
+   * per-mode prompt to tag the way V3's `modeInfo.templateType` does — and
+   * `logUsage('rag_live', …)` stores `type: 'rag_live'`, not `'chat'`.
+   * SessionTracker.logUsage therefore records `source: 'external'`, but more
+   * to the point `getRecentManualTurn` filters on `entry.type !== 'chat'`
+   * FIRST, before it ever looks at `source` — a `rag_live` entry can never
+   * be read back as the "previous manual turn" a later prompt injects as
+   * `<previous_assistant_answer_excerpt>`. A truncated V3 `chat` entry needs
+   * `pushUsage({ synthetic: true })` to close that replay door; a truncated
+   * `rag_live` entry is already outside it, so this helper doesn't need the
+   * synthetic-usage counterpart.
+   */
+  function recordLiveRagTurn(
+    senderId: number,
+    query: string,
+    answer: string,
+    manualActiveMode: import('./services/ModesManager').Mode | null,
+  ): void {
+    const ragLiveAnswer = answer.trim();
+    if (!query.trim() || !ragLiveAnswer) return;
+    const { RAG_STREAM_INCOMPLETE_CODA } = require('./rag/RAGManager') as typeof import('./rag/RAGManager');
+    const ragLiveTruncated = ragLiveAnswer.trimEnd().endsWith(RAG_STREAM_INCOMPLETE_CODA.trim());
+    const im = appState.getIntelligenceManager?.();
+    try {
+      im?.addTranscript?.({ text: query, speaker: 'user', timestamp: Date.now(), final: true, origin: 'manual_chat' }, true);
+    } catch { /* continuity only */ }
+    try {
+      im?.logUsage?.('rag_live', query, ragLiveAnswer);
+    } catch { /* usage only */ }
+    if (ragLiveTruncated) {
+      console.warn('[RAG] truncated live answer — recording the user turn but skipping answer-side history sinks');
+      return;
+    }
+    // BUG-MODE-BLEEDING guard, mirroring the V3 manual-chat site's record
+    // guard (see this function's docblock for why a switch mid-stream needs
+    // checking again here rather than trusting the caller's snapshot).
+    const { ModesManager } = require('./services/ModesManager');
+    const mm = ModesManager.getInstance();
+    let liveModeIdAtRecord: string | null = null;
+    try { liveModeIdAtRecord = mm.getActiveMode()?.id ?? null; } catch { /* record-guard only */ }
+    if (liveModeIdAtRecord !== (manualActiveMode?.id ?? null)) {
+      console.warn('[RAG] mode changed mid-stream — skipping answer-side history sinks for the live RAG turn', {
+        requestMode: manualActiveMode?.id ?? null,
+        liveMode: liveModeIdAtRecord,
+      });
+      return;
+    }
+    try {
+      const { recordAnswerSummary } = require('./context-intelligence/question/conversation-state-store');
+      recordAnswerSummary(
+        v3ConversationSessionId(appState, senderId),
+        ragLiveAnswer,
+        undefined,
+        // Seeds state for a turn that never went through orchestrate(); see
+        // recordAnswerSummary's `question` docblock.
+        query,
+      );
+    } catch { /* continuity only */ }
+    try {
+      _manualConversationMemory.record({
+        sessionId: String(senderId),
+        userMessage: query,
+        assistantAnswer: ragLiveAnswer,
+        timestamp: Date.now(),
+      });
+    } catch { /* memory only */ }
+    try {
+      im?.addAssistantMessage?.(ragLiveAnswer, undefined, 'manual_chat');
+    } catch { /* continuity only */ }
+  }
+
   // Query live meeting with JIT RAG
   safeHandle('rag:query-live', async (event, { query }: { query: string }) => {
     const ragManager = appState.getRAGManager();
@@ -13733,6 +13810,17 @@ export function initializeIpcHandlers(appState: AppState): void {
     const queryKey = `live-${crypto.randomUUID()}`;
     activeRAGQueries.set(queryKey, abortController);
 
+    // Captured BEFORE the stream starts (BUG-MODE-BLEEDING, final review pass
+    // on #552): recordLiveRagTurn below compares this against the mode that
+    // is active when the stream actually finishes. A `modes:set-active` mid-
+    // stream clears `_manualConversationMemory`/the ring for the OUTGOING
+    // mode but does not abort this stream, so without the comparison the
+    // recorder would re-populate both with the OLD mode's turn right after
+    // the switch cleared them for the NEW one. Same idiom as the V3
+    // manual-chat site above (`const mm = ModesManager.getInstance()`).
+    const { ModesManager } = require('./services/ModesManager');
+    const manualActiveMode = ModesManager.getInstance().getActiveMode();
+
     try {
       const stream = ragManager.queryMeeting(liveMeetingId, query, abortController.signal);
 
@@ -13754,7 +13842,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       // the NEW placeholder as done before its first real chunk arrives.
       if (!abortController.signal.aborted) {
         event.sender.send('rag:stream-complete', { live: true });
-        recordLiveRagTurn(event.sender.id, query, ragLiveAnswer);
+        recordLiveRagTurn(event.sender.id, query, ragLiveAnswer, manualActiveMode);
       }
       return { success: true };
     } catch (error: any) {

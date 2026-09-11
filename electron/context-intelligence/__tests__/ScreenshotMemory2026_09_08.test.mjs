@@ -482,9 +482,24 @@ test('EVERY ring reader derives its key from the shared resolver', () => {
     assert.equal(v, 'this.conversationSessionId()',
       `a ring reader derives its own key (${v}) instead of using the shared resolver`);
   }
-  // ipcHandlers' reader and writer must both go through its helper.
-  assert.match(ipc, /sessionId: v3ConversationSessionId\(appState, senderId\)/);
-  assert.match(ipc, /recordAnswerSummary\(\s*\n\s*v3ConversationSessionId\(appState, senderId\)/);
+  // ipcHandlers' reader and writer must both go through its helper. The
+  // screen port reads the request-scope CONST (v3ConversationKey) rather than
+  // re-deriving it, so the guard pins the const's declaration plus its use —
+  // see AlwaysAnswerResilience2026_09_10.test.mjs for the same shape (2026-09-11).
+  assert.match(ipc, /const v3ConversationKey = v3ConversationSessionId\(appState, senderId\);/);
+  assert.match(ipc, /sessionId: v3ConversationKey,/);
+  // recordAnswerSummary now has a second call site (rag:query-live's
+  // recordLiveRagTurn helper, issue #552) — anchor this assertion inside the
+  // WHOLE V3 manual-chat try block (through its own `catch (v3Err`) so it
+  // still pins the ring writer, not just any match. The writer call sits
+  // AFTER buildV3Prompt (it records the composed answer once streaming
+  // finishes), so the slice must extend past that point, unlike the shorter
+  // pre-buildV3Prompt slice the resolver tests above use.
+  const v3Slice = ipc.slice(
+    ipc.indexOf('// ── CONTEXT INTELLIGENCE V3 — wired manual-chat surface'),
+    ipc.indexOf('} catch (v3Err: any) {'),
+  );
+  assert.match(v3Slice, /recordAnswerSummary\(\s*\n\s*v3ConversationSessionId\(appState, senderId\)/);
 });
 
 test('the merge branch is budgeted, newest-first, like the ring branch beside it', async () => {

@@ -126,16 +126,6 @@ export class IntelligenceManager extends EventEmitter {
         this.session.setMeetingMetadata(metadata);
     }
 
-    /**
-     * Real accessor (issue #552). ipcHandlers used to reach this through
-     * `getSessionTracker()`, a method that never existed — `as any` plus
-     * optional chaining turned it into a silent `undefined`, so manual chat's
-     * V3 meeting evidence was dead code.
-     */
-    getMeetingMetadata(): any {
-        return this.session.getMeetingMetadata();
-    }
-
     addTranscript(segment: import('./SessionTracker').TranscriptSegment, skipRefinementCheck: boolean = false): void {
         if (skipRefinementCheck) {
             // Direct add without refinement detection

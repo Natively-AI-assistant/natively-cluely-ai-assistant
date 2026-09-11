@@ -27,6 +27,17 @@ import type { ProviderDataScopePolicy } from '../llm/ProviderRouter';
  */
 const RAG_STREAM_STALL_MS = 15_000;
 
+/**
+ * Appended to a queryMeeting/queryGlobal stream when it ends early (capped or
+ * post-commit-failed) so the truncation is VISIBLE in the rendered/persisted
+ * answer (see the two yield sites below). Exported (issue #552) so callers
+ * that need to detect a truncated live-RAG answer — e.g. ipcHandlers'
+ * recordLiveRagTurn, deciding whether to record the answer-side history
+ * sinks — compare against this constant instead of re-typing the string,
+ * which would silently drift from the yielded text.
+ */
+export const RAG_STREAM_INCOMPLETE_CODA = '\n\n_(Answer incomplete — the model stream ended early.)_';
+
 async function* raceGeneratorWithDeadline(
     stream: AsyncGenerator<string, void, unknown>,
     stallMs: number,
@@ -328,7 +339,7 @@ export class RAGManager {
         // in the rendered/persisted answer (skipped on user abort — that is
         // a cancellation, not a truncation).
         if (streamOutcome.incomplete && !abortSignal?.aborted) {
-            yield '\n\n_(Answer incomplete \u2014 the model stream ended early.)_';
+            yield RAG_STREAM_INCOMPLETE_CODA;
         }
     }
 
@@ -374,7 +385,7 @@ export class RAGManager {
         // in the rendered/persisted answer (skipped on user abort — that is
         // a cancellation, not a truncation).
         if (streamOutcome.incomplete && !abortSignal?.aborted) {
-            yield '\n\n_(Answer incomplete \u2014 the model stream ended early.)_';
+            yield RAG_STREAM_INCOMPLETE_CODA;
         }
     }
 
