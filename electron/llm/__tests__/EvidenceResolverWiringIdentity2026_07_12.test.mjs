@@ -485,7 +485,12 @@ describe('evidence-execution-repair: EvidenceResolver wiring identity (a524329 r
     assert.equal(cogCtx.evidencePack, null, 'evidencePack must remain untouched (null) when govern is false');
   });
 
-  test('governed turn missing immutable question fails closed without legacy retrieval or provider dispatch', async () => {
+  // Re-pinned 2026-09-07 (always answer): a governed turn whose governance
+  // context carries no immutable question no longer fails closed — that throw
+  // surfaced live as "could you rephrase the question?" whenever diarization
+  // labelled every turn as the user. The user's message IS the turn question;
+  // the resolver runs against it and the provider is dispatched.
+  test('governed turn missing immutable question falls back to the user message (always answer)', async () => {
     resolveCalls = 0;
     resolveArgsSeen = null;
     throwOnResolve = false;
@@ -516,10 +521,9 @@ describe('evidence-execution-repair: EvidenceResolver wiring identity (a524329 r
       { answerType: 'list_answer', contextOsGeneration: cogCtx },
     ));
 
-    assert.equal(resolveCalls, 0, 'a missing immutable question must fail before retrieval');
-    assert.equal(hybridLegacyCalls, 0, 'a governed missing-question failure must never fall back to legacy hybrid retrieval');
-    assert.equal(lexicalLegacyCalls, 0, 'a governed missing-question failure must never fall back to legacy lexical retrieval');
-    assert.equal(calls.find(c => c.via === 'executeCustomProvider'), undefined, 'a governed missing-question failure must not dispatch a provider');
+    assert.ok(resolveCalls >= 1, 'the resolver must run against the user message');
+    assert.equal(hybridLegacyCalls + lexicalLegacyCalls, 0, 'a governed turn still never falls back to legacy retrieval');
+    assert.ok(calls.find(c => c.via === 'executeCustomProvider'), 'the provider must be dispatched — the turn is answered');
   });
 
   test('resolver throws → governed turn refuses without legacy retrieval or provider dispatch', async () => {

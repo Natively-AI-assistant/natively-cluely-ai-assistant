@@ -924,7 +924,14 @@ export const EmbeddingSettings: React.FC<{ onNavigate?: (tab: string) => void }>
                 </div>
 
                 {active.lightweight && !acknowledged && (
-                    <div className="aip-inline-warn flex items-start gap-2 pt-3" role="status">
+                    /* mt-3, not pt-3. `.aip-inline-warn` sets `padding: 8px 10px`
+                       as a SHORTHAND, and AIP_CSS is injected into the body —
+                       later in document order than Tailwind's sheet — so at equal
+                       specificity the shorthand wins and a `pt-*` on this element
+                       emits nothing. The strip was sitting flush against the
+                       "384 dimensions · …" line with no separation at all
+                       (measured: 0px). Margin is unset by the class, so it lands. */
+                    <div className="aip-inline-warn flex items-start gap-2 mt-3" role="status">
                         <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
                         <span className="min-w-0">
                             {t('This is the compatibility default. It may retrieve less well on large projects, which can affect answer quality even with a strong AI model.')}

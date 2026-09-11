@@ -13,6 +13,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import UpdateBanner from "./components/UpdateBanner"
 import { NativelyQuotaBanner } from "./components/NativelyQuotaBanner"
 import { FreeTrialBanner }      from "./components/trial/FreeTrialBanner"
+import type { TrialUsage, TrialLimits } from './types/nativelyUsage';
 import { FreeTrialModal }       from "./components/trial/FreeTrialModal"
 import { OrchestratorProvider, OrchestratedToasterHost, setUserState as setOrchestratorUserState, emitOrchestratorEvent } from "./components/onboarding/OrchestratedToasterHost"
 import ReviewPromptHost from "./components/ReviewPromptHost"
@@ -344,7 +345,9 @@ const App: React.FC = () => {
   // ── Free Trial global state ────────────────────────────────
   const [activeTrial, setActiveTrial] = useState<{
     expiresAt: string;
-    usage: { ai: number; stt_seconds: number; search: number };
+    usage: TrialUsage;
+    /** Carried from /v1/trial/status so the banner does not hardcode allowances. */
+    limits?: TrialLimits;
   } | null>(null);
   const [showTrialExpiredModal, setShowTrialExpiredModal] = useState(false);
 
@@ -613,7 +616,8 @@ const App: React.FC = () => {
         } else {
           setActiveTrial({
             expiresAt: res.expires_at ?? '',
-            usage:     res.usage     ?? { ai: 0, stt_seconds: 0, search: 0 },
+            usage:     res.usage     ?? { ai: 0, ai_tokens: 0, stt_seconds: 0, search: 0 },
+            limits:    (res as { limits?: TrialLimits }).limits,
           });
         }
       } catch { /* ignore — non-critical */ }
@@ -621,6 +625,7 @@ const App: React.FC = () => {
     window.electronAPI?.getLocalTrial?.().then((local: any) => {
       if (!local?.hasToken) return;
       if (local.expired) {
+        // (expiry branch below)
         // Already expired at launch — wipe immediately then show modal after a brief delay
         if (!profileWiped) {
           profileWiped = true;
@@ -629,6 +634,22 @@ const App: React.FC = () => {
         setTimeout(() => setShowTrialExpiredModal(true), 10_000);
         return;
       }
+      // Seed the banner from the LOCAL token before the first poll answers.
+      //
+      // This is the "closed the app and reopened it inside the 30 minutes and
+      // the trial was gone" report. The trial was fine — the countdown just
+      // had nothing to render: activeTrial was only ever set from
+      // checkTrial(), a network call, so on every relaunch the banner stayed
+      // absent until /v1/trial/status came back, and stayed absent FOREVER if
+      // that call failed (it returns early on !ok, offline included).
+      //
+      // expiresAt is stored locally at start, so the clock is already knowable
+      // offline. Usage starts at zero and is replaced by the poll below —
+      // the settings panel has seeded itself exactly this way all along.
+      setActiveTrial({
+        expiresAt: local.expiresAt ?? '',
+        usage: { ai: 0, ai_tokens: 0, stt_seconds: 0, search: 0 },
+      });
       checkTrial();
       trialPollId = setInterval(checkTrial, 30_000);
     }).catch(() => {});
@@ -1283,6 +1304,7 @@ const App: React.FC = () => {
           <FreeTrialBanner
             expiresAt={activeTrial.expiresAt}
             usage={activeTrial.usage}
+            limits={activeTrial.limits}
             onUpgrade={() => openSettingsExclusive('plans')}
           />
         )}
@@ -1290,7 +1312,7 @@ const App: React.FC = () => {
         {/* Post-trial upgrade modal — shown when trial expires */}
         {!isolateModals && (isLauncherWindow || isDefault) && showTrialExpiredModal && (
           <FreeTrialModal
-            usage={activeTrial?.usage ?? { ai: 0, stt_seconds: 0, search: 0 }}
+            usage={activeTrial?.usage ?? { ai: 0, ai_tokens: 0, stt_seconds: 0, search: 0 }}
             onByok={async () => {
               await window.electronAPI?.endTrialByok?.();
             }}

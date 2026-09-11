@@ -32,12 +32,8 @@ export {
     formatTemporalContextForPrompt
 } from "./TemporalContextBuilder";
 export type { TemporalContext, AssistantResponse } from "./TemporalContextBuilder";
-export {
-    classifyIntent,
-    getAnswerShapeGuidance,
-    warmupIntentClassifier
-} from "./IntentClassifier";
-export type { ConversationIntent, IntentResult } from "./IntentClassifier";
+export { classifyIntent, hasQuestionSignal } from "./PlannerDecision";
+export type { ConversationIntent, IntentResult } from "./PlannerDecision";
 export { checkAnswerRelevance } from "./AnswerRelevanceChecker";
 export type { AnswerRelevanceResult } from "./AnswerRelevanceChecker";
 export { planNextAssistantAction } from "./PlannerDecision";
@@ -110,10 +106,17 @@ export type { PiTelemetryEvent, PiTelemetryRecord } from "./piTelemetry";
 export { resolveLiveFollowup, isContextFreeBareFollowup, toMemoryMode, toSurface, effectiveMemoryMode } from "./liveSessionMemory";
 export type { LiveTurn, LiveResolveInput } from "./liveSessionMemory";
 export {
-  raceStreamWithDeadline, firstUsefulDeadlineMs,
+  raceStreamWithDeadline, firstUsefulDeadlineMs, totalHardTimeoutMs,
   LIVE_FIRST_USEFUL_BUDGET_MS, LIVE_PROVIDER_FIRST_USEFUL_HARD_TIMEOUT_MS,
   LIVE_PROVIDER_FIRST_USEFUL_COMPLEX_TIMEOUT_MS, LIVE_TOTAL_HARD_TIMEOUT_MS,
-  LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, LIVE_LOCAL_TOTAL_HARD_TIMEOUT_MS,
+  LIVE_USER_ENDPOINT_TOTAL_HARD_TIMEOUT_MS, LIVE_DEFAULT_PROVIDER_TOTAL_HARD_TIMEOUT_MS,
+  regenerationBudgetMs, LIVE_TURN_TOTAL_BUDGET_MS, REGENERATION_MIN_SHARE_OF_ROUTE,
+  repairDeadlineMs, REPAIR_MIN_FIRST_USEFUL_MS, REPAIR_MAX_FIRST_USEFUL_MS,
+  REPAIR_LATENCY_MARGIN_MS, REPAIR_VISION_MIN_FIRST_USEFUL_MS,
+  userEndpointBudgetMs, LIVE_USER_ENDPOINT_MIN_TOTAL_HARD_TIMEOUT_MS,
+  LIVE_USER_ENDPOINT_MAX_TOTAL_HARD_TIMEOUT_MS, USER_ENDPOINT_MIN_SAMPLES_TO_NARROW,
+  USER_ENDPOINT_LATENCY_MARGIN_MS,
+  LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, LIVE_LOCAL_TOTAL_HARD_TIMEOUT_MS, LIVE_VISION_TOTAL_HARD_TIMEOUT_MS,
   LIVE_INTER_TOKEN_STALL_MS, BENCHMARK_PER_QUESTION_HARD_TIMEOUT_MS,
   MAX_STREAM_OUTPUT_CHARS, MAX_SUMMARY_OUTPUT_CHARS,
   CODING_REGEN_ABORT_CHARS,

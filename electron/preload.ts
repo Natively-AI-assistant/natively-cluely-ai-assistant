@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { SkillUploadPayload } from './services/skills/SkillValidator';
+import type { NativelyUsageResponse, NativelyPlansResponse } from '../src/types/nativelyUsage';
 import { PAGE_CAPTURE_FALLBACK_CHANNEL, PAGE_CAPTURE_STARTED_CHANNEL, type PageCaptureFallbackNotice } from './services/pageCaptureFallback';
 
 /**
@@ -24,7 +25,14 @@ interface DirectAssistRequest {
   manualContext?: string;
   referenceContext?: string;
   pageContext?: { dom?: string; ocr?: string; url?: string; title?: string } | null;
-  history?: Array<{ role: 'user' | 'assistant'; content: string }>;
+  history?: Array<{
+    role: 'user' | 'assistant'
+    content: string
+    /** Screenshots that turn was sent with, so a follow-up question can still
+     *  see them. Main re-validates each path and silently skips any the
+     *  screenshot queue has unlinked. */
+    imagePaths?: string[]
+  }>;
   transcript?: string;
   imagePaths?: string[];
   requestedLanguage?: string;
@@ -39,8 +47,17 @@ interface DirectAssistError {
 }
 
 type DirectAssistEvent =
-  | { type: 'start'; requestId: string; provider: string; model: string; trimmedFields: string[] }
+  | { type: 'start'; requestId: string; provider: string; model: string; trimmedFields: string[]; shortenedFields: string[] }
   | { type: 'delta'; requestId: string; sequence: number; text: string }
+  | {
+      type: 'provider_switch';
+      requestId: string;
+      /** SNAPSHOT of the delta counter, never a slot of its own — always 0. */
+      sequence: number;
+      from: { provider: string; model: string };
+      to: { provider: string; model: string };
+      reason: string;
+    }
   | { type: 'done'; requestId: string; sequence: number; provider: string; model: string; fullText?: string }
   | { type: 'error'; requestId: string; sequence: number; partial: boolean; error: DirectAssistError }
   | { type: 'cancel'; requestId: string; sequence: number };
@@ -54,7 +71,12 @@ interface ElectronAPI {
   }) => Promise<{ width: number; height: number } | undefined>;
   sendOverlayUiState: (state: Record<string, unknown>) => Promise<void>;
   onOverlayUiState: (callback: (state: Record<string, unknown>) => void) => () => void;
-  sendOverlayToggleAnchor: (payload: { panelRight: number }) => Promise<void>;
+  sendOverlayToggleAnchor: (payload: { panelRight: number; panelLeft?: number }) => Promise<void>;
+  overlayResizeEnvelope: (
+    payload:
+      | { phase: 'begin'; drag?: { direction: string; startWidth: number; startHeight: number; minWidth: number; minHeight: number; panelLeft: number } }
+      | { phase: 'end'; final?: { width: number; height: number } },
+  ) => Promise<{ width: number; height: number } | undefined>;
   setOverlayHoverInteractive: (interactive: boolean) => Promise<void>;
   dismissOverlayPopovers: (opts?: { settings?: boolean; model?: boolean }) => Promise<void>;
   sendOverlayUiAction: (action: { type: string }) => Promise<void>;
@@ -100,7 +122,7 @@ interface ElectronAPI {
 
   // LLM Model Management
   getCurrentLlmConfig: () => Promise<{
-    provider: 'ollama' | 'gemini' | 'custom' | 'codex-cli';
+    provider: 'ollama' | 'gemini' | 'custom' | 'codex-cli' | 'antigravity';
     /**
      * @deprecated Use `modelId` for selection comparisons and `displayName`
      * for UI labels. Kept as an alias of `modelId` for back-compat.
@@ -191,38 +213,13 @@ interface ElectronAPI {
     can_use_publicly: boolean;
     display_name_publicly: boolean;
   }) => Promise<{ ok: boolean; error?: string; status?: number }>;
-  getNativelyPricing: () => Promise<{
-    ok: boolean;
-    currency?: string;
-    fetchedAt?: string;
-    stale?: boolean;
-    products?: Record<string, {
-      id: string;
-      dodoProductId: string;
-      name: string;
-      amount: number | null;
-      currency: string;
-      formattedPrice: string | null;
-      interval: 'month' | 'year' | 'lifetime';
-      checkoutUrl: string;
-      coupon: { code: string; eligible: boolean; discountPercent: number; reason?: string };
-    }>;
-    error?: string;
-    status?: number;
-  }>;
-  getNativelyUsage: (force?: boolean) => Promise<{
-    ok: boolean;
-    plan?: string;
-    quota?: {
-      transcription: { used: number; limit: number; remaining: number };
-      ai: { used: number; limit: number; remaining: number };
-      search: { used: number; limit: number; remaining: number };
-      resets_at: string;
-    };
-    member_since?: string;
-    error?: string;
-    status?: number;
-  }>;
+  // Shape imported, not restated. This used to be written out here AND in
+  // src/types/electron.d.ts, so the resource model would have had to be
+  // remembered in three places.
+  getNativelyUsage: (force?: boolean) => Promise<NativelyUsageResponse>;
+  /** The plan catalog — allowances and prices, straight from the server, so the
+   *  plan table never carries its own copy of numbers the server enforces. */
+  getNativelyPlans: () => Promise<NativelyPlansResponse>;
   getStoredCredentials: () => Promise<{
     hasGeminiKey: boolean;
     hasGroqKey: boolean;
@@ -691,6 +688,12 @@ interface ElectronAPI {
   // startLogin kicks off the PKCE flow + opens the system browser; the
   // renderer listens for codex:login:complete / :failed events to update UI.
   codexLoginStatus: () => Promise<{ success: boolean; signedIn: boolean; email?: string; expiresAt?: number; error?: string }>;
+  antigravityStatus: () => Promise<{ signedIn: boolean; inProgress: boolean; expiresAt?: number; projectId?: string; error?: string }>;
+  antigravityStartLogin: () => Promise<{ success: boolean; error?: string }>;
+  antigravityCancelLogin: () => Promise<void>;
+  antigravitySignOut: () => Promise<{ success: boolean; error?: string }>;
+  antigravityModels: (force?: boolean) => Promise<{ success: boolean; models: { id: string; label: string }[]; error?: string }>;
+  onAntigravityStatusChanged: (callback: (status: { signedIn: boolean; inProgress: boolean; expiresAt?: number; projectId?: string; error?: string }) => void) => () => void;
   codexStartLogin: () => Promise<{ success: boolean; email?: string; expiresAt?: number; error?: string }>;
   codexSignOut: () => Promise<{ success: boolean; error?: string }>;
   codexRefreshTokens: () => Promise<{ success: boolean; email?: string; expiresAt?: number; error?: string }>;
@@ -1288,8 +1291,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
   // Overlay renderer → main: live panel right edge (toggle window rides it).
-  sendOverlayToggleAnchor: (payload: { panelRight: number }) =>
+  sendOverlayToggleAnchor: (payload: { panelRight: number; panelLeft?: number }) =>
     ipcRenderer.invoke('overlay-toggle-anchor', payload),
+  // Overlay renderer → main: smooth-resize envelope (see WindowHelper).
+  overlayResizeEnvelope: (
+    payload:
+      | { phase: 'begin'; drag?: { direction: string; startWidth: number; startHeight: number; minWidth: number; minHeight: number; panelLeft: number } }
+      | { phase: 'end'; final?: { width: number; height: number } },
+  ) => ipcRenderer.invoke('overlay-resize-envelope', payload),
   // Overlay renderer → main: hover hit-test (margins click-through gate).
   setOverlayHoverInteractive: (interactive: boolean) =>
     ipcRenderer.invoke('overlay-hover-interactive', interactive),
@@ -1611,8 +1620,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     can_use_publicly: boolean;
     display_name_publicly: boolean;
   }) => ipcRenderer.invoke('review:update-testimonial', payload),
-  getNativelyPricing: () => ipcRenderer.invoke('get-natively-pricing'),
   getNativelyUsage: (force?: boolean) => ipcRenderer.invoke('get-natively-usage', force ? { force: true } : undefined),
+  getNativelyPlans: () => ipcRenderer.invoke('get-natively-plans'),
   getStoredCredentials: () => ipcRenderer.invoke('get-stored-credentials'),
   // R-10 resolution flow: ambiguous credential stores (names + last-4 only).
   getAmbiguousCredentialStores: () => ipcRenderer.invoke('credentials:get-ambiguous-stores'),
@@ -1980,8 +1989,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getRerankerStatus: () => ipcRenderer.invoke('reranker:get-status'),
   getRerankerCatalog: (opts?: { refresh?: boolean }) => ipcRenderer.invoke('reranker:get-catalog', opts),
   setRerankerConfig: (next: {
-    provider?: 'local' | 'openrouter';
+    // Was 'local' | 'openrouter' — already missing 'jina' before this change.
+    // The object is forwarded opaquely so the omission never failed at runtime,
+    // which is exactly why it went unnoticed; kept in step with the handler now.
+    provider?: 'local' | 'natively' | 'openrouter' | 'jina';
     openrouterModel?: string;
+    jinaModel?: string;
+    nativelyModel?: string;
     candidateCount?: number;
     fallbackToLocal?: boolean;
   }) => ipcRenderer.invoke('reranker:set-config', next),
@@ -2321,6 +2335,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // The renderer listens for `codex:login:complete` / `:failed` /
   // `:signed-out` / `:tokens:refreshed` events for live UI updates.
   codexLoginStatus: () => ipcRenderer.invoke('codex:login-status'),
+  antigravityStatus: () => ipcRenderer.invoke('antigravity:status'),
+  antigravityStartLogin: () => ipcRenderer.invoke('antigravity:start-login'),
+  antigravityCancelLogin: () => ipcRenderer.invoke('antigravity:cancel-login'),
+  antigravitySignOut: () => ipcRenderer.invoke('antigravity:sign-out'),
+  antigravityModels: (force?: boolean) => ipcRenderer.invoke('antigravity:models', force),
+  onAntigravityStatusChanged: (callback) => {
+    const listener = (_: Electron.IpcRendererEvent, status: Parameters<typeof callback>[0]) => callback(status);
+    ipcRenderer.on('antigravity:status-changed', listener);
+    return () => ipcRenderer.removeListener('antigravity:status-changed', listener);
+  },
   codexStartLogin: () => ipcRenderer.invoke('codex:start-login'),
   codexSignOut: () => ipcRenderer.invoke('codex:sign-out'),
   codexRefreshTokens: () => ipcRenderer.invoke('codex:refresh-tokens'),
@@ -2798,6 +2822,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('direct-assist-enabled-changed', subscription);
     };
   },
+  getDirectAssistFallbackEnabled: () => ipcRenderer.invoke('get-direct-assist-fallback-enabled'),
+  setDirectAssistFallbackEnabled: (enabled: boolean) =>
+    ipcRenderer.invoke('set-direct-assist-fallback-enabled', enabled),
+  onDirectAssistFallbackEnabledChanged: (callback: (enabled: boolean) => void) => {
+    const subscription = (_: Electron.IpcRendererEvent, enabled: boolean) => callback(enabled);
+    ipcRenderer.on('direct-assist-fallback-enabled-changed', subscription);
+    return () => {
+      ipcRenderer.removeListener('direct-assist-fallback-enabled-changed', subscription);
+    };
+  },
   getCodeVerification: () => ipcRenderer.invoke('get-code-verification'),
   setCodeVerification: (enabled: boolean) => ipcRenderer.invoke('set-code-verification', enabled),
   getMeetingRetention: () => ipcRenderer.invoke('get-meeting-retention'),
@@ -2982,6 +3016,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   knowledgeRejectCard: (cardId: string) => ipcRenderer.invoke('knowledge:reject-card', cardId),
   knowledgeRestoreCardVersion: (params: { cardId: string; versionId: string }) =>
     ipcRenderer.invoke('knowledge:restore-card-version', params),
+  // Provider Performance Profile — read-only diagnostics, plus a manual reset
+  // that is the "recalibrate" affordance Phase 22 asks for. Deliberately no
+  // "start calibration" call: calibration here is PASSIVE (production turns are
+  // the samples), so there is nothing to start and nothing to bill.
+  providerPerformanceGetDiagnostics: () => ipcRenderer.invoke('provider-performance:get-diagnostics'),
+  providerPerformanceReset: (providerId?: string) => ipcRenderer.invoke('provider-performance:reset', providerId),
+  // The one call in this feature that can bill the user. Both its flags default
+  // OFF; with them off this issues no request and reports why.
+  providerPerformanceCalibrate: () => ipcRenderer.invoke('provider-performance:calibrate'),
   knowledgeGetCardHistory: (cardId: string) => ipcRenderer.invoke('knowledge:get-card-history', cardId),
   onKnowledgeIndexProgress: (callback: (data: { fileId: string; status: string; startedAt?: number; finishedAt?: number; error?: string }) => void) => {
     const subscription = (_: any, data: any) => callback(data);

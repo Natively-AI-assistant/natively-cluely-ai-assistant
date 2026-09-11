@@ -346,13 +346,17 @@ export class RAGManager {
         // Retrieve from all meetings
         const context = await this.retriever.retrieveGlobal(query);
 
-        if (context.chunks.length === 0) {
-            yield NO_GLOBAL_CONTEXT_FALLBACK;
-            return;
-        }
+        // ALWAYS ANSWER (2026-09-07, owner's direction): an empty global search
+        // used to yield NO_GLOBAL_CONTEXT_FALLBACK with no model call — the
+        // launcher's chat ended in "I couldn't find any discussion about that".
+        // The model now gets an explicit "nothing matched" excerpt and the
+        // prompt's rule to note the gap and still answer from general knowledge.
+        const formatted = context.chunks.length === 0
+            ? `(No matching excerpts were found across the user's meetings for this question.)\n${NO_GLOBAL_CONTEXT_FALLBACK}`
+            : context.formattedContext;
 
         // Build prompt with intent hint
-        const prompt = buildRAGPrompt(query, context.formattedContext, 'global', context.intent);
+        const prompt = buildRAGPrompt(query, formatted, 'global', context.intent);
 
         // Stream response
         const streamOutcome: { incomplete?: boolean } = {};

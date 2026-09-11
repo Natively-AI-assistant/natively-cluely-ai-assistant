@@ -161,3 +161,63 @@ test('an explicit résumé plus JD comparison requires both families', () => {
   assert.equal(decision.owner, 'mixed');
   assert.deepEqual(decision.requiredEvidenceKinds, ['profile_resume', 'projects', 'profile_jd']);
 });
+
+// ── Invariant 5 (2026-09-05): an absent DEFAULT source with no explicit request
+// answers from what remains; it does not clarify. This was live: technical-
+// interview and looking-for-work seed profile_only, and with no résumé uploaded
+// every interviewer question was refused before generation with "switch to a
+// mode that enables your résumé". Nothing private was requested, so answering
+// from the transcript widens nothing. Strict authorities are unchanged.
+const nothingLoaded = { hasReferenceFiles: false, hasProfileFacts: false, hasJobDescription: false, hasLiveTranscript: true, hasMeetingRag: false };
+const decide = (authority, extra = {}) => resolveTurnSourceDecision({
+  sourceContract: { sourceAuthority: authority, defaultOwner: authority.startsWith('profile') ? 'profile' : authority.startsWith('reference') ? 'reference_files' : null },
+  persistedSourceAuthority: authority, explicitRequest: null, explicitRequests: [],
+  availability: nothingLoaded, ...extra,
+});
+
+test('inv5: profile_only with no résumé and no request answers by default in the profile voice, granting nothing', () => {
+  const d = decide('profile_only');
+  assert.equal(d.outcome, 'default');
+  assert.equal(d.owner, 'profile');
+  assert.deepEqual(d.allowedEvidenceKinds, []);
+  assert.deepEqual(d.requiredEvidenceKinds, []);
+  assert.match(d.reasonCode, /default_profile_absent_answer_from_context/);
+});
+
+test('inv5: the legacy adapter then does NOT clarify and does NOT allow profile (nothing to allow)', () => {
+  const own = resolveSourceOwnership({ question: 'so how would you shard that', turnSourceDecision: decide('profile_only') });
+  assert.equal(own.shouldClarifyInsteadOfProfile, false, 'no clarification for a question that asked for no source');
+  assert.equal(own.profileAllowed, false, 'no profile facts exist to allow');
+  assert.equal(own.owner, 'profile');
+});
+
+test('inv5: profile_plus_transcript with no résumé keeps the live transcript', () => {
+  const d = decide('profile_plus_transcript');
+  assert.equal(d.outcome, 'default');
+  assert.deepEqual(d.allowedEvidenceKinds, ['live_transcript']);
+});
+
+test('inv5: reference_files_primary with nothing attached answers from the transcript, not a clarification', () => {
+  const d = decide('reference_files_primary');
+  assert.equal(d.outcome, 'default');
+  assert.equal(d.owner, 'reference_files');
+  assert.deepEqual(d.allowedEvidenceKinds, ['live_transcript']);
+  assert.deepEqual(d.requiredEvidenceKinds, []);
+});
+
+test('inv3 intact: STRICT reference_files_only with nothing attached still fails closed', () => {
+  const d = decide('reference_files_only');
+  assert.equal(d.outcome, 'source_unavailable');
+  assert.equal(d.owner, 'clarify');
+  assert.equal(d.reasonCode, 'default_reference_files_unavailable');
+});
+
+test('inv2 intact: an EXPLICIT request for an unavailable source still fails closed', () => {
+  const d = resolveTurnSourceDecision({
+    sourceContract: { sourceAuthority: 'reference_files_primary', defaultOwner: 'reference_files' },
+    persistedSourceAuthority: 'reference_files_primary',
+    explicitRequest: 'profile', explicitRequests: ['profile'],
+    availability: { ...nothingLoaded, hasReferenceFiles: true },
+  });
+  assert.equal(d.outcome, 'source_unavailable', 'asking for a résumé that is not loaded must still be refused honestly');
+});

@@ -1,0 +1,1132 @@
+{
+  "providerId": "head-minilm",
+  "meta": {
+    "family": "fine-tuned-multihead",
+    "params": 0,
+    "sizeOnDiskMB": 0,
+    "runtime": "onnx",
+    "ortBinding": "onnxruntime-node",
+    "modelId": "resources/models/natively/router-minilm-multihead",
+    "forwardPassesPerRow": 1,
+    "dataset": "v3.jsonl",
+    "datasetRows": 5328,
+    "loadMs": 154,
+    "split": "holdout",
+    "language": "hinglish",
+    "punctuated": false,
+    "failed": 0,
+    "machineLoad": 0.32,
+    "latencyTrustworthy": true
+  },
+  "axes": {
+    "dialogue_act": {
+      "n": 33,
+      "accuracy": 0.6666666666666666,
+      "macroF1": 0.4123606889564337,
+      "labelsScored": 3,
+      "excludedLabels": [
+        "answer",
+        "interruption"
+      ],
+      "macroF1WellSupported": 0.8085106382978724,
+      "labelsWellSupported": 1,
+      "thinLabels": [
+        {
+          "label": "backchannel",
+          "support": 1,
+          "f1": 0
+        },
+        {
+          "label": "statement",
+          "support": 7,
+          "f1": 0.42857142857142855
+        }
+      ],
+      "perLabel": {
+        "answer": {
+          "precision": 0,
+          "recall": null,
+          "f1": 0,
+          "support": 0,
+          "tp": 0,
+          "fp": 2,
+          "fn": 0
+        },
+        "ask": {
+          "precision": 0.8636363636363636,
+          "recall": 0.76,
+          "f1": 0.8085106382978724,
+          "support": 25,
+          "tp": 19,
+          "fp": 3,
+          "fn": 6
+        },
+        "backchannel": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 1,
+          "tp": 0,
+          "fp": 0,
+          "fn": 1
+        },
+        "interruption": {
+          "precision": 0,
+          "recall": null,
+          "f1": 0,
+          "support": 0,
+          "tp": 0,
+          "fp": 2,
+          "fn": 0
+        },
+        "statement": {
+          "precision": 0.42857142857142855,
+          "recall": 0.42857142857142855,
+          "f1": 0.42857142857142855,
+          "support": 7,
+          "tp": 3,
+          "fp": 4,
+          "fn": 4
+        }
+      },
+      "unresolved": 0,
+      "ece": 0.16605954630773703,
+      "eceDegenerate": false,
+      "eceN": 33,
+      "coverage": {
+        "fired": 33,
+        "total": 33,
+        "hitRate": 1,
+        "precisionWhenFired": 0.6666666666666666
+      }
+    },
+    "needs_response": {
+      "n": 33,
+      "accuracy": 0.8787878787878788,
+      "macroF1": 0.7155172413793103,
+      "labelsScored": 2,
+      "excludedLabels": [],
+      "macroF1WellSupported": 0.9310344827586207,
+      "labelsWellSupported": 1,
+      "thinLabels": [
+        {
+          "label": "no",
+          "support": 3,
+          "f1": 0.5
+        }
+      ],
+      "perLabel": {
+        "no": {
+          "precision": 0.4,
+          "recall": 0.6666666666666666,
+          "f1": 0.5,
+          "support": 3,
+          "tp": 2,
+          "fp": 3,
+          "fn": 1
+        },
+        "yes": {
+          "precision": 0.9642857142857143,
+          "recall": 0.9,
+          "f1": 0.9310344827586207,
+          "support": 30,
+          "tp": 27,
+          "fp": 1,
+          "fn": 3
+        }
+      },
+      "unresolved": 0,
+      "ece": 0.08043641544541932,
+      "eceDegenerate": false,
+      "eceN": 33,
+      "coverage": {
+        "fired": 33,
+        "total": 33,
+        "hitRate": 1,
+        "precisionWhenFired": 0.8787878787878788
+      }
+    },
+    "voice": {
+      "n": 33,
+      "accuracy": 0,
+      "macroF1": 0,
+      "labelsScored": 4,
+      "excludedLabels": [
+        "<unresolved>"
+      ],
+      "macroF1WellSupported": 0,
+      "labelsWellSupported": 1,
+      "thinLabels": [
+        {
+          "label": "advisor",
+          "support": 1,
+          "f1": 0
+        },
+        {
+          "label": "capture",
+          "support": 6,
+          "f1": 0
+        },
+        {
+          "label": "silent",
+          "support": 3,
+          "f1": 0
+        }
+      ],
+      "perLabel": {
+        "<unresolved>": {
+          "precision": 0,
+          "recall": null,
+          "f1": 0,
+          "support": 0,
+          "tp": 0,
+          "fp": 33,
+          "fn": 0
+        },
+        "advisor": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 1,
+          "tp": 0,
+          "fp": 0,
+          "fn": 1
+        },
+        "capture": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 6,
+          "tp": 0,
+          "fp": 0,
+          "fn": 6
+        },
+        "first_person_script": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 23,
+          "tp": 0,
+          "fp": 0,
+          "fn": 23
+        },
+        "silent": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 3,
+          "tp": 0,
+          "fp": 0,
+          "fn": 3
+        }
+      },
+      "unresolved": 33,
+      "ece": null,
+      "eceDegenerate": false,
+      "eceN": 0,
+      "coverage": {
+        "fired": 0,
+        "total": 33,
+        "hitRate": 0,
+        "precisionWhenFired": null
+      }
+    },
+    "task": {
+      "n": 33,
+      "accuracy": 0.5151515151515151,
+      "macroF1": 0.49328449328449325,
+      "labelsScored": 7,
+      "excludedLabels": [
+        "create",
+        "plan",
+        "research"
+      ],
+      "macroF1WellSupported": null,
+      "labelsWellSupported": 0,
+      "thinLabels": [
+        {
+          "label": "answer",
+          "support": 8,
+          "f1": 0.6666666666666666
+        },
+        {
+          "label": "compare",
+          "support": 4,
+          "f1": 0.46153846153846156
+        },
+        {
+          "label": "debug",
+          "support": 7,
+          "f1": 0.7692307692307692
+        },
+        {
+          "label": "explain",
+          "support": 7,
+          "f1": 0.22222222222222224
+        },
+        {
+          "label": "none",
+          "support": 4,
+          "f1": 0.6666666666666666
+        },
+        {
+          "label": "rewrite",
+          "support": 1,
+          "f1": 0
+        },
+        {
+          "label": "summarize",
+          "support": 2,
+          "f1": 0.6666666666666666
+        }
+      ],
+      "perLabel": {
+        "answer": {
+          "precision": 1,
+          "recall": 0.5,
+          "f1": 0.6666666666666666,
+          "support": 8,
+          "tp": 4,
+          "fp": 0,
+          "fn": 4
+        },
+        "compare": {
+          "precision": 0.3333333333333333,
+          "recall": 0.75,
+          "f1": 0.46153846153846156,
+          "support": 4,
+          "tp": 3,
+          "fp": 6,
+          "fn": 1
+        },
+        "create": {
+          "precision": 0,
+          "recall": null,
+          "f1": 0,
+          "support": 0,
+          "tp": 0,
+          "fp": 1,
+          "fn": 0
+        },
+        "debug": {
+          "precision": 0.8333333333333334,
+          "recall": 0.7142857142857143,
+          "f1": 0.7692307692307692,
+          "support": 7,
+          "tp": 5,
+          "fp": 1,
+          "fn": 2
+        },
+        "explain": {
+          "precision": 0.5,
+          "recall": 0.14285714285714285,
+          "f1": 0.22222222222222224,
+          "support": 7,
+          "tp": 1,
+          "fp": 1,
+          "fn": 6
+        },
+        "none": {
+          "precision": 1,
+          "recall": 0.5,
+          "f1": 0.6666666666666666,
+          "support": 4,
+          "tp": 2,
+          "fp": 0,
+          "fn": 2
+        },
+        "plan": {
+          "precision": 0,
+          "recall": null,
+          "f1": 0,
+          "support": 0,
+          "tp": 0,
+          "fp": 4,
+          "fn": 0
+        },
+        "research": {
+          "precision": 0,
+          "recall": null,
+          "f1": 0,
+          "support": 0,
+          "tp": 0,
+          "fp": 1,
+          "fn": 0
+        },
+        "rewrite": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 1,
+          "tp": 0,
+          "fp": 0,
+          "fn": 1
+        },
+        "summarize": {
+          "precision": 0.5,
+          "recall": 1,
+          "f1": 0.6666666666666666,
+          "support": 2,
+          "tp": 2,
+          "fp": 2,
+          "fn": 0
+        }
+      },
+      "unresolved": 0,
+      "ece": 0.21702922444019826,
+      "eceDegenerate": false,
+      "eceN": 33,
+      "coverage": {
+        "fired": 33,
+        "total": 33,
+        "hitRate": 1,
+        "precisionWhenFired": 0.5151515151515151
+      }
+    },
+    "mode_intent": {
+      "n": 33,
+      "accuracy": 0.30303030303030304,
+      "macroF1": 0.21285714285714286,
+      "labelsScored": 20,
+      "excludedLabels": [
+        "called_on_for_status",
+        "correctness_question",
+        "frustration_escalation",
+        "interviewer_speaking",
+        "new_concept",
+        "next_step_moment",
+        "pricing_ask",
+        "sales_objection",
+        "transition_or_compliment"
+      ],
+      "macroF1WellSupported": null,
+      "labelsWellSupported": 0,
+      "thinLabels": [
+        {
+          "label": "action_item",
+          "support": 1,
+          "f1": 0
+        },
+        {
+          "label": "code_review_hint",
+          "support": 2,
+          "f1": 0
+        },
+        {
+          "label": "complexity_probe",
+          "support": 2,
+          "f1": 1
+        },
+        {
+          "label": "decision",
+          "support": 1,
+          "f1": 0
+        },
+        {
+          "label": "diagnostic_answer",
+          "support": 4,
+          "f1": 0.4
+        },
+        {
+          "label": "discovery_answer",
+          "support": 2,
+          "f1": 0
+        },
+        {
+          "label": "dsa_problem",
+          "support": 1,
+          "f1": 0
+        },
+        {
+          "label": "escalation_request",
+          "support": 1,
+          "f1": 0.6666666666666666
+        },
+        {
+          "label": "interviewer_thinking_aloud",
+          "support": 1,
+          "f1": 0
+        },
+        {
+          "label": "issue_description",
+          "support": 1,
+          "f1": 0
+        },
+        {
+          "label": "objection_competitor",
+          "support": 3,
+          "f1": 0.8571428571428571
+        },
+        {
+          "label": "objection_price",
+          "support": 1,
+          "f1": 0
+        },
+        {
+          "label": "objection_timing",
+          "support": 2,
+          "f1": 0
+        },
+        {
+          "label": "optimization_probe",
+          "support": 2,
+          "f1": 0.6666666666666666
+        },
+        {
+          "label": "question_to_me",
+          "support": 2,
+          "f1": 0
+        },
+        {
+          "label": "question_to_room",
+          "support": 1,
+          "f1": 0
+        },
+        {
+          "label": "refund_or_credit_request",
+          "support": 1,
+          "f1": 0.6666666666666666
+        },
+        {
+          "label": "risk_blocker",
+          "support": 2,
+          "f1": 0
+        },
+        {
+          "label": "satisfied_customer",
+          "support": 1,
+          "f1": 0
+        },
+        {
+          "label": "system_design",
+          "support": 2,
+          "f1": 0
+        }
+      ],
+      "perLabel": {
+        "action_item": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 1,
+          "tp": 0,
+          "fp": 0,
+          "fn": 1
+        },
+        "called_on_for_status": {
+          "precision": 0,
+          "recall": null,
+          "f1": 0,
+          "support": 0,
+          "tp": 0,
+          "fp": 3,
+          "fn": 0
+        },
+        "code_review_hint": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 2,
+          "tp": 0,
+          "fp": 0,
+          "fn": 2
+        },
+        "complexity_probe": {
+          "precision": 1,
+          "recall": 1,
+          "f1": 1,
+          "support": 2,
+          "tp": 2,
+          "fp": 0,
+          "fn": 0
+        },
+        "correctness_question": {
+          "precision": 0,
+          "recall": null,
+          "f1": 0,
+          "support": 0,
+          "tp": 0,
+          "fp": 2,
+          "fn": 0
+        },
+        "decision": {
+          "precision": 0,
+          "recall": 0,
+          "f1": 0,
+          "support": 1,
+          "tp": 0,
+          "fp": 1,
+          "fn": 1
+        },
+        "diagnostic_answer": {
+          "precision": 1,
+          "recall": 0.25,
+          "f1": 0.4,
+          "support": 4,
+          "tp": 1,
+          "fp": 0,
+          "fn": 3
+        },
+        "discovery_answer": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 2,
+          "tp": 0,
+          "fp": 0,
+          "fn": 2
+        },
+        "dsa_problem": {
+          "precision": 0,
+          "recall": 0,
+          "f1": 0,
+          "support": 1,
+          "tp": 0,
+          "fp": 2,
+          "fn": 1
+        },
+        "escalation_request": {
+          "precision": 0.5,
+          "recall": 1,
+          "f1": 0.6666666666666666,
+          "support": 1,
+          "tp": 1,
+          "fp": 1,
+          "fn": 0
+        },
+        "frustration_escalation": {
+          "precision": 0,
+          "recall": null,
+          "f1": 0,
+          "support": 0,
+          "tp": 0,
+          "fp": 1,
+          "fn": 0
+        },
+        "interviewer_speaking": {
+          "precision": 0,
+          "recall": null,
+          "f1": 0,
+          "support": 0,
+          "tp": 0,
+          "fp": 1,
+          "fn": 0
+        },
+        "interviewer_thinking_aloud": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 1,
+          "tp": 0,
+          "fp": 0,
+          "fn": 1
+        },
+        "issue_description": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 1,
+          "tp": 0,
+          "fp": 0,
+          "fn": 1
+        },
+        "new_concept": {
+          "precision": 0,
+          "recall": null,
+          "f1": 0,
+          "support": 0,
+          "tp": 0,
+          "fp": 1,
+          "fn": 0
+        },
+        "next_step_moment": {
+          "precision": 0,
+          "recall": null,
+          "f1": 0,
+          "support": 0,
+          "tp": 0,
+          "fp": 1,
+          "fn": 0
+        },
+        "objection_competitor": {
+          "precision": 0.75,
+          "recall": 1,
+          "f1": 0.8571428571428571,
+          "support": 3,
+          "tp": 3,
+          "fp": 1,
+          "fn": 0
+        },
+        "objection_price": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 1,
+          "tp": 0,
+          "fp": 0,
+          "fn": 1
+        },
+        "objection_timing": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 2,
+          "tp": 0,
+          "fp": 0,
+          "fn": 2
+        },
+        "optimization_probe": {
+          "precision": 0.5,
+          "recall": 1,
+          "f1": 0.6666666666666666,
+          "support": 2,
+          "tp": 2,
+          "fp": 2,
+          "fn": 0
+        },
+        "pricing_ask": {
+          "precision": 0,
+          "recall": null,
+          "f1": 0,
+          "support": 0,
+          "tp": 0,
+          "fp": 2,
+          "fn": 0
+        },
+        "question_to_me": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 2,
+          "tp": 0,
+          "fp": 0,
+          "fn": 2
+        },
+        "question_to_room": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 1,
+          "tp": 0,
+          "fp": 0,
+          "fn": 1
+        },
+        "refund_or_credit_request": {
+          "precision": 0.5,
+          "recall": 1,
+          "f1": 0.6666666666666666,
+          "support": 1,
+          "tp": 1,
+          "fp": 1,
+          "fn": 0
+        },
+        "risk_blocker": {
+          "precision": 0,
+          "recall": 0,
+          "f1": 0,
+          "support": 2,
+          "tp": 0,
+          "fp": 1,
+          "fn": 2
+        },
+        "sales_objection": {
+          "precision": 0,
+          "recall": null,
+          "f1": 0,
+          "support": 0,
+          "tp": 0,
+          "fp": 2,
+          "fn": 0
+        },
+        "satisfied_customer": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 1,
+          "tp": 0,
+          "fp": 0,
+          "fn": 1
+        },
+        "system_design": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 2,
+          "tp": 0,
+          "fp": 0,
+          "fn": 2
+        },
+        "transition_or_compliment": {
+          "precision": 0,
+          "recall": null,
+          "f1": 0,
+          "support": 0,
+          "tp": 0,
+          "fp": 1,
+          "fn": 0
+        }
+      },
+      "unresolved": 0,
+      "ece": 0.2512529305947714,
+      "eceDegenerate": false,
+      "eceN": 33,
+      "coverage": {
+        "fired": 33,
+        "total": 33,
+        "hitRate": 1,
+        "precisionWhenFired": 0.30303030303030304
+      }
+    },
+    "answer_form": {
+      "n": 33,
+      "accuracy": 0.6060606060606061,
+      "macroF1": 0.6011294261294262,
+      "labelsScored": 8,
+      "excludedLabels": [
+        "table"
+      ],
+      "macroF1WellSupported": null,
+      "labelsWellSupported": 0,
+      "thinLabels": [
+        {
+          "label": "code",
+          "support": 3,
+          "f1": 0.5714285714285715
+        },
+        {
+          "label": "explanation",
+          "support": 7,
+          "f1": 0.6153846153846153
+        },
+        {
+          "label": "fact",
+          "support": 7,
+          "f1": 0.6666666666666666
+        },
+        {
+          "label": "none",
+          "support": 5,
+          "f1": 0.5
+        },
+        {
+          "label": "rebuttal",
+          "support": 5,
+          "f1": 0.888888888888889
+        },
+        {
+          "label": "recommendation",
+          "support": 2,
+          "f1": 0.5
+        },
+        {
+          "label": "steps",
+          "support": 3,
+          "f1": 0.6666666666666666
+        },
+        {
+          "label": "summary",
+          "support": 1,
+          "f1": 0.4
+        }
+      ],
+      "perLabel": {
+        "code": {
+          "precision": 0.5,
+          "recall": 0.6666666666666666,
+          "f1": 0.5714285714285715,
+          "support": 3,
+          "tp": 2,
+          "fp": 2,
+          "fn": 1
+        },
+        "explanation": {
+          "precision": 0.6666666666666666,
+          "recall": 0.5714285714285714,
+          "f1": 0.6153846153846153,
+          "support": 7,
+          "tp": 4,
+          "fp": 2,
+          "fn": 3
+        },
+        "fact": {
+          "precision": 0.8,
+          "recall": 0.5714285714285714,
+          "f1": 0.6666666666666666,
+          "support": 7,
+          "tp": 4,
+          "fp": 1,
+          "fn": 3
+        },
+        "none": {
+          "precision": 0.6666666666666666,
+          "recall": 0.4,
+          "f1": 0.5,
+          "support": 5,
+          "tp": 2,
+          "fp": 1,
+          "fn": 3
+        },
+        "rebuttal": {
+          "precision": 1,
+          "recall": 0.8,
+          "f1": 0.888888888888889,
+          "support": 5,
+          "tp": 4,
+          "fp": 0,
+          "fn": 1
+        },
+        "recommendation": {
+          "precision": 0.5,
+          "recall": 0.5,
+          "f1": 0.5,
+          "support": 2,
+          "tp": 1,
+          "fp": 1,
+          "fn": 1
+        },
+        "steps": {
+          "precision": 0.6666666666666666,
+          "recall": 0.6666666666666666,
+          "f1": 0.6666666666666666,
+          "support": 3,
+          "tp": 2,
+          "fp": 1,
+          "fn": 1
+        },
+        "summary": {
+          "precision": 0.25,
+          "recall": 1,
+          "f1": 0.4,
+          "support": 1,
+          "tp": 1,
+          "fp": 3,
+          "fn": 0
+        },
+        "table": {
+          "precision": 0,
+          "recall": null,
+          "f1": 0,
+          "support": 0,
+          "tp": 0,
+          "fp": 2,
+          "fn": 0
+        }
+      },
+      "unresolved": 0,
+      "ece": 0.16859419832329697,
+      "eceDegenerate": false,
+      "eceN": 33,
+      "coverage": {
+        "fired": 33,
+        "total": 33,
+        "hitRate": 1,
+        "precisionWhenFired": 0.6060606060606061
+      }
+    },
+    "grounding": {
+      "n": 33,
+      "accuracy": 0.5454545454545454,
+      "macroF1": 0.5224932249322493,
+      "labelsScored": 3,
+      "excludedLabels": [
+        "knowledge_base"
+      ],
+      "macroF1WellSupported": 0.6341463414634146,
+      "labelsWellSupported": 1,
+      "thinLabels": [
+        {
+          "label": "conversation_memory",
+          "support": 3,
+          "f1": 0.3333333333333333
+        },
+        {
+          "label": "none",
+          "support": 4,
+          "f1": 0.6
+        }
+      ],
+      "perLabel": {
+        "conversation_memory": {
+          "precision": 0.2222222222222222,
+          "recall": 0.6666666666666666,
+          "f1": 0.3333333333333333,
+          "support": 3,
+          "tp": 2,
+          "fp": 7,
+          "fn": 1
+        },
+        "knowledge_base": {
+          "precision": 0,
+          "recall": null,
+          "f1": 0,
+          "support": 0,
+          "tp": 0,
+          "fp": 3,
+          "fn": 0
+        },
+        "mode_files": {
+          "precision": 0.8666666666666667,
+          "recall": 0.5,
+          "f1": 0.6341463414634146,
+          "support": 26,
+          "tp": 13,
+          "fp": 2,
+          "fn": 13
+        },
+        "none": {
+          "precision": 0.5,
+          "recall": 0.75,
+          "f1": 0.6,
+          "support": 4,
+          "tp": 3,
+          "fp": 3,
+          "fn": 1
+        }
+      },
+      "unresolved": 0,
+      "ece": 0.1420572042666158,
+      "eceDegenerate": false,
+      "eceN": 33,
+      "coverage": {
+        "fired": 33,
+        "total": 33,
+        "hitRate": 1,
+        "precisionWhenFired": 0.5454545454545454
+      }
+    }
+  },
+  "n": 33,
+  "modeIntentByMode": {
+    "team-meet": {
+      "n": 6,
+      "accuracy": 0,
+      "macroF1": 0,
+      "labelsScored": 4,
+      "underpowered": true
+    },
+    "technical-interview": {
+      "n": 10,
+      "accuracy": 0.4,
+      "macroF1": 0.27777777777777773,
+      "labelsScored": 6,
+      "underpowered": true
+    },
+    "sales": {
+      "n": 9,
+      "accuracy": 0.3333333333333333,
+      "macroF1": 0.17142857142857143,
+      "labelsScored": 5,
+      "underpowered": true
+    },
+    "call-center": {
+      "n": 7,
+      "accuracy": 0.42857142857142855,
+      "macroF1": 0.43333333333333335,
+      "labelsScored": 4,
+      "underpowered": true
+    },
+    "lecture": {
+      "n": 1,
+      "accuracy": 0,
+      "macroF1": 0,
+      "labelsScored": 1,
+      "underpowered": true
+    }
+  },
+  "secondaryTasks": {
+    "recall": 0,
+    "expected": 12,
+    "found": 0,
+    "rowsWithAny": 12
+  },
+  "latency": {
+    "n": 33,
+    "p50": 14.901916999999912,
+    "p95": 15.983125000000001,
+    "p99": 15.986916999999949,
+    "mean": 15.034814424242423,
+    "max": 15.986916999999949
+  },
+  "legacy": {
+    "n": 33,
+    "balancedAccuracy": 0.48484848484848486,
+    "macroF1": 0.424963924963925,
+    "labelsScored": 7,
+    "excludedLabels": [],
+    "perLabel": {
+      "behavioral": {
+        "precision": 0.25,
+        "recall": 0.5,
+        "f1": 0.3333333333333333,
+        "support": 2,
+        "tp": 1,
+        "fp": 3,
+        "fn": 1
+      },
+      "clarification": {
+        "precision": 0,
+        "recall": 0,
+        "f1": 0,
+        "support": 6,
+        "tp": 0,
+        "fp": 2,
+        "fn": 6
+      },
+      "coding": {
+        "precision": 1,
+        "recall": 0.875,
+        "f1": 0.9333333333333333,
+        "support": 8,
+        "tp": 7,
+        "fp": 0,
+        "fn": 1
+      },
+      "deep_dive": {
+        "precision": 0.375,
+        "recall": 0.75,
+        "f1": 0.5,
+        "support": 4,
+        "tp": 3,
+        "fp": 5,
+        "fn": 1
+      },
+      "follow_up": {
+        "precision": 0.3333333333333333,
+        "recall": 0.6666666666666666,
+        "f1": 0.4444444444444444,
+        "support": 3,
+        "tp": 2,
+        "fp": 4,
+        "fn": 1
+      },
+      "general": {
+        "precision": 1,
+        "recall": 0.2222222222222222,
+        "f1": 0.3636363636363636,
+        "support": 9,
+        "tp": 2,
+        "fp": 0,
+        "fn": 7
+      },
+      "summary_probe": {
+        "precision": 0.25,
+        "recall": 1,
+        "f1": 0.4,
+        "support": 1,
+        "tp": 1,
+        "fp": 3,
+        "fn": 0
+      }
+    },
+    "productionWeighted": {
+      "weightedAccuracy": 0.4088865836791148,
+      "labelsWeighted": 7,
+      "missingFromWeights": []
+    }
+  },
+  "roundTrip": {
+    "p50": 15.08,
+    "p95": 16.17
+  },
+  "latencySource": "worker"
+}

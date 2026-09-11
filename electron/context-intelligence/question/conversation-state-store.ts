@@ -42,6 +42,38 @@ export function getConversationState(sessionId: string): ConversationState | nul
   return store().get(sessionId) ?? null;
 }
 
+/**
+ * THE session key for V3 conversation state. Every writer and every reader must
+ * derive its key from here.
+ *
+ * It exists because they did not. Typed chat wrote the ring under
+ * `String(senderId)` (a webContents id) while what-to-answer read it under
+ * `meetingId ?? meetingMarker` — two namespaces, so a screenshot described in
+ * typed chat was invisible to the spoken surface and vice versa, and neither
+ * surface's history could ever contain the other's. The bug is invisible in
+ * isolation: each surface is internally consistent and passes its own tests.
+ *
+ * The meeting wins when there is one, because THAT is the conversation a user
+ * means; the sender/session id is only a fallback for chat outside a meeting.
+ * Prefixed so a meeting id can never collide with a sender id.
+ */
+/**
+ * The key returned when there is NO real conversation scope — no meeting and no
+ * session. It is a shared bucket by construction, so a caller that has its own
+ * scope (a webContents id, say) must prefer that instead of collapsing into it.
+ */
+export const NO_CONVERSATION_SCOPE = 'engine';
+
+export function resolveConversationSessionId(
+  meetingId: string | null | undefined,
+  fallback: string | number | null | undefined,
+): string {
+  const meeting = typeof meetingId === 'string' ? meetingId.trim() : '';
+  if (meeting) return `m:${meeting}`;
+  const key = fallback === null || fallback === undefined ? '' : String(fallback).trim();
+  return key ? `s:${key}` : NO_CONVERSATION_SCOPE;
+}
+
 export interface AdvanceTurnInput {
   sessionId: string;
   scope: EvidenceScope;
@@ -94,10 +126,34 @@ export function advanceConversationState(input: AdvanceTurnInput): ConversationS
  */
 export function recordAnswerSummary(
   sessionId: string, answerText: string, screenContext?: string,
+  /** Seeds state when the turn never went through orchestrate() — a legacy or
+   *  V3-off turn, whose answer would otherwise leave no antecedent at all.
+   *  Only passed by callers that HAVE a question: `appendTurn` refuses a
+   *  question-less turn, and seeding one with '' would create a permanently
+   *  unappendable state rather than fixing anything. */
+  question?: string,
 ): void {
   const s = store();
-  const cur = s.get(sessionId);
+  let cur = s.get(sessionId);
+  if (!cur && question?.trim()) {
+    cur = { previousQuestion: question.trim(), turns: [] } as unknown as ConversationState;
+  }
   if (!cur) return;
+  // THE question this answer answers, captured by the caller at turn time.
+  //
+  // `cur.previousQuestion` is read HERE, at write time, and that is wrong twice
+  // over. It is only ever updated by advance(), so on any path that does not
+  // reach orchestrate() it keeps the FIRST question forever — measured, three
+  // turns each passing their own question were all recorded under the first, so
+  // a screenshot attached on turn 3 reached the model as the answer to turn 1.
+  // And because the live writer defers behind an awaited transcription, a turn
+  // that lands after the NEXT turn has advanced the state would be filed under
+  // that later question instead.
+  //
+  // Falling back to previousQuestion keeps the typed-chat path byte-identical:
+  // it passes no question because advance() has already set the right one for
+  // this very turn.
+  const turnQuestion = question?.trim() || cur.previousQuestion || '';
   const text = String(answerText ?? '');
   s.set(sessionId, {
     ...cur,
@@ -107,7 +163,7 @@ export function recordAnswerSummary(
     // (rather than only overwriting a single slot) is what lets turn N see
     // turn N-2. A turn whose stream was truncated never reaches this call, so
     // it correctly leaves no half-turn behind.
-    turns: appendTurn(cur.turns ?? [], cur.previousQuestion ?? '', text, screenContext),
+    turns: appendTurn(cur.turns ?? [], turnQuestion, text, screenContext),
   });
 }
 

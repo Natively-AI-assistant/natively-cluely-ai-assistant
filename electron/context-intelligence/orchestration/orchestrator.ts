@@ -22,7 +22,7 @@ import { resolveModePolicy, generalKnowledgeAllowed, type ModePolicy } from '../
 import { resolveAnswerPolicy, type AnswerPolicy } from '../policies/answer-policy';
 import { CLAIM_AUTHORITY, claimAuthority } from '../policies/source-authority-policy';
 import { isRetrievalFixEnabled } from '../contracts/retrieval-flags';
-import { classifyTurn, isBareFollowUp } from '../question/turn-classifier';
+import { classifyTurn, isBareFollowUp, stripSttFillers } from '../question/turn-classifier';
 import type { AnswerTrace, RetrievalAttemptTrace } from '../observability/answer-trace';
 
 export interface AnswerRequest {
@@ -91,7 +91,13 @@ export interface OrchestratorResult {
 /** Manual > transcript. Resolution happens ONCE (§12.2). */
 function resolveQuestion(req: AnswerRequest): { resolved: string; source: 'manual' | 'transcript'; confidence: number } {
   const manual = req.manualQuestion?.trim();
-  if (manual) return { resolved: manual, source: 'manual', confidence: 1 };
+  // Fillers and stutters are transcriber noise, never content (2026-09-07,
+  // measured in a 1,000-turn live campaign): "arh" became an "ARH number" in
+  // the answer, "arh so due" an "ARIS chart", and filler-laden value lookups
+  // routed FAST because the classifier could not see "what is the <noun>".
+  // Stripped here, once, so the classifier, the retrieval query and the
+  // model all see the same clean question. rawQuestion keeps the original.
+  if (manual) return { resolved: stripSttFillers(manual) || manual, source: 'manual', confidence: 1 };
   const t = req.transcriptQuestion?.trim() ?? '';
   if (!t) return { resolved: t, source: 'transcript', confidence: 0 };
   // Honour the extractor's own confidence when the caller supplied it; fall
@@ -99,7 +105,7 @@ function resolveQuestion(req: AnswerRequest): { resolved: string; source: 'manua
   const c = typeof req.questionConfidence === 'number' && Number.isFinite(req.questionConfidence)
     ? Math.max(0, Math.min(1, req.questionConfidence))
     : 0.7;
-  return { resolved: t, source: 'transcript', confidence: c };
+  return { resolved: stripSttFillers(t) || t, source: 'transcript', confidence: c };
 }
 
 function buildClaimRequirements(
@@ -126,6 +132,16 @@ function buildClaimRequirements(
       subject: clauses[ct],
     };
   });
+}
+
+/** See the `queries` note in decide(): a bare fragment borrows the attached file names as its retrieval subject. */
+export function bareFragmentQuery(resolved: string, attachedFileNames: readonly string[] | undefined): string | null {
+  if (!attachedFileNames?.length || !isBareFollowUp(resolved)) return null;
+  const words = attachedFileNames
+    .map((n) => String(n ?? '').replace(/\.[a-z0-9]{1,5}$/i, '').replace(/[^a-z0-9]+/gi, ' ').trim())
+    .filter(Boolean)
+    .join(' ');
+  return words ? `${resolved} ${words}`.trim() : null;
 }
 
 /** Decide ONCE. The result is deep-frozen; nothing downstream may reinterpret it. */
@@ -181,7 +197,14 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
         : policy.allowedSourceTypes.filter((s) =>
           s === 'REFERENCE_FILE' || s === 'PROJECT_FILE' || s === 'CODING_SAMPLE' || s === 'MEETING_TRANSCRIPT'))
       : [],
-    queries: [q.resolved],
+    // A bare fragment with no referent ("explain", "why?", "more") retrieves
+    // NOTHING on its own text, so the composer had no material to apply it to
+    // and asked "what should I explain?" (2026-09-07, always-answer). When
+    // files are attached, the attachments are the only subject the fragment
+    // can be about: widen the retrieval query with their names so their
+    // chunks surface, and the follow-up guidance applies the fragment to them.
+    // The resolved question itself is unchanged — only the retrieval query.
+    queries: [bareFragmentQuery(q.resolved, req.attachedFileNames) ?? q.resolved],
     entities: [],
     useSemanticSearch: true,
     useKeywordSearch: true,
@@ -190,9 +213,16 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
     usePreviousSourceContinuity: cls.questionTypes.includes('FOLLOW_UP'),
     retrieveAdjacentContext: cls.path === 'VERIFICATION',
     maximumAttempts: 2,
-    maximumCandidates: policy.retrievalPolicy.maximumCandidates,
-    maximumAcceptedEvidence: policy.retrievalPolicy.maximumAcceptedEvidence,
-    timeoutMs: 1200,
+    // An exhaustive request ("find every place…") is widened HERE, once: the
+    // ports read these two numbers, the packer reads the cap, and the composer
+    // reads the flag. ×2 candidates so the rerank pool has something to widen
+    // into; ×3 accepted evidence because the measured miss was 8 of ~20 values
+    // with the cap at 6 (2026-09-07). Latency is still bounded: the rerank
+    // budget is unchanged, only its pool grows.
+    maximumCandidates: policy.retrievalPolicy.maximumCandidates * (cls.exhaustive && cls.shouldRetrieve ? 2 : 1),
+    maximumAcceptedEvidence: policy.retrievalPolicy.maximumAcceptedEvidence * (cls.exhaustive && cls.shouldRetrieve ? 3 : 1),
+    timeoutMs: cls.exhaustive && cls.shouldRetrieve ? 2400 : 1200,
+    ...(cls.exhaustive && cls.shouldRetrieve ? { exhaustive: true } : {}),
   };
 
   return freezeTurnDecision({

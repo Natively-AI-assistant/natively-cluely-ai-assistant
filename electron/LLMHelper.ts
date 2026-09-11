@@ -22,6 +22,7 @@ import {
 } from "./llm/tinyPrompts"
 import { getModelCapabilities, selectPromptTier, estimateTokens, truncateTranscriptToFit, getOpenAiMaxOutput, getOpenAiReasoningEffort, type OpenAiReasoningEffort, type PromptTier, type ModelCapabilities } from "./llm/modelCapabilities"
 import { GeminiPromptCache } from "./llm/GeminiPromptCache"
+import { filterOllamaGenerationModels } from "./llm/ollamaGenerationModels"
 import {
   runStreamingVisionFallback,
   orderVisionByHealth,
@@ -68,12 +69,15 @@ import { promisify } from 'util';
 import axios from 'axios';
 import { createProviderRateLimiters, RateLimiter } from './services/RateLimiter';
 import { CodexCliConfig, CodexCliService, DEFAULT_CODEX_CLI_CONFIG } from './services/CodexCliService';
+import { AntigravityService } from './services/AntigravityService';
 import { GROQ_PRIMARY_MODEL, groqFallbackFor, isGroqModelGone, groqReasoningParams } from './llm/groqModels';
 import { DirectAssistError } from './direct-assist/errors';
 import { DIRECT_ASSIST_CURRENT_TURN_SPEECH_MARKER } from './direct-assist/requestBuilder';
+import { DIRECT_ASSIST_LADDER_INELIGIBLE_PROVIDERS } from './direct-assist/types';
 import type {
   DirectAssistDispatchRequest,
   DirectAssistProvider,
+  DirectAssistRung,
   DirectAssistSelection,
 } from './direct-assist/types';
 const execAsync = promisify(exec);
@@ -174,6 +178,23 @@ const CLAUDE_MAX_OUTPUT_TOKENS = 64000
 // connect that then prefills slowly. Override per-call for non-interactive use.
 const INTERACTIVE_CONNECT_TIMEOUT_MS = 4_000;
 
+// Direct Assist connect budgets. The 4s ceiling above is calibrated for the
+// LIVE path, where a connect that stalls is HANDED OFF — the ladder tries the
+// next provider. Direct Assist has no retry, no model ladder and no
+// cross-provider failover by design, so a deadline that fires there is a
+// user-visible hard failure with nothing behind it.
+//
+// Measured on the shipping default (`natively`, auto-selected by
+// CredentialsManager.setNativelyApiKey for anyone who has not deliberately
+// picked another model): text time-to-first-byte 1.2-2.0s, but a vision
+// request carrying a compressed screenshot lands at 2.1-4.0s — straddling the
+// 4s line, so screenshot answers failed intermittently with CONNECT_TIMEOUT
+// (one measured success cleared it by 6ms). These budgets stay inside
+// DEFAULT_DIRECT_ASSIST_STREAM_IDLE_TIMEOUT_MS (45s) so a genuinely dead
+// connection still ends promptly with a specific error.
+const DIRECT_ASSIST_CONNECT_TIMEOUT_MS = 15_000;
+const DIRECT_ASSIST_VISION_CONNECT_TIMEOUT_MS = 30_000;
+
 // First-useful-token budget for the Natively gateway on the TEXT path. Larger than
 // the shared 2.5s text default because the gateway's server-side fallback chain can
 // land on MiniMax (first token 3.3-7.7s); a 2.5s cap aborts it before it speaks.
@@ -181,6 +202,31 @@ const INTERACTIVE_CONNECT_TIMEOUT_MS = 4_000;
 // per-provider gate never fires before the single source-of-truth deadline. See the
 // natively text-provider registration for the full rationale.
 const NATIVELY_TEXT_TTFT_MS = 8_000;
+/**
+ * The smallest window in which a spare rung is worth opening at all. Below it
+ * the rung is dropped: a request that cannot reach first token before the
+ * caller's deadline still costs the user money and the provider a slot.
+ *
+ * WHERE THE NUMBER COMES FROM. It is not a measurement and deliberately not
+ * adaptive. The only spare that declares a need is natively at
+ * NATIVELY_TEXT_TTFT_MS (8000), so this is ~37% of the one figure the codebase
+ * actually asserts about a spare — enough that a fast rung can land, low enough
+ * that it does not itself become the reason a rung is dropped.
+ *
+ * Deriving it per-rung from observed latency was considered and REJECTED: the
+ * only per-rung statistic here is textHealth's ttftEma, which is populated on
+ * SUCCESS only. A spare that has never won has no EMA, so the measured path
+ * would apply precisely where it is least needed — and a rung whose thin slice
+ * made it time out would raise its own floor, drop itself from fitting, and
+ * never be measured again. A rung's own history must not decide whether the
+ * rung is ever tried.
+ *
+ * What makes the bare number safe is the invariant, not the value: the fitted
+ * chain never exceeds the route ceiling, and a turn whose spares are all
+ * dropped falls back to the whole budget plus a hedge. Both are swept across
+ * the entire reachable latency range in LiveDeadlineRouteTable2026_09_06.
+ */
+const MIN_USEFUL_RUNG_MS = 3_000;
 
 // ── Deterministic sampling for interview/coding answers (REPORT §22 D1) ──────
 // The text streaming methods previously used scattered temperatures (0.3/0.4/
@@ -519,6 +565,193 @@ export class LLMHelper {
   // vision breaker and vice-versa (different endpoints, different latencies).
   private textHealth: Map<string, VisionHealthEntry> = new Map();
 
+  // ─── Observed first-token latency of the SELECTED answer provider ────────
+  // Feeds the adaptive user-endpoint deadline (liveDeadlines.userEndpointBudgetMs).
+  //
+  // Deliberately NOT textHealth. That map is the emergency text RACE's breaker,
+  // keyed by rung id ('custom', 'litellm'), and its ttftEma exists to reorder
+  // rungs. Two different gateways both land on the id 'custom' there, which is
+  // harmless for ordering and wrong for a deadline — one user's fast OpenRouter
+  // would size the budget for their slow self-hosted proxy. This map is keyed by
+  // the ENDPOINT (see answerLatencyKey), so editing a provider's base URL starts
+  // a fresh measurement instead of inheriting a stale one, with no setter hook
+  // to remember.
+  //
+  // maxMs is a DECAYING maximum, not a mean: a deadline sized off an average
+  // lands near p50 and guillotines the tail, which is the exact geometry of the
+  // vision-ceiling defect. The 0.9 decay lets one freak sample age out over
+  // ~10 healthy turns instead of pinning the budget for the session.
+  private answerLatency: Map<string, { maxMs: number; ewmaMs: number; count: number }> = new Map();
+
+  /**
+   * Stable identity for the endpoint currently selected, or null when the route
+   * is not a user endpoint (nothing else adapts, so nothing else is measured).
+   */
+  private answerLatencyKey(): string | null {
+    if (this.customProvider) {
+      const c: any = this.customProvider;
+      return `custom:${c.id}:${c.baseUrl || c.model || ''}`;
+    }
+    if (this.activeCurlProvider) {
+      const c: any = this.activeCurlProvider;
+      return `curl:${c.id}:${c.curlCommand ? String(c.curlCommand).length : ''}`;
+    }
+    if (this.isLiteLLMModel(this.currentModelId) || this.isNvidiaNimModel(this.currentModelId)) {
+      return `model:${this.currentModelId}`;
+    }
+    return null;
+  }
+
+  /**
+   * Record how long the selected provider took to produce its first token on a
+   * turn that COMMITTED. Only committed turns are recorded: a turn aborted by
+   * the deadline would otherwise teach the budget that this endpoint takes
+   * exactly as long as the budget allows, which is a feedback loop that can only
+   * ratchet upward.
+   */
+  public recordAnswerFirstToken(ms: number): void {
+    if (!Number.isFinite(ms) || ms < 0) return;
+    const key = this.answerLatencyKey();
+    if (!key) return;
+    const prev = this.answerLatency.get(key);
+    this.answerLatency.set(key, {
+      // Rounded: this feeds a setTimeout and a log line, and a decaying float
+      // accumulates a long fractional tail that makes both unreadable.
+      maxMs: prev ? Math.round(Math.max(ms, prev.maxMs * 0.9)) : Math.round(ms),
+      ewmaMs: prev ? Math.round(0.2 * ms + 0.8 * prev.ewmaMs) : Math.round(ms),
+      count: (prev?.count ?? 0) + 1,
+    });
+  }
+
+  // ─── A copy of the turn's ANSWER call, for its post-answer repairs ───────
+  //
+  // A repair used to be dispatched as `streamChat(repairPrompt, undefined,
+  // undefined, undefined, true, true)`: no images, no transcript, no system
+  // prompt, no scopes, no route. The answer had all of it. So the repair was
+  // asked to improve an answer it could not see the evidence for — on a
+  // screenshot turn it could not see the screenshot at all, and with
+  // skipModeInjection still true it could not pull the reference files back
+  // either. It was reasoning from the prior answer text alone.
+  //
+  // WhatToAnswerLLM already composes the answer as a single argument tuple with
+  // ignoreKnowledgeMode/skipModeInjection BOTH true, which means the transcript,
+  // the screenshot, the reference files, the realtime prompt and the mode prompt
+  // are already baked into that tuple's message and system prompt rather than
+  // injected downstream. So the tuple is self-contained and replaying it costs
+  // no retrieval — the repair simply gets the turn the answer got.
+  //
+  // KEYED BY THE TURN'S ABORT SIGNAL, and a WeakMap so a finished turn's copy is
+  // collectable. The key matters: replaying turn N-1's tuple on turn N would
+  // hand the repair a stale transcript and a stale screenshot, which is strictly
+  // worse than the `undefined` it passes today. A missing or mismatched key
+  // returns null and the caller keeps its current arguments — and that is a live
+  // branch, not an edge case: the ScopeFallback route and the Context-OS
+  // refuse/clarify terminals never reach the compose step at all.
+  private answerCallByTurn: WeakMap<object, Parameters<LLMHelper['streamChat']>> = new WeakMap();
+
+  /** Longest prefix of the answer prompt a repair may inherit. */
+  private static readonly REPLAYED_ANSWER_PROMPT_MAX_CHARS = 24000;
+
+  /** Called by the ANSWER paths only. Repairs must never overwrite the copy. */
+  public rememberAnswerCall(key: object | undefined | null, args: Parameters<LLMHelper['streamChat']>): void {
+    if (!key || typeof key !== 'object') return;
+    try { this.answerCallByTurn.set(key, args); } catch { /* never break the answer */ }
+  }
+
+  /**
+   * The answer call's arguments, with the repair's own message and abort signal
+   * substituted. Returns null when this turn has no remembered answer.
+   *
+   * The signal is REPLACED, never inherited. By the time a repair runs the
+   * answer's controller may already be aborted — often that is why the repair is
+   * running — and a replayed aborted signal yields zero tokens, trips no
+   * "useful" threshold, and looks exactly like the old behaviour while being
+   * silent about it.
+   */
+  public replayAnswerCall(
+    key: object | undefined | null,
+    repairMessage: string,
+    signal?: AbortSignal,
+  ): Parameters<LLMHelper['streamChat']> | null {
+    if (!key || typeof key !== 'object') return null;
+    const args = this.answerCallByTurn.get(key);
+    if (!args) return null;
+    // The answer prompt was already fitted to the model's context budget, so an
+    // appended instruction pushes past what it was fitted to. Trim the INHERITED
+    // half — never the repair instruction, which is the only part that says what
+    // to do.
+    const original = String(args[0] ?? '');
+    const cap = LLMHelper.REPLAYED_ANSWER_PROMPT_MAX_CHARS;
+    const inherited = original.length > cap
+      ? `${original.slice(0, cap)}\n\n[...answer context truncated for the repair pass...]`
+      : original;
+    const message = `${inherited}\n\n---\n${repairMessage}`;
+    const replayed = [...args] as Parameters<LLMHelper['streamChat']>;
+    replayed[0] = message;
+    replayed[7] = signal;
+    // The spread is SHALLOW, so the route object at [9] — and the
+    // contextOsGeneration inside it — was the very same instance the answer
+    // turn is still using. The govern branch sets
+    // `governedEvidenceResolutionStarted = true` before it checks
+    // `_cogEarly.evidencePack`, so any throw inside that try replaces the pack
+    // with emptyEvidencePack({ answerPolicy: 'refuse_insufficient_evidence' }).
+    // Reproduced: the repair's write turned the ANSWER's real pack into a
+    // refuse-pack, which the post-stream validator and claim persistence then
+    // read for an answer that had already been delivered. A repair must be able
+    // to resolve its own evidence without editing the turn it is repairing.
+    const route: any = replayed[9];
+    if (route && typeof route === 'object') {
+      const copy: any = { ...route };
+      if (copy.contextOsGeneration && typeof copy.contextOsGeneration === 'object') {
+        copy.contextOsGeneration = { ...copy.contextOsGeneration };
+      }
+      replayed[9] = copy;
+    }
+    return replayed;
+  }
+
+  /**
+   * The turn's answer call, VERBATIM, for a regeneration after the first attempt
+   * produced no answer in time.
+   *
+   * Distinct from replayAnswerCall, and the difference is the whole point. A
+   * post-answer REPAIR has an answer to improve, so it appends an instruction
+   * saying how. A REGENERATION has no answer at all — the request was correct
+   * and simply did not come back — so the right second attempt is the same
+   * request again: same prompt, same 180s transcript, same reference files,
+   * same realtime prompt, same screenshot. Appending anything here would make
+   * attempt 2 a different question from the one the user asked.
+   *
+   * Only the abort signal is swapped: the original was aborted by the deadline
+   * driver's cleanup before this runs.
+   */
+  public retryAnswerCall(
+    key: object | undefined | null,
+    signal?: AbortSignal,
+  ): Parameters<LLMHelper['streamChat']> | null {
+    if (!key || typeof key !== 'object') return null;
+    const args = this.answerCallByTurn.get(key);
+    if (!args) return null;
+    const retried = [...args] as Parameters<LLMHelper['streamChat']>;
+    retried[7] = signal;
+    return retried;
+  }
+
+  /** Does this turn carry a screenshot? Repairs need it to size their deadline. */
+  public replayedAnswerHasImages(key: object | undefined | null): boolean {
+    if (!key || typeof key !== 'object') return false;
+    const args = this.answerCallByTurn.get(key);
+    return Array.isArray(args?.[1]) && (args![1] as string[]).length > 0;
+  }
+
+  /** What we have measured from the selected endpoint; null when unmeasured. */
+  public observedAnswerLatency(): { maxMs: number; count: number } | null {
+    const key = this.answerLatencyKey();
+    if (!key) return null;
+    const e = this.answerLatency.get(key);
+    return e ? { maxMs: e.maxMs, count: e.count } : null;
+  }
+
   // Process-local cache of Gemini explicit context caches (caches.create).
   // Lifecycle and contract documented in GeminiPromptCache.ts.
   private geminiPromptCache: GeminiPromptCache = new GeminiPromptCache();
@@ -738,7 +971,7 @@ export class LLMHelper {
   private static readonly PROVIDER_LABEL_FAMILY: Readonly<Record<string, string>> = {
     gemini: 'gemini', groq: 'groq', natively: 'natively', openai: 'openai',
     claude: 'claude', deepseek: 'deepseek', litellm: 'litellm', codex: 'codex-cli',
-    custom_curl: 'custom', custom_provider: 'custom',
+    antigravity: 'antigravity', custom_curl: 'custom', custom_provider: 'custom',
   };
 
   /**
@@ -798,6 +1031,7 @@ export class LLMHelper {
   /** Live, fail-OPEN: a credential-store failure must not start refusing turns
    *  that would otherwise have been answered. */
   private anyVisionProviderAvailable(): boolean {
+    if (!this.isProviderDisabled('antigravity') && AntigravityService.getInstance().getStatus().signedIn) return true;
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
@@ -1293,10 +1527,22 @@ export class LLMHelper {
     userPrompt: string,
     systemPrompt: string,
     imagePath: string,
+    // The calling chain's per-attempt budget and cancellation. Optional so the
+    // signature stays back-compatible, but VisionProviderRegistry always passes
+    // both — without them the chain's own deadline could not reach the provider
+    // and each method's private default silently became the real bound.
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
   ): Promise<string> {
     switch (providerId) {
       case 'natively':
-        return this.generateWithNatively(userPrompt, systemPrompt, [imagePath]);
+        // A screen-understanding extraction is the DENSE, non-streaming case
+        // that generateWithNatively's own 8s default explicitly warns is "far
+        // too short" — and no caller had ever passed the larger bound it asks
+        // for. Hand it the chain's budget so the two agree.
+        return this.generateWithNatively(userPrompt, systemPrompt, [imagePath], {
+          timeoutMs: opts?.timeoutMs,
+          signal: opts?.signal,
+        });
       case 'openai':
         return this.generateWithOpenai(userPrompt, systemPrompt, [imagePath]);
       case 'claude':
@@ -1549,6 +1795,76 @@ export class LLMHelper {
     return modelId === "codex-cli" || modelId.startsWith("codex-cli:");
   }
 
+  private isAntigravityModel(model: string): boolean { return model.startsWith('antigravity:'); }
+
+  private getAntigravityModelId(model: string): string { return model.replace(/^antigravity:/, ''); }
+
+  private async *streamWithAntigravity(userPrompt: string, systemPrompt?: string, imagePaths?: string[], signal?: AbortSignal, model = this.currentModelId, direct = false): AsyncGenerator<string> {
+    if (this.isLocalOnlyMode) throw new Error('Cloud providers disabled in local-only mode');
+    // Direct Assist has already classified/stripped optional context. Its typed
+    // current question must not be reclassified as meeting transcript here.
+    this.assertOutboundScopes('antigravity', direct ? '' : userPrompt, imagePaths, direct ? this.inferEmbeddedMessageScopes(userPrompt) : []);
+    const images = [];
+    for (const imagePath of imagePaths || []) {
+      signal?.throwIfAborted();
+      images.push(await this.processImage(imagePath));
+    }
+    yield* AntigravityService.getInstance().stream({
+      model: this.getAntigravityModelId(model), userPrompt, systemPrompt, images, signal,
+      maxOutputTokens: getModelCapabilities(this.getAntigravityModelId(model), false).outputBudgetTokens,
+    });
+  }
+
+  /**
+   * The Antigravity model a FALLBACK rung should ask for, or null when the rung
+   * must not be seated.
+   *
+   * Two things make this necessary. streamWithAntigravity defaults `model` to
+   * `currentModelId` and only strips an `antigravity:` prefix — so when
+   * Antigravity is recruited as a fallback for some OTHER provider,
+   * `currentModelId` is that provider's id ("gemini-3.8-flash") and would go
+   * onto Antigravity's wire verbatim. And the catalogue is per-account: there is
+   * no id that is safe to hardcode.
+   *
+   * So: the user's own Antigravity selection wins; otherwise the first model
+   * discovery actually returned. If discovery has not run this session there is
+   * nothing to name, and returning null skips the rung — a chain that fails at
+   * the wire is worse than one rung shorter, because the rung still burns its
+   * TTFT budget before the next provider gets a turn.
+   */
+  private antigravityFallbackModel(): string | null {
+    if (this.isLocalOnlyMode) return null;
+    if (this.isProviderDisabled('antigravity')) return null;
+    try {
+      const service = AntigravityService.getInstance();
+      return LLMHelper.resolveAntigravityFallbackModel(
+        service.getStatus().signedIn, this.currentModelId, service.getCachedModels(),
+      );
+    } catch {
+      // A credential-store or service failure must not take the turn down; it
+      // just means no Antigravity rung this time.
+      return null;
+    }
+  }
+
+  /**
+   * The decision half of antigravityFallbackModel, split out as a pure static so
+   * it is testable: the wrapper's only other job is reaching a singleton that
+   * esbuild inlines per bundle and no test can substitute.
+   */
+  static resolveAntigravityFallbackModel(
+    signedIn: boolean, currentModelId: string, cached: readonly { id: string }[] | null,
+  ): string | null {
+    if (!signedIn) return null;
+    // The user's own selection wins over anything discovery happens to list first.
+    if (currentModelId.startsWith('antigravity:')) {
+      const id = currentModelId.slice('antigravity:'.length).trim();
+      return id || null;
+    }
+    const first = cached?.[0]?.id?.trim();
+    return first || null;
+  }
+
   private isCodexAvailable(): boolean {
     // The store spells this family 'codex-cli'; isProviderFamilyDisabled also
     // accepts the router's 'codex'.
@@ -1628,6 +1944,235 @@ export class LLMHelper {
     if (targetModelId === GEMINI_FLASH_MODEL) this.geminiModel = GEMINI_FLASH_MODEL;
 
     console.log(`[LLMHelper] Switched to Model: ${targetModelId}`);
+  }
+
+  /**
+   * Spare rungs for a text turn whose SELECTED provider is a single terminal
+   * branch (Custom / cURL / LiteLLM / NVIDIA NIM).
+   *
+   * Those branches return unconditionally, so until now a user on their own
+   * gateway had no failover at all on the text path — and, worse, the only
+   * mechanism in this file that converts SLOWNESS into failover is the Natively
+   * TTFT race, which they never reach. A provider that connects and then goes
+   * quiet throws nothing, so no catch fires and nothing falls through; the outer
+   * live deadline was the only thing that noticed, and a deadline can only give
+   * up.
+   *
+   * Deliberately does NOT include a configured-but-not-active custom provider,
+   * even though installConfiguredCustomForRace exists for the Natively race.
+   * That helper temporarily reassigns `this.customProvider`, and while it is
+   * swapped answerLatencyKey() resolves to the WRONG provider — a first token
+   * arriving in that window would file the latency sample under a gateway the
+   * user has not selected and poison its adaptive budget. Adding it needs the
+   * key pinned for the turn first; the rungs below touch no instance state.
+   */
+  /**
+   * Did THIS route actually go through the shared fallback engine?
+   *
+   * IntelligenceEngine suppresses its verbatim regeneration when the engine has
+   * already retried, and it used to ask `isUsingUserEndpoint()`. That predicate
+   * is about WHOSE ENDPOINT is being billed, not about whether a retry happened,
+   * and the two disagree for exactly one route: the cURL provider. Branch 2b
+   * calls executeCustomProvider, which returns Promise<string> — it is fully
+   * blocking, has no first token to race, and is deliberately NOT wrapped in
+   * the engine. A cURL user therefore got no engine retry AND no regeneration:
+   * measured, one request and then the canned line. Strictly worse than before
+   * the failover work, which at least still regenerated.
+   *
+   * Wrapping 2b instead would be the wrong tool — a hedge on a blocking call
+   * duplicates the whole request for no latency win.
+   */
+  public hasEngineLevelRetry(): boolean {
+    if (this.useOllama || this.isUsingCodexCli()) return false;
+    if (this.activeCurlProvider) return false;      // branch 2b: blocking, terminal
+    return this.isUsingUserEndpoint();
+  }
+
+  private buildTextSpareRungs(
+    userContent: string,
+    finalSystemPrompt: string,
+    thinkingBudget: number,
+    excludeIds: string[] = [],
+  ): TextStreamProvider[] {
+    const spares: TextStreamProvider[] = [];
+    // Belt and braces with the per-method guards: a local-only user gets no
+    // cloud spare offered at all, so the failure mode is "no spare" rather
+    // than "a spare that throws on every turn".
+    if (this.isLocalOnlyMode) return spares;
+    const skip = new Set(excludeIds);
+    let prio = 1;
+    if (!skip.has('natively') && this.hasNatively()) {
+      spares.push({
+        id: 'natively', name: 'Natively API', isLocal: false, priority: prio++,
+        ttftTimeoutMs: NATIVELY_TEXT_TTFT_MS,
+        open: (sig) => this.streamWithNatively(userContent, finalSystemPrompt, undefined, sig, INTERACTIVE_CONNECT_TIMEOUT_MS),
+      });
+    }
+    if (!skip.has('gemini_flash') && this.client) {
+      spares.push({
+        id: 'gemini_flash', name: 'Gemini Flash', isLocal: false, priority: prio++,
+        open: (sig) => this.streamWithGeminiModel(userContent, GEMINI_FLASH_MODEL, undefined, finalSystemPrompt, sig, thinkingBudget),
+      });
+    }
+    if (!skip.has('groq') && this.groqClient) {
+      const groqSystem = this.injectLanguageInstruction(GROQ_SYSTEM_PROMPT);
+      spares.push({
+        id: 'groq', name: 'Groq', isLocal: false, priority: prio++,
+        open: (sig) => this.streamWithGroq(userContent, GROQ_MODEL, groqSystem, sig),
+      });
+    }
+    return spares;
+  }
+
+  /**
+   * When to launch the parallel retry, for a single-provider user who has no
+   * spare rung to fail over to.
+   *
+   * MUST sit ABOVE this endpoint's observed first token, or the hedge fires on
+   * turns that were about to succeed and bills the user's own key twice for
+   * nothing. The engine's own default (hedgeDelayDefaultMs, clamped 2.5-6s) is
+   * sized for the shipped text chain and is far too eager for a gateway
+   * measured at 11.6s — and its EWMA input is absent here anyway, because the
+   * selected provider's terminal branch never populated textHealth. So the
+   * delay comes from the same decaying max the adaptive ceiling uses; a second
+   * latency statistic for one provider is the recurring mistake in this area.
+   */
+  private hedgeDelayForBudget(budgetMs: number): number {
+    const observed = this.observedAnswerLatency();
+    const floor = Math.round(budgetMs * 0.5);
+    const ceil = Math.round(budgetMs * 0.85);
+    if (!observed || observed.count <= 0) return Math.round(budgetMs * 0.6);
+    return Math.min(ceil, Math.max(floor, Math.round(observed.maxMs) + 1500));
+  }
+
+  /**
+   * Run a single-terminal-rung text turn through the shared fallback engine, so
+   * that a STALL fails over (or, with nothing to fail over to, is retried in
+   * parallel) instead of running out the clock.
+   *
+   * The rung budget comes from the live route table, NOT
+   * DEFAULT_TEXT_FALLBACK_CONFIG's 2_500ms. That default is sized for the
+   * shipped chain; applying it here would fail this population over at 2.5s
+   * when their measured tail is 11.6s, silently undoing the whole route table.
+   */
+  private async *streamSelectedProviderWithFailover(opts: {
+    id: string;
+    name: string;
+    open: (signal: AbortSignal) => AsyncGenerator<string, void, unknown>;
+    userContent: string;
+    finalSystemPrompt: string;
+    thinkingBudget: number;
+    abortSignal?: AbortSignal;
+    /** This turn carries a screenshot — see the guard at the top of the body. */
+    hasImages?: boolean;
+    /** Rungs this provider must never fail over to (itself, above all). */
+    excludeSpareIds?: string[];
+  }): AsyncGenerator<string, void, unknown> {
+    // An image-bearing turn gets NO spares and NO hedge. Every spare rung built
+    // below is text-only, so failing over would silently drop the screenshot and
+    // answer a different question than the user asked. Image turns are supposed
+    // to be intercepted by the unified vision chain far above this; reaching here
+    // with images means that chain already declined, and a text-only rescue is
+    // not a rescue.
+    if (opts.hasImages) {
+      yield* opts.open(opts.abortSignal ?? new AbortController().signal);
+      return;
+    }
+    // Dynamic, like every other liveDeadlines use in this file — a static
+    // import here closes a module cycle.
+    const { totalHardTimeoutMs } = await import('./llm/liveDeadlines');
+    const budgetMs = totalHardTimeoutMs({
+      isUserEndpoint: this.isUsingUserEndpoint(),
+      observedUserEndpointLatency: this.observedAnswerLatency(),
+    });
+    const spares = this.buildTextSpareRungs(opts.userContent, opts.finalSystemPrompt, opts.thinkingBudget, [opts.id, ...(opts.excludeSpareIds ?? [])]);
+
+    // How long to wait on this provider before doing something else. With a
+    // spare behind it that is a FAILOVER trigger; with nothing behind it, it is
+    // the whole budget, because giving up early on the only provider you have
+    // buys nothing. Same question either way, so the same number answers it —
+    // and it is measurement-aware, which is what stops a gateway with a known
+    // 11.6s tail being abandoned at the engine's text-sized 2.5s default.
+    let primaryTtftMs = spares.length > 0 ? this.hedgeDelayForBudget(budgetMs) : budgetMs;
+
+    // Fit the spare rungs INSIDE the caller's ceiling. Each rung previously
+    // declared its own ttft (natively 8000) or inherited the whole budget, so
+    // the chain's worst case was primary + 8000 + budget + budget against a
+    // budget-sized ceiling: measured on a 15000ms route, rung 3 opened at
+    // 13047ms with 1953ms left and rung 4 never opened at all. Opening a rung
+    // that cannot reach first token before the caller kills the turn is not a
+    // failover, it is a billed request with no chance of winning. So walk the
+    // spares against the remaining time and drop the ones that do not fit.
+    let remainingForSpares = Math.max(0, budgetMs - primaryTtftMs);
+    const fittedSpares: TextStreamProvider[] = [];
+    for (const spare of spares) {
+      if (remainingForSpares < MIN_USEFUL_RUNG_MS) break;
+      const want = spare.ttftTimeoutMs ?? remainingForSpares;
+      const give = Math.min(want, remainingForSpares);
+      fittedSpares.push({ ...spare, ttftTimeoutMs: give });
+      remainingForSpares -= give;
+    }
+    // If fitting dropped EVERY spare, this is the lone-provider case after all,
+    // and both decisions above were made on the pre-fitting count: the primary
+    // would keep a shortened failover-trigger ttft while having nothing to fail
+    // over to, and no hedge would be armed — strictly worse than before rung
+    // fitting existed. Today the arithmetic cannot quite reach that (the
+    // user-endpoint budget is observed+5000 while the hedge fires at
+    // observed+1500, leaving exactly 3500ms, and the shipped 8000ms route never
+    // records latency so it always leaves 3200ms) — but that is a coincidence
+    // of two unrelated constants, not a guarantee, and it would break silently
+    // the day either one moves. Decide from what actually survived.
+    if (fittedSpares.length === 0) primaryTtftMs = budgetMs;
+    const hedging = fittedSpares.length === 0;
+    const primary: TextStreamProvider = {
+      id: opts.id, name: opts.name, isLocal: false, priority: 0,
+      ttftTimeoutMs: primaryTtftMs,
+      open: (sig) => opts.open(sig),
+    };
+    if (hedging) {
+      // A distinct id so the primary's own breaker does not suppress its hedge.
+      // The cost of the distinct id is that the hedge gets its own cooldown, so
+      // a chronically dead provider keeps being hedged — accepted, because the
+      // alternative is that the first failure disables the only retry this user
+      // has.
+      primary.hedgeWith = {
+        id: `${opts.id}#hedge`,
+        name: `${opts.name} (parallel retry)`,
+        open: (sig) => opts.open(sig),
+      };
+    }
+
+    console.log('[LLMHelper] selected-provider text turn', {
+      provider: opts.id, budgetMs, primaryTtftMs,
+      spares: fittedSpares.map(p => `${p.id}@${p.ttftTimeoutMs}ms`),
+      sparesDropped: spares.length - fittedSpares.length,
+      mode: hedging ? 'hedged (no spare rung configured)' : 'failover',
+    });
+
+    // Lazily materialised: several suites drive _streamChatInner on an
+    // Object.create(LLMHelper.prototype) instance, which never runs the field
+    // initialisers, so this map is undefined there. The engine dereferences it
+    // unconditionally, so without this the whole turn throws rather than merely
+    // losing its health tracking.
+    if (!this.textHealth) this.textHealth = new Map();
+    yield* runStreamingTextFallback(
+      [primary, ...fittedSpares],
+      this.textHealth,
+      {
+        ...DEFAULT_TEXT_FALLBACK_CONFIG,
+        // One attempt per rung: the hedge is already a second concurrent call,
+        // and maxAttempts 2 would make a single-provider turn four billed
+        // requests before the chain even ends.
+        maxAttempts: 1,
+        ttftTimeoutMs: budgetMs,
+        hedgeEnabled: hedging,
+        hedgeDelayDefaultMs: this.hedgeDelayForBudget(budgetMs),
+        hedgeDelayMinMs: Math.round(budgetMs * 0.4),
+        hedgeDelayMaxMs: Math.round(budgetMs * 0.9),
+      },
+      {},
+      opts.abortSignal,
+    );
   }
 
   /**
@@ -1949,7 +2494,10 @@ export class LLMHelper {
     // user asked not to have.
     if (this.isProviderDisabled('ollama')) return { ok: false };
     try {
-      const availableModels = await this.getOllamaModels();
+      // Generation-capable only: a machine holding just the bootstrapped
+      // nomic-embed-text has no local text model, and answering ok:true here
+      // would route a turn to a model that cannot answer it.
+      const availableModels = await this.getOllamaGenerationModels();
       if (availableModels.length === 0) return { ok: false };
       const model = (this.ollamaModel && availableModels.includes(this.ollamaModel))
         ? this.ollamaModel
@@ -2000,9 +2548,16 @@ export class LLMHelper {
 
   private async initializeOllamaModel(): Promise<void> {
     try {
-      const availableModels = await this.getOllamaModels()
+      const availableModels = await this.getOllamaGenerationModels()
       if (availableModels.length === 0) {
-        const msg = `No Ollama models installed. Run "ollama pull <model>" (e.g. ollama pull qwen2.5:4b) and restart.`;
+        // Two different situations, two different instructions. Natively pulls
+        // nomic-embed-text itself for retrieval, so "you have models, none of
+        // them can chat" is a state a fresh install lands in — telling that user
+        // nothing is installed sends them to fix something that is not broken.
+        const installed = await this.getOllamaModels();
+        const msg = installed.length > 0
+          ? `Ollama has ${installed.length} model(s) installed, but none can generate text (embedding models such as nomic-embed-text cannot). Run "ollama pull <model>" (e.g. ollama pull qwen2.5:4b) and restart.`
+          : `No Ollama models installed. Run "ollama pull <model>" (e.g. ollama pull qwen2.5:4b) and restart.`;
         console.warn(`[LLMHelper] ${msg}`);
         this.notifyRendererOllamaError(msg);
         return
@@ -2031,7 +2586,7 @@ export class LLMHelper {
     } catch (error: any) {
       console.error(`[LLMHelper] Failed to initialize Ollama model: ${error?.message}`);
       try {
-        const models = await this.getOllamaModels()
+        const models = await this.getOllamaGenerationModels()
         if (models.length > 0) {
           this.ollamaModel = models[0]
           console.log(`[LLMHelper] Fallback to first installed model: ${this.ollamaModel}`)
@@ -3288,6 +3843,12 @@ let isMultimodal = !!(imagePaths?.length);
       const openaiSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(systemPromptOverride || OPENAI_SYSTEM_PROMPT);
       const claudeSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(systemPromptOverride || CLAUDE_SYSTEM_PROMPT);
 
+      if (!this.useOllama && !this.customProvider && !this.activeCurlProvider && this.isAntigravityModel(this.currentModelId)) {
+        let text = '';
+        for await (const chunk of this.streamWithAntigravity(cloudUserContent, openaiSystemPrompt, cloudImagePaths)) text += chunk;
+        return text;
+      }
+
       // GROQ FAST TEXT OVERRIDE (Text-Only) — gated on picked model so Gemini/Claude/OpenAI
       // selections aren't silently routed to Groq. See streamChat() for matching gate.
       // !this.isCodexCliModel(this.currentModelId) prevents fast-mode from
@@ -3915,7 +4476,7 @@ let isMultimodal = !!(imagePaths?.length);
   /**
    * Routes AI generation through the Natively API backend (Gemini-powered).
    */
-  private async generateWithNatively(userMessage: string, systemPrompt?: string, imagePaths?: string[], opts?: { purpose?: 'extraction'; timeoutMs?: number }): Promise<string> {
+  private async generateWithNatively(userMessage: string, systemPrompt?: string, imagePaths?: string[], opts?: { purpose?: 'extraction'; timeoutMs?: number; signal?: AbortSignal }): Promise<string> {
     this.assertOutboundScopes('natively', userMessage, imagePaths);
     // Prefer the in-memory field; fall back to CredentialsManager for the direct-routing path
     // where currentModelId === 'natively' but setNativelyKey() wasn't called yet.
@@ -4004,6 +4565,10 @@ let isMultimodal = !!(imagePaths?.length);
     // provider waterfall for 25-30s before the OS-level TCP reset fires. Callers doing a
     // DENSE structured extraction (meeting notes) pass a larger bound — 8s is far too
     // short for that, and silently selected for sparse output.
+    // `?? 8000` (not `opts?.timeoutMs || 8000`) so an explicit 0 is impossible
+    // to pass by accident, and so a caller that hands us `undefined` still gets
+    // the documented default. Callers doing a dense extraction — meeting notes,
+    // and now the screen-understanding vision rung — pass their own bound.
     const timeoutMs = opts?.timeoutMs ?? 8000;
     // Overall-deadline signal covers BOTH connect AND the body read below. Without
     // a read-phase bound, a server that sends headers then hangs the body would
@@ -4027,7 +4592,13 @@ let isMultimodal = !!(imagePaths?.length);
         method: 'POST',
         headers,
         body: serializedBody,
-        signal: AbortSignal.any([AbortSignal.timeout(timeoutMs), overallController.signal]),
+        // opts.signal is the CALLER's cancellation (the vision chain's
+        // per-attempt controller). Including it here is what lets an upstream
+        // deadline actually tear this request down instead of leaving it
+        // running while the caller has already moved on.
+        signal: AbortSignal.any(
+          [AbortSignal.timeout(timeoutMs), overallController.signal, opts?.signal].filter(Boolean) as AbortSignal[],
+        ),
       });
     } catch (fetchErr: any) {
       clearTimeout(overallTimer);
@@ -4273,7 +4844,7 @@ let isMultimodal = !!(imagePaths?.length);
     if (imagePath) {
       try {
         const optimized = await getImageOptimizer().optimize(imagePath, {
-          profile: 'balanced',
+          profile: this.imageProfileFor('balanced', userMessage?.length ?? 0),
           provider: 'custom',
           cacheKey: imagePath,
         });
@@ -4505,7 +5076,7 @@ let isMultimodal = !!(imagePaths?.length);
     if (imagePath) {
       try {
         const optimized = await getImageOptimizer().optimize(imagePath, {
-          profile: 'balanced',
+          profile: this.imageProfileFor('balanced', rawUserMessage?.length ?? 0),
           provider: 'custom',
           cacheKey: imagePath,
         });
@@ -5674,6 +6245,18 @@ let isMultimodal = !!(imagePaths?.length);
         cloud.push({ id: 'codex-cli', name: `Codex CLI (${this.codexCliConfig.model})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
           open: (sig) => this.streamWithCodexCli(userContent, systemPrompt, false, imagePaths, sig) });
       }
+      // Antigravity, beside Codex CLI: the panel's other OAuth provider, seated
+      // whenever it is signed in rather than only when selected. It was declared
+      // vision-capable in the support switch but had no rung here — and this
+      // chain intercepts EVERY image-bearing request and returns, so that
+      // declaration was unreachable: a user whose selected model was an
+      // Antigravity one still had their screenshots answered by somebody else,
+      // or refused outright when nothing else was configured.
+      const antigravityVisionModel = this.antigravityFallbackModel();
+      if (antigravityVisionModel) {
+        cloud.push({ id: 'antigravity', name: `Antigravity (${antigravityVisionModel})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
+          open: (sig) => this.streamWithAntigravity(userContent, systemPrompt, imagePaths, sig, `antigravity:${antigravityVisionModel}`) });
+      }
     }
 
     // Local providers (always available, including in local-only mode).
@@ -6520,7 +7103,10 @@ let isMultimodal = !!(imagePaths?.length);
           const { isIntelligenceFlagEnabled: _isFlagOn } = require('./intelligence/intelligenceFlags');
           if (_cogEarly && _cogEarly.govern && forceDocumentGrounding && _isFlagOn('contextOsEvidencePackEnabled')) {
             governedEvidenceResolutionStarted = true;
-            governedTurnQuestion = _cogEarly.turnQuestion?.trim() || null;
+            // The user's message is the turn question when the governance
+            // context carries none (2026-09-07): this used to throw, and the
+            // throw surfaced as "could you rephrase the question?".
+            governedTurnQuestion = _cogEarly.turnQuestion?.trim() || String(message || '').trim() || null;
             markH4Stage('resolver_enter', { hasTurnQuestion: Boolean(governedTurnQuestion) });
             if (!governedTurnQuestion) throw new Error('governed turn missing immutable turn question');
             if (_cogEarly.evidencePack) {
@@ -7075,7 +7661,8 @@ let isMultimodal = !!(imagePaths?.length);
       const referent = callerSuppliedContextForPriorResolution
         ? `\n\n## RECENT CONVERSATION (for pronoun resolution only — not a source of facts)\n${callerSuppliedContextForPriorResolution}`
         : '';
-      const governedQuestion = (routeOptions?.contextOsGeneration as import('./intelligence/context-os').ContextOsGenerationContext | undefined)?.turnQuestion?.trim();
+      const governedQuestion = (routeOptions?.contextOsGeneration as import('./intelligence/context-os').ContextOsGenerationContext | undefined)?.turnQuestion?.trim()
+        || String(message || '').trim();
       if (!governedQuestion) throw new Error('governed prompt missing immutable turn question');
       userContent = `QUESTION: ${governedQuestion}\n\n${contextOsGoverningBlock}${referent}\n\nNow answer this question using ONLY the evidence_pack above: ${governedQuestion}`;
       void contextOsGovernedPack; // referenced for clarity; pack surfaced via _cog
@@ -7288,6 +7875,28 @@ let isMultimodal = !!(imagePaths?.length);
     markH4Stage('provider_dispatch_start', { model: this.currentModelId });
     _stage(`provider dispatch START (sysPrompt=${finalSystemPrompt.length}c, userContent=${userContent.length}c, model=${this.currentModelId})`);
 
+    if (!this.useOllama && !this.customProvider && !this.activeCurlProvider && this.isAntigravityModel(this.currentModelId)) {
+      // Selected-provider text turn (2026-09-07): this was the one remaining
+      // bare terminal rung. Measured on the live What-To-Answer path with
+      // Antigravity selected: intermittent stalls past the 8s first-token
+      // deadline ("AntigravityError: Google request cancelled"), a
+      // regeneration on the SAME stalled provider, and the user shown "I don't
+      // have enough context from the conversation to answer that yet" /
+      // "The model did not produce an answer in time" — a provider stall
+      // dressed as a missing-context refusal. The engine gives it a spare rung
+      // when one is keyed, or a parallel retry when none is; an image turn
+      // gets neither (the spares are text-only). streamWithAntigravity keeps
+      // its own local-only throw and assertOutboundScopes, so the rung is no
+      // wider a data path than before.
+      yield* this.streamSelectedProviderWithFailover({
+        id: 'antigravity', name: 'Google Antigravity',
+        open: (sig) => this.streamWithAntigravity(userContent, finalSystemPrompt, imagePaths, sig),
+        userContent, finalSystemPrompt, thinkingBudget, abortSignal,
+        hasImages: Boolean(imagePaths?.length),
+      });
+      return;
+    }
+
     // ── UNIFIED MULTIMODAL PATH ────────────────────────────────────────────
     // Every image-bearing request goes through the single streaming vision
     // fallback chain (OpenAI → Claude → Gemini → Groq → Natively → local) with
@@ -7399,6 +8008,18 @@ let isMultimodal = !!(imagePaths?.length);
     }
 
     // 1. Ollama Streaming
+    //
+    // DELIBERATELY NOT routed through streamSelectedProviderWithFailover, unlike
+    // every cloud rung below. Two independent reasons:
+    //   • A parallel retry would load the model TWICE. setModel already unloads
+    //     the previous pin precisely so two models are not resident at once; a
+    //     hedge would put two concurrent loads on one laptop's RAM and make both
+    //     attempts slower than the single attempt it was meant to rescue.
+    //   • A cloud spare rung would send the transcript off-device after the user
+    //     chose a local model. That is what the provider data-scope system
+    //     exists to prevent — a latency fix must not become a privacy
+    //     regression.
+    // Codex CLI below is excluded for the same two reasons.
     if (this.useOllama) {
       const ollamaSystemPrompt = this.resolveLocalSystemPrompt(finalSystemPrompt);
       yield* this.streamWithOllama(contextOsGoverningBlock ? userContent : message, contextOsGoverningBlock ? undefined : combinedContext || undefined, ollamaSystemPrompt, imagePaths, abortSignal);
@@ -7412,7 +8033,45 @@ let isMultimodal = !!(imagePaths?.length);
 
     // 2a. CustomProvider (switchToCustom path) — full SSE-capable streaming
     if (this.customProvider) {
-      yield* this.streamWithCustom(message, context, imagePaths, finalSystemPrompt, abortSignal);
+      // This rung used to be TERMINAL — it returned unconditionally, so a user
+      // on their own gateway had no failover on the text path at all, and the
+      // one mechanism here that turns SLOWNESS into failover (the Natively TTFT
+      // race) was unreachable for them. A gateway that connects then goes quiet
+      // throws nothing, so no catch fired and nothing fell through.
+      //
+      // It now runs through the shared fallback engine: a spare rung if the user
+      // has one keyed, and a PARALLEL RETRY of the same gateway if they do not.
+      // The engine still returns unconditionally afterwards, so the user-facing
+      // failure sentence below is still the last word — it just now speaks only
+      // once every rung, including the hedge, has failed.
+      const commit = { emitted: false };
+      try {
+        yield* this.trackCommit(
+          this.streamSelectedProviderWithFailover({
+            id: 'custom',
+            name: `Custom (${this.customProvider.name})`,
+            open: (sig) => this.streamWithCustom(message, context, imagePaths, finalSystemPrompt, sig),
+            userContent, finalSystemPrompt, thinkingBudget, abortSignal,
+            hasImages: Boolean(isMultimodal && imagePaths?.length),
+          }),
+          commit,
+        );
+      } catch (e: any) {
+        if (abortSignal?.aborted) return;
+        if (commit.emitted) {
+          // Died mid-answer. Appending an error sentence after text the user is
+          // already reading would look like a second, contradictory answer —
+          // signal truncation instead, as the last-resort rung below does.
+          console.warn(`[LLMHelper] Custom provider failed AFTER first token — ending stream: ${e?.message || e}`);
+          yield LLMHelper.TRUNCATION_SENTINEL;
+          return;
+        }
+        // Byte-identical to what streamWithCustom used to yield, so this path's
+        // UX is unchanged.
+        yield typeof e?.status === 'number'
+          ? `Error: Custom Provider returned HTTP ${e.status}`
+          : 'Error streaming from custom provider.';
+      }
       return;
     }
 
@@ -7437,11 +8096,17 @@ let isMultimodal = !!(imagePaths?.length);
     if (this.isOpenAiModel(this.currentModelId) && this.openaiClient) {
       const openAiSystem = systemPromptOverride || OPENAI_SYSTEM_PROMPT;
       const finalOpenAiSystem = this.injectLanguageInstruction(openAiSystem);
-      if (isMultimodal && imagePaths) {
-        yield* this.streamWithOpenaiMultimodal(userContent, imagePaths, finalOpenAiSystem, undefined, abortSignal);
-      } else {
-        yield* this.streamWithOpenai(userContent, finalOpenAiSystem, undefined, abortSignal);
-      }
+      // Single terminal rung, same as Custom/LiteLLM/NIM: a well-known endpoint
+      // is usually fast, but nothing sits behind it, and a stall throws nothing
+      // for a catch to see. The engine gives it a spare rung when one is keyed.
+      yield* this.streamSelectedProviderWithFailover({
+        id: 'openai', name: 'OpenAI',
+        open: (sig) => ((isMultimodal && imagePaths)
+          ? this.streamWithOpenaiMultimodal(userContent, imagePaths, finalOpenAiSystem, undefined, sig)
+          : this.streamWithOpenai(userContent, finalOpenAiSystem, undefined, sig)),
+        userContent, finalSystemPrompt: finalOpenAiSystem, thinkingBudget, abortSignal,
+        hasImages: Boolean(isMultimodal && imagePaths?.length),
+      });
       return;
     }
 
@@ -7449,11 +8114,14 @@ let isMultimodal = !!(imagePaths?.length);
     if (this.isClaudeModel(this.currentModelId) && this.claudeClient) {
       const claudeSystem = systemPromptOverride || CLAUDE_SYSTEM_PROMPT;
       const finalClaudeSystem = this.injectLanguageInstruction(claudeSystem);
-      if (isMultimodal && imagePaths) {
-        yield* this.streamWithClaudeMultimodal(userContent, imagePaths, finalClaudeSystem, undefined, abortSignal);
-      } else {
-        yield* this.streamWithClaude(userContent, finalClaudeSystem, undefined, abortSignal);
-      }
+      yield* this.streamSelectedProviderWithFailover({
+        id: 'claude', name: 'Claude',
+        open: (sig) => ((isMultimodal && imagePaths)
+          ? this.streamWithClaudeMultimodal(userContent, imagePaths, finalClaudeSystem, undefined, sig)
+          : this.streamWithClaude(userContent, finalClaudeSystem, undefined, sig)),
+        userContent, finalSystemPrompt: finalClaudeSystem, thinkingBudget, abortSignal,
+        hasImages: Boolean(isMultimodal && imagePaths?.length),
+      });
       return;
     }
 
@@ -7462,13 +8130,29 @@ let isMultimodal = !!(imagePaths?.length);
     if (this.isDeepseekModel(this.currentModelId) && this.deepseekClient && !(isMultimodal && imagePaths)) {
       const deepseekSystem = systemPromptOverride || OPENAI_SYSTEM_PROMPT;
       const finalDeepseekSystem = this.injectLanguageInstruction(deepseekSystem);
-      yield* this.streamWithDeepseek(userContent, finalDeepseekSystem, undefined, abortSignal);
+      yield* this.streamSelectedProviderWithFailover({
+        id: 'deepseek', name: 'DeepSeek',
+        open: (sig) => this.streamWithDeepseek(userContent, finalDeepseekSystem, undefined, sig),
+        userContent, finalSystemPrompt: finalDeepseekSystem, thinkingBudget, abortSignal,
+        // No `hasImages` here, unlike every other rung: the guard above already
+        // excludes image turns from this branch entirely, so it is always false.
+        // Passing it would read as the bug the other five sites exist to avoid.
+      });
       return;
     }
 
     if (this.isNvidiaNimModel(this.currentModelId) && this.nvidiaNimClient) {
       const nimSystem = this.injectLanguageInstruction(systemPromptOverride || OPENAI_SYSTEM_PROMPT);
-      yield* this.streamWithNvidiaNim(userContent, nimSystem, (isMultimodal && imagePaths) ? imagePaths : undefined, abortSignal);
+      // Same treatment as Custom and LiteLLM: a self-hosted NIM endpoint may be
+      // cold-starting a container, and this branch had neither failover nor an
+      // exception to fall through on.
+      yield* this.streamSelectedProviderWithFailover({
+        id: 'nvidia_nim',
+        name: `NVIDIA NIM (${this.currentModelId.replace('nvidia_nim/', '')})`,
+        open: (sig) => this.streamWithNvidiaNim(userContent, nimSystem, (isMultimodal && imagePaths) ? imagePaths : undefined, sig),
+        userContent, finalSystemPrompt: nimSystem, thinkingBudget, abortSignal,
+        hasImages: Boolean(isMultimodal && imagePaths?.length),
+      });
       return;
     }
 
@@ -7477,11 +8161,29 @@ let isMultimodal = !!(imagePaths?.length);
     if (this.isLiteLLMModel(this.currentModelId) && this.litellmClient) {
       const litellmSystem = systemPromptOverride || OPENAI_SYSTEM_PROMPT;
       const finalLitellmSystem = this.injectLanguageInstruction(litellmSystem);
-      yield* this.streamWithLiteLLM(userContent, finalLitellmSystem, (isMultimodal && imagePaths) ? imagePaths : undefined, abortSignal);
+      // Same treatment as the Custom rung above: a LiteLLM gateway is an address
+      // we have not measured, fronting an upstream we cannot see, and this branch
+      // had no failover and no exception on a stall.
+      yield* this.streamSelectedProviderWithFailover({
+        id: 'litellm',
+        name: `LiteLLM (${this.currentModelId.replace('litellm/', '')})`,
+        open: (sig) => this.streamWithLiteLLM(userContent, finalLitellmSystem, (isMultimodal && imagePaths) ? imagePaths : undefined, sig),
+        userContent, finalSystemPrompt: finalLitellmSystem, thinkingBudget, abortSignal,
+        hasImages: Boolean(isMultimodal && imagePaths?.length),
+      });
       return;
     }
 
     // Groq (Text + Multimodal)
+    //
+    // NOT routed through streamSelectedProviderWithFailover, unlike the other
+    // cloud rungs. Groq is the one branch that ALREADY falls through — its error
+    // ladder below (auth-failure disable, over-capacity, the commit.emitted
+    // guard) drops into the Natively TTFT race, so a Groq user already reaches a
+    // multi-rung recovery on error. The only gap is a STALL, and that gap is not
+    // worth wrapping a carefully-built ladder to close: Groq's healthy first
+    // token is sub-second, and the wrap would sit between those branches and
+    // their fall-through.
     if (this.isGroqModel(this.currentModelId) && this.groqClient) {
       try {
         if (isMultimodal && imagePaths) {
@@ -7594,6 +8296,23 @@ let isMultimodal = !!(imagePaths?.length);
           textProviders.push({
             id: 'gemini_flash', name: `Gemini Flash`, isLocal: false, priority: prio++,
             open: (sig) => this.streamWithGeminiModel(userContent, GEMINI_FLASH_MODEL, imagePaths, finalSystemPrompt, sig, thinkingBudget),
+          });
+        }
+        // Fallback: Antigravity, if signed in. Seated after Gemini Flash because
+        // its TTFT is the slower of the two, so the cheap rung keeps first
+        // refusal.
+        //
+        // SCOPE, because it is easy to over-read: this ladder is the
+        // `currentModelId === 'natively'` branch, so what this rung buys is a
+        // Natively-selected user reaching Antigravity when the Natively API is
+        // down. It is NOT general text failover — a selected provider is still
+        // one terminal rung, which is a separate gap and not one this change
+        // closes.
+        const antigravityTextModel = this.antigravityFallbackModel();
+        if (antigravityTextModel) {
+          textProviders.push({
+            id: 'antigravity', name: `Antigravity (${antigravityTextModel})`, isLocal: false, priority: prio++,
+            open: (sig) => this.streamWithAntigravity(userContent, finalSystemPrompt, imagePaths, sig, `antigravity:${antigravityTextModel}`),
           });
         }
         // Fallback: configured-but-not-active Custom provider (e.g. OpenRouter).
@@ -7803,6 +8522,17 @@ let isMultimodal = !!(imagePaths?.length);
    * Throws on empty response so the fallback chain tries the next provider.
    */
   private async * streamWithNatively(userContent: string, systemPrompt?: string, imagePaths?: string[], abortSignal?: AbortSignal, connectTimeoutMs: number = INTERACTIVE_CONNECT_TIMEOUT_MS, directMode = false): AsyncGenerator<string, void, unknown> {
+    // Local-only + outbound-scope guards, matching streamWithGeminiModel and
+    // streamWithGroq. This method was the ONE cloud stream sibling carrying
+    // neither, which went unnoticed while natively was only ever reached from
+    // the server cascade. Adding it as a text SPARE RUNG made the gap
+    // reachable from a user-selected provider: measured, a local-only user
+    // whose gateway stalled had the turn failed over to natively-api and their
+    // transcript sent off-device. The scope assert is a backstop (denied
+    // evidence is stripped upstream), but local-only is NOT enforced by
+    // stripping — nothing else stands between this call and the network.
+    if (this.isLocalOnlyMode) throw new Error('Cloud providers disabled in local-only mode');
+    this.assertOutboundScopes('natively', userContent, imagePaths);
     // ── REAL SSE STREAM (replaces the fake word-by-word simulation) ──────────
     // Previous implementation called generateWithNatively() (blocking, waited for
     // the full response), then drip-fed words with setTimeout delays — pure theater.
@@ -7874,6 +8604,18 @@ let isMultimodal = !!(imagePaths?.length);
       if (images.length) body.images = images;
     }
 
+    // WIDEN-ONLY. Returns `connectTimeoutMs` unchanged unless this network has
+    // been measured to need longer — a 4s connect timer has already killed a
+    // working vision request in this app by a 6ms margin, so evidence may only
+    // ever buy a slow network more room, never less.
+    const effectiveConnectTimeoutMs = (() => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { applyAdaptiveConnectTimeout } = require('./llm/performance/wiring');
+        return applyAdaptiveConnectTimeout(connectTimeoutMs, { llmHelper: this });
+      } catch { return connectTimeoutMs; }
+    })();
+
     const endpointUrl = `${NATIVELY_API_URL}/v1/chat`;
     const requestId = makeRequestId('nat_stream');
     const streamStartedAt = nowMs();
@@ -7923,8 +8665,8 @@ let isMultimodal = !!(imagePaths?.length);
     // connect timeout to the connect phase only.
     const streamController = new AbortController();
     let connectTimer: NodeJS.Timeout | null = setTimeout(
-      () => streamController.abort(new Error(`Natively API connect timeout (${Math.round(connectTimeoutMs / 1000)}s)`)),
-      connectTimeoutMs,
+      () => streamController.abort(new Error(`Natively API connect timeout (${Math.round(effectiveConnectTimeoutMs / 1000)}s)`)),
+      effectiveConnectTimeoutMs,
     );
     const onCallerAbort = () => {
       try { streamController.abort(abortSignal?.reason); } catch { /* already aborted */ }
@@ -7952,8 +8694,17 @@ let isMultimodal = !!(imagePaths?.length);
         e?.cause?.code === 'ENOTFOUND' || e?.cause?.code === 'EAI_AGAIN';
 
       let lastErr: unknown;
+      // The connect measurement is per-ATTEMPT, not since the loop began.
+      // `streamStartedAt` is captured once above, so folding
+      // `responseStartedAt - streamStartedAt` into the connect estimate would
+      // charge a failed attempt-0 DNS lookup plus its backoff to the attempt
+      // that actually succeeded — which is not "request start → response
+      // headers" as the field claims, and pushes connect.maxMs toward its
+      // ceiling on exactly the flaky resolvers the retry exists to survive.
+      let attemptStartedAt = streamStartedAt;
       for (let attempt = 0; attempt < 3; attempt++) {
         if (streamController.signal.aborted) break;
+        attemptStartedAt = nowMs();
         try {
           const serializedBody = JSON.stringify(body);
           if (!directMode) {
@@ -7971,6 +8722,16 @@ let isMultimodal = !!(imagePaths?.length);
             signal: streamController.signal,
           });
           responseStartedAt = nowMs();
+          // The CONNECT phase, measured: request start → response headers. This
+          // is the one provider path that exposes it; every other adapter hands
+          // us a generator and nothing about the socket underneath, which is
+          // why the adaptive connect timeout is deliberately narrow rather than
+          // a number invented for all of them.
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const { recordConnectLatency } = require('./llm/performance/wiring');
+            recordConnectLatency({ llmHelper: this, ms: responseStartedAt - attemptStartedAt });
+          } catch { /* measurement must never break a request */ }
           responseStatus = response.status;
           serverRequestId = response.headers.get('x-request-id');
           lastErr = undefined;
@@ -7986,7 +8747,7 @@ let isMultimodal = !!(imagePaths?.length);
               stage: streamController.signal.aborted ? 'connect_timeout_or_abort' : 'pre_response',
               model: this.currentModelId,
               provider: 'natively',
-              connectTimeoutMs,
+              connectTimeoutMs: effectiveConnectTimeoutMs,
               durationMs,
               error: directMode ? '[omitted for Direct Assist]' : summarizeFetchError(fetchErr),
               aborted: streamController.signal.aborted,
@@ -8003,9 +8764,18 @@ let isMultimodal = !!(imagePaths?.length);
               }
               throw new DirectAssistError('PROVIDER_ERROR', 'The selected provider could not start the stream.', true);
             }
-            throw new Error(`Natively API stream request failed before response requestId=${requestId} endpoint=${endpointUrl} method=POST timeoutMs=${connectTimeoutMs} durationMs=${durationMs} ${formatFetchError(fetchErr)}`);
+            throw new Error(`Natively API stream request failed before response requestId=${requestId} endpoint=${endpointUrl} method=POST timeoutMs=${effectiveConnectTimeoutMs} durationMs=${durationMs} ${formatFetchError(fetchErr)}`);
           }
           console.warn(`[streamWithNatively] DNS failure req=${requestId} (${fetchErr.cause?.code ?? fetchErr.code}), retry ${attempt + 1}/2 in 500ms`);
+          // Bank the retry for the profile. A provider that always succeeds on
+          // attempt three looks perfect by its success rate and feels slow —
+          // this counter is the only thing that makes that visible.
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const { noteTransportRetry } = require('./llm/performance/recorder');
+            const _pid = this.performanceIdentity(false);
+            noteTransportRetry(_pid.providerId, _pid.modelId);
+          } catch { /* a diagnostic counter must never break a retry */ }
           await new Promise<void>(r => setTimeout(r, 500));
         }
       }
@@ -8037,7 +8807,7 @@ let isMultimodal = !!(imagePaths?.length);
         statusText: directMode ? undefined : response.statusText,
         model: this.currentModelId,
         provider: 'natively',
-        connectTimeoutMs,
+        connectTimeoutMs: effectiveConnectTimeoutMs,
         durationMs: Math.round(nowMs() - streamStartedAt),
         responseBody: directMode ? '[omitted for Direct Assist]' : errText.slice(0, 1000),
       });
@@ -8103,7 +8873,7 @@ let isMultimodal = !!(imagePaths?.length);
               model: this.currentModelId,
               provider: 'natively',
               serverModel: providerModel,
-              connectTimeoutMs,
+              connectTimeoutMs: effectiveConnectTimeoutMs,
               tfftMs: firstTokenAt ? Math.round(firstTokenAt - streamStartedAt) : null,
               durationMs: Math.round(nowMs() - streamStartedAt),
               error: directMode ? '[omitted for Direct Assist]' : chunk.error,
@@ -8137,7 +8907,7 @@ let isMultimodal = !!(imagePaths?.length);
         model: this.currentModelId,
         provider: 'natively',
         serverModel: providerModel,
-        connectTimeoutMs,
+        connectTimeoutMs: effectiveConnectTimeoutMs,
         tfftMs: firstTokenAt ? Math.round(firstTokenAt - streamStartedAt) : null,
         durationMs: Math.round(nowMs() - streamStartedAt),
         tokens: tokenCount,
@@ -8169,7 +8939,7 @@ let isMultimodal = !!(imagePaths?.length);
           provider: 'natively',
           serverModel: providerModel,
           fallbackUsed: false,
-          connectTimeoutMs,
+          connectTimeoutMs: effectiveConnectTimeoutMs,
           responseHeaderMs: responseStartedAt ? Math.round(responseStartedAt - streamStartedAt) : null,
           tfftMs: firstTokenAt ? Math.round(firstTokenAt - streamStartedAt) : null,
           totalStreamMs: Math.round(totalMs),
@@ -9118,7 +9888,7 @@ let isMultimodal = !!(imagePaths?.length);
         // wire payload stays under the 10 MB Anthropic per-image limit.
         // Use the first image for custom providers (they typically only support one).
         const optimized = await getImageOptimizer().optimize(sourcePath, {
-          profile: 'balanced',
+          profile: this.imageProfileFor('balanced', 0),
           provider: 'custom',
           cacheKey: sourcePath,
         });
@@ -9195,7 +9965,17 @@ let isMultimodal = !!(imagePaths?.length);
     }
 
     const streamAbort = new AbortController();
-    const streamTimeout = setTimeout(() => streamAbort.abort(), 30_000);
+    // 30s predates Direct Assist (v2.2.0) and is the right generous default
+    // for the legacy/general-purpose callers of this function. Direct Assist
+    // callers get the SAME per-path budget streamWithNatively already uses
+    // (DIRECT_ASSIST_CONNECT_TIMEOUT_MS/VISION_CONNECT_TIMEOUT_MS, LLMHelper.ts
+    // ~195-196) instead of always waiting the vision-sized window on a plain
+    // text turn — a stalled custom text endpoint now fails over in ~15s per
+    // attempt instead of ~30s.
+    const customConnectTimeoutMs = strictErrors
+      ? (imagePaths?.length ? DIRECT_ASSIST_VISION_CONNECT_TIMEOUT_MS : DIRECT_ASSIST_CONNECT_TIMEOUT_MS)
+      : 30_000;
+    const streamTimeout = setTimeout(() => streamAbort.abort(), customConnectTimeoutMs);
     // Forward the caller's user-cancel signal into the same controller so
     // the fetch socket closes immediately on supersession, freeing the
     // custom provider's quota and any rate-limiter slot.
@@ -9207,6 +9987,13 @@ let isMultimodal = !!(imagePaths?.length);
       clearTimeout(streamTimeout);
       return;
     }
+    // The connect phase of the USER-ENDPOINT route — the one route whose
+    // deadlines actually adapt, so the one where a measured handshake is worth
+    // most. Same measurement streamWithNatively takes: request issued → response
+    // headers. (For an SSE response that is also the first body byte, so Phase
+    // 6's "first byte" and this are the same instant; TTFT, measured by the
+    // deadline driver, is the first PARSED event and is a separate number.)
+    const customConnectStartedAt = Date.now();
     try {
       const response = await fetch(url, {
         method: requestConfig.method || 'POST',
@@ -9220,16 +10007,43 @@ let isMultimodal = !!(imagePaths?.length);
         redirect: 'manual',
       });
       clearTimeout(streamTimeout);
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { recordConnectLatency } = require('./llm/performance/wiring');
+        recordConnectLatency({ llmHelper: this, ms: Date.now() - customConnectStartedAt });
+      } catch { /* measurement must never break a request */ }
 
       if (!response.ok) {
+        // strictErrors callers keep main's exact early throw, message shape and
+        // all, so nothing that already depends on it changes. Everything below
+        // is the NON-strict path, which used to yield the error as if it were an
+        // answer.
         if (strictErrors) {
           const error = new Error(`Custom Provider returned HTTP ${response.status}`) as Error & { status?: number };
           error.status = response.status;
           throw error;
         }
+        // Keep the structured status log AND throw. The log is the operator's
+        // only breadcrumb when a chain silently falls back to another provider,
+        // and SensitiveLogRedaction pins this exact line as the redaction-safe
+        // shape (status only, never a body snippet).
         console.error('[LLMHelper] Custom Provider stream HTTP error', { status: response.status });
-        yield `Error: Custom Provider returned HTTP ${response.status}`;
-        return;
+        // THROW, never yield. Yielding made a provider failure indistinguishable
+        // from an answer: every consumer of this generator decides "did the
+        // provider work?" by whether a non-empty first chunk arrived, so a 500
+        // was a successful commit. Measured against a local 500 —
+        //   [Vision] committed to Custom (OpenRouter) (attempt 1/1, ttft=11ms)
+        // — the healthy fallback rung behind it was never invoked, the provider
+        // was marked healthy, and the user's answer was the literal string
+        // "Error: Custom Provider returned HTTP 500".
+        //
+        // Message shape matches executeCustomProvider's ("Custom Provider HTTP
+        // <status>"), which is what the non-streaming twin has always thrown, so
+        // both chains' classifiers bucket the two identically.
+        throw Object.assign(
+          new Error(`Custom Provider HTTP ${response.status}`),
+          { status: response.status },
+        );
       }
 
       if (!response.body) return;
@@ -9338,9 +10152,37 @@ let isMultimodal = !!(imagePaths?.length);
 
     } catch (e) {
       clearTimeout(streamTimeout);
-      if (strictErrors) throw e;
+      // A CALLER-INITIATED abort is not a provider error and must not produce
+      // content. The fetch above rejects with AbortError the moment the caller
+      // cancels, and yielding here made that rejection look like a first token:
+      // in natively_debug (3).log the live deadline aborted the turn at 13.00s,
+      // this catch yielded 35 non-empty characters, and the vision chain
+      // committed to a stream the consumer had already stopped reading.
+      // The per-chunk `if (abortSignal?.aborted) return` above already applies
+      // this rule to the success path; the error path simply never learned it.
+      if (abortSignal?.aborted) return;
+      if (strictErrors) {
+        // Disambiguate OUR OWN internal stall guard (streamAbort, 30s above)
+        // from a genuine provider failure before it reaches
+        // normalizeDirectAssistError — that classifier maps every AbortError
+        // to CANCELLED, and streamAbort fires with no distinguishing info of
+        // its own, so a provider that connects and then goes silent was
+        // reported as if the request had been cancelled instead of timing
+        // out. The caller's own abortSignal was just checked above and is
+        // NOT aborted, so any abort observed here can only be streamAbort's,
+        // exactly like streamWithNatively's connect-timeout branch above.
+        if (streamAbort.signal.aborted) {
+          throw new DirectAssistError('CONNECT_TIMEOUT', 'The selected provider timed out.', true);
+        }
+        throw e;
+      }
       console.error("Custom streaming failed", e);
-      yield "Error streaming from custom provider.";
+      // Same rule as the HTTP branch above: a failure must reach the caller AS a
+      // failure. The user-facing sentence this used to yield now lives at the
+      // one call site that is genuinely terminal (the `2a. CustomProvider`
+      // branch of _streamChatInner), where "there is no provider after this"
+      // is actually known. Here, it is not.
+      throw e instanceof Error ? e : new Error(String(e));
     } finally {
       // Always drop the listener so we don't leak a subscription on a
       // long-lived AbortSignal shared across many calls.
@@ -9449,6 +10291,125 @@ let isMultimodal = !!(imagePaths?.length);
     return this.currentModelId === 'natively';
   }
 
+  /**
+   * True when this turn goes to an endpoint the USER pointed us at, rather than
+   * to a shipped provider-list entry.
+   *
+   * The distinction is the ENDPOINT, not whose key pays for it. A user's own
+   * Gemini or Groq key still hits Google's or Groq's well-known API with a
+   * sub-second healthy first token, so it belongs with the defaults. A Custom
+   * Provider, a cURL provider, a LiteLLM gateway or an NVIDIA NIM base URL is an
+   * address we have never measured and cannot see behind — it may be a proxy
+   * fronting a slow upstream, a self-hosted container cold-starting, or a
+   * queueing marketplace model.
+   *
+   * Ollama and Codex CLI are deliberately NOT here: they are local, and
+   * isUsingOllama()/isUsingCodexCli() already give them the far longer cold-load
+   * budget. A rung matching both would take the local one first.
+   *
+   * Callers use this to pick the deadline; see totalHardTimeoutMs() and
+   * firstUsefulDeadlineMs(). Mirrors isUsingOllama()/isUsingCodexCli()/
+   * isUsingNativelyServerCascade().
+   */
+  public isUsingUserEndpoint(): boolean {
+    if (this.customProvider || this.activeCurlProvider) return true;
+    return this.isLiteLLMModel(this.currentModelId) || this.isNvidiaNimModel(this.currentModelId);
+  }
+
+  /**
+   * The image-optimisation preset this vision turn should use.
+   *
+   * Normally the caller's own choice, verbatim. Downgraded to `fast` only when
+   * the Provider Performance Profile predicts this turn will blow its urgency
+   * budget — Phase 18's "the profile says this workload is likely to be too slow
+   * and an EXISTING mechanism responds". The mechanism is ImageOptimizer's
+   * preset table, which already ships and which every vision call site already
+   * passes a value from.
+   *
+   * Fails open to the requested preset on any error: a latency hint must never
+   * be able to stop an image being sent.
+   */
+  private imageProfileFor(
+    requested: 'fast' | 'balanced' | 'technical' | 'best',
+    approxInputChars: number,
+  ): 'fast' | 'balanced' | 'technical' | 'best' {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { imageProfileForTurn } = require('./llm/performance/wiring');
+      return imageProfileForTurn(requested, {
+        llmHelper: this,
+        inputTokens: Math.ceil(Math.max(0, approxInputChars) / 4),
+        // These three sites serve both live and manual turns and cannot tell
+        // which from here. `manual_chat_stream` is the CONSERVATIVE label: its
+        // 20s budget is twice the live one, so a turn is only ever downgraded
+        // when it would blow the more generous of the two.
+        streamRoute: 'manual_chat_stream',
+      });
+    } catch {
+      return requested;
+    }
+  }
+
+  /**
+   * Who is answering this turn, for the Provider Performance Profile.
+   *
+   * ADDITIVE AND READ-ONLY. It touches no instance state and changes no
+   * decision — it exists so the deadline driver's `observe` hook can label a
+   * measurement without every call site re-deriving the route from four
+   * predicates (which is how WTA and manual chat came to disagree about the
+   * same turn before the route table existed).
+   *
+   * The route is resolved in the SAME ORDER as `totalHardTimeoutMs`'s table,
+   * and that ordering is load-bearing rather than stylistic: local first so a
+   * local rung is never reclassified by another flag, then vision, then the
+   * server cascade as an explicit branch rather than a fallthrough. A profile
+   * keyed by a route resolved in a different order would file one route's
+   * evidence under another's name, which is the exact failure the route table
+   * was introduced to end.
+   *
+   * `providerId` is the coarse transport (`getCurrentProvider()`), NOT the
+   * endpoint URL: the profile's network dimension already separates two
+   * gateways, and putting a base URL in a profile key would put a user-supplied
+   * address in a persisted file for no gain.
+   */
+  public performanceIdentity(hasImages: boolean = false): {
+    providerId: string;
+    modelId: string;
+    route: 'local' | 'vision' | 'server_cascade' | 'user_endpoint' | 'default_provider';
+    /**
+     * Reported SEPARATELY from `route`, because the two are not the same
+     * question. `route === 'local'` covers Ollama AND Codex CLI, while
+     * `getModelCapabilities(id, isOllama)` needs to know specifically whether
+     * this is an Ollama model — passing `false` for one returns the wrong
+     * context window and the wrong vision answer. Inferring one from the other
+     * is exactly the conflation that made a LiteLLM model report
+     * `supportsImages: false`.
+     */
+    isOllama: boolean;
+  } {
+    // A Custom Provider's model is NOT `currentModelId`. That field holds the
+    // selected-model id, which for a custom provider is whatever was selected
+    // before/alongside it — measured live, a provider actually calling
+    // `mistralai/mistral-nemo` was profiled under `gemini-3.8-flash`, so every
+    // sample landed on a model that was never called. The model lives on the
+    // provider record; fall back to its id, then to the selected id.
+    const custom: any = this.customProvider ?? this.activeCurlProvider;
+    const modelId = (custom
+      ? (custom.model || custom.id || this.currentModelId)
+      : this.currentModelId) || 'unknown';
+    const providerId = (() => {
+      try { return this.getCurrentProvider(); } catch { return 'unknown'; }
+    })();
+    const route = (() => {
+      if (this.isUsingOllama() || this.isUsingCodexCli()) return 'local' as const;
+      if (hasImages && !this.isUsingNativelyServerCascade()) return 'vision' as const;
+      if (this.isUsingNativelyServerCascade()) return 'server_cascade' as const;
+      if (this.isUsingUserEndpoint()) return 'user_endpoint' as const;
+      return 'default_provider' as const;
+    })();
+    return { providerId, modelId, route, isOllama: this.isUsingOllama() };
+  }
+
   public async getOllamaModels(): Promise<string[]> {
     const baseUrl = (this.ollamaUrl || "http://127.0.0.1:11434").replace('localhost', '127.0.0.1');
 
@@ -9474,6 +10435,27 @@ let isMultimodal = !!(imagePaths?.length);
       // Connection refused/timeout — OllamaManager logs startup status.
       return [];
     }
+  }
+
+  /**
+   * Installed models that can actually GENERATE — getOllamaModels() minus the
+   * embedding-only ones.
+   *
+   * Kept separate rather than folded into getOllamaModels() on purpose. That
+   * method's empty array already carries two meanings ("daemon down" and "daemon
+   * up, nothing pulled"), and callers of the destructive restart path key off
+   * them (see the comment below and forceRestartOllama's guard). Filtering in
+   * place would add a THIRD meaning — "daemon up, models pulled, none can
+   * generate" — to the same value, which is exactly the collapse that comment
+   * exists to prevent: on a machine holding only the bootstrapped
+   * nomic-embed-text, a healthy user-visible daemon would have read as missing.
+   *
+   * So: this is for callers PICKING a model to generate with. Liveness and
+   * "is anything installed" keep asking getOllamaModels().
+   */
+  public async getOllamaGenerationModels(): Promise<string[]> {
+    const baseUrl = (this.ollamaUrl || "http://127.0.0.1:11434").replace('localhost', '127.0.0.1');
+    return filterOllamaGenerationModels(baseUrl, await this.getOllamaModels());
   }
 
   /**
@@ -9659,8 +10641,9 @@ let isMultimodal = !!(imagePaths?.length);
     }
   }
 
-  public getCurrentProvider(): "ollama" | "gemini" | "custom" | "codex-cli" {
+  public getCurrentProvider(): "ollama" | "gemini" | "custom" | "codex-cli" | "antigravity" {
     if (this.customProvider) return "custom";
+    if (!this.useOllama && !this.activeCurlProvider && this.isAntigravityModel(this.currentModelId)) return "antigravity";
     if (this.isCodexCliModel(this.currentModelId)) return "codex-cli";
     return this.useOllama ? "ollama" : "gemini";
   }
@@ -9707,6 +10690,7 @@ let isMultimodal = !!(imagePaths?.length);
       // generic vendor predicates or the request escapes through the wrong
       // credential/client boundary.
       if (selected === 'natively') provider = 'natively';
+      else if (this.isAntigravityModel(selected)) provider = 'antigravity';
       else if (this.isCodexCliModel(selected)) {
         provider = 'codex-cli';
         model = this.getSelectedCodexCliModel(false);
@@ -9727,6 +10711,145 @@ let isMultimodal = !!(imagePaths?.length);
   }
 
   /**
+   * Plan the Direct Assist ladder.
+   *
+   * Every credential, capability and privacy boundary is applied HERE, as a
+   * filter. A provider that fails one is absent from the returned list — it is
+   * never opened and then refused at dispatch, because a rung that is going to
+   * throw still costs an attempt, a backoff and a circuit-breaker mark.
+   *
+   * The adapters keep their own assertOutboundScopes call. This is not a
+   * replacement for that backstop; it is the reason the backstop should never
+   * fire on this path.
+   */
+  public listDirectAssistRungs(request: DirectAssistDispatchRequest): readonly DirectAssistRung[] {
+    const selected = request.selection;
+    const hasImages = (request.imagePaths?.length ?? 0) > 0;
+    const selectedRung: DirectAssistRung = {
+      provider: selected.provider,
+      model: selected.model,
+      priority: 0,
+      isFallback: false,
+    };
+
+    // A blocking, non-streaming selection has no commit point: it gets no
+    // ladder and no retry, exactly as before this feature existed.
+    if (DIRECT_ASSIST_LADDER_INELIGIBLE_PROVIDERS.includes(selected.provider)) {
+      return Object.freeze([selectedRung]);
+    }
+    if (!this.directAssistFallbackEnabled()) return Object.freeze([selectedRung]);
+
+    const eligible = (provider: DirectAssistProvider, model: string): boolean => {
+      if (DIRECT_ASSIST_LADDER_INELIGIBLE_PROVIDERS.includes(provider)) return false;
+      if (provider === selected.provider) return false; // already rung 0
+      const family = LLMHelper.PROVIDER_LABEL_FAMILY[provider] ?? provider;
+      if (this.isProviderDisabled(family)) return false;
+      if (!this.directProviderHasCredential(provider)) return false;
+      // Third arg is `CurlProvider | null`, NOT optional — pass null, not
+      // undefined. `custom`/`curl` are never fallback candidates, so neither
+      // provider argument can matter here.
+      if (hasImages && !this.directSelectionSupportsImages({ provider, model }, null, null)) {
+        return false;
+      }
+      // Privacy boundaries, evaluated rather than caught. Both throw on
+      // refusal, which is the contract they were written for.
+      try {
+        this.assertOutboundImagesAllowed(provider, hasImages);
+      } catch {
+        return false;
+      }
+      if (this.isLocalOnlyMode && !isLocalVisionProvider(provider, {
+        customProviderIsLocal: customProviderIsLocal(this.customProvider),
+      })) {
+        return false;
+      }
+      // Outbound scopes: mirror the dispatcher's TWO HARD-FAIL branches only.
+      // `getDeniedOutboundScopes` takes no provider, so calling it bare would
+      // filter every rung identically — and worse, most denied scopes are
+      // handled by STRIPPING the block and proceeding, not by refusing. Only
+      // these two end a request, so only these two disqualify a rung:
+      //   • `screenshots` denied while the request carries images
+      //   • `transcript` denied while the prompt carries the current turn's
+      //     speech (that IS the question; answering without it answers a
+      //     different, incomplete one)
+      // A LOCAL rung is exempt, exactly as directProviderIsLocal makes it
+      // exempt in the dispatcher.
+      const rungIsLocal = provider === 'ollama'
+        || (provider === 'custom' && customProviderIsLocal(this.customProvider));
+      if (!rungIsLocal) {
+        const denied = this.getDeniedOutboundScopes(
+          request.userPrompt,
+          [...(request.imagePaths ?? [])],
+          this.inferEmbeddedMessageScopes(request.userPrompt),
+        );
+        if (hasImages && denied.includes('screenshots')) return false;
+        if (denied.includes('transcript')
+          && request.userPrompt.includes(DIRECT_ASSIST_CURRENT_TURN_SPEECH_MARKER)) {
+          return false;
+        }
+      }
+      return true;
+    };
+
+    const rungs: DirectAssistRung[] = [selectedRung];
+    let priority = 1;
+    for (const { provider, model } of this.directFallbackCandidates()) {
+      if (!eligible(provider, model)) continue;
+      rungs.push({ provider, model, priority: priority++, isFallback: true });
+    }
+    return Object.freeze(rungs);
+  }
+
+  /**
+   * Fallback preference order, mirroring the live cloud chain's priorities.
+   * Every id is the module constant this file already uses for that family —
+   * do NOT introduce new default-model accessors, and do not hardcode strings.
+   */
+  private directFallbackCandidates(): { provider: DirectAssistProvider; model: string }[] {
+    const candidates: { provider: DirectAssistProvider; model: string }[] = [
+      { provider: 'natively', model: 'natively' },
+      { provider: 'gemini', model: GEMINI_FLASH_MODEL },
+      { provider: 'openai', model: OPENAI_MODEL },
+      { provider: 'claude', model: CLAUDE_MODEL },
+      { provider: 'groq', model: GROQ_MODEL },
+      { provider: 'antigravity', model: this.antigravityFallbackModel() || '' },
+      // Instance field, empty when Ollama is on auto-detect — the filter below
+      // then drops the rung rather than dispatching to a nameless model. Read
+      // defensively: a bare-prototype caller (see the ladder test harness)
+      // never ran the constructor, so the field initializer never set this.
+      { provider: 'ollama', model: this.ollamaModel ?? '' },
+    ];
+    return candidates.filter((c) => c.model.length > 0);
+  }
+
+  private directProviderHasCredential(provider: DirectAssistProvider): boolean {
+    switch (provider) {
+      case 'natively': return this.hasNatively();
+      case 'gemini': return !!this.client;
+      case 'openai': return !!this.openaiClient;
+      case 'claude': return !!this.claudeClient;
+      case 'groq': return !!this.groqClient;
+      case 'deepseek': return !!this.deepseekClient;
+      case 'nvidia_nim': return !!this.nvidiaNimClient;
+      case 'litellm': return !!this.litellmClient;
+      case 'ollama': return this.useOllama;
+      case 'antigravity': return !!this.antigravityFallbackModel();
+      default: return false;
+    }
+  }
+
+  private directAssistFallbackEnabled(): boolean {
+    try {
+      const { SettingsManager } = require('./services/SettingsManager');
+      return SettingsManager.getInstance().getDirectAssistFallbackEnabled();
+    } catch {
+      // A settings store that cannot be read must not silently disable
+      // recovery — default to the shipped behaviour, which is ON.
+      return true;
+    }
+  }
+
+  /**
    * Direct Assist provider boundary. The request is copied synchronously so a
    * later Settings/model change cannot alter an in-flight dispatch. The
    * returned generator invokes exactly one adapter and contains no fallback.
@@ -9734,6 +10857,7 @@ let isMultimodal = !!(imagePaths?.length);
   public streamDirectAssist(
     request: DirectAssistDispatchRequest,
     abortSignal?: AbortSignal,
+    rung?: DirectAssistRung,
   ): AsyncGenerator<string, void, unknown> {
     if (!request?.selection?.provider || !request.selection.model) {
       throw new DirectAssistError('NO_PROVIDER_CONFIGURED', 'Direct Assist requires a selected provider and model.');
@@ -9749,14 +10873,19 @@ let isMultimodal = !!(imagePaths?.length);
       userPrompt: request.userPrompt,
       imagePaths: Object.freeze([...request.imagePaths]),
     });
-    const custom = request.selection.provider === 'custom'
-      ? this.snapshotDirectCustomProvider(request.selection.model)
+    // The ladder decides WHO answers; request.selection stays the record of who
+    // the user picked (the `done` event and the terminal outcome still report
+    // the rung that actually answered, supplied by the caller).
+    const provider = rung?.provider ?? request.selection.provider;
+    const model = rung?.model ?? request.selection.model;
+    const custom = provider === 'custom'
+      ? this.snapshotDirectCustomProvider(model)
       : null;
-    const curl = request.selection.provider === 'curl' && this.activeCurlProvider?.id === request.selection.model
+    const curl = provider === 'curl' && this.activeCurlProvider?.id === model
       ? Object.freeze({ ...this.activeCurlProvider })
       : null;
 
-    return this.streamDirectAssistFrozen(frozenRequest, custom, curl, abortSignal);
+    return this.streamDirectAssistFrozen(frozenRequest, custom, curl, abortSignal, rung);
   }
 
   private snapshotDirectCustomProvider(modelId: string): CustomProvider | null {
@@ -9774,6 +10903,7 @@ let isMultimodal = !!(imagePaths?.length);
     switch (selection.provider) {
       case 'natively':
       case 'codex-cli':
+      case 'antigravity':
         return true;
       case 'custom':
         return customProviderSupportsVision(custom);
@@ -9802,10 +10932,15 @@ let isMultimodal = !!(imagePaths?.length);
     custom: CustomProvider | null,
     curl: CurlProvider | null,
     abortSignal?: AbortSignal,
+    rung?: DirectAssistRung,
   ): AsyncGenerator<string, void, unknown> {
     if (abortSignal?.aborted) return;
 
-    const { provider, model } = request.selection;
+    // The ladder decides WHO answers; request.selection stays the record of who
+    // the user picked (the `done` event and the terminal outcome still report
+    // the rung that actually answered, supplied by the caller).
+    const provider = rung?.provider ?? request.selection.provider;
+    const model = rung?.model ?? request.selection.model;
     const imagePaths = [...request.imagePaths];
     for (const imagePath of imagePaths) {
       try {
@@ -9814,6 +10949,20 @@ let isMultimodal = !!(imagePaths?.length);
         throw new DirectAssistError('INVALID_ATTACHMENT', 'An image attachment is no longer available.');
       }
     }
+    // Screenshots re-attached from earlier turns are optional context, so every
+    // check below DROPS them where the current turn's own attachments would
+    // hard-fail. The alternative — one evicted file, an image-less model or a
+    // privacy setting failing an ordinary typed question that merely happens to
+    // follow a screenshot — would make follow-up questions worse than the
+    // no-memory behaviour this replaces. The <recent_transcript> breadcrumb
+    // still tells the model a screenshot existed and is not in this request.
+    let carriedImagePaths = [...(request.historyImagePaths ?? [])].filter((imagePath) => {
+      try {
+        return fs.statSync(imagePath).isFile();
+      } catch {
+        return false;
+      }
+    });
     const disabledFamily = provider === 'codex-cli'
       ? 'codex-cli'
       : provider === 'curl' || provider === 'custom'
@@ -9822,17 +10971,30 @@ let isMultimodal = !!(imagePaths?.length);
     if (this.isProviderDisabled(disabledFamily)) {
       throw new ProviderDisabledError(provider);
     }
-    if (imagePaths.length && !this.directSelectionSupportsImages(request.selection, custom, curl)) {
-      throw new DirectAssistError(
-        'MODEL_DOES_NOT_SUPPORT_IMAGES',
-        `The selected ${model} model does not support image input.`,
-      );
+    if (!this.directSelectionSupportsImages({ provider, model }, custom, curl)) {
+      // Cleared BEFORE the throw below so a text-only turn on a text-only model
+      // still answers instead of failing on an image the user did not attach.
+      carriedImagePaths = [];
+      if (imagePaths.length) {
+        // The capability CHECK stays on `model` — the rung actually about to
+        // be dispatched, fallback or not. The message names
+        // request.selection.model instead: on a fallback rung `model` is a
+        // provider the user never picked, and telling them THAT model
+        // rejected their image would name something they never selected.
+        throw new DirectAssistError(
+          'MODEL_DOES_NOT_SUPPORT_IMAGES',
+          `The selected ${request.selection.model} model does not support image input.`,
+        );
+      }
     }
-    if ((provider === 'custom' || provider === 'curl') && imagePaths.length > 1) {
-      throw new DirectAssistError(
-        'INVALID_ATTACHMENT',
-        'The selected custom provider accepts at most one image per request.',
-      );
+    if (provider === 'custom' || provider === 'curl') {
+      if (imagePaths.length > 1) {
+        throw new DirectAssistError(
+          'INVALID_ATTACHMENT',
+          'The selected custom provider accepts at most one image per request.',
+        );
+      }
+      carriedImagePaths = carriedImagePaths.slice(0, Math.max(0, 1 - imagePaths.length));
     }
 
     // Direct Assist bypasses the legacy context assembler, so enforce the
@@ -9888,10 +11050,52 @@ let isMultimodal = !!(imagePaths?.length);
         'Transcript data is disabled for cloud providers, so this request was not sent.',
       );
     }
+    if (carriedImagePaths.length) {
+      // 'transcript' strips <recent_transcript>, and that block holds the ONLY
+      // text binding each carried screenshot to the turn it came from. Sending
+      // the images without it hands the model unexplained pictures of a screen
+      // from several turns ago, which it will answer from with confidence —
+      // strictly worse than sending nothing.
+      if (deniedScopes.includes('transcript')) {
+        carriedImagePaths = [];
+      } else if (!directProviderIsLocal) {
+        // RE-EVALUATE WITH THE CARRIED IMAGES IN THE SET.
+        //
+        // `deniedScopes` above was computed from `imagePaths`, and
+        // scopesForPayload only tags 'screenshots' when that array is non-empty.
+        // On a text-only follow-up carrying earlier screenshots it is empty, so
+        // 'screenshots' was never in deniedScopes and this guard passed on a
+        // decision made about a payload that did not contain the images.
+        // Measured with the scope denied: [] with the current-turn set, and
+        // ['screenshots'] once a carried image is included.
+        //
+        // The images were then pushed, and the per-streamer
+        // assertOutboundScopes saw them and THREW — turning an ordinary typed
+        // question into a hard failure, the opposite of the drop-never-fail
+        // contract this block documents.
+        const deniedWithCarried = this.getDeniedOutboundScopes(
+          request.userPrompt, [...imagePaths, ...carriedImagePaths], directScopes,
+        );
+        if (deniedWithCarried.includes('screenshots')) {
+          carriedImagePaths = [];
+        } else {
+        // The current turn's images already passed this above; this covers a
+        // turn that carries earlier ones and attaches none of its own.
+          try {
+            this.assertOutboundImagesAllowed(provider, true);
+          } catch {
+            carriedImagePaths = [];
+          }
+        }
+      }
+    }
+    if (carriedImagePaths.length) imagePaths.push(...carriedImagePaths);
     const directUserPrompt = deniedScopes.length
       ? this.stripDeniedScopedBlocksFromMessage(request.userPrompt, deniedScopes)
       : request.userPrompt;
-    const capabilityModel = provider === 'litellm'
+    const capabilityModel = provider === 'antigravity'
+      ? this.getAntigravityModelId(model)
+      : provider === 'litellm'
       ? model.replace(/^litellm\//, '')
       : provider === 'nvidia_nim'
         ? model.replace(/^nvidia_nim\//, '')
@@ -9914,7 +11118,9 @@ let isMultimodal = !!(imagePaths?.length);
           request.systemPrompt,
           imagePaths,
           abortSignal,
-          INTERACTIVE_CONNECT_TIMEOUT_MS,
+          imagePaths.length
+            ? DIRECT_ASSIST_VISION_CONNECT_TIMEOUT_MS
+            : DIRECT_ASSIST_CONNECT_TIMEOUT_MS,
           true,
         );
         return;
@@ -9958,6 +11164,9 @@ let isMultimodal = !!(imagePaths?.length);
         if (!this.isCodexAvailable()) throw new Error('Codex CLI provider not configured');
         yield* this.streamWithCodexCli(directUserPrompt, request.systemPrompt, false, imagePaths, abortSignal, model);
         return;
+      case 'antigravity':
+        yield* this.streamWithAntigravity(directUserPrompt, request.systemPrompt, imagePaths, abortSignal, model, true);
+        return;
       case 'custom':
         if (!custom) throw new Error('Custom provider not configured');
         if (this.isLocalOnlyMode && !customProviderIsLocal(custom)) {
@@ -9984,6 +11193,9 @@ let isMultimodal = !!(imagePaths?.length);
    * and never compare the result to option IDs (use {@link getCurrentModelId}).
    */
   public getCurrentModelDisplayName(): string {
+    if (!this.useOllama && !this.customProvider && !this.activeCurlProvider && this.isAntigravityModel(this.currentModelId)) {
+      return `${this.getAntigravityModelId(this.currentModelId)} (Antigravity)`;
+    }
     if (this.customProvider) return this.customProvider.name;
     if (this.activeCurlProvider) return this.activeCurlProvider.id;
     return this.useOllama ? this.ollamaModel : this.currentModelId;
@@ -10034,6 +11246,9 @@ let isMultimodal = !!(imagePaths?.length);
   }
 
   public getCapabilities(): ModelCapabilities {
+    if (!this.useOllama && !this.customProvider && !this.activeCurlProvider && this.isAntigravityModel(this.currentModelId)) {
+      return getModelCapabilities(this.getAntigravityModelId(this.currentModelId), false);
+    }
     return getModelCapabilities(this.getCurrentModel(), this.useOllama);
   }
 
@@ -10432,6 +11647,48 @@ let isMultimodal = !!(imagePaths?.length);
         }
       } catch (e: any) {
         console.warn(`[LLMHelper] ⚠️ Codex CLI summary failed: ${e.message}. Falling back...`);
+      }
+    }
+
+    // ATTEMPT 2b: Antigravity (signed in). Beside Codex CLI, the chain's other
+    // OAuth provider. This chain is FIXED — it does not consult the active model
+    // — so before this rung a user whose only working provider was Antigravity
+    // got no meeting summary at all once Natively and Codex were unavailable.
+    //
+    // Consumes the streaming generator rather than adding a non-streaming path:
+    // AntigravityService only exposes stream(), and one more shape to maintain
+    // is not worth saving a join here.
+    const antigravitySummaryModel = this.antigravityFallbackModel();
+    if (antigravitySummaryModel) {
+      console.log(`[LLMHelper] Attempting Antigravity for summary...`);
+      // withTimeout only RACES: when the timer wins, the loser keeps running.
+      // stream() honours input.signal, so an abort is what actually stops the
+      // HTTP stream — without it a timed-out summary kept streaming to
+      // completion with nothing consuming it, holding the socket and spending
+      // output tokens on a request whose result had already been discarded.
+      // Aborted in `finally`, so the success path tears it down too.
+      const antigravityAbort = new AbortController();
+      try {
+        const text = await this.withTimeout(
+          (async () => {
+            let out = '';
+            for await (const chunk of this.streamWithAntigravity(
+              `Context:\n${context}`, systemPrompt, undefined, antigravityAbort.signal,
+              `antigravity:${antigravitySummaryModel}`,
+            )) out += chunk;
+            return out;
+          })(),
+          opts?.timeoutMs ? opts.timeoutMs + 5000 : 60000,
+          'Antigravity Summary',
+        );
+        if (text.trim().length > 0) {
+          console.log(`[LLMHelper] ✅ Antigravity summary generated successfully.`);
+          return this.processResponse(text);
+        }
+      } catch (e: any) {
+        console.warn(`[LLMHelper] ⚠️ Antigravity summary failed: ${e.message}. Falling back...`);
+      } finally {
+        antigravityAbort.abort();
       }
     }
 

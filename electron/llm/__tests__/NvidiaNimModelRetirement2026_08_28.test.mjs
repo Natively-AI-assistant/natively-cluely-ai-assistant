@@ -203,7 +203,7 @@ describe('the ipcHandlers wiring', () => {
 
 describe('the runtime retry classifier treats 410 as permanent', () => {
   test('410 is listed with 404 in the model_gone branch', () => {
-    assert.match(src('electron/llm/visionStreamFallback.ts'),
+    assert.match(src('electron/llm/streamFallbackEngine.ts'),
       /status === 404 \|\| status === 410/);
   });
 });

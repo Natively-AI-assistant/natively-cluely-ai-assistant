@@ -94,7 +94,7 @@ describe('shouldWarnAboutLightweightEmbeddings', () => {
   });
 
   test('does not warn when the user already acknowledged it', () => {
-    // "Continue with MiniLM" must actually stick — an unstoppable warning is
+    // "Keep MiniLM" must actually stick — an unstoppable warning is
     // worse than none.
     assert.equal(shouldWarnAboutLightweightEmbeddings({
       embeddingSpace: 'local:xenova/all-minilm-l6-v2:384',

@@ -82,8 +82,23 @@ const CATALOG = {
     ],
 };
 
+// `?lightweight=1` puts the panel in the state that renders the compatibility
+// -default warning under the Active Embedding Model row. The default stub
+// reports a strong cloud model, so that strip is otherwise unreachable here.
+const LIGHTWEIGHT = new URLSearchParams(location.search).get('lightweight') === '1';
+
 (window as any).electronAPI = {
-    getEmbeddingStatus: async () => ({
+    getEmbeddingStatus: async () => (LIGHTWEIGHT ? {
+        active: {
+            configured: true, provider: 'local', model: 'Xenova/all-MiniLM-L6-v2',
+            dimensions: 384, space: 'local:xenova/all-minilm-l6-v2:384',
+            location: 'on-device', lightweight: true,
+        },
+        configured: { mode: 'auto' },
+        acknowledged: false,
+        scopeAllowsCloud: true,
+        shouldWarn: true,
+    } : {
         active: {
             configured: true, provider: 'gemini', model: 'gemini-embedding-2',
             dimensions: 3072, space: 'gemini:gemini-embedding-2:3072',

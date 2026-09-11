@@ -82,7 +82,7 @@ describe('declineYieldsToAttachedImages (pure rule)', () => {
     );
     assert.equal(
       packGovernsGeneration({ answerPolicy: 'refuse_insufficient_evidence', sourceAuthority: 'reference_files_only', hasReferenceFiles: true }),
-      true,
+      false /* 2026-09-07: refusal packs never govern — always answer */,
     );
   });
 });

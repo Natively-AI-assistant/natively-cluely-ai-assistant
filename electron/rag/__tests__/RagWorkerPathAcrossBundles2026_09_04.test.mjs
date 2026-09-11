@@ -189,3 +189,38 @@ test('bootstrapPath does not assume its own source depth', () => {
   assert.match(body, /resolveBundledScript/,
     'it must ascend to find the bootstrap, like the rag workers do');
 });
+
+// ── LocalEmbeddingProvider had the identical bug ───────────────────────────
+
+test('every bundle that inlines LocalEmbeddingProvider can find its worker', () => {
+  // Found the same way as the others: getWorkerPath() used a fixed 4-candidate
+  // list covering only electron/rag/providers, electron/rag, electron, and the
+  // dist-electron root. MEASURED against a real build, electron/services (e.g.
+  // StealthKeyboardManager.js, KeybindManager.js) and electron/llm
+  // (WhatToAnswerLLM.js) both inline this class and neither depth was covered
+  // — the on-device embedding fallback would throw MODULE_NOT_FOUND from
+  // exactly the entry points that exhaust cloud quota routes through.
+  const SEGMENTS = ['rag', 'providers', 'localEmbeddingWorker.js'];
+  const dirs = bundleDirsInlining('// electron/rag/providers/LocalEmbeddingProvider.ts');
+  assert.ok(dirs.length > 1, `expected LocalEmbeddingProvider in several bundles, found ${dirs.length}`);
+  const broken = dirs.filter(d => !fs.existsSync(resolveBundledScript(d, SEGMENTS)));
+  assert.deepEqual(broken.map(d => path.relative(DIST, d)), [],
+    'these bundle depths cannot reach localEmbeddingWorker.js');
+
+  // Named explicitly, because that listing coming back empty would also pass.
+  for (const dir of ['electron/services', 'electron/db', 'electron/services/modes', 'electron/llm']) {
+    assert.ok(fs.existsSync(resolveBundledScript(path.join(DIST, dir), SEGMENTS)),
+      `${dir} cannot reach localEmbeddingWorker.js`);
+  }
+});
+
+test('getWorkerPath does not assume its own source depth', () => {
+  const src = fs.readFileSync(path.join(repoRoot, 'electron/rag/providers/LocalEmbeddingProvider.ts'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const fn = src.slice(src.indexOf('private getWorkerPath'));
+  const body = fn.slice(0, fn.indexOf('\n  }'));
+  assert.doesNotMatch(body, /path\.join\(__dirname, 'localEmbeddingWorker/,
+    'joining a fixed set of relative paths onto __dirname is the defect — the depth is not knowable');
+  assert.match(body, /resolveBundledScript/,
+    'it must ascend to find the worker, like the rag workers and the extension host do');
+});

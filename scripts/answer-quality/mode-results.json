@@ -1,0 +1,121 @@
+{
+  "technical-interview": {
+    "turns": 18,
+    "with": 8,
+    "without": 10,
+    "tie": 0,
+    "intents": {
+      "general": 7,
+      "coding": 5,
+      "example_request": 1,
+      "follow_up": 4,
+      "summary_probe": 1
+    },
+    "meanWith": 1402,
+    "meanWithout": 1018
+  },
+  "looking-for-work": {
+    "turns": 18,
+    "with": 7,
+    "without": 11,
+    "tie": 0,
+    "intents": {
+      "behavioral": 1,
+      "general": 7,
+      "deep_dive": 2,
+      "example_request": 4,
+      "summary_probe": 2,
+      "clarification": 1,
+      "coding": 1
+    },
+    "meanWith": 1031,
+    "meanWithout": 1182
+  },
+  "sales": {
+    "turns": 18,
+    "with": 13,
+    "without": 5,
+    "tie": 0,
+    "intents": {
+      "general": 10,
+      "example_request": 3,
+      "summary_probe": 2,
+      "follow_up": 3
+    },
+    "meanWith": 425,
+    "meanWithout": 600
+  },
+  "team-meet": {
+    "turns": 18,
+    "with": 8,
+    "without": 10,
+    "tie": 0,
+    "intents": {
+      "coding": 2,
+      "clarification": 3,
+      "general": 9,
+      "example_request": 2,
+      "summary_probe": 2
+    },
+    "meanWith": 625,
+    "meanWithout": 623
+  },
+  "lecture": {
+    "turns": 11,
+    "with": 4,
+    "without": 7,
+    "tie": 0,
+    "intents": {
+      "coding": 3,
+      "example_request": 3,
+      "general": 5
+    },
+    "meanWith": 821,
+    "meanWithout": 824
+  },
+  "seminar": {
+    "turns": 18,
+    "with": 5,
+    "without": 13,
+    "tie": 0,
+    "intents": {
+      "clarification": 7,
+      "example_request": 1,
+      "deep_dive": 1,
+      "general": 6,
+      "follow_up": 2,
+      "summary_probe": 1
+    },
+    "meanWith": 336,
+    "meanWithout": 641
+  },
+  "call-center": {
+    "turns": 18,
+    "with": 11,
+    "without": 7,
+    "tie": 0,
+    "intents": {
+      "coding": 2,
+      "general": 7,
+      "summary_probe": 6,
+      "clarification": 1,
+      "example_request": 2
+    },
+    "meanWith": 382,
+    "meanWithout": 273
+  },
+  "general": {
+    "turns": 18,
+    "with": 8,
+    "without": 10,
+    "tie": 0,
+    "intents": {
+      "clarification": 5,
+      "example_request": 3,
+      "general": 8,
+      "follow_up": 2
+    },
+    "meanWith": 389,
+    "meanWithout": 626
+  }
+}

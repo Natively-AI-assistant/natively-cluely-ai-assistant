@@ -11,6 +11,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { X, ArrowRight, MessageSquareCode, AudioLines, Compass } from 'lucide-react';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
+import { TRIAL_FALLBACK_LIMITS, formatCompact } from '../../types/nativelyUsage';
 
 const PERMS_KEY        = 'natively_perms_shown_v1';
 
@@ -185,7 +186,7 @@ export const TrialPromoToaster: React.FC<Props> = ({
                         ? `0 0 48px rgba(124,58,237,0.18)`
                         : `0 0 64px rgba(139,92,246,0.3), 0 0 120px rgba(139,92,246,0.1)`,
                     }}>
-                      10
+                      30
                     </span>
                     {/* Stacked label column — tight stack at bottom */}
                     <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', gap: '3px', paddingBottom: '6px' }}>
@@ -198,7 +199,7 @@ export const TrialPromoToaster: React.FC<Props> = ({
                     Try everything. No card needed.
                   </h2>
                   <p style={{ fontSize: '13px', lineHeight: 1.66, color: t3, margin: '0 auto', maxWidth: '330px' }}>
-                    Full Natively API access — AI chat, meeting transcription, and company research — free for 10 minutes. Bound to this device. No sign-in.
+                    Full Natively API access — AI chat, meeting transcription, and company research — free for 30 minutes. Bound to this device. No sign-in.
                   </p>
                 </motion.div>
 
@@ -206,9 +207,9 @@ export const TrialPromoToaster: React.FC<Props> = ({
                 <motion.div variants={ITEM}>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
                     {[
-                      { icon: MessageSquareCode, label: 'AI Chat',       sub: '10 requests' },
-                      { icon: AudioLines,        label: 'Transcription', sub: '10 min STT' },
-                      { icon: Compass,           label: 'Research',      sub: '2 searches' },
+                      { icon: MessageSquareCode, label: 'AI Chat',       sub: `${formatCompact(TRIAL_FALLBACK_LIMITS.ai_tokens)} AI tokens` },
+                      { icon: AudioLines,        label: 'Transcription', sub: `${TRIAL_FALLBACK_LIMITS.stt_minutes} min STT` },
+                      { icon: Compass,           label: 'Research',      sub: `${TRIAL_FALLBACK_LIMITS.search_requests} searches` },
                     ].map(({ icon: Icon, label, sub }) => (
                       <motion.div 
                         key={label}

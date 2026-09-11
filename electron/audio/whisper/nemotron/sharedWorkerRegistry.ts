@@ -207,7 +207,7 @@ export async function acquireSharedNemotronWorker(
       // that forces the semaphore's exclusive mode — admitted only when the
       // gate is COMPLETELY idle, held for the entire meeting — which breaks
       // coexistence in BOTH directions: (a) if any weight-1 consumer
-      // (LocalEmbeddingProvider / LocalReranker / IntentClassifier, each of
+      // (LocalEmbeddingProvider / LocalReranker, each of
       // which holds its slot for its worker's whole lifetime) is loaded
       // first, this acquisition can never be admitted — it times out after
       // 15s and Nemotron STT fails to start for the whole meeting; (b) if

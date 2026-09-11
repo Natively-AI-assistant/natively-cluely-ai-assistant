@@ -1,0 +1,13 @@
+[
+ {
+  "targetTokens": 1200,
+  "chars": 4800,
+  "chunks": 32,
+  "questions": 60,
+  "vec1": 46.666666666666664,
+  "vecK": 100,
+  "rerank1": 98.33333333333333,
+  "embedTokens": 33944,
+  "rerankP50": 2572
+ }
+]

@@ -32,6 +32,7 @@ import {
   VisionProviderConfig,
   VisionMode,
   VisionFailureReason,
+  VisionRungHealth,
 } from './VisionProviderFallbackChain';
 import { getImageOptimizer, ImageOptimizer } from './ImageOptimizer';
 import { buildVisionProviders, VisionProviderBuildInputs } from './VisionProviderRegistry';
@@ -42,7 +43,20 @@ export type UserAction =
   | 'shortcut'
   | 'code_hint'
   | 'brainstorm'
-  | 'what_to_say';
+  | 'what_to_say'
+  /**
+   * Transcribe the screen for MEMORY, not to answer this turn.
+   *
+   * Every other action routes to a prompt that asks the model to "answer
+   * concisely", which is right for the turn in front of the user and useless as
+   * a record: verified live, the text stored for a build-failure screenshot was
+   * "Your build failed because you've run out of disk quota" — second person,
+   * paraphrased, with the error code and ticket reference the user later asked
+   * about nowhere in it. Before this, STRUCTURED_EXTRACTION_SYSTEM_PROMPT had NO
+   * caller at all: every call site passed `manual_use_screen` or `what_to_say`,
+   * both of which take the direct-answer branch.
+   */
+  | 'transcribe';
 
 export type QualityMode = 'fast' | 'balanced' | 'best' | 'private';
 
@@ -119,11 +133,46 @@ export interface ScreenUnderstandingResult {
   source_kind?: 'vision' | 'ocr_legacy';
 }
 
+/**
+ * Wall-clock ceiling on the ENTIRE screen-understanding pre-pass — every rung
+ * the fallback chain walks, not one attempt. See the call site in understand()
+ * for why a best-effort enrichment step on the critical path needs a total
+ * bound rather than a per-provider one.
+ *
+ * 6000, below the chain's 12s per-provider default: the per-attempt timeout is
+ * clamped to whatever is left of this, so this is the number that decides how
+ * long a user waits before their answer starts.
+ */
+export const SCREEN_UNDERSTANDING_TOTAL_BUDGET_MS = 6000;
+
 export class ScreenUnderstandingService {
   private imageHashService: ImageHashService;
   private optimizer: ImageOptimizer;
   private lastResult: ScreenUnderstandingResult | null = null;
+  /**
+   * What was ASKED of the cached image, not just which image it was.
+   *
+   * cacheLookup keyed on the image alone, and the prompt varies by userAction:
+   * 'what_to_say' produces a concise ANSWER, 'transcribe' produces a full
+   * transcription. Same screen, deliberately different results. Verified live:
+   * the transcription request that follows an answer on the same screenshot got
+   * handed the ANSWER back, so the conversation record stored "Your build failed
+   * because you've run out of disk quota" instead of the screen's text, and a
+   * follow-up asking for the error code could never be answered.
+   */
+  private lastResultKind: string | null = null;
   private readonly STALE_THRESHOLD_MS = 5 * 60 * 1000;
+  /**
+   * Per-rung failure memory, held on the singleton so it survives across turns
+   * (the chain itself is a pure function called once per screenshot).
+   *
+   * This is what stops a dead rung from charging the user its share of the
+   * pre-pass budget on every single press. Note the boundary: it helps from the
+   * SECOND failing turn onward — the first turn after an app start, or after a
+   * cooldown lapses, still pays. That is deliberate; a provider that recovers
+   * has to be allowed to prove it.
+   */
+  private readonly rungHealth = new Map<string, VisionRungHealth>();
 
   constructor(optimizer?: ImageOptimizer) {
     this.imageHashService = new ImageHashService();
@@ -200,9 +249,10 @@ export class ScreenUnderstandingService {
       }
     }
 
-    // Cache lookup — same image within 5 min → reuse.
+    // Cache lookup — same image AND same question-kind within 5 min → reuse.
+    const resultKind = request.userAction === 'transcribe' ? 'transcribe' : 'answer';
     if (imageHash) {
-      const cached = this.cacheLookup(imageHash);
+      const cached = this.cacheLookup(imageHash, resultKind);
       if (cached) return cached;
     }
 
@@ -245,6 +295,44 @@ export class ScreenUnderstandingService {
       userPrompt,
       optimizer: this.optimizer,
       optimizationProfile: profile,
+      // Screen understanding is BEST-EFFORT ENRICHMENT sitting on the critical
+      // path: `generate-what-to-say` awaits it before the answer stream opens,
+      // and the answer itself already receives the screenshot through
+      // streamVisionWithFallback. Every millisecond spent here is added to
+      // time-to-first-token for a structured extraction the turn can do without.
+      //
+      // It had no total bound at all. In natively_debug (3).log that cost the
+      // user 8.0s on 31 of 33 turns — the Natively rung's inner timeout, which
+      // happened to be the only thing stopping the chain because their build
+      // then skipped every remaining rung. On a build that walks the whole chain
+      // (post-3e29a67f) the same failure would have cost 8s PLUS a real call to
+      // their own provider, so fixing the skip makes the latency worse unless
+      // this bound exists. A provider that cannot describe a screenshot inside
+      // the budget is not worth delaying the answer for; failing fast to "no
+      // screen context" is the cheaper outcome, and the healthy case (a cloud
+      // vision rung returning in 2-4s) never reaches this ceiling.
+      totalDeadlineMs: SCREEN_UNDERSTANDING_TOTAL_BUDGET_MS,
+      health: this.rungHealth,
+    });
+
+    // The chain's attempt ledger is otherwise WRITE-ONLY: runVisionFallback
+    // reports through `params.telemetry?.()`, this call site passed no callback,
+    // and `result.attempts` only ever reached the IPC response — never a log.
+    // A user debug log therefore showed a bare "[NativelyAPI] JSON pre-response
+    // failure" and then nothing, with no way to tell a rung that was SKIPPED
+    // (not configured / not vision-capable) from one that was tried and failed.
+    // Diagnosing natively_debug (3).log needed source archaeology and a build-
+    // dating exercise to answer "did it even try the user's own provider?".
+    // One line, every turn, answers it.
+    console.log('[ScreenUnderstanding] vision chain', {
+      ok: result.ok,
+      providerUsed: result.providerUsed,
+      failureReason: result.failureReason,
+      durationMs: result.durationMs,
+      attempts: result.attempts.map(a =>
+        a.skipped
+          ? `${a.provider}:skipped(${a.skipReason})`
+          : `${a.provider}:${a.ok ? 'ok' : (a.errorClass || 'error')}(${a.durationMs}ms)`),
     });
 
     const out = this.assembleResult(result, {
@@ -256,6 +344,7 @@ export class ScreenUnderstandingService {
       isTechnical,
     });
     this.lastResult = out;
+    this.lastResultKind = resultKind;
     return out;
   }
 
@@ -297,8 +386,11 @@ export class ScreenUnderstandingService {
     return helper.takeScreenshot();
   }
 
-  private cacheLookup(imageHash: string): ScreenUnderstandingResult | null {
+  private cacheLookup(imageHash: string, resultKind: string): ScreenUnderstandingResult | null {
     if (!this.lastResult || this.lastResult.imageHash !== imageHash) return null;
+    // An answer is not a transcription. Serving one for the other is what made
+    // the conversation record a paraphrase of the screen instead of its text.
+    if (this.lastResultKind !== resultKind) return null;
     const age = Date.now() - this.lastResult.capturedAt;
     if (age < this.STALE_THRESHOLD_MS) return { ...this.lastResult };
     return null;

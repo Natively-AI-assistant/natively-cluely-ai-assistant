@@ -103,7 +103,7 @@ export class LocalWhisperSTT extends EventEmitter {
     private isActive = false;
     // Cross-loader ONNX gate slot. Acquired in spawnWorker() before posting
     // init; released in worker error/exit handlers so other ONNX consumers
-    // (LocalReranker / LocalEmbeddingProvider / IntentClassifier) can take
+    // (LocalReranker / LocalEmbeddingProvider) can take
     // the slot promptly. Whisper uses priority 'high' so its streaming loop
     // acquires before queued normal-priority consumers.
     private slotRelease: (() => void) | null = null;

@@ -50,6 +50,16 @@ const DEFAULT_ON_KEYS = new Set([
   // The doc-grounded validator checks the block that was SENT (2026-08-28) —
   // default ON, literal (never isInternalDevTestContext).
   'docGroundedValidatorUsesSentEvidence',
+  // Provider Performance Profile (2026-09-08) — all four ON by plain literals.
+  // The two that change behaviour are bounded so that ON can only ever be safer
+  // or equal: the stall guard is clamped at or below today's constant, and the
+  // TTFT filter may only widen.
+  'providerPerformanceProfile',
+  'adaptiveStreamIdle',
+  'adaptiveTtft',
+  'providerPerformanceDiagnostics',
+  // Widen-only, so ON can only ever buy a slow network more room.
+  'adaptiveConnectTimeout',
   // Promoted to unconditional `true` (2026-08-30, dev/prod parity audit):
   // both are pure shadow-observation side channels (divergence logging only,
   // zero change to any real return value), so there is no risk to running

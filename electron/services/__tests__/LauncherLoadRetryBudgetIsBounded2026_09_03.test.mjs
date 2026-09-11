@@ -1,7 +1,7 @@
 // Regression test for: the dev launcher load-retry loop never terminated.
 //
 // THE BUG. WindowHelper.createWindow() self-heals a failed dev load (the Vite
-// server at http://localhost:5180 being momentarily down) by re-issuing
+// server at http://127.0.0.1:5180 being momentarily down) by re-issuing
 // loadURL() once a second, bounded by MAX_LAUNCHER_LOAD_RETRIES = 10. The bound
 // was unreachable. The counter was reset inside the `did-finish-load` handler —
 // but when a load fails, Chromium commits its OWN error page, and that error
@@ -27,7 +27,7 @@
 // `did-finish-load` handler no longer touches the counter.
 //
 // STRATEGY. Source-level static check, same as the neighbouring
-// LauncherBootRevealNotFrameGated2026_09_01 / OverlayAlwaysContentProtected
+// LauncherBootRevealNotFrameGated2026_09_01 / OverlayContentProtectionFollowsUndetectable
 // tests: WindowHelper.ts instantiates BrowserWindow on import and pulls in
 // main-process-only Electron APIs, so the handler cannot be exercised in
 // isolation without standing up a real app.

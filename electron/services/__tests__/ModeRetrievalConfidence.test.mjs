@@ -151,7 +151,13 @@ describe('Phase 0: retrieval-confidence signal (observe only)', () => {
     }];
     const query = 'When is the meeting scheduled?';
 
-    delete process.env[FLAG];
+    // Explicitly OFF. This leg used to `delete` the env var, which stopped
+    // meaning "off" when ragConfidenceGate's default became true (3e29a67f).
+    // Both legs then ran with the gate ON, so a test whose entire job is to
+    // prove the confidence signal does not change retrieval was comparing ON
+    // against ON and could not fail. The sibling test above was corrected for
+    // the same reason; this one was missed.
+    process.env[FLAG] = 'off';
     {
       const { mockDb, mockVectorStore, mockEmbeddingPipeline } = mockDeps();
       const r1 = new ModeHybridRetriever(mockDb, mockVectorStore, mockEmbeddingPipeline);
@@ -163,6 +169,12 @@ describe('Phase 0: retrieval-confidence signal (observe only)', () => {
       const r2 = new ModeHybridRetriever(mockDb, mockVectorStore, mockEmbeddingPipeline);
       var on = await r2.retrieve({ query, modeId: 'mode1', files, tokenBudget: 1000, topK: 3 });
     }
+
+    // Prove the two legs really are in different flag states before comparing
+    // them. Without this the test can silently go back to comparing ON with ON
+    // — which is exactly how it spent months passing while proving nothing.
+    assert.equal('confidence' in off, false, 'the OFF leg must actually have the gate off');
+    assert.equal('confidence' in on, true, 'the ON leg must actually have the gate on');
 
     assert.equal(off.formattedContext, on.formattedContext, 'formattedContext must be identical regardless of flag');
     assert.deepEqual(

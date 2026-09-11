@@ -19,6 +19,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const modPath = path.resolve(__dirname, '../../../dist-electron/electron/llm/visionStreamFallback.js');
 const {
+  isProviderErrorProse,
   classifyVisionError,
   orderVisionByHealth,
   runStreamingVisionFallback,
@@ -224,6 +225,27 @@ describe('runStreamingVisionFallback — commit point + fallback', () => {
     assert.equal(p._calls, 1);
   });
 
+  test('a first chunk that is provider ERROR PROSE is a pre-commit failure, not a token (2026-09-06)', async () => {
+    // LLMHelper's generators yield "Error: Custom Provider returned HTTP 500"
+    // instead of throwing. The gate used to commit to it, record a fabricated
+    // TTFT, mark the provider healthy, and let manual chat paint the error as
+    // the answer.
+    const a = okProvider('custom', ['Error: Custom Provider returned HTTP 500', 'never-shown']);
+    const b = okProvider('claude', ['real answer']);
+    const health = new Map();
+    const out = await collect(runStreamingVisionFallback([a, b], CFG, health, fastHooks()));
+    assert.deepEqual(out, ['real answer'], 'the error prose must never reach the user, and the next rung must be tried');
+    assert.equal(health.get('custom')?.ttftMs ?? health.get('custom')?.ttftEwmaMs ?? null, null, 'no TTFT may be recorded for a failed attempt');
+  });
+
+  test('isProviderErrorProse recognises exactly the shapes the generators yield', () => {
+    assert.equal(isProviderErrorProse('Error: Custom Provider returned HTTP 500'), true);
+    assert.equal(isProviderErrorProse('  Error streaming from custom provider.'), true);
+    assert.equal(isProviderErrorProse('Error: Failed to stream from Ollama (socket hang up).'), true);
+    assert.equal(isProviderErrorProse('Error handling in Go uses explicit returns.'), false, 'an answer about errors must still commit');
+    assert.equal(isProviderErrorProse('The custom provider returned HTTP 200 quickly.'), false);
+  });
+
   test('first provider fails pre-commit → SILENT fallback, no partial output', async () => {
     const a = throwBeforeFirst('openai', 'fetch failed');
     const b = okProvider('claude', ['hi']);
@@ -271,6 +293,33 @@ describe('runStreamingVisionFallback — commit point + fallback', () => {
     const out = await collect(runStreamingVisionFallback([a, b], CFG, health, fastHooks()));
     assert.deepEqual(out, ['par', 'tial'], 'delivers what arrived before the break');
     assert.equal(b._calls, 0, 'must not switch providers after commit (would duplicate)');
+  });
+
+  // A provider that yields one chunk then throws lands in the DRAIN loop's own
+  // catch, not the outer one (the outer catch only sees a throw from the FIRST
+  // `it.next()`, before commit). rethrowAfterCommit must be honoured on both
+  // paths — this is exactly the shape Task 6 drives (yield 'half', then throw,
+  // expecting a terminal error with partial:true).
+  test('rethrowAfterCommit=false (default): a post-commit drain failure ends the stream quietly', async () => {
+    const a = throwAfterFirst('openai', ['half'], 'drain broke');
+    const health = new Map();
+    const out = await collect(runStreamingVisionFallback([a], CFG, health, fastHooks()));
+    assert.deepEqual(out, ['half'], 'the chunk delivered before the drain failure is kept');
+  });
+
+  test('rethrowAfterCommit=true: a post-commit drain failure propagates instead of ending quietly', async () => {
+    const a = throwAfterFirst('openai', ['half'], 'drain broke');
+    const health = new Map();
+    const cfg = { ...CFG, rethrowAfterCommit: true };
+    const out = [];
+    await assert.rejects(
+      (async () => {
+        for await (const c of runStreamingVisionFallback([a], cfg, health, fastHooks())) out.push(c);
+      })(),
+      /drain broke/,
+      'the drain-loop error must propagate when the caller opted in',
+    );
+    assert.deepEqual(out, ['half'], 'the chunk delivered before commit is still yielded before the throw');
   });
 
   test('empty-stream first provider → falls back', async () => {

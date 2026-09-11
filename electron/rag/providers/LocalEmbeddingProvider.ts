@@ -8,12 +8,12 @@
 // (BFCArena::Extend → posix_memalign) during a live InferenceSession::Run()
 // call, with 16-17 ORT-related OS threads alive at crash time. This is
 // consistent with multiple ONNX sessions (Whisper's streaming STT worker +
-// IntentClassifier's zero-shot worker + this local-embedding fallback) being
+// the intent classifier's zero-shot worker, since removed + this local-embedding fallback) being
 // concurrently active in-process. Both of those other consumers already ran
 // their ONNX sessions inside a worker_threads.Worker; this provider was the
 // ONLY one still calling pipeline()/embed() directly on the main process. It
 // is now isolated the same way, following the exact message-passing pattern
-// used by electron/llm/IntentClassifier.ts / intentClassifierWorker.ts.
+// the (since removed) intent classifier used.
 //
 // Public API (isAvailable/embed/embedQuery/embedBatch) is UNCHANGED — all
 // worker plumbing is internal so EmbeddingPipeline.ts and
@@ -33,13 +33,14 @@ import {
 } from '../../utils/onnxLoadSentinel';
 import { ProviderStatusRegistry } from '../../services/ProviderStatusRegistry';
 import type { LocalWorkerStatus } from '../../utils/workerStatus';
+import { resolveBundledScript } from '../resolveRagWorker';
 
 const WORKER_INIT_TIMEOUT_MS = 60_000; // model load (cold disk read + ORT session init)
 const WORKER_EMBED_TIMEOUT_MS = 30_000; // a single embed()/embedBatch() call
 
 /** Process-local poison flag: set by the cold-start consume path to tell the
  *  ensureLoaded + embed paths to fast-fail this launch. Mirrors
- *  IntentClassifier's startupPoisoned. */
+ *  LocalReranker's startupPoisoned. */
 let startupPoisoned = false;
 
 /**
@@ -97,22 +98,24 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
     return candidates.find(Boolean) || path.join(process.resourcesPath || '.', 'models');
   }
 
-  // Same candidate-search pattern as resolveModelPath, but for the worker
-  // script itself — the compiled `localEmbeddingWorker.js` sibling of this
-  // compiled provider file. Mirrors IntentClassifier's getWorkerPath().
+  // The compiled `localEmbeddingWorker.js`, which ships at
+  // `electron/rag/providers/localEmbeddingWorker.js`. This used to be its own
+  // fixed 4-candidate list (mirroring resolveModelPath above), which only
+  // resolves when this class is inlined at exactly `electron/rag/providers`,
+  // `electron/rag`, `electron`, or the dist-electron root — build-electron.js
+  // gives every .ts file under electron/ its own esbuild entry point, so this
+  // class also gets inlined at OTHER depths (confirmed against a real build:
+  // `electron/services`, e.g. dist-electron/electron/services/
+  // StealthKeyboardManager.js and KeybindManager.js both carry this lookup
+  // and none of the 4 fixed candidates existed from there). LocalReranker and
+  // GgufReranker hit the exact same bug (see resolveRagWorker.ts) and were
+  // moved to an ascend-and-probe helper instead of guessing the depth; use
+  // the same helper here (`resolveBundledScript` rather than the narrower
+  // `resolveRagWorker`, since that one is hardcoded to a worker sitting
+  // directly under `rag/`, not `rag/providers/`).
   private getWorkerPath(): string {
-    const candidates = [
-      path.join(__dirname, 'localEmbeddingWorker.js'),
-      path.join(__dirname, 'providers', 'localEmbeddingWorker.js'),
-      path.join(__dirname, 'rag', 'providers', 'localEmbeddingWorker.js'),
-      path.join(__dirname, 'electron', 'rag', 'providers', 'localEmbeddingWorker.js'),
-    ];
-
-    let resolvedPath = candidates.find(p => fs.existsSync(p)) ?? candidates[0];
-    if (resolvedPath.includes('app.asar') && !resolvedPath.includes('app.asar.unpacked')) {
-      resolvedPath = resolvedPath.replace('app.asar', 'app.asar.unpacked');
-    }
-    return resolvedPath;
+    return resolveBundledScript(__dirname, ['rag', 'providers', 'localEmbeddingWorker.js'],
+      { unpackFromAsar: true });
   }
 
   private getWorker(): Worker {
@@ -328,7 +331,7 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
 
   /**
    * Latch a synthetic non-recoverable failure when the worker dies before
-   * the model is fully loaded. Idempotent. Mirrors IntentClassifier's latch
+   * the model is fully loaded. Idempotent. Mirrors LocalReranker's latch
    * so the retry-on-every-call pathology can't happen against a missing
    * packaged asset.
    */
@@ -408,7 +411,7 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
       return;
     }
 
-    // Cross-loader ONNX gate (shared with LocalReranker / IntentClassifier /
+    // Cross-loader ONNX gate (shared with LocalReranker /
     // Whisper). A gate refusal here is non-fatal — embedBatch will reject,
     // EmbeddingPipeline falls back to lexical retrieval, and the next call
     // retries. We do NOT have a `loadFailed` latch (matches the pre-gate
@@ -419,9 +422,16 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
       );
     }
 
-    const releaseSlot = await acquireOnnxSlot('normal');
-
+    // The slot is acquired INSIDE the load promise (2026-09-07). It used to be
+    // acquired before `loadingPromise` was assigned, so a burst of concurrent
+    // embed() calls (EmbeddingPipeline during ingest) each passed the
+    // `if (this.loadingPromise)` guard, each acquired a slot, and the second
+    // overwrote `slotRelease` — the first release was lost, the shared ONNX
+    // gate sat at capacity for the process lifetime, and every later local
+    // reranker / router load queued forever with no log. Assigning the promise
+    // first makes the guard hold for every concurrent caller.
     this.loadingPromise = (async () => {
+      const releaseSlot = await acquireOnnxSlot('normal');
       try {
         await this.postToWorker({ type: 'init', modelPath: this.modelPath }, WORKER_INIT_TIMEOUT_MS);
         this.loaded = true;
@@ -481,7 +491,7 @@ export function consumeLocalEmbeddingSentinel(): { modelId: string; startedAt: n
 
 /**
  * Public reset: clears the cold-start poison flag, allowing the next
- * embed() call to attempt a fresh load. Mirrors `clearIntentClassifierPoison`
+ * embed() call to attempt a fresh load. Mirrors `clearLocalRerankerPoison`
  * and the local-whisper-reset-to-default IPC but generalized. Idempotent.
  */
 export function clearLocalEmbeddingPoison(): void {

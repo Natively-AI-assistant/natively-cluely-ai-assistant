@@ -353,7 +353,21 @@ export function isOllamaVisionModel(modelId: string): boolean {
 async function callLLMHelperVision(providerId: string, params: VisionInvocationParams): Promise<string> {
   const helper = await getActiveLLMHelper();
   if (!helper) throw new Error('LLMHelper not initialized');
-  return helper.runVisionRequest(providerId, params.userPrompt, params.systemPrompt, params.optimized.path);
+  // `signal` and `timeoutMs` used to stop here. VisionProviderFallbackChain
+  // builds an AbortController per attempt and arms it with perProviderTimeoutMs
+  // (12s), but this hand-off dropped both, so the chain's budget and its
+  // cancellation were INERT for every cloud rung — whatever inner deadline the
+  // provider method happened to carry was the real one. For the Natively rung
+  // that was generateWithNatively's 8s text default, which is why every
+  // screenshot in natively_debug (3).log failed at exactly 8.0s and the
+  // chain's 12s never appeared anywhere.
+  return helper.runVisionRequest(
+    providerId,
+    params.userPrompt,
+    params.systemPrompt,
+    params.optimized.path,
+    { signal: params.signal, timeoutMs: params.timeoutMs },
+  );
 }
 
 /**

@@ -5,12 +5,18 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowUpRight, Clock, Mic, Search, Zap } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
+import {
+  formatCompact, TRIAL_FALLBACK_LIMITS,
+  type TrialLimits, type TrialUsage,
+} from '../../types/nativelyUsage';
 
 const PLAN_PRO_URL = 'https://checkout.dodopayments.com/buy/pdt_0NcM6Aw0IWdspbsgUeCLA';
 
 interface TrialBannerProps {
   expiresAt: string; // ISO timestamp
-  usage: { ai: number; stt_seconds: number; search: number };
+  usage: TrialUsage;
+  /** The trial's allowances from /v1/trial/status. Falls back when absent. */
+  limits?: TrialLimits;
   onUpgrade: () => void; // opens FreeTrialModal
 }
 
@@ -22,7 +28,7 @@ function fmt(ms: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-export const FreeTrialBanner: React.FC<TrialBannerProps> = ({ expiresAt, usage, onUpgrade }) => {
+export const FreeTrialBanner: React.FC<TrialBannerProps> = ({ expiresAt, usage, limits, onUpgrade }) => {
   const [remaining, setRemaining] = useState(() =>
     Math.max(0, new Date(expiresAt).getTime() - Date.now()),
   );
@@ -47,9 +53,20 @@ export const FreeTrialBanner: React.FC<TrialBannerProps> = ({ expiresAt, usage, 
   const isWarning = remaining > 0 && remaining < 2 * 60 * 1000;
   const expired = remaining === 0;
 
-  const aiPct = Math.min(100, (usage.ai / 10) * 100);
-  const sttPct = Math.min(100, (usage.stt_seconds / 60 / 10) * 100);
-  const searchPct = Math.min(100, (usage.search / 2) * 100);
+  // Allowances come from the server (see TRIAL_FALLBACK_LIMITS for why the
+  // fallback is shared rather than a literal here). AI is token-denominated
+  // now: `usage.ai` counted requests and stopped being written when chat moved
+  // to a token meter, so a pip reading it would sit at 0 for the whole trial.
+  const aiLimit = limits?.ai_tokens ?? TRIAL_FALLBACK_LIMITS.ai_tokens;
+  const sttLimit = limits?.stt_minutes ?? TRIAL_FALLBACK_LIMITS.stt_minutes;
+  const searchLimit = limits?.search_requests ?? TRIAL_FALLBACK_LIMITS.search_requests;
+  const aiUsed = usage.ai_tokens ?? 0;
+  const sttUsedMin = usage.stt_seconds / 60;
+
+  const pct = (used: number, limit: number) => (limit > 0 ? Math.min(100, (used / limit) * 100) : 0);
+  const aiPct = pct(aiUsed, aiLimit);
+  const sttPct = pct(sttUsedMin, sttLimit);
+  const searchPct = pct(usage.search, searchLimit);
 
   return (
     <AnimatePresence>
@@ -87,13 +104,13 @@ export const FreeTrialBanner: React.FC<TrialBannerProps> = ({ expiresAt, usage, 
 
           {/* Usage mini-bars */}
           <div className="flex items-center gap-3 flex-1 min-w-0">
-            <UsagePip icon={Zap} pct={aiPct} label={`${usage.ai}/10 AI`} />
+            <UsagePip icon={Zap} pct={aiPct} label={`${formatCompact(aiUsed)}/${formatCompact(aiLimit)} AI`} />
             <UsagePip
               icon={Mic}
               pct={sttPct}
-              label={`${(usage.stt_seconds / 60).toFixed(1)}/10m STT`}
+              label={`${sttUsedMin.toFixed(1)}/${sttLimit}m voice`}
             />
-            <UsagePip icon={Search} pct={searchPct} label={`${usage.search}/2 search`} />
+            <UsagePip icon={Search} pct={searchPct} label={`${usage.search}/${searchLimit} research`} />
           </div>
 
           {/* Upgrade CTA */}

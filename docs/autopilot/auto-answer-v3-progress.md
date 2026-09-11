@@ -1,6 +1,14 @@
 # Auto Answer V3 — Campaign Progress
 
-## Status: phase 7 complete + post-campaign code-review repairs (2026-08-24) — branch local, no PR, no push
+## Status: shipped. Phase 7 + the 2026-08-24 code-review repairs landed with PR #541 (merged 2026-09-07, `13fc8b5a`); latest fix `467a629e` on `main`
+
+> **Read the dated sections below as a LOG, not as a spec.** Several policies
+> described as live in 2026-08 have since been retired — most of all the entire
+> user-channel/mic-echo family (2026-09-03). Each such section carries a
+> `Superseded` banner; the current behaviour is whatever the newest entry and
+> the code say. `ECHO_*`, `GENUINE_ANSWER_MIN_WORDS` and the echo latch no
+> longer exist in the engine at all.
+
 
 Branch: `feat/auto-answer-v3` (created from `main` @ f7ba73c0, 2026-08-23).
 Specs: `docs/specs/auto-answer-v2-spec.md.md` (note: file has a doubled `.md.md` extension on disk),
@@ -782,6 +790,12 @@ prefixed `[AutoAnswer:legacy]`. Smoke-verified by hand (restart-then-fire-once, 
 unaffected (189/189). REMOVE the file and its main.ts wiring when the comparison is done.
 
 ### Live-run repairs, round 3 (2026-08-24 — the A/B session; mic echo)
+
+> **Superseded 2026-09-03** — mic-echo detection (item 6 below) is GONE. The
+> user channel is inert: `ECHO_*`, the latch and `GENUINE_ANSWER_MIN_WORDS`
+> were deleted, and no user speech suppresses, cancels or barges in. See the
+> 2026-09-03 entry. Kept here for the measurements that produced the constants.
+
 The user ran the A/B harness. LEGACY behaved exactly as preserved: it fired constantly on garbage single turns
 ("Cool.", ".", "My name is Kylie,") — the recorded PR #497 failure mode, now demonstrated live. V3 answered
 nothing: every candidate skipped `user_answering`. The log showed why — nearly every interviewer final had an
@@ -918,6 +932,11 @@ dispatches, zero user_answering skips, everything else silent. Test live#8/8b (b
 mutation-probed red). Suite 216/216 · typecheck clean.
 
 ### Lenient mic (2026-08-24 — user decision after rounds 3/5/6)
+
+> **Superseded 2026-09-03** — the lenient-mic policy was retired outright, not
+> loosened further: the user channel now has no vote at all. See the
+> 2026-09-03 entry.
+
 Every live mic interaction was FALSE suppression; the user asked whether to de-prioritize mic speech like the
 legacy engine (mic-blind). Decision: **lenient mic** — the mic suppresses only on strong evidence. A user final
 counts as answering only when non-echo, non-backchannel AND ≥ `GENUINE_ANSWER_MIN_WORDS`=4 words; blips below the
@@ -1456,6 +1475,14 @@ Windows: `Reviewed but not executed` (no platform-specific code paths touched).
 
 ## Live session 2026-08-26 (meeting 7e4cbe43) — mic echo was shredding every question
 
+> **Superseded 2026-09-03** — the latch this session produced (`ECHO_ACTIVATE_COUNT`,
+> `ECHO_FLAG_WINDOW`, `ECHO_MODE_HOLD_MS`, the `mic_echo` skip reason) no longer
+> exists in the engine. `echoContainment` survives in `AutoAnswerText.ts` for
+> `docs/triage/echo.mjs` only. The diagnosis below still stands — speaker bleed
+> IS real — but the answer is now "the user channel never closes a candidate",
+> so bleed cannot shred one either. See the 2026-09-03 entry.
+
+
 User report: "the auto answer is failure". Seven minutes produced **12 candidates and 1 answer**, with 82
 user-channel skips (50 backchannel, 30 user_answering). The judge was not the problem — the transcript was.
 
@@ -1682,3 +1709,66 @@ leaving a guard nothing exercised. 57/57, typecheck clean.
   duplicate guard compares `lastAnsweredText` exactly, so near-duplicates pass.
 * `1-q13` fired at **a=0.4** on *"I recommend maybe sharing your screen."* — the same weak band flagged in the
   replay analysis. Everything at 0.9 was a real ask.
+
+---
+
+## 2026-09-03 — live session gen 13: both real questions lost to the prefetch; user channel made inert
+
+Packaged 2.8.8, Auto Answer on, general mode, a real call. Telemetry (`logs/telemetry.jsonl` under the
+app's user-data directory — the packaged app persists nothing else) shows 13 candidates, two positive
+verdicts, zero answers shown:
+
+| id | verdict | what happened |
+| --- | --- | --- |
+| `13-q4` | technical_question, a=0.9, `held_applied` → `decision: auto` | The prefetch had FINISHED 2 s earlier. Its text went to a `.catch`-only caller and was dropped; the dispatch "adopted" a stream that no longer existed and returned. Independently, completion had stamped `lastTriggerTime`, so the planner would have refused the adoption as a `cooldown` repeat of itself. |
+| `13-q6` | technical_question, a=1.0, `held_applied` | The prefetch was STILL STREAMING. `canAutoAnswer` saw mode `what_to_say` and said busy; the dispatch parked; 195 ms later `13-q7` bumped `judgeSeq` and the retry exited with no telemetry and no log. |
+
+The remaining candidates were `stale` — continuous speech, working as designed.
+
+**Fixes (all shared logic, no platform branch):**
+1. `IntelligenceEngine.completeSpeculativeRun` keeps a finished prefetch's text (`speculativeAnswer`, gated
+   by the existing `speculativeText` window) and no longer stamps `lastTriggerTime`; adoption stamps it.
+2. Adoption (`handleSuggestionTriggerInner`) distinguishes a prefetch still streaming (revealed at
+   completion), one already finished (`revealSpeculativeAnswer` now), and one that aborted (fresh run).
+3. `canAutoAnswer` accepts a dispatch while the engine's OWN prefetch is live — that dispatch is the adopter.
+4. `SimpleAutoAnswer.deliver` reports a park dropped by supersession as `auto_answer_ignored`
+   (`superseded_while_parked`) with a log line. Never a silent exit again.
+
+**Policy change (user decision, same day):** the user channel is INERT. The user answers the moment the
+question lands, so their own speech no longer cancels a stream, clears a candidate, or drops a parked or
+held verdict. The 2026-08-24 lenient-mic policy and the echo latch (`ECHO_*`, `GENUINE_ANSWER_MIN_WORDS`)
+are gone with it; `USER_BACKCHANNEL` stays as the interviewer-side prefilter.
+
+Pinned in `AutoAnswerSimple.test.mjs` (rewritten user-channel tests, loud park drop) and the new
+`AutoAnswerPrefetchReveal2026_09_03.test.mjs` (finished prefetch revealed, in-flight prefetch adopted and
+revealed at completion, cooldown not stamped, manual press never leaks a prefetch). Auto Answer suites
+85/85, electron typecheck clean. Not yet run against a live call.
+
+## 2026-09-07 — in-flight adoption was conditional on the trigger being automatic
+
+Post-merge audit of the fixes above. Adoption of a STILL-STREAMING prefetch was recorded only through
+`automaticGenerationId`, which `handleSuggestionTriggerInner` sets only when `trigger.automatic` is true —
+and `completeSpeculativeRun` read that same field to decide whether to reveal. A **non-automatic** adopter
+therefore returned having "adopted" the live stream while completion, finding no marker, parked the text in
+`speculativeAnswer` and emitted nothing: `13-q4` reproduced on the other caller. The already-finished branch
+was never affected; it does not consult `automatic` at all.
+
+Confirmed live, not only in tests. Same signed-in session, same spoken question, same protocol (Auto Answer
+disabled the instant the speculative stream starts, so only the non-automatic `__e2e__:ask` can adopt):
+
+| build | engine trace | overlay |
+| --- | --- | --- |
+| before | `Speculative stream accepted (Jaccard=1.00) — continuing; revealed at completion`, then nothing | transcript + the idle placeholder; no answer |
+| after  | the same line, then `Revealing the prefetched answer (1772 chars, prefetch gen 7 → 8)` | the answer renders |
+
+**Fix:** a dedicated `speculativeAdoptedGenerationId`, set on adoption regardless of `automatic`, read by
+`completeSpeculativeRun`, and cleared wherever `speculativeAnswer` is. `automatic` is derived separately for
+the reveal (`this.automaticGenerationId === generationId`), so `revealSpeculativeAnswer` never nulls
+`automaticGenerationId` for a generation that is not its own — a non-automatic reveal must not look
+barge-in-cancellable.
+
+Latent for users: `__e2e__:ask` (the E2E/benchmark harness) is the only non-automatic caller and it resets
+first, so no shipped path reaches it. It still silently loses an answer whenever the harness does, which is
+how Auto Answer quality gets measured.
+
+Pinned by a seventh case in `AutoAnswerPrefetchReveal2026_09_03.test.mjs`, red against the pre-fix bundle.

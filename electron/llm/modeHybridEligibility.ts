@@ -24,7 +24,10 @@
 //    lexical on timeout, because it sits on the live first-useful deadline.
 //    chatWithGemini awaits without a race (budgetMs: null) — it is not on the
 //    streaming deadline and a lexical downgrade there is a pure quality loss.
-//    This asymmetry is intentional; pass budgetMs accordingly.
+//    This asymmetry is intentional; pass budgetMs accordingly. Since
+//    2026-09-07 the raced site also forwards its budget to the retriever as
+//    `rerankDeadlineMs`, so the two sites' retrievalOptions differ by exactly
+//    that key — the parity test strips it before comparing.
 // 2. Query preparation: chatWithGemini expands the doc-grounded query
 //    (expandQueryWithHints) before retrieval; streamChat — the live-validated
 //    real Ask-AI path — passes the raw message, and ModeHybridRetriever
@@ -115,7 +118,16 @@ export async function runHybridModeRetrieval(
     /* excludeCustomContext */ true,
     args.pinnedModeId ?? undefined,
     /* allowRerank */ true,
-    { forceDocumentGrounding: args.forceDocumentGrounding, followUpReferentHint: args.followUpReferentHint, rerankSurface: 'manual' as const },
+    {
+      forceDocumentGrounding: args.forceDocumentGrounding,
+      followUpReferentHint: args.followUpReferentHint,
+      rerankSurface: 'manual' as const,
+      // A raced call tells the retriever its deadline so a rerank that cannot
+      // finish inside it is never started (measured waste: the recap hotkey
+      // billed a hosted rerank of the whole transcript and discarded it —
+      // rerankBudget.ts). The un-raced site (budgetMs null) carries none.
+      ...(args.budgetMs != null ? { rerankDeadlineMs: args.budgetMs } : {}),
+    },
   );
   if (args.budgetMs == null) {
     return { block: await hybridPromise, timedOut: false };

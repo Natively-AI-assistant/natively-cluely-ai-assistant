@@ -1233,7 +1233,6 @@ import { punctuationSourceFor } from "./llm/punctuationProvenance"
 import { ThemeManager } from "./ThemeManager"
 import { RAGManager } from "./rag/RAGManager"
 import { DatabaseManager } from "./db/DatabaseManager"
-import { warmupIntentClassifier } from "./llm"
 
 /** Unified type for all STT providers with optional extended capabilities */
 type STTProvider = (GoogleSTT | RestSTT | DeepgramStreamingSTT | SonioxStreamingSTT | ElevenLabsStreamingSTT | OpenAIStreamingSTT | NativelyProSTT | NvidiaNimStreamingSTT) & {
@@ -1705,20 +1704,10 @@ export class AppState {
     // experience instead of a crashloop.
     setImmediate(() => {
       try {
-        const { consumeIntentClassifierSentinel } = require('./llm/IntentClassifier');
         const { consumeLocalEmbeddingSentinel } = require('./rag/providers/LocalEmbeddingProvider');
         const { consumeLocalRerankerSentinel } = require('./rag/LocalReranker');
 
-        const intentPoisoned = consumeIntentClassifierSentinel();
-        if (intentPoisoned) {
-          const message = `Recovered from an intent classifier crash. ${intentPoisoned.modelId} is skipped this launch — falling back to regex/heuristic intent.`;
-          console.warn(`[AppState] ${message}`);
-          this.setOnnxRecoveryNotice('intent', {
-            family: 'intent',
-            badModelId: intentPoisoned.modelId,
-            message,
-          });
-        }
+        // Intent-classifier poison sentinel removed 2026-09-05 with the classifier.
 
         const embeddingPoisoned = consumeLocalEmbeddingSentinel();
         if (embeddingPoisoned) {
@@ -2590,6 +2579,36 @@ export class AppState {
           this.knowledgeOrchestrator.setSearchProviderResolver(resolveCompanySearchProvider);
         }
 
+        // Is company research appropriate in the active mode? (Routing audit,
+        // 2026-09-04.) The orchestrator's dossier gate was mode-blind, so a
+        // Team Meet or Lecture turn containing a bare token like "reviews" or
+        // "funding" could put a query on the wire to an external search
+        // provider whenever a JD was still loaded from an earlier session.
+        //
+        // In exactly those modes the result is discarded: the intercept gate in
+        // LLMHelper runs AFTER processQuestion returns, so the research had
+        // already happened and its output was thrown away. The call could never
+        // change the answer, only leak the query and spend the budget.
+        //
+        // Reuses the SAME predicate as that gate, so the two cannot drift: the
+        // modes that discard the result are exactly the modes that no longer
+        // request it. Resolved per call because the user switches modes
+        // mid-session. Optional-capability guard matches the sibling wiring
+        // above, so an older premium build without the setter is unaffected.
+        if (typeof this.knowledgeOrchestrator.setCompanyResearchAllowedFn === 'function') {
+          this.knowledgeOrchestrator.setCompanyResearchAllowedFn(() => {
+            try {
+              // Local require, matching every other ModesManager use in this
+              // file: the module is not statically imported here.
+              const { ModesManager } = require('./services/ModesManager');
+              return ModesManager.getInstance().isPremiumKnowledgeInterceptAllowed();
+            } catch {
+              // Never let a mode-lookup failure disable a paid capability.
+              return true;
+            }
+          });
+        }
+
         // Embedding function — lazily delegate to the cascaded EmbeddingPipeline
         // (OpenAI → Gemini → Ollama → Local bundled model).
         // We await waitForReady() so uploads during boot wait for the pipeline
@@ -3096,8 +3115,11 @@ export class AppState {
   public async checkForUpdates(): Promise<void> {
     console.log('[AutoUpdater] Manual check for updates requested')
     try {
-      // In development mode, use manual GitHub API check (electron-updater skips in dev)
-      if (process.env.NODE_ENV === "development") {
+      // Use app.isPackaged, not NODE_ENV, matching every other updater gate in
+      // this file (see canAutoInstall()) — a stray NODE_ENV=development in a
+      // packaged build's environment must not silently downgrade the real
+      // electron-updater flow to the manual GitHub-API-only check.
+      if (!app.isPackaged) {
         await this.checkForUpdatesManual()
       } else {
         await autoUpdater.checkForUpdatesAndNotify()
@@ -8692,6 +8714,14 @@ if (process.env.THINKING_MATRIX === '1') {
       console.log('[LocalFallbackPreflight] skipped — app is quitting');
       return;
     }
+    // Sweep retired model caches first, so the preflight below never reports
+    // a model nothing opens any more. Non-fatal by construction.
+    try {
+      const { purgeObsoleteModelCaches } = require('./audio/whisper/modelManager');
+      purgeObsoleteModelCaches();
+    } catch (err: any) {
+      console.warn('[modelManager] obsolete cache sweep failed (non-fatal):', err?.message || err);
+    }
     try {
       const llmHelper = appState.processingHelper.getLLMHelper();
       const { runLocalFallbackPreflight } = require('./services/LocalFallbackPreflight');
@@ -8704,16 +8734,9 @@ if (process.env.THINKING_MATRIX === '1') {
   // Don't let the preflight timer keep the process alive past quit.
   if (preflightTimer && typeof preflightTimer.unref === 'function') preflightTimer.unref();
 
-  // Defer the zero-shot intent classifier warmup until after the launcher has
-  // had a chance to paint and settle. The classifier still lazy-loads on first
-  // use, so this only moves startup CPU work out of the visible launch path.
-  setTimeout(() => {
-    try {
-      warmupIntentClassifier();
-    } catch (err) {
-      console.warn('[Init] Intent classifier warmup scheduling failed (non-fatal):', err);
-    }
-  }, Number(process.env.NATIVELY_INTENT_WARMUP_DELAY_MS || '2500'));
+  // The zero-shot intent classifier warmup that used to sit here was removed
+  // on 2026-09-05 with the classifier itself; its cache is swept above.
+  // See docs/natively-router-final-answer-2026-09-05.md.
 
   // DUAL-DOCK-ICON FIX (promotion half): now that the disguised name/icon are
   // applied and the window exists, promote back to 'regular' so a SINGLE dock
@@ -8769,6 +8792,20 @@ if (process.env.THINKING_MATRIX === '1') {
     const { powerMonitor } = require('electron') as typeof import('electron');
     powerMonitor.on('resume', () => {
       console.log('[Main] powerMonitor: system resumed from sleep.');
+      // Tell the Provider Performance Profile that the next few turns are not
+      // representative: a machine coming back from sleep re-associates Wi-Fi,
+      // re-opens TLS sessions and re-warms DNS, and a first-token measurement
+      // taken across that would teach the deadline that this provider is slow.
+      // Deliberately hung off the EXISTING subscription rather than a second
+      // powerMonitor listener — two listeners on the same event is how two
+      // subsystems come to disagree about whether a resume happened.
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { getRuntimeSignals } = require('./llm/performance/runtimeSignals');
+        getRuntimeSignals().noteSystemResumed();
+      } catch (err) {
+        console.warn('[Main] performance profile resume note failed (non-fatal):', err);
+      }
       appState.restartCapturesAfterResume().catch((err) =>
         console.error('[Main] restartCapturesAfterResume threw:', err)
       );
@@ -9059,6 +9096,15 @@ if (process.env.THINKING_MATRIX === '1') {
     // Only the graceful path emits this. SIGTERM/SIGINT call app.exit(), which
     // bypasses will-quit — so a killed app records no shutdown, which is the
     // honest outcome rather than a fabricated one.
+    // Flush the Provider Performance Profile before anything else touches the
+    // disk. Its writes are debounced and the timer is unref'd (a cache must
+    // never hold the event loop open), so without this the last few turns of a
+    // session are lost on every graceful quit — which is precisely the turns a
+    // user just told us about by quitting after them.
+    try {
+      const { getProviderPerformanceStore } = require('./llm/performance/ProviderPerformanceStore');
+      getProviderPerformanceStore().dispose();
+    } catch { /* a cache that cannot flush is not a reason to block quit */ }
     try {
       const { recordAppShutdown } = require('./services/usageInstrumentation');
       recordAppShutdown();

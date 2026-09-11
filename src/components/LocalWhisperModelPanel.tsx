@@ -238,6 +238,26 @@ export function LocalWhisperModelPanel({ onModelConfigChanged }: LocalWhisperMod
     const [onnxNotices, setOnnxNotices] = useState<Partial<Record<OnnxRecoveryNotice['family'], OnnxRecoveryNotice>>>({});
     const [loading, setLoading] = useState(true);
 
+    /* True only while the System Audio column is opening or closing its width.
+     *
+     * That column clips itself (`overflow: hidden`) so the trigger cannot spill
+     * out of a box narrower than the trigger's own minimum — 10px padding either
+     * side plus a `flex-shrink: 0` chevron is ~39px that does NOT shrink with the
+     * column. But the clip cannot be permanent: the select's popup is
+     * `position: absolute` inside `.aip-select { position: relative }`, so its
+     * containing block sits INSIDE the clipper and the whole listbox is clipped
+     * away. That is the bug this flag exists to prevent — the System Audio
+     * dropdown opened (chevron rotated, outside-click armed) and painted nothing,
+     * while the Mic column, which has no clipper, worked.
+     *
+     * Default false, and only ever set true from the toggle handler. That is the
+     * load-bearing part: `AnimatePresence initial={false}` mounts the column
+     * straight at its `animate` values with NO enter animation when the panel
+     * opens with Split already on — the common case, since the setting persists.
+     * A flag that un-clipped on animation-complete would never fire there and the
+     * dropdown would stay dead. */
+    const [columnAnimating, setColumnAnimating] = useState(false);
+
     const loadData = useCallback(async () => {
         try {
             const [modelsRes, hwRes, cfgRes, stateRes, noticeRes, intentRes, embedRes, rerankRes] = await Promise.all([
@@ -435,6 +455,11 @@ export function LocalWhisperModelPanel({ onModelConfigChanged }: LocalWhisperMod
     // disagree about `enabled`. The parent is notified from the effect above,
     // which sees the committed value rather than a locally-computed guess.
     const toggleDualChannel = async (enabled: boolean) => {
+        // FIRST, before setConfig: both land in one commit, so the column must
+        // already be marked animating in the same render that mounts it —
+        // otherwise it paints one unclipped frame at ~zero width with the
+        // trigger hanging out over the Mic column.
+        setColumnAnimating(true);
         setConfig(prev => ({ ...prev, enabled }));
         await electronAPI?.localWhisperSetChannelConfig?.({ enabled });
     };
@@ -620,8 +645,20 @@ export function LocalWhisperModelPanel({ onModelConfigChanged }: LocalWhisperMod
                             <motion.div
                                 key="system"
                                 className="min-w-0"
+                                onAnimationComplete={() => setColumnAnimating(false)}
                                 style={{
-                                    overflow: 'hidden',
+                                    // Clip ONLY while the width is in motion. See
+                                    // `columnAnimating` above: at rest this must be
+                                    // `visible` or the select's absolutely-positioned
+                                    // popup — whose containing block is the
+                                    // `.aip-select` inside this box — is clipped out of
+                                    // existence and the System Audio model cannot be
+                                    // picked at all.
+                                    //
+                                    // Under reduced motion the column has no width
+                                    // animation (`animate` carries opacity alone), so
+                                    // there is nothing to clip in the first place.
+                                    overflow: columnAnimating && !reduceMotion ? 'hidden' : 'visible',
                                     // flexBasis 0 is what makes the split exactly 50/50. The
                                     // sibling is `flex-1` — i.e. `flex: 1 1 0%` — so it sizes
                                     // purely from grow. Leaving this one at the default

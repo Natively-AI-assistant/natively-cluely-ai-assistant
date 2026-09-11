@@ -2,6 +2,7 @@
 // LLM mode routing and orchestration.
 // Extracted from IntelligenceManager to decouple LLM logic from state management.
 
+import type { SessionWriteDecision } from './llm/FinalAnswerGenerationPolicy';
 import { EventEmitter } from 'events';
 import { LLMHelper } from './LLMHelper';
 import { SessionTracker, TranscriptSegment, SuggestionTrigger, ContextItem } from './SessionTracker';
@@ -9,15 +10,15 @@ import {
     AnswerLLM, AssistLLM, BrainstormLLM, ClarifyLLM, CodeHintLLM, FollowUpLLM, RecapLLM,
     FollowUpQuestionsLLM, WhatToAnswerLLM,
     prepareTranscriptForWhatToAnswer, buildTemporalContext,
-    AssistantResponse as LLMAssistantResponse, classifyIntent, planNextAssistantAction, PlannerDecision,
+    AssistantResponse as LLMAssistantResponse, classifyIntent, hasQuestionSignal, planNextAssistantAction, PlannerDecision,
     extractLatestQuestion, toCandidateFraming, planAnswer, validateAnswerStructure, isCompleteShortAnswer, detectExplicitCodingContract, detectAndExtractScaffoldMisfire, hasUnrecoveredScaffoldContamination, isScaffoldRegenerationEligible, isCodingAnswerType, isJdFactualLookupNotNegotiationAdvice, resolveFollowUp, resolveFollowUpOrClarify,
     isLiveSessionMemoryEnabled, resolveLiveFollowup, toMemoryMode, toSurface, effectiveMemoryMode,
     resolveLiveSessionMemoryConfig, piTelemetry, ageBucket,
     buildContextRoute, summarizeContextRoute, shouldThrottleTrigger,
     validateProfileOutput, validateProfileEvidence, buildProfileRepairInstruction, sanitizeCandidateAnswer, CANDIDATE_VOICE_ANSWER_TYPES,
     detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES,
-    raceStreamWithDeadline, LIVE_INTER_TOKEN_STALL_MS, LIVE_TOTAL_HARD_TIMEOUT_MS,
-    LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, LIVE_LOCAL_TOTAL_HARD_TIMEOUT_MS, isLeakedSchemaStub, isLeakedJsonEnvelope, extractAnswerFromJsonEnvelope,
+    raceStreamWithDeadline, LIVE_INTER_TOKEN_STALL_MS, totalHardTimeoutMs, repairDeadlineMs, regenerationBudgetMs,
+    LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, isLeakedSchemaStub, isLeakedJsonEnvelope, extractAnswerFromJsonEnvelope,
     isProviderTransportError, isLeakedInternalTagBlock, isLeakedAnswerArtifact,
     cleanAnswerArtifacts, compressToSpeakable, SCAFFOLD_LABEL_RE, BOLD_PSEUDO_HEADER_RE,
     buildProfileJitPrompt, decideSessionWritePolicy,
@@ -36,9 +37,12 @@ import { HARD_SYSTEM_PROMPT } from './llm/prompts';
 import type { ActiveModeInfo } from './llm/modeProfiles';
 import type { WhatToAnswerRequestSnapshot } from './llm/whatToAnswerRequestSnapshot';
 import { resolveCanonicalTurn } from './llm/resolveCanonicalTurn';
+import { performanceHooks, applyAdaptiveTtft, secondaryStreamObserver, slowWorkloadAdvice } from './llm/performance/wiring';
+import { estimateTokens } from './llm/modelCapabilities';
 import { mintTurnId } from './llm/turnIdentity';
 import { deriveRetrievalQuery } from './llm/retrievalQueryPolicy';
 import { buildGracefulRetry } from './llm/manualProfileIntelligence';
+import { providerFailureUserMessage } from './llm/providerErrorClassifier';
 import { CodingStreamGate } from './llm/codingStreamGate';
 import { isCodeVerificationEnabled } from './llm/codeVerification/verificationEnabled';
 import { DynamicActionEngine } from './services/dynamic-actions/DynamicActionEngine';
@@ -182,6 +186,16 @@ export interface IntelligenceModeEvents {
     'dynamic_action_emitted': (action: DynamicAction) => void;
 }
 
+/** A speculative prefetch that completed unadopted, held for the dispatch that may adopt it. */
+interface SpeculativeAnswer {
+    generationId: number;
+    question: string;
+    confidence: number;
+    text: string;
+    /** The run's own session-write decision (e.g. do_not_store for a truncated stream); undefined on the legacy answerLLM path. */
+    writeDecision: SessionWriteDecision | undefined;
+}
+
 export class IntelligenceEngine extends EventEmitter {
     // Mode state
     private activeMode: IntelligenceMode = 'idle';
@@ -218,6 +232,108 @@ export class IntelligenceEngine extends EventEmitter {
 
     // Keep reference to LLMHelper for client access
     private llmHelper: LLMHelper;
+
+    /**
+     * First-token budget for a post-answer repair/regeneration stream.
+     *
+     * These were a hardcoded 7000 on every route. On a gateway whose first token
+     * measures 9s that window can never succeed, so the repair was spent and
+     * discarded on every turn — silently, since the user just never sees their
+     * answer improve. Derived from the route budget instead; see
+     * liveDeadlines.repairDeadlineMs. `minMs` preserves each site's own previous
+     * value as a floor so nothing gets shorter than it is today.
+     */
+    /**
+     * Arguments for a post-answer repair stream.
+     *
+     * Prefers a replay of THIS turn's answer call, so the repair sees the same
+     * transcript, screenshot, reference files, realtime prompt and evidence the
+     * answer saw. Falls back to the caller's own arguments when the turn has no
+     * remembered answer — the ScopeFallback route and the Context-OS
+     * refuse/clarify terminals never compose one, so that is a real branch.
+     *
+     * The abort signal is always the caller's, never the remembered one.
+     */
+    private repairCallArgs(
+        turnKey: object | undefined,
+        repairPrompt: string,
+        signal: AbortSignal | undefined,
+        fallbackSystemPrompt?: string,
+        fallbackScopes: any[] = [],
+    ): Parameters<LLMHelper['streamChat']> {
+        const replayed = (this.llmHelper as any).replayAnswerCall?.(turnKey, repairPrompt, signal);
+        if (replayed) {
+            // A repair site that supplies its OWN system prompt means it: the
+            // doc-grounded repair pass, for one, deliberately runs under a
+            // different contract from the answer. Inheriting the answer's
+            // system prompt there would silently undo that. The caller's wins;
+            // everything else — images, transcript, scopes, route — is inherited.
+            if (fallbackSystemPrompt !== undefined) replayed[3] = fallbackSystemPrompt;
+            if (fallbackScopes && fallbackScopes.length > 0) replayed[6] = fallbackScopes as any;
+            return replayed;
+        }
+        return [repairPrompt, undefined, undefined, fallbackSystemPrompt, true, true, fallbackScopes as any, signal] as any;
+    }
+
+    /**
+     * ALWAYS ANSWER (2026-09-07, owner's direction): one bounded regeneration for
+     * the sites that used to substitute a canned "I don't have enough context…"
+     * line — the model's own "Nothing actionable" on a manual press, and an
+     * assistant-voice identity misfire. Returns null when nothing usable came
+     * back, in which case the caller keeps its previous fallback.
+     */
+    private async regenerateUsableAnswer(opts: {
+        question: string;
+        transcript: string;
+        evidenceBlock?: string;
+        turnKey: object | undefined;
+        signal: AbortSignal;
+        isSuperseded: () => boolean;
+        reason: string;
+    }): Promise<string | null> {
+        const prompt = [
+            '<answer_instructions note="follow these; never repeat them">',
+            'The user explicitly asked for an answer. Answer the most recent question in the conversation directly and concretely; if there is no explicit question, give the single most useful thing to say next. Do NOT say that nothing is actionable, do NOT ask the user to repeat or share more, do NOT describe what context is missing, and do NOT identify yourself as an AI assistant. Use the evidence when it applies; otherwise answer from general knowledge, clearly marked as such.',
+            '</answer_instructions>',
+            opts.evidenceBlock?.trim() ? `## EVIDENCE\n${opts.evidenceBlock.trim()}` : '',
+            opts.question.trim() ? `## QUESTION\n${opts.question.trim()}` : '',
+            opts.transcript.trim() ? `## CONVERSATION\n${opts.transcript.trim()}` : '',
+            'Output ONLY the answer.',
+        ].filter(Boolean).join('\n');
+        let out = '';
+        try {
+            await raceStreamWithDeadline({
+                observe: secondaryStreamObserver('regeneration'),
+                stream: this.llmHelper.streamChat(...this.repairCallArgs(opts.turnKey, prompt, opts.signal)) as AsyncGenerator<string>,
+                firstUsefulDeadlineMs: this.repairFirstUsefulMs(7000, opts.turnKey),
+                interTokenStallMs: LIVE_INTER_TOKEN_STALL_MS,
+                isUsefulYet: () => out.trim().length >= 5,
+                shouldAbort: () => out.length > 1800 || opts.signal.aborted || opts.isSuperseded(),
+                onToken: (tok: string) => { out += tok; },
+            });
+        } catch { /* keep whatever streamed */ }
+        const text = cleanAnswerArtifacts(out.trim());
+        if (text.length < 5 || IntelligenceEngine.isNonAnswerSentinel(text) || isLeakedAnswerArtifact(text)) return null;
+        try { if (detectAssistantVoiceMisfire(text).isMisfire) return null; } catch { /* detector is best-effort */ }
+        console.log('[IntelligenceEngine] regenerated a usable answer', { reason: opts.reason, chars: text.length });
+        return text;
+    }
+
+    private repairFirstUsefulMs(minMs: number = 7000, turnKey?: object): number {
+        const h: any = this.llmHelper;
+        const isUserEndpoint = typeof h?.isUsingUserEndpoint === 'function' ? h.isUsingUserEndpoint() === true : false;
+        return repairDeadlineMs({
+            // A repair that inherits the answer's screenshot pays a multimodal
+            // prefill, which no text-sized window can clear.
+            hasImages: turnKey ? h?.replayedAnswerHasImages?.(turnKey) === true : false,
+            isLocal: typeof h?.isUsingOllama === 'function' ? h.isUsingOllama() === true : false,
+            viaServerCascade: typeof h?.isUsingNativelyServerCascade === 'function' ? h.isUsingNativelyServerCascade() === true : false,
+            isUserEndpoint,
+            observedUserEndpointLatency: isUserEndpoint && typeof h?.observedAnswerLatency === 'function'
+                ? h.observedAnswerLatency() : null,
+            minMs,
+        });
+    }
 
     // Reference to SessionTracker for context
     private session: SessionTracker;
@@ -303,6 +419,26 @@ export class IntelligenceEngine extends EventEmitter {
     // the first final turn while questionLedgerShadow is enabled.
     private questionLedgerShadow: import('./llm/questionLedger').QuestionLedger | null = null;
     private speculativeText: string | null = null;
+    /**
+     * A speculative prefetch that COMPLETED before anything adopted it. A
+     * speculative stream never renders (the judge may still say no), so its
+     * text used to be returned to a `.catch`-only caller and lost; the
+     * dispatch then "adopted" a stream that no longer existed and showed
+     * nothing (live session 2026-09-03, 13-q4). Held here, gated by the same
+     * speculativeText / expiry window, so adoption can reveal it instead.
+     */
+    private speculativeAnswer: SpeculativeAnswer | null = null;
+    /**
+     * The generation a dispatch adopted while it was STILL STREAMING. Adoption
+     * used to be recorded only through `automaticGenerationId`, which is set
+     * only for an `automatic` trigger — so a non-automatic adopter returned
+     * having "adopted" the stream and its completion then parked the text
+     * instead of revealing it, reproducing 13-q4 on that path. Confirmed in a
+     * live session (2026-09-07): the adoption logged "revealed at completion"
+     * and no answer ever reached the overlay. Latent for users — `__e2e__:ask`
+     * is the only non-automatic caller — but wrong on any caller.
+     */
+    private speculativeAdoptedGenerationId: number | null = null;
     // epoch ms after which speculativeText is stale; Infinity while stream is still running
     private speculativeTextExpiry: number = Infinity;
     private readonly SPECULATIVE_DEBOUNCE_MS = 350;
@@ -322,6 +458,25 @@ export class IntelligenceEngine extends EventEmitter {
     // active meeting, so detectAndEmitDynamicActions becomes a no-op safely.
     private dynamicActionEngine: DynamicActionEngine | null = null;
     private currentSessionId: string | null = null;
+
+    /**
+     * THE conversation-ring key for every surface, computed in one place.
+     *
+     * Exposed because ipcHandlers has to WRITE the same ring this engine READS,
+     * and the two previously derived their key independently — typed chat off a
+     * webContents id, what-to-answer off the meeting id — so each surface built
+     * a history the other could not see. A public accessor is the cheapest way
+     * to make that class of drift impossible rather than merely fixed once.
+     */
+    public conversationSessionId(): string {
+        const meetingMarker = this.currentSessionId
+            ?? (this.session.getMeetingMetadata?.()?.calendarEventId)
+            ?? undefined;
+        const meetingId = (this.session as any)?.getMeetingMetadata?.()?.id ?? null;
+        const { resolveConversationSessionId } =
+            require('./context-intelligence/question/conversation-state-store');
+        return resolveConversationSessionId(meetingId ?? meetingMarker, meetingMarker);
+    }
     private currentDynamicActionModeId: string | null = null;
     private currentDynamicActionTemplateType: string | null = null;
     // Latency trace for the most recent live request (manual/WTA). Exposed via
@@ -548,6 +703,14 @@ export class IntelligenceEngine extends EventEmitter {
         this.recapLLM = new RecapLLM(this.llmHelper);
         this.followUpQuestionsLLM = new FollowUpQuestionsLLM(this.llmHelper);
         this.whatToAnswerLLM = new WhatToAnswerLLM(this.llmHelper);
+        // Interaction router warmup (2026-09-05). RouterModel.warmup() existed
+        // but nothing in production called it, so the first speculative turn
+        // paid the 5s load inline. isAvailable() inside warmup() returns false
+        // when the flag is off, so this is a no-op on the shipped default.
+        try {
+            const { RouterModel } = require('./llm/routing/RouterModel') as typeof import('./llm/routing/RouterModel');
+            void RouterModel.getInstance().warmup().catch(() => { /* a router that cannot warm returns null per turn */ });
+        } catch { /* routing module absent: the flag path returns null */ }
         this.codeHintLLM = new CodeHintLLM(this.llmHelper);
         this.brainstormLLM = new BrainstormLLM(this.llmHelper);
 
@@ -563,9 +726,11 @@ export class IntelligenceEngine extends EventEmitter {
     // Transcript Handling (delegates to SessionTracker)
     // ============================================
 
+    // One definition, shared with the planner and tuned on the router corpus for
+    // unpunctuated STT. The private copy this replaced caught 38.0% of held-out
+    // turns that needed a response; the shared one catches 51.4%.
     private static hasQuestionSignal(text: string): boolean {
-        if (text.trimEnd().endsWith('?')) return true;
-        return /\b(what|how|why|where|when|which|who|can you|could you|tell me|explain|describe|walk me through|talk me through)\b/i.test(text);
+        return hasQuestionSignal(text);
     }
 
     // Fires speculative LLM inference on a stable high-confidence interviewer partial.
@@ -770,7 +935,17 @@ export class IntelligenceEngine extends EventEmitter {
      * and are allowed to supersede.
      */
     canAutoAnswer(): boolean {
-        if (this.activeMode !== 'idle' && this.activeMode !== 'assist') return false;
+        if (this.activeMode !== 'idle' && this.activeMode !== 'assist') {
+            // The engine's OWN speculative prefetch is not "busy": the dispatch
+            // that arrives now is the one that adopts it. Refusing it parked a
+            // 1.0-answerability verdict until the next candidate superseded it
+            // (live session 2026-09-03, 13-q6). A manual press or an automatic
+            // run has no speculative identity and still refuses.
+            const ownPrefetchLive = this.activeMode === 'what_to_say'
+                && this.speculativeGenerationId !== null
+                && this.speculativeGenerationId === this.currentGenerationId;
+            if (!ownPrefetchLive) return false;
+        }
         if (Date.now() - this.lastTriggerTime < this.automaticTriggerCooldown) return false;
         return true;
     }
@@ -838,19 +1013,41 @@ export class IntelligenceEngine extends EventEmitter {
                 this.speculativeText = null;
                 this.speculativeTextExpiry = Infinity;
                 this.speculativeQuestionId = null;
+                const finished = this.speculativeAnswer;
+                this.speculativeAnswer = null;
+                this.speculativeAdoptedGenerationId = null;
                 if (similarity >= this.SPECULATIVE_SIMILARITY_THRESHOLD) {
-                    console.log(`[IntelligenceEngine] Speculative stream accepted (Jaccard=${similarity.toFixed(2)}) — continuing`);
                     this.lastTriggerTime = Date.now();
                     this.lastTriggerQuestion = trigger.lastQuestion ?? null;
-                    // The running speculative stream IS the automatic answer now.
-                    if (trigger.automatic) this.automaticGenerationId = this.currentGenerationId;
-                    return;
+                    const stillStreaming = this.activeMode === 'what_to_say'
+                        && this.speculativeGenerationId !== null
+                        && this.speculativeGenerationId === this.currentGenerationId;
+                    if (stillStreaming) {
+                        console.log(`[IntelligenceEngine] Speculative stream accepted (Jaccard=${similarity.toFixed(2)}) — continuing; revealed at completion`);
+                        // The running speculative stream IS the automatic answer
+                        // now. It never streamed to the UI, so completion reveals
+                        // it (see the isSpeculative completion branch).
+                        this.speculativeAdoptedGenerationId = this.currentGenerationId;
+                        if (trigger.automatic) this.automaticGenerationId = this.currentGenerationId;
+                        return;
+                    }
+                    if (finished) {
+                        console.log(`[IntelligenceEngine] Speculative stream accepted (Jaccard=${similarity.toFixed(2)}) — already finished; revealing`);
+                        this.revealSpeculativeAnswer(finished, trigger.automatic === true);
+                        return;
+                    }
+                    // Accepted, but the stream neither runs nor finished (aborted
+                    // or errored between prefetch and dispatch): answer afresh.
+                    console.warn('[IntelligenceEngine] Speculative stream accepted but nothing to adopt (aborted?) — restarting');
+                } else {
+                    console.log(`[IntelligenceEngine] Speculative stream rejected (Jaccard=${similarity.toFixed(2)}) — restarting`);
                 }
-                console.log(`[IntelligenceEngine] Speculative stream rejected (Jaccard=${similarity.toFixed(2)}) — restarting`);
             } else {
                 console.log(`[IntelligenceEngine] Speculative result discarded (expired=${expired}, noQuestion=${!trigger.lastQuestion})`);
                 this.speculativeText = null;
                 this.speculativeTextExpiry = Infinity;
+                this.speculativeAnswer = null;
+                this.speculativeAdoptedGenerationId = null;
             }
             // IMPORTANT: no await between this increment and runWhatShouldISay below —
             // the increment must be synchronous with the new stream launch to preserve generation-id ordering.
@@ -936,6 +1133,110 @@ export class IntelligenceEngine extends EventEmitter {
         console.log(`[IntelligenceEngine] Auto Answer prefetch fired while the judge decides`, { questionId, length: trimmed.length });
         this.runWhatShouldISay(trimmed, 0.9, undefined, { speculative: true })
             .catch(err => console.error('[IntelligenceEngine] Auto Answer prefetch error:', err));
+    }
+
+    /**
+     * A speculative run finished. It never rendered, so this is where its text
+     * is kept for adoption — or revealed at once if the dispatch already
+     * adopted the stream while it was in flight.
+     *
+     * Deliberately does NOT stamp lastTriggerTime / lastTriggerQuestion: the
+     * cooldown slot belongs to the real trigger (it is stamped on adoption).
+     * Stamping it here made the planner refuse the adoption of a just-finished
+     * prefetch as a "cooldown" repeat of itself (live session 2026-09-03).
+     * The speculativeText window still throttles a second prefetch.
+     */
+    private completeSpeculativeRun(
+        generationId: number, question: string | undefined, confidence: number, text: string,
+        writeDecision: SessionWriteDecision | undefined,
+    ): string {
+        const finished: SpeculativeAnswer = { generationId, question: question || 'inferred', confidence, text, writeDecision };
+        const adoptedInFlight = this.speculativeAdoptedGenerationId === generationId && this.currentGenerationId === generationId;
+        if (this.speculativeAdoptedGenerationId === generationId) this.speculativeAdoptedGenerationId = null;
+        if (adoptedInFlight) {
+            this.speculativeText = null;
+            this.speculativeTextExpiry = Infinity;
+            this.speculativeQuestionId = null;
+            this.speculativeAnswer = null;
+        } else {
+            this.speculativeAnswer = finished;
+            this.speculativeTextExpiry = Date.now() + this.triggerCooldown + 500;
+        }
+        this.setMode('idle');
+        if (adoptedInFlight) this.revealSpeculativeAnswer(finished, this.automaticGenerationId === generationId);
+        return text;
+    }
+
+    /**
+     * Show a prefetched answer the dispatch adopted. Mirrors the tail of the
+     * live path in the smallest honest way: the always-on artifact cleanup,
+     * the session record under the run's own write decision, one token emit
+     * to open the row, then the final. Validation and repair passes are
+     * skipped — a speculative run was generated from the same prompt as a
+     * live one, and a late answer that exists beats a validated one that
+     * never shows. The write decision is NOT skipped: a prefetch the provider
+     * cut short is shown, like any truncated live answer, but it must not
+     * become prior_assistant_responses evidence for the next turn.
+     */
+    private revealSpeculativeAnswer(finished: SpeculativeAnswer, automatic: boolean): void {
+        let text = finished.text;
+        // A speculative run is never `isCoding` (see runWhatShouldISay), so it
+        // gets neither the StreamingSpecStripper nor the live path's
+        // stripVerificationSpec — but the PROMPT still asks for the hidden
+        // <verification_spec> block whenever code verification is enabled
+        // (WhatToAnswerLLM passes isCodeVerificationEnabled() straight to
+        // formatAnswerPlanForPrompt, which does not know about isSpeculative).
+        // Discarding the text hid that; revealing it would put the raw block in
+        // the UI and the session record. No-op when the answer has none.
+        try {
+            const { stripVerificationSpec } = require('./llm/codingContract') as typeof import('./llm/codingContract');
+            text = stripVerificationSpec(text);
+        } catch (err) {
+            console.warn('[IntelligenceEngine] Prefetched answer spec strip failed:', err);
+        }
+        try {
+            const cleaned = cleanAnswerArtifacts(text);
+            if (cleaned.trim().length >= 10) text = cleaned;
+        } catch (err) {
+            console.warn('[IntelligenceEngine] Prefetched answer cleanup failed; revealing it as generated:', err);
+        }
+        if (!text.trim()) {
+            console.warn('[IntelligenceEngine] Prefetched answer was empty — nothing to reveal');
+            return;
+        }
+        // The prefetch never emitted, so the renderer never saw its generation.
+        // Mint a fresh one: the engine is idle here, so nothing is superseded.
+        const generationId = ++this.currentGenerationId;
+        this.automaticGenerationId = automatic ? generationId : null;
+        console.log(`[IntelligenceEngine] Revealing the prefetched answer (${text.length} chars, prefetch gen ${finished.generationId} → ${generationId})`);
+        this.emit('suggested_answer_token', text, finished.question, finished.confidence, generationId);
+        this.session.addAssistantMessage(text, finished.writeDecision, 'what_to_answer');
+        if (finished.writeDecision?.policy !== 'do_not_store') {
+            this.session.pushUsage({ type: 'assist', timestamp: Date.now(), question: finished.question, answer: text });
+            // THE ADOPTED ANSWER'S ONLY RECORDING POINT.
+            //
+            // recordLiveTurn has exactly three call sites — the runWhatShouldISay,
+            // runAssistMode and runManualAnswer wrappers — and BOTH adoption
+            // branches in handleSuggestionTriggerInner `return` before reaching
+            // runWhatShouldISay. So the answer the user actually sees, on the most
+            // common Auto Answer path, never entered the conversation ring: the
+            // wrapper's "a draft the user never saw is not part of the
+            // conversation" reasoning is true for a DISCARDED prefetch and false
+            // for an adopted one.
+            //
+            // This method is where an adopted answer becomes user-visible (its
+            // only two callers are the two adoption paths), so it is the one
+            // place that cannot be bypassed. Gated on the same do_not_store
+            // decision as the session write directly above: a turn the session
+            // declined to store must not reach the ring either.
+            //
+            // No imagePaths: a speculative run is always started with
+            // `undefined` for them, so there is no screen to transcribe.
+            this.recordLiveTurn(text, undefined, finished.question, 0);
+        } else {
+            console.warn(`[IntelligenceEngine] Prefetched answer revealed but not stored (${finished.writeDecision.reason ?? 'do_not_store'})`);
+        }
+        this.emit('suggested_answer', text, finished.question, finished.confidence, generationId);
     }
 
     /** Auto Answer V3: identity of the speculative cache, for keyed/embedding reuse. */
@@ -1058,6 +1359,20 @@ export class IntelligenceEngine extends EventEmitter {
      * Low-priority observational insights
      */
     async runAssistMode(): Promise<string | null> {
+        // 'assist' READS the ring (engine-bridge does so at its buildV3Prompt
+        // call below) but deliberately does not WRITE to it.
+        //
+        // An assist insight is unprompted — there is no question it answers. It
+        // was being appended under whatever question happened to be in
+        // previousQuestion, so the user's earlier question was recorded as
+        // having been answered by an insight they never asked for, and the next
+        // "explain that" resolved against it. A surface with no question has no
+        // exchange to contribute; it still reads the exchanges other surfaces
+        // record, which is what it needs.
+        return await this.runAssistModeInner();
+    }
+
+    private async runAssistModeInner(): Promise<string | null> {
         if (this.activeMode !== 'idle' && this.activeMode !== 'assist') {
             return null;
         }
@@ -1116,7 +1431,96 @@ export class IntelligenceEngine extends EventEmitter {
      * Manual trigger - uses clean transcript pipeline for question inference
      * NEVER returns null - always provides a usable response
      */
+    /**
+     * Records a completed live exchange into the V3 conversation ring.
+     *
+     * WHY THIS IS A WRAPPER, NOT A LINE AT THE END OF EACH METHOD
+     * runWhatShouldISay is ~3,300 lines with many terminal returns, and the
+     * callers that matter most do not go through the IPC layer at all: Auto
+     * Answer calls `this.runWhatShouldISay(...)` directly (three call sites
+     * above), so a writer placed in the `generate-what-to-say` handler only
+     * ever recorded a MANUAL button press. Every automatic answer — the common
+     * case in a live meeting — was missing from the history, and so was every
+     * screenshot attached to one. Wrapping is the only placement that cannot
+     * miss a caller or an exit path.
+     *
+     * Speculative pre-fetches are deliberately excluded: a draft the user never
+     * saw is not part of the conversation, and recording it would make the ring
+     * describe an exchange that did not happen.
+     */
+    private recordLiveTurn(
+        answer: string | null, screenContext?: unknown, question?: string,
+        /** How many screenshots the turn carried, INDEPENDENT of whether any of
+         *  them could be transcribed. See SCREEN_NOT_TRANSCRIBED. */
+        imageCount = 0,
+        /** The turn's attachments, transcribed for the record AFTER the answer. */
+        imagePaths?: readonly string[],
+    ): void {
+        if (!answer) return;
+        void (async () => {
+        try {
+            const { recordAnswerSummary } =
+                require('./context-intelligence/question/conversation-state-store');
+            const { SCREEN_NOT_TRANSCRIBED } = require('./services/screen/screenDescription');
+            // A DEDICATED transcription, not the answering call's output. The
+            // answering call is asked to answer concisely; measured live, its
+            // text for a build-failure screen was "Your build failed because
+            // you've run out of disk quota" — no error code, no ticket
+            // reference, which is precisely what the follow-up then asked for.
+            // Awaited here, not before the answer: the user already has their
+            // answer by this point, so this costs them nothing.
+            let screenText = '';
+            if (imagePaths?.length) {
+                const { transcribeScreenForMemory } = require('./services/screen/screenTranscription');
+                screenText = await transcribeScreenForMemory(imagePaths, question);
+            }
+            // FALLBACK to the caller's already-computed ScreenUnderstandingResult.
+            //
+            // `screenContext` was accepted and never read: the text came solely
+            // from imagePaths. Harmless only because every current caller that
+            // supplies one also supplies attachments — but a turn that answers
+            // from a periodic screen capture with no attachment would record
+            // neither screen text NOR the not-transcribed marker, silently
+            // losing a screen the model demonstrably saw. Its own answer is
+            // less faithful than a dedicated transcription, which is why it is
+            // the fallback rather than the source.
+            if (!screenText && screenContext) {
+                const { composeScreenDescription: compose } = require('./services/screen/screenDescription');
+                screenText = compose(screenContext as never) || '';
+            }
+            recordAnswerSummary(
+                this.conversationSessionId(),
+                answer,
+                // A failed transcription still records that a screen was THERE.
+                // Recording nothing is what let a follow-up deny the screenshot
+                // ever existed, which is a worse answer than "I can't read it".
+                // A screen was THERE whenever attachments or a ScreenUnderstanding
+                // result existed, whether or not either yielded text.
+                screenText || ((imageCount > 0 || screenContext) ? SCREEN_NOT_TRANSCRIBED : undefined),
+                // Seeds state for a turn that never reached orchestrate() (V3
+                // off, or a legacy route). runAssistMode deliberately passes
+                // nothing: an unprompted insight has no question, and a
+                // question-less turn is one appendTurn refuses anyway.
+                question,
+            );
+        } catch (error: any) {
+            // NEVER silent: a lost turn leaves the next follow-up with no
+            // antecedent, which is indistinguishable from a bad answer.
+            console.warn('[Intelligence] conversation ring write failed — this turn will not be in history:',
+                error?.message ?? error);
+        }
+        })();
+    }
+
     async runWhatShouldISay(question?: string, confidence: number = 0.8, imagePaths?: string[], options?: { speculative?: boolean; skipCooldown?: boolean; screenContext?: ScreenContext; promptInstruction?: string; activeSkill?: { id: string; name: string; promptBlock: string }; domContext?: string; forceFresh?: boolean }): Promise<string | null> {
+        const answer = await this.runWhatShouldISayInner(question, confidence, imagePaths, options);
+        if (!options?.speculative) {
+            this.recordLiveTurn(answer, options?.screenContext, question, imagePaths?.length ?? 0, imagePaths);
+        }
+        return answer;
+    }
+
+    private async runWhatShouldISayInner(question?: string, confidence: number = 0.8, imagePaths?: string[], options?: { speculative?: boolean; skipCooldown?: boolean; screenContext?: ScreenContext; promptInstruction?: string; activeSkill?: { id: string; name: string; promptBlock: string }; domContext?: string; forceFresh?: boolean }): Promise<string | null> {
         const now = Date.now();
         // Intelligence OS observe-only trace (Phase 1). Zero-cost NO-OP unless
         // intelligence_trace_enabled is on. Committed at the primary final-answer emit
@@ -1137,6 +1541,8 @@ export class IntelligenceEngine extends EventEmitter {
         if (forceFresh && !isSpeculative) {
             this.speculativeText = null;
             this.speculativeTextExpiry = Infinity;
+            this.speculativeAnswer = null;
+            this.speculativeAdoptedGenerationId = null;
         }
 
         // Cooldown bypass: explicit images (user intent), speculative pre-fetch, or
@@ -1155,6 +1561,52 @@ export class IntelligenceEngine extends EventEmitter {
             triggerCooldown: this.triggerCooldown,
         })) {
             return null;
+        }
+
+        // ── PR 7: INTERACTION ROUTER PRE-CHECK ──────────────────────────────
+        //
+        // The one thing the router is for. Today the decision to say nothing is
+        // made by the cloud LLM AFTER a full generation: retrieval runs, a
+        // prompt is built, tokens are spent, and the answer is the mode's
+        // silence string which the branch near the end of this method then
+        // discards. Production telemetry put that at 6.1% of generations, and
+        // 95.9% of them on two answer types.
+        //
+        // SPECULATIVE ONLY, AND THAT IS THE WHOLE SAFETY ARGUMENT.
+        //
+        // A manual press is explicit user intent and the user must always see
+        // something, which is why the sentinel branch below substitutes an
+        // honest fallback rather than silence on that path. The router must
+        // never be able to swallow a turn the user asked for. On the
+        // speculative path the sentinel already produces nothing visible, so
+        // this gate does not change what the user sees. It changes what it cost
+        // to show it.
+        //
+        // Null from the router means NO OPINION, not `no`. Falling through is
+        // the correct reading of it, and it is what happens when the flag is
+        // off, the model is missing, the load was poisoned, memory is tight, or
+        // the call times out.
+        if (isSpeculative) {
+            // Availability is checked SYNCHRONOUSLY first. With the flag off, which
+            // is the shipped default, this path must add no async hop at all: a
+            // speculative run's observable state (isAnswerStreaming, activeMode)
+            // is read by callers on the same tick they start it, and an `await`
+            // here, even one that resolves to false, lagged that state by a
+            // microtask and read as "idle" while the stream was starting.
+            // `false && await x` short-circuits without awaiting.
+            const routerSkip = IntelligenceEngine.routerAvailableSync() && await this.routerSaysStaySilent(question);
+            if (routerSkip) {
+                // The same state the post-generation sentinel path leaves
+                // behind. Skipping any of it would make the engine behave
+                // differently on the next turn purely because the router fired,
+                // which would be a behaviour change rather than a cost saving.
+                this.speculativeText = null;
+                this.speculativeTextExpiry = Infinity;
+                this.lastTriggerTime = Date.now();
+                this.lastTriggerQuestion = question ?? null;
+                this.setMode('idle');
+                return null;
+            }
         }
 
         if (this.assistCancellationToken) {
@@ -1201,6 +1653,8 @@ export class IntelligenceEngine extends EventEmitter {
         if (isSpeculative) {
             this.speculativeText = question ?? null;
             this.speculativeTextExpiry = now + this.triggerCooldown + 5000;
+            this.speculativeAnswer = null;
+            this.speculativeAdoptedGenerationId = null;
         }
 
         // ── Live-path latency trace (click → first useful token → render) ──
@@ -1383,12 +1837,7 @@ export class IntelligenceEngine extends EventEmitter {
                     return null;
                 }
                 if (isSpeculative) {
-                    this.speculativeText = null;
-                    this.speculativeTextExpiry = Infinity;
-                    this.lastTriggerTime = Date.now();
-                    this.lastTriggerQuestion = question ?? null;
-                    this.setMode('idle');
-                    return answer || buildGracefulRetry(question);
+                    return this.completeSpeculativeRun(generationId, question, confidence, answer || buildGracefulRetry(question), undefined);
                 }
                 if (answer && IntelligenceEngine.isNonAnswerSentinel(answer)) {
                     this.setMode('idle');
@@ -1463,6 +1912,23 @@ export class IntelligenceEngine extends EventEmitter {
 
             const lastInterviewerTurn = this.session.getLastInterviewerTurn();
             const extractedQuestion = extractLatestQuestion(transcriptTurns);
+            // SPEAKER-MISATTRIBUTION FALLBACK (2026-09-07, always answer). Real
+            // diarization labels the other party as "user" often enough that a
+            // manual press can arrive with a transcript and NO interviewer turn.
+            // The extractor then yields nothing, the governed prompt threw
+            // "missing immutable turn question", and the catch showed "I didn't
+            // fully catch that — could you rephrase the question?". The user
+            // pressed the key: the most recent utterance from anyone is the
+            // thing to answer. Speculative runs keep the strict extractor.
+            if (!isSpeculative && !question?.trim() && !extractedQuestion.latestQuestion && !lastInterviewerTurn) {
+                const lastAnyTurn = [...transcriptTurns].reverse().find((t) => t.role !== 'assistant' && String(t.text || '').trim().length >= 3);
+                if (lastAnyTurn) {
+                    extractedQuestion.latestQuestion = String(lastAnyTurn.text).trim();
+                    extractedQuestion.confidence = Math.max(extractedQuestion.confidence ?? 0, 0.6);
+                    trace.mark('repair_used', { reason: 'question_from_any_speaker', role: lastAnyTurn.role });
+                    console.log('[IntelligenceEngine] no interviewer turn — answering the latest utterance regardless of speaker label', { role: lastAnyTurn.role, chars: extractedQuestion.latestQuestion.length });
+                }
+            }
             // WTA mint point (Phase 6 Slice 1, "what changes" item 1): one
             // TurnId for this What-to-Answer invocation, threaded into every
             // buildTurnContractIfEnabled call this method makes below instead
@@ -1623,7 +2089,7 @@ export class IntelligenceEngine extends EventEmitter {
                         recordWtaCancellation();
                         return null;
                     }
-                    if (fr.isClarification && fr.clarificationText && !isSpeculative) {
+                    if (fr.isClarification && fr.clarificationText && !isSpeculative && !_wtaHasVisualContext) {
                         piTelemetry.emit('wta_context_free_clarification', { surface: 'what_to_answer', via: (fr as any).resolvedVia ?? 'clarification' });
                         this.session.addAssistantMessage(fr.clarificationText, undefined, 'what_to_answer');
                         this.emit('suggested_answer', fr.clarificationText, extractedQuestion.latestQuestion || 'inferred', 0.9, generationId);
@@ -1795,8 +2261,8 @@ export class IntelligenceEngine extends EventEmitter {
                 question || extractedQuestion.latestQuestion || lastInterviewerTurn,
                 preparedTranscript,
                 this.session.getAssistantResponseHistory().length
-            ).catch((): { intent: 'general'; confidence: number; answerShape: string } => (
-                { intent: 'general', confidence: 0.4, answerShape: 'Concise, direct answer to the question.' }
+            ).catch((): { intent: 'general'; confidence: number } => (
+                { intent: 'general', confidence: 0.4 }
             ));
             // Retrieval-query provenance (HDFC leak, 2026-08-18): the prefetch
             // query must be USER-originated — question, then non-assistant
@@ -1921,6 +2387,16 @@ export class IntelligenceEngine extends EventEmitter {
             if (_wtaTurnSourceDecision) {
                 wtaDecisionAllowsCandidateProfile = _wtaTurnSourceDecision.outcome === 'default'
                     || _wtaTurnSourceDecision.outcome === 'explicit_granted';
+                // An EMPTY allowed list grants nothing (2026-09-05). This gate used
+                // to narrow only when the list was non-empty, so a `default`
+                // decision that granted no evidence at all still let the résumé
+                // orchestrator run. Nothing to read made it a no-op, but the
+                // manual-chat twin (_contractAllowsProfile in ipcHandlers.ts) asks
+                // the contract per kind and would say no here; the two paths now
+                // agree. Never-retrieve means never, not "unless the list is empty".
+                if (_wtaTurnSourceDecision.allowedEvidenceKinds.length === 0) {
+                    wtaDecisionAllowsCandidateProfile = false;
+                }
                 if (_wtaTurnSourceDecision.allowedEvidenceKinds.length > 0) {
                     // Grounding-campaign fix (2026-07-16): this check previously
                     // omitted 'profile_jd', so a JD-only-granted turn (e.g.
@@ -2230,10 +2706,20 @@ export class IntelligenceEngine extends EventEmitter {
                     wtaDecisionAllowsCandidateProfile =
                         _wtaTurnSourceDecision.outcome === 'default'
                         || _wtaTurnSourceDecision.outcome === 'explicit_granted';
+                    // Same rule as the first assignment (~line 1979): an EMPTY
+                    // allowed list grants nothing. This block re-derives the gate
+                    // from scratch and, until 2026-09-05, silently undid the first
+                    // block's empty-list check on every mode with a persisted
+                    // contract. Both sites now agree; the never-retrieve test asserts
+                    // the rule appears at both.
+                    if (_wtaTurnSourceDecision.allowedEvidenceKinds.length === 0) {
+                        wtaDecisionAllowsCandidateProfile = false;
+                    }
                     if (_wtaTurnSourceDecision.allowedEvidenceKinds.length > 0) {
                         wtaDecisionAllowsCandidateProfile = wtaDecisionAllowsCandidateProfile
                             && (_wtaTurnSourceDecision.allowedEvidenceKinds.includes('profile_resume')
-                                || _wtaTurnSourceDecision.allowedEvidenceKinds.includes('projects'));
+                                || _wtaTurnSourceDecision.allowedEvidenceKinds.includes('projects')
+                                || _wtaTurnSourceDecision.allowedEvidenceKinds.includes('profile_jd'));
                     }
                 }
                 const _wtaContract = buildCustomModeExecutionContract({
@@ -2830,6 +3316,8 @@ export class IntelligenceEngine extends EventEmitter {
             if (wtaTurnContract
                 && wtaTurnContract.sourceOwner === 'clarify'
                 && isIntelligenceFlagEnabled('contextOsPropertyValidation')
+                // Retired 2026-09-07 (always answer) — see clarificationShortCircuitEnabled.
+                && contextOsStatic.clarificationShortCircuitEnabled()
                 && !isSpeculative
                 // Visual turns bypass clarification — the manual-chat twin has
                 // had this since its escape hatches; WTA never did (2026-08-11:
@@ -2859,7 +3347,14 @@ export class IntelligenceEngine extends EventEmitter {
                     // the manual-chat path (ipcHandlers.ts, same short-circuit
                     // pattern) for the full rationale.
                     const clarify = wtaOwnershipDecision?.shouldClarifyInsteadOfProfile
-                        ? require('./llm/sourceOwnership').buildSourceSwitchClarification(wtaOwnershipDecision.owner)
+                        // Name the source the user actually asked for, and do not claim
+                        // "uploaded material" when none is attached (2026-09-05). The
+                        // phone-mirror path already did both.
+                        ? require('./llm/sourceOwnership').buildSourceSwitchClarification(
+                            wtaOwnershipDecision.owner,
+                            wtaOwnershipDecision.requestedSource ?? null,
+                            { hasReferenceFiles: Boolean((snapshotModeInfo as any)?.hasReferenceFiles) },
+                        )
                         : buildSourceClarification({
                             hasReferenceFiles: Boolean((snapshotModeInfo as any)?.hasReferenceFiles),
                             hasProfileFacts: Boolean((this.llmHelper.getKnowledgeOrchestrator?.() as any)?.activeResume?.structured_data),
@@ -3060,7 +3555,11 @@ export class IntelligenceEngine extends EventEmitter {
                         // WTA turn across every meeting shared one key.
                         scope: {
                             meetingId: _ctx.meetingId ?? meetingMarker ?? undefined,
-                            sessionId: _ctx.meetingId ?? meetingMarker ?? undefined,
+                            // ONE key across surfaces (resolveConversationSessionId).
+                            // Typed chat keyed the same ring off its senderId, so
+                            // the two surfaces kept separate histories and neither
+                            // could read the other's screenshot descriptions.
+                            sessionId: this.conversationSessionId(),
                         },
                         requestId: trace.requestId,
                         requestSequence: generationId,
@@ -3398,12 +3897,88 @@ export class IntelligenceEngine extends EventEmitter {
             const usingLocalLlm = typeof (this.llmHelper as any).isUsingOllama === 'function'
                 ? (this.llmHelper as any).isUsingOllama()
                 : false;
-            const firstUsefulDeadline = usingLocalLlm
-                ? LIVE_LOCAL_TOTAL_HARD_TIMEOUT_MS
-                : LIVE_TOTAL_HARD_TIMEOUT_MS;
+            // An image-bearing turn goes through streamVisionWithFallback, whose
+            // per-attempt budget is 20s and up — but only when the outer ceiling
+            // lets it. LIVE_TOTAL_HARD_TIMEOUT_MS is derived from the natively
+            // server's provider cutover, so it is the right ceiling ONLY for a
+            // turn actually routed through that server. `viaServerCascade` is the
+            // vocabulary firstUsefulDeadlineMs() already uses for that question;
+            // reuse it rather than inventing a second way to ask.
+            const viaServerCascade = typeof (this.llmHelper as any).isUsingNativelyServerCascade === 'function'
+                ? (this.llmHelper as any).isUsingNativelyServerCascade() === true
+                : false;
+            const isVisionTurn = (imagePaths?.length ?? 0) > 0;
+            // A user-supplied endpoint (Custom / cURL / LiteLLM / NVIDIA NIM) is an
+            // address we have never measured, so it gets a longer ceiling than a
+            // shipped provider called directly. Same reasoning as viaServerCascade
+            // above: ask which route this turn actually takes, rather than letting
+            // one route's number become everyone's default.
+            const isUserEndpoint = typeof (this.llmHelper as any).isUsingUserEndpoint === 'function'
+                ? (this.llmHelper as any).isUsingUserEndpoint() === true
+                : false;
+            const observedUserEndpointLatency = isUserEndpoint
+                && typeof (this.llmHelper as any).observedAnswerLatency === 'function'
+                ? (this.llmHelper as any).observedAnswerLatency()
+                : null;
+            // The shipped route table decides first, and a POST-FILTER may then
+            // move it — never the other way round. Written this way so deleting
+            // the applyAdaptiveTtft call restores today's behaviour with no
+            // other edit, which is the rollback story the flag exists for.
+            //
+            // With `adaptiveTtft` off (its default) this is the identity
+            // function. With it on it only moves routes the table marks
+            // adaptive — today just user endpoints — and its value is backed by
+            // the PERSISTED profile, so a gateway measured last week no longer
+            // has to be re-learned from scratch after a restart. That is the
+            // one thing observedUserEndpointLatency above cannot do: its map
+            // dies with the process.
+            const firstUsefulDeadline = applyAdaptiveTtft(
+                totalHardTimeoutMs({
+                    isLocal: usingLocalLlm,
+                    isVisionTurn,
+                    viaServerCascade,
+                    isUserEndpoint,
+                    observedUserEndpointLatency,
+                }),
+                { llmHelper: this.llmHelper as any, hasImages: isVisionTurn, inputTokens: estimateTokens(`${preparedTranscript ?? ''}${candidateProfile ?? ''}`) },
+            );
+            // Time-to-first-token for THIS turn, recorded only if it commits —
+            // see LLMHelper.recordAnswerFirstToken for why an aborted turn must
+            // not teach the budget.
+            // `let`, because a regeneration must time ITSELF. Reusing attempt 1's
+            // start would record the whole failed budget as this endpoint's
+            // first-token cost, which is the upward ratchet the adaptive budget
+            // was explicitly built to avoid.
+            let answerStreamStartedAt = Date.now();
+            let recordedFirstToken = false;
+            // MEASURED off the wire, RECORDED only once the turn actually
+            // produces content. Two separate steps on purpose. Measuring at the
+            // first visible token folded CodingStreamGate hold time into
+            // provider latency; recording the instant a token arrives would
+            // undo recordAnswerFirstToken's own contract, which is that a turn
+            // the deadline killed must not teach the budget — a first token at
+            // 14.9s of a 15s budget then dying is exactly the upward ratchet
+            // that contract exists to prevent. So capture the accurate number
+            // here and commit it from emitChunk, which is the same
+            // produced-usable-content signal manual chat commits on.
+            let pendingFirstTokenMs: number | null = null;
+            const noteFirstToken = () => {
+                if (recordedFirstToken || !isUserEndpoint) return;
+                recordedFirstToken = true;
+                pendingFirstTokenMs = Date.now() - answerStreamStartedAt;
+            };
+            const commitFirstTokenMeasurement = () => {
+                if (pendingFirstTokenMs == null) return;
+                const ms = pendingFirstTokenMs;
+                pendingFirstTokenMs = null;
+                try {
+                    (this.llmHelper as any).recordAnswerFirstToken?.(ms);
+                } catch { /* measurement must never break the answer */ }
+            };
             let liveDeadlineFired = false;
 
             const emitChunk = (chunk: string) => {
+                commitFirstTokenMeasurement();
                 emittedStreamingToken = true;
                 openedStreamRow = true;
                 if (trace.markFirstUseful({ via: 'stream', answerType: answerPlan.answerType })) {
@@ -3420,10 +3995,64 @@ export class IntelligenceEngine extends EventEmitter {
             // iterator.return()` blocks if the generator is stuck in an await, so
             // the driver fire-and-forgets cleanup. This is the no-10s-wait / no-134s
             // guarantee (Issue 1, P0).
+            // ── Provider Performance Profile ───────────────────────────────
+            // One call, spread into the driver below. With every flag at its
+            // default this changes nothing: `observe` only records, and
+            // `interTokenStallMs` returns LIVE_INTER_TOKEN_STALL_MS until the
+            // adaptiveStreamIdle flag is on AND the profile has enough healthy
+            // streams to move it. See electron/llm/performance/wiring.ts.
+            //
+            // `hasImages` must match the value that picked the deadline above
+            // (isVisionTurn) — passing a different one here would file a vision
+            // turn's evidence under the text route, and the route is the thing
+            // the whole table is keyed on.
+            // Phase 18: ask the profile whether this turn can land inside the
+            // moment. ADVISORY — it never shortens a deadline. On the live path
+            // an answer that takes 30s will very likely succeed and still be
+            // useless, so the right response is to send less, not to give up
+            // sooner; giving up sooner only converts a slow answer into none.
+            //
+            // Surfaced as a diagnostic here rather than wired into truncation:
+            // the retrieval and transcript budgets upstream have their own
+            // correctness contracts, and silently shrinking their input from a
+            // latency estimate would change what the model is asked without any
+            // of those contracts knowing. This makes the condition VISIBLE and
+            // leaves the reduction to the layers that own it.
+            try {
+                const _slow = slowWorkloadAdvice({
+                    llmHelper: this.llmHelper as any,
+                    hasImages: isVisionTurn,
+                    inputTokens: estimateTokens(`${preparedTranscript ?? ''}${candidateProfile ?? ''}`),
+                    streamRoute: 'wta_live',
+                });
+                // Logged, not traced: PiMilestone is a closed union owned by the
+                // latency tracer, and widening it for an advisory signal would
+                // put a performance hint into the milestone vocabulary that
+                // measures the answer pipeline itself.
+                if (_slow) console.log('[Perf] workload predicted too slow to be useful', _slow);
+            } catch { /* an advisory signal must never break a turn */ }
+            const perf = performanceHooks({
+                llmHelper: this.llmHelper as any,
+                hasImages: isVisionTurn,
+                // A proxy, not a count. The providers that report real usage do
+                // so only at the END of a stream, and this is needed at the
+                // start to pick a workload bucket. estimateTokens is the same
+                // estimator the context budgets already fit prompts with, so a
+                // bucket boundary here means what it means there.
+                inputTokens: estimateTokens(`${preparedTranscript ?? ''}${candidateProfile ?? ''}`),
+                isUserCancelled: () => whatToAnswerCancellationToken.signal.aborted || isWtaSuperseded(),
+                onDiagnostics: (record) => {
+                    if (record.terminationReason === 'done') return;
+                    // Only the failures are logged. A line per healthy turn would
+                    // bury the one case this record exists to explain.
+                    console.log('[Perf] wta turn ended early', record);
+                },
+            });
             const raceOutcome = await raceStreamWithDeadline({
                 stream: stream as AsyncGenerator<string>,
                 firstUsefulDeadlineMs: firstUsefulDeadline,
-                interTokenStallMs: LIVE_INTER_TOKEN_STALL_MS,
+                interTokenStallMs: perf.interTokenStallMs,
+                observe: perf.observe,
                 isSpeculative,
                 // "Useful" = the provider has actually delivered real content (raw
                 // arrival), NOT the gate's emit threshold — otherwise a coding
@@ -3445,6 +4074,18 @@ export class IntelligenceEngine extends EventEmitter {
                 onFirstUsefulTimeout: () => { liveDeadlineFired = true; trace.mark('provider_timeout', { budgetMs: firstUsefulDeadline, answerType: answerPlan.answerType }); },
                 onStallTimeout: () => { liveDeadlineFired = true; trace.mark('provider_timeout', { reason: 'inter_token_stall', answerType: answerPlan.answerType }); },
                 onToken: (token: string) => {
+                    // TTFT is measured HERE, at the first token off the wire —
+                    // not in emitChunk. emitChunk fires on the first VISIBLE
+                    // token, which on a coding turn is gated behind
+                    // CodingStreamGate until a '## ' heading is confirmed, so
+                    // seconds of gate-hold were being recorded as provider
+                    // latency. That feeds a decaying MAX (max(ms, prev*0.9)),
+                    // so one gated turn widened the endpoint's budget by up to
+                    // 5s and decayed only ~10% per turn afterwards — an upward
+                    // ratchet on a number whose whole purpose is to track the
+                    // endpoint. Manual chat already measured it here; the two
+                    // surfaces feed one map and must mean the same thing.
+                    if (!isSpeculative) noteFirstToken();
                     fullAnswer += token;
                     if (isSpeculative) return; // speculative prefetch never streams to UI
                     if (codingGate) {
@@ -3470,7 +4111,16 @@ export class IntelligenceEngine extends EventEmitter {
                             }
                         }
                         if (scaffoldStreamHold) return;
+                        // Canned-opener hold (2026-09-07): "Sorry, I don't have that in
+                        // front of me. Could you clarify which…?" followed by a real
+                        // answer must paint WITHOUT the opener — see cannedOpener.ts.
+                        let openerHold = false;
+                        try {
+                            const { shouldHoldForCannedOpener } = require('./llm/cannedOpener') as typeof import('./llm/cannedOpener');
+                            openerHold = shouldHoldForCannedOpener(streamingTokenBuffer);
+                        } catch { /* never hold on a helper failure */ }
                         if (streamingTokenBuffer.length >= STREAMING_SAFE_PREFIX_CHARS
+                            && !openerHold
                             && !IntelligenceEngine.isNonAnswerSentinel(streamingTokenBuffer)) {
                             // Prompt System v2: a misfired "[[NO_ACTION]] real
                             // text…" keeps its real text but the sentinel token
@@ -3479,6 +4129,11 @@ export class IntelligenceEngine extends EventEmitter {
                             try {
                                 const { stripLeadingNoActionSentinel } = require('./llm/promptSystemV2') as typeof import('./llm/promptSystemV2');
                                 visiblePrefix = stripLeadingNoActionSentinel(visiblePrefix) || visiblePrefix;
+                            } catch { /* emit unmodified */ }
+                            try {
+                                const { stripCannedOpener } = require('./llm/cannedOpener') as typeof import('./llm/cannedOpener');
+                                const cleaned = stripCannedOpener(visiblePrefix);
+                                if (cleaned.stripped.length) { console.log('[IntelligenceEngine] canned opener stripped at first paint', { count: cleaned.stripped.length }); visiblePrefix = cleaned.text; }
                             } catch { /* emit unmodified */ }
                             emitChunk(visiblePrefix);
                             streamingTokenBuffer = '';
@@ -3535,17 +4190,122 @@ export class IntelligenceEngine extends EventEmitter {
                 // so the fragment case still falls through to the fallback.
                 if (fullAnswer.trim().length < STREAMING_SAFE_PREFIX_CHARS
                     && !isCompleteShortAnswer(fullAnswer)) {
-                    const safe = (answerPlan.answerType === 'general_meeting_answer' || answerPlan.answerType === 'lecture_answer')
-                        ? "I don't have enough context from the conversation to answer that yet."
-                        : "The model did not produce an answer in time, so I won't guess from your profile.";
-                    fullAnswer = safe;
-                    emitChunk(safe);
-                    wtaWriteDecision = decideSessionWritePolicy({
-                        finalGenerationMode: 'provider_error_no_answer',
-                        validationOk: false,
-                        criticalViolations: ['provider_timeout_no_answer'],
+                    // ── ONE VERBATIM REGENERATION BEFORE GIVING UP ──────────
+                    // The request was not wrong; it did not come back. So the
+                    // second attempt is the SAME request — same prompt, same
+                    // 180s transcript, same reference files, same realtime
+                    // prompt, same screenshot — not a repair, which would be
+                    // asking a different question than the user asked.
+                    //
+                    // Safe to re-issue: the deadline driver's onCleanup above
+                    // aborts whatToAnswerCancellationToken on every non-'done'
+                    // reason, so attempt 1's request is already cancelled and
+                    // this cannot put two identical calls in flight.
+                    //
+                    // What it can and cannot rescue: a provider that STALLED
+                    // gets a fresh connection and often answers. A provider that
+                    // is DOWN fails again, because the primary dispatch path
+                    // does not consult rung health — that costs the regeneration
+                    // budget and nothing else, which is why the budget is capped
+                    // by the turn total rather than being a second full one.
+                    // A user-endpoint route no longer needs this: LLMHelper now
+                    // runs those turns through the shared fallback engine, which
+                    // has already either failed over to a spare rung or retried
+                    // the same gateway IN PARALLEL. Regenerating here would be a
+                    // third identical call on the user's own key, for a provider
+                    // that has already been tried twice.
+                    // hasEngineLevelRetry(), NOT isUsingUserEndpoint(): the
+                    // latter answers "whose key pays", which is a different
+                    // question and is wrong for the cURL provider — branch 2b is
+                    // blocking and terminal, so the engine never retried it and
+                    // suppressing the regeneration there left that user with a
+                    // single attempt and then the canned line.
+                    const engineAlreadyRetried = typeof (this.llmHelper as any).hasEngineLevelRetry === 'function'
+                        && (this.llmHelper as any).hasEngineLevelRetry() === true
+                        && !isVisionTurn;
+                    const regenBudget = engineAlreadyRetried ? 0 : regenerationBudgetMs({
+                        routeBudgetMs: firstUsefulDeadline,
+                        elapsedMs: Date.now() - answerStreamStartedAt,
                     });
-                    trace.mark('fallback_answer_used', { answerType: answerPlan.answerType, finalGenerationMode: 'provider_error_no_answer' });
+                    let regenerated = '';
+                    if (regenBudget > 0) {
+                        const retryController = new AbortController();
+                        const retryArgs = (this.llmHelper as any).retryAnswerCall?.(
+                            whatToAnswerCancellationToken.signal, retryController.signal);
+                        if (retryArgs) {
+                            trace.mark('answer_regeneration_started', { budgetMs: regenBudget, answerType: answerPlan.answerType });
+                            answerStreamStartedAt = Date.now();
+                            recordedFirstToken = false;
+                            // Attempt 1 produced nothing usable, so whatever it
+                            // measured is not this endpoint's first-token cost.
+                            pendingFirstTokenMs = null;
+                            try {
+                                await raceStreamWithDeadline({
+                                    observe: secondaryStreamObserver('regeneration'),
+                                    stream: this.llmHelper.streamChat(...(retryArgs as Parameters<LLMHelper['streamChat']>)) as AsyncGenerator<string>,
+                                    firstUsefulDeadlineMs: regenBudget,
+                                    interTokenStallMs: LIVE_INTER_TOKEN_STALL_MS,
+                                    onToken: (tok: string) => {
+                                        // Same reason: without this the single
+                                        // emitChunk(regenerated) below recorded
+                                        // the WHOLE regeneration wall-clock as
+                                        // this endpoint's first-token cost.
+                                        if (!isSpeculative) noteFirstToken();
+                                        regenerated += tok;
+                                    },
+                                    isUsefulYet: () => regenerated.trim().length >= STREAMING_SAFE_PREFIX_CHARS
+                                        || isCompleteShortAnswer(regenerated),
+                                    // A regeneration can outlive the question that
+                                    // started it; the entry guard above is no longer
+                                    // current by the time this finishes.
+                                    shouldAbort: () => this.currentGenerationId !== generationId,
+                                    onCleanup: () => { try { retryController.abort(); } catch { /* noop */ } },
+                                });
+                            } catch { regenerated = ''; }
+                        }
+                    }
+                    const regenUsable = this.currentGenerationId === generationId
+                        && (regenerated.trim().length >= STREAMING_SAFE_PREFIX_CHARS || isCompleteShortAnswer(regenerated));
+                    if (regenUsable) {
+                        trace.mark('answer_regeneration_succeeded', { chars: regenerated.trim().length, answerType: answerPlan.answerType });
+                        fullAnswer = regenerated;
+                        emitChunk(regenerated);
+                        // FALL THROUGH — never `return fullAnswer` here. An early
+                        // return skips the terminal `suggested_answer` emit, the
+                        // setMode('idle'), session persistence, trace.finish AND
+                        // the whole post-stream chain (leaked-schema guard,
+                        // validateAnswerStructure, repairCodingMarkdown,
+                        // sanitizeCandidateAnswer). The renderer would open a
+                        // streaming row that never gets its final event and the
+                        // engine would sit in a non-idle mode — a rescued answer
+                        // is the ONE case that must take the normal exit, since
+                        // it is real model output that has never been validated.
+                        // The failure path below is deliberately an `else`: the
+                        // two branches used to be sequential, which is why the
+                        // early return was load-bearing.
+                    } else {
+                        // This turn ends in the canned line, so it did NOT
+                        // commit — and recordAnswerFirstToken's contract is that
+                        // only a committed turn teaches the budget. Attempt 1 may
+                        // still have a pending measurement here (a few
+                        // sub-threshold tokens arrived before it stalled); the
+                        // emitChunk below would otherwise commit it while
+                        // rendering OUR fallback text, conflating "we printed an
+                        // apology" with "the provider produced content".
+                        pendingFirstTokenMs = null;
+                        trace.mark('answer_regeneration_failed', { attempted: regenBudget > 0, answerType: answerPlan.answerType });
+                        const safe = (answerPlan.answerType === 'general_meeting_answer' || answerPlan.answerType === 'lecture_answer')
+                            ? "I don't have enough context from the conversation to answer that yet."
+                            : "The model did not produce an answer in time, so I won't guess from your profile.";
+                        fullAnswer = safe;
+                        emitChunk(safe);
+                        wtaWriteDecision = decideSessionWritePolicy({
+                            finalGenerationMode: 'provider_error_no_answer',
+                            validationOk: false,
+                            criticalViolations: ['provider_timeout_no_answer'],
+                        });
+                        trace.mark('fallback_answer_used', { answerType: answerPlan.answerType, finalGenerationMode: 'provider_error_no_answer' });
+                    }
                 }
             }
 
@@ -3575,8 +4335,26 @@ export class IntelligenceEngine extends EventEmitter {
             }
 
             if (!fullAnswer || fullAnswer.trim().length < 5) {
-                // W6b: topic-aware graceful retry instead of the fixed canned line.
-                fullAnswer = buildGracefulRetry(question || extractedQuestion.latestQuestion || lastInterviewerTurn);
+                // ALWAYS ANSWER (2026-09-07): an empty or aborted stream is retried
+                // ONCE with the same question, transcript and evidence before any
+                // fallback line is considered. The old behaviour substituted a
+                // "Could you repeat that?" line here, which told the user the app
+                // had not heard them.
+                let regenerated: string | null = null;
+                try {
+                    regenerated = await this.regenerateUsableAnswer({
+                        question: question || extractedQuestion.latestQuestion || lastInterviewerTurn || '',
+                        transcript: preparedTranscript,
+                        evidenceBlock: (requestSnapshot as any)?.v3Prompt?.evidenceBlock,
+                        turnKey: whatToAnswerCancellationToken.signal,
+                        signal: whatToAnswerCancellationToken.signal,
+                        isSuperseded: isWtaSuperseded,
+                        reason: 'empty_stream',
+                    });
+                } catch { regenerated = null; }
+                // W6b: topic-aware graceful retry — now an honest "no answer came
+                // back, press again" line, never a request to repeat.
+                fullAnswer = regenerated ?? buildGracefulRetry(question || extractedQuestion.latestQuestion || lastInterviewerTurn);
             }
 
             // LEAKED-SCHEMA-STUB GUARD + PROVIDER-TRANSPORT-ERROR GUARD — MUST run
@@ -3685,6 +4463,16 @@ export class IntelligenceEngine extends EventEmitter {
                         turnPlan: _c3TurnPlan,
                         evidenceFound: true,
                     });
+                // A canned opener that a real answer followed is thrown away here
+                // too, so the committed text matches what first paint showed
+                // (cannedOpener.ts, 2026-09-07).
+                try {
+                    const { stripCannedOpener, stripCannedTail } = require('./llm/cannedOpener') as typeof import('./llm/cannedOpener');
+                    const cleaned = stripCannedOpener(fullAnswer);
+                    if (cleaned.stripped.length) { console.log('[IntelligenceEngine] canned opener stripped from the final answer', { count: cleaned.stripped.length }); fullAnswer = cleaned.text; }
+                    const tail = stripCannedTail(fullAnswer);
+                    if (tail.stripped) { console.log('[IntelligenceEngine] canned tail stripped from the final answer'); fullAnswer = tail.text; }
+                } catch { /* never block the emit */ }
                 // Phase 4 defense-in-depth (forensic-report §6b): carry generationId.
                 this.emit('suggested_answer', fullAnswer, question || extractedQuestion.latestQuestion || 'inferred', confidence, generationId, _c3SourceLabel);
                 this.setMode('idle');
@@ -3965,17 +4753,17 @@ export class IntelligenceEngine extends EventEmitter {
                     let scaffoldRepaired = '';
                     try {
                         await raceStreamWithDeadline({
+                            observe: secondaryStreamObserver('repair'),
                             stream: this.llmHelper.streamChat(
-                                scaffoldRepairPrompt,
-                                undefined,
-                                undefined,
-                                undefined,
-                                true,
-                                true,
-                                [],
-                                whatToAnswerCancellationToken.signal,
+                                ...this.repairCallArgs(
+                                    whatToAnswerCancellationToken.signal,
+                                    scaffoldRepairPrompt,
+                                    whatToAnswerCancellationToken.signal,
+                                    undefined,
+                                    [],
+                                )
                             ) as AsyncGenerator<string>,
-                            firstUsefulDeadlineMs: this.llmHelper.isUsingOllama() ? LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS : 7000,
+                            firstUsefulDeadlineMs: this.repairFirstUsefulMs(7000, whatToAnswerCancellationToken.signal),
                             interTokenStallMs: LIVE_INTER_TOKEN_STALL_MS,
                             isUsefulYet: () => scaffoldRepaired.length >= 5,
                             shouldAbort: () => scaffoldRepaired.length > 1800
@@ -4159,6 +4947,14 @@ export class IntelligenceEngine extends EventEmitter {
 
                         if (!firstCheck.ok) {
                             trace.mark('validation_failed', { reason: firstCheck.reason, action: firstCheck.action });
+                            // Diagnosable from the user's debug log (2026-09-07): every
+                            // overwrite investigated this session had to be re-derived
+                            // offline because the reason lived only in the trace.
+                            console.log('[IntelligenceEngine] doc-grounded validation failed', {
+                                reason: firstCheck.reason, action: firstCheck.action,
+                                missing: firstCheck.missing.slice(0, 6), coverage: firstCheck.coverage.reason,
+                                evidenceChars: docContextBlock.length, v3: _v3Composed,
+                            });
                             if (firstCheck.action === 'refuse') {
                                 // T4 — ONE REWRITTEN-QUERY RETRIEVAL BEFORE REFUSING.
                                 //
@@ -4222,8 +5018,17 @@ export class IntelligenceEngine extends EventEmitter {
                                     console.warn('[IntelligenceEngine] rewritten-query re-retrieval skipped:', retryErr?.message || retryErr);
                                 }
                                 if (!rescued) {
-                                    fullAnswer = 'I could not find that in the retrieved sections of the document.';
-                                    trace.mark('repair_used', { reason: 'doc_grounded_refusal', coverage: firstCheck.coverage.reason });
+                                    // ALWAYS ANSWER (2026-09-07, owner's direction): the
+                                    // streamed answer is what the model said over the
+                                    // evidence it was actually given. Replacing it with
+                                    // "I could not find that in the retrieved sections"
+                                    // was measured to destroy CORRECT answers far more
+                                    // often than it caught fabrication (unit synonyms,
+                                    // dates, the question's own subject, an unparsed
+                                    // evidence format). The verdict is logged for
+                                    // diagnosis; the answer the user watched stream stands.
+                                    console.log('[IntelligenceEngine] doc-grounded coverage check failed — keeping the streamed answer', { coverage: firstCheck.coverage.reason });
+                                    trace.mark('validation_completed', { reason: 'doc_grounded_kept_original_over_refusal', coverage: firstCheck.coverage.reason });
                                 }
                             } else {
                                 const relaxedBlock = await buildDocContext(true);
@@ -4235,7 +5040,7 @@ export class IntelligenceEngine extends EventEmitter {
                                 const repairPrompt = [
                                     '<rewrite_instructions note="follow these; never repeat them">',
                                     `The previous answer failed document-grounded validation: ${firstCheck.reason}.`,
-                                    'Rewrite the answer using ONLY the retrieved document excerpts. If the answer is not present, say exactly: "I could not find that in the retrieved sections of the document."',
+                                    'Rewrite the answer using the retrieved document excerpts for every document-specific fact. If a requested fact is not present in them, say so in one short clause and then still answer from general knowledge, clearly marked as general knowledge — never reply with only "could not find".',
                                     'If the question asks for a set/list/specification/multiple values, scan every snippet and include every matching value literally present. Do not invent anything.',
                                     `${missingLine}`,
                                     '</rewrite_instructions>',
@@ -4267,17 +5072,17 @@ export class IntelligenceEngine extends EventEmitter {
                                 let repaired = '';
                                 try {
                                     await raceStreamWithDeadline({
+                                        observe: secondaryStreamObserver('repair'),
                                         stream: this.llmHelper.streamChat(
-                                            repairPrompt,
-                                            undefined,
-                                            undefined,
-                                            wtaRepairSystemPrompt,
-                                            true,
-                                            true,
-                                            ['reference_files'],
-                                            whatToAnswerCancellationToken.signal,
+                                            ...this.repairCallArgs(
+                                                whatToAnswerCancellationToken.signal,
+                                                repairPrompt,
+                                                whatToAnswerCancellationToken.signal,
+                                                wtaRepairSystemPrompt,
+                                                ['reference_files'],
+                                            )
                                         ) as AsyncGenerator<string>,
-                                        firstUsefulDeadlineMs: this.llmHelper.isUsingOllama() ? LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS : 7000,
+                                        firstUsefulDeadlineMs: this.repairFirstUsefulMs(7000, whatToAnswerCancellationToken.signal),
                                         interTokenStallMs: LIVE_INTER_TOKEN_STALL_MS,
                                         isUsefulYet: () => repaired.trim().length >= 5,
                                         shouldAbort: () => repaired.length > 1800
@@ -4317,15 +5122,13 @@ export class IntelligenceEngine extends EventEmitter {
                                     }).ok) {
                                     fullAnswer = repairedTrim;
                                     trace.mark('repair_used', { reason: 'doc_grounded_repair_applied', originalReason: firstCheck.reason });
-                                } else if (firstCheck.reason === 'empty_or_greeting' || firstCheck.reason === 'false_refusal_evidence_exists' || wtaRepairIsLengthDowngrade) {
-                                    // Keep the original for non-fabrication-sensitive failures if
-                                    // repair failed validation (or would be a length regression);
-                                    // the normal cleanup/misfire guards below may still improve it.
-                                    // For absent facts and unsupported claims we fail closed instead.
-                                    trace.mark('validation_completed', { reason: 'doc_grounded_repair_rejected_keep_original', originalReason: firstCheck.reason });
                                 } else {
-                                    fullAnswer = 'I could not find that in the retrieved sections of the document.';
-                                    trace.mark('repair_used', { reason: 'doc_grounded_safe_refusal_after_repair_reject', originalReason: firstCheck.reason });
+                                    // Keep the original whenever the repair did not cleanly
+                                    // improve on it (2026-09-07). This branch used to fail
+                                    // closed to the canonical refusal for "unsupported"
+                                    // verdicts; see the kept-original note above for why a
+                                    // streamed answer now always outranks a canned line.
+                                    trace.mark('validation_completed', { reason: 'doc_grounded_repair_rejected_keep_original', originalReason: firstCheck.reason });
                                 }
                             }
                         }
@@ -4486,17 +5289,17 @@ export class IntelligenceEngine extends EventEmitter {
                         // `await iterator.return()` anti-pattern.
                         try {
                             await raceStreamWithDeadline({
+                                observe: secondaryStreamObserver('regeneration'),
                                 stream: this.llmHelper.streamChat(
-                                    repairPrompt,
-                                    undefined,
-                                    undefined,
-                                    undefined,
-                                    true,
-                                    true,
-                                    [],
-                                    whatToAnswerCancellationToken.signal,
+                                    ...this.repairCallArgs(
+                                        whatToAnswerCancellationToken.signal,
+                                        repairPrompt,
+                                        whatToAnswerCancellationToken.signal,
+                                        undefined,
+                                        [],
+                                    )
                                 ) as AsyncGenerator<string>,
-                                firstUsefulDeadlineMs: this.llmHelper.isUsingOllama() ? LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS : 7000,
+                                firstUsefulDeadlineMs: this.repairFirstUsefulMs(7000, whatToAnswerCancellationToken.signal),
                                 isUsefulYet: () => repaired.length >= 5,
                                 shouldAbort: () => repaired.length > 1200
                                     || whatToAnswerCancellationToken.signal.aborted
@@ -4651,22 +5454,39 @@ export class IntelligenceEngine extends EventEmitter {
             // it") and emit "I'm Natively, an AI assistant" / "I can't share that"
             // instead of a real answer. Replace that misfire with an honest line — the
             // manual path (ipcHandlers) applies the identical guard.
-            if (ASSISTANT_VOICE_ANSWER_TYPES.has(answerPlan.answerType)) {
+            // A whole-answer "could you repeat/rephrase that?" is a misfire on EVERY
+            // answer type (2026-09-07), not only the assistant-voice ones.
+            if (ASSISTANT_VOICE_ANSWER_TYPES.has(answerPlan.answerType)
+                || detectAssistantVoiceMisfire(fullAnswer).reason === 'repeat_request') {
                 try {
                     const mis = detectAssistantVoiceMisfire(fullAnswer);
                     if (mis.isMisfire) {
-                        fullAnswer = (answerPlan.answerType === 'general_meeting_answer' || answerPlan.answerType === 'lecture_answer')
+                        // ALWAYS ANSWER (2026-09-07): regenerate once; the honest
+                        // line is the last resort, not the response.
+                        const regenerated = await this.regenerateUsableAnswer({
+                            question: question || extractedQuestion.latestQuestion || lastInterviewerTurn || '',
+                            transcript: preparedTranscript,
+                            evidenceBlock: requestSnapshot.v3Prompt?.evidenceBlock,
+                            turnKey: whatToAnswerCancellationToken.signal,
+                            signal: whatToAnswerCancellationToken.signal,
+                            isSuperseded: isWtaSuperseded,
+                            reason: 'assistant_voice_misfire',
+                        });
+                        fullAnswer = regenerated ?? ((answerPlan.answerType === 'general_meeting_answer' || answerPlan.answerType === 'lecture_answer')
                             ? "I don't have enough context from the conversation to answer that yet."
                             : answerPlan.answerType === 'sales_answer'
                                 ? "I don't have enough context on that yet — could you share a bit more?"
-                                : 'Could you give me a bit more to go on?';
-                        trace.mark('repair_used', { reason: 'assistant_voice_misfire', misfireReason: mis.reason });
+                                : 'Could you give me a bit more to go on?');
+                        trace.mark('repair_used', { reason: 'assistant_voice_misfire', misfireReason: mis.reason, regenerated: Boolean(regenerated) });
                     }
                 } catch (avErr: any) {
                     console.warn('[IntelligenceEngine] assistant-voice guard skipped:', avErr?.message);
                 }
             }
 
+            // Set by the false-no-content guard below so the Phase 1b silence
+            // instrument can tell a PROMPTED sentinel from a NORMALIZED one.
+            let silenceViaNormalizer = false;
             // FALSE-NO-CONTENT-CLAIM GUARD (campaign2 longsession run-022,
             // 2026-07-18): the model's raw answer spontaneously claims no
             // question/content was captured while `extractedQuestion` proves a
@@ -4698,7 +5518,87 @@ export class IntelligenceEngine extends EventEmitter {
                 // speculative silent-discard path identically to the
                 // intentionally-prompted case.
                 fullAnswer = 'Nothing actionable right now.';
+                silenceViaNormalizer = true;
             }
+
+            // PHASE 1b SILENCE-SHARE INSTRUMENT (interaction-router campaign,
+            // 2026-09-04). This is the ONE post-generation point in
+            // runWhatShouldISay where `fullAnswer` is final: the assistant-voice
+            // guard and the false-no-content normalizer have both run, and the
+            // sentinel branch below has not yet consumed it. Emitting here — for
+            // BOTH outcomes, not just the silent one — is what makes the ring
+            // yield a RATE rather than an unanchored count.
+            //
+            // The routing audit (docs/natively-current-routing-map.md) could not
+            // answer what share of live generations end in a silence string,
+            // because the decision is made by the cloud LLM after a full
+            // generation rather than by a pre-check. That share is the size of
+            // the prize for the router's `needs_response` axis, so it is measured
+            // before the taxonomy is designed, not after.
+            //
+            // Marker-only and observe-only. No branch reads `silenced`, nothing
+            // downstream changes, and piTelemetry.scrubTelemetry drops anything
+            // that is not an allow-listed marker key. Buffered in the bounded
+            // ring; a line is logged only under NATIVELY_PI_TELEMETRY_DEBUG or
+            // the 'full' debug level. Wrapped because instrumentation must never
+            // be able to fail a live turn.
+            try {
+                const _silenced = IntelligenceEngine.isNonAnswerSentinel(fullAnswer);
+                let _modeTemplate = 'unknown';
+                try {
+                    // Local require, matching every other ModesManager use in this
+                    // file: the module is not statically imported here.
+                    const { ModesManager } = require('./services/ModesManager') as typeof import('./services/ModesManager');
+                    _modeTemplate = ModesManager.getInstance().getActiveMode?.()?.templateType ?? 'none';
+                } catch { /* mode unavailable — the outcome is still worth counting */ }
+                piTelemetry.emit('wta_turn_silence_outcome', {
+                    silenced: _silenced,
+                    surface: isSpeculative ? 'speculative' : 'manual',
+                    mode: _modeTemplate,
+                    answerType: answerPlan?.answerType ?? 'none',
+                    // Which mechanism produced the sentinel. 'prompted' is the
+                    // model taking the escape hatch the mode prompt instructs;
+                    // 'normalized' is the false-no-content guard above rewriting
+                    // a spontaneous non-answer onto the same string. A log line
+                    // alone cannot tell these apart, which is why the audit
+                    // recorded the share as unmeasurable without this split.
+                    reason: _silenced ? (silenceViaNormalizer ? 'normalized' : 'prompted') : 'answered',
+                });
+            } catch { /* instrumentation must never break a live turn */ }
+
+            // ── PR 9: SHADOW RUN ────────────────────────────────────────────
+            //
+            // What the router WOULD have decided, beside what actually
+            // happened. This is the evidence PR 11 needs before MobileBERT and
+            // the legacy Answer Shape table can be removed: a benchmark says
+            // the model is better on rows a generator wrote, and only a shadow
+            // run says it is better on this user's turns.
+            //
+            // NOT AWAITED. The turn is already decided and about to be
+            // dispatched. The router costs about 18ms and the user gets nothing
+            // for it here, so paying for the experiment with their latency
+            // would be the wrong trade. Fired and forgotten, failures swallowed
+            // inside.
+            try {
+                const { recordShadowDecision } = require('./llm/routing/shadowRun') as typeof import('./llm/routing/shadowRun');
+                const _shadowTurn = (question || extractedQuestion.latestQuestion || lastInterviewerTurn || '').trim();
+                if (_shadowTurn) {
+                    void recordShadowDecision({
+                        turn: _shadowTurn,
+                        mode: this.getActiveModeId(),
+                        channel: 'system',
+                        history: this.session.getContext(120)
+                            .filter((i) => i.role !== 'assistant')
+                            .slice(-4)
+                            .map((i) => `[${i.role === 'user' ? 'USER' : 'SYSTEM'}] ${i.text}`),
+                        modeHasReferenceFiles: Boolean((snapshotModeInfo as any)?.hasReferenceFiles),
+                        legacyIntent: answerPlan?.answerType ?? 'none',
+                        legacyConfidence: confidence,
+                        liveWasSilent: IntelligenceEngine.isNonAnswerSentinel(fullAnswer),
+                        surface: isSpeculative ? 'speculative' : 'manual',
+                    });
+                }
+            } catch { /* the shadow run never reaches the turn it observes */ }
 
             if (IntelligenceEngine.isNonAnswerSentinel(fullAnswer)) {
                 // [TRACE:LONGCTX] Campaign 2, F-longsession-1 (2026-07-16): the
@@ -4726,7 +5626,19 @@ export class IntelligenceEngine extends EventEmitter {
                     } catch (e) { console.warn('[TRACE:LONGCTX] nonanswer_sentinel_discard logging failed', e); }
                 }
                 if (!isSpeculative) {
-                    const honestFallback = "I don't have enough from the conversation to answer that specific point yet.";
+                    // ALWAYS ANSWER (2026-09-07): a manual press regenerates once
+                    // before any canned line is considered.
+                    const regenerated = await this.regenerateUsableAnswer({
+                        question: question || extractedQuestion.latestQuestion || lastInterviewerTurn || '',
+                        transcript: preparedTranscript,
+                        evidenceBlock: requestSnapshot.v3Prompt?.evidenceBlock,
+                        turnKey: whatToAnswerCancellationToken.signal,
+                        signal: whatToAnswerCancellationToken.signal,
+                        isSuperseded: isWtaSuperseded,
+                        reason: 'manual_press_nonanswer_sentinel',
+                    });
+                    if (isWtaSuperseded()) { recordWtaCancellation(); return null; }
+                    const honestFallback = regenerated ?? "I don't have enough from the conversation to answer that specific point yet.";
                     fullAnswer = honestFallback;
                     console.log('[FIX:longsession-nonanswer-fallback]', JSON.stringify({
                         answerType: answerPlan?.answerType,
@@ -4809,17 +5721,17 @@ export class IntelligenceEngine extends EventEmitter {
                         let clauseAddition = '';
                         try {
                             await raceStreamWithDeadline({
+                                observe: secondaryStreamObserver('repair'),
                                 stream: this.llmHelper.streamChat(
-                                    coverageRepairPrompt,
-                                    undefined,
-                                    undefined,
-                                    undefined,
-                                    true,
-                                    true,
-                                    [],
-                                    whatToAnswerCancellationToken.signal,
+                                    ...this.repairCallArgs(
+                                        whatToAnswerCancellationToken.signal,
+                                        coverageRepairPrompt,
+                                        whatToAnswerCancellationToken.signal,
+                                        undefined,
+                                        [],
+                                    )
                                 ) as AsyncGenerator<string>,
-                                firstUsefulDeadlineMs: this.llmHelper.isUsingOllama() ? LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS : 7000,
+                                firstUsefulDeadlineMs: this.repairFirstUsefulMs(7000, whatToAnswerCancellationToken.signal),
                                 isUsefulYet: () => clauseAddition.length >= 5,
                                 shouldAbort: () => clauseAddition.length > 900
                                     || whatToAnswerCancellationToken.signal.aborted
@@ -4864,8 +5776,8 @@ export class IntelligenceEngine extends EventEmitter {
             // appears empty.", "(trajectory truncated; nothing captured yet)" —
             // every occurrence uses different wording), so a semantic check is the
             // only way to generalize. Runs a local zero-shot NLI entailment check
-            // (AnswerRelevanceChecker.ts, reusing IntentClassifier.ts's existing
-            // warmed classifier/worker — no added model load) and, if the answer
+            // (AnswerRelevanceChecker.ts; since 2026-09-05 it returns null, the
+            // MobileBERT session it reused left with the classifier) and, if the answer
             // doesn't semantically address the question, attempts ONE bounded
             // regeneration mirroring the profile-repair pattern just above: same
             // trust-scoped XML repair prompt shape, same raceStreamWithDeadline
@@ -5023,17 +5935,17 @@ export class IntelligenceEngine extends EventEmitter {
                             let repaired = '';
                             try {
                                 await raceStreamWithDeadline({
+                                    observe: secondaryStreamObserver('repair'),
                                     stream: this.llmHelper.streamChat(
-                                        repairPrompt,
-                                        undefined,
-                                        undefined,
-                                        undefined,
-                                        true,
-                                        true,
-                                        [],
-                                        whatToAnswerCancellationToken.signal,
+                                        ...this.repairCallArgs(
+                                            whatToAnswerCancellationToken.signal,
+                                            repairPrompt,
+                                            whatToAnswerCancellationToken.signal,
+                                            undefined,
+                                            [],
+                                        )
                                     ) as AsyncGenerator<string>,
-                                    firstUsefulDeadlineMs: this.llmHelper.isUsingOllama() ? LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS : 7000,
+                                    firstUsefulDeadlineMs: this.repairFirstUsefulMs(7000, whatToAnswerCancellationToken.signal),
                                     isUsefulYet: () => repaired.length >= 5,
                                     shouldAbort: () => repaired.length > 1200
                                         || whatToAnswerCancellationToken.signal.aborted
@@ -5083,11 +5995,7 @@ export class IntelligenceEngine extends EventEmitter {
             }
 
             if (isSpeculative) {
-                this.lastTriggerTime = Date.now();
-                this.lastTriggerQuestion = question ?? null;
-                this.speculativeTextExpiry = this.lastTriggerTime + this.triggerCooldown + 500;
-                this.setMode('idle');
-                return fullAnswer;
+                return this.completeSpeculativeRun(generationId, question, confidence, fullAnswer, wtaWriteDecision);
             }
 
             // Keep the RAW answer (with the hidden <verification_spec>) for
@@ -5374,6 +6282,15 @@ export class IntelligenceEngine extends EventEmitter {
             if (openedStreamRow) this.emit('suggested_answer_discard', 'error');
             this.emit('error', error as Error, 'what_to_say');
             this.setMode('idle');
+            // A provider failure must not be dressed as "Could you repeat that?"
+            // (2026-09-07): a dead key, a 429 or an outage read as the app not
+            // having heard the question. Name the actual problem; keep the
+            // graceful retry for everything that is not a provider failure.
+            const providerMessage = providerFailureUserMessage(error);
+            if (providerMessage) {
+                if (!isSpeculative) this.emit('suggested_answer', providerMessage, question || 'inferred', 0.9, generationId);
+                return providerMessage;
+            }
             return buildGracefulRetry(question);
         } finally {
             // Only the request that still owns the slot may clear it. An older
@@ -5424,17 +6341,17 @@ export class IntelligenceEngine extends EventEmitter {
                     // 6s) clears MiniMax's 4-6s first-token when it's the fallback.
                     let fixed = '';
                     await raceStreamWithDeadline({
+                        observe: secondaryStreamObserver('verification'),
                         stream: this.llmHelper.streamChat(
-                            repairPrompt,
-                            undefined,
-                            undefined,
-                            undefined,
-                            true,
-                            true,
-                            [],
-                            abortSignal,
+                            ...this.repairCallArgs(
+                                abortSignal,
+                                repairPrompt,
+                                abortSignal,
+                                undefined,
+                                [],
+                            )
                         ) as AsyncGenerator<string>,
-                        firstUsefulDeadlineMs: this.llmHelper.isUsingOllama() ? LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS : 7000,
+                        firstUsefulDeadlineMs: this.repairFirstUsefulMs(7000, abortSignal),
                         isUsefulYet: () => fixed.length >= 5,
                         shouldAbort: () => fixed.length > 1200 || superseded(),
                         onToken: (tok: string) => { fixed += tok; },
@@ -5516,6 +6433,7 @@ export class IntelligenceEngine extends EventEmitter {
             const extraSourceTypes = attachmentSourceTypeExtensions(_modeId, _files);
             const modePort = createModeRetrievalPort({
                 modesManager: _mm, modeInfo: _mi, files: _files,
+                rerankSurface: 'live',
                 // Types each file by shape against what this mode authorizes —
                 // a résumé is RESUME here and CANDIDATE_FILE in recruiting.
                 allowedSourceTypes: [...policy.allowedSourceTypes, ...extraSourceTypes],
@@ -5609,14 +6527,32 @@ export class IntelligenceEngine extends EventEmitter {
      * its legacy behaviour — proactivity is the product feature, and degrading it
      * into no-evidence disclosures would be adoption theatre.
      */
-    private async buildV3ForTranscriptSurface(tag: 'assist' | 'clarify' | 'brainstorm' = 'assist'): Promise<{ system: string; user: string } | null> {
+    private async buildV3ForTranscriptSurface(
+        tag: 'assist' | 'clarify' | 'brainstorm' | 'code-hint' = 'assist',
+        /**
+         * A question the caller already has, which beats resolving one out of
+         * speech. Code hint is the case: the problem statement comes off a
+         * screenshot or a pinned coding question, so running the transcript
+         * resolver would either find nothing or find a DIFFERENT question that
+         * happens to be more recent than the problem being worked on.
+         *
+         * `surface` selects the AnswerSurface member; the type has no
+         * `code-hint`, and `screenshot` is what that turn actually is.
+         */
+        pinned?: { question: string; surface?: 'assist' | 'screenshot'; source?: 'screenshot' | 'transcript' | 'manual' },
+    ): Promise<{ system: string; user: string } | null> {
         try {
             const { isContextIntelligenceV3Enabled } = require('./context-intelligence/contracts/flag');
             if (!isContextIntelligenceV3Enabled()) return null;
             const segs: any[] = (this.session as any)?.getContext?.(120) ?? [];
-            if (!segs.length) return null;
+            // A pinned question stands on its own. Requiring a transcript here
+            // would silently disable V3 for a screenshot-only code hint, which
+            // is the most common way that surface is used.
+            if (!segs.length && !pinned?.question) return null;
             const { resolveQuestion } = require('./context-intelligence/question/question-resolver');
-            const resolved = resolveQuestion({
+            const resolved = pinned?.question
+                ? { resolvedQuestion: pinned.question, requiresClarification: false, confidence: 1 }
+                : resolveQuestion({
                 // getContext() returns ContextItem, whose field is `role`
                 // ('interviewer' | 'user' | 'assistant') — there is no `speaker`
                 // here. The previous mapping read `t.speaker` (always undefined)
@@ -5635,7 +6571,7 @@ export class IntelligenceEngine extends EventEmitter {
             if (!ctx) return null;
             const { buildV3Prompt } = require('./context-intelligence/orchestration/engine-bridge');
             const _v3 = await buildV3Prompt({
-                surface: 'assist',
+                surface: pinned?.surface ?? 'assist',
                 // See the what-to-answer call site: the rollback must reach
                 // every surface, not just typed chat.
                 multiTurnHistory: isIntelligenceFlagEnabled('chatHistoryMultiTurn'),
@@ -5652,13 +6588,19 @@ export class IntelligenceEngine extends EventEmitter {
                 resolvedProfileSources: ctx.resolvedProfileSources,
                 extraAllowedSourceTypes: ctx.extraAllowedSourceTypes as never[],
                 requestSequence: this.currentGenerationId,
-                scope: { meetingId: ctx.meetingId ?? undefined, sessionId: ctx.meetingId ?? undefined },
+                scope: {
+                    meetingId: ctx.meetingId ?? undefined,
+                    sessionId: this.conversationSessionId(),
+                },
                 // This question came out of live speech via question-resolver,
                 // not from the user's keyboard, so it must not be stamped
                 // manual/1.0. The resolver's own confidence is already gated at
                 // >= 0.6 above; pass the real value through rather than
                 // discarding it at the boundary.
-                questionSource: 'transcript',
+                // A pinned question did not come out of speech, so it must not
+                // be stamped 'transcript' — the provenance drives how much the
+                // policy layer trusts it.
+                questionSource: pinned?.source ?? 'transcript',
                 questionConfidence: resolved.confidence,
                 conversationSummary: ctx.conversationWindow(60),
                 retrieval: ctx.port as any,
@@ -6048,6 +6990,15 @@ export class IntelligenceEngine extends EventEmitter {
      * Explicit bypass when auto-detection fails
      */
     async runManualAnswer(question: string): Promise<string | null> {
+        // The FOURTH V3 surface ('manual-chat' via pathTag 'engine'). It reads
+        // the ring at the buildV3Prompt call below and, like the other two live
+        // surfaces, had no writer — so its own answers never became history.
+        const manualAnswer = await this.runManualAnswerInner(question);
+        this.recordLiveTurn(manualAnswer, undefined, question);
+        return manualAnswer;
+    }
+
+    private async runManualAnswerInner(question: string): Promise<string | null> {
         this.emit('manual_answer_started');
         this.setMode('manual');
 
@@ -6127,7 +7078,16 @@ export class IntelligenceEngine extends EventEmitter {
                         // 'engine', so every session on this surface shared one
                         // continuity slot -- one user's activeTopic resolving another
                         // turn's "that project". A one-line omission, not a design.
-                        scope: { meetingId: _ctx.meetingId ?? undefined, sessionId: _ctx.meetingId ?? undefined },
+                        scope: {
+                            meetingId: _ctx.meetingId ?? undefined,
+                            // THE resolver, like every other surface. This read the
+                            // BARE meeting id while its own writer (recordLiveTurn ->
+                            // conversationSessionId) stored under `m:<id>`, so with a
+                            // meeting active manual-chat wrote a bucket it never read.
+                            // Invisible without a meeting, where both collapse to
+                            // 'engine' — which is why the parity test passed.
+                            sessionId: this.conversationSessionId(),
+                        },
                         retrieval: _ctx.port as any,
                     });
                 } catch { return null; }
@@ -6235,11 +7195,23 @@ export class IntelligenceEngine extends EventEmitter {
 
             const generationId = ++this.currentGenerationId;
             let fullHint = "";
+            // V3 for code hint. The bridge named this surface in its own scope
+            // from the start and it was the one of five never connected, so a
+            // coding question in a mode holding reference files got no source
+            // authority while the same question through assist did.
+            //
+            // The pinned question is preferred over transcript resolution: the
+            // problem statement is what the user is actually working on, and the
+            // most recent spoken question may be about something else entirely.
+            const codeHintV3 = await this.buildV3ForTranscriptSurface('code-hint', questionContext
+                ? { question: questionContext, surface: 'screenshot', source: questionSource === 'transcript' ? 'transcript' : 'screenshot' }
+                : undefined);
             const stream = this.codeHintLLM.generateStream(
                 imagePaths,
                 questionContext ?? undefined,
                 questionSource,
-                transcriptContext ?? undefined
+                transcriptContext ?? undefined,
+                codeHintV3 ?? undefined
             );
 
             let streamAborted = false;
@@ -6378,6 +7350,114 @@ export class IntelligenceEngine extends EventEmitter {
      * for live session-memory routing. Read defensively (dynamic require avoids a
      * load-time cycle); returns 'general' when unavailable. Never throws.
      */
+    /**
+     * Does the interaction router say this turn needs no response?
+     *
+     * Returns false unless it is confidently sure. Every uncertainty resolves
+     * to "generate as before", because the two errors are not symmetric. A skip
+     * we do not take costs one wasted generation, which is today's behaviour. A
+     * skip we take wrongly costs the user an answer they should have had, on
+     * the speculative path where they never learn it was suppressed.
+     *
+     * So the threshold is high and the failure direction is fixed.
+     */
+    /**
+     * How sure the router must be before a turn is skipped without generating.
+     *
+     * 0.90, not the 0.50 an argmax would imply. The measured model is sharply
+     * confident when it is right about silence: a backchannel comes back at
+     * 0.979. Setting the bar near that keeps the skips to the cases the model
+     * is certain about and lets everything else pay for a generation, which is
+     * today's cost and today's behaviour.
+     *
+     * Raise it to make the router more conservative. Lower it only with live
+     * evidence, never to make a benchmark number look better.
+     */
+    private static readonly ROUTER_SILENCE_CONFIDENCE = 0.90;
+
+    /** Flag, poison sentinel and model presence, without touching the worker. Never throws. */
+    private static routerAvailableSync(): boolean {
+        try {
+            const { RouterModel } = require('./llm/routing/RouterModel') as typeof import('./llm/routing/RouterModel');
+            return RouterModel.getInstance().isAvailable();
+        } catch { return false; }
+    }
+
+    private async routerSaysStaySilent(question?: string): Promise<boolean> {
+        try {
+            const { RouterModel } = require('./llm/routing/RouterModel') as typeof import('./llm/routing/RouterModel');
+            const router = RouterModel.getInstance();
+            // Cheap and synchronous. Checks the flag, the poison sentinel from a
+            // previous launch, and whether the model is on disk at all.
+            if (!router.isAvailable()) return false;
+
+            const turn = (question ?? this.session.getLastInterviewerTurn() ?? '').trim();
+            if (!turn) return false;
+
+            // getContext, not an invented accessor. The first version of this
+            // called `getConversationHistory`, which SessionTracker does not
+            // define, behind an optional chain: it returned undefined, the
+            // fallback produced an empty array, and the router would have run
+            // in cold-start mode on every single turn with nothing anywhere
+            // saying so. The corpus marks the other party [SYSTEM] and the user
+            // [USER], and `role` here is interviewer, user or assistant.
+            const history = this.session.getContext(120)
+                .filter((i) => i.role !== 'assistant')
+                .slice(-4)
+                .map((i) => `[${i.role === 'user' ? 'USER' : 'SYSTEM'}] ${i.text}`);
+
+            const modeId = this.getActiveModeId();
+            let hasFiles = false;
+            try {
+                const { ModesManager } = require('./services/ModesManager') as typeof import('./services/ModesManager');
+                // getActiveModeInfo() carries hasReferenceFiles; the raw Mode row from
+                // getActiveMode() never did, so the router's [files] feature was
+                // permanently "no" until 2026-09-05.
+                hasFiles = Boolean(ModesManager.getInstance().getActiveModeInfo?.()?.hasReferenceFiles);
+            } catch { /* absent ModesManager means no files, which is the safe reading */ }
+
+            const pred = await router.classify({
+                turn,
+                mode: modeId,
+                // The speculative path is driven by the other party on system
+                // audio. The router was trained with the channel as a feature
+                // and Recruiting inverts who the user is, so this must be the
+                // real channel rather than an assumption that mic is the user.
+                channel: 'system',
+                history,
+                modeHasReferenceFiles: hasFiles,
+            });
+
+            // No opinion. Generate, as before.
+            if (!pred) return false;
+            if (pred.needs_response !== 'no') return false;
+
+            const conf = pred.confidence?.needs_response ?? 0;
+            const silent = conf >= IntelligenceEngine.ROUTER_SILENCE_CONFIDENCE;
+            try {
+                // Emitted for BOTH outcomes, not only the skip, for the same
+                // reason the silence-share instrument is: a count of skips
+                // without a count of consultations is not a rate, and the rate
+                // is what says whether the router is worth its latency.
+                piTelemetry.emit('router_precheck_decision', {
+                    mode: modeId,
+                    needs_response: pred.needs_response,
+                    dialogue_act: pred.dialogue_act,
+                    confidence: Number(conf.toFixed(3)),
+                    // Whether the gate actually skipped a generation, which is
+                    // not the same as the model saying `no`: below the
+                    // threshold it says no and we generate anyway.
+                    acted: silent,
+                    surface: 'speculative',
+                });
+            } catch { /* instrumentation must never break a live turn */ }
+            return silent;
+        } catch {
+            // Every failure generates. See the header.
+            return false;
+        }
+    }
+
     private getActiveModeId(): string {
         try {
             const { ModesManager } = require('./services/ModesManager') as typeof import('./services/ModesManager');
@@ -6426,6 +7506,8 @@ export class IntelligenceEngine extends EventEmitter {
         }
         this.speculativeText = null;
         this.speculativeTextExpiry = Infinity;
+        this.speculativeAnswer = null;
+        this.speculativeAdoptedGenerationId = null;
     }
 
     /**

@@ -5,7 +5,7 @@ import { resolveV2SystemPrompt, v2TierForPromptTier } from "./promptSystemV2";
 import { composeWtaSystemPrompt } from "./wtaSystemPrompt";
 import { estimateTokens } from "./modelCapabilities";
 import { TemporalContext } from "./TemporalContextBuilder";
-import { IntentResult } from "./IntentClassifier";
+import type { IntentResult } from './PlannerDecision';
 import { ScreenContext } from "../services/screen/ScreenContextService";
 import { PromptAssembler, escapeUserContent, INJECTION_REDACTION_MESSAGE, TRUNCATION_SUFFIX } from "../services/context/PromptAssembler";
 import { isIntelligenceFlagEnabled } from "../intelligence/intelligenceFlags";
@@ -312,12 +312,11 @@ ${promptInstruction.trim()}
                 : undefined;
 
             const intentContextParts = [];
-            if (intentResult) {
-                intentContextParts.push(`<intent_and_shape>
-DETECTED INTENT: ${intentResult.intent}
-ANSWER SHAPE: ${intentResult.answerShape}
-</intent_and_shape>`);
-            }
+            // <intent_and_shape> removed 2026-09-05. It only ever entered the v2/v1
+            // carriers, both discarded whenever V3 composes the turn (default ON),
+            // so the model never saw it on the live path. `intentResult` stays in
+            // the signature for callers; it is not read here.
+            void intentResult;
             if (answerPlan) {
                 intentContextParts.push(formatAnswerPlanForPrompt(answerPlan, isCodeVerificationEnabled()));
             }
@@ -1172,6 +1171,15 @@ The user triggered this action with a coding problem on screen and NO new questi
             // fixes that and additionally checks arity and order against the real
             // signature — which an `as const` tuple silently did not.
             const _wtaArgs: Parameters<LLMHelper['streamChat']> = [_wtaUserMessage, imagePaths, undefined, _wtaSystemPrompt, true, true, packetScopes, abortSignal, wtaThinkingBudget, _wtaRoute];
+            // Hand this turn's fully-composed answer call to LLMHelper so the
+            // post-answer repair passes can reuse it. Because positions 5 and 6
+            // are both `true`, everything the answer knows — transcript,
+            // screenshot, reference files, realtime prompt, mode prompt,
+            // evidence pack — is already inside _wtaUserMessage/_wtaSystemPrompt
+            // rather than injected downstream, so a repair that replays this
+            // tuple sees the same turn at no retrieval cost. Keyed by this
+            // turn's abort signal so a later turn cannot inherit it.
+            this.llmHelper.rememberAnswerCall?.(abortSignal, _wtaArgs);
             const _wtaStream = typeof (this.llmHelper as any).streamChatWithOutcome === 'function'
                 ? (this.llmHelper as any).streamChatWithOutcome(..._wtaArgs)
                 : { stream: (this.llmHelper as any).streamChat(..._wtaArgs), outcome: { truncated: false } };
@@ -1259,9 +1267,11 @@ The user triggered this action with a coding problem on screen and NO new questi
             if (isProviderFailure) {
                 yield "I couldn't reach the AI provider — this looks like an API key or rate-limit issue. Check your API keys / plan in Settings and try again.";
             } else {
-                // W6b: topic-aware graceful retry instead of the fixed canned line.
-                const { buildGracefulRetry } = require('./manualProfileIntelligence') as typeof import('./manualProfileIntelligence');
-                yield buildGracefulRetry(cleanedTranscript.split('\n').pop() || '');
+                // ALWAYS ANSWER (2026-09-07): yield NOTHING. The engine treats an
+                // empty stream as "regenerate once, then the honest
+                // buildGracefulRetry line". Yielding the line from here made it
+                // the answer and skipped the retry.
+                console.warn('[WhatToAnswerLLM] stream failed without a provider signal — leaving the answer empty so the engine retries');
             }
         }
     }

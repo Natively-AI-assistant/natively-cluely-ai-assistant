@@ -71,6 +71,7 @@ const UNPACKED_CALLERS = [
   { what: 'the ONNX reranker worker', segments: ['rag', 'localRerankerWorker.js'] },
   { what: 'the GGUF reranker worker', segments: ['rag', 'ggufRerankerWorker.js'] },
   { what: 'the extension host bootstrap', segments: ['services', 'extensions', 'host', 'bootstrap.js'] },
+  { what: 'the local embedding worker', segments: ['rag', 'providers', 'localEmbeddingWorker.js'] },
 ];
 
 test('every script we rewrite out of the asar is actually unpacked', () => {
@@ -121,4 +122,14 @@ test('the extension host asks for the rewrite, and says why', () => {
   const fn = code.slice(code.indexOf('export function bootstrapPath'));
   assert.match(fn.slice(0, fn.indexOf('\n}')), /unpackFromAsar:\s*true/,
     'utilityProcess.fork needs a real file on disk, so the bootstrap must be unpacked');
+});
+
+test('the local embedding worker asks for the rewrite, and says why', () => {
+  // Same shape as the extension host: new Worker() needs a real file on disk,
+  // and this worker loads the ONNX native addon, so it must be unpacked.
+  const src = fs.readFileSync(path.join(repoRoot, 'electron/rag/providers/LocalEmbeddingProvider.ts'), 'utf8');
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const fn = code.slice(code.indexOf('private getWorkerPath'));
+  assert.match(fn.slice(0, fn.indexOf('\n  }')), /unpackFromAsar:\s*true/,
+    'new Worker() needs a real file on disk, so the embedding worker must be unpacked');
 });

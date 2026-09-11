@@ -295,7 +295,9 @@ describe('unsupported-in-mode notice names the remedy (2026-08-02)', () => {
       decision: d, policy: MODE_POLICIES.general, evidence: [],
       attachedSourceCount: 0, profileSourceCount: 0,
     });
-    assert.ok(p.user.includes('do not answer from general knowledge as though it were sourced'), p.user);
+    // 2026-09-07 (always answer): the strict branch keeps the honest gap and
+    // the remedy, and now ends with a clearly-marked general-knowledge answer.
+    assert.ok(p.user.includes('still answer the question itself helpfully from general knowledge, clearly marked as general knowledge and never presented as sourced'), p.user);
     assert.ok(p.user.includes('no document has been added to this mode yet'), p.user);
   });
 

@@ -97,6 +97,11 @@ export class IntelligenceManager extends EventEmitter {
     // LLM Initialization (delegates to engine)
     // ============================================
 
+    /** The V3 conversation-ring key. See IntelligenceEngine.conversationSessionId. */
+    conversationSessionId(): string {
+        return this.engine.conversationSessionId();
+    }
+
     initializeLLMs(): void {
         // Cancel any in-flight streams before swapping LLM clients
         this.engine.reset();

@@ -123,12 +123,6 @@ describe('worker isolation — source guards', () => {
       'expected exactly two from_pretrained calls: the tokenizer and the model');
   });
 
-  test('IntentClassifier zero-shot worker applies bounded session options', () => {
-    const src = read('electron/llm/intentClassifierWorker.ts');
-    assert.match(src, /getBoundedOnnxSessionOptions/);
-    assert.match(src, /session_options:\s*getBoundedOnnxSessionOptions\(\)/);
-  });
-
   test('Whisper worker applies bounded session options on its ASR pipeline', () => {
     const src = read('electron/audio/whisper/whisperWorker.ts');
     assert.match(src, /getBoundedOnnxSessionOptions/);
@@ -152,7 +146,7 @@ describe('worker isolation — source guards', () => {
     assert.ok(unpack.includes('**/localRerankerWorker.js'), 'localRerankerWorker.js must be asar-unpacked');
     // Existing entries must remain (no regression to the already-shipped workers).
     assert.ok(unpack.includes('**/whisperWorker.js'));
-    assert.ok(unpack.includes('**/intentClassifierWorker.js'));
+    assert.ok(!unpack.includes('**/intentClassifierWorker.js'), 'intent worker removed 2026-09-05; a stale unpack glob would ship nothing but would mislead');
   });
 
   test('packaging: @huggingface/transformers node_modules is asar-unpacked (2026-07-05 fix)', () => {

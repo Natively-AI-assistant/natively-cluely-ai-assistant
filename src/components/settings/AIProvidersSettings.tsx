@@ -6,6 +6,7 @@ import { validateCurl } from '../../lib/curl-validator';
 import { ProviderCard } from './ProviderCard';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useToggleInit } from './useToggleInit';
+import { motion, useReducedMotion } from 'framer-motion';
 
 // Official provider marks, vendored from @lobehub/icons-static-svg v1.94.0 (MIT).
 // See src/assets/provider-logos/README.md for provenance and why these are local
@@ -73,9 +74,17 @@ import { useResolvedTheme } from '../../hooks/useResolvedTheme';
    Tailwind is still used for LAYOUT only inside `.aip-root`. Colour comes from
    `var(--aip-*)`.
 
-   Motion is CSS-only — deliberately no framer-motion in this file. Animations
-   stay off the main thread, which matters because this renderer also hosts the
-   always-on-top overlay and a 3s Ollama poll.
+   Motion is CSS-only with ONE exception: the provider tablist's selection pill,
+   whose translate is driven by a framer-motion spring so it matches the
+   meeting-notes Summary/Transcript/Usage switcher (see the tablist below). It is
+   still one transform on one element — framer-motion is the driver, not a new
+   layer of layout work, and layout/`layoutId` projection is deliberately avoided
+   there for a scroll regression documented at the call site. Everything else
+   stays on the compositor, which matters because this renderer also hosts the
+   always-on-top overlay and a 3s Ollama poll. framer-motion is already loaded in
+   this renderer by the sibling settings panels (Plans, Intelligence, Help, Pro,
+   Natively API), so the exception adds no bundle cost that was not already
+   being paid.
    ═══════════════════════════════════════════════════════════════════════════ */
 /* Exported so other panels can adopt this design language. Every token below is
    scoped to `.aip-root`, and this sheet is mounted by whichever panel renders it
@@ -280,6 +289,41 @@ export const AIP_CSS = `
 .aip-check      { animation: aip-check-in 200ms var(--aip-ease-spring) both; }
 .aip-skeleton   { background: var(--aip-btn-bg); border-radius: var(--aip-r-sm);
                   animation: aip-shimmer 1.4s ease-in-out infinite; }
+
+/* ── Dismissal. A one-shot card that disappears on click, without the rest of
+      the panel snapping up into the hole it left.
+
+      grid-template-rows 1fr -> 0fr is the only way to transition to a content
+      height CSS never had to compute — "height: auto" is not an animatable
+      value, and a hardcoded max-height would be either a clip or a stall
+      depending on how a translation wrapped. The child needs min-height:0 (grid
+      items floor at min-content otherwise, and nothing moves) and
+      overflow:hidden (so the content is clipped by the shrinking track rather
+      than spilling past it).
+
+      The grid ITEM must be a bare div — no padding, no border. min-height:0
+      lets its CONTENT reach zero, but its own padding and border box cannot
+      shrink, so putting the card (p-5, 1px border) directly in the track floors
+      the collapse at 42px. Measured, not assumed: the first version of this
+      stopped dead at exactly 20+20+2.
+
+      The card's LEADING gap rides inside the track too, as padding on a child
+      of that bare item, rather than as the space-y margin it would otherwise
+      inherit — a margin outside the track survives the collapse and lands as a
+      20px jump at unmount. The TRAILING gap is left to the next sibling's
+      space-y margin, which is exactly the gap that should remain once this card
+      is gone.
+
+      One duration for both properties, ease-out, 160ms — an exit is the system
+      responding, not the user deciding, so it is the panel's fast state
+      duration rather than its travel duration. The reduced-motion block above
+      already squashes this to 0.01ms; the caller drops its unmount timer to
+      match, so the card leaves at once rather than sitting invisible. */
+.aip-dismissable { display:grid; grid-template-rows:1fr;
+                   transition: grid-template-rows var(--aip-dur-state) var(--aip-ease-out),
+                               opacity var(--aip-dur-state) var(--aip-ease-out); }
+.aip-dismissable > * { min-height:0; overflow:hidden; }
+.aip-dismissable[data-leaving='true'] { grid-template-rows:0fr; opacity:0; }
 
 /* ── Surfaces. The container is rounded-xl + --bg-item-surface +
       --border-subtle, which is the pair every card in this panel carried at
@@ -893,17 +937,31 @@ select.aip-input { cursor:pointer; }
 .aip-select-option[aria-selected='true'] { background: var(--aip-item-active); color: var(--aip-primary); }
 .aip-select-empty { padding:6px 8px; font-size:12px; color: var(--aip-tertiary); }
 
-/* ── Segmented control. Architecture kept as-is (one absolutely-positioned
-      pill translated across the track, so only "transform" animates and the
-      work stays on the compositor; the tabs never restyle their own
-      background). The pill gets "state", not "travel" — it crosses ~200px so
-      a long duration reads as lag. ─────────────────────────────────────── */
+/* ── Segmented control. Architecture unchanged — still ONE absolutely-positioned
+      pill translated across a fixed-width track, so only "transform" animates and
+      the tabs never restyle their own background. What changed is the driver:
+      framer-motion springs the translate instead of a fixed-duration CSS ease, so
+      the travel matches the meeting-notes Summary/Transcript/Usage switcher and an
+      interrupted switch keeps its speed instead of restarting from rest. The pill
+      deliberately does NOT unmount per tab — see the tablist JSX for the scroll
+      regression that caused.
+      The tabs' own colour swap stays in CSS at 200ms, which is MeetingDetails'
+      "transition-all duration-200" — so it lands first: measured, the pill needs
+      ~250-350ms from click to settle. The label is already the right colour
+      under the arriving pill rather than catching up behind it. ────────── */
 .aip-tablist { background: var(--aip-well-bg); border:1px solid var(--aip-border); }
 .aip-tab-pill { background: var(--aip-pill-bg); border:1px solid var(--aip-pill-border);
                 box-shadow: var(--aip-pill-lift), var(--aip-pill-shadow); }
-.aip-tab { color: var(--aip-secondary); background:transparent; cursor:pointer; }
-/* The tablist is overflow:hidden, which clips an outside focus ring. Must be
-   specific enough to beat ".aip-root :focus-visible" (0,2,0) above. */
+/* No reduced-motion rule of its own: the .aip-root guard below already forces
+   transition-duration to 0.01ms !important on every descendant, and a
+   non-important shorthand here would lose to it anyway. */
+.aip-tab { color: var(--aip-secondary); background:transparent; cursor:pointer;
+           transition: color 200ms var(--aip-ease-out); }
+/* Inset focus ring. This started as a workaround for the tablist's
+   overflow:hidden (which the selection pill's spring overshoot has since forced
+   off, see the tablist JSX) and is kept as the deliberate look: the tabs sit
+   flush in the well, so an outside ring reads as a halo around the whole track.
+   Must be specific enough to beat ".aip-root :focus-visible" (0,2,0) above. */
 .aip-root .aip-tab:focus-visible { outline-offset:-2px; }
 .aip-tab:hover { color: var(--aip-primary); }
 .aip-tab[aria-selected='true'] { color: var(--aip-hero); }
@@ -1220,6 +1278,18 @@ interface AipModelListProps {
     /** Discovery in flight. */
     refreshing?: boolean;
     /**
+     * Every row came from provider discovery, so there is no preset/fetched
+     * split and the "Showing built-in models only." note below would be false.
+     *
+     * That note is a heuristic on list LENGTH — it fires under
+     * AIP_MODEL_FILTER_THRESHOLD, which is right for the key-backed cards that
+     * ship a handful of presets and fetch the rest. A provider whose whole
+     * catalogue arrives from an authenticated call (Antigravity) has nothing
+     * built in, and a short list there means the account has four models, not
+     * that discovery has not run.
+     */
+    catalogIsComplete?: boolean;
+    /**
      * Called once, the first time the panel is expanded with no catalog yet.
      * Expanding this list IS the intent to browse models, so discovery belongs
      * here rather than behind a separate button elsewhere in the card.
@@ -1249,6 +1319,7 @@ const AIP_MODEL_FILTER_THRESHOLD = 12;
 export const AipModelList: React.FC<AipModelListProps> = ({
     models, enabled, onToggle, onReset, defaultId, onSetDefault, staleIds = [], error,
     onRefresh, refreshing, onFirstOpen, optIn = false, onBulkToggle,
+    catalogIsComplete = false,
 }) => {
     const t = useT();
     const [open, setOpen] = useState(false);
@@ -1425,7 +1496,11 @@ export const AipModelList: React.FC<AipModelListProps> = ({
                                 title={t('Re-read the model list from this provider')}
                             >
                                 <RefreshCw size={11} strokeWidth={1.75} className={refreshing ? 'aip-spinner' : ''} />
-                                {refreshing ? t('Fetching...') : showFilterBar ? t('Refresh') : t('Fetch all models')}
+                                {/* "Fetch all models" offers to go and get the REST of the
+                                    catalogue — right for the preset-shipping cards, wrong for
+                                    one whose catalogue already arrived whole. Same signal
+                                    catalogIsComplete uses to silence the built-in note. */}
+                                {refreshing ? t('Fetching...') : (showFilterBar || catalogIsComplete) ? t('Refresh') : t('Fetch all models')}
                             </button>
                         )}
                         </div>
@@ -1487,7 +1562,7 @@ export const AipModelList: React.FC<AipModelListProps> = ({
                             })}
                         </div>
 
-                        {models.length <= AIP_MODEL_FILTER_THRESHOLD && (
+                        {!catalogIsComplete && models.length <= AIP_MODEL_FILTER_THRESHOLD && (
                             <p className="aip-meta mt-2">{t('Showing built-in models only.')}</p>
                         )}
                     </div>
@@ -2005,53 +2080,166 @@ export const AmbiguousCredentialStoresCard = AmbiguousStoresCard;
  */
 const LightweightEmbeddingNotice: React.FC<{ onOpenEmbeddings?: () => void }> = ({ onOpenEmbeddings }) => {
     const t = useT();
-    const [state, setState] = React.useState<{ show: boolean; model?: string | null }>({ show: false });
+    const reduceMotion = useReducedMotion();
+    const [state, setState] = React.useState<{
+        show: boolean;
+        model?: string | null;
+        dimensions?: number | null;
+        location?: 'on-device' | 'cloud' | 'unknown';
+        cloudAllowed: boolean;
+    }>({ show: false, cloudAllowed: true });
+    // Dismissal is two steps: play the collapse, THEN unmount. Without the
+    // second state the card would vanish on click and the panel would snap up
+    // into the hole.
+    const [leaving, setLeaving] = React.useState(false);
+    const leaveTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
     React.useEffect(() => {
         let cancelled = false;
         (async () => {
             try {
                 const s = await window.electronAPI.getEmbeddingStatus?.();
-                if (!cancelled && s?.shouldWarn) setState({ show: true, model: s.active?.model });
+                if (!cancelled && s?.shouldWarn) setState({
+                    show: true,
+                    model: s.active?.model,
+                    dimensions: s.active?.dimensions,
+                    location: s.active?.location,
+                    // Never dangle a managed cloud key at someone whose scope
+                    // forbids cloud embeddings — for them the only real advice
+                    // is a stronger LOCAL model.
+                    cloudAllowed: s.scopeAllowsCloud !== false,
+                });
             } catch { /* best-effort notice */ }
         })();
         return () => { cancelled = true; };
     }, []);
 
+    React.useEffect(() => () => { if (leaveTimer.current) clearTimeout(leaveTimer.current); }, []);
+
     if (!state.show) return null;
 
+    const dismiss = async () => {
+        // Persist FIRST: the animation is decoration, the acknowledgement is the
+        // thing that must survive a close mid-transition.
+        await window.electronAPI.acknowledgeLightweightEmbeddings?.(true);
+        // Reduced motion squashes the transition to 0.01ms panel-wide, so a
+        // 160ms timer would just leave an invisible card holding its space.
+        if (reduceMotion) { setState(s => ({ ...s, show: false })); return; }
+        setLeaving(true);
+        leaveTimer.current = setTimeout(() => setState(s => ({ ...s, show: false })), 170);
+    };
+
+    const detail = [
+        // "-d" is a unit, not prose: it stays out of the translation catalogue.
+        state.dimensions ? `${state.dimensions}-d` : null,
+        state.location === 'on-device' ? t('On-device') : state.location === 'cloud' ? t('Cloud') : null,
+    ].filter(Boolean).join(' · ');
+
     return (
-        <div className="aip-card p-5 space-y-3">
-            <div className="flex items-start gap-3">
-                {/* One status primitive, as everywhere else in this panel. */}
-                <AipBadge tone="warn" label={t('Embeddings')} />
-                <div className="min-w-0">
-                    <p className="text-xs aip-hero font-medium">
-                        {t('Your AI provider is configured, but retrieval still uses a lightweight embedding model')}
-                    </p>
-                    <p className="text-[11px] aip-muted mt-1 leading-relaxed">
-                        {t('Natively embeds your files with')} <span className="aip-mono">{state.model || 'MiniLM'}</span>{t('. It may give weaker code and project retrieval than newer embedding models, which can affect answer quality even when your AI provider is excellent.')}
-                    </p>
-                    <p className="text-[11px] aip-muted mt-1 leading-relaxed">
-                        {t('For better results, choose a stronger local embedding model, or use a Natively API key, which includes managed embeddings.')}
-                    </p>
+        // Three nested boxes, each load-bearing: the grid wrapper animates,
+        // the bare item is the only thing that can actually reach zero height
+        // (see .aip-dismissable), and pt-5 inside it puts the card's leading gap
+        // INSIDE the collapsing track. The inline margin opts the wrapper out of
+        // the parent space-y, whose margin would survive the collapse and land
+        // as a 20px jump at unmount.
+        //
+        // Measured consequence, accepted: the header's own 8px bottom margin
+        // (the subtitle's mb-2) escapes and collapses against this wrapper's
+        // zero margin, so the gap ABOVE the card reads 28px where every other
+        // card gap is 20px. A grid container never self-collapses, so no
+        // arrangement of margins here can be both jump-free on exit and exactly
+        // 20px at rest — and 8px of extra air before an interruption is the
+        // cheaper of the two errors.
+        <div
+            className="aip-dismissable"
+            data-leaving={leaving ? 'true' : 'false'}
+            style={{ marginTop: 0 }}
+        >
+          {/* Bare grid item: anything with padding or a border here floors the
+              collapse at that box's own height. */}
+          <div>
+            <div className="pt-5">
+            {/* No entrance animation of its own. This wrapper is a direct child
+                of `[data-settings-stagger]`, so `settings-stagger-in` (220ms,
+                the same ease-out) already plays when the card is inserted —
+                which is the moment that matters here, since the card mounts a
+                beat after the panel does, on an IPC round-trip. Adding
+                `.aip-panel-fade` underneath would be two entrances for one
+                arrival. */}
+            <div className="aip-card p-5 space-y-3">
+                {/* Provider-card anatomy, verbatim: 26px tile, 13px title, one
+                    status badge, 11px description hanging off the tile gutter.
+                    That shape is what makes a card in this panel look like it
+                    belongs to this panel. `.aip-tile--mark` is the NEUTRAL tile
+                    (button fill, hairline border, currentColor glyph) rather
+                    than the brand-tinted monogram — there is no brand here. */}
+                <div className="flex items-start gap-3">
+                    <span className="aip-tile aip-tile--mark" aria-hidden="true">
+                        <Boxes size={16} strokeWidth={1.75} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <p className="aip-card-title">{t('Retrieval still uses a lightweight model')}</p>
+                            {/* One status primitive, as everywhere else here. */}
+                            <AipBadge tone="warn" label={t('Embeddings')} />
+                        </div>
+                        {/* Two plain sentences: the stake first, then the fix.
+                            No em-dash aside — a parenthetical inside an 11px
+                            line is a speed bump, and it was carrying the part
+                            the reader most needs.
+                            It also no longer sells the Natively key. Embeddings
+                            run on any provider in the catalogue (OpenAI, Gemini,
+                            Voyage, OpenRouter, Ollama, a custom endpoint), so
+                            naming one of them here was both a plug and wrong. */}
+                        <p className="aip-meta mt-1">
+                            {state.cloudAllowed
+                                ? t('Every answer is built on what retrieval finds. A stronger embedding model finds your code and documents more accurately, locally or through any provider you have set up.')
+                                : t('Every answer is built on what retrieval finds. A stronger local embedding model finds your code and documents more accurately.')}
+                        </p>
+                    </div>
+                </div>
+                {/* The model as a well, not as prose. It is the evidence behind
+                    the word "lightweight", so it gets the panel's recessed
+                    surface and its real numbers — 384 dimensions is what makes
+                    the claim checkable instead of an assertion. */}
+                <div className="aip-well px-3 py-2 flex items-center justify-between gap-3">
+                    <span className="aip-mono truncate">{state.model || 'MiniLM'}</span>
+                    {detail && <span className="aip-count shrink-0">{detail}</span>}
+                </div>
+                {/* The Antigravity/Codex action bar, verbatim: `flex-1` +
+                    data-size="row" on the action, `shrink-0` + the same row
+                    height beside it. Two auto-width pills left-aligned under a
+                    576px card left half the row empty and read as leftovers;
+                    a filled 34px bar reads as the card's footer, and it is the
+                    shape this panel already uses for a card's primary action.
+                    NEUTRAL, like every button here. Not data-variant="accent":
+                    the accent tint is periwinkle in this panel's token scope,
+                    and both sign-in bars refuse it for exactly that reason.
+                    `ghost` is not the answer for the dismiss either: no border,
+                    no fill, and this dismissal is permanent, so an escape hatch
+                    that reads as a caption is an unstoppable warning from the
+                    other side. Width and order carry the hierarchy. */}
+                <div className="aip-provider-row">
+                    <button
+                        type="button"
+                        className="aip-btn flex-1"
+                        data-size="row"
+                        onClick={() => onOpenEmbeddings?.()}
+                    >
+                        {t('Choose an embedding model')}
+                    </button>
+                    <button
+                        type="button"
+                        className="aip-btn shrink-0"
+                        data-size="row"
+                        onClick={dismiss}
+                    >
+                        {t('Keep MiniLM')}
+                    </button>
                 </div>
             </div>
-            <div className="flex flex-wrap gap-2 pl-1">
-                <button type="button" className="aip-btn" onClick={() => onOpenEmbeddings?.()}>
-                    {t('Configure embedding model')}
-                </button>
-                <button
-                    type="button"
-                    className="aip-btn"
-                    onClick={async () => {
-                        await window.electronAPI.acknowledgeLightweightEmbeddings?.(true);
-                        setState({ show: false });
-                    }}
-                >
-                    {t('Continue with MiniLM')}
-                </button>
             </div>
+          </div>
         </div>
     );
 };
@@ -2146,14 +2334,17 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
     const [confirmBusy, setConfirmBusy] = useState(false);
     const [activeTab, setActiveTab] = useState<ProviderTabId>('cloud');
-    // Index drives the sliding pill's translate; -1 can't happen (state is typed
-    // to the tab ids) but Math.max keeps a bad persisted value from shifting it off-track.
+    // Index drives the pill's spring target; -1 can't happen (state is typed to
+    // the tab ids) but Math.max keeps a bad persisted value from shifting it off-track.
     const activeTabIndex = Math.max(0, PROVIDER_TABS.findIndex((tab) => tab.id === activeTab));
     const [isRefreshingOllama, setIsRefreshingOllama] = useState(false);
     // Roving tabindex: only the selected tab is a tab stop, so Arrow/Home/End
     // are the ONLY way to reach the other two. Without this a keyboard user
     // landed on the active tab and could never leave it.
     const tabRefs = useRef<Partial<Record<ProviderTabId, HTMLButtonElement | null>>>({});
+    // Gates the tablist pill's spring only. Every other animation in this file
+    // is CSS and is already covered by the .aip-root reduced-motion block.
+    const prefersReducedMotion = useReducedMotion();
 
     const handleTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
         const navKeys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'];
@@ -2191,6 +2382,47 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     // without leaving Settings.
     const [codexOauthStatus, setCodexOauthStatus] = useState<{ signedIn: boolean; email?: string; expiresAt?: number }>({ signedIn: false });
     const [codexOauthInProgress, setCodexOauthInProgress] = useState(false);
+    const [antigravityStatus, setAntigravityStatus] = useState({ signedIn: false, inProgress: false, expiresAt: undefined as number | undefined });
+    const [antigravityModels, setAntigravityModels] = useState<{ id: string; label: string }[]>([]);
+    const [antigravityError, setAntigravityError] = useState('');
+    const [antigravityBusy, setAntigravityBusy] = useState(false);
+    const antigravityLoad = useRef(0);
+
+    useEffect(() => window.electronAPI.onAntigravityStatusChanged?.((status) => {
+        ++antigravityLoad.current;
+        setAntigravityStatus({ signedIn: status.signedIn, inProgress: status.inProgress, expiresAt: status.expiresAt });
+        if (!status.signedIn) setAntigravityModels([]);
+        setAntigravityError(status.error || '');
+    }), []);
+
+    const loadAntigravity = async (force = false) => {
+        const run = ++antigravityLoad.current;
+        if (!window.electronAPI.antigravityStatus) return;
+        try {
+            const status = await window.electronAPI.antigravityStatus();
+            const result = status.signedIn ? await window.electronAPI.antigravityModels(force) : null;
+            if (run !== antigravityLoad.current) return;
+            setAntigravityStatus({ signedIn: status.signedIn, inProgress: status.inProgress, expiresAt: status.expiresAt });
+            if (!status.signedIn || result?.success) setAntigravityModels(result?.models || []);
+            setAntigravityError(result?.error || status.error || '');
+        } catch {
+            if (run === antigravityLoad.current) setAntigravityError(t('Could not load Antigravity status. Try again.'));
+        }
+    };
+
+    const runAntigravityAction = async (action: 'login' | 'logout' | 'models') => {
+        setAntigravityBusy(true);
+        setAntigravityError('');
+        try {
+            if (action === 'models') { await loadAntigravity(true); return; }
+            const result = await (action === 'login' ? window.electronAPI.antigravityStartLogin()
+                : window.electronAPI.antigravitySignOut());
+            await loadAntigravity();
+            if (!result.success) setAntigravityError(result.error || t('Antigravity request failed. Try again.'));
+        } catch {
+            setAntigravityError(t('Could not reach Antigravity. Try again.'));
+        } finally { setAntigravityBusy(false); }
+    };
 
     // --- Default Model ---
     // UNION, not a pick. 3.8-flash is this branch's bump and main has no
@@ -2201,6 +2433,12 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     const [directAssistEnabled, setDirectAssistEnabled] = useState(false);
     const [directAssistBusy, setDirectAssistBusy] = useState(false);
     const [directAssistError, setDirectAssistError] = useState('');
+    // Persisted default is ON (see SettingsManager.getDirectAssistFallbackEnabled),
+    // so the local state starts true too — a slow/failed initial IPC read must
+    // not flash the toggle into an "off" state it does not actually have.
+    const [directAssistFallbackEnabled, setDirectAssistFallbackEnabled] = useState(true);
+    const [directAssistFallbackBusy, setDirectAssistFallbackBusy] = useState(false);
+    const [directAssistFallbackError, setDirectAssistFallbackError] = useState('');
     const [fastResponseMode, setFastResponseMode] = useState(false);
     const [credentialsLoaded, setCredentialsLoaded] = useState(false);
     const canUseFastMode = !!(hasStoredKey.groq || hasStoredKey.natively || (codexCliConfig.enabled && codexOauthStatus.signedIn));
@@ -2376,6 +2614,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 }
 
                 const fastMode = await window.electronAPI?.getGroqFastTextMode();
+                await loadAntigravity();
                 if (fastMode) setFastResponseMode(fastMode.enabled);
 
                 // @ts-ignore
@@ -2393,6 +2632,9 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
 
                 const directEnabled = await window.electronAPI?.getDirectAssistEnabled?.();
                 setDirectAssistEnabled(directEnabled === true);
+
+                const directFallbackEnabled = await window.electronAPI?.getDirectAssistFallbackEnabled?.();
+                setDirectAssistFallbackEnabled(directFallbackEnabled !== false);
 
                 // Check Ollama
                 checkOllama();
@@ -2422,6 +2664,12 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             unsubs.push(window.electronAPI.onDirectAssistEnabledChanged((enabled: boolean) => {
                 setDirectAssistEnabled(enabled === true);
                 setDirectAssistError('');
+            }));
+        }
+        if (window.electronAPI?.onDirectAssistFallbackEnabledChanged) {
+            unsubs.push(window.electronAPI.onDirectAssistFallbackEnabledChanged((enabled: boolean) => {
+                setDirectAssistFallbackEnabled(enabled !== false);
+                setDirectAssistFallbackError('');
             }));
         }
         if (window.electronAPI?.onCredentialsChanged) {
@@ -2469,6 +2717,19 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         // modelAvailable() in ipcHandlers.ts compares against; storing the bare name
         // would make the two surfaces disagree and the filter would silently no-op.
         if (provider === 'litellm') litellmModels.forEach(m => push(`litellm/${m}`, litellmModelLabel(m)));
+        // Antigravity is the same shape of problem as LiteLLM: no preset table, and
+        // `cloudFetchedModels` is written only from getCloudFetchedModels(), which
+        // covers the key-backed providers and never the OAuth ones. Without this the
+        // universe is EMPTY, and handleToggleModel's "empty allow-list means all"
+        // branch then materialises `universe` — nothing — so un-ticking one row
+        // persisted an allow-list containing ONLY that row. Measured before the fix:
+        // un-ticking the 2nd of 4 models took the summary from "All 4" to "1 / 4" and
+        // moved the default onto the row just un-ticked. handleBulkToggleModels reads
+        // the same universe and had the same landmine.
+        //
+        // Prefixed, because `antigravity:<id>` is the form the allow-list, the picker
+        // and modelAvailable() in ipcHandlers.ts all compare against.
+        if (provider === 'antigravity') antigravityModels.forEach(m => push(`antigravity:${m.id}`, m.label || m.id));
         (cloudFetchedModels[provider] || []).forEach(m => push(m.id, m.label || m.id));
         // Allow-listed ids with no catalog entry still get a row, labelled as best we can.
         // LiteLLM ids are proxy literals, so they take the segment label rather than
@@ -2477,7 +2738,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         (cloudEnabledModels[provider] || []).forEach(id =>
             push(id, provider === 'litellm' ? litellmModelLabel(id) : prettifyModelId(id)));
         return out;
-    }, [cloudFetchedModels, cloudEnabledModels, litellmModels]);
+    }, [cloudFetchedModels, cloudEnabledModels, litellmModels, antigravityModels]);
 
     const buildAvailableModelOptions = (): { id: string; name: string }[] => {
         const opts: { id: string; name: string }[] = [];
@@ -2513,6 +2774,12 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 }
             });
         }
+        if (antigravityStatus.signedIn && isProviderEnabled('antigravity')) {
+            antigravityModels.forEach(({ id, label }) => {
+                const selectorId = `antigravity:${id}`;
+                if (isModelEnabled('antigravity', selectorId)) opts.push({ id: selectorId, name: `${label} (Antigravity)` });
+            });
+        }
         if (hasStoredKey.litellm && isProviderEnabled('litellm')) {
             // Same allow-list gate the cloud providers get above. Without it the proxy's
             // full catalogue reaches the picker while modelAvailable() filters it, and
@@ -2538,12 +2805,14 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     // changes instead of waiting for a failing request to discover stale state.
     useEffect(() => {
         if (!credentialsLoaded) return;
+        if (defaultModel.startsWith('antigravity:') && antigravityStatus.signedIn && antigravityError) return;
         const opts = buildAvailableModelOptions();
         if (!defaultModel || opts.some(o => o.id === defaultModel) || opts.length === 0) return;
-        const next = opts[0].id;
+        const next = (defaultModel.startsWith('antigravity:')
+            ? opts.find(option => option.id.startsWith('antigravity:'))?.id : undefined) || opts[0].id;
         setDefaultModel(next);
         window.electronAPI?.setDefaultModel?.(next).catch(console.error);
-    }, [credentialsLoaded, defaultModel, hasStoredKey, preferredModels, isCodexReady, codexCliConfig.model, customProviders, ollamaModels, litellmModels, disabledProviders, cloudEnabledModels]);
+    }, [credentialsLoaded, defaultModel, hasStoredKey, preferredModels, isCodexReady, codexCliConfig.model, customProviders, ollamaModels, litellmModels, disabledProviders, cloudEnabledModels, antigravityStatus.signedIn, antigravityModels, antigravityError]);
 
     // Load LiteLLM model IDs only when the proxy is configured. The active-model
     // selector should not expose stale `litellm/...` choices after the proxy is
@@ -2720,6 +2989,55 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             setPreferredModels(prevPreferred);
             setModelSaveError(p => ({ ...p, [provider]: true }));
             setTimeout(() => setModelSaveError(p => ({ ...p, [provider]: false })), 4000);
+        }
+    };
+
+    /**
+     * Antigravity's "Set default" promotes a model to the APP's active model,
+     * not to a per-provider preferred model.
+     *
+     * handleSetDefaultModel writes `preferredModels[provider]`, which persists as
+     * `<provider>PreferredModel`. That is a dead end here: PreferredModelProvider
+     * is gemini|groq|openai|claude|deepseek|nvidia_nim|litellm, StoredCredentials
+     * has no antigravityPreferredModel field, and the only reader in the codebase
+     * is litellm's. Wiring the button there would move a badge and change nothing —
+     * worse than no button.
+     *
+     * `antigravity:<id>` IS a valid app default: buildAvailableModelOptions emits
+     * those ids and the fallback effect above already handles them. So this sets
+     * the same state the Active Model select at the top of the panel sets, which
+     * is also why the two now agree on screen.
+     *
+     * Keeps handleSetDefaultModel's invariant — the default is ALWAYS allow-listed,
+     * or the picker would refuse to show the model the app defaults to — and the
+     * same ordering: allow-list first, because "allow-listed but not default" is a
+     * coherent resting state and "default but not allow-listed" is the one being
+     * abolished.
+     */
+    const handleSetAntigravityDefault = async (modelId: string) => {
+        const prevEnabled = cloudEnabledModels;
+        const prevDefault = defaultModel;
+        const current = cloudEnabledModels['antigravity'] || [];
+        // An empty allow-list already means "all", so there is nothing to add.
+        const needsAllow = current.length > 0 && !current.includes(modelId);
+        const nextList = needsAllow ? [...current, modelId] : current;
+
+        if (needsAllow) setCloudEnabledModelsState(p => ({ ...p, antigravity: nextList }));
+        setDefaultModel(modelId);
+
+        try {
+            if (needsAllow) {
+                const r = await window.electronAPI?.setCloudEnabledModels?.('antigravity', nextList);
+                if (r && r.success === false) throw new Error(r.error || 'allow-list write failed');
+            }
+            // @ts-ignore - persist as default + update runtime + broadcast
+            await window.electronAPI?.setDefaultModel(modelId);
+        } catch (e) {
+            console.error('Failed to set Antigravity default model:', e);
+            setCloudEnabledModelsState(prevEnabled);
+            setDefaultModel(prevDefault);
+            setModelSaveError(p => ({ ...p, antigravity: true }));
+            setTimeout(() => setModelSaveError(p => ({ ...p, antigravity: false })), 4000);
         }
     };
 
@@ -2919,13 +3237,26 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         try {
             // @ts-ignore
             const models = await window.electronAPI?.getAvailableOllamaModels?.();
-            if (models && models.length > 0) {
-                setOllamaModels(models);
+            const usable = Array.isArray(models) ? models : [];
+            setOllamaModels(usable);
+
+            if (usable.length > 0) {
                 setOllamaStatus('detected');
             } else {
-                // Silent failure on background checks
-                // Only set not-found if we haven't detected it yet
-                if (ollamaStatus !== 'detected') {
+                // An empty list is NOT proof the daemon is missing. This handler
+                // answers with generation-capable models, and Natively itself
+                // pulls nomic-embed-text for retrieval — so a perfectly healthy
+                // Ollama holding only that embedder lands here. Reporting "Not
+                // found" would offer Auto-Fix, whose force-restart path can
+                // `kill -9` an app-managed daemon that is working fine.
+                // Ask the daemon directly instead; 'detected' with an empty list
+                // already has its own copy ("running but no models found").
+                let reachable = false;
+                try { reachable = Boolean(await window.electronAPI?.isOllamaReachable?.()); } catch { /* treated as unreachable */ }
+                if (reachable) {
+                    setOllamaStatus('detected');
+                } else if (ollamaStatus !== 'detected') {
+                    // Only set not-found if we haven't detected it yet
                     setOllamaStatus('not-found');
                 }
             }
@@ -3378,7 +3709,6 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         // in-tab panel switch. `.aip-root`'s own reduced-motion guard (~line 841)
         // already neutralises both.
         <div className="aip-root space-y-5 pb-10" data-theme={theme} data-settings-stagger>
-            <LightweightEmbeddingNotice onOpenEmbeddings={onNavigate ? () => onNavigate('embedding') : undefined} />
             <AmbiguousStoresCard />
             {confirmCopy && (
                 <ConfirmDialog
@@ -3401,6 +3731,14 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 </p>
             </header>
 
+            {/* Below the header, not above it. This is an advisory about one
+                setting, and rendering it first opened the whole panel on a
+                yellow warning with no title above it. AmbiguousStoresCard stays
+                at the top on purpose: a credential-store conflict is an alarm
+                about what the panel is showing you, not advice about a setting
+                inside it. */}
+            <LightweightEmbeddingNotice onOpenEmbeddings={onNavigate ? () => onNavigate('embedding') : undefined} />
+
             <div className="aip-card p-5 flex items-center justify-between gap-4">
                     <div className="min-w-0">
                         <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('Active Model')}</label>
@@ -3418,48 +3756,6 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 </div>
 
             <div className="aip-card p-5 flex items-center justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                            <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('Direct Assist')}</label>
-                            <AipBadge tone="info" label={t('Beta')} />
-                        </div>
-                        <p className="text-[10px] aip-muted mt-0.5">
-                            {t('Sends your current typed, spoken, screenshot, and page input straight to the active model without meeting retrieval or answer rewriting.')}
-                        </p>
-                        {directAssistError && (
-                            <p className="text-[10px] aip-danger-fg mt-1" role="alert">{directAssistError}</p>
-                        )}
-                    </div>
-                    <AipSwitch
-                        checked={directAssistEnabled}
-                        disabled={directAssistBusy}
-                        label={t('Direct Assist')}
-                        onChange={async () => {
-                            if (directAssistBusy) return;
-                            const previous = directAssistEnabled;
-                            const next = !previous;
-                            setDirectAssistBusy(true);
-                            setDirectAssistError('');
-                            setDirectAssistEnabled(next);
-                            try {
-                                const result = await window.electronAPI?.setDirectAssistEnabled?.(next);
-                                if (!result?.success) {
-                                    setDirectAssistEnabled(previous);
-                                    setDirectAssistError(result?.error || t('Could not update Direct Assist.'));
-                                }
-                            } catch (error) {
-                                setDirectAssistEnabled(previous);
-                                setDirectAssistError(
-                                    error instanceof Error ? error.message : t('Could not update Direct Assist.'),
-                                );
-                            } finally {
-                                setDirectAssistBusy(false);
-                            }
-                        }}
-                    />
-                </div>
-
-<div className="aip-card p-5 flex items-center justify-between gap-4">
                     <div className="min-w-0">
                         <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('AI Response Language')}</label>
                         <p className="text-[10px] aip-muted mt-0.5">
@@ -3507,16 +3803,103 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     </div>
                 </div>
 
+            <div className="aip-card p-5 flex items-center justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                            <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('Direct Assist')}</label>
+                            <AipBadge tone="info" label={t('Beta')} />
+                        </div>
+                        <p className="text-[10px] aip-muted mt-0.5">
+                            {t('Sends your current typed, spoken, screenshot, and page input straight to the active model without meeting retrieval or answer rewriting.')}
+                        </p>
+                        {directAssistError && (
+                            <p className="text-[10px] aip-danger-fg mt-1" role="alert">{directAssistError}</p>
+                        )}
+                    </div>
+                    <AipSwitch
+                        checked={directAssistEnabled}
+                        disabled={directAssistBusy}
+                        label={t('Direct Assist')}
+                        onChange={async () => {
+                            if (directAssistBusy) return;
+                            const previous = directAssistEnabled;
+                            const next = !previous;
+                            setDirectAssistBusy(true);
+                            setDirectAssistError('');
+                            setDirectAssistEnabled(next);
+                            try {
+                                const result = await window.electronAPI?.setDirectAssistEnabled?.(next);
+                                if (!result?.success) {
+                                    setDirectAssistEnabled(previous);
+                                    setDirectAssistError(result?.error || t('Could not update Direct Assist.'));
+                                }
+                            } catch (error) {
+                                setDirectAssistEnabled(previous);
+                                setDirectAssistError(
+                                    error instanceof Error ? error.message : t('Could not update Direct Assist.'),
+                                );
+                            } finally {
+                                setDirectAssistBusy(false);
+                            }
+                        }}
+                    />
+                </div>
+
+            <div
+                    className={`aip-card p-5 flex items-center justify-between gap-4 ${!directAssistEnabled ? 'opacity-50 grayscale' : ''}`}
+                    title={!directAssistEnabled ? t('Requires Direct Assist to be enabled') : ''}
+                >
+                    <div className="flex-1 min-w-0">
+                        <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('Fall back to another provider')}</label>
+                        <p className="text-[10px] aip-muted mt-0.5">
+                            {t('If a Direct Assist provider fails, automatically retry with another configured provider instead of showing an error. Every switch is shown in the UI.')}
+                        </p>
+                        {directAssistFallbackError && (
+                            <p className="text-[10px] aip-danger-fg mt-1" role="alert">{directAssistFallbackError}</p>
+                        )}
+                    </div>
+                    <AipSwitch
+                        checked={directAssistFallbackEnabled}
+                        disabled={directAssistFallbackBusy || !directAssistEnabled}
+                        label={t('Fall back to another provider')}
+                        onChange={async () => {
+                            if (directAssistFallbackBusy || !directAssistEnabled) return;
+                            const previous = directAssistFallbackEnabled;
+                            const next = !previous;
+                            setDirectAssistFallbackBusy(true);
+                            setDirectAssistFallbackError('');
+                            setDirectAssistFallbackEnabled(next);
+                            try {
+                                const result = await window.electronAPI?.setDirectAssistFallbackEnabled?.(next);
+                                if (!result?.success) {
+                                    setDirectAssistFallbackEnabled(previous);
+                                    setDirectAssistFallbackError(result?.error || t('Could not update Direct Assist fallback.'));
+                                }
+                            } catch (error) {
+                                setDirectAssistFallbackEnabled(previous);
+                                setDirectAssistFallbackError(
+                                    error instanceof Error ? error.message : t('Could not update Direct Assist fallback.'),
+                                );
+                            } finally {
+                                setDirectAssistFallbackBusy(false);
+                            }
+                        }}
+                    />
+                </div>
+
 <div
                     className={`aip-card p-5 flex items-center justify-between gap-4 ${!canUseFastMode ? 'opacity-50 grayscale' : ''}`}
                     title={!canUseFastMode ? t("Requires Groq, Natively API, or Codex CLI to be configured") : ""}
                 >
                     <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                            <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('Fast Response Mode')}</label>
-                            <AipBadge tone="info" label={t('New')} />
-                            {!canUseFastMode && <AipBadge tone="warn" label={t('Needs Groq')} />}
-                        </div>
+                        {/* No "Needs Groq" badge. It named ONE of the three
+                            providers that satisfy canUseFastMode (Groq, Natively
+                            API, Codex CLI), so it read as a hard Groq dependency
+                            that does not exist — and the line below already
+                            states the real requirement in full, as does the
+                            card's title. A badge carries only what no other
+                            control already says. */}
+                        <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('Fast Response Mode')}</label>
                         <p className="text-[10px] aip-muted mt-0.5">{t('Uses the fastest available provider instead of your selected model.')}</p>
                         {!canUseFastMode && (
                             <p className="text-xs aip-warn-fg mt-0.5 font-medium">{t('Requires Groq, Natively API, or Codex CLI to be configured.')}</p>
@@ -3550,31 +3933,56 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 a roving-tabindex key handler (see handleTabKeyDown) — without it a
                 keyboard user landed on the active tab and could never leave it.
 
-                Motion matches the Plans & Billing tier switcher: the selection is
-                one absolutely-positioned pill translated across a fixed-width
-                track, so only `transform` animates and the work stays on the
-                compositor. The tabs themselves never restyle their background —
-                which is what stops the four-way colour swap that a per-button
-                `bg` transition produces. */}
+                Motion is the meeting-notes Summary/Transcript/Usage switcher's
+                (MeetingDetails.tsx): the same framer-motion spring, stiffness 400
+                / damping 30. Measured here: 2.8% positional overshoot, settled by
+                ~640ms, and on an interrupt at +100ms the pill goes 32 -> 23 -> 48
+                -> 46 px/frame — it keeps its speed instead of restarting from
+                rest, which is what the old `transition-transform` did (a fresh
+                full duration eased in from zero velocity, every time). That
+                interruption behaviour is the part that actually reads as "the
+                same switcher"; the easing curve alone is not.
+
+                What is deliberately NOT copied is MeetingDetails' `layoutId`
+                shared-layout element. This pill is ONE node that never unmounts,
+                springing `x` across the track. The reason is a real regression the
+                layoutId version caused: switching tabs from a scrolled position
+                snapped the panel back to the top. No code writes scrollTop (a
+                patched setter caught zero writes) — layout projection forces a
+                measure pass around the panel unmount/mount, the scroller's content
+                transiently collapses below scrollTop + clientHeight, and Chromium
+                clamps. Measured in the harness: scrollTop 260 -> 0 with layoutId,
+                260 -> 260 with this version, same spring in both. `overflow-anchor:
+                none` on SettingsOverlay's scroller means nothing restores it.
+
+                Still transform-only, and the tabs themselves still never restyle
+                their background — which is what stops the three-way colour swap
+                that a per-button `bg` transition produces. Only the label colour
+                crossfades, from `.aip-tab`'s own CSS transition.
+
+                The track's `overflow-hidden` is GONE, and that is load-bearing:
+                the spring overshoots by ~13px on the ~465px cloud->privacy hop
+                while the track has only 4px of `p-1` plus a ~1px gap to spare, so
+                on the end tabs the clip shaved the pill's outer edge flat for ~4
+                frames — exactly the part of the meeting-notes feel being ported.
+                Nothing else needed the clip: the pill is inset and `rounded-md`
+                inside the track's `rounded-lg`, and the labels self-truncate. */}
             <div
                 role="tablist"
                 aria-label={t('Provider groups')}
-                className="aip-tablist grid grid-cols-3 relative p-1 rounded-lg overflow-hidden"
+                className="aip-tablist grid grid-cols-3 relative p-1 rounded-lg"
             >
-                {/* Active sliding pill. duration-150 is what the Plans & Billing
-                    pill actually renders at — its `duration-220` is not a real
-                    Tailwind class (no 220 on the scale, and the config doesn't
-                    extend transitionDuration), so it is dropped and
-                    transition-transform's own 150ms default applies there.
-                    Bump both to duration-[220ms] together to get the timing that
-                    code originally intended. */}
-                <div
+                <motion.div
                     aria-hidden="true"
-                    className="absolute top-0 bottom-0 left-0 w-1/3 p-1 transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] will-change-transform motion-reduce:transition-none"
-                    style={{ transform: `translate3d(${activeTabIndex * 100}%, 0, 0)` }}
+                    className="absolute top-0 bottom-0 left-0 w-1/3 p-1 will-change-transform"
+                    initial={false}
+                    animate={{ x: `${activeTabIndex * 100}%` }}
+                    transition={prefersReducedMotion
+                        ? { duration: 0 }
+                        : { type: 'spring', stiffness: 400, damping: 30 }}
                 >
                     <div className="w-full h-full rounded-md aip-tab-pill" />
-                </div>
+                </motion.div>
 
                 {PROVIDER_TABS.map(({ id, label, Icon }) => (
                     <button
@@ -3657,92 +4065,208 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 </div>
             </div>
 
-            {/* Codex — ChatGPT subscription proxy */}
-            <div className="space-y-5">
+            {/* Google Antigravity */}
+            <div className="aip-card p-5 space-y-4">
                 <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-2.5 min-w-0">
-                        <AipProviderMark provider="codex" name="ChatGPT (Codex)" className="mt-0.5" />
+                    <div className="flex gap-3">
+                        <AipProviderMark provider="antigravity" name="Google Antigravity" className="mt-0.5" />
+                        <div>
+                            <h3 className="text-sm font-bold aip-hero mb-1">Google Antigravity</h3>
+                            <p className="text-xs aip-muted">{t('Sign in with Google to use your Antigravity models.')}</p>
+                        </div>
+                    </div>
+                    {/* Same switch every other provider header carries (Codex above,
+                        ProviderCard's key-backed providers below) — not an
+                        Enable/Disable button, which read as a different kind of
+                        control for the same state. Shown unconditionally, like
+                        Codex: ProviderCard gates its switch on `hasStoredKey`
+                        because there is nothing to hide before a key exists, but
+                        this provider's models are gated by sign-in, not a key, and
+                        the disabled flag is independently meaningful. */}
+                    <AipSwitch
+                        checked={!disabledProviders.includes('antigravity')}
+                        onChange={() => handleToggleProvider('antigravity', disabledProviders.includes('antigravity'))}
+                        label={`${disabledProviders.includes('antigravity') ? t('Enable') : t('Disable')} Google Antigravity`}
+                        title={disabledProviders.includes('antigravity') ? t('Enable provider') : t('Disable provider')}
+                    />
+                </div>
+                {/* No "Not connected" line: the sign-in bar directly below already
+                    says the account is not connected, so the label was a second
+                    copy of the same fact taking a row.
+                    The live region stays MOUNTED and is hidden instead of being
+                    conditionally rendered — a role="status" that mounts together
+                    with its first message is not reliably announced, and Tailwind's
+                    space-y uses `:not([hidden]) ~ :not([hidden])`, so a hidden node
+                    drops out of the spacing chain and leaves no gap. */}
+                <p className="text-xs aip-muted" role="status" hidden={!antigravityStatus.inProgress && !antigravityStatus.signedIn}>
+                    {antigravityStatus.inProgress ? t('Waiting for Google sign-in…')
+                        : antigravityStatus.signedIn ? t('Antigravity connected') : ''}
+                    {antigravityStatus.signedIn && antigravityStatus.expiresAt && ` · ${t('Refreshes automatically before')} ${new Date(antigravityStatus.expiresAt).toLocaleTimeString()}`}
+                </p>
+                {/* Primary action takes Codex's full-width row SHAPE (aip-btn
+                    flex-1, data-size="row") but NOT its data-variant="accent":
+                    the accent tint is periwinkle in this panel's token scope, and
+                    the card keeps the neutral button colour it already had.
+                    Cancel stays a compact ghost beside the in-flight bar rather
+                    than replacing it — Antigravity can abort a pending browser
+                    round-trip and Codex cannot, and that capability should not
+                    cost the shared shape. */}
+                {/* `.aip-provider-row`, the same class Groq / NVIDIA NIM / every
+                    ProviderCard action row uses — not an ad-hoc `flex flex-wrap gap-2`,
+                    which was 8px in both axes where that class is 12px column / 8px row.
+                    Reusing it keeps the two card families spaced identically instead of
+                    close enough to look like a mistake. */}
+                <div className="aip-provider-row">
+                    {antigravityStatus.inProgress ? (
+                        <>
+                            <button type="button" className="aip-btn flex-1" data-size="row" disabled>
+                                <Loader2 size={13} strokeWidth={1.75} className="aip-spinner" /> {t('Waiting for browser…')}
+                            </button>
+                            <button
+                                type="button"
+                                className="aip-btn shrink-0"
+                                data-size="row"
+                                data-variant="ghost"
+                                onClick={() => window.electronAPI.antigravityCancelLogin().catch(() => setAntigravityError(t('Could not cancel sign-in. Try again.')))}
+                            >{t('Cancel')}</button>
+                        </>
+                    ) : !antigravityStatus.signedIn ? (
+                        <button
+                            type="button"
+                            className="aip-btn flex-1"
+                            data-size="row"
+                            disabled={antigravityBusy}
+                            onClick={() => void runAntigravityAction('login')}
+                        >
+                            <ExternalLink size={13} strokeWidth={1.75} /> {t('Sign in with Google')}
+                        </button>
+                    ) : (<>
+                        {/* "Reload models" is gone from this row: AipModelList owns
+                           discovery, exactly as ProviderCard's comment says for the cloud
+                           cards. Two controls for one action is what that note warns about. */}
+                        <button type="button" className="aip-btn" onClick={() => void runAntigravityAction('logout')}>{t('Disconnect')}</button>
+
+                        {/* Beside Disconnect, not under it — the same row placement Groq,
+                            NVIDIA NIM and every other ProviderCard uses.
+
+                            It MUST be a direct child of this wrapping flex row: AipModelList
+                            is a fragment whose summary is `order-2` (so it lands after the
+                            order-0 buttons) and whose panel is `basis-full order-4` (so the
+                            panel wraps onto its own line). Outside a wrapping flex row those
+                            classes are inert and the panel squeezes — which is exactly what
+                            it did when this sat in a block below. The enclosing fragment is
+                            transparent to flex, so these stay direct children.
+
+                            Ids carry the `antigravity:` prefix because that is the form
+                            buildAvailableModelOptions and the allow-list already use; a bare
+                            id would tick a row that never matches at read time. Antigravity
+                            is not an opt-in provider (isOptInModelProvider is litellm-only),
+                            so an empty allow-list still means ALL models. */}
+                        {antigravityModels.length > 0 && !disabledProviders.includes('antigravity') && (
+                            <AipModelList
+                                models={antigravityModels.map(({ id, label }) => ({ id: `antigravity:${id}`, label }))}
+                                enabled={cloudEnabledModels['antigravity'] || []}
+                                onToggle={(modelId) => handleToggleModel('antigravity', modelId)}
+                                onReset={() => handleResetModels('antigravity')}
+                                defaultId={defaultModel.startsWith('antigravity:') ? defaultModel : undefined}
+                                onSetDefault={(modelId) => void handleSetAntigravityDefault(modelId)}
+                                error={modelSaveError['antigravity'] ? 'save-failed' : null}
+                                refreshing={antigravityBusy}
+                                onRefresh={() => void runAntigravityAction('models')}
+                                catalogIsComplete
+                            />
+                        )}
+                    </>)}
+                </div>
+                {/* The empty catalogue keeps its own Reload control. Discovery moved
+                    into AipModelList, which is gated on `antigravityModels.length > 0`
+                    — so in exactly the state that needs a retry there was none, and
+                    signing out and back in was the only way to re-run it. */}
+                {antigravityStatus.signedIn && antigravityModels.length === 0 && (
+                    <div className="space-y-1">
+                        <p className="text-xs aip-muted">{t('No Antigravity models currently have quota.')}</p>
+                        <button type="button" className="aip-btn" data-size="sm" disabled={antigravityBusy} onClick={() => void runAntigravityAction('models')}>
+                            <RefreshCw size={12} strokeWidth={1.75} className={antigravityBusy ? 'aip-spinner' : undefined} />
+                            {antigravityBusy ? t('Reloading…') : t('Reload models')}
+                        </button>
+                    </div>
+                )}
+                {antigravityError && <p className="text-xs aip-warn-fg" role="alert">{antigravityError}</p>}
+            </div>
+
+            {/* Codex — ChatGPT subscription proxy.
+
+                Same card shape as Google Antigravity above: ONE aip-card that owns
+                its provider header (mark + title + description + switch), then a
+                hidden-until-meaningful role="status" line, then the action row.
+                Previously the header sat OUTSIDE the card and the card repeated the
+                provider with a "ChatGPT Account" label — two nested sections for one
+                provider, and the only card on the panel shaped that way.
+
+                The account email moves from a dedicated `aip-well` into the status
+                line, which is where Antigravity puts the same fact; the well was the
+                third element competing to say "you are signed in". */}
+            <div className="aip-card p-5 space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                    <div className="flex gap-3 min-w-0">
+                        <AipProviderMark provider="codex" name="OpenAI Codex" className="mt-0.5" />
                         <div className="min-w-0">
-                        <h3 className="text-sm font-bold aip-hero mb-1">ChatGPT (Codex)</h3>
-                        <p className="text-xs aip-muted">{t('Use your ChatGPT Plus/Pro subscription as an AI provider — no API key needed.')}</p>
+                            <h3 className="text-sm font-bold aip-hero mb-1">OpenAI Codex</h3>
+                            <p className="text-xs aip-muted">{t('Use your ChatGPT Plus/Pro subscription as an AI provider.')}</p>
                         </div>
                     </div>
                     <AipSwitch
                         checked={!disabledProviders.includes('codex-cli')}
                         onChange={() => handleToggleProvider('codex-cli', disabledProviders.includes('codex-cli'))}
-                        label={`${disabledProviders.includes('codex-cli') ? t('Enable') : t('Disable')} Codex`}
+                        label={`${disabledProviders.includes('codex-cli') ? t('Enable') : t('Disable')} OpenAI Codex`}
                         title={disabledProviders.includes('codex-cli') ? t('Enable provider') : t('Disable provider')}
                     />
                 </div>
 
-                <div className="aip-card p-5 space-y-4">
-                    {/* Header row: title + sign-in state + actions — mirrors ProviderCard */}
-                    <div className="flex items-center justify-between gap-3 mb-2">
-                        <label className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide aip-hero">
-                            {t('ChatGPT Account')}
-                        </label>
-                        {codexOauthStatus.signedIn ? (
-                            <div className="flex items-center gap-2 shrink-0">
-                                <button
-                                    type="button"
-                                    onClick={handleCodexRefresh}
-                                    disabled={codexOauthInProgress}
-                                    className="aip-btn"
-                                    data-size="sm"
-                                    data-variant="ghost"
-                                    title={t("Refresh session")}
-                                >
-                                    <RefreshCw size={12} strokeWidth={1.75} />
-                                    <span className="uppercase tracking-wide">{t('Refresh')}</span>
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={handleCodexSignOut}
-                                    disabled={codexOauthInProgress}
-                                    className="aip-btn"
-                                    data-size="sm"
-                                    data-variant="ghost"
-                                >
-                                    <LogOut size={12} strokeWidth={1.75} />
-                                    <span className="uppercase tracking-wide">{t('Sign out')}</span>
-                                </button>
-                            </div>
-                        ) : null}
-                    </div>
+                {/* Mounted-but-hidden live region, same reasoning as Antigravity's. */}
+                <p className="text-xs aip-muted" role="status" hidden={!codexOauthInProgress && !codexOauthStatus.signedIn}>
+                    {codexOauthInProgress ? t('Waiting for browser…')
+                        : codexOauthStatus.signedIn
+                            ? `${t('Codex connected')}${codexOauthStatus.email ? ` · ${codexOauthStatus.email}` : ''}`
+                            : ''}
+                </p>
 
-                    {/* Sign-in area or signed-in account display */}
-                    {codexOauthStatus.signedIn ? (
-                        <div className="flex gap-2 mb-3">
-                            <div className="aip-well flex-1 min-w-0 px-3 py-2.5 text-xs aip-text flex items-center gap-2">
-                                <span className="aip-badge-dot aip-ok-fg" aria-hidden="true" />
-                                <span className="truncate">{codexOauthStatus.email || t('ChatGPT account connected')}</span>
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="flex gap-2 mb-3">
-                            <button
-                                type="button"
-                                onClick={() => handleCodexAuthAction('login')}
-                                disabled={codexOauthInProgress || codexAuthAction !== 'idle'}
-                                className="aip-btn flex-1"
-                                data-size="row"
-                                data-variant="accent"
-                            >
-                                {codexOauthInProgress || codexAuthAction === 'login'
-                                    ? <><Loader2 size={13} strokeWidth={1.75} className="aip-spinner" /> {t('Waiting for browser…')}</>
-                                    : <><ExternalLink size={13} strokeWidth={1.75} /> {t('Sign in with ChatGPT')}</>}
-                            </button>
-                        </div>
-                    )}
+                <div className="flex flex-wrap gap-2">
+                    {!codexOauthStatus.signedIn ? (
+                        /* Full-width row, and NEUTRAL: data-variant="accent" tints it
+                           periwinkle, which the Antigravity bar deliberately does not do. */
+                        <button
+                            type="button"
+                            onClick={() => handleCodexAuthAction('login')}
+                            disabled={codexOauthInProgress || codexAuthAction !== 'idle'}
+                            className="aip-btn flex-1"
+                            data-size="row"
+                        >
+                            {codexOauthInProgress || codexAuthAction === 'login'
+                                ? <><Loader2 size={13} strokeWidth={1.75} className="aip-spinner" /> {t('Waiting for browser…')}</>
+                                : <><ExternalLink size={13} strokeWidth={1.75} /> {t('Sign in with ChatGPT')}</>}
+                        </button>
+                    ) : <>
+                        {/* Plain aip-btn in a wrap row, matching Antigravity's
+                            Reload models / Disconnect pair. Glyphs kept: they cost
+                            nothing here and the two actions are easy to confuse. */}
+                        <button type="button" onClick={handleCodexRefresh} disabled={codexOauthInProgress} className="aip-btn" title={t("Refresh session")}>
+                            <RefreshCw size={13} strokeWidth={1.75} /> {t('Refresh')}
+                        </button>
+                        <button type="button" onClick={handleCodexSignOut} disabled={codexOauthInProgress} className="aip-btn">
+                            <LogOut size={13} strokeWidth={1.75} /> {t('Sign out')}
+                        </button>
+                    </>}
+                </div>
 
-                    {codexAuthMessage && (
-                        <p className={`text-[10px] mt-1.5 mb-2 ${codexAuthStatus === 'error' ? 'aip-danger-fg' : 'aip-ok-fg'}`}>
-                            {codexAuthMessage}
-                        </p>
-                    )}
+                {codexAuthMessage && (
+                    <p className={`text-xs ${codexAuthStatus === 'error' ? 'aip-danger-fg' : 'aip-ok-fg'}`} role="alert">
+                        {codexAuthMessage}
+                    </p>
+                )}
 
-                    {/* Model + settings — only shown once signed in */}
-                    {codexOauthStatus.signedIn && (
+                {/* Model + settings — only shown once signed in */}
+                {codexOauthStatus.signedIn && (
                         <>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 <CodexCliModelField
@@ -3846,7 +4370,6 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                             </div>
                         </>
                     )}
-                </div>
             </div>
 
             </div>
@@ -4101,8 +4624,20 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         </div>
                     )}
                     {ollamaStatus === 'detected' && ollamaModels.length === 0 && (
-                        <div className="text-xs aip-muted">
-                            {t('Ollama is running but no models found. Run `ollama pull llama3` to get started.')}
+                        <div className="flex flex-col gap-2">
+                            <div className="flex items-center gap-2">
+                                <AipBadge tone="ok" label={t('Running')} />
+                                <span className="text-xs aip-muted">{t('Ollama connected')}</span>
+                            </div>
+                            {/* "no models found" was true of the old raw list and
+                                is not true now: this list is generation-capable
+                                models, and a fresh install can hold exactly the
+                                nomic-embed-text Natively pulled for retrieval.
+                                Telling that user nothing is installed sends them
+                                to fix something that is not broken. */}
+                            <div className="text-xs aip-muted">
+                                {t('No model here can generate text yet. Embedding models, such as the one Natively uses for retrieval, cannot chat. Run `ollama pull qwen2.5:3b` to add one.')}
+                            </div>
                         </div>
                     )}
                 </div>

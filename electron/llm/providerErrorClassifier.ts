@@ -33,7 +33,7 @@ export interface ProviderErrorClassification {
 // A content-free clarification stall the model emits when it's confused/degraded.
 // MUST stay in sync with IntelligenceEngine's "Could you repeat that?" fallback and
 // the benchmark's stall quarantine.
-const STALL_RE = /^(?:\s*)(?:could you (?:please )?repeat|can you repeat|i(?:'m| am)? (?:sorry,? )?(?:i )?(?:didn'?t|did not) (?:catch|hear|get)|sorry,? (?:could|can) you|i want to make sure i (?:address|understand)|please (?:repeat|clarify|rephrase)|what (?:was|did) (?:the|you))/i;
+const STALL_RE = /^(?:\s*)(?:i couldn'?t generate an answer|the answer(?: about [^.]{1,60})? didn'?t come through|no answer came back|could you (?:please )?repeat|can you repeat|i(?:'m| am)? (?:sorry,? )?(?:i )?(?:didn'?t|did not) (?:catch|hear|get)|sorry,? (?:could|can) you|i want to make sure i (?:address|understand)|please (?:repeat|clarify|rephrase)|what (?:was|did) (?:the|you))/i;
 
 /** Is `text` a content-free clarification stall (not a real answer)? */
 export function isClarificationStall(text: string | null | undefined): boolean {
@@ -131,4 +131,43 @@ export function classifyProviderError(err: any, text?: string): ProviderErrorCla
   if (isClarificationStall(t)) return { kind: 'stall', isOutage: true, retryable: true, code: 'stall' };
 
   return { kind: 'none', isOutage: false, retryable: false, code: 'ok' };
+}
+
+/**
+ * The user-facing line for a PROVIDER failure on the What-To-Answer path, or
+ * null when the error is not a provider failure (2026-09-07).
+ *
+ * The engine's catch used to return the graceful "Could you repeat that?"
+ * retry for EVERY error — including a dead API key, a 429 and a network
+ * outage — so a provider problem read as the app not having heard the
+ * question. WhatToAnswerLLM already distinguishes those for its own stream
+ * failures; this is the same distinction, made once, for the engine's outer
+ * catch. Timeouts and empty streams keep the graceful retry: those already
+ * have their own deadline fallbacks and the retry wording is honest there.
+ */
+export function providerFailureUserMessage(err: unknown): string | null {
+  if (!err) return null;
+  const c = classifyProviderError(err);
+  const msg = String((err as { message?: unknown })?.message ?? err ?? '').toLowerCase();
+  const status = statusOf(err);
+  // The classifier's server/network buckets are deliberately broad for outage
+  // SCORING; for a user-facing claim require a concrete transport signal, so a
+  // plain programming error keeps the graceful retry instead of blaming the
+  // provider.
+  const transportSignal = status >= 500
+    || /\b5\d\d\b|internal server error|bad gateway|overloaded|unavailable|capacity|enotfound|econnreset|econnrefused|eai_again|etimedout|socket hang up|network|dns\b|fetch failed/.test(msg);
+  switch (c.kind) {
+    case 'auth':
+      return "I couldn't reach the AI provider — this looks like an API key or permission issue. Check your API keys / plan in Settings and try again.";
+    case 'rate_limit':
+      return 'The AI provider is rate-limiting requests right now. Give it a moment and try again.';
+    case 'overloaded':
+    case 'server_error':
+    case 'network':
+      return transportSignal
+        ? "The AI provider is unreachable or overloaded right now, so I couldn't generate an answer. Try again in a moment."
+        : null;
+    default:
+      return null;
+  }
 }

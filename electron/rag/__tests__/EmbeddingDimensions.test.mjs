@@ -31,10 +31,13 @@ describe('defaults', () => {
     assert.equal(p.space, 'gemini:gemini-embedding-2:3072');
   });
 
-  test('Natively-managed defaults to 3072, matching what the server now requests', () => {
+  test('Natively-managed is voyage-4 at 2048, matching what the server serves', () => {
+    // Not the same as the direct-Gemini provider above any more: /v1/embed
+    // serves voyage-4 to any request that names it, and this provider does.
     const p = new NativelyEmbeddingProvider('nk', {});
-    assert.equal(p.dimensions, 3072);
-    assert.equal(p.space, 'natively:gemini-embedding-2:3072');
+    assert.equal(p.model, 'voyage-4');
+    assert.equal(p.dimensions, 2048);
+    assert.equal(p.space, 'natively:voyage-4:2048');
   });
 
   test('the catalogue advertises the same defaults the providers use', () => {
@@ -42,7 +45,12 @@ describe('defaults', () => {
     const gem = cat.find(p => p.id === 'gemini').models.find(m => m.id === 'gemini-embedding-2');
     assert.equal(gem.dimensions, 3072);
     const nat = cat.find(p => p.id === 'natively').models[0];
-    assert.equal(nat.dimensions, 3072);
+    // Pinned to the PROVIDER's own constants, not to a literal: the panel and
+    // the provider disagreeing about which model stores the user's vectors is
+    // the exact drift this asserts against.
+    const provider = new NativelyEmbeddingProvider('nk', {});
+    assert.equal(nat.id, provider.model);
+    assert.equal(nat.dimensions, provider.dimensions);
   });
 });
 

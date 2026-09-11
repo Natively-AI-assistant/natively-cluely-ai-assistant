@@ -232,7 +232,9 @@ describe('option 2 — "Only answer from references" keeps every refusal', () =>
     setAll('only_answer_from_references');
     const r = await ask('What is my CGPA?', 'looking-for-work');
     assert.match(r.user, /has NO reference material attached, so there was nothing to search/);
-    assert.match(r.user, /do not answer from general knowledge as though it were sourced/);
+    // 2026-09-07 (always answer): the strict policy still names the gap and
+    // the remedy, but no longer forbids a clearly-marked general-knowledge answer.
+    assert.match(r.user, /still answer the question itself helpfully from general knowledge, clearly marked as general knowledge and never presented as sourced/);
     assert.match(r.user, /Profile Intelligence/);
   });
 });

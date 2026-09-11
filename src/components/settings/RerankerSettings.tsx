@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { motion } from 'framer-motion';
 import { AlertCircle, Check, ChevronDown, Cloud, Download, ExternalLink, Filter, FolderOpen, HardDrive, KeyRound, Loader2, Monitor, Puzzle, RefreshCw, Search, ShieldAlert, Trash2, X } from 'lucide-react';
 import { useT } from '../../i18n';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
@@ -85,7 +86,7 @@ const PlatformMark: React.FC = () => (
     </span>
 );
 
-type RerankerProvider = 'local' | 'openrouter' | 'jina';
+type RerankerProvider = 'local' | 'natively' | 'openrouter' | 'jina';
 type ModelGroup = 'recommended' | 'quality' | 'fast' | 'multimodal' | 'other';
 
 interface CatalogModel {
@@ -104,6 +105,7 @@ interface RerankerStatus {
     provider: RerankerProvider;
     openrouterModel: string | null;
     jinaModel: string | null;
+    nativelyModel: string | null;
     /** The model id for whichever hosted provider is selected. */
     hostedModel: string | null;
     candidateCount: number | null;
@@ -114,7 +116,7 @@ interface RerankerStatus {
     ineligibleMessage: string | null;
     builtIn: { id: string; name: string; bundled: boolean; cached?: boolean; available?: boolean };
     selectedLocal: { id: string; name: string } | null;
-    effective: { kind: 'local' | 'extension' | 'openrouter' | 'jina'; id: string | null };
+    effective: { kind: 'local' | 'extension' | 'natively' | 'openrouter' | 'jina'; id: string | null };
     lastTest: { at: string; model: string; latencyMs: number; ok: boolean; failure?: string } | null;
 }
 
@@ -313,7 +315,7 @@ const RerankerModelSelect: React.FC<FloatingSelectProps> = ({
     placeholder,
     disabled = false,
     className = '',
-    containerClassName = 'relative min-w-[200px] max-w-[320px] w-full sm:w-64',
+    containerClassName = 'relative min-w-[150px] max-w-[240px] w-full sm:w-48',
     ariaLabel,
     title,
     disabledHint,
@@ -357,7 +359,7 @@ const RerankerModelSelect: React.FC<FloatingSelectProps> = ({
             {isOpen && (
                 <div
                     role="listbox"
-                    className="aip-float aip-scroll-y aip-panel-fade absolute top-full right-0 mt-1.5 w-full min-w-[240px] z-50 max-h-64 p-1 custom-scrollbar shadow-2xl rounded-md border border-white/10 bg-[#161618]"
+                    className="aip-float aip-scroll-y aip-panel-fade absolute top-full right-0 mt-1.5 w-full min-w-[180px] z-50 max-h-64 p-1 custom-scrollbar shadow-2xl rounded-md border border-white/10 bg-[#161618]"
                 >
                     {options.map((option) => (
                         <button
@@ -388,6 +390,51 @@ const RerankerModelSelect: React.FC<FloatingSelectProps> = ({
     );
 };
 
+interface CandidatesSlidingTabsProps {
+    value: number;
+    choices: number[];
+    onChange: (choice: number) => void;
+}
+
+/**
+ * Tab switcher for candidate count using Framer Motion layoutId spring transition,
+ * matching MeetingDetails (Summary / Transcript / Usage) 1:1.
+ */
+const CandidatesSlidingTabs: React.FC<CandidatesSlidingTabsProps> = ({ value, choices, onChange }) => {
+    const layoutId = React.useId();
+    const theme = useResolvedTheme();
+    const isLight = theme === 'light';
+
+    return (
+        <div className={`p-1 rounded-xl inline-flex items-center gap-0.5 border shrink-0 ${isLight ? 'bg-[#E5E5EA] border-black/[0.04]' : 'bg-[#0D0D0F] border-white/[0.08]'}`}>
+            {choices.map((n) => {
+                const isSelected = value === n;
+                return (
+                    <button
+                        key={n}
+                        type="button"
+                        onClick={() => onChange(n)}
+                        className={`
+                            relative px-3 py-1 text-xs font-medium rounded-lg transition-colors duration-200 z-10 select-none
+                            ${isSelected ? (isLight ? 'text-black' : 'text-[#E9E9E9]') : (isLight ? 'text-black/60 hover:text-black' : 'text-white/40 hover:text-white/80')}
+                        `}
+                    >
+                        {isSelected && (
+                            <motion.div
+                                layoutId={`candidatesTabActive-${layoutId}`}
+                                className={`absolute inset-0 rounded-lg -z-10 shadow-sm ${isLight ? 'bg-white' : 'bg-[#3A3A3C]'}`}
+                                initial={false}
+                                transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                            />
+                        )}
+                        {n}
+                    </button>
+                );
+            })}
+        </div>
+    );
+};
+
 
 /**
  * What the panel shows before the first IPC reply lands.
@@ -404,6 +451,7 @@ const INITIAL_STATUS: RerankerStatus = {
     provider: 'local',
     openrouterModel: null,
     jinaModel: null,
+    nativelyModel: null,
     hostedModel: null,
     candidateCount: null,
     fallbackToLocal: false,
@@ -449,7 +497,7 @@ export const RerankerSettings: React.FC = () => {
     const [busyCatalogId, setBusyCatalogId] = useState<string | null>(null);
     const [catalogError, setCatalogError] = useState<string | null>(null);
     const [hostedProviders, setHostedProviders] = useState<Array<{
-        id: 'openrouter' | 'jina'; name: string; keyUrl: string; keyPlaceholder: string;
+        id: 'natively' | 'openrouter' | 'jina'; name: string; keyUrl: string; keyPlaceholder: string;
         staticCatalogue: boolean; hasApiKey: boolean;
         models: Array<{ id: string; label: string; note?: string; recommended?: boolean }>;
     }>>([]);
@@ -480,6 +528,14 @@ export const RerankerSettings: React.FC = () => {
         // switch that governs both. Models stay empty on this path — a name and
         // a key field is the useful degradation; the catalogue is not.
         setHostedProviders(cur => (cur.length ? cur : [{
+            // Natively is listed here for the same reason Jina is: leaving a
+            // provider out of THIS list is what makes its card vanish when
+            // discovery degrades, and the managed reranker is the one a customer
+            // can use without going and getting a second account.
+            id: 'natively', name: 'Natively',
+            keyUrl: 'https://natively.software', keyPlaceholder: 'natively_sk_…',
+            staticCatalogue: true, hasApiKey: false, models: [],
+        }, {
             id: 'openrouter', name: 'OpenRouter',
             keyUrl: 'https://openrouter.ai/keys', keyPlaceholder: 'sk-or-v1-…',
             staticCatalogue: false, hasApiKey: false, models: [],
@@ -592,7 +648,9 @@ export const RerankerSettings: React.FC = () => {
     }, [status?.builtIn.name, status?.hasApiKey, catalogModels, extensions, catalog, hostedProviders, t]);
 
     const activeOptionId = useMemo(() => {
-        if (status?.effective.kind === 'openrouter' || status?.effective.kind === 'jina') {
+        if (status?.effective.kind === 'natively'
+            || status?.effective.kind === 'openrouter'
+            || status?.effective.kind === 'jina') {
             return `${status.effective.kind}::${status.effective.id ?? ''}`;
         }
         if (status?.effective.kind === 'extension') return `extension::${status.effective.id ?? ''}`;
@@ -606,7 +664,13 @@ export const RerankerSettings: React.FC = () => {
         setBusyCatalogId(optionId);
         setCatalogError(null);
         try {
-            if (kind === 'openrouter') {
+            if (kind === 'natively') {
+                // Its own arm, not the trailing `else`. Without one, picking the
+                // managed reranker fell through to the local branch and silently
+                // set provider:'local' — the picker would show a selection the
+                // app was not using.
+                await window.electronAPI.setRerankerConfig?.({ provider: 'natively', nativelyModel: id });
+            } else if (kind === 'openrouter') {
                 await window.electronAPI.setRerankerConfig?.({ provider: 'openrouter', openrouterModel: id });
             } else if (kind === 'jina') {
                 await window.electronAPI.setRerankerConfig?.({ provider: 'jina', jinaModel: id });
@@ -636,7 +700,13 @@ export const RerankerSettings: React.FC = () => {
         if (!status) return '';
         const parts: string[] = [];
 
-        if (status.effective.kind === 'openrouter') {
+        if (status.effective.kind === 'natively') {
+            // Says where the text goes and what it costs, because both are the
+            // questions this option raises: it is hosted like the BYOK ones, but
+            // billed against the plan the user already pays for.
+            parts.push(t('Hosted'), t('Document text is sent to Natively'), t('Uses your plan\u2019s Knowledge allowance'));
+            if (status.lastTest?.ok) parts.push(`${Math.round(status.lastTest.latencyMs)} ms ${t('last test')}`);
+        } else if (status.effective.kind === 'openrouter') {
             parts.push(t('Hosted'), t('Document text is sent to OpenRouter'));
             if (status.lastTest?.ok) parts.push(`${Math.round(status.lastTest.latencyMs)} ms ${t('last test')}`);
         } else if (status.effective.kind === 'extension') {
@@ -1340,7 +1410,14 @@ export const RerankerSettings: React.FC = () => {
                 const draft = keyDrafts[p.id] ?? '';
                 const saving = savingKeyFor === p.id;
                 const saved = savedKeyFor === p.id;
-                const selectedModel = p.id === 'jina' ? status.jinaModel : status.openrouterModel;
+                const selectedModel = p.id === 'natively'
+                    ? status.nativelyModel
+                    : p.id === 'jina' ? status.jinaModel : status.openrouterModel;
+                // Natively runs on the API key the user already configured, so
+                // this card must not offer a key field. Rendering one would
+                // invite a paste that reranker:set-hosted-key now refuses
+                // ('not_byok'), and a Remove button that would delete nothing.
+                const byok = p.id !== 'natively';
                 // A live catalogue arrives from OpenRouter; a static one ships
                 // with the app and is listed even before a key exists, so the
                 // user can see what a key would buy them.
@@ -1357,21 +1434,36 @@ export const RerankerSettings: React.FC = () => {
                             <div className="ml-auto flex items-center gap-2 shrink-0">
                                 <AipBadge tone={hasKey ? 'ok' : 'warn'} label={hasKey ? t('Key set') : t('No key')} />
 
-                                <button
-                                    type="button"
-                                    className="aip-btn"
-                                    data-size="sm"
-                                    data-variant="ghost"
-                                    onClick={() => window.electronAPI.openExternal?.(p.keyUrl)}
-                                    title={`Get ${p.name} API Key`}
-                                >
-                                    <span className="uppercase tracking-wide">{t('Get Key')}</span>
-                                    <ExternalLink size={12} strokeWidth={1.75} />
-                                </button>
+                                {byok && (
+                                    <button
+                                        type="button"
+                                        className="aip-btn"
+                                        data-size="sm"
+                                        data-variant="ghost"
+                                        onClick={() => window.electronAPI.openExternal?.(p.keyUrl)}
+                                        title={`Get ${p.name} API Key`}
+                                    >
+                                        <span className="uppercase tracking-wide">{t('Get Key')}</span>
+                                        <ExternalLink size={12} strokeWidth={1.75} />
+                                    </button>
+                                )}
                             </div>
                         </div>
 
+                        {/* Not BYOK: say which key it uses and where that lives, rather
+                            than showing an input for a credential this card does not own. */}
+                        {!byok && (
+                            <div className="aip-provider-row">
+                                <p className="text-[11px] text-white/45 leading-relaxed">
+                                    {hasKey
+                                        ? t('Runs on your Natively API key. Reranking counts toward your plan\u2019s Knowledge allowance.')
+                                        : t('Requires a Natively API key. Add one in the Natively API section to use the managed reranker.')}
+                                </p>
+                            </div>
+                        )}
+
                         {/* API Key Credential Row matching EmbeddingSettings */}
+                        {byok && (
                         <div className="aip-provider-row">
                             <div className="aip-provider-field">
                                 <div className="aip-field">
@@ -1419,6 +1511,7 @@ export const RerankerSettings: React.FC = () => {
                                 )}
                             </div>
                         </div>
+                        )}
 
                         {/* Action Row: Test Connection & Model List Selector matching EmbeddingSettings */}
                         {(hasKey || models.length > 0) && (
@@ -1799,27 +1892,35 @@ export const RerankerSettings: React.FC = () => {
                 </div>
             </div>
 
-            {/* Provider Card 5: Candidates. The hosted fallback used to share this
-                card; it now sits under Active Reranker, where it belongs. */}
-            <div className="aip-card p-5">
-                <div className="space-y-1.5">
-                    <label className="block text-xs font-medium uppercase tracking-wide aip-hero">{t('Candidates to rerank')}</label>
-                    <div className="flex gap-2 flex-wrap">
-                        {CANDIDATE_CHOICES.map(n => (
-                            <button
-                                key={n}
-                                type="button"
-                                className="aip-btn"
-                                data-active={status.candidateCount === n ? 'true' : undefined}
-                                onClick={() => void setConfig({ candidateCount: n })}
-                            >
-                                {n}
-                            </button>
-                        ))}
+            {/* Provider Card 5: Candidates Selector — High-End Segmented Control */}
+            <div className="aip-card p-5 space-y-3">
+                <div className="flex items-center justify-between gap-4 flex-wrap sm:flex-nowrap">
+                    <div>
+                        <label className="block text-xs font-medium uppercase tracking-wide aip-hero">
+                            {t('Candidates to rerank')}
+                        </label>
+                        <p className="text-[10px] aip-muted mt-0.5">
+                            {t('Number of initial retrieved passages scored by the reranker.')}
+                        </p>
                     </div>
-                    <p className="text-[10px] aip-muted">
-                        {t('More candidates can improve the answer but cost more and take longer. Leave this alone unless you have a reason.')}
-                    </p>
+
+                    <CandidatesSlidingTabs
+                        value={status.candidateCount ?? 15}
+                        choices={CANDIDATE_CHOICES}
+                        onChange={(n) => void setConfig({ candidateCount: n })}
+                    />
+                </div>
+
+                <div className="pt-2 border-t border-white/5 flex items-center justify-between text-[10.5px] aip-muted">
+                    <span>
+                        {(status.candidateCount ?? 15) <= 5 && t('Fast & low latency — best for quick queries.')}
+                        {(status.candidateCount ?? 15) === 10 && t('Balanced speed and recall.')}
+                        {(status.candidateCount ?? 15) === 15 && t('Recommended default — high accuracy with manageable cost.')}
+                        {(status.candidateCount ?? 15) >= 20 && t('Deep recall — evaluates maximum context passages.')}
+                    </span>
+                    <span className="font-mono text-white/50 text-[9.5px]">
+                        {status.candidateCount ?? 15} {t('passages')}
+                    </span>
                 </div>
             </div>
 

@@ -2,11 +2,11 @@ import React, { useEffect, useRef } from 'react';
 import { useT } from '../i18n';
 import {
     Github, Twitter, Shield, Cpu, Database,
-    Heart, Linkedin, Instagram, Mail, MicOff, Star, Bug, Globe, Sparkles, Zap, Camera, LayoutGrid, User, Volume2, Activity, MessageSquare, Link, Smartphone, Calendar, ListTodo, Users, WifiOff, Send
+    Heart, Linkedin, Instagram, Mail, MicOff, Star, Bug, Globe, Sparkles, Zap, Camera, LayoutGrid, User, Volume2, Activity, MessageSquare, Link, Smartphone, Calendar, ListOrdered, Boxes, Users, WifiOff, Send
 } from 'lucide-react';
 import evinProfile from '../assets/evin.png';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
-import { getModifierSymbol } from '../utils/platformUtils';
+import { APP_FEATURE_VERSION } from '../utils/appVersion';
 
 interface AboutSectionProps { }
 
@@ -68,78 +68,78 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
 
             {/* What's New Section */}
             <div>
-                <h4 className="text-xs font-bold text-text-tertiary uppercase tracking-wider mb-2 px-1">{`What's New in v${appVersion}`}</h4>
+                <h4 className="text-xs font-bold text-text-tertiary uppercase tracking-wider mb-2 px-1">{`${t("What's New in")} v${APP_FEATURE_VERSION}`}</h4>
                 <div className="bg-bg-item-surface rounded-xl border border-border-subtle overflow-hidden">
-                    {/* 1. Auto Answer */}
+                    {/* 1. Direct Assist */}
                     <div className="p-3 border-b border-border-subtle bg-bg-card/50">
                         <div className="flex items-start gap-4">
                             <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-400 shrink-0">
                                 <Zap size={20} />
                             </div>
                             <div>
-                                <h5 className="text-sm font-bold text-text-primary mb-1">Auto Answer (Beta)</h5>
+                                <h5 className="text-sm font-bold text-text-primary mb-1">Direct Assist</h5>
                                 <p className="text-xs text-text-secondary leading-relaxed">
-                                    Answers appear on their own the moment the other person finishes a question. Natively judges whether an answer is actually wanted and stays silent when it isn't. Off by default — turn it on in General.
+                                    The model sees your last three minutes of conversation and your reference files verbatim — no retrieval, no summarising in between. Off by default; enable it in AI Providers.
                                 </p>
                             </div>
                         </div>
                     </div>
 
-                    {/* 2. A New Answer Engine */}
+                    {/* 2. Bring Your Own Reranker */}
                     <div className="p-3 border-b border-border-subtle bg-bg-card/50">
                         <div className="flex items-start gap-4">
                             <div className="w-10 h-10 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-400 shrink-0">
-                                <Cpu size={20} />
+                                <ListOrdered size={20} />
                             </div>
                             <div>
-                                <h5 className="text-sm font-bold text-text-primary mb-1">A New Answer Engine</h5>
+                                <h5 className="text-sm font-bold text-text-primary mb-1">Bring Your Own Reranker</h5>
                                 <p className="text-xs text-text-secondary leading-relaxed">
-                                    Answers now pick their source properly — your résumé, an uploaded document, the live conversation, or general knowledge — instead of blending them. Follow-ups keep the thread even after the topic changes.
+                                    Choose what picks the material behind your answers — hosted through Jina AI or OpenRouter, or run locally. Installs from Hugging Face in Settings › Reranker.
                                 </p>
                             </div>
                         </div>
                     </div>
 
-                    {/* 3. Meeting Notes, Rebuilt */}
+                    {/* 3. Providers That Fail Over */}
                     <div className="p-3 border-b border-border-subtle bg-bg-card/50">
                         <div className="flex items-start gap-4">
                             <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-400 shrink-0">
-                                <ListTodo size={20} />
+                                <Activity size={20} />
                             </div>
                             <div>
-                                <h5 className="text-sm font-bold text-text-primary mb-1">Meeting Notes, Rebuilt</h5>
+                                <h5 className="text-sm font-bold text-text-primary mb-1">Providers That Fail Over</h5>
                                 <p className="text-xs text-text-secondary leading-relaxed">
-                                    Summaries adapt to the kind of meeting you're in, get a real title instead of the first line of the transcript, and scale with meeting length. Plus editable speaker labels and a ready-to-send follow-up email draft.
+                                    A stalled provider no longer costs you the answer. OpenAI, Claude, DeepSeek, LiteLLM, NVIDIA NIM and custom endpoints now switch to a spare, or retry in parallel. Local models are untouched.
                                 </p>
                             </div>
                         </div>
                     </div>
 
-                    {/* 4. Browser Companion */}
+                    {/* 4. Lighter and Faster */}
                     <div className="p-3 border-b border-border-subtle bg-bg-card/50">
                         <div className="flex items-start gap-4">
                             <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-400 shrink-0">
-                                <Globe size={20} />
+                                <Cpu size={20} />
                             </div>
                             <div>
-                                <h5 className="text-sm font-bold text-text-primary mb-1">Browser Companion for Chrome</h5>
+                                <h5 className="text-sm font-bold text-text-primary mb-1">Lighter and Faster</h5>
                                 <p className="text-xs text-text-secondary leading-relaxed">
-                                    Press {getModifierSymbol('commandorcontrol')}+Y to pull the page you're looking at into your next answer — a job description, a coding problem, documentation. One click enables it everywhere.
+                                    Around a quarter less memory, and windows open faster. Each used to load the entire app — the tiny overlay toggle booted the Markdown and maths renderers just to draw a button.
                                 </p>
                             </div>
                         </div>
                     </div>
 
-                    {/* 5. Hindsight Long-Term Memory */}
+                    {/* 5. Choose Your Embedding Model */}
                     <div className="p-3 bg-bg-card/50">
                         <div className="flex items-start gap-4">
                             <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400 shrink-0">
-                                <Database size={20} />
+                                <Boxes size={20} />
                             </div>
                             <div>
-                                <h5 className="text-sm font-bold text-text-primary mb-1">Hindsight Long-Term Memory</h5>
+                                <h5 className="text-sm font-bold text-text-primary mb-1">Choose Your Embedding Model</h5>
                                 <p className="text-xs text-text-secondary leading-relaxed">
-                                    A local vector database that indexes your past meetings, profiles and documents, so Natively can recall what was said weeks ago — not just in this session. Pro, and opt-in from Settings.
+                                    Set what finds your material: Gemini, OpenAI, Voyage AI, OpenRouter, Ollama or any OpenAI-compatible endpoint, each with a live Test. In Settings › Embeddings.
                                 </p>
                             </div>
                         </div>

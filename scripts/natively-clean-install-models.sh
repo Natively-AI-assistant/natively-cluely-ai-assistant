@@ -166,10 +166,6 @@ MODELS_TO_DOWNLOAD=(
   "Xenova/all-MiniLM-L6-v2/tokenizer_config.json"
   "Xenova/all-MiniLM-L6-v2/onnx/model_quantized.onnx"
   
-  "Xenova/mobilebert-uncased-mnli/config.json"
-  "Xenova/mobilebert-uncased-mnli/tokenizer.json"
-  "Xenova/mobilebert-uncased-mnli/tokenizer_config.json"
-  "Xenova/mobilebert-uncased-mnli/onnx/model_quantized.onnx"
   
   "Xenova/ms-marco-MiniLM-L-6-v2/config.json"
   "Xenova/ms-marco-MiniLM-L-6-v2/tokenizer.json"

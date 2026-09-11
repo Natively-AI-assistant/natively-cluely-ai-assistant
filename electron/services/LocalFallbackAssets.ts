@@ -24,10 +24,6 @@ export const REQUIRED_MODEL_FILES: RequiredLocalAsset[] = [
   { id: 'minilm-tokenizer', kind: 'model_file', relativePath: 'Xenova/all-MiniLM-L6-v2/tokenizer.json', description: 'MiniLM embedding tokenizer' },
   { id: 'minilm-tokenizer-config', kind: 'model_file', relativePath: 'Xenova/all-MiniLM-L6-v2/tokenizer_config.json', description: 'MiniLM embedding tokenizer config' },
   { id: 'minilm-onnx', kind: 'model_file', relativePath: 'Xenova/all-MiniLM-L6-v2/onnx/model_quantized.onnx', description: 'MiniLM quantized ONNX model' },
-  { id: 'mobilebert-config', kind: 'model_file', relativePath: 'Xenova/mobilebert-uncased-mnli/config.json', description: 'MobileBERT classifier config' },
-  { id: 'mobilebert-tokenizer', kind: 'model_file', relativePath: 'Xenova/mobilebert-uncased-mnli/tokenizer.json', description: 'MobileBERT classifier tokenizer' },
-  { id: 'mobilebert-tokenizer-config', kind: 'model_file', relativePath: 'Xenova/mobilebert-uncased-mnli/tokenizer_config.json', description: 'MobileBERT classifier tokenizer config' },
-  { id: 'mobilebert-onnx', kind: 'model_file', relativePath: 'Xenova/mobilebert-uncased-mnli/onnx/model_quantized.onnx', description: 'MobileBERT quantized ONNX model' },
 ];
 
 /**

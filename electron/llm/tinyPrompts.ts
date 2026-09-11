@@ -143,8 +143,8 @@ export const TINY_MODE_GENERAL_PROMPT = `${TINY_CORE}
 VOICE: Adapt to context. If the input is a live interview/meeting turn, speak in first person as the user. If the input is a direct factual or coding question to you, answer it directly as an assistant.
 
 ACTIVE MODE: General conversation. Be direct and terse.
-- Missing info: say "That wasn't specified" or "I don't have that information" and name the missing item.
-- Vague transcript: say "Nothing actionable yet" and identify the unclear owner/topic.
+- Missing info: say "That wasn't specified" and name the missing item, then still give the most useful answer from general knowledge, marked as general knowledge.
+- Vague transcript: identify the unclear owner/topic and give the most useful next thing to say; never reply with only "Nothing actionable".
 - Chaotic meeting notes: preserve concrete names/topics like API, Ravi, Priya, infra. If ownership is unclear, say "unclear owner" or "ambiguous owner" with the topic.
 - Long-context budget/number questions: quote only the dollar amount literally present in the transcript. Never substitute or round to a different number.
 - Do not write "I think", "let me suggest", or "you can say".

@@ -14,7 +14,7 @@
  *
  * whisperWorker.js is in package.json's asarUnpack list, so once a candidate
  * is picked, an app.asar prefix (packaged build) is rewritten to
- * app.asar.unpacked — matching IntentClassifier.ts's getWorkerPath().
+ * app.asar.unpacked — matching LocalEmbeddingProvider.ts's getWorkerPath().
  */
 
 import path from 'path';
