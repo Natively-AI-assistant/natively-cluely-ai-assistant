@@ -1236,7 +1236,8 @@ import { DatabaseManager } from "./db/DatabaseManager"
 
 /** Unified type for all STT providers with optional extended capabilities */
 type STTProvider = (GoogleSTT | RestSTT | DeepgramStreamingSTT | SonioxStreamingSTT | ElevenLabsStreamingSTT | OpenAIStreamingSTT | NativelyProSTT | NvidiaNimStreamingSTT) & {
-  finalize?: () => void;
+  /** Local models return whether a trailing final is now in flight; cloud providers return void. */
+  finalize?: () => void | boolean;
   setAudioChannelCount?: (count: number) => void;
   notifySpeechEnded?: () => void;
 };
@@ -3634,7 +3635,14 @@ export class AppState {
       const isQuotaError = err.message.toLowerCase().includes('transcription_quota_exceeded')
         || err.message.toLowerCase().includes('quota');
 
-      if (isAuthError) {
+      // A local STT worker that could not start (no ONNX slot within 20s, or
+      // the model never reported ready) is terminal for this meeting: nothing
+      // restarts a LocalWhisperSTT instance, so "reconnecting" would be a lie
+      // the user stares at until they end the call. Surface the actionable
+      // message as a failure instead (LocalWhisperSTT.LOCAL_STT_UNAVAILABLE_CODE).
+      const isLocalSttUnavailable = (err as any)?.code === 'local_stt_unavailable';
+
+      if (isAuthError || isLocalSttUnavailable) {
         _consecutiveErrors = 0;
         _lastState = 'failed';
         this.sendSttStatus( {
@@ -5388,12 +5396,102 @@ export class AppState {
     this._lastObservedDefaultOutputId = null;
   }
 
+  // ── ScreenCaptureKit re-probe (macOS, 2026-09-11) ─────────────────────────
+  // When the user chose the SCK backend and a system-initiated stop (display
+  // sleep, a display reconfiguration during a screen share) made the recovery
+  // land on the CoreAudio fallback — SCK cannot enumerate a display while
+  // every display is asleep — nothing ever brought SCK back once displays
+  // returned: the user who picked SCK because the CoreAudio tap does not work
+  // with their Bluetooth/USB device (#540) stayed on it for the rest of the
+  // meeting. Poll while the meeting runs on the 'sck' route: if the live
+  // capture reports the CoreAudio backend and a display is available again,
+  // rebuild on SCK. Bounded so a display that flaps cannot rebuild forever.
+  private _sckReprobeInterval: NodeJS.Timeout | null = null;
+  private _sckReprobeRebuilds = 0;
+  private static readonly SCK_REPROBE_INTERVAL_MS = 10_000;
+  private static readonly SCK_REPROBE_MAX_REBUILDS = 3;
+
+  private startSckReprobeWatcher(): void {
+    if (process.platform !== 'darwin') return;
+    if (this._sckReprobeInterval) return;
+    if (this._lastRequestedOutputDeviceId !== 'sck') return;
+    const NativeModule: any = loadNativeModule();
+    if (!NativeModule || typeof NativeModule.screenCaptureDisplaysAvailable !== 'function') {
+      console.log('[SckReprobe] Native screenCaptureDisplaysAvailable unavailable — skipping re-probe watcher.');
+      return;
+    }
+    this._sckReprobeRebuilds = 0;
+    console.log('[SckReprobe] Started (SCK backend requested).');
+    this._sckReprobeInterval = setInterval(() => {
+      if (this._isQuitting || !this.isMeetingActive) return;
+      if (this._lastRequestedOutputDeviceId !== 'sck') return;
+      if (this._defaultOutputSwitchInProgress || this._systemAudioRecoveryInProgress) return;
+      const capture = this.systemAudioCapture;
+      if (!capture) return;
+      const backend = capture.getActiveBackend();
+      if (backend === 'sck') { this._sckReprobeRebuilds = 0; return; } // healthy
+      if (backend !== 'coreaudio') return;                               // still initialising
+      if (this._sckReprobeRebuilds >= AppState.SCK_REPROBE_MAX_REBUILDS) return;
+      let displays = false;
+      try { displays = !!NativeModule.screenCaptureDisplaysAvailable(); } catch { return; }
+      if (!displays) return;
+      this._sckReprobeRebuilds++;
+      console.log(`[SckReprobe] Displays are back and the capture is on the CoreAudio fallback — rebuilding on ScreenCaptureKit (attempt ${this._sckReprobeRebuilds}/${AppState.SCK_REPROBE_MAX_REBUILDS}).`);
+      this.rebuildSystemCaptureForSck().catch((err) => {
+        console.error('[SckReprobe] Rebuild failed:', err);
+      });
+    }, AppState.SCK_REPROBE_INTERVAL_MS);
+    this._sckReprobeInterval.unref?.();
+  }
+
+  private stopSckReprobeWatcher(): void {
+    if (this._sckReprobeInterval) {
+      clearInterval(this._sckReprobeInterval);
+      this._sckReprobeInterval = null;
+    }
+  }
+
+  /**
+   * Destroy + recreate the system capture on the SCK backend. Same ownership
+   * discipline as handleDefaultOutputChanged (F-102/F-103/F-104): the shared
+   * cross-flow mutex, an awaited destroy, and a re-validation after every await.
+   */
+  private async rebuildSystemCaptureForSck(): Promise<void> {
+    const meetingGeneration = this._meetingGeneration;
+    const isCurrentMeeting = () => this.isMeetingActive && this._meetingGeneration === meetingGeneration;
+    if (this._isQuitting || !isCurrentMeeting()) return;
+    if (this._defaultOutputSwitchInProgress || this._systemAudioRecoveryInProgress) return;
+    this._defaultOutputSwitchInProgress = true;
+    try {
+      const oldCapture = this.systemAudioCapture;
+      this.systemAudioCapture = null;
+      this._sysSttRateApplied = false;
+      await oldCapture?.destroy();
+      if (this._isQuitting || !isCurrentMeeting()) return;
+      if (this.systemAudioCapture) {
+        console.warn('[SckReprobe] Capture rebuilt by another flow mid-await — keeping theirs.');
+        return;
+      }
+      const fresh = new SystemAudioCapture('sck');
+      this.systemAudioCapture = fresh;
+      this.wireSystemCapture(fresh, '(SckReprobe)');
+      fresh.start();
+      // A fresh backend gets a fresh recovery budget.
+      this._systemAudioRecoveryAttempts = 0;
+      this._systemAudioConsecutiveFailures = 0;
+      console.log('[SckReprobe] Capture rebuilt on ScreenCaptureKit.');
+    } finally {
+      this._defaultOutputSwitchInProgress = false;
+    }
+  }
+
   // Public wrapper for the before-quit hook so shutdown can cancel the
   // interval without poking into a private method. Mirrors the meeting-end
   // path's stopDefaultOutputWatcher() call but is invoked from a context that
   // does not own a `this` reference inside the AppState class.
   public stopDefaultOutputWatcherForShutdown(): void {
     this.stopDefaultOutputWatcher();
+    this.stopSckReprobeWatcher();
   }
 
   private async handleDefaultOutputChanged(currentId?: string): Promise<void> {
@@ -5994,12 +6092,21 @@ export class AppState {
     }
   }
 
-  public finalizeMicSTT(): void {
+  /**
+   * Flush the user-mic provider so its trailing final is produced. Returns
+   * whether the provider reports a final now IN FLIGHT (local models can —
+   * they know a segment was just flushed to the worker); cloud providers
+   * return void and read as `pending: false`. The renderer's Answer/Stop tail
+   * wait uses this to decide between its short grace and its full window.
+   */
+  public finalizeMicSTT(): { pending: boolean } {
     // We only want to finalize the user microphone, because the context is Manual Answer
     if (this.googleSTT_User?.finalize) {
       console.log('[Main] Finalizing STT');
-      this.googleSTT_User.finalize();
+      const r: unknown = this.googleSTT_User.finalize();
+      return { pending: r === true };
     }
+    return { pending: false };
   }
 
   /**
@@ -6352,6 +6459,7 @@ export class AppState {
         // output or if the native binary lacks the getDefaultOutputDeviceId
         // export.
         this.startDefaultOutputWatcher();
+        this.startSckReprobeWatcher();
 
         if (this._verboseLogging) {
           const requestedInput = metadata?.audio?.inputDeviceId || 'default';
@@ -6544,6 +6652,7 @@ export class AppState {
     // Stop the default-output watcher — no point polling CoreAudio while
     // there's no active capture to rebind.
     this.stopDefaultOutputWatcher();
+    this.stopSckReprobeWatcher();
 
     // Tell STT to mark the audio stream as ended; trailing finals will arrive
     // over the next ~150ms while we're already returning to the renderer.
