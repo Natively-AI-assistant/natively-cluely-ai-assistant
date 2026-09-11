@@ -14,6 +14,7 @@ import { assemblePromptV2 } from "../intelligence/PromptAssemblerV2";
 import { beginTrace, commitTrace } from "../intelligence/IntelligenceTrace";
 import { DOM_CONTEXT_MAX_CHARS } from "../config/constants";
 import { checkAnswerForCodeBugs } from "./CodeSanityCheck";
+import { providerRejectionUserMessage } from "./providerErrorClassifier";
 import { formatAnswerPlanForPrompt, isCodingAnswerType } from "./AnswerPlanner";
 import { resolveCodingPromptSignals, isDeicticAsk, isPromotedScreenCodingTurn } from "./codingPromptSignals";
 import type { AnswerPlan, AnswerType } from "./AnswerPlanner";
@@ -1264,7 +1265,14 @@ The user triggered this action with a coding problem on screen and NO new questi
             // support. Surface an actionable message for provider failures.
             const msg = String(error?.message ?? error ?? '').toLowerCase();
             const isProviderFailure = /\b(401|403|429)\b|api key|unauthor|forbidden|quota|rate.?limit|billing|exhausted|permission/.test(msg);
-            if (isProviderFailure) {
+            // A permanent rejection ("The '<model>' model is not supported when
+            // using Codex with a ChatGPT account", issue #543) is not retryable:
+            // the engine's regeneration would replay the same refused call and
+            // then say "press again". The provider's explanation is the answer.
+            const rejection = isProviderFailure ? null : providerRejectionUserMessage(error);
+            if (rejection) {
+                yield rejection;
+            } else if (isProviderFailure) {
                 yield "I couldn't reach the AI provider — this looks like an API key or rate-limit issue. Check your API keys / plan in Settings and try again.";
             } else {
                 // ALWAYS ANSWER (2026-09-07): yield NOTHING. The engine treats an
