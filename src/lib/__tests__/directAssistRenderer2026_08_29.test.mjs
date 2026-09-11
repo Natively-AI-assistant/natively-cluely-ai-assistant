@@ -56,8 +56,9 @@ test('typed Direct submission preserves exact text, skill prefix, screenshots an
     '// Refresh the latest-handler ref on every render',
   );
   const directBranch = body.indexOf('if (directAssistEnabled) {');
-  const ragBranch = body.indexOf('ragQueryLive');
-  assert.ok(directBranch >= 0 && ragBranch > directBranch, 'Direct branch must precede legacy RAG');
+  const legacyTransport = body.indexOf('streamGeminiChat(');
+  assert.ok(directBranch >= 0 && legacyTransport > directBranch, 'Direct branch must precede the legacy chat transport');
+  assert.doesNotMatch(body, /ragQueryLive/, 'typed chat has no RAG pre-flight (issue #552) — V3 carries meeting evidence');
   assert.match(body, /const rawUserText = inputValue/);
   assert.match(body, /currentRequest: rawUserText\.trim\(\)\.length > 0\s*\? rawUserText/);
   assert.match(body, /imagePaths: currentAttachments\.map/);
