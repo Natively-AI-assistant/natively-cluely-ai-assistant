@@ -685,10 +685,11 @@ interface ElectronAPI {
   codexCliLogout: (config?: any) => Promise<{ success: boolean; action: string; output?: string; error?: string; resolvedPath?: string; config?: any }>;
   codexCliLogin: (config?: any) => Promise<{ success: boolean; action: string; output?: string; error?: string; resolvedPath?: string; config?: any }>;
   codexCliDoctor: (config?: any) => Promise<{ success: boolean; action: string; output?: string; error?: string; resolvedPath?: string; config?: any }>;
+  getCodexCliModels: () => Promise<{ source: 'codex-cli' | 'unavailable'; models: { id: string; name: string }[]; fetchedAt?: string; clientVersion?: string }>;
   // ChatGPT OAuth IPCs — replace the old `codex login` CLI subprocess flow.
   // startLogin kicks off the PKCE flow + opens the system browser; the
   // renderer listens for codex:login:complete / :failed events to update UI.
-  codexLoginStatus: () => Promise<{ success: boolean; signedIn: boolean; email?: string; expiresAt?: number; error?: string }>;
+  codexLoginStatus: () => Promise<{ success: boolean; signedIn: boolean; source?: 'natively' | 'codex-cli' | null; cliLogin?: 'ok' | 'expired' | 'missing' | 'api-key' | 'invalid'; email?: string; expiresAt?: number; error?: string }>;
   antigravityStatus: () => Promise<{ signedIn: boolean; inProgress: boolean; expiresAt?: number; projectId?: string; error?: string }>;
   antigravityStartLogin: () => Promise<{ success: boolean; error?: string }>;
   antigravityCancelLogin: () => Promise<void>;
@@ -2332,6 +2333,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   codexCliLogout: (config?: any) => ipcRenderer.invoke('codex-cli:logout', config),
   codexCliLogin: (config?: any) => ipcRenderer.invoke('codex-cli:login', config),
   codexCliDoctor: (config?: any) => ipcRenderer.invoke('codex-cli:doctor', config),
+  getCodexCliModels: () => ipcRenderer.invoke('codex-cli:models'),
   // ChatGPT OAuth (PKCE) — replaces the old `codex login` CLI subprocess.
   // The renderer listens for `codex:login:complete` / `:failed` /
   // `:signed-out` / `:tokens:refreshed` events for live UI updates.
