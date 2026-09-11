@@ -37,10 +37,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import Module from 'node:module';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const COMPILED = path.resolve(
-  path.dirname(new URL(import.meta.url).pathname),
+  path.dirname(fileURLToPath(import.meta.url)),
   '../../../dist-electron/electron/services/CredentialsManager.js',
 );
 
@@ -234,7 +235,7 @@ test('EVERY method that calls saveCredentials() checks the degraded guard first'
   // mutator added later fails here rather than silently reintroducing the
   // memory/disk divergence.
   const src = fs.readFileSync(
-    path.resolve(path.dirname(new URL(import.meta.url).pathname), '../CredentialsManager.ts'),
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../CredentialsManager.ts'),
     'utf8',
   );
   const lines = src.split('\n');
