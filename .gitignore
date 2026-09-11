@@ -593,3 +593,18 @@ resources/models/Xenova/nli-deberta-v3-small/
 resources/models/Xenova/bge-small-en-v1.5/
 resources/models/knowledgator/
 resources/models/minishlab/
+
+# Local scratch: CDP/Playwright session drivers and a campaign's reference-doc pack.
+/cdp-*.mjs
+/live-*.mjs
+/cluely_reference_pack_fresh/
+
+# Local intent-benchmark reports that were never committed (the classifier was removed 2026-09-05).
+# Exact names only: the rest of reports/ is tracked.
+scripts/intent-benchmark/reports/head-deberta-cs.json
+scripts/intent-benchmark/reports/head-deberta-fixed.json
+scripts/intent-benchmark/reports/head-deberta-q8.json
+scripts/intent-benchmark/reports/hybrid-rules-proto-head-cs.json
+scripts/intent-benchmark/reports/hybrid-tight-cs.json
+scripts/intent-benchmark/reports/hybrid-wide-cs.json
+scripts/intent-benchmark/reports/none-always-answer-cs.json
