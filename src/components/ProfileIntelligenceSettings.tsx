@@ -789,7 +789,15 @@ const HANDOFF_OUT_MS = 240;
 const HANDOFF_IN_MS = 670;
 function useIndexHandoff(indexing: boolean): { settling: boolean; arriving: boolean } {
     const [phase, setPhase] = useState<'idle' | 'settling' | 'arriving'>('idle');
-    const prevIndexingRef = useRef(indexing);
+    // The previous value is STATE, not a ref, and that distinction is load-
+    // bearing under React 19 + StrictMode (see src/main.tsx): a render can be
+    // double-invoked or thrown away, and React rolls back the state updates of
+    // a discarded render but NOT a ref written during one. With a ref, a
+    // discarded pass could record `indexing` and the committed pass would then
+    // see no edge and skip the handoff entirely — the orb snapping straight to
+    // the result, which is the exact glitch this hook exists to remove. This is
+    // React's documented "adjusting state when a prop changes" form.
+    const [prevIndexing, setPrevIndexing] = useState(indexing);
 
     // The falling edge is handled DURING render, not in an effect. Effects run
     // after paint, so reacting there lets the browser paint one frame of the
@@ -799,8 +807,8 @@ function useIndexHandoff(indexing: boolean): { settling: boolean; arriving: bool
     // before paint, so that frame never reaches the screen. A fresh upload
     // landing mid-handoff resets to idle: the orb is coming back, and finishing
     // the previous exit would fight the new entrance.
-    if (prevIndexingRef.current !== indexing) {
-        prevIndexingRef.current = indexing;
+    if (prevIndexing !== indexing) {
+        setPrevIndexing(indexing);
         setPhase(indexing ? 'idle' : 'settling');
     }
 
@@ -1559,6 +1567,23 @@ export function ProfileIntelligenceSettings({
     // false at that moment. This makes adoption an explicit render signal.
     const [adoptTick, setAdoptTick] = useState(0);
 
+    // Every finished upload schedules a 3s "clear the ready/failed badge" timer.
+    // It deliberately OUTLIVES the effect that armed it — clearing `uploading`
+    // re-runs the adopt-poll effect below and tears it down, so cancelling on
+    // that teardown would pin the badge on ready/failed forever. Unmount is a
+    // different matter: nothing cancelled these, so closing the panel inside the
+    // 3s window left a timer running to setState on a dead component. They are
+    // collected here and cleared once, on unmount only.
+    const statusResetTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+    const scheduleStatusReset = (clear: () => void) => {
+        const t = setTimeout(() => { statusResetTimersRef.current.delete(t); clear(); }, 3000);
+        statusResetTimersRef.current.add(t);
+    };
+    useEffect(() => () => {
+        statusResetTimersRef.current.forEach(clearTimeout);
+        statusResetTimersRef.current.clear();
+    }, []);
+
     // ── Hero stat (static rounded value, no count-up) ────────────────────────
     const heroYearsRounded = (profileStatus.totalExperienceYears != null && Number.isFinite(profileStatus.totalExperienceYears))
         ? Math.round(profileStatus.totalExperienceYears)
@@ -1687,9 +1712,15 @@ export function ProfileIntelligenceSettings({
     // when doResumeUpload/doJdUpload own the request their awaited promise
     // already reports the outcome, so polling would double-handle it.
     useEffect(() => {
-        if (!profileDetachedRef.current && !jdDetachedRef.current) return;
         let stopped = false;
         let timer: ReturnType<typeof setTimeout> | undefined;
+        // One cleanup, returned on EVERY path including the nothing-to-adopt
+        // guard below. The guard used to `return` bare, which left a path out of
+        // an effect that arms a polling timer — safe only for as long as the
+        // guard stays above every schedule site, which is not an invariant worth
+        // trusting to a future edit.
+        const cleanup = () => { stopped = true; if (timer) clearTimeout(timer); };
+        if (!profileDetachedRef.current && !jdDetachedRef.current) return cleanup;
         const finish = (
             setUploading: (v: boolean) => void,
             setStatus: (v: string | undefined) => void,
@@ -1700,8 +1731,9 @@ export function ProfileIntelligenceSettings({
             // NOT guarded by `stopped`: clearing `uploading` re-runs this effect
             // and tears it down, so a stopped-guard here would leave the badge
             // pinned on ready/failed forever. Matches the local-upload path,
-            // which fires the same unguarded reset.
-            setTimeout(() => setStatus(undefined), 3000);
+            // which fires the same unguarded reset. Registered so the ONE
+            // thing that must cancel it — unmount — still can.
+            scheduleStatusReset(() => setStatus(undefined));
         };
         const tick = async () => {
             try {
@@ -1745,7 +1777,7 @@ export function ProfileIntelligenceSettings({
             }
         };
         timer = setTimeout(tick, 1500);
-        return () => { stopped = true; if (timer) clearTimeout(timer); };
+        return cleanup;
     }, [profileUploading, jdUploading, adoptTick]);
 
     const handleRemoveTavilyKey = async () => {
@@ -1788,7 +1820,7 @@ export function ProfileIntelligenceSettings({
         } finally {
             if (!token.cancelled) {
                 setProfileUploading(false);
-                setTimeout(() => setProfileUploadStatus(undefined), 3000);
+                scheduleStatusReset(() => setProfileUploadStatus(undefined));
             }
         }
     };
@@ -1818,7 +1850,7 @@ export function ProfileIntelligenceSettings({
         } finally {
             if (!token.cancelled) {
                 setJdUploading(false);
-                setTimeout(() => setJdUploadStatus(undefined), 3000);
+                scheduleStatusReset(() => setJdUploadStatus(undefined));
             }
         }
     };
