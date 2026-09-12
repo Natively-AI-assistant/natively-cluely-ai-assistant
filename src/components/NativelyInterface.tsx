@@ -242,6 +242,7 @@ import {
 } from '../lib/overlayActionDedup.mjs';
 import { shouldDedupeManualSubmit } from '../lib/overlaySubmitDedup.mjs';
 import { decideScrollInterrupt } from '../lib/scrollInterruptDecision.mjs';
+import { decideStreamingHeightCommit } from '../lib/streamingHeightDecision.mjs';
 import { mergeTranscriptChunks } from '../lib/transcriptMerge.mjs';
 import { createTranscriptTailWaiter } from '../lib/answerTailWait.mjs';
 import {
@@ -3029,38 +3030,29 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // up to the reserved headroom, cuts the native call frequency from
   // "every wrapped line" to "every few wrapped lines" while keeping that
   // invariant exactly true at every instant — no lag, ever.
+  //
+  // The branching lives in src/lib/streamingHeightDecision.mjs (table-tested).
+  // 2026-09-12 live repro of the "window size changes rapidly when sending
+  // screenshots" review: the headroom was committed the instant the EMPTY
+  // placeholder row mounted, then the exact height was reported again 0.6s
+  // later, before any token — a +96/-96 bounce on every send. Headroom now
+  // waits for the first token (`hasText`); an empty placeholder reports its
+  // exact height and is not adopted as the current stream, so the first
+  // token still takes the brand-new-card branch and gets its own headroom.
   const driveStreamingHeight = useCallback(
     (targetHeight: number) => {
-      if (targetHeight <= 0) return;
-      const currentStreamId = streamingMsgIdRef.current;
-
-      // Brand-new answer card (or the very first measurement of the app's
-      // lifetime): commit fresh, with its own buffer. Comparing against
-      // whatever height an unrelated previous message left behind would be
-      // meaningless.
-      if (currentStreamId !== streamingHeightStreamIdRef.current) {
-        streamingHeightStreamIdRef.current = currentStreamId;
-        const committed = targetHeight + STREAMING_HEIGHT_GROW_BUFFER_PX;
-        streamingHeightCommittedRef.current = committed;
-        resizeOverlayWindow(committed);
-        return;
-      }
-
-      // Still comfortably inside the reserved headroom from the last grow —
-      // no native call needed at all. This is the common case for most
-      // token arrivals; it is what actually cuts the resize frequency.
-      if (targetHeight <= streamingHeightCommittedRef.current) return;
-
-      // Content caught up to (or exceeded) the reserved headroom: grow again,
-      // immediately, with a fresh buffer. No rate limiting is applied here —
-      // and none is needed, because a grow only fires once every ~4 lines of
-      // real content, which is already far below any perceptible-jitter
-      // frequency; adding a delay here would only reopen a window where
-      // real content briefly exceeds the committed (undersized) native
-      // height.
-      const committed = targetHeight + STREAMING_HEIGHT_GROW_BUFFER_PX;
-      streamingHeightCommittedRef.current = committed;
-      resizeOverlayWindow(committed);
+      const decision = decideStreamingHeightCommit({
+        streamId: streamingMsgIdRef.current,
+        lastStreamId: streamingHeightStreamIdRef.current,
+        committedHeight: streamingHeightCommittedRef.current,
+        measuredHeight: targetHeight,
+        hasText: streamingTextRef.current.length > 0,
+        bufferPx: STREAMING_HEIGHT_GROW_BUFFER_PX,
+      });
+      streamingHeightStreamIdRef.current = decision.nextStreamId;
+      streamingHeightCommittedRef.current = decision.nextCommittedHeight;
+      if (decision.action === 'none') return;
+      resizeOverlayWindow(decision.height);
     },
     [resizeOverlayWindow],
   );
