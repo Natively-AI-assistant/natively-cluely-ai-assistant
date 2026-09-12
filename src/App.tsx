@@ -1138,6 +1138,41 @@ const App: React.FC = () => {
   return (
     <ErrorBoundary context="Launcher">
     <div className="h-full min-h-0 w-full relative bg-transparent">
+      {/* BOOT BACKDROP (Windows/Linux only) — the one thing that paints the
+          window while nothing else does. The launcher is created transparent
+          with a TRANSPARENT native backgroundColor off-mac (WindowHelper's
+          createWindow) so the 16px CSS corner radius isn't painted over by a
+          square opaque rect. That left the splash→launcher handoff with
+          nothing behind it: AnimatePresence renders both children at once, so
+          for ~0.6s the exiting splash (opacity→0) and the entering launcher
+          (opacity 0→1, scale .99→1, y 8→0) are BOTH part-transparent and the
+          window showed the desktop straight through — "everything goes
+          transparent, then the launcher appears". The entering launcher's
+          scale/translate also leave the window's edges bare for that whole
+          animation, so fixing the opacity alone would not cover it.
+
+          This restores exactly what the opaque native backgroundColor used to
+          cover, but INSIDE body's rounded clip, so the corners survive.
+
+          macOS is excluded deliberately: there the window keeps its opaque
+          black backgroundColor (the OS rounds the frame itself) and
+          'under-window' vibrancy paints the material behind the UI — a black
+          layer here would sit on top of that material and kill it.
+
+          data-opacity-preview-surface so the Interface Opacity live preview
+          hides this along with every other opaque surface; without it the
+          preview would show black instead of the real desktop on Windows.
+          -z-10 keeps it beneath every sibling no matter what framer-motion
+          leaves on their transform (a transformed element paints with the
+          positioned group, an untransformed one does not — DOM order alone is
+          not a stable answer here). */}
+      {!isMac && (
+        <div
+          data-opacity-preview-surface=""
+          aria-hidden="true"
+          className="absolute inset-0 -z-10 bg-[#000000] pointer-events-none"
+        />
+      )}
       {/* data-opacity-preview-surface: queried (via querySelectorAll, not by
           id — there are two separate blocks below) by SettingsOverlay's
           startPreviewingOpacity/stopPreviewingOpacity so the Interface
