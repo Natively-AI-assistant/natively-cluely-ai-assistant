@@ -20,6 +20,7 @@ import {
 } from './utils/launcherResizeAnimation';
 import { attachNoActivate, isNoActivateManaged } from './utils/windowsFocusPolicy';
 import { resizeEnvelopeFor } from '../src/lib/overlayCustomSize.mjs';
+import { decideLauncherClose } from '../src/lib/launcherCloseDecision.mjs';
 
 const isEnvDev = process.env.NODE_ENV === 'development';
 const isPackaged = app.isPackaged;
@@ -1180,18 +1181,33 @@ export class WindowHelper {
     // then either self-exits on the lost lock or loads a dead dev server →
     // "loads once, then stuck at logo/black forever." In dev we therefore let a
     // window close actually quit the app, so no zombie survives between runs.
+    //
+    // NO-TRAY RULE (2026-09-12, three Windows reviews "closing the app doesn't
+    // work / only in Task Manager"): undetectable mode destroys the tray and
+    // removes the taskbar button, so hide-to-tray left the user with no way
+    // to bring the window back or quit. Hide only while a tray exists;
+    // otherwise X quits. Decision table: src/lib/launcherCloseDecision.mjs.
     if (process.platform !== 'darwin') {
       this.launcherWindow.on('close', (e) => {
-        if (isDev) {
-          // Let the close proceed and quit — no hide-to-tray in dev.
+        const decision = decideLauncherClose({
+          platform: process.platform,
+          isDev,
+          quitting: this.appState.isQuitting(),
+          hasTray: this.appState.hasTray(),
+        });
+        if (decision === 'close') return;
+        if (decision === 'quit') {
+          // Let this close proceed and quit the app. app.quit() drives the
+          // same before-quit path the tray "Quit" item uses, so the overlay
+          // windows (which would otherwise keep window-all-closed from firing)
+          // are torn down with it.
           this.appState.setQuitting(true);
+          app.quit();
           return;
         }
-        if (!this.appState.isQuitting()) {
-          e.preventDefault();
-          this.launcherWindow?.hide();
-          this.isWindowVisible = false;
-        }
+        e.preventDefault();
+        this.launcherWindow?.hide();
+        this.isWindowVisible = false;
       });
 
       // Sync maximize state to renderer so WindowControls stays in sync (Windows/Linux only).
