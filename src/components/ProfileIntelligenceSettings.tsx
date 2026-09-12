@@ -252,6 +252,111 @@ const PI_CSS = `
         animation: pi-shimmer-pulse 1.4s ease-in-out infinite;
     }
 
+    /* ── Thinking states (transitions.dev) ──────────────────────────────────
+       The ingest label names the stage it is on and moves through them, rather
+       than sitting on one frozen "Reading your resume…" for the length of a
+       real extraction — a line that never changes is exactly what reads as a
+       hang. Two signals, deliberately separate: the shimmer is liveness and
+       never stops; the label sequence is progress and STOPS on its last state
+       instead of looping, because a loop reads as "it started over". That last
+       state is therefore always the genuinely long-running one (indexing), and
+       no state ever claims a finish the ingest can't confirm.
+
+       Scoped under .pi-root like .t-toggle above: this panel is the only thing
+       that defines t-think, so it must not leak a generic t-* name globally.
+
+       The hidden sizer holds the longest state and is what gives the box its
+       width — lines are absolutely positioned across it, so every state centres
+       in a box that never resizes mid-swap. font-size lives on .t-think, not on
+       the line: the sizer only reports the right width if it is set in the same
+       font as the text it is standing in for.
+
+       The whole widget is aria-hidden; FileUploadIndexing's role="status"
+       announces one stable line instead. See the note there. */
+    .pi-root .t-think {
+        --think-swap: 150ms;
+        --think-gap: 50ms;
+        --think-distance: 8px;
+        --think-blur: 2px;
+        --think-shimmer: 2000ms;
+        --think-base: var(--pi-secondary);
+        --think-highlight: var(--pi-hero);
+        --think-ease: ease-in-out;
+        position: relative;
+        display: inline-block;
+        text-align: center;
+        font-size: 12px;
+        line-height: 1.5;
+    }
+    .pi-root .t-think-sizer { display: block; visibility: hidden; white-space: nowrap; }
+    .pi-root .t-think-text {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        display: block;
+        color: var(--think-base);
+        white-space: nowrap;
+        transform: translateY(0);
+        filter: blur(0);
+        opacity: 1;
+        transition:
+            transform var(--think-swap) var(--think-ease),
+            filter var(--think-swap) var(--think-ease),
+            opacity var(--think-swap) var(--think-ease);
+        will-change: transform, filter, opacity;
+    }
+    /* Shimmer sweeps the glyphs only (background-clip: text). --think-highlight
+       inverts with the theme — white over the 55% white base in dark, near-black
+       over grey-500 in light — so the sweep is a highlight either way rather
+       than a near-white band washing out on a white panel. */
+    .pi-root .t-think-text::before {
+        content: attr(data-text);
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background-image: linear-gradient(90deg,
+            transparent 0%, transparent 40%,
+            var(--think-highlight) 50%,
+            transparent 60%, transparent 100%);
+        background-size: 400% 100%;
+        background-repeat: no-repeat;
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        -webkit-text-fill-color: transparent;
+        animation: t-think-shimmer var(--think-shimmer) linear infinite;
+    }
+    @keyframes t-think-shimmer {
+        0%   { background-position: 100% 0; }
+        100% { background-position: 0% 0; }
+    }
+    /* The outgoing line floats over the box so both halves animate. */
+    .pi-root .t-think-text.is-exit {
+        transform: translateY(calc(var(--think-distance) * -1));
+        filter: blur(var(--think-blur));
+        opacity: 0;
+    }
+    .pi-root .t-think-text.is-enter-start {
+        transition: none;
+        transform: translateY(var(--think-distance));
+        filter: blur(var(--think-blur));
+        opacity: 0;
+    }
+
+    /* Visually hidden, still announced. Used for the one stable line the
+       indexing slot's live region reads out. */
+    .pi-sr-only {
+        position: absolute;
+        width: 1px; height: 1px;
+        margin: -1px; padding: 0;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        clip-path: inset(50%);
+        white-space: nowrap;
+        border: 0;
+    }
+
     /* ── Press feedback ── */
     .pi-press {
         transition: background 180ms var(--pi-ease-out), color 180ms ease,
@@ -564,6 +669,16 @@ const PI_CSS = `
         .pi-handoff-in-self,
         .pi-handoff-in > * { animation: pi-fade-only 200ms ease backwards; }
         .pi-handoff-in > *:nth-child(2) { animation-delay: 0ms; }
+        /* The ingest label still CHANGES — which stage the ingest is on is
+           information, not decoration, and it is the whole reason the line
+           exists. What goes is the travel, the blur and the shimmer sweep, so
+           the states hard-cut instead of sliding. */
+        .pi-root .t-think-text {
+            transition: none !important;
+            transform: none !important;
+            filter: none !important;
+        }
+        .pi-root .t-think-text::before { display: none !important; }
     }
 `;
 
@@ -763,6 +878,182 @@ const FileUploadEmpty = ({ hint, hasAccess, onBrowse, onNeedUpgrade, enterClass 
     </div>
 );
 
+// ─── ThinkingStates — cycling shimmer label ───────────────────────────────────
+// transitions.dev's thinking-states recipe. Two copies of the line live in the
+// box during a swap: the outgoing one exits upward while the incoming one rises
+// from below, held back by --think-gap so the two halves read as one motion
+// instead of a crossfade.
+//
+// Both copies are driven imperatively (classList in a layout effect) rather than
+// through className, because the class has to be applied, forced through a
+// reflow and released within a single frame — React cannot express that. The
+// price is that `className` on those two nodes MUST stay a constant string:
+// this panel re-renders from unrelated state constantly (the adopt-poll, status
+// polling, adoptTick), and a state-derived className would let reconciliation
+// wipe .is-enter-start / .is-exit mid-transition. That failure only shows up
+// under load, so keep the props constant.
+const THINK_SWAP_MS  = 150;   // keep in sync with --think-swap
+const THINK_GAP_MS   = 50;    // keep in sync with --think-gap
+
+/** One stage of a sequence. `hold` is how long this line stays before the swap
+ *  to the next one starts; the LAST stage's hold is never read. */
+interface ThinkStage { text: string; hold: number }
+
+const ThinkingStates = ({ stages, sizer, paused }: { stages: ThinkStage[]; sizer?: string; paused?: boolean }) => {
+    const [index, setIndex] = useState(0);
+    const [outgoing, setOutgoing] = useState<{ id: number; text: string } | null>(null);
+    const lineRef = useRef<HTMLSpanElement | null>(null);
+    const outRef = useRef<HTMLSpanElement | null>(null);
+    const seqRef = useRef(0);
+    const last = stages.length - 1;
+
+    // Advance one state at a time, and STOP on the last one — see the CSS note.
+    // `paused` is the handoff: a label swap firing during the 240ms
+    // pi-handoff-out fade reads as a glitch on the way out.
+    useEffect(() => {
+        if (paused || index >= last) return;
+        const t = setTimeout(() => {
+            setOutgoing({ id: seqRef.current++, text: stages[index].text });
+            setIndex(i => i + 1);
+        }, stages[index].hold);
+        return () => clearTimeout(t);
+    }, [index, last, paused, stages]);
+
+    // Incoming copy: React has already swapped this node's text, so jump it
+    // below the line with no transition, reflow, then release it after the gap.
+    useLayoutEffect(() => {
+        const el = lineRef.current;
+        if (!el || index === 0) return;
+        el.classList.add('is-enter-start');
+        void el.offsetHeight; // force reflow so removing the class transitions
+        const t = setTimeout(() => el.classList.remove('is-enter-start'), THINK_GAP_MS);
+        return () => { clearTimeout(t); el.classList.remove('is-enter-start'); };
+    }, [index]);
+
+    // Outgoing copy: mounted at rest this commit, so read layout to lock the
+    // from-state in before adding .is-exit — mounting it with the class already
+    // on would land it at the end state with nothing to transition from. Keyed
+    // by id so a swap that arrives before the previous exit finishes gets a
+    // fresh node instead of reusing one that already carries .is-exit.
+    useLayoutEffect(() => {
+        if (!outgoing) return;
+        const el = outRef.current;
+        if (!el) return;
+        void el.offsetHeight;
+        el.classList.add('is-exit');
+        const t = setTimeout(() => setOutgoing(null), THINK_SWAP_MS + 60);
+        return () => clearTimeout(t);
+    }, [outgoing]);
+
+    // `sizer` overrides the widest line of THIS list. The JD slot passes one so
+    // the two JD variants report the same width: which variant renders is keyed
+    // on profileStatus.hasProfile, which can flip mid-ingest when a resume and a
+    // JD are uploaded together, and the two lists' own longest lines differ by
+    // ~43px — a visible box jump long after the entrance animation could hide
+    // it. Not reproduced live (the flip window is narrow and profileDelete hung
+    // the harness), so this removes the dependency rather than fixing a seen bug.
+    const widest = sizer ?? stages.reduce((a, b) => (b.text.length > a.length ? b.text : a), '');
+    const current = stages[Math.min(index, last)].text;
+
+    return (
+        <span className="t-think" aria-hidden="true">
+            <span className="t-think-sizer">{widest}</span>
+            {/* textContent and data-text must stay in sync — data-text is what
+                the shimmer ::before copy paints. */}
+            <span ref={lineRef} className="t-think-text" data-text={current}>{current}</span>
+            {outgoing && (
+                <span key={outgoing.id} ref={outRef} className="t-think-text" data-text={outgoing.text}>
+                    {outgoing.text}
+                </span>
+            )}
+        </span>
+    );
+};
+
+// ─── Ingest stages ────────────────────────────────────────────────────────────
+// Timed, not wired to real progress: 'uploading' and 'processing' are both set
+// back-to-back by the renderer before it even invokes main (doResumeUpload), so
+// neither carries stage information. What keeps these honest is that every line
+// names work KnowledgeOrchestrator.ingestDocument actually performs, in the
+// order it performs it. Don't add a state for work the pipeline doesn't do, and
+// don't add a terminal "Almost done" — nothing here knows that.
+//
+// ── Where the hold values come from ──────────────────────────────────────────
+// Measured, not guessed. 20 real ingests (10 résumés + 10 JDs, the
+// test-fixtures/profiles corpus, driven through the live app; 0 failures, 0
+// heuristic-extractor fallbacks, company research healthy):
+//
+//   résumé  min 4.5s · p25 7.2s · median 23.9s · mean 23.5s · p75 25.0s · max 64.5s
+//   JD      min 28.9s · p25 63.9s · median 69.3s · mean 64.8s · p75 70.6s · max 92.7s
+//
+// A JD is ~3x a résumé because `atomicJdProfilePackGeneration` (shipped ON,
+// 2026-08-30) makes ingestDocument AWAIT the whole AOT pipeline — company
+// research, then gap analysis + negotiation + intro, then mock questions, then
+// culture mapping — all real LLM calls in the critical path. So the two types
+// get different sequences AND different pacing; one schedule cannot serve both.
+//
+// The holds RAMP rather than sitting flat. The two failure modes are
+// asymmetric: parking on the last line is visible and is exactly the "is it
+// stuck?" complaint, while running out of lines early is invisible. A ramp
+// spans a wide duration range with one schedule — a fast ingest still shows the
+// early lines, a slow one keeps receiving new ones deep into the tail — and it
+// matches how waiting is perceived, since a longer gap is tolerable later on.
+// Each sequence is paced to reach its LAST line at roughly its measured median,
+// so the typical upload parks for a second or two rather than a minute.
+//
+// If ingest latency moves (a faster extraction model, an AOT phase dropped),
+// re-measure and re-pace — don't leave these at numbers the pipeline outgrew.
+
+// Sums to 22.7s at the last line vs a 23.9s median — parks ~1s typically.
+// Step 8 of the ingest generates STAR stories (an LLM call) and is the résumé
+// tail, so it gets the terminal line rather than indexing.
+const RESUME_INGEST_STAGES: ThinkStage[] = [
+    { text: 'Reading your resume…',           hold: 1200 },
+    { text: 'Pulling out your experience…',   hold: 2500 },
+    { text: 'Mapping your skills…',           hold: 4000 },
+    { text: 'Noting projects and education…', hold: 6000 },
+    { text: 'Indexing it for recall…',        hold: 9000 },
+    { text: 'Writing up your best stories…',  hold: 0 },
+];
+
+// Sums to 65.7s at the last line vs a 69.3s median. Lines 6-10 are the AOT
+// pipeline's four awaited phases in the order AOTPipeline.runForJD runs them.
+// Phase 2 (gap analysis / negotiation / intro) is internally parallel — naming
+// two of its outputs in sequence describes work that IS running in that window,
+// which is what a progress line is for.
+const JD_INGEST_STAGES: ThinkStage[] = [
+    { text: 'Reading the job description…',        hold: 1200 },
+    { text: 'Pulling out the requirements…',       hold: 2500 },
+    { text: 'Noting the responsibilities…',        hold: 4000 },
+    { text: 'Picking up the tech stack…',          hold: 6000 },
+    { text: 'Indexing it for recall…',             hold: 8000 },
+    { text: 'Researching the company…',            hold: 12000 },
+    { text: 'Matching it against your resume…',    hold: 11000 },
+    { text: 'Sketching your negotiation angle…',   hold: 11000 },
+    { text: 'Drafting the questions they’ll ask…', hold: 10000 },
+    { text: 'Mapping your stories to their values…', hold: 0 },
+];
+
+// AOT phases 2-4 are all gated on `resumeDoc` — with no résumé on file the JD
+// ingest stops after company research, so promising gap analysis and talking
+// points would be describing work that will not run. That also makes this path
+// an order of magnitude faster, so it needs its own (much tighter) pacing, not
+// a prefix of the schedule above: measured over 5 ingests with the profile
+// wiped between each, on both a warm and a fresh user-data dir —
+// min 6.1s · median 6.8s · mean 7.4s · max 8.8s. Four lines summing to 6.8s
+// rather than six, so the swaps don't strobe inside a seven-second wait.
+// Both JD variants size to the longest line of the LONGER list, so the box is
+// the same width whichever one is showing — see the `sizer` note in
+// ThinkingStates for why that matters.
+const JD_SIZER = JD_INGEST_STAGES.reduce((a, b) => (b.text.length > a.length ? b.text : a), '');
+
+const JD_INGEST_STAGES_NO_RESUME: ThinkStage[] = [
+    { text: 'Reading the job description…',  hold: 1200 },
+    { text: 'Pulling out the requirements…', hold: 2000 },
+    { text: 'Indexing it for recall…',       hold: 3600 },
+    { text: 'Researching the company…',      hold: 0 },
+];
+
 // ─── FileUploadIndexing — in-flight ingest ────────────────────────────────────
 // Reuses the empty slot's container so the empty → indexing → filled sequence
 // keeps one silhouette and the panel doesn't jump as the state advances.
@@ -771,14 +1062,22 @@ const FileUploadEmpty = ({ hint, hasAccess, onBrowse, onNeedUpgrade, enterClass 
 // block the empty slot was already occupying. `theme` stays on its default
 // `auto` — it walks up to .pi-root's data-theme, which is the same signal the
 // panel's own light/dark tokens key off.
-// The orb is aria-hidden and the <p> carries the announcement: labelling both
-// makes a screen reader read the state twice. role="status" (implicitly polite)
-// is the whole announcement contract here — the badge no longer has an
-// in-progress branch to carry it.
-const FileUploadIndexing = ({ label, settling }: { label: string; settling?: boolean }) => (
+// The orb is aria-hidden and one hidden line carries the announcement:
+// labelling more than one makes a screen reader read the state twice.
+// role="status" (implicitly polite) is the whole announcement contract here —
+// the badge no longer has an in-progress branch to carry it.
+//
+// That announcement is deliberately NOT the cycling line. Pushing six-to-ten
+// states through a live region — times the two copies that overlap during every
+// swap — makes a screen reader read the entire sequence out. The rotation exists to
+// stop a sighted user concluding the panel has hung; it carries no information
+// a non-sighted user is otherwise missing. So the visible widget is aria-hidden
+// and the sr-only line states the work once and never changes.
+const FileUploadIndexing = ({ stages, sizer, settling }: { stages: ThinkStage[]; sizer?: string; settling?: boolean }) => (
     <div className={`pi-file-empty${settling ? ' pi-handoff-out' : ''}`} style={{ gap: 14 }} role="status">
         <ThinkingOrb state="composing" size={64} speed={1.10} aria-hidden="true" />
-        <p style={{ fontSize: 12, color: 'var(--pi-secondary)', margin: 0 }}>{label}</p>
+        <span className="pi-sr-only">{stages[0].text}</span>
+        <ThinkingStates stages={stages} sizer={sizer} paused={settling} />
     </div>
 );
 
@@ -1641,7 +1940,7 @@ export function ProfileIntelligenceSettings({
                 </p>
             </div>
             {profileIndexing || profileHandoff.settling ? (
-                <FileUploadIndexing label="Reading your resume…" settling={profileHandoff.settling} />
+                <FileUploadIndexing stages={RESUME_INGEST_STAGES} settling={profileHandoff.settling} />
             ) : !profileStatus.hasProfile ? (
                 <FileUploadEmpty
                     hint="Add your resume as real-time context."
@@ -1753,7 +2052,7 @@ export function ProfileIntelligenceSettings({
                 </p>
             </div>
             {jdIndexing || jdHandoff.settling ? (
-                <FileUploadIndexing label="Reading the job description…" settling={jdHandoff.settling} />
+                <FileUploadIndexing stages={profileStatus.hasProfile ? JD_INGEST_STAGES : JD_INGEST_STAGES_NO_RESUME} sizer={JD_SIZER} settling={jdHandoff.settling} />
             ) : !profileData?.hasActiveJD ? (
                 <FileUploadEmpty
                     hint="Add a job description as real-time context."
