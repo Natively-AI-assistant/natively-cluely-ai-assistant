@@ -55,8 +55,34 @@ const BIG_O_RE = /\bbig[- ]?o\b(?!ther)/i;
 // "without code" / "without writing code" / "no code" / "explain only" /
 // "don't write code" / "conceptually". The (?:writing|using|adding)? gerund covers
 // "without writing code" / "no actual code" phrasings.
-const EXPLAIN_ONLY_RE =
-  /\b(?:without|no|don'?t\s+(?:write|use|include|give))\s+(?:any\s+|actual\s+|writing\s+|using\s+|adding\s+|me\s+)*code\b|\bexplain\s+(?:it\s+|this\s+|the\s+\w+\s+)?(?:only|conceptually|in\s+words|in\s+plain\s+english)\b|\bonly\s+explain\b|\bconceptual(?:ly)?\s+(?:answer|explanation)\b|\bjust\s+explain\b/i;
+//
+// 2026-09-12 (in-app review "keeps giving code answers even when you tell it not
+// to"): the negation branch was a closed verb list, so the natural mid-session
+// push-backs — "stop giving me code", "I don't want code", "no more code answers",
+// "don't answer with code", "never output code" — fell through to the default
+// six-section contract. A trailing qualifier ("code that uses recursion", "the
+// code to crash") means the user is talking ABOUT code, not refusing it, so the
+// negation branches are guarded by NO_CODE_TAIL.
+const NO_CODE_TAIL = String.raw`(?:\s+(?:answers?|snippets?|blocks?))?\b(?!\s+(?:to|that|which|for|from|so|because|when|where|until|unless)\b)`;
+const NO_CODE_FILLER = String.raw`(?:any\s+|actual\s+|more\s+|writing\s+|using\s+|adding\s+|giving\s+|me\s+|the\s+|us\s+)*`;
+const EXPLAIN_ONLY_RE = new RegExp(
+  [
+    // "without code" / "no code" / "no more code answers"
+    String.raw`\b(?:without|no(?:\s+more)?)\s+${NO_CODE_FILLER}code${NO_CODE_TAIL}`,
+    // "don't write code" / "stop giving me code" / "never output code" /
+    // "please don't answer with code" / "I don't want code"
+    String.raw`\b(?:don'?t|do\s+not|never|stop|quit)\s+(?:want(?:\s+to\s+see)?|writ(?:e|ing)|us(?:e|ing)|includ(?:e|ing)|giv(?:e|ing)|show(?:ing)?|output(?:ting)?|return(?:ing)?|send(?:ing)?|answer(?:ing)?\s+with|respond(?:ing)?\s+with|reply(?:ing)?\s+with)\s+${NO_CODE_FILLER}code${NO_CODE_TAIL}`,
+    // "why do you keep giving me code?"
+    String.raw`\bwhy\s+(?:do\s+you\s+|are\s+you\s+)?(?:keep|still)\s+(?:giving|writing|showing|sending)\s+(?:me\s+)?code\b`,
+    // "answer in words not code" / "prose, not code"
+    String.raw`\b(?:words|prose|english|text|explanation)\s*,?\s+not\s+code\b`,
+    String.raw`\bexplain\s+(?:it\s+|this\s+|the\s+\w+\s+)?(?:only|conceptually|in\s+words|in\s+plain\s+english)\b`,
+    String.raw`\bonly\s+explain\b`,
+    String.raw`\bconceptual(?:ly)?\s+(?:answer|explanation)\b`,
+    String.raw`\bjust\s+explain\b`,
+  ].join('|'),
+  'i',
+);
 
 /**
  * Detect an explicit coding FORMAT constraint from the question. Deterministic,
