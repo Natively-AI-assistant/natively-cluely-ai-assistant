@@ -7632,6 +7632,16 @@ export class AppState {
     }
   }
 
+  /**
+   * Whether a tray icon currently exists. The launcher's win32/linux close
+   * handler hides to the tray only while this is true; with no tray (Windows
+   * undetectable mode destroys it) the close quits instead, because nothing
+   * on screen could bring the window back — see src/lib/launcherCloseDecision.mjs.
+   */
+  public hasTray(): boolean {
+    return this.tray !== null && !this.tray.isDestroyed();
+  }
+
   public setHasDebugged(value: boolean): void {
     this.hasDebugged = value
   }
