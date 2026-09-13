@@ -91,10 +91,14 @@ export class CalendarManager extends EventEmitter {
                         const qs = new url.URL(req.url, 'http://localhost:11111').searchParams;
                         const code = qs.get('code');
                         const error = qs.get('error');
+                        const errorDescription = qs.get('error_description');
 
                         if (error) {
                             res.end('Authentication failed! You can close this window.');
-                            finish(() => reject(new Error(error)));
+                            const errorMessage = errorDescription
+                                ? `${error}: ${errorDescription}`
+                                : error;
+                            finish(() => reject(new Error(errorMessage)));
                             return;
                         }
 
@@ -123,7 +127,9 @@ export class CalendarManager extends EventEmitter {
             server.listen(11111, () => {
                 // 3. Open Browser
                 const authUrl = this.getAuthUrl();
-                shell.openExternal(authUrl);
+                void shell.openExternal(authUrl).catch((err) => {
+                    finish(() => reject(err));
+                });
             });
 
             server.on('error', (err) => {
