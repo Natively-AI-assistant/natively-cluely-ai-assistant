@@ -456,6 +456,46 @@ export class DatabaseManager {
     // New migrations append a new `if (version < N)` block.
     // ============================================
 
+    /**
+     * Ensure the reserved '__profile_okf__' mode row exists.
+     *
+     * APPLIED UNCONDITIONALLY ON EVERY BOOT, NOT VERSION-GATED (live defect,
+     * 2026-09-13). This INSERT used to live inside the `version < 23` block. A
+     * live profile was observed at user_version 31 carrying v23's `pii` column
+     * but NOT this row, so the gate could never run again and the row could
+     * never come back. Every profile Knowledge Pack write then failed the
+     * knowledge_sources.mode_id -> modes(id) foreign key with "FOREIGN KEY
+     * constraint failed", and because ProfilePackBuilder.generateForProfile
+     * deliberately swallows its own errors (the OKF layer must never fail an
+     * ingest), ingest kept reporting success while the profile card layer
+     * silently never persisted a single row.
+     *
+     * `INSERT OR IGNORE` is idempotent by construction — the same reasoning as
+     * the meetings.user_titled ALTER further down — so it must not depend on a
+     * counter that concurrent branches can race or that a one-shot can strand.
+     * Running it every boot also self-heals any database already in that state.
+     *
+     * Safe to call from anywhere after migration v11 created `modes`; it is
+     * invoked from runMigrations immediately after the v23 block.
+     */
+    private ensureProfileOkfSentinelMode(): void {
+        if (!this.db) return;
+        try {
+            const result = this.db.prepare(`
+                INSERT OR IGNORE INTO modes (id, name, template_type, custom_context, is_active, created_at)
+                VALUES ('__profile_okf__', 'Profile Intelligence (reserved)', '__reserved__', '', 0, CURRENT_TIMESTAMP)
+            `).run();
+            if (result.changes > 0) {
+                console.log('[DatabaseManager] Restored the reserved __profile_okf__ mode row (profile Knowledge Packs could not persist without it)');
+            }
+        } catch (e) {
+            // Never fatal: without the sentinel, profile OKF packs stay broken
+            // (the pre-fix status quo), but every other table still works, so a
+            // failure here must not take the whole boot down with it.
+            console.error('[DatabaseManager] Failed to ensure the reserved __profile_okf__ mode row:', (e as Error)?.message || e);
+        }
+    }
+
     private runMigrations() {
         if (!this.db) return;
 
@@ -1302,7 +1342,7 @@ export class DatabaseManager {
             // pii=1 so downstream tooling (export, UI, any future consumer) can filter
             // PII cards. Reference-file cards keep the default pii=0 — no behavior
             // change for the existing document OKF path.
-            console.log('[DatabaseManager] Applying migration v22 → v23: profile OKF (reserved mode + knowledge_cards.pii)');
+            console.log('[DatabaseManager] Applying migration v22 → v23: profile OKF (knowledge_cards.pii)');
             const addPiiColumn = () => {
                 try {
                     this.db!.exec(`ALTER TABLE knowledge_cards ADD COLUMN pii INTEGER NOT NULL DEFAULT 0`);
@@ -1313,12 +1353,13 @@ export class DatabaseManager {
                 }
             };
             addPiiColumn();
-            this.db.prepare(`
-                INSERT OR IGNORE INTO modes (id, name, template_type, custom_context, is_active, created_at)
-                VALUES ('__profile_okf__', 'Profile Intelligence (reserved)', '__reserved__', '', 0, CURRENT_TIMESTAMP)
-            `).run();
             this.db.pragma('user_version = 23');
         }
+
+        // The '__profile_okf__' sentinel row itself is ensured on EVERY boot,
+        // not inside the v23 gate where it used to live — see
+        // ensureProfileOkfSentinelMode for the live defect that forced this.
+        this.ensureProfileOkfSentinelMode();
 
         // Version 23 → 24: Context OS memory safety (docs/context-os/, Phase 9).
         // assistant_claims separates factual CLAIMS from conversational assistant
