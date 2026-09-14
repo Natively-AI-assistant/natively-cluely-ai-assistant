@@ -16,6 +16,7 @@ import type {
     SkillUploadPreview,
     UploadSkillOutcome,
 } from '../../types/electron';
+import { LiquidGlassButton } from '../../ui-components/LiquidGlassButton';
 
 // Cap on the instructions preview length shown in the confirm card. The main
 // process may also truncate (DEFAULT_MAX_INSTRUCTIONS_PREVIEW=280), but the
@@ -92,6 +93,10 @@ export const SkillsSettings: React.FC = () => {
     // depth via a counter means we only clear the highlight when the cursor
     // has fully exited the entire card.
     const dragDepthRef = useRef(0);
+    // The glass button is a real <button>, so it cannot rely on a wrapping
+    // <label> to open the picker — an interactive descendant suppresses the
+    // label's activation behaviour. It drives the input directly instead.
+    const uploadInputRef = useRef<HTMLInputElement | null>(null);
     const [showAdvanced, setShowAdvanced] = useState(false);
 
     const loadSkills = useCallback(async () => {
@@ -421,9 +426,13 @@ export const SkillsSettings: React.FC = () => {
                 }}
                 className={[
                     'rounded-xl border transition-colors p-4 bg-bg-card',
+                    // The dashed outline is drag feedback, so it appears only
+                    // while a file is actually over the card. It used to also
+                    // show on plain hover, which read as the card being a
+                    // control in its own right.
                     isDragging
-                        ? 'border-accent-primary bg-accent-subtle'
-                        : 'border-dashed border-border-subtle hover:border-accent-border',
+                        ? 'border-dashed border-accent-primary bg-accent-subtle'
+                        : 'border-transparent',
                 ].join(' ')}
             >
                 <div className="flex items-center justify-between gap-4">
@@ -439,28 +448,26 @@ export const SkillsSettings: React.FC = () => {
                             <p className="text-[11px] text-text-tertiary animate-pulse mt-2">{t('Uploading…')}</p>
                         )}
                     </div>
-                    <label className="cursor-pointer shrink-0">
-                        <input
-                            type="file"
-                            accept=".md,text/markdown"
-                            className="hidden"
-                            onChange={async (e) => {
-                                const f = e.target.files?.[0];
-                                if (f) await handleFilePicked(f);
-                                e.currentTarget.value = ''; // allow re-pick of same file
-                            }}
-                            disabled={uploading}
-                        />
-                        <span
-                            className={[
-                                'inline-flex items-center px-4 py-2 rounded-lg text-xs font-semibold transition-colors shrink-0',
-                                'bg-legacy-action-bg hover:bg-legacy-action-hover text-legacy-action-fg',
-                                uploading ? 'opacity-60 pointer-events-none' : '',
-                            ].join(' ')}
-                        >
-                            {t('Upload')}
-                        </span>
-                    </label>
+                    <input
+                        ref={uploadInputRef}
+                        type="file"
+                        accept=".md,text/markdown"
+                        className="hidden"
+                        onChange={async (e) => {
+                            const f = e.target.files?.[0];
+                            if (f) await handleFilePicked(f);
+                            e.currentTarget.value = ''; // allow re-pick of same file
+                        }}
+                        disabled={uploading}
+                    />
+                    <LiquidGlassButton
+                        variant="sky"
+                        className="lg-sm shrink-0"
+                        disabled={uploading}
+                        onClick={() => uploadInputRef.current?.click()}
+                    >
+                        {t('Upload')}
+                    </LiquidGlassButton>
                 </div>
             </div>
 
