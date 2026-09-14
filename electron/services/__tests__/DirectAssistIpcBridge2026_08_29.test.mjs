@@ -383,13 +383,10 @@ test('listDirectAssistRungs builds the ladder with no preference gate in front o
   assert.doesNotMatch(block, /SettingsManager/);
 });
 
-test('the Direct Assist card still tells the user that a switch can happen', () => {
-  // The behaviour did not disappear with the toggle, so the explanation must
-  // not either — but it is one clause on the existing line, not a second
-  // paragraph: this card sits in a stack of equally-sized cards.
-  const ui = read('src/components/settings/AIProvidersSettings.tsx');
-  assert.match(ui, /If it fails, another provider answers\./);
-});
+// No test pins copy about the fallback onto this card. The switch is announced
+// where it actually happens — the answer card's fallbackNotice
+// (NativelyInterface.tsx) — so Settings does not have to describe it, and the
+// Direct Assist card keeps the one-line description it shipped with.
 
 test('a transcribed history turn does not consume the image-validation budget', () => {
   // selectCarriedHistoryImages skips every turn that has a description, but the

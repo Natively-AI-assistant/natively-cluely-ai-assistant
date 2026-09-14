@@ -360,6 +360,50 @@
 /* short side edges on a rect, so the cap shadow needs far less weight */
 .lg-button.lg-sm::after  { padding: 1px; opacity: .5; }
 
+/*
+  ---------------------------------------------------------------------------
+  .lg-badge — the material at TAG scale, and NOT a control.
+
+  The same three "these do not scale with the pill" rules as .lg-sm, one step
+  further down, plus a fourth that applies only here: a badge is not pressable.
+  It gets no hover tint, no press, no lens and no focus ring, because there is
+  nothing to press. `pointer-events: none` removes all four at once — the
+  alternative is overriding each of the (0,3,0) interaction rules by hand, and
+  missing one leaves a label that lights up under the cursor and does nothing.
+  (A badge that ever needs a `title` tooltip has to trade this for those
+  per-state overrides, since a pointer-transparent element gets no tooltip.)
+
+  The box is .aip-badge's rendered box — 18px tall, 0 8px padding, 9.5px
+  uppercase at 0.04em — so swapping one primitive for the other does not shift
+  the row it sits in.
+  ---------------------------------------------------------------------------
+*/
+.lg-button.lg-badge {
+    --lg-pill-h: 18px;
+    --lg-label-size: 9.5px;
+    --lg-label-weight: 600;
+    --lg-font: inherit;
+    --lg-label-track: 0.04em;
+    /*
+      line-height 1 clips the line box below the font's own ascent + descent —
+      the same failure .lg-sm documents at 12px, just more visible at 9.5px,
+      where a 1px drop is a tenth of the cap height.
+    */
+    --lg-label-leading: 1.45;
+
+    padding: 0 8px;
+    text-transform: uppercase;
+    /* it sits in a flex row beside a label that may truncate; the tag may not */
+    flex: none;
+    pointer-events: none;
+}
+/*
+  At 18px even .lg-sm's single ring plus a 1px cap ring is a large share of the
+  pill. The rim stays — it is the material — and the cap shadow nearly goes.
+*/
+.lg-button.lg-badge::before { box-shadow: inset 0 0 0 1px var(--lg-rim-1); }
+.lg-button.lg-badge::after  { padding: 1px; opacity: .3; }
+
 .lg-content {
     position: relative;
     z-index: 2;

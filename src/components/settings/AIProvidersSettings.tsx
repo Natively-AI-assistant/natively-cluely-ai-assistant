@@ -27,6 +27,7 @@ import {
     AI_PROVIDER_MARK_IMAGES,
 } from '../ui/aiProviderMarks';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
+import { LiquidGlassBadge } from '../../ui-components/LiquidGlassBadge';
 
 /* ═══════════════════════════════════════════════════════════════════════════
    AI Providers design system — a locally-scoped token block, PI-style.
@@ -3840,13 +3841,24 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                             <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('Direct Assist')}</label>
-                            <AipBadge tone="info" label={t('Beta')} />
+                            {/* The Liquid Glass material rather than .aip-badge:
+                                a tag qualifies the title beside it, and this one
+                                carries no status, so it also drops the status dot
+                                that primitive leads with.
+
+                                `sky` is a LIGHT fill, which inverts the material's
+                                lighting model — specular on the top face only, plus
+                                a contact shadow — so it is the one variant that
+                                looks the same in both themes without a per-theme
+                                block. Its white label is 2.81:1, below the AA floor
+                                for text this size; design.md records that as a
+                                deliberate choice for this variant, and it is one
+                                here too. A navy label on the same fill reaches
+                                5.31:1 if that ever needs to change. */}
+                            <LiquidGlassBadge variant="sky">{t('Beta')}</LiquidGlassBadge>
                         </div>
                         <p className="text-[10px] aip-muted mt-0.5">
-                            {/* Fallback used to be a second toggle here. It is
-                                unconditional now, so it earns a clause, not a
-                                card — the switch itself is labelled on the answer. */}
-                            {t('Sends your current typed, spoken, screenshot, and page input straight to the active model without meeting retrieval or answer rewriting. If it fails, another provider answers.')}
+                            {t('Sends your typed, spoken, screenshot, and page input straight to the model, unprocessed.')}
                         </p>
                         {directAssistError && (
                             <p className="text-[10px] aip-danger-fg mt-1" role="alert">{directAssistError}</p>

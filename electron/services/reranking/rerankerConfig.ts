@@ -196,7 +196,20 @@ export function readHostedModel(settings: RerankerSettings): string | undefined 
     const { defaultHostedModel } = require('../../rag/hostedRerankProviders') as typeof import('../../rag/hostedRerankProviders');
     return settings.nativelyModel || defaultHostedModel('natively') || undefined;
   }
-  return settings.provider === 'jina' ? settings.jinaModel : settings.openrouterModel;
+  if (settings.provider === 'jina') {
+    // Same reasoning as the natively branch: Jina's catalogue is curated and
+    // static, so an unset model means "the recommended one", not 'no-model'
+    // ineligibility on a provider whose key the user just pasted. Without this
+    // a Jina key activated nothing and silently fell back to the local
+    // cross-encoder.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { defaultHostedModel } = require('../../rag/hostedRerankProviders') as typeof import('../../rag/hostedRerankProviders');
+    return settings.jinaModel || defaultHostedModel('jina') || undefined;
+  }
+  // OpenRouter's catalogue is FETCHED (staticCatalogue: false), so there is no
+  // id to fall back to here that we have seen on the live API. It is filled in
+  // by hostedKeyActivation after a successful catalogue fetch instead.
+  return settings.openrouterModel;
 }
 
 export function readOpenRouterApiKey(): string | undefined {

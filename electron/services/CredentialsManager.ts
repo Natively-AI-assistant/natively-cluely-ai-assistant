@@ -1019,10 +1019,38 @@ export class CredentialsManager {
         return this.credentials.voyageApiKey;
     }
 
+
+    /**
+     * Turn a saved (or cleared) hosted key into the retrieval settings it implies.
+     *
+     * setNativelyApiKey has done this for its own key since 2026-09-08; every
+     * other hosted key was written here and then ignored, so pasting one
+     * activated nothing and there was no symptom — a rerank that never runs just
+     * leaves the cosine order, and an embedding candidate the resolver declines
+     * to build falls through to the bundled model.
+     *
+     * Fire-and-forget on purpose. OpenRouter's rerank catalogue has to be
+     * fetched before a model id can be written, and a credential save must never
+     * wait on (or fail because of) a network call. hostedKeyActivation catches
+     * its own failures and logs every refusal.
+     */
+    private activateHostedRetrieval(provider: 'openrouter' | 'jina' | 'voyage', keyPresent: boolean): void {
+        try {
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const { applyHostedKeyActivation } = require('./hostedKeyActivation');
+            void applyHostedKeyActivation(provider, { keyPresent }).catch((err: any) => {
+                console.warn(`[CredentialsManager] hosted retrieval not activated for ${provider}:`, err?.message);
+            });
+        } catch (err: any) {
+            console.warn(`[CredentialsManager] hosted retrieval activation unavailable (${provider}):`, err?.message);
+        }
+    }
+
     public setVoyageApiKey(key: string): boolean {
         if (this.refuseWriteWhileDegraded('set voyage api key')) return false;
         this.credentials.voyageApiKey = key.trim() || undefined;
         this.saveCredentials();
+        this.activateHostedRetrieval('voyage', !!this.credentials.voyageApiKey);
         return true;
     }
 
@@ -1034,6 +1062,7 @@ export class CredentialsManager {
         if (this.refuseWriteWhileDegraded('set openrouter api key')) return false;
         this.credentials.openrouterApiKey = key.trim() || undefined;
         this.saveCredentials();
+        this.activateHostedRetrieval('openrouter', !!this.credentials.openrouterApiKey);
         return true;
     }
 
@@ -1045,6 +1074,7 @@ export class CredentialsManager {
         if (this.refuseWriteWhileDegraded('set jina api key')) return false;
         this.credentials.jinaApiKey = key.trim() || undefined;
         this.saveCredentials();
+        this.activateHostedRetrieval('jina', !!this.credentials.jinaApiKey);
         return true;
     }
 
