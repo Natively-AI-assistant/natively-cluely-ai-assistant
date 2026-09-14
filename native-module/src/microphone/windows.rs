@@ -1,5 +1,6 @@
 use super::normalize_device_name;
 use crate::audio_config::RING_BUFFER_SAMPLES;
+use crate::windows_audio::{decode_sample, downmix_to_mono};
 use anyhow::Result;
 use ringbuf::{
     traits::{Producer, Split},
@@ -10,7 +11,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Condvar, Mutex};
 use std::thread;
 use std::time::Duration;
-use wasapi::{get_default_device, DeviceCollection, Direction, SampleType, ShareMode, WaveFormat};
+use wasapi::{get_default_device, DeviceCollection, Direction, ShareMode, WaveFormat};
 
 const MAX_CONSECUTIVE_READ_FAILURES: u32 = 5;
 
@@ -101,58 +102,6 @@ fn resolve_input_device(device_id: Option<&str>) -> Result<wasapi::Device> {
         requested_id,
         available.join(", ")
     ))
-}
-
-fn decode_sample(bytes: &[u8], sample_type: SampleType, bits_per_sample: u16) -> Option<f32> {
-    match (sample_type, bits_per_sample) {
-        (SampleType::Float, 32) if bytes.len() >= 4 => {
-            Some(f32::from_le_bytes(bytes[..4].try_into().ok()?))
-        }
-        (SampleType::Float, 64) if bytes.len() >= 8 => {
-            Some(f64::from_le_bytes(bytes[..8].try_into().ok()?) as f32)
-        }
-        (SampleType::Int, 8) if !bytes.is_empty() => Some((bytes[0] as f32 - 128.0) / 128.0),
-        (SampleType::Int, 16) if bytes.len() >= 2 => {
-            Some(i16::from_le_bytes(bytes[..2].try_into().ok()?) as f32 / 32_768.0)
-        }
-        (SampleType::Int, 24) if bytes.len() >= 3 => {
-            let value = ((bytes[0] as i32) | ((bytes[1] as i32) << 8) | ((bytes[2] as i32) << 16))
-                << 8
-                >> 8;
-            Some(value as f32 / 8_388_608.0)
-        }
-        (SampleType::Int, 32) if bytes.len() >= 4 => {
-            Some(i32::from_le_bytes(bytes[..4].try_into().ok()?) as f32 / 2_147_483_648.0)
-        }
-        _ => None,
-    }
-}
-
-fn downmix_to_mono(
-    bytes: VecDeque<u8>,
-    bytes_per_frame: usize,
-    channels: usize,
-    sample_type: SampleType,
-    bits_per_sample: u16,
-) -> Vec<f32> {
-    let bytes_per_sample = bytes_per_frame / channels;
-    let bytes: Vec<u8> = bytes.into_iter().collect();
-    let mut samples = Vec::with_capacity(bytes.len() / bytes_per_frame);
-
-    for frame in bytes.chunks_exact(bytes_per_frame) {
-        let mut sum = 0.0;
-        for channel in 0..channels {
-            let start = channel * bytes_per_sample;
-            let end = start + bytes_per_sample;
-            let Some(sample) = decode_sample(&frame[start..end], sample_type, bits_per_sample)
-            else {
-                return Vec::new();
-            };
-            sum += sample;
-        }
-        samples.push(sum / channels as f32);
-    }
-    samples
 }
 
 pub struct WindowsInputStream {
