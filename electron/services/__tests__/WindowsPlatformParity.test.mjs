@@ -49,30 +49,116 @@ test('preflight: the darwin-only native asset checks are gated to darwin', () =>
   }
 });
 
-test('preflight: Windows has its own sharp / sqlite-vec checks, arch-agnostic', () => {
+test('preflight: the Windows sharp check pins the RUNNING arch, not a prefix', () => {
   const src = read('electron/services/LocalFallbackPreflight.ts');
   const block = src.slice(
     src.indexOf("} else if (process.platform === 'win32') {"),
     src.indexOf('// 4. Ollama optional path.'),
   );
   assert.ok(block.length > 0, 'win32 native-asset branch not found');
-  assert.match(
-    block,
-    /checkUnpackedNativePrefix\('node_modules\/@img', 'sharp-win32-'/,
-    'BUG: Windows must verify a sharp win32 binary was packaged.',
+
+  // This assertion INVERTS the one it replaces, deliberately.
+  //
+  // The original required the Windows check to be arch-agnostic, because the
+  // build only ever installed @img/sharp-win32-x64 and pinning an arch would
+  // have failed the ia32 installer with a false 'reinstall Natively' alarm.
+  // That made the prefix match the lesser evil, not the correct check.
+  //
+  // scripts/ensure-sharp-win-deps.js now installs every arch the NSIS target
+  // ships, so the false alarm is gone — and the prefix match became the
+  // defect: 'sharp-win32-' also matches the packaged x64 directory on an ia32
+  // install, so the check reported healthy on exactly the wrong-bitness
+  // install it exists to catch.
+  assert.ok(
+    block.includes('sharp-win32-' + '${process.arch}'),
+    'BUG: the Windows sharp check must pin the running arch — a prefix match is ' +
+      'satisfied by the packaged x64 directory on an ia32 install, hiding a ' +
+      'wrong-bitness binary behind a passing check.',
   );
-  assert.match(
-    block,
-    /checkUnpackedNativePrefix\('node_modules', 'sqlite-vec-windows-'/,
-    'BUG: Windows must verify the sqlite-vec Windows extension was packaged.',
+  assert.ok(
+    !block.includes("checkUnpackedNativePrefix('node_modules/@img'"),
+    'BUG: reverted to the prefix match — see above; it cannot distinguish arches.',
   );
-  // Arch must NOT be hardcoded: Windows ships x64 AND ia32 installers, so
-  // pinning one arch would fail the other with the same false "reinstall" alarm.
-  assert.doesNotMatch(
-    block,
-    /sharp-win32-x64|sharp-win32-ia32|sqlite-vec-windows-x64/,
-    'BUG: do not hardcode a Windows arch — prefix-match so x64/ia32/arm64 all pass.',
+});
+
+test('preflight: sqlite-vec absent on a non-x64 Windows arch is expected, not a failure', () => {
+  const src = read('electron/services/LocalFallbackPreflight.ts');
+  const block = src.slice(
+    src.indexOf("} else if (process.platform === 'win32') {"),
+    src.indexOf('// 4. Ollama optional path.'),
   );
+
+  // sqlite-vec publishes a Windows extension for x64 only, at every version
+  // (checked through 0.1.10-alpha.4). On ia32 the extension is legitimately
+  // absent: DatabaseManager catches the load error and VectorStore drops to
+  // JS cosine. Asserting its presence there would flip `nativeOk` and tell a
+  // correctly-installed user to reinstall — so the arch split must stay, and
+  // the non-x64 branch must report ok.
+  assert.ok(
+    block.includes("if (process.arch === 'x64') {"),
+    'BUG: the sqlite-vec Windows check must be split by arch — only x64 has a ' +
+      'published extension to look for.',
+  );
+  assert.ok(
+    block.includes('sqlite-vec-windows-x64/vec0.dll'),
+    'BUG: the x64 branch must verify the actual packaged extension file.',
+  );
+
+  const nonX64Branch = block.slice(block.indexOf('} else {'));
+  assert.ok(
+    nonX64Branch.includes("id: 'sqlite-vec windows extension'") &&
+      nonX64Branch.includes('ok: true'),
+    'BUG: on a non-x64 Windows arch the check must report ok — a missing ' +
+      'sqlite-vec there is upstream reality, not a corrupt install, and failing ' +
+      'it produces a false "Please reinstall Natively".',
+  );
+});
+
+// ── 1c. 32-bit Windows has no ONNX runtime, and said so as 'reinstall me' ────
+// onnxruntime-node publishes prebuilt binaries only, for win32 {x64, arm64}.
+// The ia32 installer therefore has no ONNX runtime at all, so the three import
+// probes failed and every packaged-local provider reported
+// 'missing_required_asset' — i.e. told a correctly-installed 32-bit user to
+// reinstall, which could never help. Cloud STT and cloud embeddings are
+// unaffected, so the honest status is 'unavailable', not 'corrupt'.
+
+test('preflight: the ONNX import probes are skipped on an arch with no runtime', () => {
+  const src = read('electron/services/LocalFallbackPreflight.ts');
+
+  assert.ok(
+    src.includes('function onnxRuntimeSupportsThisArch()'),
+    'BUG: the arch-capability gate is gone — the ia32 build then probes for an ' +
+      'onnxruntime-node binary that is not published for it.',
+  );
+  assert.ok(
+    src.includes("if (process.platform === 'win32') return process.arch === 'x64' || process.arch === 'arm64';"),
+    'BUG: the win32 ONNX arch set must stay {x64, arm64} — those are the only ' +
+      'binaries onnxruntime-node publishes for Windows.',
+  );
+  assert.ok(
+    src.includes('const onnxArchSupported = onnxRuntimeSupportsThisArch();') &&
+      src.includes('if (onnxArchSupported) {'),
+    'BUG: the import probes must sit behind the arch gate.',
+  );
+});
+
+test('preflight: a no-ONNX arch reports unavailable, never "Please reinstall"', () => {
+  const src = read('electron/services/LocalFallbackPreflight.ts');
+
+  // 'missing_required_asset' is the only health that sets recoverable:false
+  // (see statusFor), and it is the one that renders the reinstall prompt. An
+  // architecture that upstream never built for is not a damaged install.
+  for (const provider of ['local-embedding', 'intent-classifier', 'local-reranker']) {
+    const idx = src.indexOf("'" + provider + "',");
+    assert.ok(idx > -1, 'provider status block for ' + provider + ' not found');
+    const block = src.slice(idx, idx + 900);
+    assert.ok(
+      block.includes("onnxArchSupported ? 'missing_required_asset' : 'unavailable'"),
+      'BUG: ' + provider + ' must report unavailable (not missing_required_asset) ' +
+        'when the architecture has no ONNX runtime — otherwise a correctly ' +
+        'installed 32-bit user is told to reinstall, which cannot help.',
+    );
+  }
 });
 
 // ── 2. Full-screen screenshots captured the wrong monitor on Windows ─────────

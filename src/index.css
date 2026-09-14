@@ -3207,6 +3207,66 @@ html[data-platform="win32"][data-overlay-enter="entering"] body {
     transform 300ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 
+/* ── Departing overlay group (Stop meeting) ─────────────────────────────────
+   The mirror of the launcher recede above, and the more visible of the two
+   departures: the overlay group is the alwaysOnTop half of the swap, so this
+   plays ON TOP of the launcher rising underneath it. It is the cross-fade the
+   user actually watches when they press Stop.
+
+   Same 0.965 and same curve as the launcher's recede, deliberately — a window
+   stepping back to let another through should read identically whichever
+   window it is. The transform-origin rules below (shared with the entrance)
+   keep the pill welded to the shell's top edge while it goes.
+
+   `pointer-events: none` is the DOM half of the click-through the main process
+   forces in beginOverlayExit(); neither alone is enough, because the window
+   itself keeps hit-testing even when its contents opt out. */
+html[data-platform="win32"][data-window="overlay"][data-overlay-enter="leaving"] body,
+html[data-platform="win32"][data-window="overlay-pill"][data-overlay-enter="leaving"] body,
+html[data-platform="win32"][data-window="overlay-toggle"][data-overlay-enter="leaving"] body {
+  opacity: 0;
+  transform: scale(0.965);
+  will-change: opacity, transform;
+  pointer-events: none;
+  transition:
+    opacity 260ms cubic-bezier(0.32, 0.72, 0, 1),
+    transform 260ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* ── Arriving launcher (Stop meeting) ───────────────────────────────────────
+   The launcher's entrance, which only exists on the way back from a meeting.
+   Transform on BODY for the same reason the recede uses body: body is the
+   launcher's rounded clip and the containing block for the hairline ring in
+   body::after, so scaling it carries the backing, the radius and the ring as
+   one rigid object.
+
+   0.96 matches the overlay entrance rather than the 0.965 of the two
+   departures. Arrivals travel slightly further than exits — the extra 0.005 is
+   what stops an entrance from reading as a window that was already there. */
+html[data-platform="win32"][data-window="launcher"][data-launcher-transition="arriving"] body {
+  opacity: 0;
+  transform: scale(0.96);
+  transform-origin: center center;
+  will-change: opacity, transform;
+  /* No transition INTO this state — it is a starting position being set behind
+     a shielded window, not something to animate to. */
+  transition: none;
+}
+
+/* Opacity finishes before the transform (200ms of 300ms), same as the overlay
+   entrance: the surface is fully present while its shape is still settling,
+   which is what makes an entrance read as an object arriving rather than a
+   layer fading up. */
+html[data-platform="win32"][data-window="launcher"][data-launcher-transition="entering"] body {
+  opacity: 1;
+  transform: scale(1);
+  transform-origin: center center;
+  will-change: opacity, transform;
+  transition:
+    opacity 200ms cubic-bezier(0.32, 0.72, 0, 1),
+    transform 300ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
 /* Reduced motion means less movement, not no feedback: the swap still needs a
    transition or the blank-gap fix regresses into a hard cut. Keep the fades,
    drop every transform, and shorten. */
@@ -3221,6 +3281,20 @@ html[data-platform="win32"][data-overlay-enter="entering"] body {
   }
 
   html[data-platform="win32"][data-overlay-enter="entering"] body {
+    transform: none;
+    transition: opacity 140ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  html[data-platform="win32"][data-overlay-enter="leaving"] body {
+    transform: none;
+    transition: opacity 140ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  html[data-platform="win32"][data-window="launcher"][data-launcher-transition="arriving"] body {
+    transform: none;
+  }
+
+  html[data-platform="win32"][data-window="launcher"][data-launcher-transition="entering"] body {
     transform: none;
     transition: opacity 140ms cubic-bezier(0.32, 0.72, 0, 1);
   }

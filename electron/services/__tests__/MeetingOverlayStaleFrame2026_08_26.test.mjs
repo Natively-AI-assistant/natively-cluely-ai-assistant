@@ -46,7 +46,14 @@ const sliceStartMeetingTransition = (main) => {
 const sliceEndMeetingTransition = (main) => {
   const start = main.indexOf('private async endMeetingTransition(');
   assert.ok(start > -1, 'endMeetingTransition() not found in electron/main.ts');
-  return stripComments(main.slice(start, start + 6000));
+  // Slice to the NEXT method rather than a fixed character budget. The old
+  // `start + 6000` silently truncated the function the first time somebody
+  // added a paragraph of comment above the session-reset send, and the test
+  // failed with "must still clear the overlay tree" on a function that still
+  // did. A window that moves with the code cannot rot that way.
+  const end = main.indexOf('private async processCompletedMeetingForRAG(', start);
+  assert.ok(end > start, 'end of endMeetingTransition() not found');
+  return stripComments(main.slice(start, end));
 };
 
 const sliceSwitchToOverlay = (helper) => {
@@ -103,6 +110,31 @@ test('endMeetingTransition still clears the overlay only after hiding it', () =>
   assert.ok(
     hideAt < resetAt,
     'the overlay must be hidden BEFORE session-reset — clearing it while visible plays the chat-list unmount and width collapse on screen.',
+  );
+
+  // STRENGTHENED for the Stop-swap choreography. Source order is no longer
+  // sufficient on its own: setWindowMode('launcher') now DEFERS the overlay's
+  // hide behind the launcher's opacity shield and a 260ms exit fade, so a
+  // session-reset that merely comes later in the file can still land while the
+  // overlay is on screen — and it is the worst possible thing to land there,
+  // because collapsing the shell width is an OS-level window resize.
+  //
+  // So the send must be scheduled off the exit, not merely sequenced after the
+  // swap, and it must be guarded: a Stop→Start faster than that timer would
+  // otherwise wipe the NEXT meeting's freshly shown overlay.
+  const tail = body.slice(hideAt);
+  assert.match(
+    tail,
+    /WindowHelper\.overlayExitSettleMs/,
+    'the session-reset must be scheduled off WindowHelper.overlayExitSettleMs. ' +
+      'Sending it synchronously after setWindowMode is no longer "after the hide" — ' +
+      'the hide is deferred behind the exit animation.',
+  );
+  assert.match(
+    tail,
+    /getCurrentWindowMode\(\)\s*!==\s*'launcher'/,
+    'the deferred session-reset must bail if a meeting has started again — ' +
+      'otherwise a fast Stop→Start clears the new overlay instead of the old one.',
   );
 });
 
@@ -192,11 +224,20 @@ test('switchToLauncher drops any pending overlay un-shield on both branches', ()
   const body = stripComments(helper.slice(start, helper.indexOf('public setWindowMode(', start)));
 
   const clearAt = body.indexOf('clearTimeout(this.opacityTimeout)');
-  const cpBranchAt = body.indexOf("process.platform === 'win32' && this.contentProtection");
+  // Anchored on the win32 SHIELD branch, not the old
+  // `win32 && this.contentProtection` one. That gate is gone, for exactly the
+  // reason the switchToOverlay test above forbids it: the stale-frame leak
+  // happens whether or not content protection is on, so the shield — and with
+  // it the whole Stop choreography — must not be gated on the user's setting.
+  // The ordering contract this test exists for is unchanged: the clear must
+  // precede whichever branch may arm a NEW timer, because the macOS/else
+  // branch arms none of its own and would otherwise leave the overlay's timer
+  // live.
+  const shieldBranchAt = body.indexOf("if (process.platform === 'win32') {");
   assert.ok(clearAt > -1, 'switchToLauncher must clear the pending un-shield timer.');
-  assert.ok(cpBranchAt > -1, 'the launcher content-protection branch must still exist.');
+  assert.ok(shieldBranchAt > -1, 'the launcher win32 shield branch must still exist.');
   assert.ok(
-    clearAt < cpBranchAt,
-    'the clear must happen BEFORE the content-protection branch — the non-CP branch arms no timer of its own and would otherwise leave the overlay timer live.',
+    clearAt < shieldBranchAt,
+    'the clear must happen BEFORE the shield branch — the non-win32 branch arms no timer of its own and would otherwise leave the overlay timer live.',
   );
 });

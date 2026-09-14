@@ -15,6 +15,16 @@
 // The pill is alwaysOnTop and the launcher is a regular window, so every frame
 // in that tail paints the pill over the launcher.
 //
+// UPDATE (Stop-swap choreography): symptom 1's fix has since been superseded by
+// something stronger. The Stop swap is no longer "show launcher, hide overlay"
+// at all — it is a cross-fade, and the whole overlay group leaves together on
+// one timeline, deferred behind the launcher's opacity shield. The pill can no
+// longer be stranded because it never outlives the shell. What this file still
+// pins is the invariant underneath both fixes: aux chrome and body move in the
+// same block, never one hop apart. See the superseded-contract note further
+// down before restoring any assertion about the aux hide preceding the
+// launcher SHOW.
+//
 // Fix: every show/hide call site drives the aux chrome EXPLICITLY, in the same
 // synchronous block as the overlay's own show/hide, via
 // applyOverlayAuxVisibility(want). The 'show'/'hide' event handlers remain as a
@@ -82,33 +92,61 @@ test('applyOverlayAuxVisibility exists and takes the wanted state explicitly', (
   );
 });
 
-test('switchToLauncher hides the aux chrome BEFORE showing the launcher', () => {
+// SUPERSEDED CONTRACT — read this before "restoring" the old assertion.
+//
+// This used to require `applyOverlayAuxVisibility(false)` to run BEFORE the
+// launcher show, because the pill is alwaysOnTop and the launcher is not, so
+// any frame with both up painted the pill over the launcher. That was correct
+// while the pill's disappearance was a HARD CUT: the only thing an overlapping
+// frame could produce then was a pill sitting on top of a launcher that had
+// already arrived.
+//
+// The Stop swap is now a handoff, not a cut (see the RETURN DIRECTION block in
+// WindowHelper.ts). The overlay group — shell, pill and toggle together — fades
+// out on one timeline ON TOP of the launcher rising underneath it, which is the
+// whole cross-fade. Hiding the pill ahead of the launcher show would now be the
+// defect: it would snap the pill out of a group whose shell is still fading,
+// breaking the "three HWNDs, one object" invariant the entrance direction goes
+// to real lengths to preserve.
+//
+// So the contract flips on the deferred path and is UNCHANGED on every other:
+// the aux hide now travels with the body hide, wherever that happens.
+test('switchToLauncher hides the aux chrome together with the overlay body, never before it', () => {
   const hideAux = switchToLauncher.indexOf('this.applyOverlayAuxVisibility(false)');
-  assert.notEqual(hideAux, -1, 'switchToLauncher must hide the aux chrome explicitly');
+  assert.notEqual(hideAux, -1, 'switchToLauncher must still hide the aux chrome explicitly');
 
+  const overlayHide = switchToLauncher.indexOf('this.overlayWindow.hide()');
+  assert.notEqual(overlayHide, -1, 'switchToLauncher must still hide the overlay');
+
+  assert.ok(
+    hideAux < overlayHide,
+    'the pill/toggle hide must still immediately precede the body hide — they ' +
+      'are one object and must leave the screen on one frame. Only their ' +
+      'position relative to the LAUNCHER SHOW changed.',
+  );
+
+  // ...and the deferred path must hide them from inside the handoff, not
+  // synchronously. If this regresses, the pill outlives the fade it belongs to.
+  const handoff = extractMethodBody('hideOverlayAfterLauncherHandoff');
+  const hideAuxInHandoff = handoff.indexOf('this.applyOverlayAuxVisibility(false)');
+  const hideBodyInHandoff = handoff.indexOf('this.overlayWindow.hide()');
+  assert.ok(
+    hideAuxInHandoff > -1 && hideBodyInHandoff > hideAuxInHandoff,
+    'the deferred overlay hide must take the aux chrome down with it, immediately ' +
+      'before the body — the group faded as one and must vanish as one.',
+  );
+});
+
+test('switchToLauncher still hides the overlay body AFTER showing the launcher', () => {
+  // The show-before-hide invariant that keeps at least one Natively window on
+  // screen through the swap. Unchanged by the handoff — if anything the
+  // handoff strengthens it, since the hide is now a further 260ms out.
   const launcherShow = Math.min(
     ...['this.launcherWindow.show()', 'this.launcherWindow.showInactive()']
       .map((s) => switchToLauncher.indexOf(s))
       .filter((i) => i !== -1),
   );
   assert.ok(Number.isFinite(launcherShow), 'expected a launcher show call');
-
-  assert.ok(
-    hideAux < launcherShow,
-    'the pill/toggle hide must precede the launcher show — the pill is ' +
-      'alwaysOnTop and the launcher is not, so any frame with both up paints ' +
-      'the pill over the launcher (the reported Stop-meeting bug)',
-  );
-});
-
-test('switchToLauncher still hides the overlay body AFTER showing the launcher', () => {
-  // The aux fix must not have inverted the show-before-hide invariant that
-  // keeps at least one Natively window on screen through the swap.
-  const launcherShow = Math.min(
-    ...['this.launcherWindow.show()', 'this.launcherWindow.showInactive()']
-      .map((s) => switchToLauncher.indexOf(s))
-      .filter((i) => i !== -1),
-  );
   const overlayHide = switchToLauncher.indexOf('this.overlayWindow.hide()');
   assert.notEqual(overlayHide, -1, 'switchToLauncher must still hide the overlay');
   assert.ok(

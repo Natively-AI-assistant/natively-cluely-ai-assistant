@@ -1,6 +1,7 @@
-import { BrowserWindow, shell, systemPreferences } from 'electron';
+import { BrowserWindow, clipboard, shell, systemPreferences } from 'electron';
 import type { CapturedKey, OverlayBoundsInput } from '../audio/nativeModuleLoader';
 import { isVerboseLogging } from '../verboseLog';
+import { normalizePastedText } from '../utils/stealthPasteText.mjs';
 
 /**
  * Lifecycle owner for the macOS CGEventTap. JS-side state machine for the
@@ -615,6 +616,37 @@ export class StealthKeyboardManager {
         }
     }
 
+    /**
+     * Ctrl+V inside a Windows stealth-typing session. The hook swallowed the
+     * chord (see the EDIT-CHORD SWALLOW in keyboard_hook_windows.rs), so nothing
+     * pasted anywhere — we service it here by reading the clipboard and pushing
+     * the text down the SAME `stealth-key-captured` channel ordinary keystrokes
+     * use. The renderer's existing "append printable chars" branch appends it
+     * verbatim, so this needs no renderer-side paste handler at all.
+     *
+     * macOS never reaches this path: there the overlay input holds real DOM
+     * focus and Chromium services Cmd+V itself, unchanged.
+     */
+    private handleStealthPaste(): void {
+        let text: string;
+        try {
+            text = clipboard.readText();
+        } catch (e) {
+            console.error('[StealthKeyboardManager] clipboard read failed:', e);
+            return;
+        }
+        const chars = normalizePastedText(text);
+        if (!chars) return; // empty / image-only clipboard — nothing to type
+        this.sendKeyToOverlay({
+            keyCode: 0,
+            chars,
+            flags: 0,
+            isKeyDown: true,
+            isOutsideMouseDown: false,
+            appChordId: '',
+        });
+    }
+
     private handleCapturedKey(ev: CapturedKey): void {
         // App-chord: the native hook (Windows) swallowed one of the app's OWN
         // global shortcuts so it couldn't leak into the foreground app. Dispatch
@@ -625,6 +657,14 @@ export class StealthKeyboardManager {
             // (a late event queued before a stop()).
             if (!this.active && !this.guardRunning) return;
             if (this.active) this.armIdleTimer(); // idle auto-stop is a full-mode concept
+            // `edit:*` ids are EDIT ACTIONS, not KeybindManager action ids — they
+            // must never reach triggerActionById (which would log an unknown-action
+            // error and do nothing). The hook only emits them in full stealth-typing
+            // mode, so they are inert under the shortcut guard.
+            if (ev.appChordId === 'edit:paste') {
+                this.handleStealthPaste();
+                return;
+            }
             this.dispatchAppChord(ev.appChordId);
             return;
         }

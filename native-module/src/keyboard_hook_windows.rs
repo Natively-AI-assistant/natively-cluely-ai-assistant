@@ -414,6 +414,66 @@ unsafe fn keyboard_hook_inner(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRES
         return pass();
     }
 
+    // ── EDIT-CHORD SWALLOW: Ctrl+V (paste into the overlay input) ──
+    // Below the shortcut_only return ON PURPOSE. In shortcut-guard mode there is
+    // no overlay input to paste into, so swallowing there would eat Ctrl+V
+    // system-wide — and that mode is default-ON. Only full stealth-typing mode,
+    // where the overlay IS the keyboard destination, gets this branch.
+    //
+    // Why it has to live here at all: the pass-through filter directly below
+    // hands every Ctrl combo to the foreground app. On macOS that is harmless —
+    // the overlay input holds real DOM focus, so the browser services Cmd+V
+    // itself. On Windows the overlay is WS_EX_NOACTIVATE and NEVER focused, so
+    // there is no DOM paste to service: Ctrl+V instead pasted the user's
+    // clipboard INTO THE MEETING APP. That is both the "can't paste" bug and a
+    // stealth leak, which is why the fix is a swallow and not a renderer-side
+    // clipboard read.
+    //
+    // Not hardcoded into the JS-supplied app-chord table: paste must work with
+    // an empty table (the table only carries the app's own registered
+    // shortcuts). It reuses the same delivery/`swallowed_ups` machinery though,
+    // so the key-UP swallow and the auto-repeat guard come for free.
+    //
+    // Ctrl+A / Ctrl+C / Ctrl+X are deliberately NOT handled: this input path has
+    // no selection model (the renderer appends to a value it sets
+    // programmatically; the element is never focused), so there is nothing for
+    // select-all/copy/cut to act on. They keep passing through unchanged.
+    const VK_V: u32 = 0x56;
+    if is_key_down && ctrl && !alt && vk == VK_V {
+        // AUTO-REPEAT GUARD: a held Ctrl+V would otherwise paste ~25×/sec. Same
+        // trick as the app-chord branch — "down swallowed, up pending" doubles
+        // as the repeat detector, and the key-UP handler above re-arms it.
+        if state
+            .swallowed_ups
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .contains(&vk)
+        {
+            return LRESULT(1);
+        }
+        let delivered = send_payload(&state, CapturedKey {
+            key_code: 0,
+            chars: String::new(),
+            flags: 0,
+            is_key_down: true,
+            is_outside_mouse_down: false,
+            // Namespaced so StealthKeyboardManager can tell an edit action from
+            // a KeybindManager action id and never route it to triggerActionById.
+            app_chord_id: "edit:paste".to_string(),
+        });
+        if delivered {
+            state
+                .swallowed_ups
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .insert(vk);
+            return LRESULT(1);
+        }
+        // No live callback ⟹ nowhere to deliver the paste. Fall through so the
+        // OS still handles Ctrl+V normally — never swallow a key with nowhere
+        // to go, or paste would die machine-wide while Natively runs.
+    }
+
     if (ctrl || alt) && !altgr {
         return pass();
     }

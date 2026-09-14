@@ -82,6 +82,24 @@ const REQUIRED_ASARUNPACK_GLOBS = [
   '**/node_modules/@img/**',
 ];
 
+// Build steps that keep the Windows per-arch payload honest. These live inside
+// a very long hand-edited npm script string, so a careless edit can drop the
+// step and the build still goes GREEN — the breakage only surfaces at runtime
+// on a user's machine. Same reasoning as REQUIRED_ASARUNPACK_GLOBS below: assert
+// the config from the code that depends on it.
+//
+//   - ensure-sharp-win-deps.js     guards @img/sharp-win32-x64 against a partial
+//                                  or offline npm ci that left it unresolved
+//
+// Without it, an installer whose npm ci silently skipped the sharp binary ships
+// with a dead screenshot/image pipeline — the defect this step was added to
+// catch. (The ia32 arch that motivated the original multi-arch guard was dropped
+// upstream; only x64 ships now.)
+const REQUIRED_WIN_BUILD_STEPS = [
+  'scripts/ensure-sharp-win-deps.js',
+];
+const WIN_BUILD_SCRIPTS = ['app:build', 'app:build:signed'];
+
 // Required built worker scripts (only checked after build:electron has run).
 const REQUIRED_WORKER_FILES = [
   'dist-electron/electron/llm/intentClassifierWorker.js',
@@ -143,6 +161,39 @@ function verifySource() {
 
   // Assert the asarUnpack/extraResources config still lists what runtime needs.
   const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
+  for (const scriptName of WIN_BUILD_SCRIPTS) {
+    const body = pkg?.scripts?.[scriptName];
+    if (!body) {
+      errors.push(`package.json scripts.${scriptName} is missing`);
+      continue;
+    }
+    for (const step of REQUIRED_WIN_BUILD_STEPS) {
+      if (!body.includes(step)) {
+        errors.push(
+          `package.json scripts.${scriptName} no longer runs "${step}" — the x64 ` +
+          `installer could ship without its sharp binary if npm ci left it unresolved.`,
+        );
+      }
+    }
+  }
+
+  // On Windows, both shipped arches must actually be on disk before packing:
+  // electron-builder packs one node_modules tree for every arch, so a missing
+  // per-arch directory becomes a wrong-arch binary inside that arch's installer
+  // rather than a build failure.
+  if (process.platform === 'win32') {
+    for (const dir of ['node_modules/@img/sharp-win32-x64']) {
+      if (!exists(path.join(repoRoot, dir))) {
+        errors.push(`Missing ${dir} (run node scripts/ensure-sharp-win-deps.js)`);
+      }
+    }
+    for (const bin of ['native-module/index.win32-x64-msvc.node']) {
+      if (!exists(path.join(repoRoot, bin))) {
+        errors.push(`Missing ${bin} (run npm run build:native)`);
+      }
+    }
+  }
+
   const asarUnpack = pkg?.build?.asarUnpack || [];
   for (const glob of REQUIRED_ASARUNPACK_GLOBS) {
     if (!asarUnpack.includes(glob)) errors.push(`package.json build.asarUnpack is missing required glob: ${glob}`);

@@ -14,6 +14,16 @@ interface DomCaptureMeta {
   firstLine?: string;
 }
 
+/**
+ * Window-swap motion cues (Windows only). Named types because the two swap
+ * directions each add phases to the SAME two channels, and an untyped string
+ * here is how a renderer ends up silently ignoring a cue it was never taught.
+ * Authoritative definitions live on WindowHelper.sendOverlayTransition /
+ * sendLauncherTransition; mirrored in src/types/electron.d.ts.
+ */
+type OverlayTransitionPhase = 'arm' | 'play' | 'exit' | 'rest';
+type LauncherTransitionPhase = 'recede' | 'restore' | 'arm' | 'enter';
+
 // Types for the exposed Electron API
 interface ElectronAPI {
   updateContentDimensions: (dimensions: { width: number; height: number }) => Promise<void>;
@@ -1358,18 +1368,31 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // animate (#root) exist from parse time and must be in their pre-entrance
   // state on the very first painted frame — a React effect would arrive after
   // it. Delivered to the overlay, pill and toggle renderers.
-  onOverlayTransition: (callback: (phase: 'arm' | 'play') => void) => {
-    const subscription = (_: any, phase: 'arm' | 'play') => callback(phase);
+  onOverlayTransition: (callback: (phase: OverlayTransitionPhase) => void) => {
+    const subscription = (_: any, phase: OverlayTransitionPhase) => callback(phase);
     ipcRenderer.on('overlay-transition', subscription);
     return () => {
       ipcRenderer.removeListener('overlay-transition', subscription);
     };
   },
-  onLauncherTransition: (callback: (phase: 'recede' | 'restore') => void) => {
-    const subscription = (_: any, phase: 'recede' | 'restore') => callback(phase);
+  onLauncherTransition: (callback: (phase: LauncherTransitionPhase) => void) => {
+    const subscription = (_: any, phase: LauncherTransitionPhase) => callback(phase);
     ipcRenderer.on('launcher-transition', subscription);
     return () => {
       ipcRenderer.removeListener('launcher-transition', subscription);
+    };
+  },
+  // Is the launcher window actually on screen? Driven by the launcher
+  // BrowserWindow's own show/hide events, NOT by the Page Visibility API —
+  // the launcher runs with backgroundThrottling:false so that it stays
+  // composited while hidden, and that pins document.visibilityState to
+  // 'visible'. Anything in the launcher that must not run during a meeting
+  // (polling, usage accounting) has to gate on this instead.
+  onLauncherVisibility: (callback: (visible: boolean) => void) => {
+    const subscription = (_: any, visible: boolean) => callback(visible);
+    ipcRenderer.on('launcher-visibility', subscription);
+    return () => {
+      ipcRenderer.removeListener('launcher-visibility', subscription);
     };
   },
   // toggleAdvancedSettings was removed (F-121): it invoked

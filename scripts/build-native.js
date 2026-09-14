@@ -156,6 +156,10 @@ if (os.platform() === 'darwin') {
     },
   };
 
+  // Windows ships an x64 installer only (build.win.target), so a host build on
+  // the x64 box emits exactly what packages. ia32 was dropped upstream — three
+  // runtime deps (onnxruntime-node, sqlite-vec, @napi-rs/canvas) publish no
+  // 32-bit Windows binary, so a 32-bit installer could only ship a crippled app.
   const expectedArtifacts = artifactMap[os.platform()]?.[os.arch()];
 
   // Windows only: unblock the artifact copy when the app is running.

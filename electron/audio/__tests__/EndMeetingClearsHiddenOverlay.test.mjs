@@ -67,8 +67,27 @@ const endMeetingBody = extractMethodBody('endMeetingTransition');
 // raw form meant this test demanded the LESS safe call. What must never regress
 // is that the overlay is cleared, and only after it is hidden, so both forms
 // count and the ordering assertion below is unchanged.
+//
+// THIRD form, added with the Stop-swap choreography: the overlay reference is
+// now HOISTED out of the send —
+//   const exitingOverlay = this.getWindowHelper().getOverlayWindow();
+//   setTimeout(() => { ...; this.sendToWindow(exitingOverlay, 'session-reset'); }, ...)
+// — because the send is no longer synchronous. setWindowMode('launcher') defers
+// the overlay's hide behind the launcher's opacity shield and a 260ms exit
+// fade, so clearing the tree inline would now run while the overlay is still ON
+// SCREEN: the chat list would empty under the fade and the collapse to the
+// baseline shell width (an OS-level window resize) would snap its geometry
+// mid-animation. Capturing the window up front names the overlay the exit
+// belonged to rather than re-resolving it a frame later.
+//
+// NOTE: source ORDER alone is therefore no longer the whole contract. That the
+// send is actually scheduled off WindowHelper.overlayExitSettleMs, and guarded
+// against a fast Stop→Start landing it on the NEXT meeting's overlay, is pinned
+// in services/__tests__/MeetingOverlayStaleFrame2026_08_26.test.mjs. This file
+// keeps its original, narrower job: the clear must exist, and must come after
+// the swap.
 const SESSION_RESET_TO_OVERLAY =
-  /(?:sendToWindow\(\s*[^,]*getOverlayWindow\(\)[^,]*,\s*['"]session-reset['"]|getOverlayWindow\(\)\?\.\s*webContents\.send\(\s*['"]session-reset['"]\s*\))/;
+  /(?:sendToWindow\(\s*[^,]*(?:getOverlayWindow\(\)|[Oo]verlay)[^,]*,\s*['"]session-reset['"]|getOverlayWindow\(\)\?\.\s*webContents\.send\(\s*['"]session-reset['"]\s*\))/;
 
 test('endMeeting sends session-reset to the overlay so its hidden tree is cleared before the next meeting', () => {
   assert.ok(

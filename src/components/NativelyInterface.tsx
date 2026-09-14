@@ -254,6 +254,7 @@ import {
   shouldBlockFocus as shouldBlockStealthFocus,
   shouldFireStealthTapStart,
 } from '../lib/overlayStealthFocusGuards.mjs';
+import { StealthCaret } from './StealthCaret';
 import {
   shouldEagerExpandForCodeToken,
   shouldHoldEagerCodeExpansion,
@@ -9104,6 +9105,17 @@ Provide only the answer, nothing else.`;
                     // green, so both platforms look identical on click.
                     className={`w-full border rounded-xl pl-3 pr-10 py-2.5 text-[13px] leading-relaxed ${inputClass} ${stealthTapActive && isWindows ? 'aurora-focus-active' : ''} ${stealthTapActive && !isWindows ? 'ring-2 ring-emerald-400/30 border-emerald-400/40 shadow-[0_0_12px_rgba(52,211,153,0.15)]' : ''}`}
                     style={appearance.inputStyle}
+                  />
+
+                  {/* Synthetic caret. Windows only, and only while the stealth
+                      hook is engaged: the overlay is WS_EX_NOACTIVATE there and
+                      the input is never focused, so Chromium draws no caret and
+                      the box looked dead while the user typed into it. macOS
+                      renders nothing here and keeps its own real caret. */}
+                  <StealthCaret
+                    inputRef={textInputRef}
+                    value={inputValue}
+                    active={isWindows && stealthTapActive}
                   />
 
                   {/* Skill picker — portal so it escapes the overflow-hidden shell */}

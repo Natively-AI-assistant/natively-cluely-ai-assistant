@@ -116,8 +116,13 @@ export interface ElectronAPI {
   onWindowMaximizedChanged: (callback: (isMaximized: boolean) => void) => () => void
   onEnsureExpanded: (callback: () => void) => () => void
   // Window-swap choreography cues (Windows only) — see src/lib/windowTransitions.ts.
-  onOverlayTransition: (callback: (phase: 'arm' | 'play') => void) => () => void
-  onLauncherTransition: (callback: (phase: 'recede' | 'restore') => void) => () => void
+  onOverlayTransition: (callback: (phase: 'arm' | 'play' | 'exit' | 'rest') => void) => () => void
+  onLauncherTransition: (callback: (phase: 'recede' | 'restore' | 'arm' | 'enter') => void) => () => void
+  // Launcher window on/off screen. Driven by the BrowserWindow's own
+  // show/hide events — NOT document.visibilityState, which the launcher's
+  // backgroundThrottling:false pins to 'visible' so it stays composited while
+  // hidden. Gate launcher-side polling and usage accounting on this.
+  onLauncherVisibility: (callback: (visible: boolean) => void) => () => void
   openExternal: (url: string) => Promise<void>
   // UX2: in-app TCC repair. macOS only; returns { ok, bundleId, results, message, promptRelaunch }.
   repairTccPermissions: () => Promise<{

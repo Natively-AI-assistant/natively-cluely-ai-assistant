@@ -102,10 +102,47 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
     // intentionally double-invokes effects to surface this class of bug.
     const mountedOnceRef = useRef<boolean>(false);
 
+    // Is this window actually on screen? Seeded true because the launcher is
+    // visible whenever it first mounts, then driven by the main process's
+    // 'launcher-visibility' broadcast (the launcher BrowserWindow's own
+    // show/hide events).
+    //
+    // This used to be `document.visibilityState === 'visible'`, read inline.
+    // That stopped being usable when the launcher took
+    // `backgroundThrottling: false` so it would stay composited while hidden
+    // and not cost a re-raster on every meeting Stop — Electron implements
+    // that flag by pinning the page to the visible state, so the Page
+    // Visibility API now reports 'visible' for the whole meeting. Anything
+    // here that must not run while the launcher is hidden gates on this ref.
+    const isLauncherVisibleRef = useRef<boolean>(true);
+
     const fetchMeetings = () => {
         if (window.electronAPI && window.electronAPI.getRecentMeetings) {
             window.electronAPI.getRecentMeetings().then(setMeetings).catch(err => console.error("Failed to fetch meetings:", err));
         }
+    };
+
+    // Coalesced refresh for the 'meetings-updated' broadcast.
+    //
+    // Stopping a meeting emits that event once per persistence milestone — the
+    // "Processing..." placeholder, then each section summary as its LLM call
+    // returns, then the final save. Five or six arrive over the ~15 s after
+    // Stop, and every one of them used to run a fresh getRecentMeetings(50)
+    // (a SELECT * over 50 rows, each carrying its whole summary_json, IPC'd
+    // and JSON.parsed) and re-render the entire history list. The first of
+    // them landed while the launcher was still animating in.
+    //
+    // Trailing edge, deliberately: nothing here is time-critical — the user
+    // just left the meeting they are waiting to see — and a trailing window
+    // both collapses the burst into one fetch and keeps that fetch out of the
+    // window-swap entrance (LAUNCHER_ENTER_MS is 300 ms).
+    const meetingsRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const scheduleMeetingsRefresh = () => {
+        if (meetingsRefreshTimer.current) clearTimeout(meetingsRefreshTimer.current);
+        meetingsRefreshTimer.current = setTimeout(() => {
+            meetingsRefreshTimer.current = null;
+            fetchMeetings();
+        }, 500);
     };
 
     const fetchEvents = () => {
@@ -211,12 +248,33 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
 
         // Listen for background updates (e.g. after meeting processing finishes)
         const removeMeetingsListener = window.electronAPI.onMeetingsUpdated(() => {
-            console.log("Received meetings-updated event");
-            fetchMeetings();
+            scheduleMeetingsRefresh();
         });
 
-        // Simple polling for events every minute
-        const interval = setInterval(fetchEvents, 60000);
+        // Window show/hide -> the visibility ref the timers below gate on.
+        let removeLauncherVisibilityListener: (() => void) | undefined;
+        if (window.electronAPI?.onLauncherVisibility) {
+            removeLauncherVisibilityListener = window.electronAPI.onLauncherVisibility((visible) => {
+                isLauncherVisibleRef.current = visible;
+                // Coming back on screen after a meeting: the list almost
+                // certainly changed while we were away, and any refresh that
+                // arrived hidden was coalesced into the pending timer anyway.
+                if (visible) scheduleMeetingsRefresh();
+            });
+        }
+
+        // Simple polling for events every minute — but only while the launcher
+        // is actually on screen. getUpcomingEvents() is a live Google Calendar
+        // fetch, not a local cache read, and Chromium's background throttling
+        // used to be the only thing stopping it from running through every
+        // meeting. `backgroundThrottling: false` removed that accident, so the
+        // gate is now explicit. Nothing on a hidden launcher can observe the
+        // result, and fetchEvents() runs again on the next show via the
+        // visibility listener's refresh below.
+        const interval = setInterval(() => {
+            if (!isLauncherVisibleRef.current) return;
+            fetchEvents();
+        }, 60000);
 
         // Orchestrator: foreground/background tracking via window blur/focus.
         // On macOS Cmd+H and Cmd+Tab the BrowserWindow fires 'blur'/'focus'
@@ -229,13 +287,21 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
         // Orchestrator: usage-time accumulator. Tick every 30s while launcher
         // is mounted and the window is foregrounded.
         const usageTimer = setInterval(() => {
-            if (document.visibilityState === 'visible') {
+            // Window-level visibility, not document.visibilityState — see
+            // isLauncherVisibleRef. Reading the Page Visibility API here would
+            // now bill the user's entire meeting as launcher usage time.
+            if (isLauncherVisibleRef.current) {
                 emitOrchestratorEvent({ type: 'usage:tick', deltaMs: 30_000 });
             }
         }, 30_000);
 
         return () => {
             mounted = false;
+            if (meetingsRefreshTimer.current) {
+                clearTimeout(meetingsRefreshTimer.current);
+                meetingsRefreshTimer.current = null;
+            }
+            if (removeLauncherVisibilityListener) removeLauncherVisibilityListener();
             if (removeMeetingsListener) removeMeetingsListener();
             if (removeUndetectableListener) removeUndetectableListener();
             if (removeMeetingStateListener) removeMeetingStateListener();

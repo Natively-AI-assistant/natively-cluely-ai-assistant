@@ -49,6 +49,14 @@ const sliceSwitchToOverlay = (helper) => {
   return helper.slice(start, end);
 };
 
+const sliceSwitchToLauncher = (helper) => {
+  const start = helper.indexOf('public switchToLauncher(');
+  assert.ok(start > -1, 'switchToLauncher() not found in electron/WindowHelper.ts');
+  const end = helper.indexOf('public setWindowMode(', start);
+  assert.ok(end > start, 'end of switchToLauncher() not found');
+  return helper.slice(start, end);
+};
+
 const numericConstant = (helper, name) => {
   const m = new RegExp(`static readonly ${name}\\s*=\\s*(\\d+)`).exec(helper);
   assert.ok(m, `WindowHelper.${name} not found — the swap choreography depends on it.`);
@@ -265,5 +273,272 @@ test('startMeetingTransition waits for the recede before swapping, and only afte
   assert.ok(
     micAt > -1 && micAt < recedeAt,
     'the recede must come AFTER the permission probes. Those can throw and abort the start, and a launcher that had already receded would be left faded out on the screen the user is stuck on.',
+  );
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// THE RETURN DIRECTION (Stop meeting)
+// ═════════════════════════════════════════════════════════════════════════════
+//
+// Everything above pins launcher → overlay. Stop is the same swap backwards and
+// it shipped without any of the same treatment: switchToLauncher showed the
+// launcher at opacity 0 and hid the overlay SYNCHRONOUSLY on the next line, so
+// the shield that protects the arriving window opened over an empty screen
+// instead of under a departing one. The identical hole, in the identical place,
+// pointing the other way — and it is the more visible direction, because the
+// DEPARTING overlay is the alwaysOnTop window, so its exit plays on top of the
+// launcher rather than being hidden behind it.
+//
+// These mirror #1 through #5 above one-for-one. A change that fixes one
+// direction and not the other is the failure mode they exist to catch.
+
+// ─── #1 mirrored: the overlay hide is deferred behind the launcher shield ────
+test('switchToLauncher does not hide the overlay synchronously on Windows', () => {
+  const body = sliceSwitchToLauncher(helperSource());
+
+  const tailAt = body.lastIndexOf('this.overlayWindow.hide()');
+  assert.ok(tailAt > -1, 'switchToLauncher must still hide the overlay on the paths that do not defer.');
+  const guardWindow = body.slice(Math.max(0, tailAt - 400), tailAt);
+  assert.match(
+    guardWindow,
+    /!overlayHideDeferred/,
+    'the synchronous overlay hide must yield to the deferred one — on win32 it runs ~60ms before the launcher is un-shielded, leaving neither window painted.',
+  );
+
+  const armAt = body.indexOf('overlayHideDeferred = true');
+  const timerAt = body.indexOf('this.opacityTimeout = setTimeout(');
+  assert.ok(
+    armAt > -1 && timerAt > -1 && armAt < timerAt,
+    'overlayHideDeferred must be set exactly where the shield timer is armed, so any path that arms no timer still falls through to the synchronous hide.',
+  );
+});
+
+test('the Windows overlay hide runs from inside the launcher shield callback, after the un-shield', () => {
+  const body = sliceSwitchToLauncher(helperSource());
+  const timerAt = body.indexOf('this.opacityTimeout = setTimeout(');
+  assert.ok(timerAt > -1, 'the launcher un-shield timer must still exist.');
+  const callback = body.slice(timerAt, body.indexOf('}, WindowHelper.LAUNCHER_SHIELD_MS);', timerAt));
+
+  const restoreAt = callback.indexOf('setOpacity(1)');
+  const handoffAt = callback.indexOf('this.hideOverlayAfterLauncherHandoff()');
+  assert.ok(
+    handoffAt > -1,
+    'the shield callback must hand the screen off to the launcher before the overlay goes away.',
+  );
+  assert.ok(
+    restoreAt > -1 && restoreAt < handoffAt,
+    'the launcher must be made opaque BEFORE the overlay is released — that ordering is the entire fix.',
+  );
+
+  const guardAt = callback.indexOf("this.currentWindowMode !== 'launcher'");
+  assert.ok(
+    guardAt > -1 && guardAt < handoffAt,
+    'the mode guard must run before the handoff — once switchToOverlay owns the overlay, hiding it here fights it.',
+  );
+});
+
+test('every route that takes ownership of the overlay cancels the deferred hide', () => {
+  const helper = helperSource();
+
+  for (const fn of ['public switchToOverlay(', 'public hideMainWindow(']) {
+    const start = helper.indexOf(fn);
+    assert.ok(start > -1, `${fn} not found.`);
+    const body = helper.slice(start, start + 4000);
+    assert.match(
+      body,
+      /this\.clearOverlayHideTimeout\(\)/,
+      `${fn} must cancel the deferred overlay hide. Deferring it is only safe because the two functions that take over the overlay — one shows it, one hides it — both clear the timer; drop either and a Stop→Start inside 260ms hides the NEW meeting overlay.`,
+    );
+  }
+});
+
+test('the deferred overlay hide does not share the launcher hide timer', () => {
+  const helper = helperSource();
+  assert.match(
+    helper,
+    /private overlayHideTimeout: NodeJS\.Timeout \| null/,
+    'the overlay hide needs its OWN handle. opacityTimeout is already shared between the two switch functions; hanging a third consumer off it means one clearTimeout can cancel the launcher un-shield and the overlay hide together.',
+  );
+  const handoff = helper.slice(helper.indexOf('private hideOverlayAfterLauncherHandoff('));
+  const body = handoff.slice(0, handoff.indexOf('private clearOverlayHideTimeout('));
+  assert.doesNotMatch(
+    body,
+    /this\.opacityTimeout/,
+    'the overlay handoff must never touch opacityTimeout — that is the shield timer for whichever window is arriving.',
+  );
+});
+
+test('the forced click-through on the departing group is always undone', () => {
+  const helper = helperSource();
+
+  // beginOverlayExit makes the whole group click-through, because for 260ms it
+  // is invisible but still up and still alwaysOnTop — a click landing on a
+  // window nobody can see is worse than the hard cut this replaced.
+  const exit = helper.slice(helper.indexOf('public beginOverlayExit('));
+  assert.match(
+    exit.slice(0, exit.indexOf('private hideOverlayAfterLauncherHandoff(')),
+    /setIgnoreMouseEvents\(true, \{ forward: true \}\)/,
+    'the departing group must be made click-through for the length of its exit.',
+  );
+
+  // TWO routes must undo it, and only one of them is the happy path. The
+  // handoff restores it after the hide; switchToOverlay restores it because a
+  // Stop→Start inside the exit window CANCELS that handoff, and without this
+  // the user gets a whole meeting of overlay that passes every click through.
+  const handoff = helper.slice(helper.indexOf('private hideOverlayAfterLauncherHandoff('));
+  assert.match(
+    handoff.slice(0, handoff.indexOf('private clearOverlayHideTimeout(')),
+    /this\.syncOverlayInteractionPolicy\(/,
+    'the deferred hide must put the interaction policy back on its derived footing.',
+  );
+
+  const swap = helper.slice(helper.indexOf('public switchToOverlay('));
+  const swapBody = swap.slice(0, swap.indexOf('public switchToLauncher('));
+  const clearAt = swapBody.indexOf('this.clearOverlayHideTimeout()');
+  const syncAt = swapBody.indexOf('this.syncOverlayInteractionPolicy(');
+  assert.ok(
+    clearAt > -1 && syncAt > clearAt,
+    'switchToOverlay cancels the deferred hide, so it must re-derive the interaction policy itself — otherwise cancelling the hide also cancels the only restore, and the new meeting overlay is click-through for its whole life.',
+  );
+});
+
+// ─── #2 mirrored: the overlap invariant ──────────────────────────────────────
+test('the overlay exit outlasts the lead plus the launcher shield', () => {
+  const helper = helperSource();
+  const exit = numericConstant(helper, 'OVERLAY_EXIT_MS');
+  const lead = numericConstant(helper, 'OVERLAY_EXIT_LEAD_MS');
+  const shield = numericConstant(helper, 'LAUNCHER_SHIELD_MS');
+
+  assert.ok(
+    exit > lead + shield,
+    `OVERLAY_EXIT_MS (${exit}) must be strictly greater than OVERLAY_EXIT_LEAD_MS + LAUNCHER_SHIELD_MS (${lead} + ${shield} = ${lead + shield}). At or below it the overlay is fully faded before the launcher first opaque frame and Stop is two sequential animations again — the blank gap with easing painted over it.`,
+  );
+});
+
+test('LAUNCHER_SHIELD_MS still describes the real shield timer', () => {
+  const body = sliceSwitchToLauncher(helperSource());
+  assert.ok(
+    body.includes('}, WindowHelper.LAUNCHER_SHIELD_MS);'),
+    'the switchToLauncher un-shield timer must be armed from LAUNCHER_SHIELD_MS — the overlap invariant above is computed from it, and a hardcoded literal drifts silently.',
+  );
+});
+
+test('the launcher shield is not gated on content protection', () => {
+  const body = sliceSwitchToLauncher(helperSource());
+  assert.doesNotMatch(
+    body,
+    /if \(process\.platform === 'win32' && this\.contentProtection\)/,
+    "the launcher shield must not be gated on contentProtection. Two things ride on it: with CP off, show() presents the launcher's stale composited frame from when the meeting STARTED (the old 'Meeting ongoing' CTA), and the entire Stop choreography becomes dead code for those users.",
+  );
+});
+
+// ─── #3 mirrored: the departing group is still one object ────────────────────
+test('shell, pill and toggle share one exit timeline', () => {
+  const css = read('src/index.css');
+  const at = css.indexOf('[data-overlay-enter="leaving"] body');
+  assert.ok(at > -1, 'the overlay exit rule is missing from src/index.css.');
+  const blockStart = css.lastIndexOf('html[data-platform="win32"]', at);
+  const selectors = css.slice(blockStart, css.indexOf('{', at));
+  for (const w of ['overlay', 'overlay-pill', 'overlay-toggle']) {
+    assert.ok(
+      selectors.includes(`[data-window="${w}"]`),
+      `the ${w} window must be on the exit timeline — the group has to leave as one piece, exactly as it arrives as one.`,
+    );
+  }
+  const declarations = css.slice(css.indexOf('{', at), css.indexOf('}', at));
+  assert.doesNotMatch(
+    declarations,
+    /transition-delay|animation-delay/,
+    'no stagger on the overlay exit, for the same reason there is none on the entrance.',
+  );
+});
+
+// ─── #4 mirrored: cross-file duration mirrors ────────────────────────────────
+test('the overlay exit duration is identical in WindowHelper, the CSS and the renderer module', () => {
+  const exit = numericConstant(helperSource(), 'OVERLAY_EXIT_MS');
+
+  const css = read('src/index.css');
+  const at = css.indexOf('[data-overlay-enter="leaving"] body');
+  assert.ok(at > -1, 'the overlay exit rule is missing from src/index.css.');
+  const rule = css.slice(at, css.indexOf('}', at));
+  assert.ok(
+    rule.includes(`opacity ${exit}ms`) && rule.includes(`transform ${exit}ms`),
+    `src/index.css must animate the exit over exactly OVERLAY_EXIT_MS (${exit}ms). WindowHelper arms the deferred overlay hide off this number; if the CSS is slower the windows vanish mid-fade.`,
+  );
+
+  const mod = read('src/lib/windowTransitions.ts');
+  assert.ok(
+    new RegExp(`OVERLAY_EXIT_MS = ${exit}\\b`).test(mod),
+    `src/lib/windowTransitions.ts mirrors OVERLAY_EXIT_MS (${exit}) for its self-heal timer.`,
+  );
+});
+
+test('the launcher entrance duration matches the renderer cleanup timer', () => {
+  const css = read('src/index.css');
+  const at = css.indexOf('[data-launcher-transition="entering"] body');
+  assert.ok(at > -1, 'the launcher entrance rule is missing from src/index.css.');
+  const rule = css.slice(at, css.indexOf('}', at));
+  const m = /transform (\d+)ms/.exec(rule);
+  assert.ok(m, 'the launcher entrance must animate transform for a known duration.');
+
+  assert.equal(
+    numericConstant(helperSource(), 'LAUNCHER_ENTER_MS'),
+    Number(m[1]),
+    'WindowHelper.LAUNCHER_ENTER_MS must match the CSS entrance duration.',
+  );
+
+  const mod = read('src/lib/windowTransitions.ts');
+  assert.ok(
+    new RegExp(`LAUNCHER_ENTER_MS = ${m[1]}\\b`).test(mod),
+    `src/lib/windowTransitions.ts must mirror the CSS entrance duration (${m[1]}ms) — it tears the attribute down on that timer, and tearing it down early snaps a half-finished entrance to rest.`,
+  );
+
+  const opacity = /opacity (\d+)ms/.exec(rule);
+  assert.ok(opacity, 'the launcher entrance must animate opacity for a known duration.');
+  assert.ok(
+    Number(opacity[1]) < Number(m[1]),
+    'opacity must finish before the transform, same as the overlay entrance — the surface being fully present while its shape is still settling is what makes an entrance read as an object arriving.',
+  );
+});
+
+// ─── #5 mirrored: macOS is deliberately untouched ────────────────────────────
+test('the return-direction choreography never fires off Windows', () => {
+  const helper = helperSource();
+
+  for (const fn of ['public beginOverlayExit(', 'private sendLauncherTransition(']) {
+    const start = helper.indexOf(fn);
+    assert.ok(start > -1, `${fn} not found.`);
+    const body = helper.slice(start, start + 900);
+    assert.match(
+      body,
+      /process\.platform !== 'win32'/,
+      `${fn} must return early off win32 — same reason as the outbound direction: macOS has no opacity shield to hide a pre-entrance state behind and re-presents a hidden window last composited frame on show().`,
+    );
+  }
+
+  const css = read('src/index.css');
+  for (const attr of ['[data-overlay-enter="leaving"]', '[data-launcher-transition="arriving"]']) {
+    const at = css.indexOf(attr);
+    assert.ok(at > -1, `${attr} rule missing from src/index.css.`);
+    const selectorStart = css.lastIndexOf('\n', css.lastIndexOf('html', at)) + 1;
+    assert.match(
+      css.slice(selectorStart, at + attr.length),
+      /html\[data-platform="win32"\]/,
+      `${attr} must stay gated on html[data-platform="win32"] — the CSS gate and the main-process gate have to agree.`,
+    );
+  }
+});
+
+test('endMeetingTransition waits for the overlay exit before swapping', () => {
+  const main = stripComments(read('electron/main.ts'));
+  const start = main.indexOf('private async endMeetingTransition(');
+  assert.ok(start > -1, 'endMeetingTransition() not found.');
+  const body = main.slice(start, main.indexOf('private async processCompletedMeetingForRAG(', start));
+
+  const swapAt = body.indexOf("setWindowMode('launcher')");
+  assert.ok(swapAt > -1, 'endMeetingTransition must still swap to the launcher.');
+  assert.ok(
+    body.slice(0, swapAt).includes('await this.windowHelper.beginOverlayExit()'),
+    'the exit must be AWAITED before the swap — the mirror of startMeetingTransition awaiting beginLauncherRecede(). Without the lead the launcher shield opens over an empty screen instead of under a departing overlay.',
   );
 });

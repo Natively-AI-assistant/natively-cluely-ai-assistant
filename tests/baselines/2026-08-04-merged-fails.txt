@@ -1,0 +1,407 @@
+✖ (a) queues ALL chunks (not just NULL-embedding) + 1 summary row
+✖ (a/b) after requeue: vectors cleared + space NULL + chunks preserved
+✖ (b) double requeue is fully idempotent — exactly 3 chunk rows + 1 summary row (FINDING-1 fix)
+✖ (c) crash MID-transaction rolls back atomically → NO orphan
+✖ (d) crash AFTER commit → durable queue rows survive (processQueue resumes)
+✖ _chatStreamsBySender map carries attemptId alongside streamId
+✖ _isCurrentStream is the one shared predicate, and preserves legacy behavior
+✖ _reembedInFlight prevents a concurrent second pass from double-embedding
+✖ 1/2. "what is my name?" grounds on identity (name reachable)
+✖ 10. SettingsOverlay.tsx binds the level bar width to `systemAudioLevel`
+✖ 13. "explain this lecture slide" gets NO resume/JD
+✖ 14. "why is your product expensive?" (sales) gets NO resume/JD
+✖ 15. coding question WITH resume loaded → resume still excluded
+✖ 3. "tell me about yourself" grounds (intro or profile)
+✖ 4. "what projects have I done?" includes the resume
+✖ 5. "have I used WebRTC?" includes resume, NOT the JD
+✖ 6. "how do I fit this data analyst role?" includes BOTH resume and JD
+✖ 8. "solve two sum" gets NO resume/JD
+✖ 8. SettingsOverlay.tsx subscribes to onAudioTestSystemLevel AND onAudioTestSystemError
+✖ 9. "explain BFS" gets NO resume/JD
+✖ 9. SettingsOverlay.tsx renders the literal "System Audio Level" label
+✖ a corrupt persisted row degrades to null, never a throw
+✖ a decrypt failure does NOT destroy a recoverable fallback (no migrate of empty creds)
+✖ a degenerate-but-valid LLM JD response is replaced by the deterministic heuristic
+✖ a divergence is logged via console.warn, never thrown or surfaced to the user
+✖ a duplicate of a KNOWN dim (vec_chunks_768) does not produce a duplicate entry (Set dedupes)
+✖ a fresh orchestrator over the same DB serves the persisted estimate cold
+✖ a genuinely empty transcript keeps the legitimate "nothing captured" claim untouched
+✖ a JD question is reachable (the original "JD never in context" bug)
+✖ a long real answer past the char cap is still classified without throwing
+✖ a long real answer whose specific content lands only in the TAIL (past the head-only cap) is still recognized as relevant
+✖ a PDF parse timeout cancels the underlying parse and never emits an unhandled rejection
+✖ a persisted estimate for a REPLACED résumé is rejected, not served
+✖ a résumé and a JD still ingest concurrently — only same-type writers queue
+✖ a re-upload during STAR generation does not orphan the first ingest's nodes
+✖ a skills question carries the anti-refusal grounding rule
+✖ a stored flat-skills (v1) resume is categorized + persisted on refresh
+✖ a string requirements field is coerced to an array, never persisted as per-character nodes
+✖ A.1: happy path gpt-5.4 + xhigh → wire carries -c model_reasoning_effort="xhigh"
+✖ A.10: pick="none" for gpt-5.4 → wire carries -c model_reasoning_effort="none"
+✖ A.2: gpt-5.3-codex + xhigh → resolver downgrades to low on the wire
+✖ A.3: 1.5s pre-token delay survives a 2.5s budget (proves 30s local deadline, not 7s cloud)
+✖ A.4: ENOENT on stale path → resolvePathOrAutoDetect falls back to auto-detect
+✖ A.5: partial-line chunk boundary recovers full text via lineBuffer
+✖ A.6: codex error event surfaces the REAL message in run() and stream() (no canned fallback)
+✖ A.7: timeoutMs=500 fires near 500ms (not earlier, not later)
+✖ A.8: AbortSignal at 100ms aborts the in-flight spawn within 2s
+✖ A.9: --image <path> flag repeated for each image in imagePaths
+✖ A: 8s cold-start mock survives a 60_000ms service timeout (Codex service deadline is independent of live-deadline)
+✖ active space UNDEFINED (pipeline not ready) + mixed corpus → gate to the MAJORITY embedded space (safer than no-gate)
+✖ active space UNDEFINED + single-space corpus → all embedded survive (no spurious exclusion)
+✖ active space UNKNOWN + EMPTY corpus + fast dim present → legacy dim check allows fast local
+✖ active space unknown → falls back to legacy DIMENSION check
+✖ active space UNKNOWN but corpus has a derivable committed space → query in THAT space (not fast-local with diff space)
+✖ active-space nodes survive; v1 + NULL-space-with-embedding excluded when active known
+✖ activeSpaceFn unset entirely (null) → NO gate (optional()), all survive
+✖ after resume ingest, setKnowledgeMode(true) actually enables mode
+✖ agreement holds on an empty DB and a single-row DB
+✖ agreement holds when ACTIVE space itself is the legacy / openai / unknown one
+✖ AIProvidersSettings credential synchronization
+✖ all 13 known guard sites call _isCurrentStream; zero raw comparisons remain
+✖ all 7 known-good real answers are never flagged (zero false positives — the critical property)
+✖ all nodes already in active space → no embed churn
+✖ all nodes already in active space → nothing to re-embed (no needless churn)
+✖ already fully in active space → no-op, commits cloud (idempotent)
+✖ AppState sends model-changed only to current model listeners
+✖ at least 8 of 9 known-bad no-content hallucinations are flagged (one accepted miss, see threshold comment)
+✖ B: --image <path> flag is emitted for EACH image in imagePaths
+✖ B5: dev-mode TCC bypass is opt-in (NATIVELY_DEV_BYPASS_SCREEN_TCC=1) only
+✖ backfill synthesizes the v1 space for legacy rows (matches legacySpaceForProvider)
+✖ both jobs run concurrently and converge without corrupting each other
+✖ both upload cards render a pi-upload-pill__pro-badge for non-Pro users
+✖ BOUND CAP: passes that keep finding NEW stale nodes stop at MAX_REEMBED_PASSES (no runaway)
+✖ BrainstormLLM: every streamChat() call passes ignoreKnowledgeMode=true
+✖ Bug 1: internal action LLMs must not go through the knowledge-mode intent gate
+✖ BUG-MODE-BLEEDING: Async post-call summary mode snapshot
+✖ buildLegacySpaceCaseSql — backfill CASE matches legacySpaceForProvider
+✖ C: real codex error message reaches the caller (not the canned fallback)
+✖ calls getEmbeddings(texts[]) once for all chunks when the provider supports it
+✖ calls parser.destroy() exactly once on a successful PDF parse
+✖ cancelPendingReindex with NO timer set is a safe no-op (does not throw)
+✖ CanonicalTurn manual-chat shadow wiring safety invariants
+✖ changed content (new hash) is re-chunked
+✖ checkAnswerRelevance — corpus regression pin (2026-07-19)
+✖ children for OTHER meetings are untouched by a re-save
+✖ ClarifyLLM: every streamChat() call passes ignoreKnowledgeMode=true
+✖ clears when the ingest fails, so the panel cannot hang on "processing"
+✖ cloud branch falls back to embedFn when no embedQueryFn registered (back-compat)
+✖ cloud branch PREFERS the asymmetric embedQueryFn over the document embedFn
+✖ cloud DOWN + local available → degrades ENTIRE corpus to local, commits _indexSpace=local
+✖ cloud DOWN + NO local → does not commit a space, leaves corpus stale for next retry
+✖ cloud healthy → converges corpus to cloud space, commits _indexSpace=cloud
+✖ cloud→local fallback during ingest stamps saved nodes with local space, not pre-call active cloud space
+✖ cloud-active with DIFFERENT dimensions (1536 vs fast 384) → embedFn
+✖ Codex active-model and fast-mode options require enabled config AND signed-in OAuth
+✖ CodexCliService: AbortSignal + deadline both propagate to the fetch + reader
+✖ cold DB (never indexed) still retrieves via ephemeral embed (no regression)
+✖ committed==local-space + fast embed returns null → returns [] (NO cross-space cloud fallback — the MEDIUM-2 fix)
+✖ committed==local-space + fast embed succeeds → fast local used
+✖ compares against the LIVE manualActiveMode.documentGroundedCustomModeActive field — not a value it invents
+✖ concurrent same-type ingests must not destroy each other (2026-08-02)
+✖ content change → re-index
+✖ Cross-feature: meetings RAG vs knowledge base do not interfere
+✖ cross-feature: meetings reindex + knowledge re-embed concurrently (one DB)
+✖ curl provider save handlers validate renderer payloads before persistence
+✖ D: full agent_message.delta stream yields the concatenated text via stream()
+✖ D2: ingest resilience when the extraction LLM is down
+✖ data persists across a CLOSE+REOPEN of the file (not :memory:)
+✖ debounce does NOT block recovery from a degraded corpus
+✖ debounce: a rapid second call on a fully-healthy corpus is skipped (no redundant re-embed)
+✖ degenerate LLM result → deterministic heuristic recovers a body
+✖ degrade moves even already-cloud-converged nodes to local (no mixed corpus)
+✖ DELETE scope is per-meeting: requeueing m1 must NOT touch stale queue rows for m2
+✖ deleteDocumentsByType removes resume and resets knowledge mode
+✖ disk-write failure is reported (success=false), never a false "Saved"
+✖ dispose() CANCELS a pending deferred auto-reindex (no fire after quit)
+✖ dispose() is idempotent: calling it twice is safe
+✖ dispose() on a manager whose VectorStore worker was NEVER started does not throw
+✖ dispose() swallows a VectorStore.destroy() failure (non-fatal teardown)
+✖ DocumentChunker emits per-category skill nodes
+✖ does not fall through session.created to transcription_session.created handler
+✖ DRIFT GUARD: buildLegacySpaceCaseSql backfill == legacySpaceForProvider for EVERY provider
+✖ DURING re-embed a v1 node is excluded; AFTER convergence it is included
+✖ electron\audio\__tests__\CaptureRestartRegression.test.mjs
+✖ electron\audio\__tests__\CaptureStopAwaitable.test.mjs
+✖ electron\audio\__tests__\GoogleSTTDropsKeepaliveSilence.test.mjs
+✖ electron\audio\__tests__\MicrophoneCapturePreWarmFailed.test.mjs
+✖ electron\audio\__tests__\NativelyProSTTBufferReset.test.mjs
+✖ electron\audio\__tests__\NativelyProSTTCloseUpstreamTimers.test.mjs
+✖ electron\audio\__tests__\NativelyProSTTPendingTimer.test.mjs
+✖ electron\audio\__tests__\NativelyProSTTStaggerTimer.test.mjs
+✖ electron\audio\__tests__\PreWarmGatedAfterTeardown.test.mjs
+✖ electron\audio\__tests__\RelayAuthFrameSelection.test.mjs
+✖ electron\audio\__tests__\RelayFallbackLadder.test.mjs
+✖ electron\audio\__tests__\RelayFlagGate.test.mjs
+✖ electron\audio\__tests__\RelayLatencyProbes.test.mjs
+✖ electron\audio\__tests__\RelaySessionResolve.test.mjs
+✖ electron\audio\__tests__\SecondMeetingStartDeadlock.test.mjs
+✖ electron\audio\__tests__\SystemAudioOrphanHandleOnStartFailure.test.mjs
+✖ electron\llm\__tests__\AnswerQualityJudge2026_06_08.test.mjs
+✖ electron\llm\__tests__\AnswerRelevanceCalibration2026_07_20.test.mjs
+✖ electron\llm\__tests__\EvidenceResolverWiringIdentity2026_07_12.test.mjs
+✖ electron\services\__tests__\LexicalFloorScaleF23.test.mjs
+✖ electron\services\__tests__\LexicalTokensNumerals.test.mjs
+✖ electron\services\__tests__\LLMHelperNegotiationCoachingGate.test.mjs
+✖ electron\services\__tests__\LocalEmbedBatchF22.test.mjs
+✖ electron\services\__tests__\PhoneChatRouteOptions.test.mjs
+✖ embedder unavailable → lexical_only status, chunk text still persisted
+✖ embedding_space column is added + backfilled from the shared CASE map
+✖ embedding-endpoint failure does NOT break the answerable profile
+✖ EmbeddingPipeline.requeueMeetingForReindex — real method, scope + idempotency
+✖ embedFn failing the FIRST attempt-per-pass-but-some-progress then succeeding converges
+✖ embedFn returning empty/non-array does NOT mark node done (stays stale, no garbage)
+✖ embedFn that ALWAYS throws TERMINATES (no infinite loop) and leaves nodes stale
+✖ endMeeting clears the overlay AFTER hiding it (setWindowMode(launcher)), so the clear is off-screen
+✖ endMeeting sends session-reset to the overlay so its hidden tree is cleared before the next meeting
+✖ ensureEmbeddingSpace degrade-to-local (MEDIUM-2)
+✖ ensureEmbeddingSpace loop bound + self-heal (real compiled method)
+✖ every call site that passes a `mac-` PermissionReason is gated on darwin
+✖ exactly 13 call sites use _isCurrentStream(senderId, myStreamId, myAttemptId)
+✖ extraction-LLM failure falls back to heuristic; ingest SUCCEEDS and profile is READY
+✖ extracts real DOCX resume text via the mammoth branch
+✖ extracts real PDF resume text via the pdf-parse/pdfjs-dist branch
+✖ failing tests:
+✖ FALLBACK fall-through: an undecryptable keyring file no longer strands a readable fallback
+✖ FALLS BACK to embedFn when local space != active even if DIMENSION matches (the fix)
+✖ falls back to Promise.all(map(getEmbedding)) when pipeline lacks getEmbeddings
+✖ fast embed null AND no embedFn → returns [] (never throws, never cross-space)
+✖ fast.dimensions == null → embedFn (cannot dimension-check, refuse fast path)
+✖ FINDING-004: KnowledgeOrchestrator ingest pipeline
+✖ FINDING-2 fix: at the SQL layer a missing spaceKey would leak ALL spaces — closed by the searchSimilar/searchSummaries entry guard
+✖ Fix #1: reconfigureSttProvider is serialized (source contract)
+✖ Fix #2: renderer no longer double-fires; server compensates the UI refresh
+✖ FIX-003: ModeHybridRetriever batches chunk embeddings
+✖ flag ON + allowRerank + low-confidence: reranker reorders selection
+✖ flipping to v2 makes all 3 processed legacy meetings incompatible
+✖ G.1: gpt-5.4 + xhigh → wire carries -c model_reasoning_effort="xhigh" (no downgrade for 5.4)
+✖ G.2: gpt-5.3-codex + xhigh → resolver downgrades to "low" on the wire (smoking-gun)
+✖ G.3: gpt-5-codex + none → resolver downgrades to "low" (codex variants reject "none")
+✖ garbled-comp rescue routes a typo to NEGOTIATION (no comp context needed)
+✖ gated on isIntelligenceFlagEnabled('modePolicyShadowObservation') AND a truthy manualActiveMode.sourceContract
+✖ gemini-chat-stream handler supersedes only the current sender and passes signal to streamChat
+✖ generateCandidateIntro leads with the candidate name
+✖ generate-what-to-say IPC forwards promptInstruction option to IntelligenceManager
+✖ getExistingVecDims — enumeration + union (real compiled method)
+✖ getExistingVecDims tolerates a closed/broken db handle (falls back to KNOWN_DIMS, never throws)
+✖ getNodesNeedingReembed ignores nodes with NO embedding (nothing to compare)
+✖ getNodesNeedingReembed sweeps legacy NULL-space nodes that HAVE an embedding
+✖ getNodesNeedingReembed sweeps OLD-space nodes (v1 while active is v2)
+✖ getProfileData exposes categorized skills + a derived flat list
+✖ getStoredSttKeyForProvider dispatches the persisted key by provider (P1 contract)
+✖ GOOD (non-degenerate) primary parse is kept as an LLM result (no heuristic swap)
+✖ hand-picked matrix of every documented row population
+✖ HindsightManager.getHindsightConfig
+✖ idempotent ALTER: initializeSchema twice does not throw / duplicate column
+✖ idempotent backfill: re-run does not clobber an already-set space
+✖ imports stripPriorAssistantTurns from ./llm/conversationHistoryPolicy
+✖ inbound session.created (general-intent event) is inert on transcription session
+✖ in-flight guard + loop-until-empty: a node added mid-pass is converged within the SAME call (not lost, not deferred)
+✖ in-flight ingest is observable from main (2026-08-02)
+✖ ingest without LLM configured returns a clear error
+✖ initializeApp does not request a second single-instance lock
+✖ Integration: transcript-aware intent routing through processQuestion
+✖ intelligence token batch flush cancels its pending setImmediate so trailing tokens cannot land after a final answer
+✖ IPC and meeting summary logs avoid answer and LLM response snippets
+✖ IPC handler captures pdf-parse data.pages array
+✖ IPC handler captures pdf-parse data.total as pdfReportedPageCount
+✖ IPC handler counts extracted pages (pages with non-empty text)
+✖ IPC handler threads pageCount + extractedPageCount through addReferenceFile
+✖ ipcHandlers.ts manual-chat repair accept-check now consults the leak guards
+✖ ipcHandlers.ts ModePolicy shadow-observation block — structural wiring
+✖ ipcHandlers.ts no longer defines its own stripPriorAssistantTurns — imports the canonical copy
+✖ ipcHandlers: defers first-paint on the doc-grounded lecture path to avoid the refusal flash
+✖ ipcHandlers: defines SYSTEM_REFUSAL_RE for the system own refusal phrase
+✖ ipcHandlers: Hindsight live recall is gated off for document-grounded turns under docGroundedStrictIsolation
+✖ ipcHandlers: strong-evidence = entity evidence OR matched high-signal entity OR tier; shouldRepair uses it directly
+✖ is a pure side-channel: no assignment back into context/answerPlan/manualActiveMode/manualSourceContract/manualTurnSourceDecision, only console.warn/console.log calls and a local payload object
+✖ is_processed=0 row STILL gets backfilled (backfill is independent of processed state) but is excluded from the reindex sweep
+✖ isIngesting(RESUME) is true while indexing and false once it lands
+✖ isLeakedAnswerArtifact and isLeakedInternalTagBlock are imported at this site
+✖ issue #252: Open Settings button does not unconditionally fire x-apple.systempreferences
+✖ Issue #303: skill picker dropdown in overlay chat input
+✖ JD ingest produces context nodes distinct from resume nodes
+✖ JD-only session: getProfileData() surfaces the uploaded JD (was null before fix)
+✖ job description upload button (calls profileUploadJD) gates at click via setIsPremiumModalOpen before profileSelectFile
+✖ JS-worker CHUNK search with v2 space returns ONLY v2 chunks (not v1, not NULL)
+✖ JS-worker SUMMARY search with v2 space returns ONLY v2 summary
+✖ keyring becomes available → fallback migrates up and is deleted
+✖ keyword-only nodes (no embedding) ALWAYS survive the gate
+✖ Knowledge base embedding-space (real KnowledgeDatabaseManager)
+✖ knowledge mode is OFF before any upload
+✖ knowledge re-embed failing does NOT stall or corrupt the meetings reindex (independence)
+✖ KnowledgeOrchestrator — degenerate JD extraction quality gate
+✖ KnowledgeOrchestrator — degenerate resume → heuristic fallback
+✖ KnowledgeOrchestrator — JD array-field normalization
+✖ KnowledgeOrchestrator ingestion uses producer embedding space metadata
+✖ KnowledgeOrchestrator._spaceGatedNodes (real compiled method)
+✖ KnowledgeOrchestrator.ensureEmbeddingSpace (real compiled method + real DB)
+✖ KnowledgeOrchestrator.resolveQueryEmbedder space-gating (real compiled method)
+✖ local-only 384d user (spaces already match) triggers NEITHER reindex NOR re-embed
+✖ LocalReranker — real bundled model
+✖ local-whisper-start-download IPC blocks download on macOS 12
+✖ main acquires the single-instance lock before native ABI recovery can rebuild or relaunch
+✖ malformed table name vec_chunks_abc is IGNORED (regex requires \d+)
+✖ meetingId + spaceKey combine: a meetingId in a DIFFERENT space yields nothing
+✖ migration is idempotent — a second load does not corrupt categorized skills
+✖ migration is INERT while v1 stays active (count = 0)
+✖ ModeContextRetriever includes reference grounding guard with retrieved snippets
+✖ ModeHybridRetriever chunk cache (audit finding #8)
+✖ model-changed call sites use the targeted helper
+✖ MULTIPLE passes genuinely occur: a node added each pass is converged in the SAME call
+✖ NativelyInterface.tsx renders a Repair Permissions button gated by isMac
+✖ native-path CHUNK hydration with v2 space drops v1/NULL even when vec match returns all
+✖ never-processed meeting is NOT swept into re-index
+✖ no active résumé ⇒ no estimate, even with a row present (fail closed)
+✖ no active space (pipeline not ready) → ensureEmbeddingSpace is a no-op
+✖ no embedFn → ensureEmbeddingSpace is a no-op (best-effort skip)
+✖ no fastQueryEmbedFn → returns embedFn directly
+✖ no local `function stripPriorAssistantTurns` definition remains
+✖ novel dims 1024 and 999 are enumerated and UNIONed with KNOWN_DIMS
+✖ NULL space is NEVER returned regardless of which active space queries
+✖ NULL-provider rows are LEFT NULL by backfill (provider IS NOT NULL guard)
+✖ NULL-space row matched only via summary embedding is swept
+✖ NULL-space row WITH embeddings is swept (the CRITICAL #1 fix)
+✖ NULL-space row WITHOUT embeddings is NOT swept (nothing to rebuild)
+✖ open-external IPC only allows known external destinations
+✖ parallel fallback: getEmbedding calls overlap (Promise.all) rather than serializing
+✖ partial embedFn failure leaves some stale → self-heals next pass
+✖ PERMANENT: 3 distinct cold-start decrypt failures escalate to needsCredentialReentry
+✖ persists chunk text + vectors + space, status ready
+✖ Phase 1: local cross-encoder rerank escalation (wiring)
+✖ Phase 4 — Hybrid RAG default in WhatToAnswerLLM
+✖ Phase 6 — TelemetryService production emission sites
+✖ PI_HEURISTIC_EXTRACTION=off restores throw behavior (extraction)
+✖ post-migration, flipping active space to v2 sweeps exactly the right rows
+✖ PR #370: keyring AVAILABLE but encryptString throws → save falls through to fallback (returns true, NOT false)
+✖ PR #370: loadCredentials detects stale-keyring state via mtime and unlinks before read
+✖ PR #370: loadCredentials does NOT discard a fresh keyring when fallback is older (legitimate round-trip)
+✖ preload and renderer type expose promptInstruction option on generateWhatToSay
+✖ primary AND fallback fail → status failed, chunk TEXT still persisted (lexical survives)
+✖ primary fails → fallback succeeds → chunks stamped with the FALLBACK space
+✖ Profile Intelligence renderer: click-time Pro gate
+✖ profile shape has all fields the IPC renderer expects
+✖ profile:delete clears both tiers via the transactional entrypoint
+✖ profile:delete-jd clears both tiers via the transactional entrypoint
+✖ promoted-space file is queryable in the fallback space (no cross-space skip)
+✖ provider throwing does not break classification
+✖ provider verdict flips an ambiguous follow-up to NEGOTIATION
+✖ race / late-arrival safety
+✖ RAGManager.dispose() / cancelPendingReindex() lifecycle (real compiled methods)
+✖ randomized fuzz: 60 DBs of mixed shapes all agree
+✖ ranks a relevant passage above an irrelevant one
+✖ RC-3 integration: categorized skills end-to-end
+✖ RC-3 integration: v1→v2 backfill of legacy flat-skills profile
+✖ RC-8: upload enables mode + JD-only visibility
+✖ REAL v0→v16 migration on a persisted file DB (mandate #2)
+✖ real VectorStore.destroy() AFTER a successful JS-worker search terminates cleanly
+✖ recovery: after a degrade, a later pass with cloud healthy restores the corpus to cloud
+✖ RE-ENTER heals: saving a real key during permanent-fail persists and clears the banner
+✖ refreshCache fires ensureEmbeddingSpace fire-and-forget and converges the cache
+✖ REGRESSION GUARD: a provider-name filter would WRONGLY return v1 for a v2 query
+✖ reindex ids are returned most-recent-first
+✖ re-ingest does not multiply nodes unboundedly
+✖ removeFile invalidates the cache → next query re-chunks
+✖ removeFileIndex drops chunks + state
+✖ removeFileIndex invalidates the cache → next query re-chunks
+✖ renderer button calls window.electronAPI?.repairTccPermissions
+✖ repeated queries against an unchanged file chunk the content only once
+✖ REPRO (side door 2): PhoneMirror ext-token mint during an unreadable session must not clobber the store
+✖ REPRO (side door): a single-field auto-populate during an unreadable session must not clobber the store
+✖ REPRO: a save during a keychain-decrypt-FAILED session must not permanently destroy the stored key
+✖ requeue resets a previously-completed queue row back to pending (re-embeds from scratch)
+✖ requeueMeetingForReindex atomicity (real VectorStore + SQLite)
+✖ requires ./services/modePolicy and calls resolveModePolicy — not a hand-rolled reimplementation
+✖ re-requeue is idempotent — no duplicate summary rows accumulate
+✖ RE-RUN (simulated relaunch) is idempotent: no double-application, no clobber
+✖ re-saving with fewer children shrinks the child set (no stale rows)
+✖ resolveCanonicalTurn and deriveQuestionNeed are called inside the guarded block
+✖ resolveMacScreenCaptureCapability calls isDevTccBypassEnabled() and has no bare !app.isPackaged early-return
+✖ resolveQueryEmbedder matrix completion (real compiled method)
+✖ resume + JD: getProfileData() exposes both
+✖ resume ingest produces correct identity, experience, and skill blocks via getProfileData()
+✖ resume upload button (calls profileUploadResume) gates at click via setIsPremiumModalOpen before profileSelectFile
+✖ returns null when hindsightExplicitlyDisabled is set (user opted out)
+✖ running the CASE in real SQLite yields legacySpaceForProvider(name,dims) for each
+✖ salary estimate survives a relaunch (2026-08-02)
+✖ saveMeeting idempotency (audit finding #1)
+✖ saving the same meeting twice does NOT duplicate transcript rows
+✖ schema has embedding_space column; saveNodes persists + reads it back
+✖ search space filter (real SQLite) — CRITICAL #1
+✖ searchSimilar with NO spaceKey returns [] (refuses to search across spaces)
+✖ searchSimilar with spaceKey filters to that space only
+✖ searchSimilar({}) with NO spaceKey → [] (refuses cross-space leak)
+✖ searchSimilar/searchSummaries entry-guard (real compiled VectorStore) — FINDING-2 fix
+✖ searchSummaries with NO spaceKey returns [] (refuses to search across spaces)
+✖ searchSummaries with spaceKey filters to that space only
+✖ searchSummaries(q, 5) with NO spaceKey → [] (refuses cross-space leak)
+✖ selectSkill sets inputValue to /skill-id with trailing space
+✖ SELF-HEAL: a failing call leaves nodes stale; a later call (network back) converges
+✖ sends transcription_session.update not session.update
+✖ separate tables: knowledge re-embed never reads/writes RAG meeting tables
+✖ SessionTracker logs transcript and assistant message metadata without text snippets
+✖ set-natively-api-key broadcasts 'credentials-changed' so the SettingsOverlay STT dropdown refreshes
+✖ setSttProvider returns false when the disk write fails (M2 contract — mirrors STT key guard)
+✖ SettingsOverlay renders a real do-not-save meetings control
+✖ space mismatch → persisted vectors ignored (no cross-space cosine), ephemeral embed used
+✖ sparse-but-valid LLM resume entries retain persistence and atomic nodes
+✖ Spec §11 E2E: profile questions ARE grounded
+✖ Spec §12 E2E acceptance: no false refusal text in grounded context
+✖ Spec §8.3 E2E: coding/technical/sales/lecture get NO profile
+✖ stale v1 nodes get re-embedded into the active v2 space
+✖ stampMeetingSpaceIfUnset(activeSpace) keeps a live meeting OUT of the sweep
+✖ stays true across a queued same-type ingest, then clears
+✖ stickiness decays after intervening substantive non-comp turns
+✖ stopMeeting snapshots active mode before session.reset() is called
+✖ streamChat extracts trailing arg as AbortSignal via args[args.length - 1] and instanceof check
+✖ summary-only meeting (no chunks) still enqueues the summary row + clears its space
+✖ telemetry calls are wrapped in try/catch (must never break app)
+✖ the .set() call populates attemptId (from the same counter as streamId)
+✖ the accept condition rejects when either guard fires, not just when stillCritical fires
+✖ the block appears AFTER the existing contextRouterV2 shadow block's own catch, not interleaved with it
+✖ the build bakes keychainGroupEntitled so telemetry can prove the entitlement shipped
+✖ the catch-fallback also leads with the first name
+✖ the enumerated dims are exactly what the delete/clear loops will iterate (coverage proof)
+✖ the handler delegates to deleteProfileTransactional for jd, covering both tiers in one transaction
+✖ the handler delegates to deleteProfileTransactional for resume, covering both tiers in one transaction
+✖ the handler exists and is isolated correctly
+✖ the helper exists and is isolated correctly
+✖ the map value type declares both streamId and attemptId
+✖ the mode argument maps exactly the 5 ActiveModeInfo fields resolveModePolicy's ResolveModePolicyModeInput expects (id/name/isCustom/hasReferenceFiles/templateType)
+✖ the new isCurrentAttempt/turnIdentityV2 check runs in PARALLEL (dev/test warn-only), never gating the return value
+✖ the real teardown/rebuild lives in _doReconfigureSttProvider
+✖ the returned value is the LEGACY streamId comparison — production behavior is unchanged
+✖ the shadow block exists and is isolated correctly
+✖ the shadow call is gated behind the canonicalTurnManualChat flag
+✖ the shadow call is wrapped in try/catch, and the catch never rethrows
+✖ the shadow result is used ONLY for divergence logging — never assigned to the real generation-path variables
+✖ the specific unambiguous hallucinations (no plausible real-answer reading) are always flagged
+✖ the v16 index idx_meetings_embedding_space exists after migration
+✖ there is no strong-model escalation hook (extraction is flash-lite→3.6-flash only)
+✖ top-level entitlements declare the exact keychain-access-group
+✖ TRANSIENT: ≤2 decrypt failures do NOT trigger re-entry, then a healthy launch recovers
+✖ unchanged hash + same space → second indexFile is a no-op (no re-embed)
+✖ UNKNOWN provider (not in CASE map) backfills to "<name>:unknown:<dims>"
+✖ updateNodeEmbedding rewrites embedding + space in place → no longer stale
+✖ user_version ends at >= 16 after applying v16
+✖ uses fast local when its SPACE matches active (local IS the active provider)
+✖ uses GA input_audio_format field not beta audio.input.format
+✖ UX4: audio test probes system audio in parallel with the mic
+✖ v1 query returns ONLY v1 (symmetry — neither space bleeds into the other)
+✖ v16 migration + space predicate (real SQLite)
+✖ vec_chunks_1024_extra (trailing junk) is IGNORED (regex is anchored ^...$)
+✖ vec_summaries_<N> tables are NOT counted (LIKE filters on vec_chunks_ only)
+✖ VectorStore REINDEX_PREDICATE drift-proof (real compiled methods)
+✖ VectorStore search hard-guard (real compiled VectorStore, pure-SQL path)
+✖ VERIFIED-HEALED: a recovery re-key KEEPS the fallback until a cold-start decrypt proves the keyring readable
+✖ W3: fallback promotion (MEDIUM #5)
+✖ W3: hot-path retrieval
+✖ W3: indexFile persistence
+✖ wasExistingStoreUnreadable() reports true ONLY during an undecryptable-store launch
+✖ WhatToAnswerLLM prefers async hybrid when method exists, falls back to sync
+✖ wire format
+✖ with a ready index, retrieve embeds ONLY the query
+✖ with NO vec tables, returns exactly KNOWN_DIMS
+✖ worklist is the EXACT set the count promises (not just same cardinality)
+✖ wrapped in its own try/catch with a non-fatal skip log, mirroring the contextRouterV2 shadow block immediately above it
+✖ zero raw _chatStreamsBySender.get(senderId)?.streamId comparisons remain anywhere in the file

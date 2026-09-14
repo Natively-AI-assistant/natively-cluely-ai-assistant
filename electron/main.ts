@@ -6476,6 +6476,17 @@ export class AppState {
     // clear effects) while still painted — combined with a same-instance theme
     // switch, that interleaving produces the half-painted overlay symptom the
     // user can only escape via force-quit. Hide first, then broadcast.
+    // Ask the overlay group to LEAVE before the swap, then swap into the
+    // middle of that animation — the exact mirror of startMeetingTransition's
+    // `await beginLauncherRecede()`. Without the lead the launcher's shield
+    // opens over an empty screen instead of over a departing overlay, which is
+    // the blank flash that made Stop read as two windows blinking. Costs
+    // OVERLAY_EXIT_LEAD_MS (60 ms) of added latency before the launcher
+    // appears, and buys the overlap that makes the two windows one motion.
+    //
+    // Resolves immediately off win32 and whenever the overlay is already
+    // hidden, so no other Stop path grows a delay.
+    await this.windowHelper.beginOverlayExit();
     this.windowHelper.setWindowMode('launcher');
 
     // ─── CLEAR THE OVERLAY TREE WHILE IT IS HIDDEN ─────────────────────────
@@ -6503,7 +6514,27 @@ export class AppState {
     // The start-side session-reset (in startMeeting) is kept as a safety net
     // for the cold-start / crash-recovery path where endMeeting never ran; on
     // the normal Stop→Start path it is now a no-op (state already clean).
-    this.sendToWindow(this.getWindowHelper().getOverlayWindow(), 'session-reset');
+    //
+    // ─── ...BUT NOT UNTIL THE EXIT HAS FINISHED PLAYING ────────────────────
+    // This send used to run here, synchronously, which was correct while the
+    // swap above hid the overlay synchronously too. It no longer does: the
+    // overlay is now mid-exit and still ON SCREEN for another
+    // overlayExitSettleMs. Clearing the tree inside that window is visible
+    // twice over — the chat list empties under the fade, and the collapse to
+    // the baseline shell width is an OS-level window RESIZE, which would snap
+    // the overlay's geometry while the user is watching it fade out.
+    //
+    // The mode guard is the load-bearing part, not the delay. A Stop→Start
+    // faster than this timer would otherwise land a session-reset on the NEXT
+    // meeting's freshly shown overlay and wipe it — a failure the synchronous
+    // version could not have. Skipping the clear then is safe: startMeeting's
+    // own session-reset (the "safety net" this block refers to above) still
+    // runs, and on that path it is no longer a no-op but the real clear.
+    const exitingOverlay = this.getWindowHelper().getOverlayWindow();
+    setTimeout(() => {
+      if (this.getWindowHelper().getCurrentWindowMode() !== 'launcher') return;
+      this.sendToWindow(exitingOverlay, 'session-reset');
+    }, WindowHelper.overlayExitSettleMs);
 
     // ─── UX STATE FLIP — SYNCHRONOUS ───────────────────────────────────────
     // Now flip the UX-facing meeting flag and broadcast. The launcher's

@@ -200,6 +200,15 @@ export class WindowHelper {
   // deferred hide above can be armed for whatever is LEFT of it rather than a
   // second fixed duration that would silently drift out of phase.
   private launcherRecedeStartedAt: number | null = null;
+  // The return direction's two mirrors of the pair above. They are SEPARATE
+  // handles on purpose. `opacityTimeout` is already shared between
+  // switchToOverlay and switchToLauncher and the comments on both branches
+  // document what that costs; hanging a third consumer off it would mean a
+  // Stop→Start inside 260ms could cancel the launcher's un-shield and the
+  // overlay's deferred hide with one clearTimeout, or worse, fire a hide on an
+  // overlay the next meeting has just shown.
+  private overlayHideTimeout: NodeJS.Timeout | null = null;
+  private overlayExitStartedAt: number | null = null;
   private lastLauncherShowInactive: boolean | null = null;
   // Tracks whether the launcher window's native vibrancy/background/shadow
   // are currently in their "preview" (transparent) state — see
@@ -311,6 +320,62 @@ export class WindowHelper {
   private static readonly OVERLAY_SHIELD_MS = 60;
   private static readonly LAUNCHER_RECEDE_MS = 260;
   private static readonly LAUNCHER_RECEDE_LEAD_MS = 60;
+
+  // ─── THE RETURN DIRECTION (Stop meeting) ───────────────────────────────────
+  //
+  // Everything above describes launcher → overlay. Stop meeting is the same
+  // swap run backwards, and until now it had none of the same treatment: the
+  // launcher was shown at opacity 0 and the overlay was hidden SYNCHRONOUSLY
+  // on the next line, so the shield that protects the arriving window was
+  // opened over an empty screen rather than under a departing one. That is the
+  // identical structural hole the block above describes, in the identical
+  // place, just pointing the other way:
+  //
+  //   t+0    launcher.show() @ opacity 0
+  //          overlay.hide()              ← ran synchronously, one line later
+  //   t+60   launcher.setOpacity(1)      ← hard cut to a finished launcher
+  //
+  // The mirror image of the fix applies unchanged. The one asymmetry is which
+  // window is on top: on the way IN the arriving overlay is alwaysOnTop and
+  // covers the departing launcher, so the launcher's recede is hidden behind
+  // it and only has to not-flicker. On the way OUT the DEPARTING overlay is
+  // the alwaysOnTop one, so its exit is fully visible ON TOP of the arriving
+  // launcher — it is a real cross-fade and the launcher is what shows through
+  // it. That makes the exit the more load-bearing half of the two, not the
+  // throwaway one.
+  //
+  //   t+0     main.ts asks the OVERLAY GROUP to leave — 260ms of
+  //           scale(1 → 0.965) + opacity(1 → 0) in the DOM, on the compositor.
+  //   t+60    (LEAD) switchToLauncher: launcher show() behind its own shield.
+  //   t+120   (LEAD + SHIELD) shield lifts; the launcher renderer plays its
+  //           entrance. The overlay is ~46 % through its exit and still
+  //           visible ABOVE the launcher — the overlap, same as the other way.
+  //   t+260   overlay.hide() + aux hide, by which time the whole group is at
+  //           opacity 0 and the windows vanishing is invisible.
+  //
+  // Same invariant, mirrored — pinned in the choreography test:
+  //
+  //     OVERLAY_EXIT_MS > OVERLAY_EXIT_LEAD_MS + LAUNCHER_SHIELD_MS
+  //
+  // LAUNCHER_SHIELD_MS is its own constant rather than a reuse of
+  // OVERLAY_SHIELD_MS: they happen to be equal, but they are two different
+  // windows' content-protection shields and the two invariants are computed
+  // independently. Collapsing them would silently couple the two directions.
+  private static readonly LAUNCHER_SHIELD_MS = 60;
+  private static readonly OVERLAY_EXIT_MS = 260;
+  private static readonly OVERLAY_EXIT_LEAD_MS = 60;
+  private static readonly LAUNCHER_ENTER_MS = 300;
+
+  // How long after beginOverlayExit() resolves the overlay is guaranteed to be
+  // hidden and safe to mutate. main.ts needs this: it sends 'session-reset' to
+  // clear the overlay's React tree, and that clear both empties the chat list
+  // and collapses the shell width (an OS-level window resize). Landing either
+  // one DURING the exit would tear the fade apart on screen. The caller has
+  // already awaited the LEAD by then, so only the remainder is left; the extra
+  // frame of margin covers the timer not being vsync-locked.
+  public static get overlayExitSettleMs(): number {
+    return WindowHelper.OVERLAY_EXIT_MS - WindowHelper.OVERLAY_EXIT_LEAD_MS + 32;
+  }
 
   // Movement variables (apply to active window)
   private step: number = 20;
@@ -588,6 +653,25 @@ export class WindowHelper {
         preload: path.join(__dirname, 'preload.js'),
         scrollBounce: true,
         webSecurity: !isDev, // DEBUG: Disable web security only in dev
+        // KEEP THE HIDDEN LAUNCHER COMPOSITED — see the note on the overlay's
+        // copy of this flag. The launcher is hidden for the WHOLE meeting, so
+        // it is the window that pays the re-show cost most visibly: Stop
+        // meeting was landing on a renderer Chromium had backgrounded, which
+        // has to unthrottle, re-raster and re-composite before it can present
+        // — the "takes a few seconds to switch back" half of the Stop-meeting
+        // jank. Matches SettingsWindowHelper/ModelSelectorWindowHelper, which
+        // already set this for the same reason ("keep window ready even when
+        // hidden").
+        //
+        // This ALSO pins document.visibilityState to 'visible' (Electron
+        // implements the flag as RenderWidgetHost `disable_hidden_`), so any
+        // renderer work gated on the Page Visibility API silently starts
+        // running while hidden. Launcher.tsx had two such gates — the 30s
+        // usage-tick and the 60s calendar poll (a live Google Calendar fetch)
+        // — and both now key off the explicit 'launcher-visibility' broadcast
+        // below instead. Do not add a new visibilityState gate in the launcher
+        // without doing the same.
+        backgroundThrottling: false,
       },
       show: false, // DEBUG: Force show -> Fixed white screen, now relies on ready-to-show
       // Platform-specific frame settings
@@ -876,6 +960,25 @@ export class WindowHelper {
         contextIsolation: true,
         preload: path.join(__dirname, 'preload.js'),
         scrollBounce: true,
+        // KEEP THE HIDDEN OVERLAY COMPOSITED.
+        //
+        // Both meeting windows are long-lived and hide()/show()n rather than
+        // created per meeting, so each one spends minutes at a time in the
+        // state Chromium treats as backgrounded: rAF stops, timers are
+        // clamped, and the compositor is free to drop the tiles. The very next
+        // thing that happens to them is a show() the user is watching — which
+        // is why the swap reads as a stall followed by a pop rather than a
+        // transition. Holding the renderer in its visible state costs idle CPU
+        // on a window that is painting nothing, and buys a first frame that is
+        // ready when the shield lifts.
+        //
+        // The choreography in switchToOverlay/switchToLauncher assumes exactly
+        // this: it arms a pre-entrance state in the DOM behind an opacity
+        // shield and expects the renderer to have committed it ~60ms later. A
+        // throttled renderer can miss that window, which is what the
+        // PLAY_WATCHDOG_MS backstop in src/lib/windowTransitions.ts exists to
+        // paper over.
+        backgroundThrottling: false,
       },
       show: false,
       frame: false, // Frameless
@@ -1122,6 +1225,31 @@ export class WindowHelper {
 
   private setupWindowListeners(): void {
     if (!this.launcherWindow) return;
+
+    // ─── GROUND TRUTH FOR "IS THE LAUNCHER ON SCREEN" ──────────────────────
+    // The launcher renderer used to read this off document.visibilityState.
+    // That stopped being true the moment the window took
+    // `backgroundThrottling: false` (see its webPreferences): the flag pins
+    // the page to 'visible' precisely so the renderer keeps compositing while
+    // hidden, which is the point — but it also means the Page Visibility API
+    // can no longer answer this question.
+    //
+    // The window's own show/hide events can, on both platforms, and they are
+    // strictly MORE accurate than what the renderer had before: they fire for
+    // every route that hides the launcher (meeting start, Cmd+B, hideMainWindow,
+    // pre-screenshot), not just the ones Chromium happened to notice.
+    //
+    // Consumers must treat this as a gate on WORK, never on correctness —
+    // 'show' can arrive a frame after the window is up. Launcher.tsx uses it
+    // for the usage-time accumulator and the calendar poll, both of which are
+    // "skip this tick" decisions.
+    const sendLauncherVisibility = (visible: boolean) => {
+      const win = this.launcherWindow;
+      if (!win || win.isDestroyed()) return;
+      win.webContents.send('launcher-visibility', visible);
+    };
+    this.launcherWindow.on('show', () => sendLauncherVisibility(true));
+    this.launcherWindow.on('hide', () => sendLauncherVisibility(false));
 
     // Suppress Windows system context menu on right-click (title bar)
     this.launcherWindow.on('system-context-menu', (e, point) => {
@@ -1393,6 +1521,16 @@ export class WindowHelper {
     this.clearLauncherHideTimeout();
     this.restoreLauncherFromRecede();
     this.launcherWindow?.hide();
+    // Symmetrically, this path hides the OVERLAY itself, so it is the other
+    // owner that makes the deferred overlay hide safe to defer (see
+    // hideOverlayAfterLauncherHandoff). Without this a Stop followed by a
+    // Cmd+B inside the exit window would leave a timer that fires
+    // applyOverlayAuxVisibility(false) + hide() on already-hidden windows —
+    // harmless today, but it is the same class of stale-timer bug the launcher
+    // side already guards, and the 'rest' cue it sends must not race a
+    // subsequent show. The restore keeps the DOM from being parked mid-exit.
+    this.clearOverlayHideTimeout();
+    this.sendOverlayTransition('rest');
     // Hide the aux chrome explicitly and BEFORE the overlay body. This path
     // feeds screenshot capture, which waits a fixed 80ms after hide() for the
     // compositor to flush; an event-chained pill hide spends part of that
@@ -1682,6 +1820,12 @@ export class WindowHelper {
         nodeIntegration: false,
         contextIsolation: true,
         preload: path.join(__dirname, 'preload.js'),
+        // The pill and toggle are separate HWNDs but ONE object on screen with
+        // the shell, and they share its entrance/exit timeline. If the shell
+        // stays composited while hidden and these do not, the group breaks
+        // apart on the swap — the shell animates and the aux chrome pops. Same
+        // flag as the overlay above, for the same reason.
+        backgroundThrottling: false,
       },
       // Same nonactivating-panel treatment as the overlay: clicking the pill's
       // buttons must not activate Natively over the user's foreground app.
@@ -2341,9 +2485,21 @@ export class WindowHelper {
   //            lifts, so the first opaque frame is the first frame of the
   //            animation rather than a finished one.
   //
+  //   'exit'  → renderer plays the group OUT (opacity 1 → 0, scale 1 → 0.965)
+  //            over OVERLAY_EXIT_MS. Sent from beginOverlayExit() at the top
+  //            of Stop meeting, LEAD ms before the launcher's shielded show,
+  //            so the launcher rises through an overlay that is already
+  //            moving. Unlike 'arm' this one is fully visible from its first
+  //            frame — the departing overlay is the alwaysOnTop window, so it
+  //            is what the user is actually watching during the swap.
+  //   'rest'  → snap back to rest, no transition. Sent after the group is
+  //            hidden. The mirror of the launcher's 'restore', and load-bearing
+  //            for the same reason: the exit ENDS at opacity 0, so a group
+  //            re-shown without this presents a blank frame.
+  //
   // All three windows get it: the pill and toggle are separate HWNDs but the
   // same visual object as the shell, so they share ONE timeline.
-  private sendOverlayTransition(phase: 'arm' | 'play'): void {
+  private sendOverlayTransition(phase: 'arm' | 'play' | 'exit' | 'rest'): void {
     if (process.platform !== 'win32') return;
     for (const w of [this.overlayWindow, this.pillWindow, this.toggleWindow]) {
       if (w && !w.isDestroyed()) w.webContents.send('overlay-transition', phase);
@@ -2435,6 +2591,112 @@ export class WindowHelper {
     }
   }
 
+  // ─── RETURN DIRECTION (Stop meeting) — mirrors of the four above ───────────
+
+  // Cue for the LAUNCHER's own entrance, which only exists on the way back
+  // from a meeting. 'arm' parks it just below rest behind the opacity shield;
+  // 'enter' plays it the instant the shield lifts, so the first opaque frame
+  // is the animation's first frame rather than a finished launcher.
+  //
+  // Deliberately NOT folded into sendLauncherTransition's existing
+  // 'recede'/'restore' vocabulary as a fifth phase on one channel — it is the
+  // same channel, but 'restore' is an instantaneous snap-to-rest and 'arm' is
+  // a position to animate OUT of. A renderer that confuses the two plays a
+  // zoom on a launcher the user believes has been sitting there.
+  private sendLauncherTransition(phase: 'recede' | 'restore' | 'arm' | 'enter'): void {
+    if (process.platform !== 'win32') return;
+    const win = this.launcherWindow;
+    if (!win || win.isDestroyed()) return;
+    win.webContents.send('launcher-transition', phase);
+  }
+
+  // Ask the overlay group to leave, then resolve after the LEAD so the caller's
+  // swap lands mid-animation instead of on top of a static overlay. The exact
+  // mirror of beginLauncherRecede(), including the reason it returns a promise.
+  //
+  // Meeting stop is the ONLY caller, for the same reason meeting start is the
+  // only caller of the recede: every other route into switchToLauncher either
+  // starts from an already-hidden overlay (cold-start convergence, screenshot
+  // restore) or is a latency-sensitive toggle (Cmd+B) that must not grow a
+  // 60ms lead.
+  public beginOverlayExit(): Promise<void> {
+    this.overlayExitStartedAt = null;
+    if (process.platform !== 'win32') return Promise.resolve();
+    const overlay = this.overlayWindow;
+    if (!overlay || overlay.isDestroyed() || !overlay.isVisible()) return Promise.resolve();
+    this.overlayExitStartedAt = Date.now();
+    this.sendOverlayTransition('exit');
+    // The group is about to become invisible while its windows are still up
+    // and still alwaysOnTop. A click landing on a window nobody can see is a
+    // worse failure than the hard cut this replaces, so make the whole
+    // departing group click-through for the duration. `forward: true` matches
+    // the passthrough policy the overlay already uses. State is re-derived
+    // from scratch by syncOverlayInteractionPolicy() once the group is hidden.
+    for (const w of [this.overlayWindow, this.pillWindow, this.toggleWindow]) {
+      if (w && !w.isDestroyed()) w.setIgnoreMouseEvents(true, { forward: true });
+    }
+    return new Promise((resolve) =>
+      setTimeout(resolve, WindowHelper.OVERLAY_EXIT_LEAD_MS),
+    );
+  }
+
+  // Hide the overlay group once the launcher has taken over the screen.
+  //
+  // Called from inside the launcher's shield callback, never synchronously at
+  // the end of switchToLauncher — that ordering is the blank gap. If an exit
+  // is still running, wait out its remainder so the group is at opacity 0
+  // before its windows vanish; otherwise (Cmd+B and friends, which never run
+  // an exit) hide immediately, which is still one shield later than before.
+  //
+  // The overlay can NEVER be stranded visible by this deferral: switchToOverlay
+  // clears the timer and shows it itself, and hideMainWindow clears it and
+  // hides it itself — the same two-route argument that makes the launcher's
+  // deferred hide safe.
+  private hideOverlayAfterLauncherHandoff(): void {
+    const hide = () => {
+      this.overlayHideTimeout = null;
+      if (this.currentWindowMode !== 'launcher') return;
+      // Aux chrome and shell go down together. They are one object and they
+      // faded as one; hiding the pill early — which is what this function
+      // replaced — is exactly what made it pop out from under a still-fading
+      // shell.
+      this.applyOverlayAuxVisibility(false);
+      if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+        this.overlayWindow.hide();
+      }
+      this.overlayExitStartedAt = null;
+      // Put the interaction policy back on its derived footing now that the
+      // group is off screen, so the next show() does not inherit the
+      // click-through we forced in beginOverlayExit().
+      this.syncOverlayInteractionPolicy(true);
+      // And drop the DOM back to rest, for the same reason the launcher's
+      // recede is restored after ITS hide: the exit ends at opacity 0, and a
+      // window shown again while still in that state presents a blank frame.
+      this.sendOverlayTransition('rest');
+    };
+
+    const elapsed = this.overlayExitStartedAt
+      ? Date.now() - this.overlayExitStartedAt
+      : Number.POSITIVE_INFINITY;
+    const remaining = Math.max(0, WindowHelper.OVERLAY_EXIT_MS - elapsed);
+
+    if (this.overlayHideTimeout) clearTimeout(this.overlayHideTimeout);
+    if (remaining <= 0) {
+      this.overlayHideTimeout = null;
+      hide();
+      return;
+    }
+    this.overlayHideTimeout = setTimeout(hide, remaining);
+  }
+
+  private clearOverlayHideTimeout(): void {
+    if (this.overlayHideTimeout) {
+      clearTimeout(this.overlayHideTimeout);
+      this.overlayHideTimeout = null;
+    }
+    this.overlayExitStartedAt = null;
+  }
+
   // --- Swapping Logic ---
 
   public switchToOverlay(inactive?: boolean): void {
@@ -2450,6 +2712,29 @@ export class WindowHelper {
     // is invisible rather than wrong — and the renderer's watchdog covers the
     // case where it never lands at all. No-op off win32.
     this.sendOverlayTransition('arm');
+
+    // Cancel any deferred overlay hide still queued from a Stop. A meeting
+    // started inside the previous stop's 260ms exit window would otherwise
+    // have its brand-new overlay hidden out from under it by that timer. Its
+    // own mode guard would also catch this (currentWindowMode is already
+    // 'overlay' above), but belt-and-braces: this is the route that takes
+    // ownership of the overlay, so this is where the timer dies.
+    this.clearOverlayHideTimeout();
+
+    // ...and with the timer dead, nothing else would undo the click-through
+    // beginOverlayExit() forced on the departing group. That restore normally
+    // rides on the deferred hide (hideOverlayAfterLauncherHandoff), which we
+    // just cancelled — so a Stop→Start inside the 260 ms exit window would
+    // otherwise hand the user a whole meeting's overlay that silently swallows
+    // nothing and passes every click through to the app behind it.
+    //
+    // Re-deriving here rather than restoring a saved value on purpose: the
+    // policy is a pure function of overlayMousePassthrough +
+    // overlayHoverInteractive, so recomputing it is always correct and cannot
+    // resurrect a stale snapshot. Idempotent, so running it on every overlay
+    // show costs nothing and closes the same gap for any other route that
+    // leaves the group click-through.
+    this.syncOverlayInteractionPolicy(true);
 
     // Set once the Windows shield timer below has accepted responsibility for
     // hiding the launcher. Anything that leaves this false — no overlay window
@@ -2702,6 +2987,14 @@ export class WindowHelper {
       this.opacityTimeout = null;
     }
 
+    // Re-entry: a second switchToLauncher inside the exit window (Stop, then
+    // Cmd+B before the 260 ms is up) must not leave the first call's deferred
+    // overlay hide armed. The block below re-arms it if this call takes the
+    // deferring branch, and a call that does NOT — no overlay, the non-shield
+    // branch — falls through to the synchronous hide at the bottom, which is
+    // the correct outcome for it.
+    this.clearOverlayHideTimeout();
+
     // Drop the deferred launcher hide for the same reason, one step further
     // along: we are about to SHOW the launcher, so a hide still queued from
     // the swap into the overlay would fire on top of it. Clearing it here is
@@ -2716,33 +3009,89 @@ export class WindowHelper {
     // is a no-op on macOS and whenever no recede ever ran.
     this.restoreLauncherFromRecede();
 
-    // Hide the overlay's floating chrome FIRST — before the launcher show.
-    // The pill and toggle are always-on-top windows; the launcher is a regular
-    // one, so any frame in which both are up paints the pill OVER the launcher.
-    // Chaining their hide off the overlay's 'hide' event put them two steps
-    // behind the launcher show (show launcher → hide overlay → 'hide' → hide
-    // pill), which is exactly the reported "pill lingers after Stop drops us
-    // on the launcher". Hiding them here does NOT open a no-window-visible gap
-    // (which is what "Show Launcher FIRST" guards against): the overlay body
-    // is still up until the "Hide Overlay SECOND" block below.
-    this.applyOverlayAuxVisibility(false);
+    // Set once the Windows shield timer below has accepted responsibility for
+    // hiding the overlay group. Mirrors `launcherHideDeferred` in
+    // switchToOverlay and exists for the same reason: anything that leaves it
+    // false — the macOS path, the non-content-protected path, a swap with no
+    // launcher window to hand off TO — must still fall through to the
+    // synchronous hide at the bottom, exactly as before.
+    let overlayHideDeferred = false;
 
     // Show Launcher FIRST
     if (this.launcherWindow && !this.launcherWindow.isDestroyed()) {
-      if (process.platform === 'win32' && this.contentProtection) {
+      // The shield is win32-wide, NOT gated on content protection — the same
+      // correction switchToOverlay already carries, for the same second
+      // reason. Only ONE of the two frame leaks needs CP to exist:
+      //   1. CP flag leak — DWM must have processed setContentProtection
+      //      before the HWND goes opaque. Only applies with CP on, which is
+      //      why this branch used to be gated on it.
+      //   2. STALE frame leak — a hidden HWND's renderer paints nothing, so
+      //      its last composited frame is the launcher as it looked when the
+      //      meeting STARTED: the blue "Meeting ongoing" CTA, the old meeting
+      //      list, the pre-meeting scroll position. show() hands DWM that
+      //      frame to present until the renderer produces a new one. With CP
+      //      off the old `else` branch was a bare show() at opacity 1, which
+      //      presented it directly — the stale-then-snap half of the reported
+      //      Stop jank, and it happens whether or not CP is on.
+      // Gating the shield on CP also meant the entire Stop choreography was
+      // dead code for anyone with content protection off. macOS keeps the
+      // un-shielded path below: its window server does not re-present a hidden
+      // window's old surface, and setOpacity churn there is not free.
+      if (process.platform === 'win32') {
+        // Arm the launcher's entrance BEFORE the show, for the same reason
+        // switchToOverlay arms the overlay's at the very top: webContents.send
+        // is async, and everything between here and the un-shield happens at
+        // native opacity 0, so an arm that lands late is invisible rather than
+        // wrong. The renderer's watchdog covers one that never lands at all.
+        this.sendLauncherTransition('arm');
         // Opacity Shield: Show at 0 opacity first
         this.launcherWindow.setOpacity(0);
         if (inactive) this.launcherWindow.showInactive();
         else this.launcherWindow.show();
-        this.launcherWindow.setContentProtection(true);
+        // The launcher follows the USER'S setting here — unlike the overlay,
+        // which is unconditionally protected. Identical to what this line did
+        // before, since the branch was previously only reachable with
+        // contentProtection true.
+        this.launcherWindow.setContentProtection(this.contentProtection);
 
+        // From here the shield callback owns the overlay's exit.
+        overlayHideDeferred = true;
         if (this.opacityTimeout) clearTimeout(this.opacityTimeout);
+        // Armed-at, for the latency line in the callback. The shield is a
+        // Node timer, so it only fires once the main thread is free — and the
+        // whole point of the handoff is that the launcher goes opaque at a
+        // PREDICTABLE moment. If this number drifts far above
+        // LAUNCHER_SHIELD_MS the swap is being starved by synchronous work on
+        // the stop path, and no amount of easing will fix that; it is the one
+        // measurement that distinguishes "the animation is wrong" from "the
+        // main thread was busy". Logged only when it actually overruns.
+        const shieldArmedAt = Date.now();
         this.opacityTimeout = setTimeout(() => {
+          // Same mode guard as the overlay's shield callback: if a meeting has
+          // started again inside this window, switchToOverlay owns both
+          // windows now and un-shielding the launcher — let alone focusing it
+          // — would fight it.
+          if (this.currentWindowMode !== 'launcher') return;
+          const shieldLatency = Date.now() - shieldArmedAt;
+          if (shieldLatency > WindowHelper.LAUNCHER_SHIELD_MS * 2) {
+            console.warn(
+              `[WindowHelper] Launcher un-shield ran ${shieldLatency}ms after arming ` +
+                `(target ${WindowHelper.LAUNCHER_SHIELD_MS}ms) — the main thread was blocked ` +
+                'during the swap, so the launcher stayed transparent for the overrun.',
+            );
+          }
           if (this.launcherWindow && !this.launcherWindow.isDestroyed()) {
             this.launcherWindow.setOpacity(1);
+            // Entrance starts in the SAME tick the shield lifts, so the window
+            // going opaque and the animation's first frame are one event.
+            this.sendLauncherTransition('enter');
             if (!inactive) this.launcherWindow.focus();
+            // Only NOW does the overlay go away. This used to run
+            // synchronously below, which is what left ~60 ms with neither
+            // window painted on every Stop.
+            this.hideOverlayAfterLauncherHandoff();
           }
-        }, 60);
+        }, WindowHelper.LAUNCHER_SHIELD_MS);
       } else {
         // Restore opacity (may have been zeroed pre-screenshot by hideMainWindow)
         this.launcherWindow.setOpacity(1);
@@ -2755,9 +3104,29 @@ export class WindowHelper {
       this.isWindowVisible = true;
     }
 
-    // Hide Overlay SECOND
-    if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
-      this.overlayWindow.hide();
+    // Hide Overlay SECOND — unless the Windows shield callback took it.
+    //
+    // On the normal Windows path the group's hide now happens in
+    // hideOverlayAfterLauncherHandoff(), off the shield callback above,
+    // because the launcher is not on screen yet at this point in the function.
+    // macOS has no shield — its launcher is already opaque by the time control
+    // reaches this line — so the synchronous hide is correct there and is
+    // deliberately left alone.
+    //
+    // The aux hide lives HERE rather than ahead of the launcher show, where it
+    // used to sit. The old ordering existed because the pill is alwaysOnTop
+    // and the launcher is not, so a frame with both up painted the pill over
+    // the launcher — but that was only a defect while the pill was a hard cut.
+    // Now the pill fades out on the shell's timeline, so it is SUPPOSED to be
+    // above the launcher while it does, exactly as the departing launcher is
+    // supposed to be beneath the rising overlay in the other direction. On
+    // this synchronous path nothing fades, so the original ordering argument
+    // still holds and the aux hide still precedes the body hide.
+    if (!overlayHideDeferred) {
+      this.applyOverlayAuxVisibility(false);
+      if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+        this.overlayWindow.hide();
+      }
     }
 
     // ─── EXPLICITLY ACTIVATE THE APP ON OVERLAY→LAUNCHER SWAPS ─────────────

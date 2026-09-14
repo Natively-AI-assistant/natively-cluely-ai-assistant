@@ -97,10 +97,16 @@ export interface CapturedKey {
   isKeyDown: boolean;
   isOutsideMouseDown?: boolean;
   /**
-   * Non-empty ⟹ this event is the app's OWN global shortcut firing, swallowed
-   * by the native hook (Windows) so it can never leak into the foreground app.
-   * The value is the KeybindManager action id; StealthKeyboardManager dispatches
-   * it instead of typing. Always absent/empty on macOS.
+   * Non-empty ⟹ this event is a chord the native hook (Windows) swallowed so it
+   * could never leak into the foreground app. Two namespaces:
+   *   • a bare KeybindManager action id — the app's OWN global shortcut firing;
+   *     StealthKeyboardManager dispatches the action instead of typing it.
+   *   • `edit:*` — an EDIT action serviced inside StealthKeyboardManager and
+   *     never passed to triggerActionById. Today only `edit:paste` (Ctrl+V),
+   *     which exists because the WS_EX_NOACTIVATE overlay is never focused and
+   *     so has no DOM paste to service.
+   * Always absent/empty on macOS, where the overlay input holds real DOM focus
+   * and Chromium services Cmd+V itself.
    */
   appChordId?: string;
 }
