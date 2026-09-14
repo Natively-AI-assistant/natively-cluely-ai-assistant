@@ -261,13 +261,25 @@ import {
   shouldHoldEagerCodeExpansion,
 } from '../lib/overlayCodeExpansion.mjs';
 import {
-  // OVERLAY_RESIZE_EASE (the bezier) is intentionally NOT imported here: the
-  // live width channel now uses OVERLAY_RESIZE_SPRING for velocity-continuous,
-  // interrupt-safe scroll-driven retargeting. The bezier remains exported from
-  // the easing module for its pure/tested deterministic samplers.
+  // OVERLAY_RESIZE_EASE (the old drawer bezier) is intentionally NOT imported
+  // here. THE TWO AXES CARRY DIFFERENT CURVES, on purpose:
+  //   WIDTH  — OVERLAY_RESIZE_SPRING, the 420ms weighted spring it has always
+  //            had. Also drives the panel-LEFT restore animate.
+  //   HEIGHT — OVERLAY_RESIZE_TWEEN, the transitions.dev "Card resize" signature
+  //            (300ms / cubic-bezier(0.22, 1, 0.36, 1)). The height axis did not
+  //            animate at all before 2026-09-13; it cut.
+  // Chosen by watching all the combinations play in the real overlay, not from
+  // first principles — see scripts/overlay-motion/README.md.
   OVERLAY_RESIZE_DURATION_MS,
   OVERLAY_RESIZE_SPRING,
+  OVERLAY_RESIZE_TWEEN,
+  OVERLAY_RESIZE_TWEEN_MS,
 } from '../../electron/utils/overlayResizeEasing.mjs';
+import {
+  decideHeightCommit,
+  shouldReportTweenHeight,
+} from '../lib/overlayHeightTween.mjs';
+import { isAimedAtAuto } from '../lib/overlaySnapToAuto.mjs';
 import { shouldAcceptIntelligenceIpc } from '../lib/overlayIntelligenceGeneration.mjs';
 import {
   shouldUseStreamingCodeUi,
@@ -281,6 +293,11 @@ import {
   maxWindowWidthFor,
   maxWindowHeightFor,
   collapsedWidthFor,
+  OVERLAY_PANEL_INSET,
+  OVERLAY_HOVER_GATE_PAD,
+  defaultCollapsedPanelWidth,
+  collapsedPanelForWindow,
+  panelWidthForWindow,
   pinsHeightFor,
   minWindowWidthFor,
   manualHeightFloorFor,
@@ -412,6 +429,24 @@ import { DOM_CONTEXT_MAX_CHARS } from '../constants/domCapture';
 // it collapses to the exact final height the instant streaming ends (see
 // reportShellSize's sync call below).
 const STREAMING_HEIGHT_GROW_BUFFER_PX = 96; // ~4 lines of headroom per forced grow
+
+// How long the ResizeObserver's own height reporting stays suppressed PAST the
+// NOMINAL end of an expand/contract animation. Whichever channel is running
+// drives the OS height itself meanwhile (see startTransition / the viewport
+// height channel) and clears this deadline in its own onComplete, so the tail is
+// a fail-safe for the case where onComplete never fires — an unmount mid-flight.
+//
+// IT HAS TO COVER A SPRING'S SETTLE, which is the part that is easy to get
+// wrong. `visualDuration` is VISUAL: OVERLAY_RESIZE_SPRING is nominally 420ms but
+// measured (ab-options-probe.mjs, "within 1px of rest") it settles at
+// 600-724ms — up to ~304ms past its own duration, because a critically-damped
+// spring has a long tail. A tail sized for a duration tween instead let the
+// deadline expire 60-180ms BEFORE the width spring finished, handing reporting
+// back to the observer mid-animation, which is exactly the per-frame native
+// setBounds the suppression exists to prevent. Sized to the slower channel and
+// shared: the height tween is nominally 300ms, so it just gets a longer
+// fail-safe, which costs nothing because its onComplete clears the deadline.
+const RESIZE_SUPPRESSION_TAIL_MS = 320;
 
 interface Message {
   id: string;
@@ -1777,6 +1812,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // True for the duration of a user resize drag. Declared up here because the
   // ResizeObserver (above the drag handler) gates its height reporting on it.
   const isResizingRef = useRef(false);
+  // Last height AUTO sizing chose (see reportShellSize). 0 = not observed yet,
+  // which makes the snap-to-auto check below decline rather than guess.
+  const autoHeightRef = useRef(0);
   // ── Streaming-height headroom-buffer state ────────────────────────────
   // See STREAMING_HEIGHT_GROW_BUFFER_PX's comment near the top of this file
   // for the full rationale (an earlier springed/interpolated version of this
@@ -2308,14 +2346,33 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // What we ASK the OS for — the user's pin, else the default. Never the
   // clamped result, or a clamp would latch permanently.
   const REQUESTED_WINDOW_WIDTH = customWindowWidth ?? OVERLAY_DEFAULT_WINDOW_WIDTH;
-  // What the window actually IS. All panel/anchor/hover-gate geometry uses this.
-  const SHELL_WIDTH_EXPANDED = appliedWindowWidth ?? REQUESTED_WINDOW_WIDTH;
+  // What the window actually IS. All anchor/hover-gate/OS geometry uses this.
+  const WINDOW_WIDTH = appliedWindowWidth ?? REQUESTED_WINDOW_WIDTH;
+  // The panel is inset from the window by OVERLAY_PANEL_INSET on every side
+  // (the padding on contentRef below), so that undetectable mode's ring has
+  // transparent room to paint OUTSIDE the card. Before this the expanded panel
+  // WAS the window width edge-to-edge, and the card was flush to the window on
+  // all four sides — measured live at y=0 in a 154px window — so an outward
+  // ring was clipped away entirely on the vertical axis and at full width on
+  // the horizontal one.
+  //
+  // The window keeps its exact previous numbers: every OS-facing value (the
+  // startup-slide birth width, the display budgets, persisted custom sizes, the
+  // min/max clamps in overlayCustomSize) is still expressed in window terms and
+  // is untouched. Only the PANEL gets narrower, by 2 x the inset.
+  //
+  // Horizontal slack is not a new idea here — the collapsed panel has always
+  // sat 66px in from each window edge, and panelLeft/mx-auto/the hover gate/the
+  // toggle anchor all already handle a panel narrower than its window. What is
+  // new is that the slack now also exists on the VERTICAL axis, and at the
+  // panel's fully expanded width.
+  const SHELL_WIDTH_EXPANDED = WINDOW_WIDTH - OVERLAY_PANEL_INSET * 2;
   const SHELL_WIDTH_COLLAPSED = collapsedWidthFor(SHELL_WIDTH_EXPANDED);
   // The OS overlay window's width. Equals SHELL_WIDTH_EXPANDED always (the
   // panel fills the window edge-to-edge when expanded), and at its default
   // equals WindowHelper.OVERLAY_DEFAULT_WIDTH (the window's birth width — the
   // startup-slide invariant).
-  const OVERLAY_WINDOW_WIDTH = SHELL_WIDTH_EXPANDED;
+  const OVERLAY_WINDOW_WIDTH = WINDOW_WIDTH;
   // Latest-value ref for the two long-lived subscriptions below (the toggle
   // anchor stream and the hover gate). They must read the LIVE window width but
   // must NOT re-subscribe when it changes: a drag updates it ~30x/second, and
@@ -2336,7 +2393,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // width would boot it visually expanded while codeExpandedRef and
   // isShellWide both still read "collapsed".
   const shellWidth = useMotionValue(
-    collapsedWidthFor(restoredOverlaySize.width ?? OVERLAY_DEFAULT_WINDOW_WIDTH),
+    collapsedPanelForWindow(restoredOverlaySize.width ?? OVERLAY_DEFAULT_WINDOW_WIDTH),
   );
   // Vertical budget cap for the chat scroll area. Default Infinity = "not yet
   // measured / unbounded", so the width-derived aesthetic max applies until we
@@ -2675,13 +2732,16 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // points past the window's own right edge. Setting it is also the only
       // thing that re-anchors the toggle and popover windows at all — that
       // stream fires from shellWidth's 'change', nothing else.
-      const wasExpanded = shellWidth.get() >= overlayWindowWidthRef.current - 1;
+      // Compared against the PANEL's expanded width, not the window's: with the
+      // gutter they differ by 2 x the inset, and testing against the window
+      // would read a fully expanded panel as collapsed on every reconcile.
+      const wasExpanded = shellWidth.get() >= panelWidthForWindow(overlayWindowWidthRef.current) - 1;
       // Written before the state update so the toggle-anchor stream and the
       // hover gate — both of which read this ref — are correct immediately,
       // not one render late.
       overlayWindowWidthRef.current = width;
       setAppliedWindowWidth(width);
-      shellWidth.set(wasExpanded ? width : collapsedWidthFor(width));
+      shellWidth.set(wasExpanded ? panelWidthForWindow(width) : collapsedPanelForWindow(width));
     }
     // Only reconcile the height when the user actually pinned one; otherwise
     // the window is content-sized and there is nothing to hold. And only
@@ -2733,6 +2793,19 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // effect, and fires a SECOND rAF-scheduled report per frame against the
     // same window.
     if (isResizingRef.current) return;
+    // An expand/contract transition owns the height channel for its duration and
+    // drives the OS window itself (leading on growth, following on shrink). The
+    // ResizeObserver already honours this deadline before routing here, but
+    // several effects call this reporter DIRECTLY on their own rAF/timer, and
+    // one of them fires on the send path: traced live, `reportShellSize` landed
+    // 1ms after a tween had led the window to its arrival height and pushed it
+    // straight back to the pre-growth 329px, under a panel already at 439 —
+    // a sliced footer until the next frame healed it. The deadline is the one
+    // place that knows a transition is in flight, so the guard belongs here at
+    // the choke point rather than at each caller. Self-expiring, and the
+    // transition's own onComplete clears it and then re-reports the exact
+    // settled height, so nothing skipped here is lost.
+    if (Date.now() < heightReportSuppressedUntilRef.current) return;
     // offsetHeight is the LAYOUT (untransformed) border-box height. We must NOT
     // use getBoundingClientRect().height here: that returns the POST-transform
     // box, so the shell's scale 0.95→1 / y 20→0 entry animation would feed a
@@ -2758,6 +2831,17 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     const measured = contentRef.current.offsetHeight;
     const pinned = customOverlayHeightRef.current;
     const height = pinned !== null ? Math.max(pinned, measured) : measured;
+    // The last height AUTO sizing chose for itself. Recorded only while nothing
+    // is pinned, which is exactly when `measured` IS the auto height — once a
+    // pin is in force this reporter sends max(pin, measured) and the auto value
+    // is no longer observable here. A manual drag's release compares against
+    // this to decide whether the user was aiming back at auto; see
+    // isAimedAtAuto. Kept as a ref rather than recomputed at release because
+    // the alternative is reconstructing the unpinned layout mid-pointerup —
+    // clear the pin, re-derive the cap, force a reflow, read, put it back —
+    // and framer writes styles on its own frame, so that read is not reliable
+    // in the same tick anyway.
+    if (pinned === null && measured > 0) autoHeightRef.current = measured;
     if (process.env.NODE_ENV === 'development') {
       const scrollEl = scrollContainerRef.current;
       console.log('[overlay-resize] reportShellSize', {
@@ -2810,7 +2894,16 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       return;
     }
     const availHeight = typeof window !== 'undefined' ? window.screen?.availHeight ?? 0 : 0;
-    const chromeHeight = contentEl.offsetHeight - scrollEl.clientHeight;
+    // Subtract the ANIMATED BOX, not the scroller. The card's height is
+    // `chrome + viewportBox`, and during an expand/contract tween the box and
+    // the scroller inside it differ by exactly the travel still to come. Using
+    // the scroller here would make `chrome` wrong for the length of every tween,
+    // which would move the cap, which would move the scroller's max-height —
+    // i.e. the viewport would breathe against its own animation. The box is the
+    // term that actually appears in the card's height, so it is the exact one.
+    const viewportBoxEl = viewportBoxRef.current;
+    const chromeHeight =
+      contentEl.offsetHeight - (viewportBoxEl?.offsetHeight ?? scrollEl.clientHeight);
     // A pinned height is the vertical budget while it is a ceiling (the chat
     // scrolls inside the size the user chose); once a new answer has started
     // it is only a floor and the AUTO budget applies above it. The pin is
@@ -3006,14 +3099,21 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
             : // Floor: the answer grows the window exactly as auto would
               // (buffered headroom, settled at stream end), never below the pin.
               Math.max(pinned, height);
+      // RETURNS the IPC promise. Callers that only push a height ignore it; the
+      // expand tween awaits it, because "the window has been ASKED for 496" and
+      // "the window IS 496" are one round trip apart and the difference is a
+      // frame of clipped footer.
       if (window.electronAPI?.updateContentDimensionsCentered) {
-        void window.electronAPI
+        return window.electronAPI
           .updateContentDimensionsCentered({ width, height: targetHeight })
           .then(adoptAppliedSize)
           .catch(() => {});
-      } else {
-        void window.electronAPI?.updateContentDimensions({ width, height: targetHeight });
       }
+      return Promise.resolve(
+        window.electronAPI?.updateContentDimensions({ width, height: targetHeight }),
+      )
+        .then(() => {})
+        .catch(() => {});
     },
     [adoptAppliedSize],
   );
@@ -3062,6 +3162,304 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // place before the ResizeObserver can possibly fire for this render, and
   // effects run after paint.
   driveStreamingHeightRef.current = driveStreamingHeight;
+
+  // The chat viewport's MOUNT GATE. Declared here rather than beside the JSX
+  // because the height channel below keys its measuring effect on it: that flip
+  // is the edge which starts both the expand and the contract.
+  const hasChatContent =
+    messages.length > 0 || isManualRecording || isProcessing || answerPanelPinned;
+  // `heightPinned`: a user-chosen height needs the viewport mounted to fill it,
+  // messages or not — otherwise the window is that tall and the panel is not.
+  const showAnswerPanel = hasChatContent || heightPinned;
+
+  // ── AUTO EXPAND / CONTRACT: the height channel ────────────────────────────
+  //
+  // The card's height used to be a pure consequence of layout: a row mounts,
+  // the panel is instantly taller, and the OS window follows in the same frame.
+  // Correct, and completely uncushioned — every discrete change was a cut.
+  // This gives that axis the same card-resize signature the width now carries
+  // (OVERLAY_RESIZE_TWEEN: 300ms / cubic-bezier(0.22, 1, 0.36, 1)).
+  //
+  // WHAT MOVES: a clipping wrapper around the chat viewport (`viewportBoxRef`),
+  // NOT the card. The card is `overflow-hidden` with the footer at the bottom of
+  // a flex column, so a card whose height lags its own content slices the footer
+  // off for the whole tween — the failure the streaming headroom exists to
+  // prevent. The viewport is the card's only elastic element, so animating its
+  // box keeps `cardHeight === chrome + viewportBox` true at EVERY instant of the
+  // tween: there is no frame in which the window can be shorter than the panel.
+  //
+  // WHAT DOES NOT MOVE: anything already owned by another clock. See
+  // decideHeightCommit in src/lib/overlayHeightTween.mjs — a WIDTH TRANSITION
+  // (the height is that motion's own consequence, and must stay in lockstep with
+  // it), streaming (its channel commits headroom AHEAD of content; a tween
+  // chases), a user resize drag (the pointer is the clock), a hidden window and
+  // reduced motion all SNAP.
+  const viewportHeight = useMotionValue(0);
+  // px STRING, not a bare number. motion-dom appends units only for the keys in
+  // its number map; emitting the string makes this immune to that trap either
+  // way (see scrollMinH's comment for the minHeight case that cost a build).
+  const viewportHeightPx = useTransform(viewportHeight, (h: number) =>
+    `${Math.max(0, Math.round(h))}px`,
+  );
+  const viewportBoxRef = useRef<HTMLDivElement>(null);
+  // The height currently COMMITTED to the box. `null` = never measured, which
+  // makes the next commit snap. Seeded on mount below: an overlay that is born
+  // with chat already in it (Cmd+B re-expand, a restored session) must not play
+  // an expand — it was already open.
+  const viewportAppliedRef = useRef<number | null>(null);
+  const viewportTweenRef = useRef<ReturnType<typeof animate> | null>(null);
+  const viewportTweenTargetRef = useRef<number | null>(null);
+
+  useLayoutEffect(() => {
+    // At mount: a viewport already in the DOM means the overlay opened WITH
+    // content, so the first commit snaps to it. No viewport means the overlay
+    // opened empty and its true height is 0 — the first answer then tweens open
+    // from 0 rather than snapping, which is the moment this whole channel is for.
+    viewportAppliedRef.current = scrollContainerRef.current ? null : 0;
+    viewportHeight.set(0);
+  }, [viewportHeight]);
+
+  const commitViewportHeight = useCallback(
+    (measured: number) => {
+      const decision = decideHeightCommit({
+        from: viewportAppliedRef.current,
+        to: measured,
+        // NOT "a stream exists" — a typed question reserves its streaming id
+        // before the first token, and that wait can run for seconds. Gating on
+        // the id alone made the overlay CUT open on send instead of gliding
+        // (measured live: 0 → 145px in one frame). This is the same predicate
+        // decideStreamingHeightCommit uses for its own headroom, so the two
+        // channels change hands at exactly one instant.
+        streamingWithText:
+          streamingMsgIdRef.current !== null && streamingTextRef.current.length > 0,
+        // A width transition owns the height for its duration — the viewport's
+        // natural height is re-wrapping under it every frame, so this is not a
+        // discrete change to animate, it is the width's own motion expressed on
+        // the other axis. See decideHeightCommit for why this one is the
+        // definition of the motion rather than an optimisation.
+        widthAnimating: animationControlsRef.current !== null,
+        resizing: isResizingRef.current,
+        // Cmd+B has hidden the OS window: there is nothing to watch, and a tween
+        // would spend 300ms pushing setBounds at an offscreen window and then
+        // reveal it mid-travel on re-expand. Treated as reduced motion — same
+        // branch, same snap.
+        reducedMotion: prefersReducedMotionRef.current || !isExpandedRef.current,
+      });
+      if (decision.action === 'none') return;
+      if (decision.action === 'snap') {
+        viewportTweenRef.current?.stop();
+        viewportTweenRef.current = null;
+        viewportTweenTargetRef.current = null;
+        viewportAppliedRef.current = decision.height;
+        viewportHeight.set(decision.height);
+        return;
+      }
+      // Already travelling to exactly this height — let it finish rather than
+      // restarting the curve from zero velocity on a repeat measurement.
+      if (viewportTweenTargetRef.current === decision.height) return;
+      viewportAppliedRef.current = decision.height;
+      viewportTweenTargetRef.current = decision.height;
+
+      // HOW THE OS WINDOW FOLLOWS. The two directions are NOT symmetric, and
+      // treating them as one channel is what put a clip on screen.
+      //
+      // GROWING — the window LEADS, in one setBounds, to the height the panel is
+      // travelling to. This is the streaming channel's own rule ("commit ahead
+      // of need, never chase") applied to the tween. Rate-limiting a follower
+      // instead leaves the window 30ms behind a panel that is getting taller,
+      // and since the card is `overflow-hidden` with the footer at the bottom,
+      // 30ms behind is a visibly sliced send button. Measured live before this:
+      // at t=474ms the card was 412 and the window still 380. Leading also cuts
+      // the native calls for an expand from ~9 to 1.
+      // SHRINKING — the window FOLLOWS the animated height, rate-limited. It may
+      // not shrink ahead of the panel (that clips), and a follower's lag leaves
+      // the window a few px taller than the panel for ~30ms, which is
+      // transparent and gone by the settle. The persistent version of that gap
+      // is the dead strip that swallowed desktop clicks; a transient one is not.
+      //
+      // The suppression deadline EXTENDS rather than resets, so a height tween
+      // overlapping a width tween cannot hand reporting back early.
+      heightReportSuppressedUntilRef.current = Math.max(
+        heightReportSuppressedUntilRef.current,
+        Date.now() + OVERLAY_RESIZE_TWEEN_MS + RESIZE_SUPPRESSION_TAIL_MS,
+      );
+      const growing = decision.height > viewportHeight.get();
+      // chrome = everything in the card that is not the animated box. Constant
+      // for the run, so chrome + target is exactly the card's height on arrival.
+      const chromeNow =
+        (contentRef.current?.offsetHeight ?? 0) - (viewportBoxRef.current?.offsetHeight ?? 0);
+      let lastReportAt = 0;
+      let lastReported = -1;
+      let healsIssued = 0;
+      let leadPending: Promise<void> | null = null;
+      if (growing && chromeNow > 0) {
+        lastReported = Math.round(chromeNow + decision.height);
+        lastReportAt = Date.now();
+        leadPending = resizeOverlayWindow(lastReported) ?? null;
+        syncStreamingHeightBaseline(lastReported);
+      }
+      const runTween = () => {
+      viewportTweenRef.current = animate(viewportHeight, decision.height, {
+        ...OVERLAY_RESIZE_TWEEN,
+        onUpdate: () => {
+          const h = contentRef.current?.offsetHeight ?? 0;
+          const now = Date.now();
+          if (growing && h <= lastReported) {
+            // The window is already at the arrival height and the panel has not
+            // outgrown it — but the lead can be UNDONE by a report that was
+            // already in flight when the tween started. The send path is exactly
+            // that case: pressing Enter mounts the viewport, whose observer
+            // reports the pre-growth height one rAF before this tween arms its
+            // suppression, and if that IPC lands second it shrinks the window
+            // back under a panel that is still growing. Measured live: the
+            // window led to 496 at t=474ms, was pulled back to 329 at t=490ms,
+            // and stayed there under a 496px panel until onComplete — a quarter
+            // second of sliced footer. So the lead is ASSERTED, not just set:
+            // one cheap read of the window's own height per frame, re-issued at
+            // the same 30fps gate if anything has undercut it. Self-healing
+            // against any racing writer, present or future, and a no-op once the
+            // window is where it belongs.
+            if (window.innerHeight >= lastReported) return;
+            // NOT rate-limited. The 33ms gate exists to stop a FOLLOWER issuing
+            // a setBounds per frame; a heal is not a follower — it fires only
+            // while something has the window below the panel, and stops the
+            // moment it is fixed. Gating it cost exactly one frame of sliced
+            // footer in the live trace (the undercut landed 16ms after the
+            // lead, inside the window the gate was holding). Capped so the one
+            // case where the window can NEVER reach the asked-for height — the
+            // main process clamping to floor(workArea.height * 0.9) on a short
+            // display — retries a few times instead of every frame for 300ms.
+            if (healsIssued >= 4) return;
+            healsIssued += 1;
+            lastReportAt = now;
+            resizeOverlayWindow(lastReported);
+            return;
+          }
+          if (!shouldReportTweenHeight({ now, lastReportAt, lastReported, height: h })) return;
+          lastReportAt = now;
+          lastReported = Math.round(h);
+          resizeOverlayWindow(h);
+          syncStreamingHeightBaseline(h);
+        },
+        onComplete: () => {
+          viewportTweenRef.current = null;
+          viewportTweenTargetRef.current = null;
+          // Hand reporting back BEFORE the settle, or the settle is swallowed by
+          // the very suppression it is meant to end — but ONLY if the WIDTH
+          // channel is not still running. Whichever transition finishes LAST
+          // releases the shared deadline; see startTransition's onComplete.
+          if (!animationControlsRef.current) heightReportSuppressedUntilRef.current = 0;
+          measureVerticalCapRef.current?.();
+          const settled = contentRef.current?.offsetHeight ?? 0;
+          if (settled > 0) {
+            resizeOverlayWindow(settled);
+            syncStreamingHeightBaseline(settled);
+          }
+        },
+      });
+      };
+
+      // START THE TWEEN ONLY ONCE THE LEAD HAS LANDED. Issuing the setBounds and
+      // animating in the same frame still clipped: the renderer paints frame 1
+      // of the tween before the main process has applied the new bounds, so the
+      // card overhangs the window by whatever that frame travelled (measured: 38px).
+      // Waiting for the IPC round trip — typically 1-3ms, well inside a frame —
+      // makes "the window is big enough" true before the first painted frame.
+      // The 80ms deadline is not optimism management: if the IPC is slow or the
+      // window is gone, the animation must still run, because the viewport is
+      // already mounted and a tween that never starts is a permanently wrong box.
+      if (leadPending) {
+        let started = false;
+        const startOnce = () => {
+          if (started) return;
+          started = true;
+          // A newer commit may have superseded this one while we waited.
+          if (viewportTweenTargetRef.current !== decision.height) return;
+          runTween();
+        };
+        void leadPending.then(startOnce, startOnce);
+        window.setTimeout(startOnce, 80);
+      } else {
+        runTween();
+      }
+    },
+    [viewportHeight, resizeOverlayWindow, syncStreamingHeightBaseline],
+  );
+
+  // Put the animated box on the viewport's CURRENT natural height, right now,
+  // in the caller's frame.
+  //
+  // The ResizeObserver path below is rAF-debounced, so it is always one frame
+  // behind — fine for a discrete change that is about to be tweened anyway, and
+  // NOT fine while the width is animating, where one frame of lag between the
+  // two axes is precisely the artifact being removed. The width transition
+  // therefore calls this from its own onUpdate: reading the scroller's
+  // offsetHeight there flushes layout at the width framer has just written, so
+  // the height applied is the one that width implies, in the same frame.
+  const syncViewportHeightToContent = useCallback(() => {
+    // Stop any in-flight height tween FIRST, before the "nothing to do" check.
+    // Calling this at all means another clock has taken the height over, and a
+    // tween must not keep running underneath it. Ordering it after the check
+    // left a hole: if the tween's target happened to equal the current natural
+    // height for a frame, the early return let it carry on animating on its own
+    // clock in the middle of a width transition.
+    if (viewportTweenRef.current) {
+      viewportTweenRef.current.stop();
+      viewportTweenRef.current = null;
+      viewportTweenTargetRef.current = null;
+    }
+    const el = scrollContainerRef.current;
+    const natural = el ? Math.max(0, Math.round(el.offsetHeight)) : 0;
+    if (viewportAppliedRef.current === natural) return;
+    viewportAppliedRef.current = natural;
+    viewportHeight.set(natural);
+  }, [viewportHeight]);
+
+  // Measure the viewport's NATURAL height and feed it to the commit rule.
+  //
+  // The observer watches the INNER scroller, whose height is still content-
+  // driven exactly as before — the animated height lives on the wrapper. That
+  // separation is what keeps this from being a feedback loop: writing the
+  // wrapper's height cannot change what is being measured.
+  useLayoutEffect(() => {
+    let raf: number | null = null;
+    const measure = () => {
+      raf = null;
+      const el = scrollContainerRef.current;
+      commitViewportHeight(el ? el.offsetHeight : 0);
+    };
+    const schedule = () => {
+      if (raf !== null) return;
+      raf = requestAnimationFrame(measure);
+    };
+    const el = scrollContainerRef.current;
+    // No viewport in the DOM: the panel is empty, so the box contracts to 0.
+    // This is the CONTRACT half of auto expand/contract — it runs on the same
+    // curve as the expand because it goes through the same commit rule.
+    if (!el) {
+      commitViewportHeight(0);
+      return;
+    }
+    const observer = new ResizeObserver(schedule);
+    observer.observe(el);
+    schedule();
+    return () => {
+      observer.disconnect();
+      if (raf !== null) cancelAnimationFrame(raf);
+    };
+    // showAnswerPanel is the mount gate for the scroller, so this must re-run
+    // when it flips — that is the edge that starts both the expand and the
+    // contract.
+  }, [showAnswerPanel, commitViewportHeight]);
+
+  useEffect(
+    () => () => {
+      viewportTweenRef.current?.stop();
+      viewportTweenRef.current = null;
+    },
+    [],
+  );
+
 
   // Re-pin the chat to the bottom for the current frame (iMessage-style sticky
   // bottom). Hoisted out of the animation callback so both the spring's
@@ -3154,12 +3552,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       if (prefersReducedMotionRef.current) {
         if (animationControlsRef.current) animationControlsRef.current.stop();
         animationControlsRef.current = null;
-        heightReportSuppressedUntilRef.current = 0;
+        // Same rule as onComplete: only if nothing else owns the channel.
+        if (!viewportTweenRef.current) heightReportSuppressedUntilRef.current = 0;
         // Snap the width to the target with no animated travel; content reflows
         // once to the final width.
         shellWidth.set(targetWidth);
         pinScrollBottomIfNeeded();
         reserveScrollHeadroomIfNeeded();
+        // The width just changed, so the viewport's natural height did too.
+        syncViewportHeightToContent();
         const h = contentRef.current?.offsetHeight ?? 0;
         if (h > 0) {
           resizeOverlayWindow(h);
@@ -3177,9 +3578,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // deadline EXTENDS on every (re)trigger so a mid-flight scroll retarget
       // keeps the observer suppressed across the blended motion; a generous tail
       // covers the spring's settle past visualDuration. Self-expiring so an
-      // interrupted spring can never wedge reporting off.
-      heightReportSuppressedUntilRef.current =
-        Date.now() + OVERLAY_RESIZE_DURATION_MS + 260;
+      // interrupted spring can never wedge reporting off. Math.max, not a bare
+      // assignment: a height tween may already have armed a deadline, and this
+      // must never SHORTEN one. It is a fail-safe either way — onComplete clears
+      // it explicitly, and only once the other channel is idle too.
+      heightReportSuppressedUntilRef.current = Math.max(
+        heightReportSuppressedUntilRef.current,
+        Date.now() + OVERLAY_RESIZE_DURATION_MS + RESIZE_SUPPRESSION_TAIL_MS,
+      );
 
       // Height channel for the animation. The chat scroll viewport's max-height
       // is derived from the LIVE width (widthDerivedScrollMax: 320px collapsed →
@@ -3197,8 +3603,23 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // 30fps stays well under 60fps, so it does not reintroduce the per-frame
       // native setBounds that the suppression machinery exists to prevent.
       let lastHeightReportAt = 0;
-      let lastReportedHeight = -1;
       const HEIGHT_REPORT_INTERVAL_MS = 33; // ~30fps
+      // What the OS window has been TOLD. ARM THE HEADROOM UP FRONT rather than
+      // seeding with the panel's current height: the grow branch below can only
+      // react on the frame AFTER the panel crosses this value, so with no
+      // runway the first growth step clips by exactly that step. Measured: 27px
+      // and 22px single-frame clips, which is one line-wrap. One extra setBounds
+      // at the start buys ~4 lines of runway and the invariant holds from frame
+      // one. On a transition whose height SHRINKS this leaves the window a
+      // buffer too tall for the run — transparent, not hit-tested (the hover
+      // gate uses the panel rect), and settled exactly by onComplete.
+      let committedWindowHeight = contentRef.current?.offsetHeight ?? 0;
+      if (committedWindowHeight > 0) {
+        committedWindowHeight += STREAMING_HEIGHT_GROW_BUFFER_PX;
+        lastHeightReportAt = Date.now();
+        resizeOverlayWindow(committedWindowHeight);
+        syncStreamingHeightBaseline(committedWindowHeight);
+      }
 
       // WIDTH SPRING on the renderer clock (600↔732 inside the fixed window).
       // Why a spring instead of the old duration+bezier tween:
@@ -3219,29 +3640,107 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       //   drawer tween. Any micro-overshoot during an interrupted retarget is
       //   renderer-only (it nudges the CSS width, never a native width setBounds —
       //   the window width is fixed), so it is safe.
+      //
+      // 2026-09-13 — THE WIDTH KEEPS THIS SPRING, UNCHANGED. The overlay's auto
+      // expand/contract was reworked to give the HEIGHT axis a card-resize tween
+      // (300ms / cubic-bezier(0.22, 1, 0.36, 1) — see the viewport height channel
+      // above); the width was briefly moved to that curve too and then moved
+      // back, by choice, after watching the two side by side in the real overlay.
+      // Width stays the 420ms weighted spring it has always been.
+      //
+      // That decision also deleted machinery rather than adding it. A tweened
+      // width needed a hybrid — tween on a fresh transition, spring on a retarget
+      // — because a tween restarts from progress 0 and therefore from ZERO
+      // velocity, and the scroll scanner re-fires startTransition every time a
+      // code block crosses the viewport edge. Measured over five retargets at
+      // 150ms (scripts/overlay-motion/ab-retarget-probe.mjs, live CSS width
+      // sampled per rAF, velocity step read AT each retarget instant):
+      //     spring          mean step 0.55 px/ms
+      //     pure tween      mean step 1.86 px/ms   ← 3.4x the discontinuity
+      //     tween + spring  mean step 0.54 px/ms
+      // A spring needs none of that: framer retargets it in flight, carrying the
+      // current velocity into the new target, which is why .stop() is deliberately
+      // NOT called before re-issuing here. The rig still reaches the rejected
+      // variants for anyone re-opening the question — `?v=before,after` on
+      // overlayResizeHarness.html, plus `retarget=tween`.
       animationControlsRef.current = animate(shellWidth, targetWidth, {
         ...OVERLAY_RESIZE_SPRING,
         onUpdate: () => {
           pinScrollBottomIfNeeded();
           reserveScrollHeadroomIfNeeded();
-          const now = Date.now();
-          if (now - lastHeightReportAt < HEIGHT_REPORT_INTERVAL_MS) return;
+          // BEFORE the rate-limit check, and before reading contentRef: the two
+          // axes have to move together. The panel is a little wider than it was
+          // last frame, so the text has re-wrapped and the viewport's natural
+          // height has changed; the animated box takes that value now, in this
+          // frame, rather than one frame later via the observer. Rate-limiting
+          // this would be rate-limiting the height animation itself.
+          syncViewportHeightToContent();
           const h = contentRef.current?.offsetHeight ?? 0;
-          if (h <= 0 || h === lastReportedHeight) return;
+          if (h <= 0) return;
+
+          // THE WINDOW MUST LEAD A GROWING PANEL, NOT FOLLOW IT. The card is
+          // `overflow-hidden` with the footer at the bottom, so any frame where
+          // the window is shorter than the panel is a visibly sliced send
+          // button. A 30fps follower left 9 such frames, worst 36px, on the
+          // manual width toggle. Reporting every growth frame instead was not
+          // enough either — `resizeOverlayWindow` is async IPC, so the setBounds
+          // lands a frame late and a single 34px re-wrap step still clipped.
+          //
+          // So commit AHEAD, which is the rule the streaming height channel
+          // already runs on: overshoot by STREAMING_HEIGHT_GROW_BUFFER_PX (~4
+          // lines) and do nothing until the panel catches up to it. Fewer native
+          // calls than a follower, not more, and the invariant holds at every
+          // instant. The extra transparent height is not a dead strip that eats
+          // clicks — the hover gate hit-tests the PANEL's rect, not the window's
+          // — and onComplete settles the window to the exact height.
+          // Top up on a LOW-WATER MARK, not on the crossing. Reacting when the
+          // panel has already passed the committed height is inherently one
+          // frame late — measured as a single 25px clipped frame even with the
+          // headroom armed up front, because a line-wrap step lands entirely
+          // within one frame. Re-committing while half the buffer is still
+          // unused means the panel never reaches the window's edge at all, so
+          // any single-frame step below that half can't clip.
+          if (h + STREAMING_HEIGHT_GROW_BUFFER_PX / 2 > committedWindowHeight) {
+            committedWindowHeight = h + STREAMING_HEIGHT_GROW_BUFFER_PX;
+            lastHeightReportAt = Date.now();
+            resizeOverlayWindow(committedWindowHeight);
+            syncStreamingHeightBaseline(committedWindowHeight);
+            return;
+          }
+
+          // SHRINKING follows, rate-limited — a window taller than the panel is
+          // transparent and harmless, so it can lag. The `- BUFFER` guard is
+          // what stops this branch from immediately undoing the headroom the
+          // grow branch just committed and oscillating (+96/-96) against it:
+          // while the panel is still climbing INTO that headroom it is by
+          // definition within a buffer of the window, so nothing is reported.
+          const now = Date.now();
+          if (h >= committedWindowHeight - STREAMING_HEIGHT_GROW_BUFFER_PX) return;
+          if (now - lastHeightReportAt < HEIGHT_REPORT_INTERVAL_MS) return;
           lastHeightReportAt = now;
-          lastReportedHeight = h;
+          committedWindowHeight = h;
           resizeOverlayWindow(h);
           syncStreamingHeightBaseline(h);
         },
         onComplete: () => {
           animationControlsRef.current = null;
           // Hand reporting back to normal FIRST so the settle below actually
-          // fires (the ResizeObserver early-returns while suppression is live).
-          heightReportSuppressedUntilRef.current = 0;
+          // fires (the ResizeObserver early-returns while suppression is live) —
+          // but ONLY if the HEIGHT channel is not still mid-tween. The two
+          // overlap routinely: a code block appearing widens the panel AND grows
+          // the viewport, so both transitions run, and whichever finished first
+          // would otherwise zero the shared deadline out from under the other.
+          // That hands the channel back to `reportShellSize` while a tween is
+          // still driving it — two writers, the exact clobber the guard inside
+          // reportShellSize exists to prevent. The settle below does not need the
+          // deadline cleared: it calls resizeOverlayWindow directly, and the
+          // other channel clears the deadline when IT finishes.
+          if (!viewportTweenRef.current) heightReportSuppressedUntilRef.current = 0;
           // Authoritative HEIGHT settle: one setBounds for the final, exact
           // content height after the width (and therefore the width-derived
           // scroll max) has fully settled — guarantees the final frame is exact
           // even if the last rate-limited sample landed a few px short.
+          syncViewportHeightToContent();
           const settledHeight = contentRef.current?.offsetHeight ?? 0;
           resizeOverlayWindow(settledHeight);
           syncStreamingHeightBaseline(settledHeight);
@@ -3256,6 +3755,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       pinScrollBottomIfNeeded,
       reserveScrollHeadroomIfNeeded,
       isAutoScrollSuppressed,
+      syncViewportHeightToContent,
     ],
   );
 
@@ -3362,7 +3862,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // (one IPC round-trip, about a frame) and raises them. The panel cannot
       // outgrow the window it is painted in, so the interim ceiling is the
       // current window, never the display.
-      let maxWidth = Math.max(startWidth, overlayWindowWidthRef.current - panelLeft);
+      // panelLeft is contentEl's rect (the padding box), while startWidth is the
+      // CARD's width — different boxes since the panel became inset. Give back
+      // both insets or the drag lets the card grow into the ring's gutter.
+      let maxWidth = Math.max(
+        startWidth,
+        overlayWindowWidthRef.current - panelLeft - OVERLAY_PANEL_INSET * 2,
+      );
       let maxHeight = startHeight;
 
       isResizingRef.current = true;
@@ -3415,7 +3921,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           )
             .then((env) => {
               if (!env || !isResizingRef.current) return;
-              maxWidth = Math.max(maxWidth, env.width - panelLeft);
+              maxWidth = Math.max(maxWidth, env.width - panelLeft - OVERLAY_PANEL_INSET * 2);
               maxHeight = Math.max(maxHeight, env.height);
             })
             .catch(() => {
@@ -3529,7 +4035,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         // re-fits the window; then the panel is flush when it fills the window
         // and centred in the slack when it is narrower than the default.
         const windowWidth = widthDriven
-          ? releaseWindowWidthFor(panelWidth, availWidth)
+          ? releaseWindowWidthFor(panelWidth + OVERLAY_PANEL_INSET * 2, availWidth)
           : overlayWindowWidthRef.current;
         const targetLeft = widthDriven ? Math.round((windowWidth - panelWidth) / 2) : panelLeft;
         const settleHeight = pinsHeight ? latest.height : (contentEl?.offsetHeight ?? latest.height);
@@ -3579,21 +4085,70 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
               typeof applied?.height === 'number' && applied.height > 0
                 ? applied.height
                 : settleHeight;
-            const settledPanel = Math.min(panelWidth, settledWidth);
+            // Bounded by the panel width the settled WINDOW can hold, not by the
+            // window itself — the panel has to leave its gutter free.
+            const settledPanel = Math.min(panelWidth, panelWidthForWindow(settledWidth));
             overlayWindowWidthRef.current = settledWidth;
             setAppliedWindowWidth(settledWidth);
+
+            // DID THEY MEAN AUTO? A drag that lands within a tolerance band of
+            // the size auto sizing would have chosen is read as an aim AT auto,
+            // not as a pin — you cannot hit the auto size by eye, and pinning a
+            // visually identical size would switch auto sizing off for the rest
+            // of the meeting. Per axis, because the pins are. See isAimedAtAuto.
+            const widthAimedAtAuto = isAimedAtAuto(settledWidth, OVERLAY_DEFAULT_WINDOW_WIDTH);
+            const heightAimedAtAuto = isAimedAtAuto(settledHeight, autoHeightRef.current);
+
             if (widthDriven) {
-              if (pinsWidth) setCustomWindowWidth(settledWidth);
-              shellWidth.set(settledPanel);
-              // The chosen panel width holds until the next stream (queueToken
-              // clears the override), exactly like the manual toggle.
-              manualWidthOverrideRef.current = settledPanel;
-              codeExpandedRef.current = settledPanel >= settledWidth - 1;
+              if (widthAimedAtAuto) {
+                // Same end state as the double-click reset's width half: no pin,
+                // no panel override, panel back to its default collapsed width.
+                setCustomWindowWidth(null);
+                // The REF too, not just the state. reportShellSize sends
+                // `requestedWindowWidthRef`, which is assigned from
+                // `customWindowWidth` during RENDER — so the report below (and
+                // any observer fire before React re-renders) would otherwise
+                // keep asking for the dragged width and the window would sit at
+                // it. Measured: the window stayed at 746 instead of returning to
+                // 732. The sizing effect re-reports on the re-render anyway;
+                // this makes the first report already correct.
+                requestedWindowWidthRef.current = OVERLAY_DEFAULT_WINDOW_WIDTH;
+                overlayWindowWidthRef.current = OVERLAY_DEFAULT_WINDOW_WIDTH;
+                setAppliedWindowWidth(OVERLAY_DEFAULT_WINDOW_WIDTH);
+                manualWidthOverrideRef.current = null;
+                shellWidth.set(defaultCollapsedPanelWidth());
+                codeExpandedRef.current = false;
+              } else {
+                if (pinsWidth) setCustomWindowWidth(settledWidth);
+                shellWidth.set(settledPanel);
+                // The chosen panel width holds until the next stream (queueToken
+                // clears the override), exactly like the manual toggle.
+                manualWidthOverrideRef.current = settledPanel;
+                codeExpandedRef.current = settledPanel >= panelWidthForWindow(settledWidth) - 1;
+              }
             }
             if (pinsHeight) {
-              customOverlayHeightRef.current = settledHeight;
+              if (heightAimedAtAuto) {
+                // Drop the pin AND its two companions, or the height would stay
+                // suspended in the ceiling/stream bookkeeping with no pin left
+                // to justify it (see handleResizeReset, which clears the same
+                // three).
+                customOverlayHeightRef.current = null;
+                heightPinIsCeilingRef.current = false;
+                heightPinStreamIdRef.current = null;
+                setHeightPinned(false);
+              } else {
+                customOverlayHeightRef.current = settledHeight;
+              }
             }
             measureVerticalCap();
+            // Clearing a pin leaves the WINDOW at the dragged size with nothing
+            // to pull it back: the content did not move, so the ResizeObserver
+            // stays silent. Report once so auto sizing takes the window over
+            // again immediately — the same gap handleResizeReset closes.
+            if ((widthDriven && widthAimedAtAuto) || (pinsHeight && heightAimedAtAuto)) {
+              reportShellSize();
+            }
             // Session-only by design: nothing is persisted (see restoredOverlaySize).
           })
           .catch(() => {
@@ -3611,7 +4166,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // stay "live" and leave height reporting suppressed.
       window.addEventListener('lostpointercapture', end, { capture: true });
     },
-    [customWindowWidth, shellWidth, measureVerticalCap],
+    [customWindowWidth, shellWidth, measureVerticalCap, reportShellSize],
   );
 
   // Double-click any handle to forget the custom size and return to
@@ -3625,7 +4180,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     setCustomWindowWidth(null);
     setAppliedWindowWidth(null);
     manualWidthOverrideRef.current = null;
-    shellWidth.set(collapsedWidthFor(OVERLAY_DEFAULT_WINDOW_WIDTH));
+    shellWidth.set(defaultCollapsedPanelWidth());
     // A WIDTH pin re-reports through the sizing effect (it lists
     // `customWindowWidth` in its deps). A height-only pin has no such path:
     // clearing a null width is not a state change, the content did not move
@@ -3698,7 +4253,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // between them. While a drag renders inside a wider envelope the panel
       // is left-anchored, so the centred derivation is wrong by the slack.
       const panelLeft = Math.round(
-        dragLeft !== null ? dragLeft : (overlayWindowWidthRef.current - w) / 2,
+        // dragLeft is contentEl's rect — the PADDING box. The toggle rides the
+        // CARD's top-right corner, one inset further in. The centred branch
+        // needs no correction: it derives the card's left from the card's own
+        // width, and the gutter is symmetric.
+        dragLeft !== null ? dragLeft + OVERLAY_PANEL_INSET : (overlayWindowWidthRef.current - w) / 2,
       );
       const panelRight = Math.round(panelLeft + w);
       const key = `${panelLeft}:${panelRight}`;
@@ -3739,7 +4298,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // ignored, so crossing back over the panel re-arms interactivity BEFORE a
   // click can happen. The default (main-process side) is interactive — the
   // panel and its drag regions are never gated. PAD inflates the panel rect
-  // slightly so fast pointer travel can't outrun the flip at the boundary.
+  // slightly so pointer jitter at the boundary cannot thrash the flag, and is
+  // deliberately SMALLER than the panel gutter so the gutter itself stays
+  // click-through — see OVERLAY_HOVER_GATE_PAD.
   useEffect(() => {
     let interactive = true;
     // Handshake reset: this effect only sends on boundary CROSSINGS, so the
@@ -3749,7 +4310,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // unconditional resync, an expanded panel (margin 0 → "inside" always
     // true → no crossing ever) would stay click-through forever.
     window.electronAPI?.setOverlayHoverInteractive?.(true).catch(() => {});
-    const PAD = 8;
+    // See OVERLAY_HOVER_GATE_PAD: must stay below OVERLAY_PANEL_INSET so the
+    // panel's transparent gutter passes clicks through to whatever is beneath
+    // instead of silently eating them.
+    const PAD = OVERLAY_HOVER_GATE_PAD;
     const onMouseMove = (e: MouseEvent) => {
       // A resize drag renders inside a window grown to its envelope, where
       // this margin math is wrong and a false "outside" would flip the window
@@ -4344,7 +4908,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // toggle aux window follows via the shellWidth 'change' anchor stream.
       // The DEFAULT collapsed width, not this render's SHELL_WIDTH_COLLAPSED,
       // which would still reflect a width pinned in the previous meeting.
-      shellWidth.set(collapsedWidthFor(OVERLAY_DEFAULT_WINDOW_WIDTH));
+      shellWidth.set(defaultCollapsedPanelWidth());
       setInputValue('');
       setAttachedContext([]);
       setManualTranscript('');
@@ -9359,11 +9923,6 @@ Provide only the answer, nothing else.`;
     sttUserError,
     sttInterviewerError,
   );
-  const hasChatContent =
-    messages.length > 0 || isManualRecording || isProcessing || answerPanelPinned;
-  // `heightPinned`: a user-chosen height needs the viewport mounted to fill it,
-  // messages or not — otherwise the window is that tall and the panel is not.
-  const showAnswerPanel = hasChatContent || heightPinned;
   // Only surface the STT pill for genuine problems (config error, failed, or a
   // dropped-then-reconnecting channel). The neutral 'awaiting-audio' state
   // ("Listening for audio…") is intentionally suppressed — it added a pill on
@@ -9473,7 +10032,15 @@ Provide only the answer, nothing else.`;
       // width-resizes, so centering is stable — the panel's center (and the
       // pill window centered over this window) never moves as the panel
       // springs 600↔732 symmetrically inside it.
-      className="flex flex-col items-center w-fit mx-auto h-fit min-h-0 bg-transparent p-0 rounded-[24px] font-sans gap-2 overlay-text-primary"
+      // p-[6px] (OVERLAY_PANEL_INSET) is the ring's gutter, and it is load
+      // bearing on BOTH axes. Vertically this element's offsetHeight is what
+      // reportShellSize sends as the window height, so the padding grows the
+      // window and leaves the card inset from its top and bottom edges — the
+      // only way anything can paint outside the card, which was previously
+      // flush to the window. Horizontally it keeps contentEl's outer box at the
+      // full window width when the panel is expanded, so mx-auto still centres
+      // and panelLeft (measured from THIS element) stays self-consistent.
+      className="flex flex-col items-center w-fit mx-auto h-fit min-h-0 bg-transparent p-[6px] rounded-[24px] font-sans gap-2 overlay-text-primary"
     >
       {/*
        * Always-mounted: isExpanded drives opacity/scale/pointer-events only.
@@ -9949,10 +10516,28 @@ Provide only the answer, nothing else.`;
                   at its padding (32px) however small its max-height, which
                   showed as a gap under the transcript and pushed the footer
                   past the window once the chrome had outgrown the pin. */}
+              {/* AUTO EXPAND / CONTRACT — the animated box.
+                  Its height carries OVERLAY_RESIZE_TWEEN (300ms /
+                  cubic-bezier(0.22, 1, 0.36, 1)) while the panel's WIDTH keeps
+                  its 420ms spring; the scroller inside keeps its
+                  natural, content-driven height so the ResizeObserver that feeds
+                  the tween measures something the tween cannot change. The clip
+                  lives HERE and not on the card because the card's own
+                  overflow-hidden would slice the footer off for the whole tween.
+                  `relative z-10` is lifted off the scroller onto this box so the
+                  stacking order against the card's other children is unchanged.
+                  Always mounted: it is the box that plays the contract to 0 after
+                  the scroller has gone. */}
+              <motion.div
+                ref={viewportBoxRef}
+                data-viewport-box=""
+                className="relative z-10 overflow-hidden shrink-0"
+                style={{ height: viewportHeightPx }}
+              >
               {showAnswerPanel && (
                 <motion.div
                   ref={scrollContainerRef}
-                  className={`relative z-10 flex-1 overflow-y-auto overflow-x-hidden ${hasChatContent ? 'p-4 space-y-3' : 'p-0'} no-drag isolate`}
+                  className={`relative flex-1 overflow-y-auto overflow-x-hidden ${hasChatContent ? 'p-4 space-y-3' : 'p-0'} no-drag isolate`}
                   layout={false}
                   style={{ scrollbarWidth: 'none', maxHeight: scrollMaxH, minHeight: scrollMinH }}
                 >
@@ -10052,6 +10637,7 @@ Provide only the answer, nothing else.`;
                   <div ref={scrollSpacerRef} aria-hidden="true" style={{ height: 0 }} />
                 </motion.div>
               )}
+              </motion.div>
 
               {/* Quick Actions - Minimal & Clean.
                   Split into an outer positioning-only wrapper + an inner row

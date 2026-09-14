@@ -91,6 +91,23 @@ import { useResolvedTheme } from '../../hooks/useResolvedTheme';
    — Settings mounts one panel at a time, so a consumer on another tab has to
    bring the sheet with it or every .aip-* class silently resolves to nothing.
    Duplicate <style> elements are harmless: identical rules, same cascade. */
+/**
+ * The container class for an "Active <thing>" model selector — the control on
+ * the right of a hero card.
+ *
+ * Defined ONCE because it has to be identical across panels: Retrieval stacks
+ * Active Embedding Model directly above Active Reranker, and the two had
+ * drifted to 179px and 192px, so their left edges did not line up. The wider
+ * of the two is kept — reranker labels ("Voyage Rerank 2.5 Lite") and embedding
+ * ids ("lfm-2.5-embedding-350m:free") are both long enough that narrowing would
+ * start truncating names that fit today.
+ *
+ * A selector holding a VALUE rather than a name (the embedding width picker,
+ * "3072d") overrides this with its own narrow width — this is the default for
+ * the model selectors only.
+ */
+export const AIP_ACTIVE_SELECT_CONTAINER = 'relative min-w-[150px] max-w-[240px] w-full sm:w-48';
+
 export const AIP_CSS = `
 .aip-root {
     --aip-accent:            var(--accent-primary);

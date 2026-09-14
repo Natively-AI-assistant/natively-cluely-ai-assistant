@@ -20,6 +20,8 @@ import { formatEnvelopeForPrompt } from './services/browser-context/formatEnvelo
 import { BrowserMetadataClassifierService } from './services/browser-context/BrowserMetadataClassifierService';
 import type { BrowserContextCategory, SafeWebsiteMetadata } from './services/browser-context/types';
 import { SettingsManager } from './services/SettingsManager';
+import { RERANK_CANDIDATE_POOL, resolveRerankPoolSize } from './services/modes/rerankPool';
+import { buildRerankProbe } from './services/reranking/rerankProbe';
 import { ProviderStatusRegistry } from './services/ProviderStatusRegistry';
 import { SkillsManager } from './services/SkillsManager';
 import { SAFE_DOCUMENT_EXTENSIONS } from './services/SafeDocumentTextExtractor';
@@ -8508,6 +8510,11 @@ export function initializeIpcHandlers(appState: AppState): void {
       nativelyModel: stored.nativelyModel ?? null,
       hostedModel,
       candidateCount: stored.candidateCount ?? null,
+      // The pool an untouched install actually reranks. Reported rather than
+      // duplicated in the renderer, which used to hardcode 15 while retrieval
+      // used 30 — so the control displayed a number nothing honoured and every
+      // selectable value silently narrowed the pool.
+      candidateCountDefault: RERANK_CANDIDATE_POOL,
       fallbackToLocal: stored.fallbackToLocal === true,
       hasApiKey,
       eligible: eligibility.eligible,
@@ -8544,7 +8551,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     // Clamp rather than reject: a nonsensical depth should not be storable, and
     // silently keeping the old value is less confusing than an error toast.
     if (Number.isFinite(next.candidateCount)) {
-      merged.candidateCount = Math.max(1, Math.min(30, Math.floor(next.candidateCount as number)));
+      merged.candidateCount = Math.max(1, Math.min(RERANK_CANDIDATE_POOL, Math.floor(next.candidateCount as number)));
     }
 
     if (!settings.set('reranker', merged)) {
@@ -8636,14 +8643,13 @@ export function initializeIpcHandlers(appState: AppState): void {
       getModel: () => model,
     });
 
-    // A deterministic 3-document probe with an obvious right answer, so the
-    // check is "did it rank sensibly", not merely "did it return 200".
-    const query = 'What is the capital city of France?';
-    const documents = [
-      'Paris is the capital and most populous city of France.',
-      'The Rhine is a river in Central and Western Europe.',
-      'Photosynthesis converts light energy into chemical energy.',
-    ];
+    // A deterministic probe with an obvious right answer, so the check is "did
+    // it rank sensibly", not merely "did it return 200" — sized and written to
+    // match what production sends, because the latency measured here is what
+    // describeRerankLatencyFit judges. Three short sentences measured a
+    // workload nothing runs; see rerankProbe.ts.
+    const probe = buildRerankProbe(resolveRerankPoolSize());
+    const { query, documents } = probe;
 
     try {
       const { order, stats } = await reranker.rerankOrThrow(query, documents);
@@ -8668,7 +8674,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         indicesValid,
         // Reported, never enforced: a model that ranks this "wrong" is odd but
         // is not broken, and refusing to save on it would be overreach.
-        rankedExpectedFirst: rankedFirst === 0,
+        rankedExpectedFirst: rankedFirst === probe.expectedIndex,
       };
       // The probe result is real whether or not it can be cached. Reporting
       // `success: false` here would misdescribe a connection that genuinely

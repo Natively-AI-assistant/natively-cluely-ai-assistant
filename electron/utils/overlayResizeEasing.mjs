@@ -167,3 +167,88 @@ export function widthAt(fromWidth, toWidth, elapsedMs, durationMs = OVERLAY_RESI
 export function isResizeComplete(elapsedMs, durationMs = OVERLAY_RESIZE_DURATION_MS) {
   return elapsedMs >= durationMs;
 }
+
+/**
+ * CARD-RESIZE TWEEN — the transitions.dev "Card resize" motion signature
+ * (`--resize-dur: 300ms`, `--resize-ease: cubic-bezier(0.22, 1, 0.36, 1)`),
+ * adopted 2026-09-13 for the overlay's HEIGHT axis only.
+ *
+ * THE TWO AXES CARRY DIFFERENT CURVES, chosen by watching the candidates play in
+ * the real overlay: the WIDTH keeps OVERLAY_RESIZE_SPRING (it was briefly moved
+ * to this tween and moved back), and this drives the chat viewport's height,
+ * which did not animate at all before — it cut. They never run at the same time:
+ * while the width animates, the height SNAPS to whatever the re-wrapped content
+ * implies, so the axes stay in lockstep (see decideHeightCommit's
+ * `widthAnimating` branch; without it the width visibly leads the height).
+ *
+ * WHY IT IS HERE AND NOT A `.t-resize` CLASS. The snippet is written for a box
+ * whose width/height are set by CSS, so a `transition:` can own them. Neither
+ * axis of this overlay is:
+ *   • WIDTH is written every frame by a framer MotionValue bound to
+ *     `style.width` — a CSS transition on a JS-driven property is inert,
+ *     because each write restarts it from the value just written.
+ *   • HEIGHT is the shell card's auto height, and the card is `overflow-hidden`
+ *     with the footer at the bottom of a flex column — tweening the CARD would
+ *     slice the footer off for the whole 300ms (see the
+ *     STREAMING_HEIGHT_GROW_BUFFER_PX comment in NativelyInterface.tsx).
+ * So the SIGNATURE is adopted in a JS channel instead: an animated-height
+ * wrapper around the chat viewport — the card's only elastic element — carries
+ * this curve. (The width bullet above is why a CSS transition could not have
+ * driven that axis either, back when it was a candidate for this curve.)
+ *
+ * THE CURVE vs THE DRAWER BEZIER. Both are easeOutQuint-shaped — a hard
+ * departure into a near-flat tail — but sampled against each other the card
+ * curve is ahead at every point, and overwhelmingly so at the start: at a tenth
+ * of the way through it has covered 40% of the travel where OVERLAY_RESIZE_EASE
+ * has covered 27%. They converge by the quarter mark (0.765 vs 0.779) and the
+ * card curve finishes marginally ahead again. Stack the shorter duration on top
+ * of that earlier departure and the two effects compound: 30ms after a resize
+ * begins the panel is 40% of the way there, against ~19% before.
+ *
+ * Monotonic, no overshoot — safe for any channel that reaches a native
+ * setBounds (an overshoot there would be a window edge briefly past its target).
+ */
+export const OVERLAY_RESIZE_TWEEN_MS = 300;
+
+/** @type {[number, number, number, number]} */
+export const OVERLAY_RESIZE_TWEEN_EASE = [0.22, 1, 0.36, 1];
+
+/**
+ * framer-motion options object: `animate(value, target, { ...OVERLAY_RESIZE_TWEEN })`.
+ * @type {{ duration: number, ease: [number, number, number, number] }}
+ */
+export const OVERLAY_RESIZE_TWEEN = {
+  duration: OVERLAY_RESIZE_TWEEN_MS / 1000,
+  ease: OVERLAY_RESIZE_TWEEN_EASE,
+};
+
+/**
+ * Eased progress along OVERLAY_RESIZE_TWEEN_EASE. Same Newton-free bisection as
+ * easeOverlayResize; kept separate so each curve's tests pin its own numbers.
+ * @param {number} t normalized time in [0,1]
+ * @returns {number} eased progress in [0,1]
+ */
+export function easeCardResize(t) {
+  if (t <= 0) return 0;
+  if (t >= 1) return 1;
+  const [x1, y1, x2, y2] = OVERLAY_RESIZE_TWEEN_EASE;
+  const cx = 3 * x1;
+  const bx = 3 * (x2 - x1) - cx;
+  const ax = 1 - cx - bx;
+  const cy = 3 * y1;
+  const by = 3 * (y2 - y1) - cy;
+  const ay = 1 - cy - by;
+  const sampleX = (u) => ((ax * u + bx) * u + cx) * u;
+  const sampleY = (u) => ((ay * u + by) * u + cy) * u;
+  let lo = 0;
+  let hi = 1;
+  let u = t;
+  for (let i = 0; i < 24; i++) {
+    const x = sampleX(u) - t;
+    if (Math.abs(x) < 1e-5) break;
+    if (x > 0) hi = u;
+    else lo = u;
+    u = (lo + hi) / 2;
+  }
+  return sampleY(u);
+}

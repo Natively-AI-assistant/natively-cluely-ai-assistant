@@ -111,6 +111,18 @@ export class EmbeddingPipeline {
     private initPromise: Promise<void> | null = null;
     /** Tracks the config used in the most recent successful initialize() call to enable idempotency. */
     private _lastConfig: AppAPIConfig | null = null;
+    /**
+     * The provider name the user PINNED in Settings (manual mode), or '' in auto
+     * mode. Kept so the pipeline can answer whether what is actually running is
+     * the user's choice or a stand-in for it — see isRunningOnUnpinnedFallback().
+     */
+    private pinnedProviderName = '';
+    /**
+     * Called when the active provider becomes the pinned one again, so the
+     * re-index sweep that was deferred while running on a stand-in can be
+     * re-armed. Set by RAGManager, which owns the sweep.
+     */
+    private onPinnedSpaceRestored: (() => void) | null = null;
 
     constructor(db: Database.Database, vectorStore: VectorStore) {
         this.db = db;
@@ -185,6 +197,13 @@ export class EmbeddingPipeline {
     }
 
     private async _doInitialize(config: AppAPIConfig): Promise<void> {
+        // Record the pin BEFORE resolution, so the "is this what the user asked
+        // for?" question is answerable no matter which way resolution goes —
+        // including the case where the pinned provider produced no candidate at
+        // all and the resolver never reported a demotion.
+        this.pinnedProviderName = config.embeddingMode === 'manual'
+            ? (config.embeddingProvider || '').trim()
+            : '';
         // Construct the local fallback up front, but do NOT call isAvailable() here.
         // LocalEmbeddingProvider construction is cheap (paths + static dimensions/space);
         // isAvailable() loads the MiniLM ONNX model via transformers.js and can stall
@@ -373,6 +392,43 @@ export class EmbeddingPipeline {
     /** Get the active provider's embedding dimensions (avoids reaching into private state). */
     getActiveDimensions(): number | undefined {
         return this.provider?.dimensions;
+    }
+
+    /**
+     * True when the user PINNED a provider in Settings and something else is
+     * actually running — i.e. the active embedding space is a stand-in, not the
+     * space the user asked for.
+     *
+     * Exists so the re-index sweep can tell "the user changed provider, migrate
+     * the corpus" apart from "the pinned provider is missing or down, and this
+     * is a temporary stand-in". Both look identical to
+     * getIncompatibleSpaceCount(), which compares rows against whatever is
+     * active and knows nothing about intent — so a Natively pin whose key had
+     * been cleared cleared every 2048-d voyage-4 vector and re-embedded the
+     * whole corpus at 384-d MiniLM, then did it again in reverse once the key
+     * came back. Measured 2026-09-13 against Evin's live corpus.
+     *
+     * Two ways to land here, and this covers both:
+     *  - TRANSIENT: the pinned provider failed its startup probe (resolver hands
+     *    back demotedPinned and the pipeline re-probes it at 5s, then hourly).
+     *  - NO CANDIDATE: the pinned provider was never even built — its key is
+     *    absent — so the manual filter returned an empty list and the resolver
+     *    fell through to the bundled model reporting nothing about the pin.
+     */
+    isRunningOnUnpinnedFallback(): boolean {
+        if (!this.pinnedProviderName) return false;   // auto mode: the chain IS the intent
+        const active = this.provider?.name;
+        if (!active) return false;                     // nothing resolved yet; nothing to sweep either
+        return active !== this.pinnedProviderName;
+    }
+
+    /**
+     * Register the callback that re-arms the deferred re-index sweep once the
+     * pinned provider is active again. RAGManager owns the sweep, so the
+     * pipeline only signals; it does not schedule.
+     */
+    setPinnedSpaceRestoredHandler(handler: (() => void) | null): void {
+        this.onPinnedSpaceRestored = handler;
     }
 
     /**
@@ -843,7 +899,16 @@ export class EmbeddingPipeline {
         // perpetually pending and unusable. The promotion guard is a no-op when
         // already promoted (idempotent under concurrent indexFile callers).
         if (this.provider === fallback) return;
+        const wasUnpinned = this.isRunningOnUnpinnedFallback();
         this.provider = fallback;
+        // The pinned space is back. Any re-index that was deferred while a
+        // stand-in was active is now the RIGHT thing to run — and it is what
+        // reconciles anything indexed at the stand-in's width during the gap.
+        if (wasUnpinned && !this.isRunningOnUnpinnedFallback()) {
+            try { this.onPinnedSpaceRestored?.(); } catch (e: any) {
+                console.warn('[EmbeddingPipeline] Deferred re-index re-arm threw (non-fatal):', e?.message || e);
+            }
+        }
         try {
             this.db.prepare("INSERT OR REPLACE INTO app_state (key, value) VALUES ('last_embedding_space', ?)").run(fallback.space);
         } catch (dbErr: any) {

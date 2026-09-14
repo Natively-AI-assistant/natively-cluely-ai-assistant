@@ -149,6 +149,9 @@ export class RAGManager {
         this.embeddingPipeline = new EmbeddingPipeline(config.db, this.vectorStore);
         this.retriever = new RAGRetriever(this.vectorStore, this.embeddingPipeline);
         this.liveIndexer = new LiveRAGIndexer(this.vectorStore, this.embeddingPipeline);
+        // The pipeline signals when the user's pinned embedding space is active
+        // again; the sweep deferred while a stand-in was running belongs here.
+        this.embeddingPipeline.setPinnedSpaceRestoredHandler(() => this.scheduleAutoReindex());
 
         // Forward the WHOLE embedding config. Hand-listing fields here is what
         // dropped nativelyApiKey / nativelyTrialToken / nativelyApiUrl /
@@ -729,6 +732,25 @@ export class RAGManager {
     scheduleAutoReindex(): void {
         const activeSpace = this.embeddingPipeline.getActiveSpaceKey();
         if (!activeSpace) return;
+        // Never migrate the corpus INTO a stand-in space. A pinned provider that
+        // is missing or down leaves something else active, and to
+        // getIncompatibleSpaceCount() that is indistinguishable from the user
+        // deliberately switching provider — so the sweep would clear every
+        // vector in the pinned space and re-embed the corpus at the stand-in's
+        // width, then do it all again in reverse when the pin came back.
+        // Deferred, not cancelled: promoteFallbackProvider re-arms this the
+        // moment the pinned provider is active again, and the sweep then also
+        // reconciles anything indexed at the stand-in's width in the meantime.
+        if (this.embeddingPipeline.isRunningOnUnpinnedFallback()) {
+            console.warn(
+                `[RAGManager] Deferring re-index: running on ${this.embeddingPipeline.getActiveProviderName()} `
+                + `(${activeSpace}) while the selected embedding provider is unavailable. `
+                + `Existing vectors are left in their own space and will be used again as soon as it returns.`
+            );
+            if (this._autoReindexTimer) clearTimeout(this._autoReindexTimer);
+            this._autoReindexTimer = null;
+            return;
+        }
         if (this.vectorStore.getIncompatibleSpaceCount(activeSpace) === 0) return;
         // Defer the kickoff so launch isn't slowed; _runReindex owns the in-flight guard.
         // Track the timer so a re-init (settings change) doesn't stack duplicate timers

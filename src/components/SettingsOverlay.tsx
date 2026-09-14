@@ -7,7 +7,7 @@ import {
     Camera, RotateCcw, Eye, Layout, MessageSquare, Crop,
     ChevronDown, ChevronUp, Check, BadgeCheck, Power, Palette, Calendar, Ghost, Sun, Moon, RefreshCw, Info, Globe, FlaskConical, Terminal, Download, Settings, Activity, ExternalLink, Trash2,
     Sparkles, Pencil, Briefcase, Building2, Search, MapPin, CheckCircle, HelpCircle, Zap, SlidersHorizontal, PointerOff, Folder,
-    Star, AlertCircle, Gift, Smartphone, Cpu, Shield, Code2, Headphones, Boxes, ListOrdered
+    Star, AlertCircle, Gift, Smartphone, Cpu, Shield, Code2, Headphones, Boxes
 } from 'lucide-react';
 import { AutoAnswerIcon } from './AutoAnswerIcon';
 import { HiCreditCard } from 'react-icons/hi2';
@@ -17,8 +17,7 @@ import { HelpSettings } from './settings/HelpSettings';
 import { AIProvidersSettings } from './settings/AIProvidersSettings';
 import { PlansSettings } from './settings/PlansSettings';
 import { PhoneMirrorSettings } from './settings/PhoneMirrorSettings';
-import { EmbeddingSettings } from './settings/EmbeddingSettings';
-import { RerankerSettings } from './settings/RerankerSettings';
+import { RetrievalSettings } from './settings/RetrievalSettings';
 import { IntelligenceSettings } from './settings/IntelligenceSettings';
 import { SkillsSettings } from './settings/SkillsSettings';
 import { LocalWhisperModelPanel, type ChannelConfig as LocalWhisperChannelConfig } from './LocalWhisperModelPanel';
@@ -411,8 +410,7 @@ const SETTINGS_NAV_ORDER = [
     'general',
     'plans',
     'ai-providers',
-    'embedding',
-    'reranker',
+    'retrieval',
     'skills',
     'calendar',
     'audio',
@@ -422,6 +420,13 @@ const SETTINGS_NAV_ORDER = [
     'help',
     'about',
 ];
+
+/* Retrieval absorbed the old Embeddings and Reranker panels. Both ids are kept
+   as aliases rather than repointed at the call site: AI Providers' lightweight
+   notice is specifically about embeddings and should land on the Embedding
+   sub-tab, not at the top of a combined page. */
+const isRetrievalTab = (tab: string) =>
+    tab === 'retrieval' || tab === 'embedding' || tab === 'reranker';
 
 interface SettingsOverlayProps {
     isOpen: boolean;
@@ -474,7 +479,16 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
        drop its internal state) when moving between them, so they collapse to
        one key — no remount, no transition, which is correct: the content
        didn't change. */
-    const panelKey = (activeTab === 'natively-api' || activeTab === 'natively-pro') ? 'plans' : activeTab;
+    /* Same collapse for the two legacy Retrieval ids: they render the SAME
+       <RetrievalSettings/>, differing only in which sub-tab opens, so they must
+       not read as a section change. Keying on activeTab would play a full panel
+       transition for a deep link that only moves the inner pill — and would put
+       'embedding'/'reranker' outside SETTINGS_NAV_ORDER, losing the direction. */
+    const panelKey = (activeTab === 'natively-api' || activeTab === 'natively-pro')
+        ? 'plans'
+        : isRetrievalTab(activeTab)
+            ? 'retrieval'
+            : activeTab;
 
     /* Read the previous key during render, write it in an effect — mutating a
        ref while rendering double-fires under StrictMode. */
@@ -1893,19 +1907,17 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         {activeTab === 'ai-providers' && navActivePill}
                                         <FlaskConical size={16} /> {t('AI Providers')}
                                     </button>
+                                    {/* One entry for both halves of document search. The
+                                        legacy 'embedding' and 'reranker' ids still render
+                                        here (see isRetrievalTab) so existing deep links
+                                        land on the matching sub-tab instead of a blank
+                                        content area. */}
                                     <button
-                                        onClick={() => setActiveTab('embedding')}
-                                        className={navItemClass(activeTab === 'embedding')}
+                                        onClick={() => setActiveTab('retrieval')}
+                                        className={navItemClass(isRetrievalTab(activeTab))}
                                     >
-                                        {activeTab === 'embedding' && navActivePill}
-                                        <Boxes size={16} /> {t('Embeddings')}
-                                    </button>
-                                    <button
-                                        onClick={() => setActiveTab('reranker')}
-                                        className={navItemClass(activeTab === 'reranker')}
-                                    >
-                                        {activeTab === 'reranker' && navActivePill}
-                                        <ListOrdered size={16} /> {t('Reranker')}
+                                        {isRetrievalTab(activeTab) && navActivePill}
+                                        <Boxes size={16} /> {t('Retrieval')}
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('skills')}
@@ -3928,11 +3940,24 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                 <PhoneMirrorSettings />
                             )}
 
-                            {activeTab === 'reranker' && (
-                                <RerankerSettings />
-                            )}
-                            {activeTab === 'embedding' && (
-                                <EmbeddingSettings onNavigate={setActiveTab} />
+                            {isRetrievalTab(activeTab) && (
+                                /* No `key`. Keying on activeTab would remount both panels
+                                   whenever the id changed — including the 'embedding' ->
+                                   'retrieval' flip you get from clicking the sidebar item
+                                   you are ALREADY on, which discarded the user's sub-tab
+                                   and flashed skeletons for ~400ms. A mounted layout picks
+                                   up a late deep link through its own effect instead.
+
+                                   `initialTab` is passed ONLY for the legacy ids: plain
+                                   'retrieval' sends undefined, which is what tells the
+                                   layout to leave the current sub-tab alone. */
+                                <RetrievalSettings
+                                    initialTab={
+                                        activeTab === 'reranker' ? 'reranker'
+                                            : activeTab === 'embedding' ? 'embedding'
+                                                : undefined
+                                    }
+                                />
                             )}
 
                             {activeTab === 'intelligence' && (

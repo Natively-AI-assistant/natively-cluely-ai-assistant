@@ -3,8 +3,9 @@ import { motion } from 'framer-motion';
 import { AlertCircle, Check, ChevronDown, Cloud, Download, ExternalLink, Filter, FolderOpen, HardDrive, KeyRound, Loader2, Monitor, Puzzle, RefreshCw, Search, ShieldAlert, Trash2, X } from 'lucide-react';
 import { useT } from '../../i18n';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
-import { AIP_CSS, AipBadge, AipModelList, AipProviderMark, AipSelect, AipSwitch, type AipSelectOption, type AipTone } from './AIProvidersSettings';
+import { AIP_ACTIVE_SELECT_CONTAINER, AIP_CSS, AipBadge, AipModelList, AipProviderMark, AipSelect, AipSwitch, type AipSelectOption, type AipTone } from './AIProvidersSettings';
 import { isMac, isWindows } from '../../utils/platformUtils';
+import { candidateControlApplies, candidateControlRationale } from '../../lib/rerankCandidateControl.mjs';
 
 /**
  * "Built-in" / Local model tile mark matching EmbeddingSettings design.
@@ -109,6 +110,9 @@ interface RerankerStatus {
     /** The model id for whichever hosted provider is selected. */
     hostedModel: string | null;
     candidateCount: number | null;
+    /** The pool an untouched install reranks. Reported by the main process so
+     *  this panel never displays a default retrieval does not use. */
+    candidateCountDefault: number;
     fallbackToLocal: boolean;
     hasApiKey: boolean;
     eligible: boolean;
@@ -275,7 +279,10 @@ interface TestResult {
     };
 }
 
-const CANDIDATE_CHOICES = [5, 10, 15, 20];
+// 30 is the retriever's RERANK_CANDIDATE_POOL — the pool an untouched install
+// already reranks. It has to be reachable: without it every choice here
+// LOWERED the pool, so the control could only ever narrow retrieval.
+const CANDIDATE_CHOICES = [5, 10, 15, 20, 30];
 
 function humanBytes(bytes: number): string {
     if (!Number.isFinite(bytes) || bytes <= 0) return '—';
@@ -315,7 +322,7 @@ const RerankerModelSelect: React.FC<FloatingSelectProps> = ({
     placeholder,
     disabled = false,
     className = '',
-    containerClassName = 'relative min-w-[150px] max-w-[240px] w-full sm:w-48',
+    containerClassName = AIP_ACTIVE_SELECT_CONTAINER,
     ariaLabel,
     title,
     disabledHint,
@@ -352,7 +359,16 @@ const RerankerModelSelect: React.FC<FloatingSelectProps> = ({
                 disabled={disabled}
                 className={`aip-select-trigger cursor-pointer flex items-center justify-between w-full ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}
             >
-                <span className="truncate pr-2 text-xs font-medium text-white">{resolvedLabel}</span>
+                {/* Exactly EmbeddingSettings' trigger label: `text-xs`, nothing
+                    else. The `font-medium text-white` this carried made the
+                    Active Reranker read brighter and heavier than Active
+                    Embedding Model directly above it on the Retrieval page —
+                    and `text-white` is a hard-coded colour that overrode
+                    `.aip-select-trigger`'s themed `var(--aip-primary)`, so in
+                    LIGHT theme the label stayed pure white on a light button
+                    and was invisible (measured: embedding flipped to
+                    rgb(55,65,81), this stayed rgb(255,255,255)). */}
+                <span className="truncate pr-2 text-xs">{resolvedLabel}</span>
                 <ChevronDown size={14} strokeWidth={1.75} className={`aip-select-chevron transition-transform duration-150 shrink-0 ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
             </button>
 
@@ -454,6 +470,9 @@ const INITIAL_STATUS: RerankerStatus = {
     nativelyModel: null,
     hostedModel: null,
     candidateCount: null,
+    // The retriever's ceiling. Replaced by the real value on the first IPC
+    // reply; until then this is the pool an unconfigured install uses.
+    candidateCountDefault: 30,
     fallbackToLocal: false,
     hasApiKey: false,
     eligible: false,
@@ -468,11 +487,54 @@ const INITIAL_STATUS: RerankerStatus = {
     lastTest: null,
 };
 
-export const RerankerSettings: React.FC = () => {
+/**
+ * The panel split the way the combined Retrieval page needs it.
+ *
+ * `hero` is the Active Reranker card plus the hosted-fallback toggle, which
+ * answers "what happens when the hosted service fails" and is therefore a
+ * question about the ACTIVE choice. `panel` is everything you configure: the
+ * local model library, the hosted providers, extensions, candidate count and
+ * the privacy notice. Retrieval DISCARDS `header` — the combined page carries
+ * one header for both halves of retrieval rather than a heading per Active card.
+ *
+ * A render prop on ONE instance, not two mounts of a `section` prop: both
+ * halves read the same `status`, so a second instance would leave the hero
+ * card stale the moment a card below it changed the active reranker.
+ */
+export interface RerankerSettingsParts {
+    /** Heading + subtitle. Retrieval drops this for one combined header. */
+    header: React.ReactNode;
+    /** Active Reranker card + the hosted-fallback toggle. */
+    hero: React.ReactNode;
+    /** Local library, hosted providers, extensions, candidates, privacy note. */
+    panel: React.ReactNode;
+}
+
+interface RerankerSettingsProps {
+    /**
+     * Optional. Absent — the standalone Reranker panel and the dev harness —
+     * renders the original single-column layout, wrapper and styles included.
+     */
+    renderParts?: (parts: RerankerSettingsParts) => React.ReactNode;
+}
+
+export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts }) => {
     const t = useT();
     const aipTheme = useResolvedTheme();
 
     const [status, setStatus] = useState<RerankerStatus>(INITIAL_STATUS);
+
+    /**
+     * The pool size this install actually reranks.
+     *
+     * One value for the whole candidates card. It used to be spelled
+     * `status.candidateCount ?? 15` at six separate sites, and the literal was
+     * wrong: nothing writes a default candidateCount, so an untouched install
+     * reranks the retriever's full pool while the panel displayed 15 — and the
+     * "recommended default" label therefore invited a click that HALVED the
+     * pool. The main process reports the real ceiling now.
+     */
+    const candidateCount = status.candidateCount ?? status.candidateCountDefault;
     const [catalog, setCatalog] = useState<CatalogModel[]>([]);
     const [catalogStale, setCatalogStale] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
@@ -701,10 +763,12 @@ export const RerankerSettings: React.FC = () => {
         const parts: string[] = [];
 
         if (status.effective.kind === 'natively') {
-            // Says where the text goes and what it costs, because both are the
-            // questions this option raises: it is hosted like the BYOK ones, but
-            // billed against the plan the user already pays for.
-            parts.push(t('Hosted'), t('Document text is sent to Natively'), t('Uses your plan\u2019s Knowledge allowance'));
+            // Says where the text goes, the question this option raises. The
+            // billing half ("Uses your plan's Knowledge allowance") is NOT
+            // repeated here — the Natively provider card below already states
+            // it, and on the combined Retrieval page this line sits directly
+            // above that card.
+            parts.push(t('Hosted'), t('Document text is sent to Natively'));
             if (status.lastTest?.ok) parts.push(`${Math.round(status.lastTest.latencyMs)} ms ${t('last test')}`);
         } else if (status.effective.kind === 'openrouter') {
             parts.push(t('Hosted'), t('Document text is sent to OpenRouter'));
@@ -1106,15 +1170,19 @@ export const RerankerSettings: React.FC = () => {
         return `${names.slice(0, -1).join(', ')} ${t('or')} ${names[names.length - 1]}`;
     }, [hostedProviders, t]);
 
-    return (
-        <div className="aip-root space-y-5 pb-10" data-theme={aipTheme} data-settings-stagger>
-            <header className="space-y-1">
-                <h3 className="aip-title">{t('Reranker')}</h3>
-                <p className="aip-subtitle">
-                    {t('After Natively searches your documents, the reranker decides which passages actually answer the question. It is chosen separately from your embedding model and your AI model.')}
-                </p>
-            </header>
+    const header = (
+        <header className="space-y-1">
+            <h3 className="aip-title">{t('Reranker')}</h3>
+            <p className="aip-subtitle">
+                {t('After Natively searches your documents, the reranker decides which passages actually answer the question. It is chosen separately from your embedding model and your AI model.')}
+            </p>
+        </header>
+    );
 
+    /* Active Reranker and the hosted-fallback toggle. On the combined Retrieval
+       page this sits above the Embedding/Reranker switcher. */
+    const hero = (
+        <>
             {loadError && (
                 <div className="aip-card p-3 flex items-start gap-2" role="status">
                     <AlertCircle size={13} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
@@ -1219,7 +1287,13 @@ export const RerankerSettings: React.FC = () => {
                     </p>
                 )}
             </div>
+        </>
+    );
 
+    /* Everything you configure. On the Retrieval page this is the body of the
+       Reranker sub-tab. */
+    const panel = (
+        <>
             {/* Provider Card 1: Unified Local Reranker & Model Library Card */}
             <div className="aip-card aip-provider space-y-3">
                 <div className="aip-provider-head">
@@ -1892,7 +1966,13 @@ export const RerankerSettings: React.FC = () => {
                 </div>
             </div>
 
-            {/* Provider Card 5: Candidates Selector — High-End Segmented Control */}
+            {/* Provider Card 5: Candidates Selector — High-End Segmented Control.
+                Shown only where the pool size decides something: a hosted or
+                extension port scores the whole pool in ONE call, so this is
+                passages billed and round-trip latency. The local cross-encoder
+                batches its forward passes well inside its budget, where every
+                choice here would only cost recall. See rerankCandidateControl. */}
+            {candidateControlApplies(status.effective.kind) && (
             <div className="aip-card p-5 space-y-3">
                 <div className="flex items-center justify-between gap-4 flex-wrap sm:flex-nowrap">
                     <div>
@@ -1900,29 +1980,28 @@ export const RerankerSettings: React.FC = () => {
                             {t('Candidates to rerank')}
                         </label>
                         <p className="text-[10px] aip-muted mt-0.5">
-                            {t('Number of initial retrieved passages scored by the reranker.')}
+                            {t(candidateControlRationale(status.effective.kind)
+                                || 'Number of initial retrieved passages scored by the reranker.')}
                         </p>
                     </div>
 
                     <CandidatesSlidingTabs
-                        value={status.candidateCount ?? 15}
+                        value={candidateCount}
                         choices={CANDIDATE_CHOICES}
                         onChange={(n) => void setConfig({ candidateCount: n })}
                     />
                 </div>
 
-                <div className="pt-2 border-t border-white/5 flex items-center justify-between text-[10.5px] aip-muted">
-                    <span>
-                        {(status.candidateCount ?? 15) <= 5 && t('Fast & low latency — best for quick queries.')}
-                        {(status.candidateCount ?? 15) === 10 && t('Balanced speed and recall.')}
-                        {(status.candidateCount ?? 15) === 15 && t('Recommended default — high accuracy with manageable cost.')}
-                        {(status.candidateCount ?? 15) >= 20 && t('Deep recall — evaluates maximum context passages.')}
-                    </span>
-                    <span className="font-mono text-white/50 text-[9.5px]">
-                        {status.candidateCount ?? 15} {t('passages')}
-                    </span>
+                <div className="pt-2 border-t border-white/5 text-[10.5px] aip-muted">
+                    {candidateCount <= 5 && t('Fast & low latency — best for quick queries.')}
+                    {candidateCount > 5 && candidateCount <= 10 && t('Balanced speed and recall.')}
+                    {candidateCount > 10 && candidateCount < status.candidateCountDefault
+                        && t('A smaller pool than the default — less to pay for and less to wait on with a hosted reranker, at some cost to recall.')}
+                    {candidateCount >= status.candidateCountDefault
+                        && t('The full pool — every candidate retrieval found. This is the default.')}
                 </div>
             </div>
+            )}
 
             {/* Provider Card 6: Privacy Notice */}
             <div className="aip-card p-4 flex items-start gap-3">
@@ -1932,6 +2011,19 @@ export const RerankerSettings: React.FC = () => {
                 </p>
             </div>
 
+        </>
+    );
+
+    /* The caller that places the parts owns the wrapper and the style tag —
+       Retrieval mounts this alongside EmbeddingSettings, and two copies of
+       AIP_CSS in one subtree is a duplicate stylesheet, not a merge. */
+    if (renderParts) return <>{renderParts({ header, hero, panel })}</>;
+
+    return (
+        <div className="aip-root space-y-5 pb-10" data-theme={aipTheme} data-settings-stagger>
+            {header}
+            {hero}
+            {panel}
             <style>{AIP_CSS}</style>
         </div>
     );
