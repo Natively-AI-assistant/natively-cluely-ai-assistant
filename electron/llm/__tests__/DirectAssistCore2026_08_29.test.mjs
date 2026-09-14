@@ -1577,8 +1577,12 @@ test('direct assist fallback config never hedges', async () => {
 // calls Electron's app.getPath() at import time — that throws outside a real
 // Electron process, so getDisabledProviderFamilies() silently fails open and
 // the real check would never see `disabledProviders` below. Own-property
-// shadowing (the same mechanism note 5 uses for directAssistFallbackEnabled)
-// is what makes the family-disable test exercise the actual code path.
+// shadowing is what makes the family-disable test exercise the actual path.
+//
+// There is deliberately NO directAssistFallbackEnabled stub here. The setting
+// and its gate were removed — fallback is unconditional — and leaving a stub
+// that forced it on would make every ladder test below pass identically
+// whether or not the gate came back.
 function rungCaller(overrides = {}) {
   const { LLMHelper } = require(path.resolve(root, 'dist-electron/electron/LLMHelper.js'));
   const self = Object.create(LLMHelper.prototype);
@@ -1587,10 +1591,6 @@ function rungCaller(overrides = {}) {
     _client: {}, _groqClient: {}, _openaiClient: {}, _claudeClient: {},
     disabledProviders: new Set(),
     isProviderDisabled: (family) => self.disabledProviders.has(family),
-    // A FUNCTION, not a boolean: listDirectAssistRungs calls
-    // this.directAssistFallbackEnabled(). An own boolean property would shadow
-    // the prototype method and throw "not a function".
-    directAssistFallbackEnabled: () => true,
     ...overrides,
   });
   return (request) => LLMHelper.prototype.listDirectAssistRungs.call(self, request);
@@ -1690,10 +1690,20 @@ test('a privacy refusal on images removes cloud rungs but spares a local one', a
   assert.ok(rungs.some((r) => r.provider === 'ollama'));
 });
 
-test('fallback disabled yields the selected rung alone', async () => {
-  const rungs = rungCaller({ directAssistFallbackEnabled: () => false })(directAssistTextRequest);
-  assert.equal(rungs.length, 1);
-  assert.equal(rungs[0].provider, 'natively');
+// The inverse of the deleted 'fallback disabled yields the selected rung alone'
+// test. A bare caller — no setting stub of any kind, because no setting exists —
+// must still get fallback rungs. This fails the moment a preference gate is
+// reintroduced ahead of the eligibility filters, which is exactly the
+// regression removing the toggle has to be protected against. The refusal
+// paths above (ineligible selection, local-only) still cut the ladder to one
+// rung, so this asserts the DEFAULT path specifically.
+test('fallback is unconditional: a plain text request gets fallback rungs with no setting in play', async () => {
+  const rungs = rungCaller()(directAssistTextRequest);
+  assert.ok(rungs.length > 1, `expected fallback rungs, got ${JSON.stringify(rungs)}`);
+  assert.ok(rungs.slice(1).every((r) => r.isFallback === true));
+  assert.ok(!('directAssistFallbackEnabled' in require(
+    path.resolve(root, 'dist-electron/electron/LLMHelper.js'),
+  ).LLMHelper.prototype), 'the fallback preference gate must stay removed');
 });
 
 // ── Task 5: streamDirectAssist dispatches the SUPPLIED rung, not the selection ─

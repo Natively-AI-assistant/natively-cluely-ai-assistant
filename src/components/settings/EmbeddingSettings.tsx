@@ -513,7 +513,7 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
     }, [endpointDraft, customApiKeyDraft, refresh, t]);
 
     const activeOptions: EmbeddingSelectOption[] = useMemo(() => {
-        return providers
+        const fromCatalogue = providers
             .flatMap(p => {
                 const primaryModels = p.models.filter(m =>
                     m.recommended ||
@@ -526,6 +526,31 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                     triggerName: bareModelName(m.label || m.id),
                 }));
             });
+
+        /* The model you are ON is always in the list, even before the catalogue
+           arrives.
+           
+           refresh() reads getEmbeddingStatus() first (~2ms) and the catalogue
+           last, and the catalogue costs a network round-trip. The Active card's
+           selector is disabled while `activeOptions` is empty, so for the whole
+           of that fetch the control sat greyed out — displaying a model we
+           already knew, and refusing to open. Seeding the active model closes
+           that window: the selector is usable as soon as the card paints, and
+           the remaining options appear when the catalogue lands.
+
+           It also fixes a second case that has nothing to do with timing: an
+           active model the catalogue does not carry (a non-recommended pick, or
+           a provider that has gone away) produced a menu where NOTHING was
+           ticked, because no option matched activeOptionId. */
+        const activeId = active.provider && active.model ? `${active.provider}::${active.model}` : '';
+        if (activeId && !fromCatalogue.some(o => o.id === activeId)) {
+            return [{
+                id: activeId,
+                name: qualifiedModelName(active.provider!, active.model!),
+                triggerName: bareModelName(active.model!),
+            }, ...fromCatalogue];
+        }
+        return fromCatalogue;
     }, [providers, active]);
 
     const activeOptionId = active.provider && active.model ? `${active.provider}::${active.model}` : '';

@@ -45,3 +45,54 @@ export function isAimedAtAuto(dragged, auto, tolerance = SNAP_TO_AUTO_TOLERANCE)
   // silently make the band one pixel narrower than it reads.
   return Math.abs(dragged - auto) <= auto * tolerance + 1e-9;
 }
+
+/**
+ * @typedef {'pin'|'auto'|'skip'} ReleaseAction
+ *   pin  — the drag was deliberate; pin this axis at the settled size
+ *   auto — the drag was aimed at auto; drop this axis's pin and resume auto
+ *   skip — this drag did not move this axis; leave whatever it had alone
+ */
+
+/**
+ * What a manual resize release should do to each axis.
+ *
+ * Extracted from the release handler so the WIRING is testable, not just the
+ * tolerance arithmetic. The bug this exists to catch was of exactly that shape:
+ * the band computed "aimed at auto" correctly, and the width still stayed where
+ * it was dragged because the release path cleared the pin's React state but not
+ * the ref the reporter actually reads. A unit test over the arithmetic could
+ * never have seen it; a unit test over the plan at least pins which axes are
+ * supposed to change hands.
+ *
+ * @param {Object} input
+ * @param {boolean} input.widthDriven  the drag moved the east edge
+ * @param {boolean} input.pinsHeight   the drag pins a height (see pinsHeightFor)
+ * @param {number} input.settledWidth  window width the drag settled at
+ * @param {number} input.settledHeight window height the drag settled at
+ * @param {number} input.autoWidth     window width auto sizing would choose
+ * @param {number} input.autoHeight    window height auto sizing would choose
+ * @param {number} [input.tolerance]
+ * @returns {{ width: ReleaseAction, height: ReleaseAction }}
+ */
+export function planResizeRelease({
+  widthDriven,
+  pinsHeight,
+  settledWidth,
+  settledHeight,
+  autoWidth,
+  autoHeight,
+  tolerance = SNAP_TO_AUTO_TOLERANCE,
+}) {
+  return {
+    width: !widthDriven
+      ? 'skip'
+      : isAimedAtAuto(settledWidth, autoWidth, tolerance)
+        ? 'auto'
+        : 'pin',
+    height: !pinsHeight
+      ? 'skip'
+      : isAimedAtAuto(settledHeight, autoHeight, tolerance)
+        ? 'auto'
+        : 'pin',
+  };
+}

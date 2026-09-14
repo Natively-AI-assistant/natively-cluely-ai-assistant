@@ -6952,25 +6952,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     return { success: true };
   });
 
-  safeHandle('get-direct-assist-fallback-enabled', async () => {
-    return SettingsManager.getInstance().getDirectAssistFallbackEnabled();
-  });
-
-  safeHandle('set-direct-assist-fallback-enabled', async (_, enabled: unknown) => {
-    if (typeof enabled !== 'boolean') {
-      return { success: false, error: 'invalid_type' };
-    }
-    const settings = SettingsManager.getInstance();
-    if (!settings.set('directAssistFallbackEnabled', enabled)) {
-      return { success: false, error: 'settings_store_degraded' };
-    }
-    const effective = settings.getDirectAssistFallbackEnabled();
-    BrowserWindow.getAllWindows().forEach((win) => {
-      if (!win.isDestroyed()) win.webContents.send('direct-assist-fallback-enabled-changed', effective);
-    });
-    return { success: true };
-  });
-
   safeHandle('direct-assist-stream', async (event, rawRequest: unknown) => {
     const normalized = normalizeDirectAssistRequest(rawRequest);
     if (normalized.error || !normalized.request) {
@@ -8013,10 +7994,36 @@ export function initializeIpcHandlers(appState: AppState): void {
     const cm = CredentialsManager.getInstance();
 
     const url = process.env.OLLAMA_URL || 'http://localhost:11434';
-    const ollamaModels = await listOllamaEmbeddingModels(url);
-    // listOllamaEmbeddingModels returns [] both when the daemon is down and when
-    // it has no embedders pulled; ask the daemon directly so the panel can say
-    // which it is.
+    // A user-hosted OpenAI-compatible endpoint (LM Studio, llama.cpp, vLLM…).
+    const customEndpoint = SettingsManager.getInstance().get('customEmbeddingEndpoint') || '';
+    // Public listing: fetched with the key when present, without it otherwise.
+    const { listOpenRouterEmbeddingModels } = require('./rag/openrouterEmbeddingModels');
+
+    /* CONCURRENT, not one await after another.
+     *
+     * These three are independent — a local daemon, a user-hosted endpoint and
+     * a public HTTP listing — but they used to run in series, so their timeouts
+     * ADDED UP: Ollama 5s + custom 5s + OpenRouter 10s, i.e. a ~20s worst case
+     * before this handler could return. Nothing renders that wait: the
+     * Embeddings panel keeps its model selector DISABLED until the catalogue
+     * lands, so a slow or offline network showed a greyed-out control for the
+     * whole of it. Run together, the ceiling is the slowest single probe.
+     *
+     * Promise.all is safe here specifically because all three list functions
+     * swallow their own errors and resolve to [] — none of them can reject, so
+     * this cannot fail where the sequential version would have succeeded.
+     */
+    const [ollamaModels, customModels, openrouterModels] = await Promise.all([
+      listOllamaEmbeddingModels(url),
+      customEndpoint
+        ? require('./rag/customEmbeddingModels').listCustomEmbeddingModels(customEndpoint, cm.getCustomEmbeddingApiKey?.())
+        : Promise.resolve([]),
+      listOpenRouterEmbeddingModels({ apiKey: cm.getOpenrouterApiKey?.() }),
+    ]);
+
+    // Still sequential, deliberately: this only runs when Ollama listed nothing,
+    // and it exists to tell "daemon down" apart from "no embedders pulled".
+    // listOllamaEmbeddingModels returns [] for both.
     let ollamaReachable = ollamaModels.length > 0;
     if (!ollamaReachable) {
       try {
@@ -8024,16 +8031,6 @@ export function initializeIpcHandlers(appState: AppState): void {
         ollamaReachable = await llmHelper.isOllamaReachable();
       } catch { ollamaReachable = false; }
     }
-
-    // A user-hosted OpenAI-compatible endpoint (LM Studio, llama.cpp, vLLM…).
-    const customEndpoint = SettingsManager.getInstance().get('customEmbeddingEndpoint') || '';
-    const customModels = customEndpoint
-      ? await require('./rag/customEmbeddingModels').listCustomEmbeddingModels(customEndpoint, cm.getCustomEmbeddingApiKey?.())
-      : [];
-
-    // Public listing: fetched with the key when present, without it otherwise.
-    const { listOpenRouterEmbeddingModels } = require('./rag/openrouterEmbeddingModels');
-    const openrouterModels = await listOpenRouterEmbeddingModels({ apiKey: cm.getOpenrouterApiKey?.() });
 
     return {
       providers: buildEmbeddingCatalog({

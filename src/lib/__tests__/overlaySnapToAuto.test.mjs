@@ -53,3 +53,54 @@ test('the tolerance is tunable and a zero band means exact-only', () => {
   assert.equal(isAimedAtAuto(501, 500, 0), false);
   assert.equal(isAimedAtAuto(600, 500, 0.25), true);
 });
+
+// ── planResizeRelease ──────────────────────────────────────────────────────
+import { planResizeRelease } from '../overlaySnapToAuto.mjs';
+
+const release = {
+  widthDriven: true,
+  pinsHeight: true,
+  settledWidth: 900,
+  settledHeight: 900,
+  autoWidth: 732,
+  autoHeight: 500,
+};
+
+test('a deliberate drag pins both axes', () => {
+  assert.deepEqual(planResizeRelease(release), { width: 'pin', height: 'pin' });
+});
+
+test('a drag aimed at auto on both axes releases both', () => {
+  assert.deepEqual(
+    planResizeRelease({ ...release, settledWidth: 746, settledHeight: 512 }),
+    { width: 'auto', height: 'auto' },
+  );
+});
+
+test('the axes are independent — a precise width and a sloppy height', () => {
+  assert.deepEqual(
+    planResizeRelease({ ...release, settledWidth: 746, settledHeight: 900 }),
+    { width: 'auto', height: 'pin' },
+  );
+  assert.deepEqual(
+    planResizeRelease({ ...release, settledWidth: 900, settledHeight: 512 }),
+    { width: 'pin', height: 'auto' },
+  );
+});
+
+test('an axis the drag never moved is SKIPPED, not pinned and not released', () => {
+  // A south-handle drag must not touch a width the user set earlier, even if
+  // that width happens to sit inside the band.
+  assert.deepEqual(
+    planResizeRelease({ ...release, widthDriven: false, settledWidth: 746 }).width,
+    'skip',
+  );
+  assert.deepEqual(
+    planResizeRelease({ ...release, pinsHeight: false, settledHeight: 512 }).height,
+    'skip',
+  );
+});
+
+test('an unknown auto height pins rather than guessing', () => {
+  assert.equal(planResizeRelease({ ...release, autoHeight: 0 }).height, 'pin');
+});

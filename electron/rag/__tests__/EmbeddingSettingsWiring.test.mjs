@@ -77,17 +77,45 @@ describe('preload bridge', () => {
 });
 
 describe('settings shell', () => {
+  // 2026-09-15: Embeddings and Reranker were merged into one Retrieval tab, so
+  // the panel is no longer reached by an 'embedding' sidebar entry of its own.
+  // These assertions follow it rather than pinning the old shape — what they
+  // guard is unchanged: the tab is navigable, its panel is mounted, and its
+  // position is known to the transition-direction table.
+
   test('the tab is registered in the nav order so its transition direction is known', () => {
     const src = read('src/components/SettingsOverlay.tsx');
     const order = src.slice(src.indexOf('const SETTINGS_NAV_ORDER'), src.indexOf('const SETTINGS_NAV_ORDER') + 400);
-    assert.match(order, /'embedding'/);
+    assert.match(order, /'retrieval'/);
   });
 
   test('the nav button and the panel are both present', () => {
     const src = read('src/components/SettingsOverlay.tsx');
-    assert.match(src, /setActiveTab\('embedding'\)/, 'no nav button');
-    assert.match(src, /activeTab === 'embedding' && \(\s*<EmbeddingSettings /, 'panel not mounted');
-    assert.match(src, /import \{ EmbeddingSettings \}/, 'component not imported');
+    assert.match(src, /setActiveTab\('retrieval'\)/, 'no nav button');
+    assert.match(src, /isRetrievalTab\(activeTab\) && \(/, 'panel not mounted');
+    assert.match(src, /import \{ RetrievalSettings \}/, 'component not imported');
+  });
+
+  test('the legacy embedding tab id still resolves to the panel', () => {
+    // AI Providers' lightweight-embedding notice deep-links with 'embedding'
+    // (onNavigate('embedding')). If that id stops resolving, the button sets an
+    // activeTab nothing matches and the user lands on a BLANK content area —
+    // silent, and invisible to a test that only checks the new id.
+    const src = read('src/components/SettingsOverlay.tsx');
+    const guard = src.slice(src.indexOf('const isRetrievalTab'), src.indexOf('const isRetrievalTab') + 200);
+    assert.match(guard, /'embedding'/, "the 'embedding' deep link no longer resolves");
+    assert.match(guard, /'reranker'/, "the 'reranker' deep link no longer resolves");
+    assert.match(
+      read('src/components/settings/AIProvidersSettings.tsx'),
+      /onNavigate\('embedding'\)/,
+      'the notice no longer deep-links, so the alias above may be dead',
+    );
+  });
+
+  test('Retrieval composes the embeddings panel rather than replacing it', () => {
+    const src = read('src/components/settings/RetrievalSettings.tsx');
+    assert.match(src, /import \{ EmbeddingSettings/, 'RetrievalSettings must mount the real panel');
+    assert.match(src, /renderParts=\{/, 'the panel must be composed through its parts contract');
   });
 });
 
@@ -288,7 +316,13 @@ describe('active model selector', () => {
     const src = panel();
     const i = src.indexOf('const activeOptions');
     assert.notEqual(i, -1);
-    const block = src.slice(i, src.indexOf('const activeOptionId', i));
+    // Comments stripped first. This asserts there is no em-dash in the label
+    // CODE; prose in the surrounding comment is not a label, and letting it
+    // count made an explanatory comment look like a regression (it did, on
+    // 2026-09-15).
+    const block = src.slice(i, src.indexOf('const activeOptionId', i))
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
     assert.match(block, /name: qualifiedModelName\(p\.id, m\.label \|\| m\.id\)/,
       'the menu row must be provider-qualified');
     assert.match(block, /triggerName: bareModelName\(m\.label \|\| m\.id\)/,
