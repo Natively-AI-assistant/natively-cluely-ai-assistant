@@ -14,7 +14,7 @@ use std::time::Duration;
 use tracing::error;
 use wasapi::{
     get_default_device, DeviceCollection, Direction, DisconnectReason, EventCallbacks, SampleType,
-    ShareMode, WaveFormat,
+    ShareMode,
 };
 
 struct WakerState {
@@ -32,6 +32,75 @@ pub struct SpeakerInput {
 /// 2026-09-11 was logged and then `continue`d forever, so JS saw a quiet
 /// ring buffer indistinguishable from a silent meeting.
 const MAX_CONSECUTIVE_READ_FAILURES: u32 = 5;
+
+struct ComGuard;
+
+impl ComGuard {
+    fn initialize() -> Result<Self> {
+        wasapi::initialize_mta()
+            .map_err(|e| anyhow::anyhow!("failed to initialize COM on capture thread: {}", e))?;
+        Ok(Self)
+    }
+}
+
+impl Drop for ComGuard {
+    fn drop(&mut self) {
+        wasapi::deinitialize();
+    }
+}
+
+fn decode_sample(bytes: &[u8], sample_type: SampleType, bits_per_sample: u16) -> Option<f32> {
+    match (sample_type, bits_per_sample) {
+        (SampleType::Float, 32) if bytes.len() >= 4 => {
+            Some(f32::from_le_bytes(bytes[..4].try_into().ok()?))
+        }
+        (SampleType::Float, 64) if bytes.len() >= 8 => {
+            Some(f64::from_le_bytes(bytes[..8].try_into().ok()?) as f32)
+        }
+        // 8-bit PCM is unsigned; wider PCM formats are signed little-endian.
+        (SampleType::Int, 8) if !bytes.is_empty() => Some((bytes[0] as f32 - 128.0) / 128.0),
+        (SampleType::Int, 16) if bytes.len() >= 2 => {
+            Some(i16::from_le_bytes(bytes[..2].try_into().ok()?) as f32 / 32768.0)
+        }
+        (SampleType::Int, 24) if bytes.len() >= 3 => {
+            let value = ((bytes[0] as i32) | ((bytes[1] as i32) << 8) | ((bytes[2] as i32) << 16))
+                << 8
+                >> 8;
+            Some(value as f32 / 8_388_608.0)
+        }
+        (SampleType::Int, 32) if bytes.len() >= 4 => {
+            Some(i32::from_le_bytes(bytes[..4].try_into().ok()?) as f32 / 2_147_483_648.0)
+        }
+        _ => None,
+    }
+}
+
+fn downmix_to_mono(
+    bytes: VecDeque<u8>,
+    bytes_per_frame: usize,
+    channels: usize,
+    sample_type: SampleType,
+    bits_per_sample: u16,
+) -> Vec<f32> {
+    let bytes_per_sample = bytes_per_frame / channels;
+    let bytes: Vec<u8> = bytes.into_iter().collect();
+    let mut samples = Vec::with_capacity(bytes.len() / bytes_per_frame);
+
+    for frame in bytes.chunks_exact(bytes_per_frame) {
+        let mut sum = 0.0;
+        for channel in 0..channels {
+            let start = channel * bytes_per_sample;
+            let end = start + bytes_per_sample;
+            let Some(sample) = decode_sample(&frame[start..end], sample_type, bits_per_sample)
+            else {
+                return Vec::new();
+            };
+            sum += sample;
+        }
+        samples.push(sum / channels as f32);
+    }
+    samples
+}
 
 pub struct SpeakerStream {
     consumer: Option<HeapCons<f32>>,
@@ -96,7 +165,7 @@ pub fn list_output_devices() -> Result<Vec<(String, String)>> {
         .get_nbr_devices()
         .map_err(|e| anyhow::anyhow!("{}", e))?;
     let mut list = Vec::new();
-    
+
     let comms_id = default_communications_device_uid();
 
     for i in 0..count {
@@ -219,6 +288,17 @@ impl SpeakerInput {
         init_tx: mpsc::Sender<Result<u32>>,
         device_id: Option<String>,
     ) -> Result<()> {
+        // COM initialization is thread-local. The capture work runs on this
+        // newly spawned thread, so initialization on the N-API thread does
+        // not apply here.
+        let _com = match ComGuard::initialize() {
+            Ok(guard) => guard,
+            Err(e) => {
+                let _ = init_tx.send(Err(e));
+                return Ok(());
+            }
+        };
+
         let init_result = (|| -> Result<_> {
             // Resolve target render device. If the saved device_id is stale
             // (unplugged, renamed, fresh install with leftover settings) we
@@ -243,8 +323,32 @@ impl SpeakerInput {
                 .get_mixformat()
                 .map_err(|e| anyhow::anyhow!("{}", e))?;
             let actual_rate = device_format.get_samplespersec();
-            let desired_format =
-                WaveFormat::new(32, 32, &SampleType::Float, actual_rate as usize, 1, None);
+            let channels = device_format.get_nchannels() as usize;
+            let bytes_per_frame = device_format.get_blockalign() as usize;
+            let bits_per_sample = device_format.get_bitspersample();
+            let sample_type = device_format
+                .get_subformat()
+                .map_err(|e| anyhow::anyhow!("{}", e))?;
+            if channels == 0 || bytes_per_frame == 0 || bytes_per_frame % channels != 0 {
+                return Err(anyhow::anyhow!(
+                    "unsupported WASAPI mix format: {} channels, {} bytes/frame",
+                    channels,
+                    bytes_per_frame
+                ));
+            }
+            if decode_sample(
+                &vec![0; bytes_per_frame / channels],
+                sample_type,
+                bits_per_sample,
+            )
+            .is_none()
+            {
+                return Err(anyhow::anyhow!(
+                    "unsupported WASAPI mix format: {:?}, {} bits",
+                    sample_type,
+                    bits_per_sample
+                ));
+            }
 
             let (_def_time, min_time) = audio_client
                 .get_periods()
@@ -253,11 +357,11 @@ impl SpeakerInput {
             // This triggers AUDCLNT_STREAMFLAGS_LOOPBACK flag in wasapi
             audio_client
                 .initialize_client(
-                    &desired_format,
+                    &device_format,
                     min_time,
                     &Direction::Capture,
                     &ShareMode::Shared,
-                    true,
+                    false,
                 )
                 .map_err(|e| anyhow::anyhow!("{}", e))?;
             let h_event = audio_client
@@ -304,11 +408,31 @@ impl SpeakerInput {
                 }
             };
 
-            Ok((h_event, render_client, actual_rate, audio_client, session_notification))
+            Ok((
+                h_event,
+                render_client,
+                actual_rate,
+                audio_client,
+                session_notification,
+                channels,
+                bytes_per_frame,
+                sample_type,
+                bits_per_sample,
+            ))
         })();
 
         match init_result {
-            Ok((h_event, render_client, sample_rate, audio_client, session_notification)) => {
+            Ok((
+                h_event,
+                render_client,
+                sample_rate,
+                audio_client,
+                session_notification,
+                channels,
+                bytes_per_frame,
+                sample_type,
+                bits_per_sample,
+            )) => {
                 let _ = init_tx.send(Ok(sample_rate));
                 let mut consecutive_read_failures: u32 = 0;
                 loop {
@@ -334,8 +458,6 @@ impl SpeakerInput {
                     }
 
                     let mut temp_queue = VecDeque::new();
-                    // bytes_per_frame for 32-bit float mono = 4 bytes
-                    let bytes_per_frame: usize = 4; // 32-bit float, 1 channel
                     if let Err(e) =
                         render_client.read_from_device_to_deque(bytes_per_frame, &mut temp_queue)
                     {
@@ -359,17 +481,13 @@ impl SpeakerInput {
                         continue;
                     }
 
-                    let mut samples = Vec::with_capacity(temp_queue.len() / 4);
-                    while temp_queue.len() >= 4 {
-                        let bytes = [
-                            temp_queue.pop_front().unwrap(),
-                            temp_queue.pop_front().unwrap(),
-                            temp_queue.pop_front().unwrap(),
-                            temp_queue.pop_front().unwrap(),
-                        ];
-                        let sample = f32::from_le_bytes(bytes);
-                        samples.push(sample);
-                    }
+                    let samples = downmix_to_mono(
+                        temp_queue,
+                        bytes_per_frame,
+                        channels,
+                        sample_type,
+                        bits_per_sample,
+                    );
 
                     if !samples.is_empty() {
                         let _ = producer.push_slice(&samples);
