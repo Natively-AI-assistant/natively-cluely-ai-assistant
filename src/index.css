@@ -4140,6 +4140,118 @@ html[data-platform="linux"] body {
   transform: translateY(0) scale(0.97) !important;
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+   PRICING CTA — rebuilt on the Liquid Glass material.
+   (src/ui-components/design.md)
+
+   Anchored as `[data-interface-theme] .cta.cta-<tier>` (0,3,0) so it outranks
+   the two per-interface-theme blocks above (0,2,0) on specificity rather than
+   source order — the same pattern the selector pills use. Both interface
+   themes carried identical fills, so one block covers them.
+
+   The old paint was a full-body gloss: white 0.35 at the top, black 0.24 at
+   the bottom, over the tier fill. That gloss was also a contrast problem —
+   lightening the top band by 35% white put white ink at 3.42 / 3.73 / 4.27:1
+   for pro / max / ultra, all UNDER the 4.5:1 AA floor for 13px text. A flat
+   fill with the depth moved into the rim takes the same three to
+   7.95 / 9.73 / 11.74:1. The colours are untouched; only the material moved.
+   ───────────────────────────────────────────────────────────────────────── */
+[data-interface-theme] .natively-api-pricing-cta {
+  position: relative;
+  isolation: isolate;
+}
+
+/* z-index:-1 — the label and its arrow are bare children and cannot be
+   raised, so the rim sits above the fill and behind them. */
+[data-interface-theme] .natively-api-pricing-cta::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  z-index: -1;
+  pointer-events: none;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.40),
+    inset 0 0 0 2px rgba(255, 255, 255, 0.17),
+    inset 0 0 0 3px rgba(255, 255, 255, 0.09);
+  -webkit-mask-image:
+    linear-gradient(180deg, #000 0%, #000 6%, transparent 27%, transparent 73%, #000 94%, #000 100%),
+    linear-gradient(90deg, transparent 4px, rgba(0, 0, 0, 0.82) 14px, #000 34px, #000 calc(100% - 34px), rgba(0, 0, 0, 0.82) calc(100% - 14px), transparent calc(100% - 4px));
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(180deg, #000 0%, #000 6%, transparent 27%, transparent 73%, #000 94%, #000 100%),
+    linear-gradient(90deg, transparent 4px, rgba(0, 0, 0, 0.82) 14px, #000 34px, #000 calc(100% - 34px), rgba(0, 0, 0, 0.82) calc(100% - 14px), transparent calc(100% - 4px));
+  mask-composite: intersect;
+}
+
+[data-interface-theme] .natively-api-pricing-cta.natively-api-pricing-cta-pro {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.08) 0%, rgba(255,255,255,0) 14%,
+                            rgba(255,255,255,0) 86%, rgba(255,255,255,.08) 100%),
+    #12538c !important;
+  box-shadow: 0 6px 18px rgba(17, 89, 153, 0.34) !important;
+}
+[data-interface-theme] .natively-api-pricing-cta.natively-api-pricing-cta-max {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.08) 0%, rgba(255,255,255,0) 14%,
+                            rgba(255,255,255,0) 86%, rgba(255,255,255,.08) 100%),
+    #5d365f !important;
+  box-shadow: 0 6px 18px rgba(93, 54, 95, 0.34) !important;
+}
+[data-interface-theme] .natively-api-pricing-cta.natively-api-pricing-cta-ultra {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.08) 0%, rgba(255,255,255,0) 14%,
+                            rgba(255,255,255,0) 86%, rgba(255,255,255,.08) 100%),
+    #61213b !important;
+  box-shadow: 0 6px 18px rgba(97, 33, 59, 0.34) !important;
+}
+
+/* NEUTRAL is a light body, so the model inverts exactly as .lg-sky does: the
+   specular stays on the top face, the underside darkens, and a contact shadow
+   does the work a bottom rim cannot do on a fill this bright. */
+[data-interface-theme] .natively-api-pricing-cta.natively-api-pricing-cta-neutral {
+  background: #f8fafc !important;
+  box-shadow:
+    inset 0 -1px 0 rgba(15, 23, 42, 0.16),
+    0 4px 12px rgba(0, 0, 0, 0.15) !important;
+}
+[data-interface-theme] .natively-api-pricing-cta.natively-api-pricing-cta-neutral::before {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.95),
+    inset 0 0 0 2px rgba(255, 255, 255, 0.45);
+  -webkit-mask-image:
+    linear-gradient(180deg, #000 0%, #000 6%, transparent 30%, transparent 100%),
+    linear-gradient(90deg, transparent 4px, rgba(0, 0, 0, 0.82) 14px, #000 34px, #000 calc(100% - 34px), rgba(0, 0, 0, 0.82) calc(100% - 14px), transparent calc(100% - 4px));
+  mask-image:
+    linear-gradient(180deg, #000 0%, #000 6%, transparent 30%, transparent 100%),
+    linear-gradient(90deg, transparent 4px, rgba(0, 0, 0, 0.82) 14px, #000 34px, #000 calc(100% - 34px), rgba(0, 0, 0, 0.82) calc(100% - 14px), transparent calc(100% - 4px));
+}
+
+/* Hover keeps each tier's existing destination colour and its lift; only the
+   body gradient it used to carry is gone. */
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme] .natively-api-pricing-cta:hover { transform: translateY(-1px) !important; }
+  [data-interface-theme] .natively-api-pricing-cta.natively-api-pricing-cta-pro:hover {
+    background-color: #1D4959 !important;
+    box-shadow: 0 10px 22px rgba(36, 94, 114, 0.50) !important;
+  }
+  [data-interface-theme] .natively-api-pricing-cta.natively-api-pricing-cta-max:hover {
+    background-color: #123B4A !important;
+    box-shadow: 0 10px 22px rgba(18, 59, 74, 0.50) !important;
+  }
+  [data-interface-theme] .natively-api-pricing-cta.natively-api-pricing-cta-ultra:hover {
+    background-color: #0A303E !important;
+    box-shadow: 0 10px 22px rgba(10, 48, 62, 0.50) !important;
+  }
+  [data-interface-theme] .natively-api-pricing-cta.natively-api-pricing-cta-neutral:hover {
+    background-color: #eef2f6 !important;
+    box-shadow:
+      inset 0 -1px 0 rgba(15, 23, 42, 0.18),
+      0 6px 16px rgba(0, 0, 0, 0.20) !important;
+  }
+}
+
+
 /* Premium micro-pills (Modern) */
 [data-interface-theme="modern"] .natively-api-pricing-badge {
   display: inline-flex;
@@ -4380,7 +4492,7 @@ html[data-platform="linux"] body {
    │ changes this card's outline is [data-active="true"].                    │
    └─────────────────────────────────────────────────────────────────────────┘ */
 [data-interface-theme] .natively-api-detail-card-standard {
-  background: linear-gradient(180deg, #325957 0%, #3C6B69 100%) !important;
+  background: #376260 !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.16),
     inset 0 -3px 8px rgba(0, 0, 0, 0.28),
@@ -4392,7 +4504,7 @@ html[data-platform="linux"] body {
 }
 
 [data-interface-theme] .natively-api-detail-card-pro {
-  background: linear-gradient(180deg, #0E487C 0%, #115999 100%) !important;
+  background: #10508a !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.17),
     inset 0 -3px 8px rgba(0, 0, 0, 0.28),
@@ -4401,7 +4513,7 @@ html[data-platform="linux"] body {
 }
 
 [data-interface-theme] .natively-api-detail-card-max {
-  background: linear-gradient(180deg, #512F52 0%, #663C68 100%) !important;
+  background: #5c365d !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.18),
     inset 0 -3px 8px rgba(0, 0, 0, 0.28),
@@ -4410,7 +4522,7 @@ html[data-platform="linux"] body {
 }
 
 [data-interface-theme] .natively-api-detail-card-ultra {
-  background: linear-gradient(180deg, #551C33 0%, #6F2542 100%) !important;
+  background: #62203a !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.20),
     inset 0 -3px 8px rgba(0, 0, 0, 0.28),
@@ -4424,7 +4536,7 @@ html[data-platform="linux"] body {
    so #10162b at the dim-ink 0.72 alpha still clears 4.5 on the deepest tier
    (that caps Ultra at about L* 70; it sits at 73). */
 [data-theme='light'] [data-interface-theme] .natively-api-detail-card-standard {
-  background: linear-gradient(180deg, #DEF0EF 0%, #CAE7E6 100%) !important;
+  background: #d4ecea !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.55),
     inset 0 -2.5px 6px rgba(0, 0, 0, 0.04),
@@ -4433,7 +4545,7 @@ html[data-platform="linux"] body {
 }
 
 [data-theme='light'] [data-interface-theme] .natively-api-detail-card-pro {
-  background: linear-gradient(180deg, #C4E2FD 0%, #ACD7FC 100%) !important;
+  background: #b8dcfc !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.60),
     inset 0 -2.5px 6px rgba(0, 0, 0, 0.04),
@@ -4442,7 +4554,7 @@ html[data-platform="linux"] body {
 }
 
 [data-theme='light'] [data-interface-theme] .natively-api-detail-card-max {
-  background: linear-gradient(180deg, #DFCAE0 0%, #D5BAD6 100%) !important;
+  background: #dac2db !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.65),
     inset 0 -2.5px 6px rgba(0, 0, 0, 0.04),
@@ -4451,7 +4563,7 @@ html[data-platform="linux"] body {
 }
 
 [data-theme='light'] [data-interface-theme] .natively-api-detail-card-ultra {
-  background: linear-gradient(180deg, #DEB8C7 0%, #D6A7BA 100%) !important;
+  background: #dab0c0 !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.70),
     inset 0 -2.5px 6px rgba(0, 0, 0, 0.04),
@@ -4494,16 +4606,47 @@ html[data-platform="linux"] body {
   color: #10162b !important;
 }
 
+/* The badge is the one control-sized pill left on the card, so it takes the
+   same rim the CTAs do: the uniform 1px border is replaced by a specular that
+   sits on the top and bottom faces and dies away across the caps. At 18px tall
+   that is a single hairline ring — three would swallow it, exactly as on
+   .lg-sm. The fill is unchanged, so the white label's contrast is too. */
 [data-interface-theme] .natively-api-detail-card .natively-api-fill-pill {
+  position: relative;
+  isolation: isolate;
   background: rgba(255, 255, 255, 0.13) !important;
-  border: 1px solid rgba(255, 255, 255, 0.36) !important;
+  border: 1px solid transparent !important;
   color: #ffffff !important;
+}
+
+[data-interface-theme] .natively-api-detail-card .natively-api-fill-pill::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  z-index: -1;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.52);
+  -webkit-mask-image:
+    linear-gradient(180deg, #000 0%, #000 12%, transparent 40%, transparent 60%, #000 88%, #000 100%),
+    linear-gradient(90deg, transparent 1px, rgba(0, 0, 0, 0.82) 4px, #000 10px, #000 calc(100% - 10px), rgba(0, 0, 0, 0.82) calc(100% - 4px), transparent calc(100% - 1px));
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(180deg, #000 0%, #000 12%, transparent 40%, transparent 60%, #000 88%, #000 100%),
+    linear-gradient(90deg, transparent 1px, rgba(0, 0, 0, 0.82) 4px, #000 10px, #000 calc(100% - 10px), rgba(0, 0, 0, 0.82) calc(100% - 4px), transparent calc(100% - 1px));
+  mask-composite: intersect;
 }
 
 [data-theme='light'] [data-interface-theme] .natively-api-detail-card .natively-api-fill-pill {
   background: rgba(16, 22, 43, 0.10) !important;
-  border: 1px solid rgba(16, 22, 43, 0.18) !important;
+  border: 1px solid transparent !important;
   color: #10162b !important;
+}
+
+/* on a pale card the badge is a light body, so the rim inverts: the edge that
+   reads is the shadowed one, not a specular that would vanish into the fill */
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card .natively-api-fill-pill::before {
+  box-shadow: inset 0 0 0 1px rgba(16, 22, 43, 0.30);
 }
 
 [data-interface-theme] .natively-api-detail-card .natively-api-body-rule {
@@ -4677,6 +4820,45 @@ html[data-platform="linux"] body {
 [data-theme='light'] [data-interface-theme] .natively-api-detail-card::before {
   opacity: 0 !important;
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   CARD BODY — Liquid Glass. (src/ui-components/design.md)
+
+   Two changes. The 24px crosshatch ::after used to lay over the whole surface
+   is gone — this material's depth IS the rim, and a texture grid fights it.
+   That frees ::after to BE the rim.
+
+   The fill is each gradient's midpoint, so the tier ladder keeps its spacing
+   and white text gains contrast rather than losing any: 6.82 / 8.28 / 9.81 /
+   11.75 against a previous worst case of 6.00 / 7.21 / 8.71 / 10.40.
+
+   The rim is deliberately quieter than a button's — one hairline ring, not
+   three. On a 640px surface a control-weight specular reads as "press me" and
+   would compete with the CTA the card contains.
+   ───────────────────────────────────────────────────────────────────────── */
+[data-interface-theme] .natively-api-detail-card::after,
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card::after {
+  background-image: none !important;
+  background-color: transparent !important;
+  opacity: 1 !important;
+  border-radius: inherit !important;
+  pointer-events: none !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22) !important;
+  -webkit-mask-image:
+    linear-gradient(180deg, #000 0%, #000 2%, transparent 13%, transparent 87%, #000 98%, #000 100%),
+    linear-gradient(90deg, transparent 6px, rgba(0, 0, 0, 0.82) 22px, #000 70px, #000 calc(100% - 70px), rgba(0, 0, 0, 0.82) calc(100% - 22px), transparent calc(100% - 6px)) !important;
+  -webkit-mask-composite: source-in !important;
+  mask-image:
+    linear-gradient(180deg, #000 0%, #000 2%, transparent 13%, transparent 87%, #000 98%, #000 100%),
+    linear-gradient(90deg, transparent 6px, rgba(0, 0, 0, 0.82) 22px, #000 70px, #000 calc(100% - 70px), rgba(0, 0, 0, 0.82) calc(100% - 22px), transparent calc(100% - 6px)) !important;
+  mask-composite: intersect !important;
+}
+
+/* a pale card is a light body: the edge that reads is the shadowed one */
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card::after {
+  box-shadow: inset 0 0 0 1px rgba(16, 22, 43, 0.16) !important;
+}
+
 
 /* Layout Stabilization — Enforce Identical Sizing for All Plans.
    The card can't size to its content: the AnimatePresence child that holds the
@@ -7005,68 +7187,121 @@ html[data-platform="linux"] body {
    tier left, which is why the old `[data-selected-tier="pro"]` dark-ink
    override that used to sit further down is gone. */
 [data-interface-theme] .natively-api-selector-bar .natively-api-selector-pill-standard {
-  background: linear-gradient(180deg, #2D504F 0%, #376260 100%) !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.16),
-    0 1px 2px rgba(0, 0, 0, 0.35) !important;
+  background:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0) 15%,
+      rgba(255, 255, 255, 0) 85%, rgba(255, 255, 255, 0.07) 100%),
+    #325958 !important;
+  border: 1px solid transparent !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35) !important;
 }
 
 [data-interface-theme] .natively-api-selector-bar .natively-api-selector-pill-pro {
-  background: linear-gradient(180deg, #0C416F 0%, #0F518A 100%) !important;
-  border: 1px solid rgba(255, 255, 255, 0.09) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.17),
-    0 1px 2px rgba(0, 0, 0, 0.35) !important;
+  background:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0) 15%,
+      rgba(255, 255, 255, 0) 85%, rgba(255, 255, 255, 0.07) 100%),
+    #0e497c !important;
+  border: 1px solid transparent !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35) !important;
 }
 
 [data-interface-theme] .natively-api-selector-bar .natively-api-selector-pill-max {
-  background: linear-gradient(180deg, #472948 0%, #5C365D 100%) !important;
-  border: 1px solid rgba(255, 255, 255, 0.10) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 1px 2px rgba(0, 0, 0, 0.35) !important;
+  background:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0) 15%,
+      rgba(255, 255, 255, 0) 85%, rgba(255, 255, 255, 0.07) 100%),
+    #523052 !important;
+  border: 1px solid transparent !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35) !important;
 }
 
 [data-interface-theme] .natively-api-selector-bar .natively-api-selector-pill-ultra {
-  background: linear-gradient(180deg, #48182B 0%, #62213B 100%) !important;
-  border: 1px solid rgba(255, 255, 255, 0.11) !important;
+  background:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0) 15%,
+      rgba(255, 255, 255, 0) 85%, rgba(255, 255, 255, 0.07) 100%),
+    #551c33 !important;
+  border: 1px solid transparent !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35) !important;
+}
+
+/* The rim, shared by all four tiers — the Liquid Glass construction from
+   src/ui-components/design.md. The pills used to be two-stop gradients; they
+   are now a FLAT fill with the depth carried entirely by a graduated rim,
+   masked so it sits on the top and bottom faces and dies away across the
+   corners. The fill is each gradient's own midpoint, which keeps the ladder's
+   5 L* spacing intact and RAISES the measured white-ink contrast on every
+   tier (7.76 / 9.28 / 11.03 / 13.12 against the documented worst-case
+   6.83 / 7.95 / 9.68 / 11.70), because there is no longer a lighter bottom
+   stop to be the worst case. */
+[data-interface-theme] .natively-api-selector-bar .natively-api-selector-pill {
+  position: relative;
+  isolation: isolate;
+}
+[data-interface-theme] .natively-api-selector-bar .natively-api-selector-pill::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.20),
-    0 1px 2px rgba(0, 0, 0, 0.35) !important;
+    inset 0 0 0 1px rgba(255, 255, 255, 0.20),
+    inset 0 0 0 2px rgba(255, 255, 255, 0.09);
+  -webkit-mask-image:
+    linear-gradient(180deg, #000 0%, #000 7%, transparent 30%, transparent 70%, #000 93%, #000 100%),
+    linear-gradient(90deg, transparent 2px, rgba(0, 0, 0, 0.82) 9px, #000 22px, #000 calc(100% - 22px), rgba(0, 0, 0, 0.82) calc(100% - 9px), transparent calc(100% - 2px));
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(180deg, #000 0%, #000 7%, transparent 30%, transparent 70%, #000 93%, #000 100%),
+    linear-gradient(90deg, transparent 2px, rgba(0, 0, 0, 0.82) 9px, #000 22px, #000 calc(100% - 22px), rgba(0, 0, 0, 0.82) calc(100% - 9px), transparent calc(100% - 2px));
+  mask-composite: intersect;
+}
+[data-theme='light'] [data-interface-theme] .natively-api-selector-bar .natively-api-selector-pill::before {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.70),
+    inset 0 0 0 2px rgba(255, 255, 255, 0.30);
 }
 
 /* ── Pill: light theme (card fill, unchanged) ────────────────────────── */
 [data-theme='light'] [data-interface-theme] .natively-api-selector-bar .natively-api-selector-pill-standard {
-  background: linear-gradient(180deg, #DEF0EF 0%, #CAE7E6 100%) !important;
-  border: 1px solid rgba(16, 22, 43, 0.08) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.55),
-    0 1px 2px rgba(15, 23, 42, 0.10) !important;
+  background:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0) 15%,
+      rgba(255, 255, 255, 0) 85%, rgba(255, 255, 255, 0.22) 100%),
+    #d4ecea !important;
+  border: 1px solid transparent !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.10) !important;
 }
 
 [data-theme='light'] [data-interface-theme] .natively-api-selector-bar .natively-api-selector-pill-pro {
-  background: linear-gradient(180deg, #C4E2FD 0%, #ACD7FC 100%) !important;
-  border: 1px solid rgba(16, 22, 43, 0.09) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.60),
-    0 1px 2px rgba(15, 23, 42, 0.10) !important;
+  background:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0) 15%,
+      rgba(255, 255, 255, 0) 85%, rgba(255, 255, 255, 0.22) 100%),
+    #b8dcfc !important;
+  border: 1px solid transparent !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.10) !important;
 }
 
 [data-theme='light'] [data-interface-theme] .natively-api-selector-bar .natively-api-selector-pill-max {
-  background: linear-gradient(180deg, #DFCAE0 0%, #D5BAD6 100%) !important;
-  border: 1px solid rgba(16, 22, 43, 0.10) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.65),
-    0 1px 2px rgba(15, 23, 42, 0.10) !important;
+  background:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0) 15%,
+      rgba(255, 255, 255, 0) 85%, rgba(255, 255, 255, 0.22) 100%),
+    #dac2db !important;
+  border: 1px solid transparent !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.10) !important;
 }
 
 [data-theme='light'] [data-interface-theme] .natively-api-selector-bar .natively-api-selector-pill-ultra {
-  background: linear-gradient(180deg, #DEB8C7 0%, #D6A7BA 100%) !important;
-  border: 1px solid rgba(16, 22, 43, 0.11) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.70),
-    0 1px 2px rgba(15, 23, 42, 0.10) !important;
+  background:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0) 15%,
+      rgba(255, 255, 255, 0) 85%, rgba(255, 255, 255, 0.22) 100%),
+    #dab0c0 !important;
+  border: 1px solid transparent !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.10) !important;
 }
 
 /* ── Ink on the tabs ─────────────────────────────────────────────────────
@@ -7739,16 +7974,51 @@ html[data-platform="linux"] body {
    fill colour instead of a washed-out white blend, which is exactly where
    white-on-periwinkle quietly drops under 4.5:1. The darkening gradient
    starts at 55% for the same reason — below the label, not through it. */
+/* Rebuilt on the Liquid Glass material (see src/ui-components/design.md).
+   Same periwinkle, same white ink, same five states — only the depth model
+   changes: a FLAT fill with the specular confined to a thin rim, instead of a
+   body gradient. The old inset pair was already edge-local for the contrast
+   reason documented above; this takes the idea further, giving the rim a
+   graduated falloff and masking it so it sits on the top and bottom faces and
+   dies away across the caps, which is what stops a pill reading as a capsule.
+   The label band is untouched by any of it, so the measured white-on-#5C65DB
+   contrast is unchanged. */
 .natively-key-cta[data-state='ready'] {
+  position: relative;
+  isolation: isolate;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0) 55%, rgba(0, 0, 0, 0.16) 100%),
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.085) 0%, rgba(255, 255, 255, 0) 13%,
+      rgba(255, 255, 255, 0) 87%, rgba(255, 255, 255, 0.085) 100%),
     #5C65DB !important;
   color: #FFFFFF !important;
-  border-color: rgba(255, 255, 255, 0.22) !important;
+  border-color: transparent !important;
+  box-shadow: 0 4px 14px rgba(69, 79, 184, 0.42) !important;
+}
+
+/* z-index:-1 keeps the rim above the fill but behind the button's own text,
+   which is a bare child here and cannot be raised the way the component's
+   content span is. */
+.natively-key-cta[data-state='ready']::before,
+.natively-key-cta[data-state='done']::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  z-index: -1;
+  pointer-events: none;
   box-shadow:
-    inset 0 2px 3px rgba(255, 255, 255, 0.42),
-    inset 0 -2px 5px rgba(10, 12, 40, 0.30),
-    0 4px 14px rgba(69, 79, 184, 0.42) !important;
+    inset 0 0 0 1px rgba(236, 238, 255, 0.44),
+    inset 0 0 0 2px rgba(236, 238, 255, 0.19),
+    inset 0 0 0 3px rgba(236, 238, 255, 0.10);
+  -webkit-mask-image:
+    linear-gradient(180deg, #000 0%, #000 6%, transparent 26%, transparent 74%, #000 94%, #000 100%),
+    linear-gradient(90deg, transparent 1.5%, rgba(0, 0, 0, 0.82) 4%, #000 10%, #000 90%, rgba(0, 0, 0, 0.82) 96%, transparent 98.5%);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(180deg, #000 0%, #000 6%, transparent 26%, transparent 74%, #000 94%, #000 100%),
+    linear-gradient(90deg, transparent 1.5%, rgba(0, 0, 0, 0.82) 4%, #000 10%, #000 90%, rgba(0, 0, 0, 0.82) 96%, transparent 98.5%);
+  mask-composite: intersect;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -7756,49 +8026,36 @@ html[data-platform="linux"] body {
      the declarations — see the SECONDARY block below for what it rests as. */
   .natively-key-cta[data-state='ready']:hover,
   .natively-key-cta[data-state='secondary']:hover {
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0) 55%, rgba(0, 0, 0, 0.10) 100%),
-      #656EE4 !important;
+    background-color: #656EE4 !important;
     transform: translateY(-1px) !important;
-    box-shadow:
-      inset 0 2.5px 3px rgba(255, 255, 255, 0.52),
-      inset 0 -2px 5px rgba(10, 12, 40, 0.28),
-      0 7px 20px rgba(69, 79, 184, 0.55) !important;
+    box-shadow: 0 7px 20px rgba(69, 79, 184, 0.55) !important;
   }
 }
 
 .natively-key-cta[data-state='ready']:active,
 .natively-key-cta[data-state='secondary']:active {
-  transform: translateY(0) scale(0.97) !important;
-  box-shadow:
-    inset 0 2px 5px rgba(6, 8, 28, 0.38),
-    0 2px 6px rgba(69, 79, 184, 0.24) !important;
+  transform: translateY(0) scale(0.985) !important;
+  box-shadow: 0 2px 6px rgba(69, 79, 184, 0.24) !important;
 }
 
 /* Light: the darker end of the same hue, so it is the darkest thing on a pale
    plaque the way the dark-theme button is the brightest thing on a dark one. */
 [data-theme='light'] .natively-key-cta[data-state='ready'] {
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0) 55%, rgba(0, 0, 0, 0.16) 100%),
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.085) 0%, rgba(255, 255, 255, 0) 13%,
+      rgba(255, 255, 255, 0) 87%, rgba(255, 255, 255, 0.085) 100%),
     #454FB8 !important;
   color: #FFFFFF !important;
-  border-color: rgba(255, 255, 255, 0.26) !important;
-  box-shadow:
-    inset 0 2px 3px rgba(255, 255, 255, 0.40),
-    inset 0 -2px 5px rgba(10, 12, 40, 0.28),
-    0 4px 14px rgba(69, 79, 184, 0.32) !important;
+  border-color: transparent !important;
+  box-shadow: 0 4px 14px rgba(69, 79, 184, 0.32) !important;
 }
 
 @media (hover: hover) and (pointer: fine) {
   [data-theme='light'] .natively-key-cta[data-state='ready']:hover,
   [data-theme='light'] .natively-key-cta[data-state='secondary']:hover {
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0) 55%, rgba(0, 0, 0, 0.10) 100%),
-      #3E47AC !important;
-    box-shadow:
-      inset 0 2.5px 3px rgba(255, 255, 255, 0.48),
-      inset 0 -2px 5px rgba(10, 12, 40, 0.26),
-      0 7px 20px rgba(69, 79, 184, 0.42) !important;
+    background-color: #3E47AC !important;
+    box-shadow: 0 7px 20px rgba(69, 79, 184, 0.42) !important;
   }
 }
 
@@ -7868,15 +8125,16 @@ html[data-platform="linux"] body {
    needs no light-theme counterpart — the override that used to sit further
    down was deleted with this change. */
 .natively-key-cta[data-state='done'] {
+  position: relative;
+  isolation: isolate;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0) 55%, rgba(0, 0, 0, 0.16) 100%),
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.075) 0%, rgba(255, 255, 255, 0) 13%,
+      rgba(255, 255, 255, 0) 87%, rgba(255, 255, 255, 0.075) 100%),
     #047857 !important;
   color: #FFFFFF !important;
-  border-color: rgba(255, 255, 255, 0.22) !important;
-  box-shadow:
-    inset 0 2px 3px rgba(255, 255, 255, 0.38),
-    inset 0 -2px 5px rgba(0, 30, 20, 0.30),
-    0 4px 14px rgba(4, 120, 87, 0.40) !important;
+  border-color: transparent !important;
+  box-shadow: 0 4px 14px rgba(4, 120, 87, 0.40) !important;
 }
 
 [data-theme='light'] .natively-key-cta[data-state='idle'],

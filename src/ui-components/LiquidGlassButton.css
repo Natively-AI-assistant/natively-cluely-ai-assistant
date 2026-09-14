@@ -1,0 +1,543 @@
+/* src/ui-components/LiquidGlassButton.css
+ *
+ * macOS 27 "Liquid Glass" pill button. Every value here was measured off a
+ * 1206x410 reference screenshot rather than guessed — see design.md for the
+ * method and the numbers.
+ *
+ * Class and custom-property names are all `lg-` / `--lg-` prefixed because
+ * this stylesheet becomes global the moment the component is imported, and
+ * `@property` registrations are global no matter where they are declared.
+ */
+
+/* Registered so the press can interpolate the lens size. Global by spec. */
+@property --lg-lens-w { syntax: "<length>"; inherits: true; initial-value: 200px; }
+@property --lg-lens-h { syntax: "<length>"; inherits: true; initial-value: 150px; }
+
+/*
+  Liquid Glass is a FLAT material. There is no top-to-bottom body gradient —
+  all of the depth lives in a thin specular rim that traces the perimeter:
+  bright where the pill faces the light (top) and catches the bounce (bottom),
+  dark along the left and right caps. Modelling it as a glossy gradient is the
+  single most common way to get it wrong.
+
+    background   flat fill + a soft inner sheen that carries the rim inward
+    ::before     three inset rings (the bright falloff), aimed by two masks
+    ::after      a ring mask that drops the caps into shadow
+    .lg-lens     the pointer-tracked highlight and local rim pickup
+*/
+.lg-button {
+    /* Geometry — measured. */
+    --lg-pill-h: 136px;
+    --lg-label-size: 51px;
+    /* a pill by default; a host can square it off without touching the height */
+    --lg-radius: calc(var(--lg-pill-h) / 2);
+
+    /*
+      Tracking and the icon gap are em-relative so they scale with the label
+      instead of being pinned to 51px. At the measured size these are exactly
+      1.6px and 24px; change --lg-label-size alone and they still hold.
+    */
+    --lg-label-track: 0.03137em;   /* 1.6px at 51px */
+    --lg-icon-gap: 0.47059em;      /* 24px at 51px */
+    --lg-label-weight: 505;
+    /* measured at hero size; see .lg-sm for why small text needs a real one */
+    --lg-label-leading: 1;
+
+    /*
+      A token so a host can opt out. At hero size the measured SF Pro metrics
+      are the point; embedded in a UI that runs on its own face, matching the
+      neighbours matters more — see .lg-sm.
+    */
+    --lg-font:
+        -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+        InterVariable, Inter, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+
+    /*
+      How fast the specular rim dies away across the rounded caps. Expressed
+      as percentages of the pill width, so the fade scales with the button
+      instead of being pinned to the 535px reference. At that width these are
+      pixel-identical to the measured 24px / 62px / 142px, and because every
+      stop stays below 50% the two mirrored halves can never cross, however
+      narrow the pill gets.
+    */
+    --lg-cap-0: 4.486%;
+    --lg-cap-1: 11.589%;
+    --lg-cap-2: 26.542%;
+
+    /*
+      One duration and one curve for the whole hover state, so the tint and
+      the lens arrive together — split timings read as two overlapping
+      changes rather than one material waking up. easeInOutSine starts and
+      ends at zero velocity, which is what "smooth" means for a cross-fade,
+      and being symmetric it is its own mirror: leaving traces the same path
+      as arriving, with no second curve to maintain.
+    */
+    --lg-hover-dur: 300ms;
+    --lg-hover-ease: cubic-bezier(.37, 0, .63, 1);
+
+    /* Written by useLensTracking on pointermove; nothing else touches them. */
+    --lg-mx: 50%;
+    --lg-my: 50%;
+    --lg-lens-w: 200px;
+    --lg-lens-h: 150px;
+
+    appearance: none;
+    /*
+      The button centres its own content. Without this the content span is an
+      inline-flex sitting on the button's BASELINE, so its vertical position
+      follows line-height and font metrics rather than the box — which put the
+      label 1.5px low at 12px while looking fine at 51px.
+    */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    isolation: isolate;
+    height: var(--lg-pill-h);
+    border: 0;
+    border-radius: var(--lg-radius);
+    padding: 0 28px;
+    cursor: pointer;
+    overflow: hidden;
+    font: inherit;
+    /*
+      PINNED, not inherited, because every tracking and weight value here was
+      measured against SF Pro. Inheriting means the numbers silently stop being
+      true: in Natively, whose default sans is Inter, labels run +1.9% wide;
+      falling all the way to Arial they run +7.6% wide AND jump to bold,
+      because Arial has no 505 weight so the match algorithm rounds 505 up
+      to 700.
+    */
+    font-family: var(--lg-font);
+    transition:
+        transform 110ms cubic-bezier(.2, .85, .25, 1),
+        background-color var(--lg-hover-dur) var(--lg-hover-ease);
+    -webkit-tap-highlight-color: transparent;
+}
+
+/*
+  ::before — the bright specular rim. Three stacked inset rings give the
+  150/132/116 falloff measured off the reference, then two mask layers aim the
+  light: the vertical one keeps it on the top and bottom faces, the horizontal
+  one lets it die away across the caps, whose normals turn away from the light.
+  A uniform ring here is what makes a pill look like a plastic capsule.
+*/
+.lg-button::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow:
+        inset 0 0 0 1px var(--lg-rim-1),
+        inset 0 0 0 2px var(--lg-rim-2),
+        inset 0 0 0 3px var(--lg-rim-3);
+    -webkit-mask-image:
+        linear-gradient(180deg, #000 0%, #000 3%, transparent 15%, transparent 85%, #000 97%, #000 100%),
+        linear-gradient(90deg, transparent var(--lg-cap-0), rgba(0, 0, 0, .82) var(--lg-cap-1), #000 var(--lg-cap-2), #000 calc(100% - var(--lg-cap-2)), rgba(0, 0, 0, .82) calc(100% - var(--lg-cap-1)), transparent calc(100% - var(--lg-cap-0)));
+    -webkit-mask-composite: source-in;
+    mask-image:
+        linear-gradient(180deg, #000 0%, #000 3%, transparent 15%, transparent 85%, #000 97%, #000 100%),
+        linear-gradient(90deg, transparent var(--lg-cap-0), rgba(0, 0, 0, .82) var(--lg-cap-1), #000 var(--lg-cap-2), #000 calc(100% - var(--lg-cap-2)), rgba(0, 0, 0, .82) calc(100% - var(--lg-cap-1)), transparent calc(100% - var(--lg-cap-0)));
+    mask-composite: intersect;
+    pointer-events: none;
+    z-index: 1;
+}
+
+/*
+  ::after — the caps sit in shadow. A ring mask holds it to the perimeter; the
+  vertical gradient keeps it clear of the lit top and bottom faces.
+*/
+.lg-button::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 2px;
+    background: linear-gradient(180deg,
+        rgba(0, 0, 0, 0) 0%,
+        rgba(0, 0, 0, 0) 6%,
+        rgba(0, 0, 0, .90) 50%,
+        rgba(0, 0, 0, 0) 94%,
+        rgba(0, 0, 0, 0) 100%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+            mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+            mask-composite: exclude;
+    pointer-events: none;
+    z-index: 1;
+}
+
+/*
+  ---------------------------------------------------------------------------
+  Variants. Each supplies the flat tint, its hover tint, and the rim/lens
+  alphas keyed to that tint.
+
+  A note on specificity, because it bit once already. A bare `.lg-button:hover`
+  ties `.lg-button.lg-green` at (0,2,0) and wins on source order alone, so a
+  variant declared after it would silently defeat the hover tint. The hover
+  rules below are written `.lg-button:not(:disabled):hover`, which is (0,3,0)
+  and beats any single variant class outright — the guard is there for the
+  disabled state, but it makes the cascade robust for free.
+  ---------------------------------------------------------------------------
+*/
+.lg-button.lg-neutral {
+    background:
+        linear-gradient(180deg,
+            rgba(255, 255, 255, .070) 0%, rgba(255, 255, 255, 0) 11%,
+            rgba(255, 255, 255, 0) 89%, rgba(255, 255, 255, .070) 100%),
+        #555555;
+    --lg-tint-hover: #707070;   /* achromatic, so brightness is the only lever */
+    --lg-lens-tint: rgba(255, 255, 255, .055);
+    --lg-lens-rim: rgba(255, 255, 255, .30);
+    --lg-lens-rim-soft: rgba(255, 255, 255, .13);
+    --lg-rim-1: rgba(255, 255, 255, .148);
+    --lg-rim-2: rgba(255, 255, 255, .118);
+    --lg-rim-3: rgba(255, 255, 255, .134);
+}
+
+.lg-button.lg-green {
+    background:
+        linear-gradient(180deg,
+            rgba(216, 255, 238, .055) 0%, rgba(216, 255, 238, 0) 11%,
+            rgba(216, 255, 238, 0) 89%, rgba(216, 255, 238, .060) 100%),
+        #1b352a;
+    --lg-tint-hover: #12573a;   /* sat x2.0, lum x1.32, hue held at 155 */
+    --lg-lens-tint: rgba(216, 255, 238, .05);
+    --lg-lens-rim: rgba(233, 255, 245, .22);
+    --lg-lens-rim-soft: rgba(233, 255, 245, .10);
+    --lg-rim-1: rgba(233, 255, 245, .115);
+    --lg-rim-2: rgba(233, 255, 245, .095);
+    --lg-rim-3: rgba(233, 255, 245, .112);
+}
+
+/*
+  .lg-action — the material in the HOST application's action colour, read from
+  its own tokens, so the button still reads as that app's primary action rather
+  than importing the reference's green.
+*/
+.lg-button.lg-action {
+    background:
+        linear-gradient(180deg,
+            rgba(255, 255, 255, .090) 0%, rgba(255, 255, 255, 0) 11%,
+            rgba(255, 255, 255, 0) 89%, rgba(255, 255, 255, .090) 100%),
+        var(--legacy-action-bg, #3b82f6);
+    --lg-tint-hover: var(--legacy-action-hover, #60a5fa);
+    --lg-lens-tint: rgba(228, 240, 255, .06);
+    --lg-lens-rim: rgba(232, 243, 255, .30);
+    --lg-lens-rim-soft: rgba(232, 243, 255, .13);
+    --lg-rim-1: rgba(232, 243, 255, .148);
+    --lg-rim-2: rgba(232, 243, 255, .118);
+    --lg-rim-3: rgba(232, 243, 255, .134);
+}
+
+/*
+  .lg-sky — a LIGHT material, which inverts the lighting logic everywhere, not
+  just in light mode.
+
+  On a light body a white bottom rim has nothing to do: the fill is already
+  brighter than any bounce. So the specular stays on the top face, the
+  underside darkens, and the caps keep their shadow — the same reasoning as the
+  light-theme treatment below, but baked in because here it is the BODY that is
+  light, not the surround.
+
+  The default #3a9ff7 sits halfway between the app's action blue (hue 217) and
+  sky-400 (hue 198) — both endpoints share a lightness, so the blend is a
+  straight hue walk with nothing else moving.
+
+  The label is white by request. Note that white on a fill this light is
+  2.80:1, under the 4.5:1 AA floor for 12px text — holding the hue and dropping
+  the fill to L42 (#0972ce) reaches 4.87:1 if that matters later.
+*/
+.lg-button.lg-sky {
+    background:
+        linear-gradient(180deg,
+            rgba(255, 255, 255, .22) 0%, rgba(255, 255, 255, 0) 14%,
+            rgba(255, 255, 255, 0) 100%),
+        var(--lg-sky-bg, #3a9ff7);
+    --lg-tint-hover: var(--lg-sky-hover, #4dacff);
+    --lg-lens-tint: rgba(255, 255, 255, .16);
+    --lg-lens-rim: rgba(255, 255, 255, .42);
+    --lg-lens-rim-soft: rgba(255, 255, 255, .18);
+    --lg-rim-1: rgba(255, 255, 255, .50);
+    --lg-rim-2: rgba(255, 255, 255, .22);
+    --lg-rim-3: rgba(255, 255, 255, .12);
+    box-shadow:
+        inset 0 -1px 0 rgba(3, 43, 68, .26),
+        0 1px 2px rgba(3, 43, 68, .18),
+        0 4px 10px rgba(3, 43, 68, .12);
+}
+.lg-sky .lg-content { color: var(--lg-sky-fg, #ffffff); }
+
+/* specular on the top face only — see above */
+.lg-button.lg-sky::before {
+    -webkit-mask-image:
+        linear-gradient(180deg, #000 0%, #000 4%, transparent 30%, transparent 100%),
+        linear-gradient(90deg, transparent var(--lg-cap-0), rgba(0, 0, 0, .82) var(--lg-cap-1), #000 var(--lg-cap-2), #000 calc(100% - var(--lg-cap-2)), rgba(0, 0, 0, .82) calc(100% - var(--lg-cap-1)), transparent calc(100% - var(--lg-cap-0)));
+    mask-image:
+        linear-gradient(180deg, #000 0%, #000 4%, transparent 30%, transparent 100%),
+        linear-gradient(90deg, transparent var(--lg-cap-0), rgba(0, 0, 0, .82) var(--lg-cap-1), #000 var(--lg-cap-2), #000 calc(100% - var(--lg-cap-2)), rgba(0, 0, 0, .82) calc(100% - var(--lg-cap-1)), transparent calc(100% - var(--lg-cap-0)));
+}
+.lg-button.lg-sky::after { opacity: .30; }
+
+/*
+  Light mode is a DERIVED material, not a measured one — the reference
+  screenshot is dark only, so this is the same lighting model reasoned through
+  rather than sampled.
+
+  What changes: on a dark stage the pill catches a bounce from below, so the
+  rim is bright top AND bottom. On a white card there is no bounce — the button
+  sits ON the card and casts a contact shadow instead. So the specular is kept
+  to the top face, the underside darkens, and a real shadow does the work the
+  bottom rim used to do. The layer structure is untouched; only the vertical
+  mask and a box-shadow move.
+*/
+[data-theme='light'] .lg-button.lg-action {
+    box-shadow:
+        inset 0 -1px 0 rgba(0, 0, 0, .20),
+        0 1px 2px rgba(16, 24, 40, .16),
+        0 4px 10px rgba(16, 24, 40, .10);
+}
+[data-theme='light'] .lg-button.lg-action::before {
+    -webkit-mask-image:
+        linear-gradient(180deg, #000 0%, #000 4%, transparent 26%, transparent 100%),
+        linear-gradient(90deg, transparent var(--lg-cap-0), rgba(0, 0, 0, .82) var(--lg-cap-1), #000 var(--lg-cap-2), #000 calc(100% - var(--lg-cap-2)), rgba(0, 0, 0, .82) calc(100% - var(--lg-cap-1)), transparent calc(100% - var(--lg-cap-0)));
+    mask-image:
+        linear-gradient(180deg, #000 0%, #000 4%, transparent 26%, transparent 100%),
+        linear-gradient(90deg, transparent var(--lg-cap-0), rgba(0, 0, 0, .82) var(--lg-cap-1), #000 var(--lg-cap-2), #000 calc(100% - var(--lg-cap-2)), rgba(0, 0, 0, .82) calc(100% - var(--lg-cap-1)), transparent calc(100% - var(--lg-cap-0)));
+}
+/* the underside shadow already reads; a full cap ring would double it */
+[data-theme='light'] .lg-button.lg-action::after { opacity: .55; }
+[data-theme='light'] .lg-button.lg-action.lg-sm::after { opacity: .32; }
+
+/*
+  ---------------------------------------------------------------------------
+  .lg-sm — the material at UI scale rather than hero scale.
+
+  The rim does NOT scale with the pill. At 136px a 3px rim is 2% of the height;
+  at 32px it is 9%, and three stacked rings plus a 2px cap ring swallow the
+  button. Collapsing to a single hairline ring is what keeps it reading as
+  glass instead of as a bevel. Verified by rendering 136 / 64 / 44 / 32px side
+  by side.
+
+  It also hands the font back to the host: at this size the label sits beside
+  ordinary UI text and should match it, not the reference's SF Pro metrics.
+  ---------------------------------------------------------------------------
+*/
+.lg-button.lg-sm {
+    /* the exact rendered box of the control it replaces, so the row's
+       rhythm does not shift: 30px tall, 8px radius, 16px side padding */
+    --lg-pill-h: 30px;
+    --lg-label-size: 12px;
+    --lg-label-weight: 600;
+    --lg-font: inherit;
+    /* matches the neighbouring control; the reference's display tracking
+       reads as loose rather than crisp at 12px */
+    --lg-label-track: 0;
+
+    /*
+      line-height: 1 is correct at 51px — it is what the reference was measured
+      with — but at 12px it clips the line box below the font's natural
+      ascent + descent, so the ink no longer sits centred in it and the label
+      lands 1.5px low. 16/12 is the host's own text-xs leading.
+    */
+    --lg-label-leading: 1.33333;
+
+    /*
+      A pill, like the reference — --lg-radius inherits calc(height / 2). Only
+      the box is matched to the control being replaced (30px tall, 16px side
+      padding) so the row's rhythm does not shift.
+    */
+    padding: 0 16px;
+
+    /*
+      The cap fade stays in percentages, as on the hero pill: the caps really
+      are semicircles here, so the specular has the same proportional run to
+      die away across. Every stop is under 50%, so the mirrored halves cannot
+      cross however short the label is.
+    */
+}
+.lg-button.lg-sm::before { box-shadow: inset 0 0 0 1px var(--lg-rim-1); }
+/* short side edges on a rect, so the cap shadow needs far less weight */
+.lg-button.lg-sm::after  { padding: 1px; opacity: .5; }
+
+.lg-content {
+    position: relative;
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--lg-icon-gap);
+    width: 100%;
+    font-size: var(--lg-label-size);
+    line-height: var(--lg-label-leading);
+    /*
+      455 / 505 are variable-font weights. They resolve wherever SF Pro is
+      present; elsewhere the stack falls back and they snap to 400 / 500.
+    */
+    font-weight: var(--lg-label-weight);
+    letter-spacing: var(--lg-label-track);
+    min-width: 0;   /* lets the label shrink so its ellipsis can engage */
+}
+
+/*
+  The pill's height is fixed, so a wrapped label does not make it taller — it
+  overflows and gets clipped through the middle of the second line. Constrained
+  to 300px, "Unmute this channel permanently" wrapped to three lines and 153px
+  inside a 136px button. A pill truncates; it does not wrap.
+
+  The trailing letter-spacing sits after the last glyph, which pushes the
+  optical centre left; a matching negative margin puts it back.
+*/
+.lg-label {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    margin-right: calc(var(--lg-label-track) * -1);
+}
+
+.lg-neutral .lg-content { color: #fafafa; }
+.lg-green   .lg-content { color: #e0fbd8; }
+.lg-action  .lg-content { color: var(--legacy-action-fg, #ffffff); }
+
+/* The icon slot only refuses to flex; sizing is the caller's — see design.md
+   for why an aspect-locked SVG cannot always hit a measured target box. */
+.lg-icon {
+    display: flex;
+    align-items: center;
+    flex: none;
+}
+
+/*
+  The lens. Glass does not brighten uniformly when you point at it — it
+  refracts toward the pointer, and the rim picks up light only on the edge
+  nearest to it. One element carries both: a flat tint plus an inset ring,
+  shaped by a radial mask parked under the cursor. The mask does double duty,
+  localising the surface bloom AND the rim pickup in a single pass.
+*/
+.lg-lens {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: var(--lg-lens-tint);
+    box-shadow:
+        inset 0 0 0 1px var(--lg-lens-rim),
+        inset 0 0 0 2px var(--lg-lens-rim-soft);
+    -webkit-mask-image: radial-gradient(var(--lg-lens-w) var(--lg-lens-h) at var(--lg-mx) var(--lg-my),
+        #000 0%, rgba(0, 0, 0, .5) 40%, transparent 74%);
+            mask-image: radial-gradient(var(--lg-lens-w) var(--lg-lens-h) at var(--lg-mx) var(--lg-my),
+        #000 0%, rgba(0, 0, 0, .5) 40%, transparent 74%);
+    opacity: 0;
+    /*
+      Opacity eases; POSITION NEVER DOES. Ease --lg-mx/--lg-my and the
+      highlight lags the cursor, which reads as a delayed glow rather than
+      refraction.
+    */
+    transition:
+        opacity var(--lg-hover-dur) var(--lg-hover-ease),
+        --lg-lens-w 150ms ease,
+        --lg-lens-h 150ms ease;
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* the lens bloom is sized for a hero pill; at UI scale it must shrink with it */
+.lg-button.lg-sm .lg-lens {
+    --lg-lens-w: 90px;
+    --lg-lens-h: 40px;
+}
+
+/* Only where a real pointer exists — on touch, :hover sticks after the tap. */
+@media (hover: hover) and (pointer: fine) {
+    .lg-button:not(:disabled):hover .lg-lens { opacity: 1; }
+
+    /*
+      The material also becomes more vivid under the pointer: the tint gains
+      saturation and a little luminance, staying on its own hue. The tint is
+      the last layer of the `background` shorthand, so it is background-color
+      and animates on its own — the sheen gradient above it is untouched.
+    */
+    .lg-button:not(:disabled):hover { background-color: var(--lg-tint-hover); }
+}
+
+/*
+  Keyboard parity: the lens is the button's affordance, so it should answer a
+  keyboard focus as well as a pointer. useLensTracking clears the inline
+  position on keyboard focus, so the bloom arrives centred rather than parked
+  wherever the pointer happened to leave it.
+*/
+.lg-button:not(:disabled):focus-visible .lg-lens { opacity: 1; }
+
+/* The press compresses the material: the pill gives, the lens tightens.
+   :active fires on pointer-down, so the feedback lands on the press. */
+.lg-button:not(:disabled):active { transform: scale(.985); }
+.lg-button:not(:disabled):active .lg-lens {
+    opacity: 1;
+    --lg-lens-w: 148px;
+    --lg-lens-h: 112px;
+}
+.lg-button.lg-sm:not(:disabled):active .lg-lens {
+    --lg-lens-w: 66px;
+    --lg-lens-h: 30px;
+}
+
+/*
+  Disabled dims the parts rather than fading the whole element. A blanket
+  `opacity: .45` takes the rim with it, so the button stops reading as glass at
+  all, and it drops the label to 3.74:1. Desaturating the body and dimming the
+  label separately keeps the material legible as itself at 5.14:1, while the
+  rim stays visible at half strength.
+*/
+.lg-button:disabled { cursor: default; }
+.lg-button:disabled.lg-neutral { background-color: #3d3d3d; }
+.lg-button:disabled.lg-green   { background-color: #1a2a24; }
+.lg-button:disabled.lg-action  { filter: saturate(.4) brightness(.85); }
+.lg-button:disabled::before { opacity: .45; }
+.lg-button:disabled::after  { opacity: .55; }
+.lg-button:disabled .lg-content { opacity: .6; }
+.lg-button:disabled .lg-lens { opacity: 0; }
+
+.lg-button:focus-visible {
+    outline: 3px solid rgba(175, 214, 255, .95);
+    outline-offset: 3px;
+}
+.lg-button.lg-sm:focus-visible {
+    outline-width: 2px;
+    outline-offset: 2px;
+}
+
+/*
+  prefers-contrast: more — the whole point of this material is a rim so subtle
+  it reads as light rather than as an edge, which is precisely what a
+  high-contrast user has asked not to rely on. Swap it for a defined border
+  and let the label sit at full strength.
+*/
+@media (prefers-contrast: more) {
+    .lg-button {
+        box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .92);
+    }
+    .lg-button.lg-neutral { background-color: #4a4a4a; }
+    .lg-button.lg-green   { background-color: #103425; }
+    .lg-neutral .lg-content { color: #ffffff; }
+    .lg-green   .lg-content { color: #eaffe2; }
+    .lg-button:focus-visible { outline-width: 4px; }
+}
+
+/*
+  Reduced motion keeps the feedback but drops the tracking: a still, centred
+  bloom instead of a highlight that chases the cursor. `!important` is what
+  makes the inline --lg-mx/--lg-my the JS writes inert, so the setting wins
+  live rather than needing a listener teardown.
+*/
+@media (prefers-reduced-motion: reduce) {
+    /* Colour is not vestibular, so the tint still cross-fades; motion goes. */
+    .lg-button { transition: background-color var(--lg-hover-dur) var(--lg-hover-ease); }
+    .lg-button:not(:disabled):active { transform: none; }
+    .lg-lens {
+        transition: opacity var(--lg-hover-dur) var(--lg-hover-ease);
+        --lg-mx: 50% !important;
+        --lg-my: 50% !important;
+        --lg-lens-w: 320px;
+        --lg-lens-h: 190px;
+    }
+}
