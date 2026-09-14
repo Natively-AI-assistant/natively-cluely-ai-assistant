@@ -142,8 +142,10 @@ export function buildRerankProbe(poolSize: number): RerankProbe {
     const documents = DISTRACTOR_SUBJECTS
         .slice(0, size - 1)
         .map(([name, gloss]) => distractor(name, gloss));
-    // Mid-pool: far enough from index 0 that identity order fails, and not last
-    // (a port that reverses its input would then pass for the same bad reason).
+    // Mid-pool: far enough from index 0 that identity order fails, and — for any
+    // pool of three or more — not last either, so a port that REVERSES its input
+    // does not pass for the mirror-image reason. At size 2 there is no position
+    // that is neither first nor last; production pools are 30, where this is 15.
     const expectedIndex = Math.floor(size / 2);
     documents.splice(expectedIndex, 0, ANSWER);
     return { query: QUERY, documents, expectedIndex };

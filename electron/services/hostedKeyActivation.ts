@@ -260,13 +260,18 @@ const scopes = (io: ActivationIo): { reference_files?: boolean; embeddings?: boo
     (io.getSetting('providerDataScopes') as { reference_files?: boolean; embeddings?: boolean }) ?? {};
 
 /** Both scopes default to ALLOWED, matching referenceFilesScopeAllowed(). */
+const EMBEDDING_MODEL_SETTING: Readonly<Record<string, string>> = Object.freeze({
+    voyage: 'voyageEmbeddingModel',
+    openrouter: 'openrouterEmbeddingModel',
+});
+
 const readEnv = (io: ActivationIo, embeddingProvider?: string): ActivationEnv => {
     const s = scopes(io);
     const reranker = (io.getSetting('reranker') as { provider?: string }) ?? {};
-    const modelKey = embeddingProvider === 'voyage' ? 'voyageEmbeddingModel' : 'openrouterEmbeddingModel';
+    const modelKey = embeddingProvider ? EMBEDDING_MODEL_SETTING[embeddingProvider] : undefined;
     return {
         rerankerProvider: reranker.provider,
-        embeddingModel: (io.getSetting(modelKey) as string | undefined) ?? undefined,
+        embeddingModel: modelKey ? ((io.getSetting(modelKey) as string | undefined) ?? undefined) : undefined,
         referenceFilesAllowed: s.reference_files !== false,
         embeddingsAllowed: s.embeddings !== false,
     };
@@ -328,6 +333,18 @@ export async function applyHostedKeyActivation(
                 // ineligible, which is the inert state this feature removes.
                 const catalog = await io.fetchRerankCatalog().catch(() => null);
                 model = rerankModelForActivation('openrouter', catalog ?? undefined);
+
+                // RE-DECIDE after the await. The verdict above was computed from
+                // settings read BEFORE a network round trip, and a key saved
+                // during that window would otherwise be overwritten by this
+                // stale decision — the user lands on whichever provider's fetch
+                // finished last rather than the one they chose last.
+                const fresh = decideRerankerActivation(provider, readEnv(io, provider));
+                if (fresh.verdict !== 'activate') {
+                    outcome.reranker = fresh.verdict;
+                    io.log(`[hostedKeyActivation] reranker/${provider}: ${fresh.verdict} on re-check — ${fresh.reason}`);
+                    return finishEmbedding(provider, io, outcome);
+                }
             }
             if (!model) {
                 outcome.reranker = 'no-model';
@@ -335,13 +352,30 @@ export async function applyHostedKeyActivation(
             } else {
                 const current = (io.getSetting('reranker') as Record<string, unknown>) ?? {};
                 const modelKey = provider === 'jina' ? 'jinaModel' : 'openrouterModel';
-                io.setSetting('reranker', { ...current, provider, [modelKey]: model });
-                io.log(`[hostedKeyActivation] reranker provider set to ${provider} with ${model}`);
+                // A model already stored for THIS provider is the user's pick and
+                // outranks the recommendation. The auto-default guard above only
+                // protects the PROVIDER, so without this a key rotation — or a
+                // re-paste after a failed test — silently replaced a deliberately
+                // chosen model. That is the bug AUTO_ASSIGNED_MODEL_IDS records
+                // being fixed once already, one setting over.
+                const existing = current[modelKey];
+                const keep = typeof existing === 'string' && existing.trim() ? existing : null;
+                io.setSetting('reranker', { ...current, provider, [modelKey]: keep ?? model });
+                io.log(keep
+                    ? `[hostedKeyActivation] reranker provider set to ${provider}; keeping your model ${keep}`
+                    : `[hostedKeyActivation] reranker provider set to ${provider} with ${model}`);
             }
         }
     }
 
-    // ── Embeddings ──
+    return finishEmbedding(provider, io, outcome);
+}
+
+/**
+ * The embedding half, split out so a reranker verdict that returns early still
+ * runs it — the two halves are independent and gated by different scopes.
+ */
+function finishEmbedding(provider: string, io: ActivationIo, outcome: ActivationOutcome): ActivationOutcome {
     if (EMBEDDING_KEY_PROVIDERS.has(provider)) {
         const env = readEnv(io, provider);
         const decision = decideEmbeddingActivation(provider, env);
@@ -355,7 +389,7 @@ export async function applyHostedKeyActivation(
                 // own flow still applies; nothing is guessed here.
                 io.log(`[hostedKeyActivation] embedding/${provider}: no curated default — leaving it to the panel`);
             } else {
-                const key = provider === 'voyage' ? 'voyageEmbeddingModel' : 'openrouterEmbeddingModel';
+                const key = EMBEDDING_MODEL_SETTING[provider];
                 io.setSetting(key, selection.model);
                 io.log(
                     `[hostedKeyActivation] ${key} set to ${selection.model} `

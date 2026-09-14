@@ -304,3 +304,54 @@ describe('jina no longer needs a model chosen to be eligible', () => {
       'its catalogue is fetched; a hard-coded id may not exist on the live API');
   });
 });
+
+// ── Review findings, 2026-09-15 ─────────────────────────────────────────────
+
+describe("re-saving a key must not replace the user's chosen model", () => {
+  // FOUND IN REVIEW. The auto-default guard protects the PROVIDER and nothing
+  // else. Re-saving a key for the provider you are already on (rotating it,
+  // fixing a typo, re-pasting after a failed test) fell through to 'activate'
+  // and wrote the recommended model over the one you picked — the exact bug
+  // AUTO_ASSIGNED_MODEL_IDS records being fixed once already: "a user's explicit
+  // pick was silently replaced the moment they added a key."
+  test('a chosen jina model survives a key rotation', async () => {
+    const io = fakeIo({ reranker: { provider: 'jina', jinaModel: 'jina-reranker-m0' } });
+    await applyHostedKeyActivation('jina', { keyPresent: true, io });
+    assert.equal(io.store.reranker.jinaModel, 'jina-reranker-m0');
+    assert.equal(io.store.reranker.provider, 'jina');
+  });
+
+  test('a chosen openrouter model survives a key rotation', async () => {
+    const io = fakeIo(
+      { reranker: { provider: 'openrouter', openrouterModel: 'some/deliberate-pick' } },
+      [{ id: 'voyageai/rerank-2.5-lite', group: 'recommended' }]);
+    await applyHostedKeyActivation('openrouter', { keyPresent: true, io });
+    assert.equal(io.store.reranker.openrouterModel, 'some/deliberate-pick');
+  });
+
+  test('but a provider with NO model still gets the default filled in', async () => {
+    const io = fakeIo({ reranker: { provider: 'jina' } });
+    await applyHostedKeyActivation('jina', { keyPresent: true, io });
+    assert.equal(io.store.reranker.jinaModel, 'jina-reranker-v3.5');
+  });
+});
+
+describe('the decision is re-checked after the catalogue fetch', () => {
+  // FOUND IN REVIEW. decideRerankerActivation ran against settings read BEFORE
+  // the OpenRouter catalogue fetch. A second key saved during that window (the
+  // fetch is a network round trip) would be overwritten by the stale decision:
+  // the user ends up on the provider whose fetch happened to finish last, not
+  // the one they saved last.
+  test('a provider chosen during the fetch window is not overwritten', async () => {
+    const io = fakeIo({}, [{ id: 'voyageai/rerank-2.5-lite', group: 'recommended' }]);
+    io.fetchRerankCatalog = async () => {
+      // Someone else wins the race while we are on the network.
+      io.store.reranker = { provider: 'jina', jinaModel: 'jina-reranker-v3.5' };
+      return [{ id: 'voyageai/rerank-2.5-lite', group: 'recommended' }];
+    };
+    const out = await applyHostedKeyActivation('openrouter', { keyPresent: true, io });
+    assert.equal(out.reranker, 'explicit-choice');
+    assert.equal(io.store.reranker.provider, 'jina',
+      'the stale pre-fetch decision must not clobber a newer choice');
+  });
+});
