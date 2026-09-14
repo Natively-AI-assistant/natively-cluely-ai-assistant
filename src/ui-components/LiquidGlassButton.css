@@ -373,32 +373,51 @@
   (A badge that ever needs a `title` tooltip has to trade this for those
   per-state overrides, since a pointer-transparent element gets no tooltip.)
 
-  The box is .aip-badge's rendered box — 18px tall, 0 8px padding, 9.5px
-  uppercase at 0.04em — so swapping one primitive for the other does not shift
-  the row it sits in.
+  The silhouette is smaller on BOTH axes than .aip-badge, the primitive it
+  replaces. Measured on the same word: 46.8 x 16 here against 51.6 x 18 there.
+  Dropping the status dot is what pays for it — that dot and its gap are ~9px
+  of the old badge's width — so the pill can lose width without losing body.
+
+  The floor on how far this can go is the cap fade, not the label. --lg-cap-2
+  is a PERCENTAGE of width, so the rim's full-strength run is always 47% of the
+  pill however short it gets: 22.0px at this width, and 19.8px if the padding
+  goes back to 8. The rim IS the material — shorten the pill enough and the
+  thing that makes it glass has nowhere left to sit, and it reads as a plain
+  coloured chip.
+
+  The consequence to know about: 16px no longer matches .aip-badge's 18px box,
+  so a row mixing the two shows two heights. That is a deliberate divergence
+  rather than an oversight — .lg-badge is its own primitive, not a drop-in.
   ---------------------------------------------------------------------------
 */
 .lg-button.lg-badge {
-    --lg-pill-h: 18px;
+    --lg-pill-h: 16px;
     --lg-label-size: 9.5px;
     --lg-label-weight: 600;
     --lg-font: inherit;
-    --lg-label-track: 0.04em;
+    /*
+      Tracking opens up with the pill. At the tight setting a four-letter word
+      sits as a clump in the middle of a long capsule, which reads as a layout
+      mistake rather than as a wide tag.
+    */
+    --lg-label-track: 0.06em;
     /*
       line-height 1 clips the line box below the font's own ascent + descent —
-      the same failure .lg-sm documents at 12px, just more visible at 9.5px,
-      where a 1px drop is a tenth of the cap height.
+      the failure .lg-sm documents at 12px, worse here. But the leading also
+      cannot stay at .lg-sm's 1.33 once the box comes down to 16px: at that
+      point the line box is what decides whether the ink sits centred, and
+      1.3 is what measures level (1.83px of air above and below the label).
     */
-    --lg-label-leading: 1.45;
+    --lg-label-leading: 1.3;
 
-    padding: 0 8px;
+    padding: 0 10px;
     text-transform: uppercase;
     /* it sits in a flex row beside a label that may truncate; the tag may not */
     flex: none;
     pointer-events: none;
 }
 /*
-  At 18px even .lg-sm's single ring plus a 1px cap ring is a large share of the
+  At 16px even .lg-sm's single ring plus a 1px cap ring is a large share of the
   pill. The rim stays — it is the material — and the cap shadow nearly goes.
 */
 .lg-button.lg-badge::before { box-shadow: inset 0 0 0 1px var(--lg-rim-1); }
