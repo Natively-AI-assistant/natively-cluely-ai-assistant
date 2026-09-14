@@ -4140,6 +4140,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
                 : settleHeight;
             // Bounded by the panel width the settled WINDOW can hold, not by the
             // window itself — the panel has to leave its gutter free.
+            // Bounded by the panel width the settled WINDOW can hold, not by the
+            // window itself — the panel has to leave its gutter free.
             const settledPanel = Math.min(panelWidth, panelWidthForWindow(settledWidth));
             overlayWindowWidthRef.current = settledWidth;
             setAppliedWindowWidth(settledWidth);
