@@ -1,0 +1,47 @@
+From f3aec22c535e480c738cdd149eae9d25d81d8127 Mon Sep 17 00:00:00 2001
+From: Evinj <natively.contact@gmail.com>
+Date: Thu, 27 Aug 2026 03:46:52 +0530
+Subject: [PATCH] @ chore(gitignore): ignore local AI-assistant and editor
+ configs
+
+.gemini/, .kiro/, .qoder/, .codebuddy/, GEMINI.md, QODER.md,
+CODEBUDDY.md and opencode.jsonc are written by whichever assistant or
+editor a given developer happens to run. None is part of the build, and
+all of them showed up as untracked noise in every `git status`, which is
+how real untracked work gets overlooked.
+
+CLAUDE.md is deliberately NOT ignored: it is the shared, reviewed
+cross-platform contract for this repo, not one person local tool state.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01K9YNdVhkUKsxnY6HLh1pbd
+@
+---
+ .gitignore | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+diff --git a/.gitignore b/.gitignore
+index 5547fc77..bb81f1a8 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -539,3 +539,17 @@ benchmark-results/
+ /natively_debug.size*
+ /pitch/
+ /researc
++
++# Local AI-assistant / editor configs. Each of these is written by a tool a
++# single developer happens to run (Gemini, Kiro, Qoder, CodeBuddy, opencode);
++# none of them is part of the build, and they otherwise show up as untracked
++# noise in every `git status`. CLAUDE.md is deliberately NOT here — it is the
++# shared, reviewed contract for this repo, not one person's local tool state.
++/.gemini/
++/.kiro/
++/.qoder/
++/.codebuddy/
++/GEMINI.md
++/QODER.md
++/CODEBUDDY.md
++/opencode.jsonc
+-- 
+2.44.0.windows.1
+

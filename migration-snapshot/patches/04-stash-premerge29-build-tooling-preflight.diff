@@ -1,0 +1,454 @@
+diff --git a/electron/services/LocalFallbackPreflight.ts b/electron/services/LocalFallbackPreflight.ts
+index 4413fa42..3f3662c1 100644
+--- a/electron/services/LocalFallbackPreflight.ts
++++ b/electron/services/LocalFallbackPreflight.ts
+@@ -210,6 +210,29 @@ function checkUnpackedNativeDir(rel: string): { ok: boolean; message: string } {
+   return { ok: false, message: `Missing app.asar.unpacked/${rel}` };
+ }
+ 
++/**
++ * Whether this platform+arch has an onnxruntime-node binary at all.
++ *
++ * onnxruntime-node ships PREBUILT binaries only (there is no source build in
++ * the package), and its win32 set is {x64, arm64} at every published version.
++ * A 32-bit Windows install therefore has no ONNX runtime, so every packaged
++ * local model — Whisper, embeddings, reranker, intent classifier — is
++ * unreachable there. A 32-bit process also caps out around 2 GB of address
++ * space, well under what those models want, so this is not a gap that a
++ * different build could close.
++ *
++ * This is an upstream platform limit, NOT a corrupt install. The app still
++ * transcribes through any of the cloud STT providers and embeds through
++ * Gemini / OpenAI / Ollama — which EmbeddingProviderResolver already prefers
++ * over the packaged local model. Reporting these as 'missing_required_asset'
++ * would tell a correctly-installed user to reinstall and fix nothing.
++ */
++function onnxRuntimeSupportsThisArch(): boolean {
++  if (process.platform === 'win32') return process.arch === 'x64' || process.arch === 'arm64';
++  if (process.platform === 'darwin') return process.arch === 'x64' || process.arch === 'arm64';
++  return true;
++}
++
+ export async function runLocalFallbackPreflight(options: { ollamaSelected?: boolean } = {}): Promise<LocalFallbackPreflightResult> {
+   if (inFlight) return inFlight;
+ 
+@@ -219,9 +242,29 @@ export async function runLocalFallbackPreflight(options: { ollamaSelected?: bool
+     const checks: LocalFallbackPreflightCheck[] = [];
+ 
+     // 1. ONNX / Transformers.js runtime imports.
+-    checks.push(await timedCheck('@huggingface/transformers import', () => canImportPackage('@huggingface/transformers')));
+-    checks.push(await timedCheck('onnxruntime-common import', () => canImportPackage('onnxruntime-common')));
+-    checks.push(await timedCheck('onnxruntime-node import', () => canImportPackage('onnxruntime-node')));
++    //
++    // Gated on arch. Where onnxruntime-node publishes no binary the import is
++    // a known-failing probe: it throws, slowly, for a condition already
++    // decided by the platform. Report it directly instead, so the failure
++    // reads as "this architecture has no ONNX runtime" rather than as a
++    // corrupted install.
++    const onnxArchSupported = onnxRuntimeSupportsThisArch();
++    if (onnxArchSupported) {
++      checks.push(await timedCheck('@huggingface/transformers import', () => canImportPackage('@huggingface/transformers')));
++      checks.push(await timedCheck('onnxruntime-common import', () => canImportPackage('onnxruntime-common')));
++      checks.push(await timedCheck('onnxruntime-node import', () => canImportPackage('onnxruntime-node')));
++    } else {
++      checks.push({
++        id: 'onnxruntime-node import',
++        ok: false,
++        health: 'unavailable',
++        durationMs: 0,
++        message:
++          'onnxruntime-node publishes no ' + process.platform + '-' + process.arch + ' binary; ' +
++          'packaged local models are unavailable on this architecture. Cloud providers are unaffected.',
++        recoverable: true,
++      });
++    }
+ 
+     // 2. Required bundled model assets. In dev the models live under the repo's
+     // resources/models/ and resolveModelPath() finds them; in packaged builds
+@@ -292,14 +335,38 @@ export async function runLocalFallbackPreflight(options: { ollamaSelected?: bool
+       checks.push(await timedCheck('sqlite-vec darwin-arm64 dylib', async () => checkUnpackedNativeDir('node_modules/sqlite-vec-darwin-arm64/vec0.dylib')));
+       checks.push(await timedCheck('sqlite-vec darwin-x64 dylib', async () => checkUnpackedNativeDir('node_modules/sqlite-vec-darwin-x64/vec0.dylib')));
+     } else if (process.platform === 'win32') {
+-      // Prefix-matched: Windows ships x64 AND ia32 installers (and arm64 is
+-      // possible), so the arch suffix cannot be hardcoded. Both directories are
+-      // covered by asarUnpack (`**/node_modules/@img/**`,
+-      // `**/node_modules/sqlite-vec-*/**`).
+-      // The 'sharp ' / 'sqlite-vec ' id prefixes are load-bearing — `nativeOk`
+-      // below selects these checks by exactly those prefixes.
+-      checks.push(await timedCheck('sharp win32 native', async () => checkUnpackedNativePrefix('node_modules/@img', 'sharp-win32-', 'sharp Windows binary')));
+-      checks.push(await timedCheck('sqlite-vec windows extension', async () => checkUnpackedNativePrefix('node_modules', 'sqlite-vec-windows-', 'sqlite-vec Windows extension')));
++      // Arch-PINNED, not prefix-matched. The NSIS target ships x64 AND ia32,
++      // and electron-builder packs the same node_modules tree for both — so a
++      // prefix match on 'sharp-win32-' was satisfied by the packaged x64
++      // directory even on an ia32 install. The check passed while the binary
++      // was the wrong bitness, i.e. it gave a clean bill of health on exactly
++      // the install it exists to catch. scripts/ensure-sharp-win-deps.js now
++      // installs every shipped arch, so pinning is both safe and meaningful.
++      // The 'sharp ' / 'sqlite-vec ' id prefixes remain load-bearing —
++      // `nativeOk` below selects these checks by exactly those prefixes.
++      checks.push(await timedCheck('sharp win32 native', async () =>
++        checkUnpackedNativeDir(`node_modules/@img/sharp-win32-${process.arch}/lib`)));
++
++      // sqlite-vec publishes a Windows extension for x64 ONLY — there is no
++      // windows-ia32 or windows-arm64 build at ANY version (checked through
++      // 0.1.10-alpha.4). On any other arch its absence is EXPECTED, not
++      // corruption: DatabaseManager catches the load failure and VectorStore
++      // falls back to JS cosine similarity. Reporting it as a failed check
++      // would flip `nativeOk` and tell a correctly-installed 32-bit user to
++      // reinstall — the same false alarm the darwin/win32 split above fixed.
++      if (process.arch === 'x64') {
++        checks.push(await timedCheck('sqlite-vec windows extension', async () =>
++          checkUnpackedNativeDir('node_modules/sqlite-vec-windows-x64/vec0.dll')));
++      } else {
++        checks.push({
++          id: 'sqlite-vec windows extension',
++          ok: true,
++          health: 'ready',
++          durationMs: 0,
++          message: `sqlite-vec publishes no Windows ${process.arch} build; vector search uses the JS cosine fallback`,
++          recoverable: true,
++        });
++      }
+     }
+ 
+     // 4. Ollama optional path.
+@@ -337,10 +404,12 @@ export async function runLocalFallbackPreflight(options: { ollamaSelected?: bool
+     ProviderStatusRegistry.getInstance().setStatus(statusFor(
+       'local-embedding',
+       'packaged_local',
+-      localEmbeddingOk ? 'ready' : 'missing_required_asset',
++      localEmbeddingOk ? 'ready' : onnxArchSupported ? 'missing_required_asset' : 'unavailable',
+       localEmbeddingOk
+         ? 'Packaged local embedding fallback assets are ready'
+-        : 'Natively local embedding fallback assets are missing or corrupted. Please reinstall Natively.',
++        : onnxArchSupported
++          ? 'Natively local embedding fallback assets are missing or corrupted. Please reinstall Natively.'
++          : 'Packaged local embeddings need onnxruntime-node, which publishes no build for this architecture. Configure a cloud embedding provider (Gemini or OpenAI) or Ollama instead.',
+       {
+         checks: checks.filter(c => c.id.includes('minilm') || c.id.includes('import') || c.id.startsWith('rust') || c.id.includes('sharp') || c.id.includes('sqlite-vec') || c.id.includes('better-sqlite3')),
+       },
+@@ -349,20 +418,24 @@ export async function runLocalFallbackPreflight(options: { ollamaSelected?: bool
+     ProviderStatusRegistry.getInstance().setStatus(statusFor(
+       'intent-classifier',
+       'packaged_local',
+-      intentOk ? 'ready' : 'missing_required_asset',
++      intentOk ? 'ready' : onnxArchSupported ? 'missing_required_asset' : 'unavailable',
+       intentOk
+         ? 'Packaged zero-shot intent classifier assets are ready'
+-        : 'Natively local classifier assets are missing or corrupted. Please reinstall Natively.',
++        : onnxArchSupported
++          ? 'Natively local classifier assets are missing or corrupted. Please reinstall Natively.'
++          : 'The zero-shot intent classifier needs onnxruntime-node, which publishes no build for this architecture.',
+       { checks: checks.filter(c => c.id.includes('mobilebert') || c.id.includes('import')) },
+     ));
+ 
+     ProviderStatusRegistry.getInstance().setStatus(statusFor(
+       'local-reranker',
+       'packaged_local',
+-      rerankerOk ? 'ready' : 'missing_required_asset',
+-      rerankerOk
++      rerankerOk && onnxArchSupported ? 'ready' : onnxArchSupported ? 'missing_required_asset' : 'unavailable',
++      rerankerOk && onnxArchSupported
+         ? 'Packaged BGE reranker (q8) is ready for offline smart-retrieval'
+-        : 'Natively packaged BGE reranker model is missing. Please reinstall Natively.',
++        : onnxArchSupported
++          ? 'Natively packaged BGE reranker model is missing. Please reinstall Natively.'
++          : 'The BGE reranker needs onnxruntime-node, which publishes no build for this architecture. Retrieval runs without the rerank escalation.',
+       { checks: checks.filter(c => c.id === 'reranker model assets') },
+     ));
+ 
+diff --git a/electron/services/__tests__/WindowsPlatformParity.test.mjs b/electron/services/__tests__/WindowsPlatformParity.test.mjs
+index 4f1fc7e8..5c0067cf 100644
+--- a/electron/services/__tests__/WindowsPlatformParity.test.mjs
++++ b/electron/services/__tests__/WindowsPlatformParity.test.mjs
+@@ -49,30 +49,116 @@ test('preflight: the darwin-only native asset checks are gated to darwin', () =>
+   }
+ });
+ 
+-test('preflight: Windows has its own sharp / sqlite-vec checks, arch-agnostic', () => {
++test('preflight: the Windows sharp check pins the RUNNING arch, not a prefix', () => {
+   const src = read('electron/services/LocalFallbackPreflight.ts');
+   const block = src.slice(
+     src.indexOf("} else if (process.platform === 'win32') {"),
+     src.indexOf('// 4. Ollama optional path.'),
+   );
+   assert.ok(block.length > 0, 'win32 native-asset branch not found');
+-  assert.match(
+-    block,
+-    /checkUnpackedNativePrefix\('node_modules\/@img', 'sharp-win32-'/,
+-    'BUG: Windows must verify a sharp win32 binary was packaged.',
++
++  // This assertion INVERTS the one it replaces, deliberately.
++  //
++  // The original required the Windows check to be arch-agnostic, because the
++  // build only ever installed @img/sharp-win32-x64 and pinning an arch would
++  // have failed the ia32 installer with a false 'reinstall Natively' alarm.
++  // That made the prefix match the lesser evil, not the correct check.
++  //
++  // scripts/ensure-sharp-win-deps.js now installs every arch the NSIS target
++  // ships, so the false alarm is gone — and the prefix match became the
++  // defect: 'sharp-win32-' also matches the packaged x64 directory on an ia32
++  // install, so the check reported healthy on exactly the wrong-bitness
++  // install it exists to catch.
++  assert.ok(
++    block.includes('sharp-win32-' + '${process.arch}'),
++    'BUG: the Windows sharp check must pin the running arch — a prefix match is ' +
++      'satisfied by the packaged x64 directory on an ia32 install, hiding a ' +
++      'wrong-bitness binary behind a passing check.',
+   );
+-  assert.match(
+-    block,
+-    /checkUnpackedNativePrefix\('node_modules', 'sqlite-vec-windows-'/,
+-    'BUG: Windows must verify the sqlite-vec Windows extension was packaged.',
++  assert.ok(
++    !block.includes("checkUnpackedNativePrefix('node_modules/@img'"),
++    'BUG: reverted to the prefix match — see above; it cannot distinguish arches.',
+   );
+-  // Arch must NOT be hardcoded: Windows ships x64 AND ia32 installers, so
+-  // pinning one arch would fail the other with the same false "reinstall" alarm.
+-  assert.doesNotMatch(
+-    block,
+-    /sharp-win32-x64|sharp-win32-ia32|sqlite-vec-windows-x64/,
+-    'BUG: do not hardcode a Windows arch — prefix-match so x64/ia32/arm64 all pass.',
++});
++
++test('preflight: sqlite-vec absent on a non-x64 Windows arch is expected, not a failure', () => {
++  const src = read('electron/services/LocalFallbackPreflight.ts');
++  const block = src.slice(
++    src.indexOf("} else if (process.platform === 'win32') {"),
++    src.indexOf('// 4. Ollama optional path.'),
++  );
++
++  // sqlite-vec publishes a Windows extension for x64 only, at every version
++  // (checked through 0.1.10-alpha.4). On ia32 the extension is legitimately
++  // absent: DatabaseManager catches the load error and VectorStore drops to
++  // JS cosine. Asserting its presence there would flip `nativeOk` and tell a
++  // correctly-installed user to reinstall — so the arch split must stay, and
++  // the non-x64 branch must report ok.
++  assert.ok(
++    block.includes("if (process.arch === 'x64') {"),
++    'BUG: the sqlite-vec Windows check must be split by arch — only x64 has a ' +
++      'published extension to look for.',
++  );
++  assert.ok(
++    block.includes('sqlite-vec-windows-x64/vec0.dll'),
++    'BUG: the x64 branch must verify the actual packaged extension file.',
+   );
++
++  const nonX64Branch = block.slice(block.indexOf('} else {'));
++  assert.ok(
++    nonX64Branch.includes("id: 'sqlite-vec windows extension'") &&
++      nonX64Branch.includes('ok: true'),
++    'BUG: on a non-x64 Windows arch the check must report ok — a missing ' +
++      'sqlite-vec there is upstream reality, not a corrupt install, and failing ' +
++      'it produces a false "Please reinstall Natively".',
++  );
++});
++
++// ── 1c. 32-bit Windows has no ONNX runtime, and said so as 'reinstall me' ────
++// onnxruntime-node publishes prebuilt binaries only, for win32 {x64, arm64}.
++// The ia32 installer therefore has no ONNX runtime at all, so the three import
++// probes failed and every packaged-local provider reported
++// 'missing_required_asset' — i.e. told a correctly-installed 32-bit user to
++// reinstall, which could never help. Cloud STT and cloud embeddings are
++// unaffected, so the honest status is 'unavailable', not 'corrupt'.
++
++test('preflight: the ONNX import probes are skipped on an arch with no runtime', () => {
++  const src = read('electron/services/LocalFallbackPreflight.ts');
++
++  assert.ok(
++    src.includes('function onnxRuntimeSupportsThisArch()'),
++    'BUG: the arch-capability gate is gone — the ia32 build then probes for an ' +
++      'onnxruntime-node binary that is not published for it.',
++  );
++  assert.ok(
++    src.includes("if (process.platform === 'win32') return process.arch === 'x64' || process.arch === 'arm64';"),
++    'BUG: the win32 ONNX arch set must stay {x64, arm64} — those are the only ' +
++      'binaries onnxruntime-node publishes for Windows.',
++  );
++  assert.ok(
++    src.includes('const onnxArchSupported = onnxRuntimeSupportsThisArch();') &&
++      src.includes('if (onnxArchSupported) {'),
++    'BUG: the import probes must sit behind the arch gate.',
++  );
++});
++
++test('preflight: a no-ONNX arch reports unavailable, never "Please reinstall"', () => {
++  const src = read('electron/services/LocalFallbackPreflight.ts');
++
++  // 'missing_required_asset' is the only health that sets recoverable:false
++  // (see statusFor), and it is the one that renders the reinstall prompt. An
++  // architecture that upstream never built for is not a damaged install.
++  for (const provider of ['local-embedding', 'intent-classifier', 'local-reranker']) {
++    const idx = src.indexOf("'" + provider + "',");
++    assert.ok(idx > -1, 'provider status block for ' + provider + ' not found');
++    const block = src.slice(idx, idx + 900);
++    assert.ok(
++      block.includes("onnxArchSupported ? 'missing_required_asset' : 'unavailable'"),
++      'BUG: ' + provider + ' must report unavailable (not missing_required_asset) ' +
++        'when the architecture has no ONNX runtime — otherwise a correctly ' +
++        'installed 32-bit user is told to reinstall, which cannot help.',
++    );
++  }
+ });
+ 
+ // ── 2. Full-screen screenshots captured the wrong monitor on Windows ─────────
+diff --git a/package.json b/package.json
+index 2f1a9f1c..d667362c 100644
+--- a/package.json
++++ b/package.json
+@@ -24,8 +24,8 @@
+     "electron:dev": "npm run build && npm run build:electron && cross-env NODE_ENV=development electron .",
+     "electron:build": "npm run build:electron && cross-env NODE_ENV=production electron .",
+     "app:dev": "concurrently --kill-others --kill-signal SIGKILL \"npm run dev -- --port 5180 --strictPort\" \"wait-on http://localhost:5180 && npm run electron:dev\"",
+-    "app:build": "npm run build && npm run typecheck:electron && npm run build:electron && cross-env NATIVELY_BUILD_ALL_MAC_ARCHES=1 npm run build:native && node scripts/ensure-sharp-mac-deps.js && node scripts/ensure-sqlite-vec.js && npm run verify:packaged-local-assets && node scripts/package-app.js",
+-    "app:build:signed": "npm run build && npm run typecheck:electron && npm run build:electron && cross-env NATIVELY_BUILD_ALL_MAC_ARCHES=1 npm run build:native && node scripts/ensure-sharp-mac-deps.js && node scripts/ensure-sqlite-vec.js && npm run verify:packaged-local-assets && node scripts/package-app.js --config electron-builder.signed.cjs",
++    "app:build": "npm run build && npm run typecheck:electron && npm run build:electron && cross-env NATIVELY_BUILD_ALL_MAC_ARCHES=1 NATIVELY_BUILD_ALL_WIN_ARCHES=1 npm run build:native && node scripts/ensure-sharp-mac-deps.js && node scripts/ensure-sharp-win-deps.js && node scripts/ensure-sqlite-vec.js && npm run verify:packaged-local-assets && node scripts/package-app.js",
++    "app:build:signed": "npm run build && npm run typecheck:electron && npm run build:electron && cross-env NATIVELY_BUILD_ALL_MAC_ARCHES=1 NATIVELY_BUILD_ALL_WIN_ARCHES=1 npm run build:native && node scripts/ensure-sharp-mac-deps.js && node scripts/ensure-sharp-win-deps.js && node scripts/ensure-sqlite-vec.js && npm run verify:packaged-local-assets && node scripts/package-app.js --config electron-builder.signed.cjs",
+     "watch": "node scripts/build-electron.js --watch",
+     "start": "npm run app:dev",
+     "dist": "npm run app:build",
+@@ -236,7 +236,7 @@
+       "perMachine": false,
+       "allowToChangeInstallationDirectory": true,
+       "deleteAppDataOnUninstall": false,
+-      "artifactName": "${productName}-Setup-${version}.${ext}"
++      "artifactName": "${productName}-Setup-${version}-${arch}.${ext}"
+     },
+     "publish": [
+       {
+diff --git a/scripts/build-native.js b/scripts/build-native.js
+index afe175ac..a41d5014 100644
+--- a/scripts/build-native.js
++++ b/scripts/build-native.js
+@@ -8,6 +8,13 @@ const nativeModulePath = path.join(__dirname, '..', 'native-module');
+ // sweep skips these; everything else matching '.node.stale-' is swept freely.
+ const RESCUE_MARKER = '.rescue-last-good';
+ const buildAllMacTargets = process.env.NATIVELY_BUILD_ALL_MAC_ARCHES === '1';
++// Windows companion to the flag above. The NSIS target ships x64 AND ia32, but
++// a host build only ever emits the host arch, so an ia32 pack used to embed the
++// x64 .node and every 32-bit install failed nativeModuleLoader (WASAPI capture
++// + the stealth keyboard hook both dead). Set this for any build that packages
++// the ia32 artifact. Cross-compiling is a plain rustup target: the MSVC linker
++// targets i686 from an x64 host, no second toolchain.
++const buildAllWinTargets = process.env.NATIVELY_BUILD_ALL_WIN_ARCHES === '1';
+ 
+ // Ensure Cargo binary directory (~/.cargo/bin) is in PATH if cargo is installed there
+ const cargoBinDir = path.join(os.homedir(), '.cargo', 'bin');
+@@ -156,7 +163,22 @@ if (os.platform() === 'darwin') {
+     },
+   };
+ 
+-  const expectedArtifacts = artifactMap[os.platform()]?.[os.arch()];
++  // Rust target triple per Windows arch, for the cross-arch build below.
++  const winTripleMap = {
++    x64: 'x86_64-pc-windows-msvc',
++    ia32: 'i686-pc-windows-msvc',
++    arm64: 'aarch64-pc-windows-msvc',
++  };
++
++  // Which arches this run must produce. Default is host-only (unchanged); with
++  // NATIVELY_BUILD_ALL_WIN_ARCHES=1 on Windows it is every arch the NSIS target
++  // ships, so one build feeds both per-arch packs.
++  const winArches =
++    os.platform() === 'win32' && buildAllWinTargets ? ['x64', 'ia32'] : null;
++
++  const expectedArtifacts = winArches
++    ? winArches.flatMap((arch) => artifactMap.win32[arch])
++    : artifactMap[os.platform()]?.[os.arch()];
+ 
+   // Windows only: unblock the artifact copy when the app is running.
+   //
+@@ -220,7 +242,21 @@ if (os.platform() === 'darwin') {
+   }
+ 
+   try {
+-    runCommand('npx napi build --platform --release');
++    if (winArches) {
++      for (const arch of winArches) {
++        const triple = winTripleMap[arch];
++        try {
++          runCommand(`rustup target add ${triple}`);
++        } catch (err) {
++          console.warn(`Warning: Could not configure rust target ${triple}. Continuing anyway.`);
++        }
++        console.log(`
++--- Building for ${triple} (${arch}) ---`);
++        runCommand(`npx napi build --platform --target ${triple} --release`);
++      }
++    } else {
++      runCommand('npx napi build --platform --release');
++    }
+     // Verified INSIDE the try, before the stale copies are swept. napi can exit
+     // 0 and still not leave the artifact this platform/arch expects — a
+     // toolchain that silently falls back to ia32, or a target-triple rename,
+diff --git a/scripts/verify-packaged-local-assets.mjs b/scripts/verify-packaged-local-assets.mjs
+index 5542483f..9d6806cd 100644
+--- a/scripts/verify-packaged-local-assets.mjs
++++ b/scripts/verify-packaged-local-assets.mjs
+@@ -82,6 +82,25 @@ const REQUIRED_ASARUNPACK_GLOBS = [
+   '**/node_modules/@img/**',
+ ];
+ 
++// Build steps that keep the Windows per-arch payload honest. These live inside
++// two very long hand-edited npm script strings, so a careless edit can drop one
++// and the build still goes GREEN — the breakage only surfaces at runtime on a
++// user's 32-bit machine. Same reasoning as REQUIRED_ASARUNPACK_GLOBS below:
++// assert the config from the code that depends on it.
++//
++//   - ensure-sharp-win-deps.js     installs @img/sharp-win32-ia32, which npm
++//                                  skips on an x64 host (cpu constraint)
++//   - NATIVELY_BUILD_ALL_WIN_ARCHES  builds index.win32-ia32-msvc.node, which a
++//                                  host-only napi build never emits
++//
++// Without either, the ia32 installer silently ships x64 binaries for sharp and
++// the Rust audio module — the exact defect this pair was added to fix.
++const REQUIRED_WIN_BUILD_STEPS = [
++  'scripts/ensure-sharp-win-deps.js',
++  'NATIVELY_BUILD_ALL_WIN_ARCHES=1',
++];
++const WIN_BUILD_SCRIPTS = ['app:build', 'app:build:signed'];
++
+ // Required built worker scripts (only checked after build:electron has run).
+ const REQUIRED_WORKER_FILES = [
+   'dist-electron/electron/llm/intentClassifierWorker.js',
+@@ -143,6 +162,39 @@ function verifySource() {
+ 
+   // Assert the asarUnpack/extraResources config still lists what runtime needs.
+   const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
++  for (const scriptName of WIN_BUILD_SCRIPTS) {
++    const body = pkg?.scripts?.[scriptName];
++    if (!body) {
++      errors.push(`package.json scripts.${scriptName} is missing`);
++      continue;
++    }
++    for (const step of REQUIRED_WIN_BUILD_STEPS) {
++      if (!body.includes(step)) {
++        errors.push(
++          `package.json scripts.${scriptName} no longer runs "${step}" — the ia32 ` +
++          `installer would ship x64 binaries for sharp and/or the Rust audio module.`,
++        );
++      }
++    }
++  }
++
++  // On Windows, both shipped arches must actually be on disk before packing:
++  // electron-builder packs one node_modules tree for every arch, so a missing
++  // per-arch directory becomes a wrong-arch binary inside that arch's installer
++  // rather than a build failure.
++  if (process.platform === 'win32') {
++    for (const dir of ['node_modules/@img/sharp-win32-x64', 'node_modules/@img/sharp-win32-ia32']) {
++      if (!exists(path.join(repoRoot, dir))) {
++        errors.push(`Missing ${dir} (run node scripts/ensure-sharp-win-deps.js)`);
++      }
++    }
++    for (const bin of ['native-module/index.win32-x64-msvc.node', 'native-module/index.win32-ia32-msvc.node']) {
++      if (!exists(path.join(repoRoot, bin))) {
++        errors.push(`Missing ${bin} (run NATIVELY_BUILD_ALL_WIN_ARCHES=1 npm run build:native)`);
++      }
++    }
++  }
++
+   const asarUnpack = pkg?.build?.asarUnpack || [];
+   for (const glob of REQUIRED_ASARUNPACK_GLOBS) {
+     if (!asarUnpack.includes(glob)) errors.push(`package.json build.asarUnpack is missing required glob: ${glob}`);
