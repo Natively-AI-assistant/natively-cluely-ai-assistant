@@ -40,6 +40,7 @@ import { Disclosure, DisclosureChevron } from './ui/AccordionSection';
 import { ProfileVisualizer, PremiumUpgradeModal } from '../premium';
 import GlassEffectLayer from './ui/GlassEffectLayer';
 import { BrandMark, BrandMonogram } from './ui/BrandMark';
+import { LiquidGlassBadge } from '../ui-components/LiquidGlassBadge';
 import icon from './icon.png';
 // Shared with the main process so the picker cannot offer a model the ipc
 // validator rejects. Pure data module — no node/electron imports.
@@ -2178,17 +2179,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         <div>
                                                             <div className="flex items-center gap-2">
                                                                 <h3 className="text-sm font-bold text-text-primary">{t('Auto Answer')}</h3>
-                                                                {/* Solid yellow, Apple style — no border, no tint. The colours
-                                                                    are tokens because systemYellow differs per appearance. */}
-                                                                <span
-                                                                    className="text-[10px] font-semibold uppercase tracking-wide leading-none px-1.5 py-0.5 rounded-full shrink-0"
-                                                                    style={{
-                                                                        color: 'var(--badge-beta-fg)',
-                                                                        backgroundColor: 'var(--badge-beta-bg)',
-                                                                    }}
-                                                                >
-                                                                    {t('Beta')}
-                                                                </span>
+                                                                {/* The same Liquid Glass tag as Direct Assist's, so the two
+                                                                    Beta features read as one decision rather than two. It
+                                                                    replaces a bespoke solid-yellow span whose --badge-beta-*
+                                                                    tokens now have no other reader. */}
+                                                                <LiquidGlassBadge variant="sky">{t('Beta')}</LiquidGlassBadge>
                                                             </div>
                                                             <p className="text-xs text-text-secondary mt-0.5">{t('Answers appear as soon as the interviewer finishes a question')}</p>
                                                         </div>

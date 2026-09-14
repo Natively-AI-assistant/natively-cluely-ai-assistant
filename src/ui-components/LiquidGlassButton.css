@@ -374,16 +374,27 @@
   per-state overrides, since a pointer-transparent element gets no tooltip.)
 
   The silhouette is smaller on BOTH axes than .aip-badge, the primitive it
-  replaces. Measured on the same word: 46.8 x 16 here against 51.6 x 18 there.
+  replaces. Measured on the same word: 42.5 x 16 here against 51.6 x 18 there.
   Dropping the status dot is what pays for it — that dot and its gap are ~9px
   of the old badge's width — so the pill can lose width without losing body.
 
-  The floor on how far this can go is the cap fade, not the label. --lg-cap-2
-  is a PERCENTAGE of width, so the rim's full-strength run is always 47% of the
-  pill however short it gets: 22.0px at this width, and 19.8px if the padding
-  goes back to 8. The rim IS the material — shorten the pill enough and the
-  thing that makes it glass has nowhere left to sit, and it reads as a plain
-  coloured chip.
+  The cap fade had to stop being a percentage here, and design.md predicted
+  exactly this case: "a small rounded rect has a top face running nearly the
+  full width and the percentage fade would eat the whole highlight — that case
+  needs px stops that track the corner instead."
+
+  The reference's stops are percentages of WIDTH, tuned on a 535px pill whose
+  caps were 12.7% of it. On a 42px tag the caps are 19% of the width, so the
+  same percentages put the fade's end (26.5%) well inside the flat top face,
+  which starts at 19% — the rim spent its brightest stretch fading across a
+  face that is not curved at all, and the full-strength run fell to 19.9px and
+  kept shrinking with every px of padding removed.
+
+  The stops below are LENGTHS pinned to the cap radius (--lg-pill-h / 2), which
+  is where the curvature actually ends. The rim now dies exactly across the
+  caps and holds full strength over the whole flat face — 26.5px here instead
+  of 19.9 — and, because the stops no longer scale with width, narrowing the
+  pill further cannot eat the highlight again.
 
   The consequence to know about: 16px no longer matches .aip-badge's 18px box,
   so a row mixing the two shows two heights. That is a deliberate divergence
@@ -400,7 +411,7 @@
       sits as a clump in the middle of a long capsule, which reads as a layout
       mistake rather than as a wide tag.
     */
-    --lg-label-track: 0.06em;
+    --lg-label-track: 0.05em;
     /*
       line-height 1 clips the line box below the font's own ascent + descent —
       the failure .lg-sm documents at 12px, worse here. But the leading also
@@ -410,7 +421,16 @@
     */
     --lg-label-leading: 1.3;
 
-    padding: 0 10px;
+    /*
+      Lengths, not percentages — see the note above. --lg-cap-2 IS the cap
+      radius, so the specular reaches full strength precisely where the
+      curvature ends; 2px and 5px place the shoulder inside the cap.
+    */
+    --lg-cap-0: 2px;
+    --lg-cap-1: 5px;
+    --lg-cap-2: calc(var(--lg-pill-h) / 2);
+
+    padding: 0 8px;
     text-transform: uppercase;
     /* it sits in a flex row beside a label that may truncate; the tag may not */
     flex: none;
