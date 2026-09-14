@@ -44,7 +44,6 @@ export interface AppSettings {
      * ON: it only ever converts a failure into an answer, and every switch is
      * announced in the UI, so it can never route silently.
      */
-    directAssistFallbackEnabled?: boolean;
     actionButtonMode?: 'recap' | 'brainstorm';
     groqFastTextMode?: boolean;
     codexCliEnabled?: boolean;
@@ -429,11 +428,6 @@ export class SettingsManager {
     public getDirectAssistEnabled(): boolean {
         if (this.isDirectAssistKilledByOperator()) return false;
         return this.settings.directAssistEnabled === true;
-    }
-
-    /** Effective Direct Assist fallback state. Persisted default is TRUE. */
-    public getDirectAssistFallbackEnabled(): boolean {
-        return this.settings.directAssistFallbackEnabled !== false;
     }
 
     // ── Smart Browser Context v2 — resolved settings (single default source) ──

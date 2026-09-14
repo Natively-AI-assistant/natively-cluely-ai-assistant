@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertCircle, Check, ChevronDown, Cloud, ExternalLink, HardDrive, KeyRound, Loader2, Monitor, Server, Trash2 } from 'lucide-react';
 import { useT } from '../../i18n';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
-import { AIP_CSS, AipBadge, AipModelList, AipProviderMark, type AipTone } from './AIProvidersSettings';
+import { AIP_ACTIVE_SELECT_CONTAINER, AIP_CSS, AipBadge, AipModelList, AipProviderMark, type AipTone } from './AIProvidersSettings';
 import { isMac, isWindows } from '../../utils/platformUtils';
 
 // Embeddings — configured INDEPENDENTLY of the generation model.
@@ -175,7 +175,7 @@ const EmbeddingModelSelect: React.FC<EmbeddingModelSelectProps> = ({
     placeholder,
     disabled = false,
     className = '',
-    containerClassName = 'relative min-w-[140px] max-w-[224px] w-full sm:w-[179px]',
+    containerClassName = AIP_ACTIVE_SELECT_CONTAINER,
     ariaLabel,
     title,
 }) => {
@@ -248,7 +248,41 @@ const EmbeddingModelSelect: React.FC<EmbeddingModelSelectProps> = ({
     );
 };
 
-export const EmbeddingSettings: React.FC<{ onNavigate?: (tab: string) => void }> = () => {
+/**
+ * The panel split into the two pieces the combined Retrieval page needs.
+ *
+ * `header` and `hero` are the identity of the setting; `panel` is the provider
+ * stack. Retrieval hoists `hero` above its Embedding/Reranker switcher, puts
+ * `panel` inside the Embedding sub-tab, and DISCARDS `header` — the combined
+ * page states what embeddings and reranking are once, in one header, instead
+ * of repeating a section heading above each Active card.
+ *
+ * Both halves read the SAME component state (`select()` writes the active
+ * model, and the hero card and the provider cards both render from it), which
+ * is why this is a render prop on one instance rather than two mounts of a
+ * `section` prop. Two instances would each hold their own `active`, and
+ * picking a model in a card would leave the hero card above it stale.
+ */
+export interface EmbeddingSettingsParts {
+    /** Heading + subtitle. Retrieval drops this for one combined header. */
+    header: React.ReactNode;
+    /** The Active Embedding Model card. */
+    hero: React.ReactNode;
+    /** The provider stack. */
+    panel: React.ReactNode;
+}
+
+interface EmbeddingSettingsProps {
+    onNavigate?: (tab: string) => void;
+    /**
+     * Optional. Absent — the standalone Embeddings panel and both dev
+     * harnesses — renders the original single-column layout, wrapper, styles
+     * and all. Present, the caller owns the wrapper and places the parts.
+     */
+    renderParts?: (parts: EmbeddingSettingsParts) => React.ReactNode;
+}
+
+export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderParts }) => {
     const t = useT();
     const aipTheme = useResolvedTheme();
 
@@ -479,7 +513,7 @@ export const EmbeddingSettings: React.FC<{ onNavigate?: (tab: string) => void }>
     }, [endpointDraft, customApiKeyDraft, refresh, t]);
 
     const activeOptions: EmbeddingSelectOption[] = useMemo(() => {
-        return providers
+        const fromCatalogue = providers
             .flatMap(p => {
                 const primaryModels = p.models.filter(m =>
                     m.recommended ||
@@ -492,6 +526,31 @@ export const EmbeddingSettings: React.FC<{ onNavigate?: (tab: string) => void }>
                     triggerName: bareModelName(m.label || m.id),
                 }));
             });
+
+        /* The model you are ON is always in the list, even before the catalogue
+           arrives.
+           
+           refresh() reads getEmbeddingStatus() first (~2ms) and the catalogue
+           last, and the catalogue costs a network round-trip. The Active card's
+           selector is disabled while `activeOptions` is empty, so for the whole
+           of that fetch the control sat greyed out — displaying a model we
+           already knew, and refusing to open. Seeding the active model closes
+           that window: the selector is usable as soon as the card paints, and
+           the remaining options appear when the catalogue lands.
+
+           It also fixes a second case that has nothing to do with timing: an
+           active model the catalogue does not carry (a non-recommended pick, or
+           a provider that has gone away) produced a menu where NOTHING was
+           ticked, because no option matched activeOptionId. */
+        const activeId = active.provider && active.model ? `${active.provider}::${active.model}` : '';
+        if (activeId && !fromCatalogue.some(o => o.id === activeId)) {
+            return [{
+                id: activeId,
+                name: qualifiedModelName(active.provider!, active.model!),
+                triggerName: bareModelName(active.model!),
+            }, ...fromCatalogue];
+        }
+        return fromCatalogue;
     }, [providers, active]);
 
     const activeOptionId = active.provider && active.model ? `${active.provider}::${active.model}` : '';
@@ -517,17 +576,16 @@ export const EmbeddingSettings: React.FC<{ onNavigate?: (tab: string) => void }>
 
         const dims = active.dimensions || mod?.dimensions || (providerId === 'gemini' ? 3072 : providerId === 'openai' ? 1536 : providerId === 'local' ? 384 : 768);
 
-        const isLocal = active.location === 'on-device' || (prov ? !prov.cloud : (providerId === 'local' || providerId === 'ollama'));
-        const isCloud = active.location === 'cloud' || (prov ? prov.cloud : (providerId === 'gemini' || providerId === 'openai' || providerId === 'natively'));
-        const locationStr = isLocal ? t('On-device') : isCloud ? t('Cloud') : t('On-device');
-
+        /* No location segment. "Cloud" / "On-device" was a third clause on a
+           line that is already dimensions + a re-index warning, and the
+           provider card for this model states its location in its own header —
+           on the Retrieval page that card is a scroll away in the same view. */
         return {
             dims,
-            locationStr,
             providerName: prov?.name || providerId,
             modelLabel: mod?.label || modelId,
         };
-    }, [active, providers, t]);
+    }, [active, providers]);
 
     const CARD_ORDER = ['gemini', 'openai', 'voyage', 'openrouter', 'ollama', 'custom'] as const;
     const cardProviders = useMemo(
@@ -880,15 +938,20 @@ export const EmbeddingSettings: React.FC<{ onNavigate?: (tab: string) => void }>
         );
     };
 
-    return (
-        <div className="aip-root space-y-5 pb-10" data-theme={aipTheme} data-settings-stagger>
-            <header className="space-y-1">
-                <h3 className="aip-title">{t('Embeddings')}</h3>
-                <p className="aip-subtitle">
-                    {t('Pick the model that indexes your documents for retrieval. It is chosen separately from your AI model, and changing it re-indexes your project.')}
-                </p>
-            </header>
+    const header = (
+        <header className="space-y-1">
+            <h3 className="aip-title">{t('Embeddings')}</h3>
+            <p className="aip-subtitle">
+                {t('Pick the model that indexes your documents for retrieval. It is chosen separately from your AI model, and changing it re-indexes your project.')}
+            </p>
+        </header>
+    );
 
+    /* The Active Embedding Model card: the decision this panel exists to make.
+       On the combined Retrieval page it sits above the Embedding/Reranker
+       switcher, so it stays readable no matter which sub-tab is open. */
+    const hero = (
+        <>
             {/* Active Model Card — matches AI Providers Active Model card styling */}
             <div className="aip-card p-5">
                 <div className="flex items-center justify-between gap-4 flex-wrap sm:flex-nowrap">
@@ -902,7 +965,7 @@ export const EmbeddingSettings: React.FC<{ onNavigate?: (tab: string) => void }>
                         </label>
                         <p className="text-[10px] aip-muted mt-0.5">
                             {active.configured && activeModelDetails
-                                ? `${activeModelDetails.dims} dimensions · ${activeModelDetails.locationStr} · ${t('Changing model re-indexes your project')}`
+                                ? `${activeModelDetails.dims} dimensions · ${t('Changing model re-indexes your project')}`
                                 : active.configured
                                     ? `${t('Configured')} · ${t('Changing model re-indexes your project')}`
                                     : t('Natively could not resolve an embedding provider.')}
@@ -961,27 +1024,41 @@ export const EmbeddingSettings: React.FC<{ onNavigate?: (tab: string) => void }>
                 )}
             </div>
 
-            {/* Provider Cards Stack */}
-            {!loaded ? (
-                <div
-                    className="aip-cq space-y-4"
-                    role="status"
-                    aria-label={t('Loading embedding providers')}
-                    data-stagger-skip
-                >
-                    <SkeletonProviderCard />
-                    <SkeletonProviderCard />
-                </div>
-            ) : cardProviders.length === 0 ? (
-                <div className="aip-card aip-card-dashed text-center py-8">
-                    <p className="text-xs aip-muted">{t('No configurable embedding providers were found.')}</p>
-                </div>
-            ) : (
-                <div className="aip-cq space-y-4">
-                    {cardProviders.map(renderProvider)}
-                </div>
-            )}
+        </>
+    );
 
+    /* The provider stack: where keys are entered and endpoints configured.
+       On the Retrieval page this is the body of the Embedding sub-tab. */
+    const panel = !loaded ? (
+        <div
+            className="aip-cq space-y-4"
+            role="status"
+            aria-label={t('Loading embedding providers')}
+            data-stagger-skip
+        >
+            <SkeletonProviderCard />
+            <SkeletonProviderCard />
+        </div>
+    ) : cardProviders.length === 0 ? (
+        <div className="aip-card aip-card-dashed text-center py-8">
+            <p className="text-xs aip-muted">{t('No configurable embedding providers were found.')}</p>
+        </div>
+    ) : (
+        <div className="aip-cq space-y-4">
+            {cardProviders.map(renderProvider)}
+        </div>
+    );
+
+    /* A caller that places the parts owns the `.aip-root` wrapper and the style
+       tag too — Retrieval mounts this component AND RerankerSettings, and two
+       copies of AIP_CSS in one subtree is a duplicate stylesheet, not a merge. */
+    if (renderParts) return <>{renderParts({ header, hero, panel })}</>;
+
+    return (
+        <div className="aip-root space-y-5 pb-10" data-theme={aipTheme} data-settings-stagger>
+            {header}
+            {hero}
+            {panel}
             <style>{AIP_CSS}</style>
         </div>
     );

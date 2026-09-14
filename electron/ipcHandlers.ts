@@ -20,6 +20,8 @@ import { formatEnvelopeForPrompt } from './services/browser-context/formatEnvelo
 import { BrowserMetadataClassifierService } from './services/browser-context/BrowserMetadataClassifierService';
 import type { BrowserContextCategory, SafeWebsiteMetadata } from './services/browser-context/types';
 import { SettingsManager } from './services/SettingsManager';
+import { RERANK_CANDIDATE_POOL, resolveRerankPoolSize } from './services/modes/rerankPool';
+import { buildRerankProbe } from './services/reranking/rerankProbe';
 import { ProviderStatusRegistry } from './services/ProviderStatusRegistry';
 import { SkillsManager } from './services/SkillsManager';
 import { SAFE_DOCUMENT_EXTENSIONS } from './services/SafeDocumentTextExtractor';
@@ -6950,25 +6952,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     return { success: true };
   });
 
-  safeHandle('get-direct-assist-fallback-enabled', async () => {
-    return SettingsManager.getInstance().getDirectAssistFallbackEnabled();
-  });
-
-  safeHandle('set-direct-assist-fallback-enabled', async (_, enabled: unknown) => {
-    if (typeof enabled !== 'boolean') {
-      return { success: false, error: 'invalid_type' };
-    }
-    const settings = SettingsManager.getInstance();
-    if (!settings.set('directAssistFallbackEnabled', enabled)) {
-      return { success: false, error: 'settings_store_degraded' };
-    }
-    const effective = settings.getDirectAssistFallbackEnabled();
-    BrowserWindow.getAllWindows().forEach((win) => {
-      if (!win.isDestroyed()) win.webContents.send('direct-assist-fallback-enabled-changed', effective);
-    });
-    return { success: true };
-  });
-
   safeHandle('direct-assist-stream', async (event, rawRequest: unknown) => {
     const normalized = normalizeDirectAssistRequest(rawRequest);
     if (normalized.error || !normalized.request) {
@@ -8011,10 +7994,36 @@ export function initializeIpcHandlers(appState: AppState): void {
     const cm = CredentialsManager.getInstance();
 
     const url = process.env.OLLAMA_URL || 'http://localhost:11434';
-    const ollamaModels = await listOllamaEmbeddingModels(url);
-    // listOllamaEmbeddingModels returns [] both when the daemon is down and when
-    // it has no embedders pulled; ask the daemon directly so the panel can say
-    // which it is.
+    // A user-hosted OpenAI-compatible endpoint (LM Studio, llama.cpp, vLLM…).
+    const customEndpoint = SettingsManager.getInstance().get('customEmbeddingEndpoint') || '';
+    // Public listing: fetched with the key when present, without it otherwise.
+    const { listOpenRouterEmbeddingModels } = require('./rag/openrouterEmbeddingModels');
+
+    /* CONCURRENT, not one await after another.
+     *
+     * These three are independent — a local daemon, a user-hosted endpoint and
+     * a public HTTP listing — but they used to run in series, so their timeouts
+     * ADDED UP: Ollama 5s + custom 5s + OpenRouter 10s, i.e. a ~20s worst case
+     * before this handler could return. Nothing renders that wait: the
+     * Embeddings panel keeps its model selector DISABLED until the catalogue
+     * lands, so a slow or offline network showed a greyed-out control for the
+     * whole of it. Run together, the ceiling is the slowest single probe.
+     *
+     * Promise.all is safe here specifically because all three list functions
+     * swallow their own errors and resolve to [] — none of them can reject, so
+     * this cannot fail where the sequential version would have succeeded.
+     */
+    const [ollamaModels, customModels, openrouterModels] = await Promise.all([
+      listOllamaEmbeddingModels(url),
+      customEndpoint
+        ? require('./rag/customEmbeddingModels').listCustomEmbeddingModels(customEndpoint, cm.getCustomEmbeddingApiKey?.())
+        : Promise.resolve([]),
+      listOpenRouterEmbeddingModels({ apiKey: cm.getOpenrouterApiKey?.() }),
+    ]);
+
+    // Still sequential, deliberately: this only runs when Ollama listed nothing,
+    // and it exists to tell "daemon down" apart from "no embedders pulled".
+    // listOllamaEmbeddingModels returns [] for both.
     let ollamaReachable = ollamaModels.length > 0;
     if (!ollamaReachable) {
       try {
@@ -8022,16 +8031,6 @@ export function initializeIpcHandlers(appState: AppState): void {
         ollamaReachable = await llmHelper.isOllamaReachable();
       } catch { ollamaReachable = false; }
     }
-
-    // A user-hosted OpenAI-compatible endpoint (LM Studio, llama.cpp, vLLM…).
-    const customEndpoint = SettingsManager.getInstance().get('customEmbeddingEndpoint') || '';
-    const customModels = customEndpoint
-      ? await require('./rag/customEmbeddingModels').listCustomEmbeddingModels(customEndpoint, cm.getCustomEmbeddingApiKey?.())
-      : [];
-
-    // Public listing: fetched with the key when present, without it otherwise.
-    const { listOpenRouterEmbeddingModels } = require('./rag/openrouterEmbeddingModels');
-    const openrouterModels = await listOpenRouterEmbeddingModels({ apiKey: cm.getOpenrouterApiKey?.() });
 
     return {
       providers: buildEmbeddingCatalog({
@@ -8508,6 +8507,11 @@ export function initializeIpcHandlers(appState: AppState): void {
       nativelyModel: stored.nativelyModel ?? null,
       hostedModel,
       candidateCount: stored.candidateCount ?? null,
+      // The pool an untouched install actually reranks. Reported rather than
+      // duplicated in the renderer, which used to hardcode 15 while retrieval
+      // used 30 — so the control displayed a number nothing honoured and every
+      // selectable value silently narrowed the pool.
+      candidateCountDefault: RERANK_CANDIDATE_POOL,
       fallbackToLocal: stored.fallbackToLocal === true,
       hasApiKey,
       eligible: eligibility.eligible,
@@ -8544,7 +8548,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     // Clamp rather than reject: a nonsensical depth should not be storable, and
     // silently keeping the old value is less confusing than an error toast.
     if (Number.isFinite(next.candidateCount)) {
-      merged.candidateCount = Math.max(1, Math.min(30, Math.floor(next.candidateCount as number)));
+      merged.candidateCount = Math.max(1, Math.min(RERANK_CANDIDATE_POOL, Math.floor(next.candidateCount as number)));
     }
 
     if (!settings.set('reranker', merged)) {
@@ -8636,14 +8640,13 @@ export function initializeIpcHandlers(appState: AppState): void {
       getModel: () => model,
     });
 
-    // A deterministic 3-document probe with an obvious right answer, so the
-    // check is "did it rank sensibly", not merely "did it return 200".
-    const query = 'What is the capital city of France?';
-    const documents = [
-      'Paris is the capital and most populous city of France.',
-      'The Rhine is a river in Central and Western Europe.',
-      'Photosynthesis converts light energy into chemical energy.',
-    ];
+    // A deterministic probe with an obvious right answer, so the check is "did
+    // it rank sensibly", not merely "did it return 200" — sized and written to
+    // match what production sends, because the latency measured here is what
+    // describeRerankLatencyFit judges. Three short sentences measured a
+    // workload nothing runs; see rerankProbe.ts.
+    const probe = buildRerankProbe(resolveRerankPoolSize());
+    const { query, documents } = probe;
 
     try {
       const { order, stats } = await reranker.rerankOrThrow(query, documents);
@@ -8668,7 +8671,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         indicesValid,
         // Reported, never enforced: a model that ranks this "wrong" is odd but
         // is not broken, and refusing to save on it would be overreach.
-        rankedExpectedFirst: rankedFirst === 0,
+        rankedExpectedFirst: rankedFirst === probe.expectedIndex,
       };
       // The probe result is real whether or not it can be cached. Reporting
       // `success: false` here would misdescribe a connection that genuinely

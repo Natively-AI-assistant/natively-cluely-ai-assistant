@@ -279,6 +279,7 @@ import {
   decideHeightCommit,
   shouldReportTweenHeight,
 } from '../lib/overlayHeightTween.mjs';
+import { planResizeRelease } from '../lib/overlaySnapToAuto.mjs';
 import { shouldAcceptIntelligenceIpc } from '../lib/overlayIntelligenceGeneration.mjs';
 import {
   shouldUseStreamingCodeUi,
@@ -1811,6 +1812,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // True for the duration of a user resize drag. Declared up here because the
   // ResizeObserver (above the drag handler) gates its height reporting on it.
   const isResizingRef = useRef(false);
+  // Last height AUTO sizing chose. 0 = not observed yet, which makes the
+  // snap-to-auto check decline rather than guess. Only a FALLBACK now —
+  // measureAutoHeight computes the live answer — but it is what covers the case
+  // where the layout cannot be measured (viewport unmounted, window hidden).
+  const autoHeightRef = useRef(0);
   // ── Streaming-height headroom-buffer state ────────────────────────────
   // See STREAMING_HEIGHT_GROW_BUFFER_PX's comment near the top of this file
   // for the full rationale (an earlier springed/interpolated version of this
@@ -2698,6 +2704,19 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // clipping window the buffer design exists to close. No dependencies: it
   // only touches a ref, so it's declared here (before reportShellSize, which
   // needs to call it) rather than near driveStreamingHeight further down.
+  // Record the height AUTO sizing settled on. Called from every point that
+  // KNOWS a settled height — the canonical reporter and both animation
+  // onCompletes — because the reporter alone is not enough: it is gated behind
+  // the transition suppression deadline, so after an animation whether it runs
+  // again at all depends on a ResizeObserver fire landing after onComplete
+  // clears that deadline. That is a race, and losing it leaves the fallback
+  // holding a pre-animation height.
+  const recordAutoHeight = useCallback((height: number) => {
+    if (customOverlayHeightRef.current === null && height > 0) {
+      autoHeightRef.current = height;
+    }
+  }, []);
+
   const syncStreamingHeightBaseline = useCallback((height: number) => {
     streamingHeightCommittedRef.current = height;
   }, []);
@@ -2827,6 +2846,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     const measured = contentRef.current.offsetHeight;
     const pinned = customOverlayHeightRef.current;
     const height = pinned !== null ? Math.max(pinned, measured) : measured;
+    recordAutoHeight(measured);
     if (process.env.NODE_ENV === 'development') {
       const scrollEl = scrollContainerRef.current;
       console.log('[overlay-resize] reportShellSize', {
@@ -3339,6 +3359,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           if (settled > 0) {
             resizeOverlayWindow(settled);
             syncStreamingHeightBaseline(settled);
+            recordAutoHeight(settled);
           }
         },
       });
@@ -3399,6 +3420,48 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     viewportAppliedRef.current = natural;
     viewportHeight.set(natural);
   }, [viewportHeight]);
+
+  // The height AUTO sizing would choose RIGHT NOW, computed rather than
+  // remembered — a recorded value goes stale while a pin is in force, which is
+  // exactly when a release needs to consult it (pin, let three answers stream
+  // in, drag back: the remembered height is the one from before the pin).
+  //
+  // chrome + min(natural viewport, the caps that would apply unpinned). The
+  // viewport's natural height is not readable while pinned, because the pin is
+  // a min-height on it — so the floor is dropped with a DIRECT style write and
+  // put straight back. Direct, not through the MotionValue, because framer
+  // flushes styles on its own frame and this must be true for the very next
+  // layout read; framer rewrites the property next frame regardless.
+  //
+  // Returns 0 when it cannot be computed (no viewport mounted), which the
+  // caller treats as "fall back to the recorded height".
+  const measureAutoHeight = useCallback(() => {
+    const contentEl = contentRef.current;
+    if (!contentEl) return 0;
+    const boxEl = viewportBoxRef.current;
+    const scrollEl = scrollContainerRef.current;
+    // No viewport in the DOM: the panel IS its chrome, and that is the auto size.
+    if (!boxEl || !scrollEl) return contentEl.offsetHeight;
+    const chromeHeight = contentEl.offsetHeight - boxEl.offsetHeight;
+    if (!(chromeHeight >= 0)) return 0;
+    const previousMinHeight = scrollEl.style.minHeight;
+    scrollEl.style.minHeight = '0px';
+    const naturalViewport = scrollEl.scrollHeight;
+    scrollEl.style.minHeight = previousMinHeight;
+    const availHeight = typeof window !== 'undefined' ? window.screen?.availHeight ?? 0 : 0;
+    // Both bounds scrollMaxH applies when nothing is pinned. The width-derived
+    // one is read at the CURRENT panel width; a release that also changes the
+    // width can therefore be off by the 320↔560 difference, which only bites on
+    // content long enough to be capped either way.
+    const cap = Math.min(
+      widthDerivedScrollMax(shellWidth.get(), {
+        collapsedWidth: SHELL_WIDTH_COLLAPSED,
+        expandedWidth: SHELL_WIDTH_EXPANDED,
+      }),
+      verticalScrollCap({ availHeight, chromeHeight }),
+    );
+    return chromeHeight + Math.min(naturalViewport, cap);
+  }, [shellWidth, SHELL_WIDTH_EXPANDED]);
 
   // Measure the viewport's NATURAL height and feed it to the commit rule.
   //
@@ -3729,6 +3792,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           const settledHeight = contentRef.current?.offsetHeight ?? 0;
           resizeOverlayWindow(settledHeight);
           syncStreamingHeightBaseline(settledHeight);
+          recordAutoHeight(settledHeight);
         },
       });
     },
@@ -3822,7 +3886,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       const availWidth = window.screen?.availWidth ?? 0;
       const availHeight = window.screen?.availHeight ?? 0;
       const pinsHeight = pinsHeightFor(direction, customOverlayHeightRef.current !== null);
-      const pinsWidth = customWindowWidth !== null || widthDriven;
+      // (There used to be a `pinsWidth` here, consumed by a single
+      // `if (pinsWidth) setCustomWindowWidth(...)` that sat INSIDE a
+      // `if (widthDriven)` — where `customWindowWidth !== null || widthDriven`
+      // is true by construction. The release path now decides per axis through
+      // planResizeRelease, so the dead term is gone rather than moved.)
       const previousManualOverride = manualWidthOverrideRef.current;
       const previousPinIsCeiling = heightPinIsCeilingRef.current;
       const previousPinStreamId = heightPinStreamIdRef.current;
@@ -4077,18 +4145,88 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
             const settledPanel = Math.min(panelWidth, panelWidthForWindow(settledWidth));
             overlayWindowWidthRef.current = settledWidth;
             setAppliedWindowWidth(settledWidth);
-            if (widthDriven) {
-              if (pinsWidth) setCustomWindowWidth(settledWidth);
+
+            // DID THEY MEAN AUTO? A drag that lands within a tolerance band of
+            // the size auto sizing would have chosen is read as an aim AT auto,
+            // not as a pin — you cannot hit the auto size by eye, and pinning a
+            // visually identical size would switch auto sizing off for the rest
+            // of the meeting. Per axis, because the pins are. The plan itself is
+            // pure and tested: planResizeRelease in src/lib/overlaySnapToAuto.mjs.
+            //
+            // The width's auto target is the CLAMPED default, not the bare 732:
+            // on a display too narrow for that, auto width is what the main
+            // process will actually grant, and comparing against 732 would put
+            // the band around a width the window can never take — swallowing
+            // deliberate pins below it.
+            const autoWidth = minWindowWidthFor(availWidth);
+            const plan = planResizeRelease({
+              widthDriven,
+              pinsHeight,
+              settledWidth,
+              settledHeight,
+              autoWidth,
+              autoHeight: measureAutoHeight() || autoHeightRef.current,
+            });
+
+            if (plan.width === 'auto') {
+              // Same end state as the double-click reset's width half: no pin,
+              // no panel override, auto width restored.
+              setCustomWindowWidth(null);
+              // The REFS too, not just the state. reportShellSize sends
+              // `requestedWindowWidthRef`, which is assigned from
+              // `customWindowWidth` during RENDER — so the report below (and any
+              // observer fire before React re-renders) would otherwise keep
+              // asking for the dragged width and the window would sit at it.
+              // Measured: the window stayed at 746 instead of returning to 732.
+              requestedWindowWidthRef.current = autoWidth;
+              overlayWindowWidthRef.current = autoWidth;
+              setAppliedWindowWidth(autoWidth);
+              manualWidthOverrideRef.current = null;
+              codeExpandedRef.current = false;
+              // Animated, not snapped: this is a release that hands the panel
+              // back to auto sizing, and everything else auto sizing does to the
+              // width is sprung. (The double-click RESET stays instant on
+              // purpose — it reads as "undo", not as a motion.)
+              const autoPanel = defaultCollapsedPanelWidth();
+              if (prefersReducedMotionRef.current) shellWidth.set(autoPanel);
+              else animate(shellWidth, autoPanel, OVERLAY_RESIZE_SPRING);
+            } else if (plan.width === 'pin') {
+              setCustomWindowWidth(settledWidth);
               shellWidth.set(settledPanel);
               // The chosen panel width holds until the next stream (queueToken
               // clears the override), exactly like the manual toggle.
               manualWidthOverrideRef.current = settledPanel;
               codeExpandedRef.current = settledPanel >= panelWidthForWindow(settledWidth) - 1;
             }
-            if (pinsHeight) {
+
+            if (plan.height === 'auto') {
+              // Drop the pin AND its two companions, or the height would stay
+              // suspended in the ceiling/stream bookkeeping with no pin left to
+              // justify it (see handleResizeReset, which clears the same three).
+              customOverlayHeightRef.current = null;
+              heightPinIsCeilingRef.current = false;
+              heightPinStreamIdRef.current = null;
+              setHeightPinned(false);
+            } else if (plan.height === 'pin') {
               customOverlayHeightRef.current = settledHeight;
             }
             measureVerticalCap();
+            // Clearing a pin leaves the WINDOW at the dragged size with nothing
+            // to pull it back: the content did not move, so the ResizeObserver
+            // stays silent. Report once.
+            //
+            // This settles the WIDTH exactly (the refs above are already the
+            // auto width). It does NOT settle the height in this tick — the
+            // viewport still carries the pin's min-height here, because framer
+            // flushes that style on its own frame, so the height in this report
+            // is still the pinned one. The height converges a moment later
+            // through its own channel: the viewport shrinks, the measuring
+            // observer fires, and the tween settles the window exactly at its
+            // onComplete. Verified live: pin 802 -> aim back -> 582, the auto
+            // height, with the viewport's min-height back to 0px.
+            if (plan.width === 'auto' || plan.height === 'auto') {
+              reportShellSize();
+            }
             // Session-only by design: nothing is persisted (see restoredOverlaySize).
           })
           .catch(() => {
@@ -4106,7 +4244,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // stay "live" and leave height reporting suppressed.
       window.addEventListener('lostpointercapture', end, { capture: true });
     },
-    [customWindowWidth, shellWidth, measureVerticalCap],
+    [customWindowWidth, shellWidth, measureVerticalCap, reportShellSize],
   );
 
   // Double-click any handle to forget the custom size and return to

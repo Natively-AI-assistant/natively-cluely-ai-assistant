@@ -10802,7 +10802,11 @@ let isMultimodal = !!(imagePaths?.length);
     if (DIRECT_ASSIST_LADDER_INELIGIBLE_PROVIDERS.includes(selected.provider)) {
       return Object.freeze([selectedRung]);
     }
-    if (!this.directAssistFallbackEnabled()) return Object.freeze([selectedRung]);
+    // Provider fallback is unconditional: there is no setting and no toggle.
+    // It only ever converts a hard failure into a recovered answer, and the
+    // filters below — local-only mode, image capability, the privacy guards,
+    // and the two hard-fail outbound scopes — are what decide where a request
+    // may go. A preference was never the privacy control.
 
     const eligible = (provider: DirectAssistProvider, model: string): boolean => {
       if (DIRECT_ASSIST_LADDER_INELIGIBLE_PROVIDERS.includes(provider)) return false;
@@ -10900,17 +10904,6 @@ let isMultimodal = !!(imagePaths?.length);
       case 'ollama': return this.useOllama;
       case 'antigravity': return !!this.antigravityFallbackModel();
       default: return false;
-    }
-  }
-
-  private directAssistFallbackEnabled(): boolean {
-    try {
-      const { SettingsManager } = require('./services/SettingsManager');
-      return SettingsManager.getInstance().getDirectAssistFallbackEnabled();
-    } catch {
-      // A settings store that cannot be read must not silently disable
-      // recovery — default to the shipped behaviour, which is ON.
-      return true;
     }
   }
 

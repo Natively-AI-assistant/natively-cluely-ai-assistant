@@ -562,6 +562,18 @@ export class EmbeddingProviderResolver {
     // retry normally.
     if (embeddingsDenied) {
       console.warn('[ScopeFallback] embeddings denied; Ollama unavailable, using bundled local embedding model lazily');
+    } else if (chosenProvider && chosenProvider !== 'local' && candidates.length === 0) {
+      // A pin that yielded NO candidate at all — the provider was never built,
+      // because its credential (or measured width) is missing. The generic
+      // "no provider available" line below reads as an auto-mode fallthrough
+      // and says nothing about the user's choice, which is exactly how a
+      // Natively pin with a cleared key looked like the app deciding on its own
+      // to run MiniLM.
+      console.warn(
+        `[EmbeddingProviderResolver] You selected '${chosenProvider}' for embeddings, but it is not configured `
+        + `(no API key/endpoint, or no measured model width) — so it produced no candidate at all. `
+        + `Using the bundled local model until it is configured; persisted vectors are left in their own space.`
+      );
     } else {
       console.log('[EmbeddingProviderResolver] No cloud/Ollama provider available; using bundled local embedding model lazily');
     }

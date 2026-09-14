@@ -500,6 +500,10 @@ export interface ElectronAPI {
     /** The model id for whichever hosted provider is selected. */
     hostedModel: string | null
     candidateCount: number | null
+    /** The pool an untouched install reranks — the ceiling the retriever
+     *  clamps to. The renderer renders THIS as the fallback rather than a
+     *  literal of its own. */
+    candidateCountDefault: number
     fallbackToLocal: boolean
     /** Presence only. The key itself never crosses the IPC boundary. */
     hasApiKey: boolean
@@ -917,9 +921,6 @@ export interface ElectronAPI {
   getDirectAssistEnabled: () => Promise<boolean>;
   setDirectAssistEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
   onDirectAssistEnabledChanged: (callback: (enabled: boolean) => void) => () => void;
-  getDirectAssistFallbackEnabled: () => Promise<boolean>;
-  setDirectAssistFallbackEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
-  onDirectAssistFallbackEnabledChanged: (callback: (enabled: boolean) => void) => () => void;
 
   getCodeVerification: () => Promise<boolean>;
   setCodeVerification: (enabled: boolean) => Promise<{ success: boolean }>;

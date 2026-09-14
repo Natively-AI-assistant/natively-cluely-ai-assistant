@@ -11,7 +11,7 @@ import { buildDocumentMap, resolveTargetSections, sectionAwareChunksFromMap, sel
 import { wordsOf } from './lexicalTokens';
 import { CHUNKER_VERSION, semanticChunks } from './semanticChunker';
 import { resolveRerankBudgetMs, rerankBudgetFitsDeadline, type RerankSurface } from '../reranking/rerankBudget';
-import { buildRerankPool } from './rerankPool';
+import { buildRerankPool, RERANK_CANDIDATE_POOL, resolveRerankPoolSize } from './rerankPool';
 // Round-8 (seminar-fix-2): use the SHARED 6-clause evidence rule so the hybrid
 // (live) path gives the model the SAME completeness + off-topic-redirect guidance
 // as the lexical path. Previously formatContext had a stale 1-sentence copy.
@@ -309,7 +309,8 @@ const CONF_MIN_QUERY_TOKENS = 3;     // ignore trivially short queries for the "
 // the final top-K so it can rescue an answer-bearing chunk that cosine ranked
 // low (the whole point — cosine over 140-word chunks is noisy at 100-page
 // scale). Bounded so the local forward-pass stays in the tens-of-ms range.
-const RERANK_CANDIDATE_POOL = 30;
+// The ceiling itself now lives in rerankPool.ts, so the settings UI can read
+// the same number the retriever clamps to.
 
 // Hard cap on the per-call forward-pass batch. The 2026-07-06 SIGTRAP crash
 // (BFCArena::Extend -> posix_memalign trap in onnxruntime::Add<float>::Compute)
@@ -320,26 +321,6 @@ const RERANK_CANDIDATE_POOL = 30;
 // on a quantized cross-encoder, so the rerank step takes ~50–100ms longer
 // total, well inside the retrieval budget.
 const RERANK_BATCH_SIZE = 6;
-
-/**
- * How many candidates to rerank, from Settings > Reranker.
- *
- * Clamped to RERANK_CANDIDATE_POOL: a larger pool is not the user's to raise
- * here, because the ceiling exists for the ONNX arena and the latency budget,
- * not as a preference. Absent or unreadable settings keep the existing default,
- * so this cannot change behaviour for anyone who has not touched the control.
- */
-function resolveRerankPoolSize(): number {
-    try {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const { SettingsManager } = require('../SettingsManager');
-        const chosen = (SettingsManager.getInstance().get('reranker') as any)?.candidateCount;
-        if (Number.isFinite(chosen) && chosen > 0) {
-            return Math.min(RERANK_CANDIDATE_POOL, Math.floor(chosen));
-        }
-    } catch { /* settings unavailable: keep the default */ }
-    return RERANK_CANDIDATE_POOL;
-}
 
 function keylessManualRetrievalUsesLexical(): boolean {
     const raw = String(process.env.NATIVELY_KEYLESS_LEXICAL_MANUAL_RETRIEVAL || '').trim().toLowerCase();

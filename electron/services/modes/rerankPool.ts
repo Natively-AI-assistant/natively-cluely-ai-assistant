@@ -60,3 +60,47 @@ export function buildRerankPool<T extends PoolCandidate>(
     pool.sort((a, b) => (index.get(a) ?? 0) - (index.get(b) ?? 0));
     return pool;
 }
+
+// ── The pool ceiling, and who owns it ──────────────────────────────────────
+//
+// This lived in ModeHybridRetriever beside the resolver, which meant the UI had
+// no way to read it and carried a literal `15` instead — while an untouched
+// install actually reranked 30. Settings > Reranker therefore displayed a
+// number retrieval never used, and every selectable value LOWERED the pool
+// below the default. One exported constant removes that drift class: the
+// retriever clamps to it, the IPC status reports it, and the UI renders what
+// the status reports.
+//
+// The value itself is not a preference. It is bounded by the ONNX arena and the
+// rerank latency budget (see RERANK_BATCH_SIZE's crash forensics in
+// ModeHybridRetriever), so a user may narrow the pool but never widen it.
+export const RERANK_CANDIDATE_POOL = 30;
+
+/**
+ * How many candidates the cross-encoder gets to see, from Settings > Reranker.
+ *
+ * `readChosen` is injectable so this is testable without a SettingsManager
+ * singleton; production passes nothing and reads the real store. ANY unusable
+ * value — absent, zero, negative, non-finite, non-numeric, or a throwing store
+ * — resolves to the full pool. Falling back to a SMALLER pool would let a
+ * degraded settings file silently narrow retrieval, which is the one failure
+ * mode a default must never have.
+ */
+export function resolveRerankPoolSize(readChosen?: () => unknown): number {
+    let chosen: unknown;
+    try {
+        if (readChosen) {
+            chosen = readChosen();
+        } else {
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const { SettingsManager } = require('../SettingsManager');
+            chosen = (SettingsManager.getInstance().get('reranker') as any)?.candidateCount;
+        }
+    } catch {
+        return RERANK_CANDIDATE_POOL; // settings unavailable: the full pool
+    }
+    if (typeof chosen !== 'number' || !Number.isFinite(chosen) || chosen <= 0) {
+        return RERANK_CANDIDATE_POOL;
+    }
+    return Math.min(RERANK_CANDIDATE_POOL, Math.floor(chosen));
+}

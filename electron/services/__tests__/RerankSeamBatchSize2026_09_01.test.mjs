@@ -18,11 +18,19 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../../..');
 const retrieverSrc = fs.readFileSync(
   path.join(repoRoot, 'electron/services/modes/ModeHybridRetriever.ts'), 'utf8');
+
+// The pool ceiling moved to rerankPool.ts (2026-09-14) so the settings UI can
+// read the same number the retriever clamps to. What this test cares about is
+// the VALUE the batching arithmetic rests on, not which file declares it — so
+// assert the value, which survives the next move too.
+const { RERANK_CANDIDATE_POOL } = createRequire(import.meta.url)(
+  path.join(repoRoot, 'dist-electron/electron/services/modes/rerankPool.js'));
 
 test('the pool loop uses the resolved batch size, not the constant', () => {
   assert.match(retrieverSrc, /const\s+rerankBatchSize\s*=/,
@@ -40,7 +48,7 @@ test('a port that declares nothing keeps exactly the existing behaviour', () => 
   assert.match(retrieverSrc, /:\s*RERANK_BATCH_SIZE;/,
     'the fallback branch must still be RERANK_BATCH_SIZE');
   assert.match(retrieverSrc, /const RERANK_BATCH_SIZE = 6;/);
-  assert.match(retrieverSrc, /const RERANK_CANDIDATE_POOL = 30;/);
+  assert.equal(RERANK_CANDIDATE_POOL, 30);
 });
 
 test('a declared batch size is clamped to the pool and rejects nonsense', () => {
