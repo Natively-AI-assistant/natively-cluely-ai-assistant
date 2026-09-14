@@ -292,6 +292,11 @@ import {
   maxWindowWidthFor,
   maxWindowHeightFor,
   collapsedWidthFor,
+  OVERLAY_PANEL_INSET,
+  OVERLAY_HOVER_GATE_PAD,
+  defaultCollapsedPanelWidth,
+  collapsedPanelForWindow,
+  panelWidthForWindow,
   pinsHeightFor,
   minWindowWidthFor,
   manualHeightFloorFor,
@@ -2337,14 +2342,33 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // What we ASK the OS for — the user's pin, else the default. Never the
   // clamped result, or a clamp would latch permanently.
   const REQUESTED_WINDOW_WIDTH = customWindowWidth ?? OVERLAY_DEFAULT_WINDOW_WIDTH;
-  // What the window actually IS. All panel/anchor/hover-gate geometry uses this.
-  const SHELL_WIDTH_EXPANDED = appliedWindowWidth ?? REQUESTED_WINDOW_WIDTH;
+  // What the window actually IS. All anchor/hover-gate/OS geometry uses this.
+  const WINDOW_WIDTH = appliedWindowWidth ?? REQUESTED_WINDOW_WIDTH;
+  // The panel is inset from the window by OVERLAY_PANEL_INSET on every side
+  // (the padding on contentRef below), so that undetectable mode's ring has
+  // transparent room to paint OUTSIDE the card. Before this the expanded panel
+  // WAS the window width edge-to-edge, and the card was flush to the window on
+  // all four sides — measured live at y=0 in a 154px window — so an outward
+  // ring was clipped away entirely on the vertical axis and at full width on
+  // the horizontal one.
+  //
+  // The window keeps its exact previous numbers: every OS-facing value (the
+  // startup-slide birth width, the display budgets, persisted custom sizes, the
+  // min/max clamps in overlayCustomSize) is still expressed in window terms and
+  // is untouched. Only the PANEL gets narrower, by 2 x the inset.
+  //
+  // Horizontal slack is not a new idea here — the collapsed panel has always
+  // sat 66px in from each window edge, and panelLeft/mx-auto/the hover gate/the
+  // toggle anchor all already handle a panel narrower than its window. What is
+  // new is that the slack now also exists on the VERTICAL axis, and at the
+  // panel's fully expanded width.
+  const SHELL_WIDTH_EXPANDED = WINDOW_WIDTH - OVERLAY_PANEL_INSET * 2;
   const SHELL_WIDTH_COLLAPSED = collapsedWidthFor(SHELL_WIDTH_EXPANDED);
   // The OS overlay window's width. Equals SHELL_WIDTH_EXPANDED always (the
   // panel fills the window edge-to-edge when expanded), and at its default
   // equals WindowHelper.OVERLAY_DEFAULT_WIDTH (the window's birth width — the
   // startup-slide invariant).
-  const OVERLAY_WINDOW_WIDTH = SHELL_WIDTH_EXPANDED;
+  const OVERLAY_WINDOW_WIDTH = WINDOW_WIDTH;
   // Latest-value ref for the two long-lived subscriptions below (the toggle
   // anchor stream and the hover gate). They must read the LIVE window width but
   // must NOT re-subscribe when it changes: a drag updates it ~30x/second, and
@@ -2365,7 +2389,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // width would boot it visually expanded while codeExpandedRef and
   // isShellWide both still read "collapsed".
   const shellWidth = useMotionValue(
-    collapsedWidthFor(restoredOverlaySize.width ?? OVERLAY_DEFAULT_WINDOW_WIDTH),
+    collapsedPanelForWindow(restoredOverlaySize.width ?? OVERLAY_DEFAULT_WINDOW_WIDTH),
   );
   // Vertical budget cap for the chat scroll area. Default Infinity = "not yet
   // measured / unbounded", so the width-derived aesthetic max applies until we
@@ -2704,13 +2728,16 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // points past the window's own right edge. Setting it is also the only
       // thing that re-anchors the toggle and popover windows at all — that
       // stream fires from shellWidth's 'change', nothing else.
-      const wasExpanded = shellWidth.get() >= overlayWindowWidthRef.current - 1;
+      // Compared against the PANEL's expanded width, not the window's: with the
+      // gutter they differ by 2 x the inset, and testing against the window
+      // would read a fully expanded panel as collapsed on every reconcile.
+      const wasExpanded = shellWidth.get() >= panelWidthForWindow(overlayWindowWidthRef.current) - 1;
       // Written before the state update so the toggle-anchor stream and the
       // hover gate — both of which read this ref — are correct immediately,
       // not one render late.
       overlayWindowWidthRef.current = width;
       setAppliedWindowWidth(width);
-      shellWidth.set(wasExpanded ? width : collapsedWidthFor(width));
+      shellWidth.set(wasExpanded ? panelWidthForWindow(width) : collapsedPanelForWindow(width));
     }
     // Only reconcile the height when the user actually pinned one; otherwise
     // the window is content-sized and there is nothing to hold. And only
@@ -3820,7 +3847,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // (one IPC round-trip, about a frame) and raises them. The panel cannot
       // outgrow the window it is painted in, so the interim ceiling is the
       // current window, never the display.
-      let maxWidth = Math.max(startWidth, overlayWindowWidthRef.current - panelLeft);
+      // panelLeft is contentEl's rect (the padding box), while startWidth is the
+      // CARD's width — different boxes since the panel became inset. Give back
+      // both insets or the drag lets the card grow into the ring's gutter.
+      let maxWidth = Math.max(
+        startWidth,
+        overlayWindowWidthRef.current - panelLeft - OVERLAY_PANEL_INSET * 2,
+      );
       let maxHeight = startHeight;
 
       isResizingRef.current = true;
@@ -3873,7 +3906,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           )
             .then((env) => {
               if (!env || !isResizingRef.current) return;
-              maxWidth = Math.max(maxWidth, env.width - panelLeft);
+              maxWidth = Math.max(maxWidth, env.width - panelLeft - OVERLAY_PANEL_INSET * 2);
               maxHeight = Math.max(maxHeight, env.height);
             })
             .catch(() => {
@@ -3987,7 +4020,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         // re-fits the window; then the panel is flush when it fills the window
         // and centred in the slack when it is narrower than the default.
         const windowWidth = widthDriven
-          ? releaseWindowWidthFor(panelWidth, availWidth)
+          ? releaseWindowWidthFor(panelWidth + OVERLAY_PANEL_INSET * 2, availWidth)
           : overlayWindowWidthRef.current;
         const targetLeft = widthDriven ? Math.round((windowWidth - panelWidth) / 2) : panelLeft;
         const settleHeight = pinsHeight ? latest.height : (contentEl?.offsetHeight ?? latest.height);
@@ -4037,7 +4070,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
               typeof applied?.height === 'number' && applied.height > 0
                 ? applied.height
                 : settleHeight;
-            const settledPanel = Math.min(panelWidth, settledWidth);
+            // Bounded by the panel width the settled WINDOW can hold, not by the
+            // window itself — the panel has to leave its gutter free.
+            // Bounded by the panel width the settled WINDOW can hold, not by the
+            // window itself — the panel has to leave its gutter free.
+            const settledPanel = Math.min(panelWidth, panelWidthForWindow(settledWidth));
             overlayWindowWidthRef.current = settledWidth;
             setAppliedWindowWidth(settledWidth);
             if (widthDriven) {
@@ -4046,7 +4083,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
               // The chosen panel width holds until the next stream (queueToken
               // clears the override), exactly like the manual toggle.
               manualWidthOverrideRef.current = settledPanel;
-              codeExpandedRef.current = settledPanel >= settledWidth - 1;
+              codeExpandedRef.current = settledPanel >= panelWidthForWindow(settledWidth) - 1;
             }
             if (pinsHeight) {
               customOverlayHeightRef.current = settledHeight;
@@ -4083,7 +4120,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     setCustomWindowWidth(null);
     setAppliedWindowWidth(null);
     manualWidthOverrideRef.current = null;
-    shellWidth.set(collapsedWidthFor(OVERLAY_DEFAULT_WINDOW_WIDTH));
+    shellWidth.set(defaultCollapsedPanelWidth());
     // A WIDTH pin re-reports through the sizing effect (it lists
     // `customWindowWidth` in its deps). A height-only pin has no such path:
     // clearing a null width is not a state change, the content did not move
@@ -4156,7 +4193,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // between them. While a drag renders inside a wider envelope the panel
       // is left-anchored, so the centred derivation is wrong by the slack.
       const panelLeft = Math.round(
-        dragLeft !== null ? dragLeft : (overlayWindowWidthRef.current - w) / 2,
+        // dragLeft is contentEl's rect — the PADDING box. The toggle rides the
+        // CARD's top-right corner, one inset further in. The centred branch
+        // needs no correction: it derives the card's left from the card's own
+        // width, and the gutter is symmetric.
+        dragLeft !== null ? dragLeft + OVERLAY_PANEL_INSET : (overlayWindowWidthRef.current - w) / 2,
       );
       const panelRight = Math.round(panelLeft + w);
       const key = `${panelLeft}:${panelRight}`;
@@ -4197,7 +4238,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // ignored, so crossing back over the panel re-arms interactivity BEFORE a
   // click can happen. The default (main-process side) is interactive — the
   // panel and its drag regions are never gated. PAD inflates the panel rect
-  // slightly so fast pointer travel can't outrun the flip at the boundary.
+  // slightly so pointer jitter at the boundary cannot thrash the flag, and is
+  // deliberately SMALLER than the panel gutter so the gutter itself stays
+  // click-through — see OVERLAY_HOVER_GATE_PAD.
   useEffect(() => {
     let interactive = true;
     // Handshake reset: this effect only sends on boundary CROSSINGS, so the
@@ -4207,7 +4250,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // unconditional resync, an expanded panel (margin 0 → "inside" always
     // true → no crossing ever) would stay click-through forever.
     window.electronAPI?.setOverlayHoverInteractive?.(true).catch(() => {});
-    const PAD = 8;
+    // See OVERLAY_HOVER_GATE_PAD: must stay below OVERLAY_PANEL_INSET so the
+    // panel's transparent gutter passes clicks through to whatever is beneath
+    // instead of silently eating them.
+    const PAD = OVERLAY_HOVER_GATE_PAD;
     const onMouseMove = (e: MouseEvent) => {
       // A resize drag renders inside a window grown to its envelope, where
       // this margin math is wrong and a false "outside" would flip the window
@@ -4802,7 +4848,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // toggle aux window follows via the shellWidth 'change' anchor stream.
       // The DEFAULT collapsed width, not this render's SHELL_WIDTH_COLLAPSED,
       // which would still reflect a width pinned in the previous meeting.
-      shellWidth.set(collapsedWidthFor(OVERLAY_DEFAULT_WINDOW_WIDTH));
+      shellWidth.set(defaultCollapsedPanelWidth());
       setInputValue('');
       setAttachedContext([]);
       setManualTranscript('');
@@ -9926,7 +9972,15 @@ Provide only the answer, nothing else.`;
       // width-resizes, so centering is stable — the panel's center (and the
       // pill window centered over this window) never moves as the panel
       // springs 600↔732 symmetrically inside it.
-      className="flex flex-col items-center w-fit mx-auto h-fit min-h-0 bg-transparent p-0 rounded-[24px] font-sans gap-2 overlay-text-primary"
+      // p-[6px] (OVERLAY_PANEL_INSET) is the ring's gutter, and it is load
+      // bearing on BOTH axes. Vertically this element's offsetHeight is what
+      // reportShellSize sends as the window height, so the padding grows the
+      // window and leaves the card inset from its top and bottom edges — the
+      // only way anything can paint outside the card, which was previously
+      // flush to the window. Horizontally it keeps contentEl's outer box at the
+      // full window width when the panel is expanded, so mx-auto still centres
+      // and panelLeft (measured from THIS element) stays self-consistent.
+      className="flex flex-col items-center w-fit mx-auto h-fit min-h-0 bg-transparent p-[6px] rounded-[24px] font-sans gap-2 overlay-text-primary"
     >
       {/*
        * Always-mounted: isExpanded drives opacity/scale/pointer-events only.

@@ -19,7 +19,7 @@ import {
   interpolateBounds,
 } from './utils/launcherResizeAnimation';
 import { attachNoActivate, isNoActivateManaged } from './utils/windowsFocusPolicy';
-import { resizeEnvelopeFor } from '../src/lib/overlayCustomSize.mjs';
+import { resizeEnvelopeFor, OVERLAY_PANEL_INSET } from '../src/lib/overlayCustomSize.mjs';
 import { decideLauncherClose } from '../src/lib/launcherCloseDecision.mjs';
 
 const isEnvDev = process.env.NODE_ENV === 'development';
@@ -1967,7 +1967,10 @@ export class WindowHelper {
     // applies, since there the pill genuinely can outlive the shell's work area.
     const rigidToShell = this.overlayGroupWelded || this.overlayGroupDragging;
     const idealX = Math.round(o.x + panelCentre - pw / 2);
-    const idealY = o.y - WindowHelper.PILL_GAP - ph;
+    // Measured from the PANEL's top, not the window's: the window carries a
+    // gutter on every side (see OVERLAY_PANEL_INSET), so anchoring to o.y would
+    // silently widen the visible pill gap by the inset.
+    const idealY = o.y + OVERLAY_PANEL_INSET - WindowHelper.PILL_GAP - ph;
     const px = rigidToShell
       ? idealX
       : Math.min(Math.max(idealX, workArea.x), workArea.x + workArea.width - pw);
@@ -2003,7 +2006,12 @@ export class WindowHelper {
       Math.max(Math.round(o.x + this.togglePanelRight + d - S / 2), workArea.x),
       workArea.x + workArea.width - S,
     );
-    const y = Math.max(Math.round(o.y - d - S / 2), workArea.y);
+    // o.y is the WINDOW's top; the panel's is one gutter below it (the panel is
+    // inset from the window on every side so undetectable mode's ring has room
+    // to paint outside the card). Without this the button rides a corner the
+    // panel does not have and sits OVERLAY_PANEL_INSET px too high — the x half
+    // was always right because it comes from the renderer-streamed panel edge.
+    const y = Math.max(Math.round(o.y + OVERLAY_PANEL_INSET - d - S / 2), workArea.y);
     toggle.setBounds({ x, y, width: S, height: S });
   }
 

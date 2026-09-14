@@ -1,4 +1,5 @@
 export const OVERLAY_DEFAULT_WINDOW_WIDTH: number;
+export const OVERLAY_PANEL_INSET: number;
 export const OVERLAY_DEFAULT_COLLAPSED_WIDTH: number;
 export const OVERLAY_MIN_WINDOW_WIDTH: number;
 export const OVERLAY_MIN_WINDOW_HEIGHT: number;
@@ -128,3 +129,7 @@ export interface PinnedViewportBudgetParams {
 export function pinnedViewportBudget(
   params: PinnedViewportBudgetParams,
 ): { cap: number; room: number; ceiling: boolean };
+export function defaultCollapsedPanelWidth(): number;
+export function panelWidthForWindow(windowWidth: number): number;
+export function collapsedPanelForWindow(windowWidth: number): number;
+export const OVERLAY_HOVER_GATE_PAD: number;

@@ -156,6 +156,10 @@
   --overlay-opacity: 0.65;
   --overlay-border: rgba(255, 255, 255, 0.12);
   --overlay-border-soft: rgba(255, 255, 255, 0.1);
+  /* Undetectable-mode ring. Deliberately far brighter than --overlay-border:
+     it is a MODE indicator, not chrome, and must read at a glance against any
+     desktop showing through the panel. See the [data-undetectable] rule below. */
+  --overlay-undetectable-ring: rgba(255, 255, 255, 0.55);
   --overlay-panel-bg: rgb(30 30 30 / calc(0.05 + (var(--overlay-opacity) * 0.55)));
   --overlay-pill-bg: rgb(30 30 30 / calc(0.04 + (var(--overlay-opacity) * 0.48)));
   --overlay-transcript-bg: rgb(30 30 30 / calc(0.02 + (var(--overlay-opacity) * 0.24)));
@@ -314,6 +318,7 @@
   --overlay-bg:              rgba(255, 255, 255, 0.82);
   --overlay-border:          rgba(0, 0, 0, 0.09);
   --overlay-border-soft:     rgba(0, 0, 0, 0.06);
+  --overlay-undetectable-ring: rgba(0, 0, 0, 0.42);
   --overlay-panel-bg:        rgb(255 255 255 / calc(0.22 + (var(--overlay-opacity) * 0.50)));
   --overlay-pill-bg:         rgb(255 255 255 / calc(0.18 + (var(--overlay-opacity) * 0.42)));
   --overlay-transcript-bg:   rgb(0 0 0 / calc(0.003 + (var(--overlay-opacity) * 0.016)));
@@ -465,6 +470,10 @@
   --overlay-panel-bg:           rgba(255, 255, 255, 0.055);
   --overlay-border:             rgba(255, 255, 255, 0.18);
   --overlay-border-soft:        rgba(255, 255, 255, 0.10);
+  /* Re-declared here (and in the modern block) because both interface themes
+     paint a DARK panel even under [data-theme='light'] — inheriting the light
+     theme's near-black ring would make it vanish. */
+  --overlay-undetectable-ring:  rgba(255, 255, 255, 0.58);
   --overlay-chip-bg:            rgba(255, 255, 255, 0.10);
   --overlay-chip-hover-bg:      rgba(255, 255, 255, 0.18);
   --overlay-input-bg:           rgba(255, 255, 255, 0.07);
@@ -1394,6 +1403,7 @@
   --overlay-pill-bg:            linear-gradient(160deg, rgba(90, 90, 108, 0.68) 0%, rgba(55, 55, 70, 0.72) 50%, rgba(36, 36, 50, 0.76) 100%);
   --overlay-border:             rgba(255, 255, 255, 0.20);
   --overlay-border-soft:        rgba(255, 255, 255, 0.10);
+  --overlay-undetectable-ring:  rgba(255, 255, 255, 0.58);
   --overlay-chip-bg:            linear-gradient(160deg, rgba(90, 90, 108, 0.88) 0%, rgba(55, 55, 70, 0.93) 50%, rgba(36, 36, 50, 0.97) 100%);
   --overlay-chip-hover-bg:      linear-gradient(160deg, rgba(108, 108, 128, 0.92) 0%, rgba(70, 70, 88, 0.95) 50%, rgba(46, 46, 64, 0.98) 100%);
   --overlay-input-bg:           rgba(255, 255, 255, 0.05);
@@ -2924,6 +2934,112 @@ a,
 :root:not([data-undetectable="true"]) .resize-handle.resize-handle-s { cursor: ns-resize !important; }
 :root:not([data-undetectable="true"]) .resize-handle.resize-handle-se { cursor: nwse-resize !important; }
 /* @cursor-lock-exception:end */
+
+/* @undetectable-ring:start */
+/* ── Undetectable-mode ring ───────────────────────────────────────────────
+   Undetectable mode is otherwise INVISIBLE from the overlay itself: it flips
+   setContentProtection on the overlay/pill/toggle windows, hides the Dock
+   entry (macOS) and the taskbar button (Windows) — all things you can only
+   confirm by looking somewhere other than the panel you are using. This
+   dashed ring is the in-panel tell.
+
+   OUTLINE, not the border, for three independent reasons:
+     1. Both interface themes set border-color with !important on
+        .overlay-shell-surface (liquid-glass forces `transparent`), and
+        appearance.shellStyle sets borderColor INLINE. A border-color rule
+        here would lose to both — dead CSS, exactly the failure mode
+        documented for PR #499 in the cursor lock above.
+     2. The card is border-box with its width bound to the live `shellWidth`
+        motion value, so changing border-WIDTH would shrink the content box
+        and perturb text re-wrap on every frame of the 600↔732 spring.
+     3. The controlled-resize floors are MEASURED from offsetHeight. Outline
+        is outside the box model entirely and cannot move that number.
+
+   The offset is POSITIVE: the ring paints in the transparent gutter OUTSIDE
+   the card, not over it. That gutter is OVERLAY_PANEL_INSET (6px), applied as
+   padding on the overlay's contentRef — the element whose offsetHeight is sent
+   to the main process as the window height. It had to be created for this:
+   before it, the card was flush to the window on both axes (measured live at
+   y=0, h=153.625 in a 154px window), so a positive offset was clipped away
+   entirely on the vertical axis, and on the horizontal one survived only while
+   the panel sat narrower than its window. Both facts were established by
+   pixel-sampling a forced outward ring, not by reading the rules.
+
+   3px offset + 2px width = 5px, which fits inside the 6px gutter with a pixel
+   to spare. Raising either past 6 silently clips again — the failure has no
+   error and no visual warning beyond the ring simply missing an edge, which is
+   why undetectable-ring.check.mjs asserts the gutter exists as well as the
+   offset.
+
+   Scoped to [data-shell-card] alone: the pill and the resize toggle live in
+   their OWN BrowserWindows (OverlayAuxWindows), whose roots never receive the
+   data-undetectable mirror. It rides inside [data-shell-root], which animates
+   to opacity 0 on Cmd+B, so it fades out with the panel rather than leaking.
+
+   The width is a WHOLE 2px, and that is load-bearing. Chromium resolves the
+   USED outline-width per device-pixel-ratio: a specified 1.5px comes back as
+   1.5px on a Retina display but is floored to 1px at DPR 1, where the dashes
+   collapse into a hairline you cannot see (measured live under
+   --force-device-scale-factor=1). DPR 1 is the DEFAULT on most Windows
+   displays, so the first draft would have shipped an invisible indicator to
+   most Windows users while looking correct on the Mac it was written on. An
+   integer width resolves identically at every scale. The width also sets the
+   DASH geometry — Chromium derives dash length and gap from it — so changing
+   it re-proportions the ring, it does not just thicken it.
+
+   Not a border-STYLE swap, and not an opacity animation on a wrapper: the ring
+   is always present as `2px dashed transparent` and only its COLOUR moves.
+   outline-style is not an animatable property, so the dashes cannot fade in —
+   but outline-color is, and a dashed ring whose colour is transparent is
+   exactly as invisible as no ring at all, at zero layout cost. That is what
+   makes the appear/disappear a smooth fade rather than a cut.
+
+   `transparent` is safe as the off-colour: CSS interpolates colour in
+   PREMULTIPLIED space, so transparent (rgba(0,0,0,0)) → rgba(255,255,255,.55)
+   does not ghost through grey on the way. Verified live by sampling the
+   computed outline-color mid-transition; if that ever changes, the fix is a
+   per-theme off-colour at alpha 0 rather than the keyword.
+
+   Timing is the shell's own vocabulary, asymmetric in the same direction:
+   ENTER is the longer, pure ease-out `cubic-bezier(0.23, 1, 0.32, 1)` used
+   throughout this file, so the moment you are watching decelerates; EXIT is
+   faster with an ease-in so it accelerates away instead of lingering. The two
+   directions are expressed by putting the exit transition on the base rule and
+   overriding it in the [data-undetectable="true"] rule — the standard CSS
+   idiom for direction-dependent timing.
+
+   Only the colour moves. An offset/size travel was tried and dropped: the ring
+   would be animating position inside a parent that is itself running
+   `y: 6 → 0, scale: 0.98 → 1` on Cmd+B, and two small position animations on
+   nested boxes is the tearing class documented in scripts/overlay-motion/README.
+
+   The ring can never leak into a screenshare: it only paints while content
+   protection is on, which is precisely when the window's pixels are excluded
+   from capture.
+
+   Pinned by tests/css/undetectable-ring.check.mjs, which resolves the REAL
+   cascade in Electron across every interface theme — reading the rule is what
+   missed the border !important the first time. */
+[data-shell-card] {
+  outline: 2px dashed transparent;
+  outline-offset: 3px;
+  /* EXIT: faster, ease-in — accelerates away rather than lingering. */
+  transition: outline-color 220ms cubic-bezier(0.32, 0, 0.67, 0);
+}
+
+:root[data-undetectable="true"] [data-shell-card] {
+  outline-color: var(--overlay-undetectable-ring);
+  /* ENTER: longer, pure ease-out — the arrival is the moment being watched. */
+  transition: outline-color 340ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-shell-card],
+  :root[data-undetectable="true"] [data-shell-card] {
+    transition: none;
+  }
+}
+/* @undetectable-ring:end */
 
 /* Restore keyboard focus rings that Tailwind preflight removes */
 *:focus-visible {

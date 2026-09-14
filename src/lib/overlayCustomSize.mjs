@@ -31,6 +31,54 @@ import { verticalScrollCap } from './overlayScrollBudget.mjs';
 
 /** The window's birth width. MUST equal WindowHelper.OVERLAY_DEFAULT_WIDTH. */
 export const OVERLAY_DEFAULT_WINDOW_WIDTH = 732;
+
+/**
+ * The transparent gutter between the overlay WINDOW's edge and the painted
+ * PANEL, on all four sides.
+ *
+ * It exists so undetectable mode's ring has somewhere to paint OUTSIDE the
+ * card. Before it, the card was flush to the window on both axes (measured
+ * live: card y=0, h=153.625 in a 154px window), so anything drawn beyond the
+ * card's box — an outline, a box-shadow, anything — was clipped away by the
+ * native window bounds. Proven by pixel-sampling a forced outward ring: the
+ * side edges survived into the window's horizontal slack, the top and bottom
+ * did not exist at all.
+ *
+ * Applied as padding on the overlay's contentRef, whose offsetHeight IS the
+ * window height. The WINDOW keeps every number it had — this narrows the
+ * PANEL, so the startup-slide birth width, the display budgets, persisted
+ * custom sizes and the clamps in this file are all untouched.
+ *
+ * Horizontal slack was never new: the collapsed panel has always sat 66px in
+ * from each window edge, which is why panelLeft, mx-auto, the hover gate and
+ * the toggle anchor already cope with a panel narrower than its window. The
+ * gutter extends that to the VERTICAL axis and to the fully expanded width.
+ */
+export const OVERLAY_PANEL_INSET = 6;
+
+/**
+ * How far OUTSIDE the panel the hover gate still counts the pointer as "over
+ * the panel", and therefore keeps the window interactive.
+ *
+ * This must stay BELOW OVERLAY_PANEL_INSET, and that is the whole reason it is
+ * declared next to it. The gate inflates the panel rect by this much before
+ * testing, so any part of the gutter within it is interactive — and an
+ * interactive transparent region swallows clicks meant for the app underneath.
+ * On an overlay whose entire value is not being noticed, an invisible border
+ * that eats clicks is a behavioural tell, so the gutter has to stay
+ * click-through even though it is inside the window.
+ *
+ * It is not zero: the gate flips the window via IPC, so a little hysteresis
+ * keeps pointer jitter at the boundary from thrashing the flag. 2px is enough
+ * for that while leaving most of the gutter transparent to clicks.
+ *
+ * Note this is a REDUCTION in the app's click-eating footprint, not a new
+ * compromise. Before the gutter existed the same inflation was 8px, and on the
+ * horizontal axis — where the collapsed panel has always had 66px of margin
+ * inside its window — it was fully in effect: an 8px band around the panel
+ * already swallowed clicks. The band is now 2px, on all four sides.
+ */
+export const OVERLAY_HOVER_GATE_PAD = 2;
 /** The panel's collapsed width at the DEFAULT window width. */
 export const OVERLAY_DEFAULT_COLLAPSED_WIDTH = 600;
 /** Floor for a user-chosen width — below this the footer chrome cannot lay out. */
@@ -536,4 +584,38 @@ export function pinnedViewportBudget({ pinnedHeight, pinIsCeiling, chromeHeight,
     return { cap, room, ceiling: true };
   }
   return { cap: autoCap, room, ceiling: false };
+}
+
+/**
+ * The collapsed PANEL width for the default window, with the panel gutter
+ * already taken off.
+ *
+ * The reset paths (session reset, and the size-pin clear) set the panel width
+ * directly rather than going through the SHELL_WIDTH_COLLAPSED derivation, so
+ * before this existed they used collapsedWidthFor(OVERLAY_DEFAULT_WINDOW_WIDTH)
+ * — the WINDOW width — and produced 600 while the derivation produced 590. The
+ * panel then sat 10px wider than the width every other path believed it had.
+ * Caught by measuring the live card after the gutter landed, not by a test.
+ */
+export function defaultCollapsedPanelWidth() {
+  return collapsedPanelForWindow(OVERLAY_DEFAULT_WINDOW_WIDTH);
+}
+
+/**
+ * The EXPANDED panel width for a given window width — the window minus its
+ * gutter on both sides.
+ *
+ * This and collapsedPanelForWindow are the only two places that convert a
+ * window width into a panel width. Before the gutter the conversion was the
+ * identity ("an expanded panel IS the window width") and so was written inline
+ * at half a dozen call sites; each of those is now an off-by-2x-inset waiting
+ * to happen, which is why they all route through here instead.
+ */
+export function panelWidthForWindow(windowWidth) {
+  return Math.max(0, Math.round(windowWidth) - OVERLAY_PANEL_INSET * 2);
+}
+
+/** The COLLAPSED panel width for a given window width. */
+export function collapsedPanelForWindow(windowWidth) {
+  return collapsedWidthFor(panelWidthForWindow(windowWidth));
 }
