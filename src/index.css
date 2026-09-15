@@ -434,6 +434,30 @@
   filter: brightness(0) invert(1) !important;
 }
 
+/* The Natively raster mark (assets/icon-512.png), as rendered by <img> in the
+   two provider tiles that carry it: Settings > Audio's speech-provider selector
+   (via <BrandMark>) and Settings > Retrieval's Embeddings + Reranker rows (via
+   <AipProviderMark>). Note that AI Providers itself never renders this mark —
+   CLOUD_PROVIDERS has no `natively` entry, and the sidebar's Natively API item
+   uses the <NativelyLogoMark> SVG. The app icon is a WHITE monochrome glyph on
+   transparency, drawn for the dark theme, and an <img> cannot take the tile's
+   own ink the way `.natively-key-mark` does with a mask. On the pale light
+   tile it was therefore an invisible ghost. Light theme flattens it to black;
+   dark theme leaves the artwork untouched.
+
+   Deliberately NOT `.force-black-icon`: that class carries
+   [data-interface-theme="liquid-glass"|"modern"] overrides that force white in
+   BOTH themes, and NativelyApiSettings/NativelyProSettings each set that
+   attribute on a settings subtree — reusing it would reinstate the bug
+   wherever a provider tile renders inside one. */
+.brand-mark-raster {
+  filter: none;
+}
+
+[data-theme='light'] .brand-mark-raster {
+  filter: brightness(0);
+}
+
 /* Light mode: liquid-glass — clean frosted white panel */
 [data-theme='light'] .liquid-glass {
   background: rgba(255, 255, 255, 0.80);

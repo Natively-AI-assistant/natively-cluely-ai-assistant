@@ -140,7 +140,10 @@ export const BrandMark: React.FC<BrandMarkProps> = ({ provider, size = 16, class
                 aria-hidden="true"
                 width={size}
                 height={size}
-                className={`object-contain ${className}`}
+                // `.brand-mark-raster` (index.css) flattens a white-on-transparent
+                // mark to black in the light theme. Natively's own icon is drawn for
+                // the dark theme, so without it the speech-provider tile reads empty.
+                className={`object-contain brand-mark-raster ${className}`}
             />
         );
     }

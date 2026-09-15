@@ -1245,7 +1245,12 @@ export const AipProviderMark: React.FC<AipProviderMarkProps> = ({ provider, name
                 title={name || provider}
                 style={{ ['--aip-brand' as string]: brand?.brand ?? 'var(--aip-accent)' } as React.CSSProperties}
             >
-                <img src={imageSrc} alt="" width={16} height={16} className="object-contain" />
+                {/* `.brand-mark-raster` (index.css) flattens a white-on-transparent
+                    mark to black in the light theme. Natively's own icon is drawn
+                    for the dark theme, so without it the tile reads as empty. This
+                    renderer is shared: the natively mark reaches it from Retrieval's
+                    Embeddings/Reranker rows, not from any row in this panel. */}
+                <img src={imageSrc} alt="" width={16} height={16} className="object-contain brand-mark-raster" />
             </span>
         );
     }
