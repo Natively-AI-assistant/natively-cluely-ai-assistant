@@ -40,6 +40,7 @@ import { Disclosure, DisclosureChevron } from './ui/AccordionSection';
 import { ProfileVisualizer, PremiumUpgradeModal } from '../premium';
 import GlassEffectLayer from './ui/GlassEffectLayer';
 import { BrandMark, BrandMonogram } from './ui/BrandMark';
+import { LiquidGlassBadge } from '../ui-components/LiquidGlassBadge';
 import icon from './icon.png';
 // Shared with the main process so the picker cannot offer a model the ipc
 // validator rejects. Pure data module — no node/electron imports.
@@ -2039,7 +2040,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                             <h3 className="text-lg font-bold text-text-primary mb-1">{t('General settings')}</h3>
                                             <p className="text-xs text-text-secondary mb-2">{t('Customize how Natively works for you')}</p>
 
-                                            <div className={`rounded-xl border ${isLight ? 'bg-bg-card border-border-subtle divide-y divide-border-subtle' : 'bg-transparent border-transparent divide-y divide-border-subtle/20'}`}>
+                                            <div className="rounded-xl border bg-transparent border-transparent divide-y divide-border-subtle/20">
                                             <div className="space-y-0">
                                                 {/* Detectable / Undetectable */}
                                                 <div className="flex items-center justify-between px-4 py-3">
@@ -2178,17 +2179,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         <div>
                                                             <div className="flex items-center gap-2">
                                                                 <h3 className="text-sm font-bold text-text-primary">{t('Auto Answer')}</h3>
-                                                                {/* Solid yellow, Apple style — no border, no tint. The colours
-                                                                    are tokens because systemYellow differs per appearance. */}
-                                                                <span
-                                                                    className="text-[10px] font-semibold uppercase tracking-wide leading-none px-1.5 py-0.5 rounded-full shrink-0"
-                                                                    style={{
-                                                                        color: 'var(--badge-beta-fg)',
-                                                                        backgroundColor: 'var(--badge-beta-bg)',
-                                                                    }}
-                                                                >
-                                                                    {t('Beta')}
-                                                                </span>
+                                                                {/* The same Liquid Glass tag as Direct Assist's, so the two
+                                                                    Beta features read as one decision rather than two. It
+                                                                    replaces a bespoke solid-yellow span whose --badge-beta-*
+                                                                    tokens now have no other reader. */}
+                                                                <LiquidGlassBadge variant="sky">{t('Beta')}</LiquidGlassBadge>
                                                             </div>
                                                             <p className="text-xs text-text-secondary mt-0.5">{t('Answers appear as soon as the interviewer finishes a question')}</p>
                                                         </div>
@@ -2284,63 +2279,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                         className={`w-full text-left px-2 py-1.5 rounded-md text-xs flex items-center gap-2 transition-colors ${themeMode === option.mode ? 'text-text-primary bg-bg-item-active/50' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
                                                                     >
                                                                         <span className={themeMode === option.mode ? 'text-text-primary' : 'text-text-secondary group-hover:text-text-primary'}>{option.icon}</span>
-                                                                        <span className="font-medium">{t(option.label)}</span>
-                                                                    </button>
-                                                                ))}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </div>
-
-                                                {/* Meeting Interface Style */}
-                                                <div className="flex items-center justify-between px-4 py-3">
-                                                    <div className="flex items-center gap-4">
-                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
-                                                            <Layout size={20} />
-                                                        </div>
-                                                        <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">{t('Meeting Interface Style')}</h3>
-                                                            <p className="text-xs text-text-secondary mt-0.5">
-                                                                {meetingInterfaceTheme === 'liquid-glass'
-                                                                    ? t('Liquid glass — Apple-inspired transparent overlay')
-                                                                    : meetingInterfaceTheme === 'modern'
-                                                                        ? t('Modern — polished dark glass with cobalt accents')
-                                                                        : t('Default overlay appearance')}
-                                                            </p>
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="relative" ref={interfaceThemeDropdownRef}>
-                                                        <button
-                                                            onClick={() => setIsInterfaceThemeDropdownOpen(!isInterfaceThemeDropdownOpen)}
-                                                            className="bg-bg-component hover:bg-bg-elevated border border-border-subtle text-text-primary px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 min-w-[110px] justify-between"
-                                                        >
-                                                            <span className="text-ellipsis overflow-hidden whitespace-nowrap">
-                                                                {meetingInterfaceTheme === 'liquid-glass'
-                                                                    ? 'Liquid Glass'
-                                                                    : meetingInterfaceTheme === 'modern'
-                                                                        ? 'Modern'
-                                                                        : t('Default')}
-                                                            </span>
-                                                            <ChevronDown size={12} className={`shrink-0 transition-transform ${isInterfaceThemeDropdownOpen ? 'rotate-180' : ''}`} />
-                                                        </button>
-
-                                                        {isInterfaceThemeDropdownOpen && (
-                                                            <div className="absolute right-0 top-full mt-1 w-full bg-bg-elevated border border-border-subtle rounded-lg shadow-xl overflow-hidden z-20 p-1 animated fadeIn select-none">
-                                                                {([
-                                                                    { mode: 'default' as MeetingInterfaceTheme, label: 'Default' },
-                                                                    { mode: 'liquid-glass' as MeetingInterfaceTheme, label: 'Liquid Glass' },
-                                                                    { mode: 'modern' as MeetingInterfaceTheme, label: 'Modern' },
-                                                                ] as const).map((option) => (
-                                                                    <button
-                                                                        key={option.mode}
-                                                                        onClick={() => {
-                                                                            setMeetingInterfaceTheme(option.mode);
-                                                                            setMeetingInterfaceThemeState(option.mode);
-                                                                            setIsInterfaceThemeDropdownOpen(false);
-                                                                        }}
-                                                                        className={`w-full text-left px-2.5 py-1.5 rounded-md text-xs flex items-center gap-2 transition-colors ${meetingInterfaceTheme === option.mode ? 'text-text-primary bg-bg-item-active/50' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
-                                                                    >
                                                                         <span className="font-medium">{t(option.label)}</span>
                                                                     </button>
                                                                 ))}
@@ -2525,6 +2463,63 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             checked={verboseLogging}
                                                             label={t('Verbose debug logging')}
                                                             onChange={() => {
+                                                    {/* Meeting Interface Style */}
+                                                    <div className="flex items-center justify-between px-4 py-3">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                                <Layout size={20} />
+                                                            </div>
+                                                            <div>
+                                                                <h3 className="text-sm font-bold text-text-primary">{t('Meeting Interface Style')}</h3>
+                                                                <p className="text-xs text-text-secondary mt-0.5">
+                                                                    {meetingInterfaceTheme === 'liquid-glass'
+                                                                        ? t('Liquid glass — Apple-inspired transparent overlay')
+                                                                        : meetingInterfaceTheme === 'modern'
+                                                                            ? t('Modern — polished dark glass with cobalt accents')
+                                                                            : t('Default overlay appearance')}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="relative" ref={interfaceThemeDropdownRef}>
+                                                            <button
+                                                                onClick={() => setIsInterfaceThemeDropdownOpen(!isInterfaceThemeDropdownOpen)}
+                                                                className="bg-bg-component hover:bg-bg-elevated border border-border-subtle text-text-primary px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 min-w-[110px] justify-between"
+                                                            >
+                                                                <span className="text-ellipsis overflow-hidden whitespace-nowrap">
+                                                                    {meetingInterfaceTheme === 'liquid-glass'
+                                                                        ? 'Liquid Glass'
+                                                                        : meetingInterfaceTheme === 'modern'
+                                                                            ? 'Modern'
+                                                                            : t('Default')}
+                                                                </span>
+                                                                <ChevronDown size={12} className={`shrink-0 transition-transform ${isInterfaceThemeDropdownOpen ? 'rotate-180' : ''}`} />
+                                                            </button>
+
+                                                            {isInterfaceThemeDropdownOpen && (
+                                                                <div className="absolute right-0 top-full mt-1 w-full bg-bg-elevated border border-border-subtle rounded-lg shadow-xl overflow-hidden z-20 p-1 animated fadeIn select-none">
+                                                                    {([
+                                                                        { mode: 'default' as MeetingInterfaceTheme, label: 'Default' },
+                                                                        { mode: 'liquid-glass' as MeetingInterfaceTheme, label: 'Liquid Glass' },
+                                                                        { mode: 'modern' as MeetingInterfaceTheme, label: 'Modern' },
+                                                                    ] as const).map((option) => (
+                                                                        <button
+                                                                            key={option.mode}
+                                                                            onClick={() => {
+                                                                                setMeetingInterfaceTheme(option.mode);
+                                                                                setMeetingInterfaceThemeState(option.mode);
+                                                                                setIsInterfaceThemeDropdownOpen(false);
+                                                                            }}
+                                                                            className={`w-full text-left px-2.5 py-1.5 rounded-md text-xs flex items-center gap-2 transition-colors ${meetingInterfaceTheme === option.mode ? 'text-text-primary bg-bg-item-active/50' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
+                                                                        >
+                                                                            <span className="font-medium">{t(option.label)}</span>
+                                                                        </button>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+
                                                                 const newState = !verboseLogging;
                                                                 setVerboseLogging(newState);
                                                                 window.electronAPI?.setVerboseLogging?.(newState);

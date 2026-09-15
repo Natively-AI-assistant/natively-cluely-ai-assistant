@@ -13,6 +13,11 @@ export interface LiquidGlassBadgeProps
      * for `action` in dark theme and 2.80:1 for `sky`).
      */
     variant?: LiquidGlassBadgeVariant;
+    /**
+     * Optional leading glyph, the same slot the button has. Size it yourself;
+     * at tag scale the label is 9.5px, so a 10px icon sits level with it.
+     */
+    icon?: React.ReactNode;
 }
 
 /**
@@ -44,6 +49,7 @@ export interface LiquidGlassBadgeProps
 export const LiquidGlassBadge: React.FC<LiquidGlassBadgeProps> = ({
     children,
     variant = 'neutral',
+    icon,
     className = '',
     ...rest
 }) => (
@@ -52,6 +58,7 @@ export const LiquidGlassBadge: React.FC<LiquidGlassBadgeProps> = ({
         className={`lg-button lg-badge lg-${variant} ${className}`.trim()}
     >
         <span className="lg-content">
+            {icon ? <span className="lg-icon" aria-hidden="true">{icon}</span> : null}
             <span className="lg-label">{children}</span>
         </span>
     </span>
