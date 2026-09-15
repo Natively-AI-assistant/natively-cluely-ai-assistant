@@ -29,9 +29,24 @@ a readiness claim.
 | 07 | `dangling-css-baseline-wip` | dropped stash `67db2d37` (2026-08-28) | 5 files, +285/−38 | Was unreachable. **Byte-identical to 06** — kept for provenance only. |
 | 08 | `dangling-ia32-cross-compile-wip` | dropped stash `89ba422b` (2026-08-27) | 4 files, +233/−38 | Was unreachable. Holds the ia32 cross-compile code (`NATIVELY_BUILD_ALL_WIN_ARCHES`, `i686-pc-windows-msvc`) that `3c4636d3` deletes. |
 | 09 | `gitignore-amend-predecessor` | `f3aec22c` (2026-08-27) | 1 file, +14 | Amend predecessor of `10fb04e6`. Content identical; provenance only. |
+| 10 | ipc — no model install when all providers disabled | `6c7e5fff` (2026-07-28) | 1 file, +8/−13 | **Was unreachable. Not an upstream duplicate.** |
+| 11 | stealth — tray disguise + overlay taskbar sync | `f1694233` (2026-07-29) | 3 files, +161/−134 | **Was unreachable. Not an upstream duplicate.** Related to open PR #406, not identical |
+| 12 | stealth — win32 gate on `syncOverlayInteractionPolicy` | `65a5046f` (2026-08-04) | 1 file, +1/−1 | **Was unreachable. Not an upstream duplicate.** Near-twin of `b710bbd3` on #418 |
 
 `backup/main-before-local-merge` is also on the remote. It has **zero** unique
 patches — all 16 of its commits already landed upstream — so it gets no patch file.
+
+## Second fsck pass — 13 more unreachable commits
+
+The first `git fsck` sweep was filtered to the 2026-08-25..28 window, which hid
+every older dangling object. A second unfiltered pass found **13 commits
+reachable from no branch, no tag and no remote**. All 13 are now reachable from
+`backup/dangling-anchor-2026-09-15`, a commit whose tree is identical to `main`
+and whose only purpose is to keep them from being pruned by `git gc`.
+
+Ten are patch-duplicates of commits already on `origin/main` (WIP stashes from
+the Aug 3-4 markdown and aspect-lock work) and get no diff file. The three that
+are **not** duplicates are patches 10-12 above.
 
 ## Why ia32 appears in three patches
 
