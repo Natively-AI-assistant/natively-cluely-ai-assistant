@@ -3609,7 +3609,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 percentage — there is no MB figure available to show. */}
                                             {appleLanguageCapability && selectedAppleNeedsDownload && (
                                                 <div className="mt-3 rounded-xl border border-border-subtle bg-bg-card p-3">
-                                                    {appleInstall ? (
+                                                    {/* Gate on the locale actually downloading, not merely on
+                                                        "a download exists": switching language mid-download
+                                                        otherwise showed the NEW language's card wearing the
+                                                        OLD language's progress bar, and hid its own button. */}
+                                                    {appleInstall && appleInstall.locale === selectedAppleLocale ? (
                                                         <>
                                                             <div className="flex items-center justify-between mb-2">
                                                                 <span className="text-xs text-text-primary">
