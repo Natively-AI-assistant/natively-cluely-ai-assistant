@@ -274,7 +274,6 @@ export interface EmbeddingSettingsParts {
 }
 
 interface EmbeddingSettingsProps {
-    onNavigate?: (tab: string) => void;
     /**
      * Optional. Absent — the standalone Embeddings panel and both dev
      * harnesses — renders the original single-column layout, wrapper, styles
