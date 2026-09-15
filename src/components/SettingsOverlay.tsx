@@ -3225,6 +3225,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                Natively is our own logo component. Every option used to share one
                                                                generic <Mic>, which made the list unreadable at a glance. */
                                                             ...(hasNativelyKey ? [{ id: 'natively', label: 'Natively API', badge: 'Saved' as const, desc: t('Managed transcription via Natively backend'), color: 'blue', icon: <BrandMark provider="natively" />, neutralTile: true }] : []),
+                                                            /* Directly under Natively API: both are turnkey — no key to paste,
+                                                               nothing to configure — so they belong together at the top, ahead
+                                                               of the bring-your-own-key providers. macOS only; the mark is
+                                                               Apple's because the model runs on this machine. */
+                                                            ...(isMac ? [{ id: 'apple-speech', label: 'Apple Speech', badge: null, desc: t('On-device · macOS 26+'), color: 'green', icon: <BrandMark provider="apple" />, neutralTile: true }] : []),
                                                             { id: 'google', label: 'Google Cloud', badge: googleServiceAccountPath ? 'Saved' : null, desc: t('gRPC streaming via Service Account'), color: 'blue', icon: <BrandMark provider="google" />, neutralTile: true },
                                                             { id: 'groq', label: 'Groq Whisper', badge: hasStoredSttGroqKey ? 'Saved' : null, desc: t('Ultra-fast REST transcription'), color: 'orange', icon: <BrandMark provider="groq" />, neutralTile: true },
                                                             { id: 'nvidia_nim', label: 'Nvidia Nim', badge: hasStoredNvidiaNimKey ? 'Saved' : null, desc: t('Low-latency Nemotron / Parakeet streaming ASR'), color: 'green', icon: <BrandMark provider="nvidia_nim" />, neutralTile: true },
@@ -3246,7 +3251,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                Windows logo exists under a licence compatible with AGPL-3.0 (it is in
                                                                neither lobehub nor simple-icons — see the README). `isMac` is the same
                                                                platform source the rest of this panel uses. */
-                                                            ...(isMac ? [{ id: 'apple-speech', label: 'Apple Speech', badge: null, desc: t('On-device · macOS 26+'), color: 'green', icon: <BrandMark provider="apple" />, neutralTile: true }] : []),
                                                             { id: 'local-whisper', label: 'Local Models', badge: null, desc: t('Privacy-first: runs 100% on your device'), color: 'green', icon: <BrandMark provider={isMac ? 'apple' : 'microsoft'} />, neutralTile: true },
                                                         ]}
                                                     />
