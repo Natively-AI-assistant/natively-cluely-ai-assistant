@@ -43,9 +43,14 @@ interface RetrievalLayoutProps {
      * item — see the effect below.
      */
     initialTab?: RetrievalTabId;
+    /**
+     * Settings' nav sequence. Changes on every deep-link request, so a REPEAT
+     * request for the sub-tab already named in `initialTab` still re-asserts.
+     */
+    navSeq?: number;
 }
 
-const RetrievalLayout: React.FC<RetrievalLayoutProps> = ({ embedding, reranker, initialTab }) => {
+const RetrievalLayout: React.FC<RetrievalLayoutProps> = ({ embedding, reranker, initialTab, navSeq }) => {
     /* `embedding.header` / `reranker.header` are intentionally unused here —
        see the combined <header> below. */
     const t = useT();
@@ -65,7 +70,12 @@ const RetrievalLayout: React.FC<RetrievalLayoutProps> = ({ embedding, reranker, 
        already on must be a no-op. */
     useEffect(() => {
         if (initialTab) setActiveTab(initialTab);
-    }, [initialTab]);
+        // `navSeq` is a dep so that repeating the SAME deep link re-asserts.
+        // `initialTab` alone is unchanged on a repeat, so the effect would not
+        // run and the click would do nothing — which is exactly what happened
+        // when the lightweight-embedding notice was clicked twice with a visit
+        // to the Reranker sub-tab in between. Verified live 2026-09-15.
+    }, [initialTab, navSeq]);
     // Index drives the pill's spring target; -1 can't happen (state is typed to
     // the tab ids) but Math.max keeps a bad value from shifting it off-track.
     const activeTabIndex = Math.max(0, RETRIEVAL_TABS.findIndex((tab) => tab.id === activeTab));
@@ -220,6 +230,8 @@ const RetrievalLayout: React.FC<RetrievalLayoutProps> = ({ embedding, reranker, 
 interface RetrievalSettingsProps {
     /** Sub-tab to force — set only by a legacy `'embedding'`/`'reranker'` deep link. */
     initialTab?: RetrievalTabId;
+    /** Settings' nav sequence, so a repeated deep link re-asserts. */
+    navSeq?: number;
 }
 
 /**
@@ -229,12 +241,17 @@ interface RetrievalSettingsProps {
  * owns the hot ticker (per-file download percentages), so it belongs on the
  * inside where its ticks cannot cascade outward.
  */
-export const RetrievalSettings: React.FC<RetrievalSettingsProps> = ({ initialTab }) => (
+export const RetrievalSettings: React.FC<RetrievalSettingsProps> = ({ initialTab, navSeq }) => (
     <EmbeddingSettings
         renderParts={(embedding) => (
             <RerankerSettings
                 renderParts={(reranker) => (
-                    <RetrievalLayout embedding={embedding} reranker={reranker} initialTab={initialTab} />
+                    <RetrievalLayout
+                        embedding={embedding}
+                        reranker={reranker}
+                        initialTab={initialTab}
+                        navSeq={navSeq}
+                    />
                 )}
             />
         )}

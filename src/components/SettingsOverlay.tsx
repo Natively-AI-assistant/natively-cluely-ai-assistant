@@ -40,6 +40,7 @@ import { Disclosure, DisclosureChevron } from './ui/AccordionSection';
 import { ProfileVisualizer, PremiumUpgradeModal } from '../premium';
 import GlassEffectLayer from './ui/GlassEffectLayer';
 import { BrandMark, BrandMonogram } from './ui/BrandMark';
+import { LiquidGlassBadge } from '../ui-components/LiquidGlassBadge';
 import icon from './icon.png';
 // Shared with the main process so the picker cannot offer a model the ipc
 // validator rejects. Pure data module — no node/electron imports.
@@ -432,6 +433,12 @@ interface SettingsOverlayProps {
     isOpen: boolean;
     onClose: () => void;
     initialTab?: string;
+    /**
+     * Bumped by App on every open request, including a repeat of the tab that
+     * is already active. It is what makes the sync effect below re-assert
+     * instead of bailing on an unchanged `initialTab`.
+     */
+    initialTabSeq?: number;
     initialIsPremium?: boolean | null;
     initialHasNativelyKey?: boolean;
 }
@@ -462,6 +469,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     isOpen,
     onClose,
     initialTab = 'general',
+    initialTabSeq = 0,
     initialIsPremium = null,
     initialHasNativelyKey = false,
 }) => {
@@ -544,6 +552,17 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         />
     );
 
+    /* The retrieval sub-tab a deep link is asking for, captured as ONE value.
+     *
+     * It must not be derived from `activeTab` at render time. `activeTab` and
+     * the nav sequence update on DIFFERENT renders, and reading them as two
+     * independent props let a stale pair through: bumping the sequence for a
+     * plain 'retrieval' request re-applied the PREVIOUS request's 'embedding'
+     * one render before activeTab caught up, throwing away the user's sub-tab.
+     * Caught by a regression guard on 2026-09-15. Target and sequence are now
+     * written together, from `initialTab`, which is the request itself. */
+    const [retrievalRequest, setRetrievalRequest] = useState<{ tab?: 'embedding' | 'reranker'; seq: number }>({ seq: 0 });
+
     // Sync active tab when modal opens
     useEffect(() => {
         if (isOpen && initialTab) {
@@ -556,10 +575,21 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                user's first real tab click. */
             if (initialTab !== activeTab) suppressPanelAnimRef.current = true;
             setActiveTab(initialTab);
+            setRetrievalRequest({
+                tab: initialTab === 'reranker' ? 'reranker'
+                    : initialTab === 'embedding' ? 'embedding'
+                        : undefined,
+                seq: initialTabSeq,
+            });
 
 
         }
-    }, [isOpen, initialTab]);
+        /* `initialTabSeq` is in the deps on purpose: a repeat request for the
+           tab that is ALREADY active must still re-assert, because the panel
+           below it may own state of its own (Retrieval's Embedding/Reranker
+           sub-tab) that the deep link is trying to reach. Without it the second
+           click of a deep link did nothing at all. */
+    }, [isOpen, initialTab, initialTabSeq]);
 
     const { shortcuts, updateShortcut, resetShortcuts, conflicts } = useShortcuts();
     // Small badge shown next to a shortcut row when globalShortcut.register()
@@ -2178,17 +2208,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         <div>
                                                             <div className="flex items-center gap-2">
                                                                 <h3 className="text-sm font-bold text-text-primary">{t('Auto Answer')}</h3>
-                                                                {/* Solid yellow, Apple style — no border, no tint. The colours
-                                                                    are tokens because systemYellow differs per appearance. */}
-                                                                <span
-                                                                    className="text-[10px] font-semibold uppercase tracking-wide leading-none px-1.5 py-0.5 rounded-full shrink-0"
-                                                                    style={{
-                                                                        color: 'var(--badge-beta-fg)',
-                                                                        backgroundColor: 'var(--badge-beta-bg)',
-                                                                    }}
-                                                                >
-                                                                    {t('Beta')}
-                                                                </span>
+                                                                {/* The same Liquid Glass tag as Direct Assist's, so the two
+                                                                    Beta features read as one decision rather than two. It
+                                                                    replaces a bespoke solid-yellow span whose --badge-beta-*
+                                                                    tokens now have no other reader. */}
+                                                                <LiquidGlassBadge variant="sky">{t('Beta')}</LiquidGlassBadge>
                                                             </div>
                                                             <p className="text-xs text-text-secondary mt-0.5">{t('Answers appear as soon as the interviewer finishes a question')}</p>
                                                         </div>
@@ -3952,11 +3976,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                    'retrieval' sends undefined, which is what tells the
                                    layout to leave the current sub-tab alone. */
                                 <RetrievalSettings
-                                    initialTab={
-                                        activeTab === 'reranker' ? 'reranker'
-                                            : activeTab === 'embedding' ? 'embedding'
-                                                : undefined
-                                    }
+                                    initialTab={retrievalRequest.tab}
+                                    navSeq={retrievalRequest.seq}
                                 />
                             )}
 
