@@ -107,6 +107,70 @@ export function readAppleSpeechLocales(
   });
 }
 
+/**
+ * Download one language asset, reporting progress as a 0..1 fraction.
+ *
+ * Apple reports a fraction and nothing else: `Progress.totalUnitCount` is 1
+ * rather than a byte count and `localizedAdditionalDescription` is empty, so
+ * there is no transfer size to surface — only how far along it is. Measured on
+ * disk the assets run ~335-390 MB each, but that is an observation of
+ * /System/Library/AssetsV2, not an API, so it is not reported as fact here.
+ *
+ * Resolves `{ ok: true }` when the asset is installed (including when it
+ * already was), otherwise `{ ok: false, error }`. Never throws.
+ */
+export function installAppleSpeechLocale(
+  locale: string,
+  onProgress: (fraction: number) => void,
+  executable = appleSpeechExecutablePath(),
+  deps: { platform?: NodeJS.Platform; spawn?: typeof spawn } = {},
+): Promise<{ ok: boolean; error?: string }> {
+  const platform = deps.platform ?? process.platform;
+  if (platform !== 'darwin') return Promise.resolve({ ok: false, error: 'Apple Speech is macOS-only.' });
+  const spawnFn = deps.spawn ?? spawn;
+  return new Promise((resolve) => {
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = spawnFn(executable, ['--install', locale], { stdio: ['ignore', 'pipe', 'ignore'] });
+    } catch (e: any) {
+      resolve({ ok: false, error: e?.message ?? 'Could not start Apple Speech.' }); return;
+    }
+    let out = '';
+    let done = false;
+    let failure: string | undefined;
+    let settled = false;
+    const finish = (value: { ok: boolean; error?: string }) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+    child.stdout?.setEncoding('utf8');
+    child.stdout?.on('data', (chunk: string) => {
+      out += chunk;
+      let end: number;
+      while ((end = out.indexOf('\n')) >= 0) {
+        const line = out.slice(0, end); out = out.slice(end + 1);
+        if (!line.trim()) continue;
+        try {
+          const m = JSON.parse(line);
+          if (m?.type === 'install-progress' && typeof m.fraction === 'number') {
+            onProgress(Math.max(0, Math.min(1, m.fraction)));
+          } else if (m?.type === 'install-done') {
+            done = true;
+          } else if (m?.type === 'error') {
+            failure = String(m.message ?? 'Apple Speech could not install the language.');
+          }
+        } catch { /* not our line */ }
+      }
+    });
+    child.on('error', (e) => finish({ ok: false, error: e.message }));
+    child.on('close', () => {
+      if (done) finish({ ok: true });
+      else finish({ ok: false, error: failure ?? 'The language download did not finish.' });
+    });
+  });
+}
+
 /** Apple on-device STT, isolated from Electron/ONNX in a Swift child process. */
 export class AppleSpeechSTT extends EventEmitter {
   private child: ChildProcessWithoutNullStreams | null = null;

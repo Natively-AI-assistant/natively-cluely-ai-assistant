@@ -790,6 +790,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     const [appleSpeechLocales, setAppleSpeechLocales] = useState<{
         available: boolean; supported: string[]; installed: string[];
     } | null>(null);
+    // Live asset download started from Settings. Apple reports a 0..1 fraction
+    // and no transfer size, so the bar is a percentage — there is no MB figure
+    // to show (Progress.totalUnitCount is 1, not bytes).
+    const [appleInstall, setAppleInstall] = useState<{ locale: string; fraction: number } | null>(null);
+    const [appleInstallError, setAppleInstallError] = useState<string>('');
 
     // AI Response Language
     const [aiResponseLanguage, setAiResponseLanguage] = useState('English');
@@ -1124,6 +1129,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     };
 
     useEffect(() => {
+        const off = window.electronAPI?.onAppleSpeechInstallProgress?.((d) => {
+            setAppleInstall((cur) => (cur && cur.locale === d.locale ? { ...cur, fraction: d.fraction } : cur));
+        });
+        return () => { off?.(); };
+    }, []);
+
+    useEffect(() => {
         if (sttProvider !== 'apple-speech') return;
         let cancelled = false;
         window.electronAPI?.getAppleSpeechLocales?.()
@@ -1152,6 +1164,36 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         }
         return keys;
     }, [appleLocaleSets, availableLanguages]);
+
+    /** bcp47 of the currently selected recognition language, if resolvable. */
+    const selectedAppleLocale = useMemo(() => {
+        if (!appleLocaleSets) return null;
+        // recognitionLanguage, not displayedRecognitionLanguage: the display
+        // fallback only fires for a locked local model, which cannot be active
+        // while Apple Speech is the provider, and it is declared further down.
+        const bcp = String((availableLanguages as any)[recognitionLanguage]?.bcp47 ?? '');
+        if (!bcp || bcp === 'auto') return null;
+        return appleLocaleSets.supported.has(bcp.toLowerCase()) ? bcp : null;
+    }, [appleLocaleSets, availableLanguages, recognitionLanguage]);
+
+    const selectedAppleNeedsDownload = !!selectedAppleLocale
+        && !!appleLocaleSets && !appleLocaleSets.installed.has(selectedAppleLocale.toLowerCase());
+
+    const startAppleDownload = async () => {
+        if (!selectedAppleLocale) return;
+        setAppleInstallError('');
+        setAppleInstall({ locale: selectedAppleLocale, fraction: 0 });
+        try {
+            const r = await window.electronAPI.installAppleSpeechLocale(selectedAppleLocale);
+            if (!r?.ok) setAppleInstallError(r?.error || 'The language download did not finish.');
+            const fresh = await window.electronAPI.getAppleSpeechLocales();
+            setAppleSpeechLocales(fresh);
+        } catch (e: any) {
+            setAppleInstallError(e?.message || 'The language download did not finish.');
+        } finally {
+            setAppleInstall(null);
+        }
+    };
 
     /** Per-variant and per-group install badges for the two language selects. */
     const appleLanguageBadges = useMemo(() => {
@@ -3559,6 +3601,55 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     <p className="text-xs text-amber-200/90">
                                                         {`"${availableLanguages[recognitionLanguage]?.label ?? recognitionLanguage}" ${t("isn't available in Apple Speech — pick one of the listed languages.")}`}
                                                     </p>
+                                                </div>
+                                            )}
+                                            {/* Download the selected language now, with a visible bar,
+                                                instead of letting the first meeting stall on it. Apple
+                                                reports a 0..1 fraction and no transfer size, so this is a
+                                                percentage — there is no MB figure available to show. */}
+                                            {appleLanguageCapability && selectedAppleNeedsDownload && (
+                                                <div className="mt-3 rounded-xl border border-border-subtle bg-bg-card p-3">
+                                                    {appleInstall ? (
+                                                        <>
+                                                            <div className="flex items-center justify-between mb-2">
+                                                                <span className="text-xs text-text-primary">
+                                                                    {t('Downloading language model…')}
+                                                                </span>
+                                                                <span className="text-xs tabular-nums text-text-secondary">
+                                                                    {Math.round(appleInstall.fraction * 100)}%
+                                                                </span>
+                                                            </div>
+                                                            <div className="h-1.5 w-full rounded-full bg-bg-input overflow-hidden">
+                                                                <div
+                                                                    className="h-full rounded-full bg-accent-primary transition-[width] duration-300 ease-out"
+                                                                    style={{ width: `${Math.max(2, appleInstall.fraction * 100)}%` }}
+                                                                />
+                                                            </div>
+                                                            <p className="text-[11px] text-text-secondary mt-2">
+                                                                {t('macOS is fetching this language. You can keep using Natively; the download continues in the background.')}
+                                                            </p>
+                                                        </>
+                                                    ) : (
+                                                        <div className="flex items-center justify-between gap-3">
+                                                            <div className="min-w-0">
+                                                                <p className="text-xs text-text-primary">
+                                                                    {t('This language is not downloaded yet.')}
+                                                                </p>
+                                                                <p className="text-[11px] text-text-secondary mt-0.5">
+                                                                    {t('Download it now, or the first meeting will wait while macOS fetches it.')}
+                                                                </p>
+                                                            </div>
+                                                            <button
+                                                                onClick={startAppleDownload}
+                                                                className="shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg bg-bg-input hover:bg-bg-elevated text-text-primary border border-border-subtle transition-colors"
+                                                            >
+                                                                {t('Download')}
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                    {appleInstallError && (
+                                                        <p className="text-[11px] text-amber-200/90 mt-2">{appleInstallError}</p>
+                                                    )}
                                                 </div>
                                             )}
                                             {appleLanguageCapability && (

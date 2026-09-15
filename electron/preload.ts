@@ -301,6 +301,8 @@ interface ElectronAPI {
       | 'local-whisper' | 'apple-speech',
   ) => Promise<{ success: boolean; error?: string }>;
   getAppleSpeechLocales: () => Promise<{ available: boolean; supported: string[]; installed: string[] }>;
+  installAppleSpeechLocale: (locale: string) => Promise<{ ok: boolean; error?: string }>;
+  onAppleSpeechInstallProgress: (cb: (data: { locale: string; fraction: number }) => void) => () => void;
   localWhisperGetModels: () => Promise<{ models: any[]; activeModelId: string }>;
   localWhisperGetRecoveryNotice: () => Promise<{
     recovered: true;
@@ -1667,6 +1669,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   ) => ipcRenderer.invoke('set-stt-provider', provider),
   getSttProvider: () => ipcRenderer.invoke('get-stt-provider'),
   getAppleSpeechLocales: () => ipcRenderer.invoke('apple-speech:get-locales'),
+  installAppleSpeechLocale: (locale: string) => ipcRenderer.invoke('apple-speech:install-locale', locale),
+  onAppleSpeechInstallProgress: (cb: (data: { locale: string; fraction: number }) => void) => {
+    const listener = (_: any, data: any) => cb(data);
+    ipcRenderer.on('apple-speech:install-progress', listener);
+    return () => ipcRenderer.removeListener('apple-speech:install-progress', listener);
+  },
   setGroqSttApiKey: (apiKey: string) => ipcRenderer.invoke('set-groq-stt-api-key', apiKey),
   setOpenAiSttApiKey: (apiKey: string) => ipcRenderer.invoke('set-openai-stt-api-key', apiKey),
   setOpenAiSttBaseUrl: (url: string) => ipcRenderer.invoke('set-openai-stt-base-url', url),

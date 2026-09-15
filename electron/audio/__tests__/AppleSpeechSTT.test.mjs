@@ -531,3 +531,56 @@ test('an unavailable Mac reports no locales rather than an empty supported list 
   });
   assert.equal(result.available, false);
 });
+
+// --- installAppleSpeechLocale: the Settings download button --------------
+const { installAppleSpeechLocale } = await import(
+  pathToFileURL(path.resolve(__dirname, '../../../dist-electron/electron/audio/AppleSpeechSTT.js')).href
+);
+
+test('install streams progress fractions and resolves ok on install-done', async () => {
+  const seen = [];
+  const result = await installAppleSpeechLocale('ko-KR', (f) => seen.push(f), '/fake/helper', {
+    platform: 'darwin',
+    spawn: stubSpawn((c) => {
+      c.stdout.emit('data', '{"type":"install-progress","locale":"ko-KR","fraction":0.15}\n');
+      c.stdout.emit('data', '{"type":"install-progress","locale":"ko-KR","fraction":0.8}\n{"type":"install-done","locale":"ko-KR"}\n');
+      c.emit('close', 0, null);
+    }),
+  });
+  assert.deepEqual(result, { ok: true });
+  assert.deepEqual(seen, [0.15, 0.8]);
+});
+
+test('a fraction outside 0..1 is clamped before it reaches a progress bar', async () => {
+  const seen = [];
+  await installAppleSpeechLocale('ko-KR', (f) => seen.push(f), '/fake/helper', {
+    platform: 'darwin',
+    spawn: stubSpawn((c) => {
+      c.stdout.emit('data', '{"type":"install-progress","fraction":-3}\n{"type":"install-progress","fraction":42}\n{"type":"install-done"}\n');
+      c.emit('close', 0, null);
+    }),
+  });
+  assert.deepEqual(seen, [0, 1]);
+});
+
+test('an exit without install-done is a failure, not a silent success', async () => {
+  const result = await installAppleSpeechLocale('ko-KR', () => {}, '/fake/helper', {
+    platform: 'darwin',
+    spawn: stubSpawn((c) => {
+      c.stdout.emit('data', '{"type":"error","message":"network unreachable"}\n');
+      c.emit('close', 1, null);
+    }),
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.error, /network unreachable/);
+});
+
+test('install never spawns a Mach-O helper off macOS', async () => {
+  let spawned = false;
+  const result = await installAppleSpeechLocale('ko-KR', () => {}, '/fake/helper', {
+    platform: 'win32',
+    spawn: () => { spawned = true; throw new Error('must not spawn'); },
+  });
+  assert.equal(spawned, false);
+  assert.equal(result.ok, false);
+});

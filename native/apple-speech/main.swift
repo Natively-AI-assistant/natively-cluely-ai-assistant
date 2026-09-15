@@ -64,6 +64,16 @@ func flushConverter(
         // `--locales` is a one-shot query used by Settings to show which
         // languages Apple can transcribe and which still need a download.
         // It never starts an analyzer, so it is cheap to call on demand.
+        // `--install <bcp47>` downloads one language asset and streams progress
+        // so Settings can show a bar instead of a silent wait. Apple reports a
+        // fraction only — Progress.totalUnitCount is 1, not a byte count, and
+        // localizedAdditionalDescription is empty — so there is no size to report.
+        if let i = CommandLine.arguments.firstIndex(of: "--install"),
+           i + 1 < CommandLine.arguments.count {
+            do { try await installLocale(CommandLine.arguments[i + 1]) }
+            catch { emit(["type":"error", "message":error.localizedDescription]); exit(1) }
+            return
+        }
         if CommandLine.arguments.contains("--locales") {
             do { try await emitLocales() }
             catch { emit(["type":"error", "message":error.localizedDescription]); exit(1) }
@@ -71,6 +81,39 @@ func flushConverter(
         }
         do { try await run() }
         catch { emit(["type":"error", "message":error.localizedDescription]); exit(1) }
+    }
+
+    static func installLocale(_ requested: String) async throws {
+        guard #available(macOS 26.0, *), SpeechTranscriber.isAvailable else {
+            throw BridgeError(message:"Apple Speech requires macOS 26 and supported Apple hardware.")
+        }
+        guard let locale = await SpeechTranscriber.supportedLocale(equivalentTo:Locale(identifier:requested)) else {
+            throw BridgeError(message:"Apple Speech does not support language \(requested).")
+        }
+        let transcriber = SpeechTranscriber(locale:locale,preset:.progressiveTranscription)
+        guard let request = try await AssetInventory.assetInstallationRequest(supporting:[transcriber]) else {
+            // Already installed — report one completed step so the UI can settle.
+            emit(["type":"install-progress", "locale":locale.identifier(.bcp47), "fraction":1.0])
+            emit(["type":"install-done", "locale":locale.identifier(.bcp47)])
+            return
+        }
+        let progress = request.progress
+        let reporter = Task {
+            var last = -1.0
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                let f = progress.fractionCompleted
+                // Only emit on change; a stalled download should not spam stdout.
+                if f != last {
+                    last = f
+                    emit(["type":"install-progress", "locale":locale.identifier(.bcp47), "fraction":f])
+                }
+            }
+        }
+        defer { reporter.cancel() }
+        try await request.downloadAndInstall()
+        emit(["type":"install-progress", "locale":locale.identifier(.bcp47), "fraction":1.0])
+        emit(["type":"install-done", "locale":locale.identifier(.bcp47)])
     }
 
     static func emitLocales() async throws {

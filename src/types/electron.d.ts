@@ -304,6 +304,8 @@ export interface ElectronAPI {
   setSttProvider: (provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech') => Promise<{ success: boolean; error?: string }>
   getSttProvider: () => Promise<string>
   getAppleSpeechLocales: () => Promise<{ available: boolean; supported: string[]; installed: string[] }>
+  installAppleSpeechLocale: (locale: string) => Promise<{ ok: boolean; error?: string }>
+  onAppleSpeechInstallProgress: (cb: (data: { locale: string; fraction: number }) => void) => () => void
   setGroqSttApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
   setOpenAiSttApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
   setOpenAiSttBaseUrl: (url: string) => Promise<{ success: boolean; error?: string }>
