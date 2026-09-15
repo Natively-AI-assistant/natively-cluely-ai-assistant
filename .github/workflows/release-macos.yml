@@ -44,7 +44,9 @@ permissions:
 
 jobs:
   build-macos:
-    runs-on: macos-14 # Apple Silicon runner; builds both arches via NATIVELY_BUILD_ALL_MAC_ARCHES
+    # Apple Speech uses SpeechAnalyzer/SpeechTranscriber from the macOS 26 SDK.
+    # The arm64 runner still cross-builds the separate Intel package.
+    runs-on: macos-26
     # 90 was already tight for two ~28-min app notarizations plus two DMG
     # notarizations. scripts/lib/notary-transient.cjs now retries a DMG submit up
     # to 3x (~25 min each) and stapleWithRetry adds ~8 min of backoff per DMG, so a
