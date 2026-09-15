@@ -13,6 +13,7 @@ import { AutoAnswerIcon } from './AutoAnswerIcon';
 import { HiCreditCard } from 'react-icons/hi2';
 import { analytics } from '../lib/analytics/analytics.service';
 import { AboutSection } from './AboutSection';
+import { ErrorBoundary } from './ErrorBoundary';
 import { HelpSettings } from './settings/HelpSettings';
 import { AIProvidersSettings } from './settings/AIProvidersSettings';
 import { PlansSettings } from './settings/PlansSettings';
@@ -433,6 +434,12 @@ interface SettingsOverlayProps {
     isOpen: boolean;
     onClose: () => void;
     initialTab?: string;
+    /**
+     * Bumped by App on every open request, including a repeat of the tab that
+     * is already active. It is what makes the sync effect below re-assert
+     * instead of bailing on an unchanged `initialTab`.
+     */
+    initialTabSeq?: number;
     initialIsPremium?: boolean | null;
     initialHasNativelyKey?: boolean;
 }
@@ -463,6 +470,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     isOpen,
     onClose,
     initialTab = 'general',
+    initialTabSeq = 0,
     initialIsPremium = null,
     initialHasNativelyKey = false,
 }) => {
@@ -545,6 +553,17 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         />
     );
 
+    /* The retrieval sub-tab a deep link is asking for, captured as ONE value.
+     *
+     * It must not be derived from `activeTab` at render time. `activeTab` and
+     * the nav sequence update on DIFFERENT renders, and reading them as two
+     * independent props let a stale pair through: bumping the sequence for a
+     * plain 'retrieval' request re-applied the PREVIOUS request's 'embedding'
+     * one render before activeTab caught up, throwing away the user's sub-tab.
+     * Caught by a regression guard on 2026-09-15. Target and sequence are now
+     * written together, from `initialTab`, which is the request itself. */
+    const [retrievalRequest, setRetrievalRequest] = useState<{ tab?: 'embedding' | 'reranker'; seq: number }>({ seq: 0 });
+
     // Sync active tab when modal opens
     useEffect(() => {
         if (isOpen && initialTab) {
@@ -557,10 +576,21 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                user's first real tab click. */
             if (initialTab !== activeTab) suppressPanelAnimRef.current = true;
             setActiveTab(initialTab);
+            setRetrievalRequest({
+                tab: initialTab === 'reranker' ? 'reranker'
+                    : initialTab === 'embedding' ? 'embedding'
+                        : undefined,
+                seq: initialTabSeq,
+            });
 
 
         }
-    }, [isOpen, initialTab]);
+        /* `initialTabSeq` is in the deps on purpose: a repeat request for the
+           tab that is ALREADY active must still re-assert, because the panel
+           below it may own state of its own (Retrieval's Embedding/Reranker
+           sub-tab) that the deep link is trying to reach. Without it the second
+           click of a deep link did nothing at all. */
+    }, [isOpen, initialTab, initialTabSeq]);
 
     const { shortcuts, updateShortcut, resetShortcuts, conflicts } = useShortcuts();
     // Small badge shown next to a shortcut row when globalShortcut.register()
@@ -2033,6 +2063,18 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                     ? { duration: 0 }
                                     : { duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
                             >
+                            {/* A render error in ANY settings section used to destroy the
+                                whole launcher window. SettingsOverlay sits inside App's
+                                <ErrorBoundary context="Launcher">, so the throw bubbled all
+                                the way up and replaced the launcher with "Launcher crashed" —
+                                measured 2026-09-15 by injecting a throw into a panel.
+
+                                This boundary keeps the blast radius at the section. It needs
+                                no `key` of its own: the motion.div above is keyed on
+                                panelKey, so switching sections remounts this subtree and
+                                clears a latched error — without that, one bad section would
+                                show its fallback on every other tab too. */}
+                            <ErrorBoundary context={`Settings · ${panelKey}`}>
                             {activeTab === 'general' && (
                                 <div className="space-y-6 animated fadeIn">
                                     <div className="space-y-3.5">
@@ -2421,48 +2463,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 </button>
                                                 <Disclosure open={showAdvancedSettings}>
                                                 <div className="mt-1">
-                                                    {/* Mouse Passthrough Toggle — Adapted from public PR #113 */}
-                                                    <div className="flex items-center justify-between px-4 py-3">
-                                                        <div className="flex items-center gap-4">
-                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
-                                                                <PointerOff size={20} />
-                                                            </div>
-                                                            <div>
-                                                                <h3 className="text-sm font-bold text-text-primary">{t('Mouse Passthrough')}</h3>
-                                                                <p className="text-xs text-text-secondary mt-0.5">
-                                                                    {t('Pass all mouse clicks through to the app beneath.')}
-                                                                </p>
-                                                            </div>
-                                                        </div>
-                                                        <SettingsToggle
-                                                            checked={isMousePassthrough}
-                                                            label={t('Mouse Passthrough')}
-                                                            onChange={() => {
-                                                                const newState = !isMousePassthrough;
-                                                                setIsMousePassthrough(newState);
-                                                                window.electronAPI?.setOverlayMousePassthrough(newState);
-                                                            }}
-                                                            className={isMousePassthrough ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
-                                                        />
-                                                    </div>
-
-                                                    {/* Debug Logging */}
-                                                    <div className="flex items-center justify-between px-4 py-3">
-                                                        <div className="flex items-center gap-4">
-                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
-                                                                <Terminal size={20} />
-                                                            </div>
-                                                            <div>
-                                                                <h3 className="text-sm font-bold text-text-primary">{t('Verbose debug logging')}</h3>
-                                                                <p className="text-xs text-text-secondary mt-0.5">
-                                                                    {t('Record everything: audio, STT, routing, and the questions and answers themselves. API keys are always removed.')}
-                                                                </p>
-                                                            </div>
-                                                        </div>
-                                                        <SettingsToggle
-                                                            checked={verboseLogging}
-                                                            label={t('Verbose debug logging')}
-                                                            onChange={() => {
                                                     {/* Meeting Interface Style */}
                                                     <div className="flex items-center justify-between px-4 py-3">
                                                         <div className="flex items-center gap-4">
@@ -2520,6 +2520,48 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         </div>
                                                     </div>
 
+                                                    {/* Mouse Passthrough Toggle — Adapted from public PR #113 */}
+                                                    <div className="flex items-center justify-between px-4 py-3">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                                <PointerOff size={20} />
+                                                            </div>
+                                                            <div>
+                                                                <h3 className="text-sm font-bold text-text-primary">{t('Mouse Passthrough')}</h3>
+                                                                <p className="text-xs text-text-secondary mt-0.5">
+                                                                    {t('Pass all mouse clicks through to the app beneath.')}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                        <SettingsToggle
+                                                            checked={isMousePassthrough}
+                                                            label={t('Mouse Passthrough')}
+                                                            onChange={() => {
+                                                                const newState = !isMousePassthrough;
+                                                                setIsMousePassthrough(newState);
+                                                                window.electronAPI?.setOverlayMousePassthrough(newState);
+                                                            }}
+                                                            className={isMousePassthrough ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
+                                                        />
+                                                    </div>
+
+                                                    {/* Debug Logging */}
+                                                    <div className="flex items-center justify-between px-4 py-3">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                                <Terminal size={20} />
+                                                            </div>
+                                                            <div>
+                                                                <h3 className="text-sm font-bold text-text-primary">{t('Verbose debug logging')}</h3>
+                                                                <p className="text-xs text-text-secondary mt-0.5">
+                                                                    {t('Record everything: audio, STT, routing, and the questions and answers themselves. API keys are always removed.')}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                        <SettingsToggle
+                                                            checked={verboseLogging}
+                                                            label={t('Verbose debug logging')}
+                                                            onChange={() => {
                                                                 const newState = !verboseLogging;
                                                                 setVerboseLogging(newState);
                                                                 window.electronAPI?.setVerboseLogging?.(newState);
@@ -3947,11 +3989,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                    'retrieval' sends undefined, which is what tells the
                                    layout to leave the current sub-tab alone. */
                                 <RetrievalSettings
-                                    initialTab={
-                                        activeTab === 'reranker' ? 'reranker'
-                                            : activeTab === 'embedding' ? 'embedding'
-                                                : undefined
-                                    }
+                                    initialTab={retrievalRequest.tab}
+                                    navSeq={retrievalRequest.seq}
                                 />
                             )}
 
@@ -3966,6 +4005,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                             {activeTab === 'about' && (
                                 <AboutSection />
                             )}
+                            </ErrorBoundary>
                             </motion.div>
                         </div>
                     </div>

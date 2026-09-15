@@ -1034,16 +1034,56 @@ export class CredentialsManager {
      * wait on (or fail because of) a network call. hostedKeyActivation catches
      * its own failures and logs every refusal.
      */
+    private _hostedActivation: Promise<unknown> = Promise.resolve();
+
     private activateHostedRetrieval(provider: 'openrouter' | 'jina' | 'voyage', keyPresent: boolean): void {
         try {
             // eslint-disable-next-line @typescript-eslint/no-var-requires
             const { applyHostedKeyActivation } = require('./hostedKeyActivation');
-            void applyHostedKeyActivation(provider, { keyPresent }).catch((err: any) => {
-                console.warn(`[CredentialsManager] hosted retrieval not activated for ${provider}:`, err?.message);
-            });
+            // RETAINED, not discarded. The credential is already durable at this
+            // point, so the IPC handler that saved it can await the activation
+            // and answer with settled state — see whenHostedRetrievalSettled.
+            this._hostedActivation = applyHostedKeyActivation(provider, { keyPresent })
+                .catch((err: any) => {
+                    console.warn(`[CredentialsManager] hosted retrieval not activated for ${provider}:`, err?.message);
+                });
         } catch (err: any) {
             console.warn(`[CredentialsManager] hosted retrieval activation unavailable (${provider}):`, err?.message);
         }
+    }
+
+    /**
+     * The most recent hosted-key activation, once it has settled.
+     *
+     * MEASURED LIVE (real OpenRouter key, 2026-09-15): the key save returns in
+     * 2ms and the activation lands under a second later, after one catalogue
+     * fetch. RerankerSettings.saveKey() calls refreshStatus() the moment the
+     * save resolves, so without this it read settings the activation had not
+     * written yet and told the user a valid key was "provider-not-selected".
+     *
+     * Never rejects. The credential write is deliberately independent of the
+     * network — a save must not fail because OpenRouter is unreachable — so a
+     * failed activation resolves here and the handler still reports the save it
+     * actually performed.
+     */
+    public whenHostedRetrievalSettled(timeoutMs: number = 3000): Promise<void> {
+        const settled = this._hostedActivation.then(() => undefined).catch(() => undefined);
+        // BOUNDED. listOpenRouterRerankModels aborts at 10s
+        // (openrouterRerankModels.ts LIST_TIMEOUT_MS), so an unreachable
+        // OpenRouter would otherwise spin the caller's Save button for ten
+        // seconds. The activation keeps running past this cap and still lands;
+        // the panel is then briefly stale, which is exactly the old behaviour
+        // and strictly better than a ten-second spinner.
+        //
+        // unref() because a pending timer in the main process is a leaked
+        // handle — it would hold the event loop open at quit and in tests.
+        return Promise.race([
+            settled,
+            new Promise<void>((resolve) => {
+                const t = setTimeout(resolve, Math.max(0, timeoutMs));
+                (t as any)?.unref?.();
+            }),
+        ]);
     }
 
     public setVoyageApiKey(key: string): boolean {

@@ -494,16 +494,17 @@ const INITIAL_STATUS: RerankerStatus = {
  * answers "what happens when the hosted service fails" and is therefore a
  * question about the ACTIVE choice. `panel` is everything you configure: the
  * local model library, the hosted providers, extensions, candidate count and
- * the privacy notice. Retrieval DISCARDS `header` — the combined page carries
- * one header for both halves of retrieval rather than a heading per Active card.
+ * the privacy notice.
+ *
+ * The section heading is NOT a part: Retrieval carries one header for both
+ * halves, so a `header` part would be built every render for a caller that
+ * never renders it. It lives in the standalone return below.
  *
  * A render prop on ONE instance, not two mounts of a `section` prop: both
  * halves read the same `status`, so a second instance would leave the hero
  * card stale the moment a card below it changed the active reranker.
  */
 export interface RerankerSettingsParts {
-    /** Heading + subtitle. Retrieval drops this for one combined header. */
-    header: React.ReactNode;
     /** Active Reranker card + the hosted-fallback toggle. */
     hero: React.ReactNode;
     /** Local library, hosted providers, extensions, candidates, privacy note. */
@@ -1169,15 +1170,6 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
         if (names.length === 1) return names[0];
         return `${names.slice(0, -1).join(', ')} ${t('or')} ${names[names.length - 1]}`;
     }, [hostedProviders, t]);
-
-    const header = (
-        <header className="space-y-1">
-            <h3 className="aip-title">{t('Reranker')}</h3>
-            <p className="aip-subtitle">
-                {t('After Natively searches your documents, the reranker decides which passages actually answer the question. It is chosen separately from your embedding model and your AI model.')}
-            </p>
-        </header>
-    );
 
     /* Active Reranker and the hosted-fallback toggle. On the combined Retrieval
        page this sits above the Embedding/Reranker switcher. */
@@ -2017,11 +2009,16 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
     /* The caller that places the parts owns the wrapper and the style tag —
        Retrieval mounts this alongside EmbeddingSettings, and two copies of
        AIP_CSS in one subtree is a duplicate stylesheet, not a merge. */
-    if (renderParts) return <>{renderParts({ header, hero, panel })}</>;
+    if (renderParts) return <>{renderParts({ hero, panel })}</>;
 
     return (
         <div className="aip-root space-y-5 pb-10" data-theme={aipTheme} data-settings-stagger>
-            {header}
+            <header className="space-y-1">
+                <h3 className="aip-title">{t('Reranker')}</h3>
+                <p className="aip-subtitle">
+                    {t('After Natively searches your documents, the reranker decides which passages actually answer the question. It is chosen separately from your embedding model and your AI model.')}
+                </p>
+            </header>
             {hero}
             {panel}
             <style>{AIP_CSS}</style>

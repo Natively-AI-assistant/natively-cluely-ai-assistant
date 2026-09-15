@@ -8303,6 +8303,12 @@ export function initializeIpcHandlers(appState: AppState): void {
     if (saved === false) {
       return { success: false, error: 'credential_store_degraded', message: 'Could not save the key. Your credential store is unavailable.' };
     }
+    // The credential is saved; the activation it triggers is what makes the
+    // provider ACTIVE. Answer only once that settled, or the panel's own
+    // refreshStatus() — which fires the moment this resolves — reads settings
+    // the activation has not written yet. Measured live: save 2ms, activation
+    // under a second (one OpenRouter catalogue fetch).
+    await CredentialsManager.getInstance().whenHostedRetrievalSettled();
     return { success: true };
   });
 
@@ -8312,6 +8318,12 @@ export function initializeIpcHandlers(appState: AppState): void {
     if (saved === false) {
       return { success: false, error: 'credential_store_degraded', message: 'Could not save the key. Your credential store is unavailable.' };
     }
+    // The credential is saved; the activation it triggers is what makes the
+    // provider ACTIVE. Answer only once that settled, or the panel's own
+    // refreshStatus() — which fires the moment this resolves — reads settings
+    // the activation has not written yet. Measured live: save 2ms, activation
+    // under a second (one OpenRouter catalogue fetch).
+    await CredentialsManager.getInstance().whenHostedRetrievalSettled();
     const { listOpenRouterEmbeddingModels } = require('./rag/openrouterEmbeddingModels');
     const models = await listOpenRouterEmbeddingModels({ apiKey: (key || '').trim() || undefined });
     return { success: true, models, count: models.length };
@@ -8578,6 +8590,12 @@ export function initializeIpcHandlers(appState: AppState): void {
     if (saved === false) {
       return { success: false, error: 'credential_store_degraded', message: 'Could not save the key. Your credential store is unavailable.' };
     }
+    // The credential is saved; the activation it triggers is what makes the
+    // provider ACTIVE. Answer only once that settled, or the panel's own
+    // refreshStatus() — which fires the moment this resolves — reads settings
+    // the activation has not written yet. Measured live: save 2ms, activation
+    // under a second (one OpenRouter catalogue fetch).
+    await cm.whenHostedRetrievalSettled();
     return { success: true };
   });
 
@@ -8602,6 +8620,12 @@ export function initializeIpcHandlers(appState: AppState): void {
     if (saved === false) {
       return { success: false, error: 'credential_store_degraded', message: 'Could not save the key. Your credential store is unavailable.' };
     }
+    // The credential is saved; the activation it triggers is what makes the
+    // provider ACTIVE. Answer only once that settled, or the panel's own
+    // refreshStatus() — which fires the moment this resolves — reads settings
+    // the activation has not written yet. Measured live: save 2ms, activation
+    // under a second (one OpenRouter catalogue fetch).
+    await CredentialsManager.getInstance().whenHostedRetrievalSettled();
     return { success: true };
   });
 

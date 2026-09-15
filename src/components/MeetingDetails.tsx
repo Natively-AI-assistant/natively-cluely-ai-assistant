@@ -7,6 +7,7 @@ import { genMessageId } from '../utils/messageId';
 import { mapLanguageForPrism, isBlockCode } from '../utils/prismLanguage';
 import { registerPrismLanguages } from '../utils/registerPrismLanguages';
 import MeetingChatOverlay from './MeetingChatOverlay';
+import GlassSurface from '../ui-components/GlassSurface';
 import EditableTextBlock from './EditableTextBlock';
 import NativelyLogo from './icon.png';
 import ReactMarkdown from 'react-markdown';
@@ -17,6 +18,58 @@ import { splitGistLine } from '../lib/displayMarkup';
 import { splitIntoWordRuns } from '../lib/textRevealAnimation.mjs';
 
 registerPrismLanguages();
+
+/*
+ * Ask-bar glass — the four values that had to be re-derived for a pill.
+ * Kept at module scope so a variant is a one-line edit rather than a hunt
+ * through the footer JSX. See the call site for what each one is doing.
+ */
+/** Pill height in px. Also its radius x2 and the basis of the band width. */
+const ASK_BAR_HEIGHT = 48;
+/** Refracting band as a fraction of the short side: 48 x 0.25 / 2 = 6px. */
+const ASK_BAR_EDGE = 0.25;
+/** Blur of the lens rect inside the map. Held under the 6px band: a blur
+ *  wider than its own inset flattens the gradient that IS the effect. */
+const ASK_BAR_MAP_BLUR = 4;
+/** How far the band samples the backdrop: |scale| / 2 = 12px. Measured off a
+ *  live capture of this pill over the notes: the chromatic offsets that give a
+ *  hero card its prism edge fringe 13px type into a rainbow that reads as a
+ *  rendering fault, so this ships achromatic and the bend carries the effect
+ *  on its own. */
+const ASK_BAR_DISTORTION = -24;
+/*
+ * Tint — the flat fill painted OVER the refracted backdrop, so it is what
+ * decides whether the field is readable. Clear glass is not: the notes scroll
+ * directly behind this pill, and at the 0.06 the material started on, a line of
+ * body text passing underneath sat at the same value as the query being typed
+ * on top of it.
+ *
+ * The two themes need different numbers, and not symmetrically. Dark tints
+ * toward black over a backdrop that is already near-black, so the alpha is
+ * doing real work at every step — the pill becomes a well, which is how every
+ * other field in the app reads. Light tints white over a backdrop that is
+ * already near-white, so most of the range changes almost nothing; it is set
+ * high mainly to suppress darker UI (a button, a heading) passing behind.
+ *
+ * Both were measured, not eyeballed: the same frame captured with a paragraph
+ * passing behind the pill and with nothing behind it, differenced over the text
+ * zone (15px in from every edge, clear of the refracting band). Each is the
+ * lowest tint at which no pixel of that zone moves by more than 6 grey levels
+ * between the two — i.e. the lowest tint at which the notes stop showing
+ * through the text. Dark needs more than light because it is tinting toward
+ * black over a backdrop that is already near-black.
+ *
+ *   dark   0.25 → 1.99% of the zone over 6 levels, peak 13   (bleed visible)
+ *          0.50 → 0.36%, peak 9
+ *          0.70 → 0.00%, peak 5                              ← shipped
+ *   light  0.35 → 0.39%, peak 9
+ *          0.60 → 0.00%, peak 6                              ← shipped
+ *
+ * Going higher buys nothing and costs the material: by ~0.85 the rim is all
+ * that is left of the glass.
+ */
+const ASK_BAR_TINT_DARK = 0.7;
+const ASK_BAR_TINT_LIGHT = 0.6;
 
 const formatTime = (ms: number) => {
     const date = new Date(ms);
@@ -2685,15 +2738,52 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
 
             {/* Floating Footer (Ask Bar) */}
             <div className={`absolute bottom-0 left-0 right-0 p-6 flex justify-center pointer-events-none ${isChatOpen ? 'z-50' : 'z-20'}`}>
-                <div className="w-full max-w-[440px] relative group pointer-events-auto">
-                    {/* Dark Glass Effect Input (Matching Reference) */}
+                {/* Refractive glass, not a blurred pane. The pill floats over the
+                    scrolling notes, so the material is only readable as glass if
+                    what passes behind it BENDS — a plain backdrop-blur reads as
+                    frosted plastic, which is what this was.
+
+                    The tuning is deliberately below the component's defaults,
+                    which are shaped for a ~200x80 card:
+                      • ASK_BAR_EDGE (borderWidth) sets the refracting band to
+                        min(w,h) x edge/2 = 6px on this 48px pill. At the default
+                        0.07 the band is 1.7px, narrower than its own blur, and
+                        the edge gradient washes out to nothing.
+                      • The channel offsets are ZERO — see ASK_BAR_DISTORTION.
+                      • yChannel is 'B', not the component's upstream 'G'. G is
+                        flat in the map, so it pushes the backdrop DOWN by a
+                        constant instead of bending it, and a constant push on
+                        body text is a visible second copy of it.
+                      • distortionScale is pulled in hard — the band samples the
+                        backdrop ~12px away rather than ~90px, so notes bend past
+                        the rim instead of smearing across it.
+                    See GlassSurface.tsx for what each one drives. */}
+                <GlassSurface
+                    width="100%"
+                    height={ASK_BAR_HEIGHT}
+                    borderRadius={ASK_BAR_HEIGHT / 2}
+                    borderWidth={ASK_BAR_EDGE}
+                    blur={ASK_BAR_MAP_BLUR}
+                    brightness={60}
+                    opacity={0.9}
+                    distortionScale={ASK_BAR_DISTORTION}
+                    redOffset={0}
+                    greenOffset={0}
+                    blueOffset={0}
+                    yChannel="B"
+                    displace={0.5}
+                    backgroundOpacity={isLight ? ASK_BAR_TINT_LIGHT : ASK_BAR_TINT_DARK}
+                    saturation={1.2}
+                    className="w-full max-w-[440px] pointer-events-auto"
+                    contentClassName="glass-surface__content--bare"
+                >
                     <input
                         type="text"
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         onKeyDown={handleInputKeyDown}
                         placeholder={t("Ask about this meeting...")}
-                        className="w-full pl-5 pr-12 py-3 bg-transparent backdrop-blur-[24px] backdrop-saturate-[140%] shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-white/20 rounded-full text-sm text-text-primary placeholder-text-tertiary/70 focus:outline-none transition-shadow duration-200"
+                        className="w-full h-full pl-5 pr-12 bg-transparent border-0 text-sm text-text-primary placeholder-text-tertiary/70 focus:outline-none"
                     />
                     <button
                         onClick={handleSubmitQuestion}
@@ -2702,7 +2792,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                     >
                         <ArrowUp size={16} className="transform rotate-45" />
                     </button>
-                </div>
+                </GlassSurface>
             </div>
 
             {/* Chat Overlay */}

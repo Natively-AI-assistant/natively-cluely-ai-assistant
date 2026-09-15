@@ -224,7 +224,17 @@ const App: React.FC = () => {
     return () => clearTimeout(t);
   }, [showStartup]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [settingsInitialTab, setSettingsInitialTab] = useState<string>('general');
+  /* Settings deep-link target, plus a sequence number that increments on EVERY
+     request even when the tab is unchanged.
+
+     Without `seq`, re-issuing the SAME tab was a silent no-op: setState with an
+     equal value does not re-render, so SettingsOverlay's sync effect never ran.
+     That was invisible while a tab id mapped to exactly one view, and became a
+     real defect once Retrieval grew Embedding/Reranker sub-tabs — clicking AI
+     Providers' lightweight-embedding notice a second time (after browsing to
+     the Reranker sub-tab) left the user where they were. Reproduced live
+     2026-09-15 before this fix. */
+  const [settingsNav, setSettingsNav] = useState<{ tab: string; seq: number }>({ tab: 'general', seq: 0 });
   const [activeManagerPanel, setActiveManagerPanel] = useState<ManagerPanel>(null);
   const [managerPanelDirection, setManagerPanelDirection] = useState<ManagerPanelDirection>('forward');
   const managerDialogRef = useRef<HTMLDivElement>(null);
@@ -244,7 +254,7 @@ const App: React.FC = () => {
     // Settings replaces the manager rather than closing back to its launcher trigger.
     managerOpenerRef.current = null;
     setActiveManagerPanel(null);
-    setSettingsInitialTab(tab);
+    setSettingsNav(prev => ({ tab, seq: prev.seq + 1 }));
     setIsSettingsOpen(true);
   }, []);
 
@@ -1136,7 +1146,8 @@ const App: React.FC = () => {
                   onClose={() => {
                     setIsSettingsOpen(false);
                   }}
-                  initialTab={settingsInitialTab}
+                  initialTab={settingsNav.tab}
+                  initialTabSeq={settingsNav.seq}
                   initialIsPremium={hasLoadedLicense ? isPremiumActive : null}
                   initialHasNativelyKey={hasNativelyApi}
                 />

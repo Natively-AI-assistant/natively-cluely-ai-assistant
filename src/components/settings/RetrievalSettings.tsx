@@ -43,11 +43,14 @@ interface RetrievalLayoutProps {
      * item — see the effect below.
      */
     initialTab?: RetrievalTabId;
+    /**
+     * Settings' nav sequence. Changes on every deep-link request, so a REPEAT
+     * request for the sub-tab already named in `initialTab` still re-asserts.
+     */
+    navSeq?: number;
 }
 
-const RetrievalLayout: React.FC<RetrievalLayoutProps> = ({ embedding, reranker, initialTab }) => {
-    /* `embedding.header` / `reranker.header` are intentionally unused here —
-       see the combined <header> below. */
+const RetrievalLayout: React.FC<RetrievalLayoutProps> = ({ embedding, reranker, initialTab, navSeq }) => {
     const t = useT();
     const aipTheme = useResolvedTheme();
 
@@ -65,7 +68,12 @@ const RetrievalLayout: React.FC<RetrievalLayoutProps> = ({ embedding, reranker, 
        already on must be a no-op. */
     useEffect(() => {
         if (initialTab) setActiveTab(initialTab);
-    }, [initialTab]);
+        // `navSeq` is a dep so that repeating the SAME deep link re-asserts.
+        // `initialTab` alone is unchanged on a repeat, so the effect would not
+        // run and the click would do nothing — which is exactly what happened
+        // when the lightweight-embedding notice was clicked twice with a visit
+        // to the Reranker sub-tab in between. Verified live 2026-09-15.
+    }, [initialTab, navSeq]);
     // Index drives the pill's spring target; -1 can't happen (state is typed to
     // the tab ids) but Math.max keeps a bad value from shifting it off-track.
     const activeTabIndex = Math.max(0, RETRIEVAL_TABS.findIndex((tab) => tab.id === activeTab));
@@ -102,13 +110,13 @@ const RetrievalLayout: React.FC<RetrievalLayoutProps> = ({ embedding, reranker, 
         // One `.aip-root`, one AIP_CSS. Both child components can emit their own
         // wrapper and style tag, and here they must not — this page mounts both.
         <div className="aip-root space-y-5 pb-10" data-theme={aipTheme} data-settings-stagger>
-            {/* ONE header for both halves. Each child component still owns its
-                own heading for its standalone layout, and Retrieval drops both
-                (`header` is destructured off and deliberately unused): two
-                headings stacked above two Active cards restated "chosen
-                separately from your AI model" twice and re-split the pipeline
-                the merge exists to join. The cards' own labels — ACTIVE
-                EMBEDDING MODEL, ACTIVE RERANKER — already say which is which. */}
+            {/* ONE header for both halves. Each child component still owns a
+                heading for its STANDALONE layout, but neither exposes it as a
+                part, so nothing is built here for a caller that would not
+                render it. Two headings stacked above two Active cards restated
+                "chosen separately from your AI model" twice and re-split the
+                pipeline the merge exists to join. The cards' own labels —
+                ACTIVE EMBEDDING MODEL, ACTIVE RERANKER — say which is which. */}
             <header className="space-y-1">
                 <h3 className="aip-title">{t('Retrieval')}</h3>
                 <p className="aip-subtitle">
@@ -220,6 +228,8 @@ const RetrievalLayout: React.FC<RetrievalLayoutProps> = ({ embedding, reranker, 
 interface RetrievalSettingsProps {
     /** Sub-tab to force — set only by a legacy `'embedding'`/`'reranker'` deep link. */
     initialTab?: RetrievalTabId;
+    /** Settings' nav sequence, so a repeated deep link re-asserts. */
+    navSeq?: number;
 }
 
 /**
@@ -229,12 +239,17 @@ interface RetrievalSettingsProps {
  * owns the hot ticker (per-file download percentages), so it belongs on the
  * inside where its ticks cannot cascade outward.
  */
-export const RetrievalSettings: React.FC<RetrievalSettingsProps> = ({ initialTab }) => (
+export const RetrievalSettings: React.FC<RetrievalSettingsProps> = ({ initialTab, navSeq }) => (
     <EmbeddingSettings
         renderParts={(embedding) => (
             <RerankerSettings
                 renderParts={(reranker) => (
-                    <RetrievalLayout embedding={embedding} reranker={reranker} initialTab={initialTab} />
+                    <RetrievalLayout
+                        embedding={embedding}
+                        reranker={reranker}
+                        initialTab={initialTab}
+                        navSeq={navSeq}
+                    />
                 )}
             />
         )}

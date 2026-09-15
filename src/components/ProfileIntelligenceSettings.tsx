@@ -492,6 +492,76 @@ const PI_CSS = `
         transition: transform 200ms var(--pi-ease-out), box-shadow 200ms ease;
         white-space: nowrap; position: relative; overflow: hidden;
     }
+    /*
+      Liquid Glass rim — see src/ui-components/design.md. The flat fill stays
+      exactly as it was; the depth moves into a specular rim that sits on the
+      top and bottom faces and dies away across the pill's caps.
+
+      The two themes need OPPOSITE treatments, because this CTA inverts: in
+      dark mode it is a WHITE pill (a light body, where a white specular would
+      vanish into the fill, so the underside darkens and a contact shadow does
+      the work), and in light mode it is a BLACK pill (a dark body, which takes
+      the standard bright-top-and-bottom rim).
+
+      ::before, because ::after is the shimmer sweep on the unlock/trial states.
+      z-index:-1 keeps it above the fill and behind the label, which is a bare
+      child here.
+    */
+    .pi-cta::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        /*
+          0, not -1. .pi-cta is position:relative with z-index:auto, so it does
+          NOT create a stacking context — a -1 pseudo paints BEHIND the
+          element's own background and the opaque fill hides it completely.
+          The label span and .pi-cta-ring are both z-index:1, so 0 is exactly
+          the slot between the fill and the content.
+        */
+        z-index: 0;
+        pointer-events: none;
+        box-shadow:
+            inset 0 0 0 1px rgba(255,255,255,0.55),
+            inset 0 0 0 2px rgba(255,255,255,0.22);
+        -webkit-mask-image:
+            linear-gradient(180deg, #000 0%, #000 8%, transparent 34%, transparent 100%),
+            linear-gradient(90deg, transparent 2px, rgba(0,0,0,0.82) 9px, #000 24px, #000 calc(100% - 24px), rgba(0,0,0,0.82) calc(100% - 9px), transparent calc(100% - 2px));
+        -webkit-mask-composite: source-in;
+        mask-image:
+            linear-gradient(180deg, #000 0%, #000 8%, transparent 34%, transparent 100%),
+            linear-gradient(90deg, transparent 2px, rgba(0,0,0,0.82) 9px, #000 24px, #000 calc(100% - 24px), rgba(0,0,0,0.82) calc(100% - 9px), transparent calc(100% - 2px));
+        mask-composite: intersect;
+    }
+    /* dark theme = white pill = light body: specular on top only, underside
+       darkens, contact shadow below */
+    .pi-cta {
+        box-shadow:
+            inset 0 -1px 0 rgba(0,0,0,0.16),
+            0 2px 8px rgba(0,0,0,0.12);
+    }
+    /* light theme = black pill = dark body: the full rim, top and bottom */
+    /*
+      The light theme's pill is pure #000, which has no headroom: every gram of
+      specular can only lift it off black, and the mass of the button starts
+      reading as dark grey. So this rim is a single hairline confined to the
+      very top edge — enough to catch light, not enough to tint the body. The
+      bottom edge is left to the drop shadow, which is what separates a black
+      pill from a white panel anyway.
+    */
+    .pi-root[data-theme='light'] .pi-cta::before {
+        box-shadow: inset 0 0 0 1px rgba(255,255,255,0.20);
+        -webkit-mask-image:
+            linear-gradient(180deg, #000 0%, #000 3%, transparent 11%, transparent 100%),
+            linear-gradient(90deg, transparent 2px, rgba(0,0,0,0.82) 9px, #000 26px, #000 calc(100% - 26px), rgba(0,0,0,0.82) calc(100% - 9px), transparent calc(100% - 2px));
+        mask-image:
+            linear-gradient(180deg, #000 0%, #000 3%, transparent 11%, transparent 100%),
+            linear-gradient(90deg, transparent 2px, rgba(0,0,0,0.82) 9px, #000 26px, #000 calc(100% - 26px), rgba(0,0,0,0.82) calc(100% - 9px), transparent calc(100% - 2px));
+    }
+    .pi-root[data-theme='light'] .pi-cta {
+        box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+    }
+
     .pi-cta:hover { transform: translateY(-1px) scale(1.01); box-shadow: 0 6px 16px rgba(0,0,0,0.28); }
     .pi-cta:active { transform: scale(0.96); box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
     .pi-cta-ring {
@@ -502,7 +572,8 @@ const PI_CSS = `
         position: relative; z-index: 1;
     }
     .pi-cta:hover .pi-cta-ring { transform: translateX(1px) scale(1.05); }
-    .pi-cta--trial { background: linear-gradient(135deg,#8b5cf6,#7c3aed); color:#fff; box-shadow:0 2px 8px rgba(124,58,237,0.30); }
+    /* flattened to the gradient's own midpoint; the depth is the rim now */
+    .pi-cta--trial { background: #8455ef; color:#fff; box-shadow:0 2px 8px rgba(124,58,237,0.30); }
     .pi-cta--trial .pi-cta-ring { background: rgba(255,255,255,0.18); }
     .pi-cta--shimmer::after {
         content: '';

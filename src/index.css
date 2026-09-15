@@ -9012,3 +9012,155 @@ html[data-platform="linux"] body {
   .mn-line-guard { animation: none; }
   .mn-line-hold { opacity: 1; }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   PRO PLAN CARDS (Yearly / Lifetime) — Liquid Glass.
+   (src/ui-components/design.md)
+
+   These carried the same three things the API detail card did, so they get the
+   same treatment:
+
+     ::after   was the 24px crosshatch. Gone — the depth here is the rim, and
+               a texture grid fights it. ::after becomes the rim.
+     ::before  was a 45%-tall top gloss sitting straight through the price and
+               the plan name. Gone; that band now stays the measured fill.
+     background  the 135deg diagonal flattens to its own midpoint. The radial
+               corner glow STAYS — it is the card's accent, not its body, and
+               it is what tells Yearly from Lifetime at a glance.
+
+   Anchored on [data-interface-theme] (presence) so one block covers both
+   interface themes, matching the pattern used by the selector pills and the
+   pricing CTAs. Declared after them, so it wins the (0,2)/(0,3) ties on order.
+   ───────────────────────────────────────────────────────────────────────── */
+[data-interface-theme] .pricing-card-yearly {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.28) 0%, transparent 60%),
+    rgba(22, 35, 61, 0.575) !important;
+  border: 1px solid transparent !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.20) !important;
+}
+[data-interface-theme] .pricing-card-lifetime {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(139, 92, 246, 0.35) 0%, transparent 60%),
+    rgba(37, 20, 65, 0.575) !important;
+  border: 1px solid transparent !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.20) !important;
+}
+[data-theme='light'] [data-interface-theme] .pricing-card-yearly {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.14) 0%, transparent 60%),
+    rgba(229, 240, 254, 0.875) !important;
+  border: 1px solid transparent !important;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.10) !important;
+}
+[data-theme='light'] [data-interface-theme] .pricing-card-lifetime {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(139, 92, 246, 0.16) 0%, transparent 60%),
+    rgba(241, 238, 254, 0.875) !important;
+  border: 1px solid transparent !important;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.10) !important;
+}
+
+/* the 45% top gloss is what used to wash the price band — retired */
+[data-interface-theme] .pricing-card-yearly::before,
+[data-interface-theme] .pricing-card-lifetime::before {
+  display: none !important;
+}
+
+/* ::after: crosshatch out, rim in. One hairline ring, as on the API detail
+   card — a 28px-radius card is a surface, not a control. */
+[data-interface-theme] .pricing-card-yearly::after,
+[data-interface-theme] .pricing-card-lifetime::after {
+  background-image: none !important;
+  background-color: transparent !important;
+  opacity: 1 !important;
+  border-radius: inherit !important;
+  z-index: 1 !important;
+  pointer-events: none !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.26) !important;
+  -webkit-mask-image:
+    linear-gradient(180deg, #000 0%, #000 2%, transparent 14%, transparent 86%, #000 98%, #000 100%),
+    linear-gradient(90deg, transparent 6px, rgba(0, 0, 0, 0.82) 24px, #000 72px, #000 calc(100% - 72px), rgba(0, 0, 0, 0.82) calc(100% - 24px), transparent calc(100% - 6px)) !important;
+  -webkit-mask-composite: source-in !important;
+  mask-image:
+    linear-gradient(180deg, #000 0%, #000 2%, transparent 14%, transparent 86%, #000 98%, #000 100%),
+    linear-gradient(90deg, transparent 6px, rgba(0, 0, 0, 0.82) 24px, #000 72px, #000 calc(100% - 72px), rgba(0, 0, 0, 0.82) calc(100% - 24px), transparent calc(100% - 6px)) !important;
+  mask-composite: intersect !important;
+}
+[data-theme='light'] [data-interface-theme] .pricing-card-yearly::after,
+[data-theme='light'] [data-interface-theme] .pricing-card-lifetime::after {
+  box-shadow: inset 0 0 0 1px rgba(16, 22, 43, 0.14) !important;
+}
+/* hover used to brighten the grid; it now lifts the rim instead */
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme] .pricing-card-yearly:hover::after,
+  [data-interface-theme] .pricing-card-lifetime:hover::after {
+    opacity: 1 !important;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.40) !important;
+  }
+}
+
+
+/* ═════════════════════════════════════════════════════════════════════════
+   REAL GLASS — translucency, backdrop blur and frosted noise.
+
+   The rim work above came from a reference screenshot of an OPAQUE pill on a
+   flat background, so there was no translucency in it to measure. Flat fill +
+   specular rim is a faithful button, but it is only half of what Liquid Glass
+   is on a large surface: the defining property is that you SEE THROUGH it.
+
+   This reuses the recipe this app already runs on .overlay-shell-surface
+   rather than inventing one — translucent fill, blur + saturate behind it,
+   and the same feTurbulence noise, whose own comment says it "is what gives
+   the panel its ground glass tactile feel".
+
+   That noise is also the honest replacement for the 24px crosshatch removed
+   earlier: the card did want texture, just not a synthetic grid.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+/* ── API tier detail card ─────────────────────────────────────────────── */
+[data-interface-theme] .natively-api-detail-card {
+  backdrop-filter: blur(22px) saturate(165%) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(165%) !important;
+}
+[data-interface-theme] .natively-api-detail-card-standard { background: rgba(55, 98, 96, 0.72) !important; }
+[data-interface-theme] .natively-api-detail-card-pro      { background: rgba(16, 80, 138, 0.72) !important; }
+[data-interface-theme] .natively-api-detail-card-max      { background: rgba(92, 54, 93, 0.72) !important; }
+[data-interface-theme] .natively-api-detail-card-ultra    { background: rgba(98, 32, 58, 0.72) !important; }
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card-standard { background: rgba(212, 236, 234, 0.72) !important; }
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card-pro      { background: rgba(184, 220, 252, 0.72) !important; }
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card-max      { background: rgba(218, 194, 219, 0.72) !important; }
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card-ultra    { background: rgba(218, 176, 192, 0.72) !important; }
+
+/* ── Pro plan cards ───────────────────────────────────────────────────── */
+[data-interface-theme] .pricing-card-yearly,
+[data-interface-theme] .pricing-card-lifetime {
+  backdrop-filter: blur(22px) saturate(165%) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(165%) !important;
+}
+
+/* ── The frosted noise, on the element's own ::before ──────────────────
+   ::after is the rim, so the texture goes on ::before — which the card body
+   block above had already retired. mix-blend-mode: overlay lets it modulate
+   the fill without dominating it. */
+[data-interface-theme] .natively-api-detail-card::before,
+[data-interface-theme] .pricing-card-yearly::before,
+[data-interface-theme] .pricing-card-lifetime::before {
+  content: '' !important;
+  display: block !important;
+  position: absolute !important;
+  inset: 0 !important;
+  height: auto !important;
+  z-index: 0 !important;
+  pointer-events: none !important;
+  border-radius: inherit !important;
+  opacity: 0.30 !important;
+  mix-blend-mode: overlay !important;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.6 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>") !important;
+  background-size: 200px 200px !important;
+}
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card::before,
+[data-theme='light'] [data-interface-theme] .pricing-card-yearly::before,
+[data-theme='light'] [data-interface-theme] .pricing-card-lifetime::before {
+  opacity: 0.16 !important;
+}
