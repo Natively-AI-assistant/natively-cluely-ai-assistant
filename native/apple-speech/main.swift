@@ -94,20 +94,30 @@ func flushConverter(
         guard let format = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith:[transcriber]) else {
             throw BridgeError(message:"Apple speech model is unavailable for \(locale.identifier(.bcp47)).")
         }
-        let analyzer = SpeechAnalyzer(modules:[transcriber])
-        let (input, continuation) = AsyncStream<AnalyzerInput>.makeStream()
-        try await analyzer.prepareToAnalyze(in:format)
-        let results = Task {
-            do {
-                for try await result in transcriber.results {
-                    emit(["type":"transcript", "text":String(result.text.characters), "isFinal":result.isFinal])
+        // One analysis session. A `flush` ends the current session cleanly and
+        // starts the next: SpeechAnalyzer.finalize(through:) cannot be used to
+        // force a final mid-stream — measured, it destroys recognition of the
+        // audio that follows (11% word recall vs 100% without it) and hangs
+        // outright when given an explicit boundary time.
+        func startSession() async throws -> (SpeechAnalyzer, AsyncStream<AnalyzerInput>.Continuation, Task<Void, Never>) {
+            let t = SpeechTranscriber(locale:locale,preset:.progressiveTranscription)
+            let a = SpeechAnalyzer(modules:[t])
+            let (i, c) = AsyncStream<AnalyzerInput>.makeStream()
+            try await a.prepareToAnalyze(in:format)
+            let r = Task {
+                do {
+                    for try await result in t.results {
+                        emit(["type":"transcript", "text":String(result.text.characters), "isFinal":result.isFinal])
+                    }
+                } catch {
+                    emit(["type":"error", "message":error.localizedDescription])
+                    exit(1)
                 }
-            } catch {
-                emit(["type":"error", "message":error.localizedDescription])
-                exit(1)
             }
+            try await a.start(inputSequence:i)
+            return (a, c, r)
         }
-        try await analyzer.start(inputSequence:input)
+        var (analyzer, continuation, results) = try await startSession()
         emit(["type":"ready", "locale":locale.identifier(.bcp47), "sampleRate":format.sampleRate])
         var converter: AVAudioConverter?
         var inputFormat: AVAudioFormat?
@@ -122,7 +132,14 @@ func flushConverter(
                 if let converter { try flushConverter(converter,to:format,continuation:continuation) }
                 converter = nil
                 inputFormat = nil
-                try await analyzer.finalize(through:nil)
+                // End this session through its real end-of-input (the only
+                // finalization path Apple honours without corrupting what
+                // follows), drain its results, then open a fresh session so
+                // the next words are recognised normally.
+                continuation.finish()
+                try await analyzer.finalizeAndFinishThroughEndOfInput()
+                await results.value
+                (analyzer, continuation, results) = try await startSession()
                 continue
             }
             guard type == "audio", let encoded = message["pcm"] as? String,

@@ -94,15 +94,23 @@ test('Swift bridge drains resampler state before flush and end-of-input', () => 
   assert.match(source, /outStatus\.pointee\s*=\s*\.endOfStream/);
   assert.match(
     source,
-    /if type == "flush"[^]*flushConverter\(converter[^]*converter = nil[^]*analyzer\.finalize/s,
+    /if type == "flush"[^]*flushConverter\(converter[^]*converter = nil[^]*analyzer\.finalizeAndFinishThroughEndOfInput/s,
   );
-  const finish = source.indexOf('continuation.finish()');
-  assert.ok(finish > 0, 'the analyzer input continuation must be finished');
-  assert.match(
-    source.slice(Math.max(0, finish - 250), finish),
-    /flushConverter\(converter/,
-    'the final converter tail must be yielded before the input continuation finishes',
-  );
+  // The invariant is ordering, not proximity: a distance window broke the
+  // moment a comment was added above continuation.finish(). Every finish must
+  // be preceded by a converter drain with no audio yielded in between, or the
+  // resampler's tail frames are dropped on the floor.
+  const finishes = [...source.matchAll(/continuation\.finish\(\)/g)].map((m) => m.index);
+  assert.ok(finishes.length >= 1, 'the analyzer input continuation must be finished');
+  for (const at of finishes) {
+    const lastDrain = source.slice(0, at).lastIndexOf('flushConverter(converter');
+    assert.ok(lastDrain > 0, 'every continuation.finish() must be preceded by a converter drain');
+    assert.doesNotMatch(
+      source.slice(lastDrain, at),
+      /continuation\.yield\(/,
+      'no audio may be yielded between the final converter drain and finishing the stream',
+    );
+  }
 });
 
 test('non-macOS builds skip before consulting Xcode or the filesystem', () => {
@@ -222,4 +230,50 @@ test('CLI parser accepts explicit universal output and rejects missing values', 
   assert.equal(parsed.output, path.resolve('./helper'));
   assert.throws(() => buildScript.parseCliArgs(['--arch']), /requires a value/);
   assert.throws(() => buildScript.parseCliArgs(['--output']), /requires a value/);
+});
+
+test('a flush restarts the analysis session instead of force-finalizing it', () => {
+  // MEASURED, not assumed. Driving the compiled helper with one sentence and a
+  // flush 1.6s in (scripts/__tests__ cannot run this — it needs macOS 26 and a
+  // built helper, so the contract is pinned here instead):
+  //
+  //   analyzer.finalize(through: nil)      →  11.1% word recall, and in a
+  //                                           second harness NO final arrived
+  //                                           within 20s at all
+  //   analyzer.finalize(through: <time>)   →  deadlocks, no output
+  //   session restart on flush             →  77.8% word recall, flush→final 77ms
+  //
+  // SpeechAnalyzer.finalize(through:) does not survive mid-stream use: the audio
+  // that follows it is recognised as punctuation debris (",.........."). The only
+  // finalization Apple honours cleanly is finalizeAndFinishThroughEndOfInput,
+  // which ends the session — so a flush must end this session and open the next.
+  const swift = fs.readFileSync(
+    path.join(repoRoot, 'native', 'apple-speech', 'main.swift'),
+    'utf8',
+  );
+
+  assert.doesNotMatch(
+    swift,
+    /analyzer\.finalize\s*\(\s*through\s*:/,
+    'finalize(through:) must never be used — it destroys recognition of the audio after it',
+  );
+
+  // Pin the flush branch itself, not just "these words appear somewhere".
+  const flush = /if type == "flush" \{([\s\S]*?)\n            \}/.exec(swift)?.[1];
+  assert.ok(flush, 'the flush branch must still exist');
+  for (const [re, why] of [
+    [/continuation\.finish\(\)/, 'must close the current input stream'],
+    [/try await analyzer\.finalizeAndFinishThroughEndOfInput\(\)/, 'must finalize through real end-of-input'],
+    [/await results\.value/, 'must drain the session results before replacing them'],
+    [/\(analyzer, continuation, results\) = try await startSession\(\)/, 'must open a fresh session'],
+  ]) {
+    assert.match(flush, re, `flush ${why}`);
+  }
+
+  // Ordering is load-bearing: finishing after finalizing, or restarting before
+  // draining, loses the very final the flush exists to produce.
+  const order = ['continuation.finish()', 'finalizeAndFinishThroughEndOfInput()', 'await results.value', 'startSession()']
+    .map((needle) => flush.indexOf(needle));
+  assert.ok(order.every((i) => i >= 0), 'every flush step must be present');
+  assert.deepEqual(order, [...order].sort((a, b) => a - b), 'flush steps must run in order');
 });
