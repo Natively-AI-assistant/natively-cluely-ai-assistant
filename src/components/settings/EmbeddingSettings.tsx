@@ -251,11 +251,14 @@ const EmbeddingModelSelect: React.FC<EmbeddingModelSelectProps> = ({
 /**
  * The panel split into the two pieces the combined Retrieval page needs.
  *
- * `header` and `hero` are the identity of the setting; `panel` is the provider
- * stack. Retrieval hoists `hero` above its Embedding/Reranker switcher, puts
- * `panel` inside the Embedding sub-tab, and DISCARDS `header` — the combined
- * page states what embeddings and reranking are once, in one header, instead
- * of repeating a section heading above each Active card.
+ * `hero` is the Active Embedding Model card; `panel` is the provider stack.
+ * Retrieval hoists `hero` above its Embedding/Reranker switcher and puts
+ * `panel` inside the Embedding sub-tab.
+ *
+ * The section heading is NOT a part. Retrieval states what embeddings and
+ * reranking are once, in one combined header, so a `header` part would be
+ * built on every render for a caller that never renders it. It lives in the
+ * standalone return below, which is the only place it is used.
  *
  * Both halves read the SAME component state (`select()` writes the active
  * model, and the hero card and the provider cards both render from it), which
@@ -264,8 +267,6 @@ const EmbeddingModelSelect: React.FC<EmbeddingModelSelectProps> = ({
  * picking a model in a card would leave the hero card above it stale.
  */
 export interface EmbeddingSettingsParts {
-    /** Heading + subtitle. Retrieval drops this for one combined header. */
-    header: React.ReactNode;
     /** The Active Embedding Model card. */
     hero: React.ReactNode;
     /** The provider stack. */
@@ -938,15 +939,6 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
         );
     };
 
-    const header = (
-        <header className="space-y-1">
-            <h3 className="aip-title">{t('Embeddings')}</h3>
-            <p className="aip-subtitle">
-                {t('Pick the model that indexes your documents for retrieval. It is chosen separately from your AI model, and changing it re-indexes your project.')}
-            </p>
-        </header>
-    );
-
     /* The Active Embedding Model card: the decision this panel exists to make.
        On the combined Retrieval page it sits above the Embedding/Reranker
        switcher, so it stays readable no matter which sub-tab is open. */
@@ -1052,11 +1044,16 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
     /* A caller that places the parts owns the `.aip-root` wrapper and the style
        tag too — Retrieval mounts this component AND RerankerSettings, and two
        copies of AIP_CSS in one subtree is a duplicate stylesheet, not a merge. */
-    if (renderParts) return <>{renderParts({ header, hero, panel })}</>;
+    if (renderParts) return <>{renderParts({ hero, panel })}</>;
 
     return (
         <div className="aip-root space-y-5 pb-10" data-theme={aipTheme} data-settings-stagger>
-            {header}
+            <header className="space-y-1">
+                <h3 className="aip-title">{t('Embeddings')}</h3>
+                <p className="aip-subtitle">
+                    {t('Pick the model that indexes your documents for retrieval. It is chosen separately from your AI model, and changing it re-indexes your project.')}
+                </p>
+            </header>
             {hero}
             {panel}
             <style>{AIP_CSS}</style>

@@ -51,8 +51,6 @@ interface RetrievalLayoutProps {
 }
 
 const RetrievalLayout: React.FC<RetrievalLayoutProps> = ({ embedding, reranker, initialTab, navSeq }) => {
-    /* `embedding.header` / `reranker.header` are intentionally unused here —
-       see the combined <header> below. */
     const t = useT();
     const aipTheme = useResolvedTheme();
 
@@ -112,13 +110,13 @@ const RetrievalLayout: React.FC<RetrievalLayoutProps> = ({ embedding, reranker, 
         // One `.aip-root`, one AIP_CSS. Both child components can emit their own
         // wrapper and style tag, and here they must not — this page mounts both.
         <div className="aip-root space-y-5 pb-10" data-theme={aipTheme} data-settings-stagger>
-            {/* ONE header for both halves. Each child component still owns its
-                own heading for its standalone layout, and Retrieval drops both
-                (`header` is destructured off and deliberately unused): two
-                headings stacked above two Active cards restated "chosen
-                separately from your AI model" twice and re-split the pipeline
-                the merge exists to join. The cards' own labels — ACTIVE
-                EMBEDDING MODEL, ACTIVE RERANKER — already say which is which. */}
+            {/* ONE header for both halves. Each child component still owns a
+                heading for its STANDALONE layout, but neither exposes it as a
+                part, so nothing is built here for a caller that would not
+                render it. Two headings stacked above two Active cards restated
+                "chosen separately from your AI model" twice and re-split the
+                pipeline the merge exists to join. The cards' own labels —
+                ACTIVE EMBEDDING MODEL, ACTIVE RERANKER — say which is which. */}
             <header className="space-y-1">
                 <h3 className="aip-title">{t('Retrieval')}</h3>
                 <p className="aip-subtitle">

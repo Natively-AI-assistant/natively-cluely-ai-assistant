@@ -37,15 +37,35 @@ const read = f => readFileSync(path.resolve(__dirname, '../../..', f), 'utf8');
 const stripComments = (src) =>
   src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
-/** The body of one safeHandle('<channel>', ...) registration. */
+/**
+ * The body of one safeHandle('<channel>', ...) registration.
+ *
+ * The opening brace is found by walking parenthesis depth rather than taking
+ * the first `{` after the channel name. safeHandle's own call parens put the
+ * callback at depth 1, so the body brace is the first `{` seen at depth 1
+ * AFTER the arrow — which skips a type literal in the parameter list, e.g.
+ * `safeHandle('x', async (_e, o: { a: number }) => {`. Taking the first brace
+ * would have grabbed `{ a: number }` and silently asserted against the wrong
+ * text.
+ */
 function handlerBody(src, channel) {
   const start = src.indexOf(`safeHandle('${channel}'`);
   assert.notEqual(start, -1, `${channel} is not registered at all`);
-  let i = src.indexOf('{', start), depth = 0;
-  assert.notEqual(i, -1, `${channel} has no body`);
-  for (let j = i; j < src.length; j++) {
+
+  let paren = 0, arrowSeen = false, open = -1;
+  for (let i = start; i < src.length; i++) {
+    const c = src[i];
+    if (c === '(') paren++;
+    else if (c === ')') paren--;
+    else if (c === '=' && src[i + 1] === '>' && paren === 1) { arrowSeen = true; i++; }
+    else if (c === '{' && arrowSeen && paren === 1) { open = i; break; }
+  }
+  assert.notEqual(open, -1, `${channel} has no callback body`);
+
+  let depth = 0;
+  for (let j = open; j < src.length; j++) {
     if (src[j] === '{') depth++;
-    else if (src[j] === '}' && --depth === 0) return src.slice(i, j + 1);
+    else if (src[j] === '}' && --depth === 0) return src.slice(open, j + 1);
   }
   throw new Error(`unbalanced braces in ${channel}`);
 }
