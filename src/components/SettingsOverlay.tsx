@@ -3090,7 +3090,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                Windows logo exists under a licence compatible with AGPL-3.0 (it is in
                                                                neither lobehub nor simple-icons — see the README). `isMac` is the same
                                                                platform source the rest of this panel uses. */
-                                                            ...(isMac ? [{ id: 'apple-speech', label: 'Apple Speech', badge: null, desc: t('On-device · macOS 26+ · No API key'), color: 'green', icon: <BrandMark provider="apple" />, neutralTile: true }] : []),
+                                                            ...(isMac ? [{ id: 'apple-speech', label: 'Apple Speech', badge: null, desc: t('On-device · macOS 26+'), color: 'green', icon: <BrandMark provider="apple" />, neutralTile: true }] : []),
                                                             { id: 'local-whisper', label: 'Local Models', badge: null, desc: t('Privacy-first: runs 100% on your device'), color: 'green', icon: <BrandMark provider={isMac ? 'apple' : 'microsoft'} />, neutralTile: true },
                                                         ]}
                                                     />
