@@ -298,7 +298,7 @@ interface ElectronAPI {
       | 'soniox'
       | 'nvidia_nim'
       | 'natively'
-      | 'local-whisper',
+      | 'local-whisper' | 'apple-speech',
   ) => Promise<{ success: boolean; error?: string }>;
   localWhisperGetModels: () => Promise<{ models: any[]; activeModelId: string }>;
   localWhisperGetRecoveryNotice: () => Promise<{
@@ -426,7 +426,7 @@ interface ElectronAPI {
   // STT Status Events
   onSttStatusChanged: (
     callback: (data: {
-      state: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio';
+      state: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio' | 'preparing';
       provider: string;
       error?: string;
       channel: 'user' | 'interviewer';
@@ -1662,7 +1662,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       | 'soniox'
       | 'nvidia_nim'
       | 'natively'
-      | 'local-whisper',
+      | 'local-whisper' | 'apple-speech',
   ) => ipcRenderer.invoke('set-stt-provider', provider),
   getSttProvider: () => ipcRenderer.invoke('get-stt-provider'),
   setGroqSttApiKey: (apiKey: string) => ipcRenderer.invoke('set-groq-stt-api-key', apiKey),
@@ -1889,7 +1889,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // STT Status Events
   onSttStatusChanged: (
     callback: (data: {
-      state: 'connected' | 'reconnecting' | 'failed';
+      state: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio' | 'preparing';
       provider: string;
       error?: string;
       channel: 'user' | 'interviewer';

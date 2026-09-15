@@ -921,8 +921,8 @@ const formatProviderLabel = (provider?: string | null): string => {
 };
 
 const getSttSummary = (
-  userStatus: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio',
-  interviewerStatus: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio',
+  userStatus: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio' | 'preparing',
+  interviewerStatus: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio' | 'preparing',
   userProvider: string,
   interviewerProvider: string,
   notConfigured: boolean,
@@ -951,6 +951,18 @@ const getSttSummary = (
       label: 'STT reconnecting',
       tone: 'warn',
       detail: `${formatProviderLabel(userProvider)} mic · ${formatProviderLabel(interviewerProvider)} system`,
+    };
+  }
+  if (userStatus === 'preparing' || interviewerStatus === 'preparing') {
+    const detail = interviewerStatus === 'preparing' && interviewerError
+      ? interviewerError
+      : userStatus === 'preparing' && userError
+      ? userError
+      : `${formatProviderLabel(userProvider)} mic · ${formatProviderLabel(interviewerProvider)} system`;
+    return {
+      label: 'Preparing Apple Speech…',
+      tone: 'warn',
+      detail,
     };
   }
   if (userStatus === 'awaiting-audio' || interviewerStatus === 'awaiting-audio') {
@@ -1277,12 +1289,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // launched. Showing green before verifying live audio masks the TCC zero-fill
   // failure mode where permissions look granted but no audio actually flows.
   const [sttUserStatus, setSttUserStatus] = useState<
-    'connected' | 'reconnecting' | 'failed' | 'awaiting-audio'
+    'connected' | 'reconnecting' | 'failed' | 'awaiting-audio' | 'preparing'
   >('awaiting-audio');
   const [sttUserError, setSttUserError] = useState<string>('');
   const [sttUserProvider, setSttUserProvider] = useState<string>('');
   const [sttInterviewerStatus, setSttInterviewerStatus] = useState<
-    'connected' | 'reconnecting' | 'failed' | 'awaiting-audio'
+    'connected' | 'reconnecting' | 'failed' | 'awaiting-audio' | 'preparing'
   >('awaiting-audio');
   const [sttInterviewerError, setSttInterviewerError] = useState<string>('');
   const [sttInterviewerProvider, setSttInterviewerProvider] = useState<string>('');
@@ -5066,12 +5078,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         setSttUserStatus(data.state);
         setSttUserProvider(data.provider);
         if (data.error) setSttUserError(data.error);
-        if (data.state === 'connected') setSttUserError('');
+        if (data.state === 'connected' || data.state === 'awaiting-audio') setSttUserError('');
       } else if (data.channel === 'interviewer') {
         setSttInterviewerStatus(data.state);
         setSttInterviewerProvider(data.provider);
         if (data.error) setSttInterviewerError(data.error);
-        if (data.state === 'connected') setSttInterviewerError('');
+        if (data.state === 'connected' || data.state === 'awaiting-audio') setSttInterviewerError('');
       }
     });
   }, []);
@@ -10038,7 +10050,9 @@ Provide only the answer, nothing else.`;
   const shouldShowSttSummaryPill =
     (sttSummary.tone === 'error' && !audioFailureBannerActive) ||
     sttUserStatus === 'reconnecting' ||
-    sttInterviewerStatus === 'reconnecting';
+    sttInterviewerStatus === 'reconnecting' ||
+    sttUserStatus === 'preparing' ||
+    sttInterviewerStatus === 'preparing';
   // Whether the vision chip will render (mirrors the IIFE's early-return guard).
   const visionPillFailed = screenContextStatus === 'failed' || !!latestVisionFailureReason;
   const visionPillSucceeded =

@@ -30,11 +30,13 @@ const tsxPath = path.join(root, 'src/components/NativelyInterface.tsx');
 const mainPath = path.join(root, 'electron/main.ts');
 const preloadPath = path.join(root, 'electron/preload.ts');
 const electronDtsPath = path.join(root, 'src/types/electron.d.ts');
+const rollingTranscriptPath = path.join(root, 'src/components/ui/RollingTranscript.tsx');
 
 const tsx = fs.readFileSync(tsxPath, 'utf8');
 const main = fs.readFileSync(mainPath, 'utf8');
 const preload = fs.readFileSync(preloadPath, 'utf8');
 const electronDts = fs.readFileSync(electronDtsPath, 'utf8');
+const rollingTranscript = fs.readFileSync(rollingTranscriptPath, 'utf8');
 
 // Helper: extract a window of N lines centred on the first match of a regex.
 function windowAround(source, re, linesBefore = 1, linesAfter = 5) {
@@ -176,5 +178,38 @@ describe('B2: STT user/interviewer status must initialize to \'awaiting-audio\''
       `BUG: the following declarations no longer contain 'awaiting-audio' in their state union: ${missing.join(', ')}. ` +
         'All four must stay in sync — they describe the same IPC payload shape.',
     );
+  });
+});
+
+describe('Apple Speech language-asset preparation status', () => {
+  it('keeps the preparing state in sync across the main, preload, and renderer boundaries', () => {
+    const mainInterface = /interface\s+SttStatusPayload\s*\{[\s\S]*?\}/.exec(main)?.[0] ?? '';
+    assert.match(mainInterface, /state\s*:[^;]*['"]preparing['"]/);
+
+    const preloadAnchors = [...preload.matchAll(/onSttStatusChanged/g)].map((match) =>
+      preload.slice(match.index, match.index + 450),
+    );
+    assert.ok(preloadAnchors.length >= 2, 'preload should declare and expose the status bridge');
+    for (const signature of preloadAnchors) {
+      assert.match(signature, /state\s*:[^;]*['"]preparing['"]/);
+    }
+
+    const dtsSignature = electronDts.slice(electronDts.indexOf('onSttStatusChanged'), electronDts.indexOf('onSttStatusChanged') + 450);
+    assert.match(dtsSignature, /state\s*:[^;]*['"]preparing['"]/);
+    assert.match(tsx, /sttUserStatus[\s\S]{0,180}['"]preparing['"]/);
+    assert.match(tsx, /sttInterviewerStatus[\s\S]{0,180}['"]preparing['"]/);
+    assert.match(rollingTranscript, /status\s*:[^;]*['"]preparing['"]/);
+  });
+
+  it('bridges helper status to preparing and returns to awaiting-audio when ready', () => {
+    assert.match(
+      main,
+      /stt instanceof AppleSpeechSTT[\s\S]*?stt\.on\('status'[\s\S]*?state:\s*'preparing'[\s\S]*?stt\.on\('ready'[\s\S]*?state:\s*'awaiting-audio'/,
+    );
+  });
+
+  it('shows the asset-install message while the transcript is still empty', () => {
+    assert.match(tsx, /label:\s*'Preparing Apple Speech…'/);
+    assert.match(rollingTranscript, /text \|\| preparingMessage \|\| 'Listening…'/);
   });
 });

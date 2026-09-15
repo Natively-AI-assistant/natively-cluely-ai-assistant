@@ -1215,13 +1215,14 @@ import { ElevenLabsStreamingSTT } from "./audio/ElevenLabsStreamingSTT"
 import { OpenAIStreamingSTT } from "./audio/OpenAIStreamingSTT"
 import { NativelyProSTT } from "./audio/NativelyProSTT"
 import { NvidiaNimStreamingSTT } from "./audio/NvidiaNimStreamingSTT"
+import { AppleSpeechSTT } from "./audio/AppleSpeechSTT"
 import { punctuationSourceFor } from "./llm/punctuationProvenance"
 import { ThemeManager } from "./ThemeManager"
 import { RAGManager } from "./rag/RAGManager"
 import { DatabaseManager } from "./db/DatabaseManager"
 
 /** Unified type for all STT providers with optional extended capabilities */
-type STTProvider = (GoogleSTT | RestSTT | DeepgramStreamingSTT | SonioxStreamingSTT | ElevenLabsStreamingSTT | OpenAIStreamingSTT | NativelyProSTT | NvidiaNimStreamingSTT) & {
+type STTProvider = (GoogleSTT | RestSTT | DeepgramStreamingSTT | SonioxStreamingSTT | ElevenLabsStreamingSTT | OpenAIStreamingSTT | NativelyProSTT | NvidiaNimStreamingSTT | AppleSpeechSTT) & {
   /** Local models return whether a trailing final is now in flight; cloud providers return void. */
   finalize?: () => void | boolean;
   setAudioChannelCount?: (count: number) => void;
@@ -1236,7 +1237,7 @@ interface SttStatusPayload {
   // STT WS may be connected but no isFinal transcript has arrived yet, so we
   // cannot honestly claim 'connected' in the UI. Renderers should display this
   // as a neutral "Listening for audio…" indicator, NOT green/active.
-  state: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio';
+  state: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio' | 'preparing';
   provider: string;
   error?: string;
   channel: 'user' | 'interviewer';
@@ -3416,6 +3417,8 @@ export class AppState {
         console.warn(`[Main] No API key for ${sttProvider} STT, falling back to GoogleSTT`);
         stt = new GoogleSTT(speaker);
       }
+    } else if (sttProvider === 'apple-speech') {
+      stt = new AppleSpeechSTT();
     } else if (sttProvider === 'local-whisper') {
       const { LocalWhisperSTT } = require('./audio/LocalWhisperSTT');
       const sm = SettingsManager.getInstance();
@@ -3585,7 +3588,7 @@ export class AppState {
     // "Listening for audio…" state until the first isFinal transcript proves
     // the pipeline is actually flowing. Pre-fix this was 'reconnecting' which
     // implied a recovery state from the get-go.
-    let _lastState: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio' = 'awaiting-audio';
+    let _lastState: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio' | 'preparing' = 'awaiting-audio';
 
     stt.on('error', (err: Error) => {
       // Google streamingRecognize's 10s silence timeout closes the stream
@@ -3695,6 +3698,31 @@ export class AppState {
       console.warn(`[Main] STT (${speaker}) warning: ${w?.code ?? 'unknown'}`,
         { provider: sttProvider, message: w?.message, droppedBytes: w?.droppedBytes });
     });
+
+    // Apple may need to install the selected language asset before either
+    // channel can produce text. Surface that phase instead of leaving the user
+    // on a generic "Listening…" state for several minutes with no explanation.
+    if (stt instanceof AppleSpeechSTT) {
+      stt.on('status', (message: string) => {
+        if (!message?.trim()) return;
+        _lastState = 'preparing';
+        this.sendSttStatus({
+          state: 'preparing',
+          provider: sttProvider,
+          error: message,
+          channel: speaker,
+        } as SttStatusPayload);
+      });
+      stt.on('ready', () => {
+        if (_lastState !== 'preparing') return;
+        _lastState = 'awaiting-audio';
+        this.sendSttStatus({
+          state: 'awaiting-audio',
+          provider: sttProvider,
+          channel: speaker,
+        } as SttStatusPayload);
+      });
+    }
 
     // Auto language detection: NativelyProSTT emits 'languageDetected' when the
     // backend resolves the language from the first audio batch. Notify the renderer

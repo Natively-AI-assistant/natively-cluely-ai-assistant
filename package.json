@@ -36,7 +36,7 @@
     "test:auto-answer": "npm run build:electron && node --test \"electron/intelligence/autoAnswer/__tests__/**/*.test.mjs\"",
     "test:auto-answer:judge": "npm run build:electron && node electron/intelligence/autoAnswer/__tests__/judgeEval.mjs",
     "test:intelligence": "npm run build:electron && node --test \"electron/intelligence/__tests__/**/*.test.mjs\" \"electron/context-intelligence/__tests__/**/*.test.mjs\"",
-    "test:core-smoke": "node --test \"electron/llm/__tests__/DirectAssistCore2026_08_29.test.mjs\" \"electron/services/__tests__/DirectAssistIpcBridge2026_08_29.test.mjs\" \"electron/services/__tests__/ScreenshotOutranksTextDecline2026_08_19.test.mjs\" \"electron/services/__tests__/SsrfProtection.test.mjs\" \"electron/context-intelligence/__tests__/AnswerTrace.test.mjs\" \"electron/context-intelligence/__tests__/LegacyTrace.test.mjs\" \"electron/context-intelligence/__tests__/ScreenCodeAskCodingTask2026_08_05.test.mjs\"",
+    "test:core-smoke": "node --test \"electron/llm/__tests__/DirectAssistCore2026_08_29.test.mjs\" \"electron/services/__tests__/DirectAssistIpcBridge2026_08_29.test.mjs\" \"electron/services/__tests__/ScreenshotOutranksTextDecline2026_08_19.test.mjs\" \"electron/services/__tests__/SsrfProtection.test.mjs\" \"electron/context-intelligence/__tests__/AnswerTrace.test.mjs\" \"electron/context-intelligence/__tests__/LegacyTrace.test.mjs\" \"electron/context-intelligence/__tests__/ScreenCodeAskCodingTask2026_08_05.test.mjs\" \"electron/audio/__tests__/AppleSpeechSTT.test.mjs\" \"electron/services/__tests__/SttAwaitingAudioInitialState.test.mjs\"",
     "test:lib": "node --experimental-strip-types --test \"src/lib/**/__tests__/**/*.test.mjs\"",
     "test:scripts": "node --test \"scripts/__tests__/**/*.test.mjs\"",
     "test:ci": "npm run typecheck:electron && npm run build && npm test && npm run test:intelligence && npm run test:lib && npm run test:scripts",
@@ -112,12 +112,13 @@
     "verify:humanized-answers": "npm run build:electron && node scripts/verify-humanized-answers.mjs",
     "verify:spoken-quality": "npm run build:electron && node scripts/verify-spoken-quality.mjs",
     "test:node-runner": "npm run build:electron && node --test \"electron/services/__tests__/**/*.test.mjs\" \"electron/lib/__tests__/**/*.test.mjs\" \"electron/llm/__tests__/**/*.test.mjs\" \"electron/llm/codeVerification/__tests__/**/*.test.mjs\" \"electron/audio/__tests__/**/*.test.mjs\" \"electron/rag/__tests__/**/*.test.mjs\" \"electron/utils/__tests__/**/*.test.mjs\" \"electron/update/**/*.test.mjs\"",
-    "test:api-smoke": "npm run build:electron && node scripts/run-with-env.mjs --default-tmpdir NATIVELY_TEST_USERDATA=natively-test-userdata --set ELECTRON_RUN_AS_NODE=1 -- electron --test electron/services/__tests__/NativelyApiE2E.test.mjs"
+    "test:api-smoke": "npm run build:electron && node scripts/run-with-env.mjs --default-tmpdir NATIVELY_TEST_USERDATA=natively-test-userdata --set ELECTRON_RUN_AS_NODE=1 -- electron --test electron/services/__tests__/NativelyApiE2E.test.mjs",
+    "build:apple-speech": "node scripts/build-apple-speech.js"
   },
   "build": {
     "generateUpdatesFilesForAllChannels": true,
     "appId": "com.electron.meeting-notes",
-    "afterPack": "./scripts/ad-hoc-sign.js",
+    "afterPack": "./scripts/after-pack.cjs",
     "productName": "Natively",
     "files": [
       "dist",
@@ -208,7 +209,8 @@
       "extendInfo": {
         "NSScreenCaptureUsageDescription": "Natively needs Screen Recording permission to capture system audio for meeting transcription.",
         "NSMicrophoneUsageDescription": "Natively needs microphone access to transcribe your voice during meetings.",
-        "NSAudioCaptureUsageDescription": "Natively needs system audio access to transcribe meeting audio."
+        "NSAudioCaptureUsageDescription": "Natively needs system audio access to transcribe meeting audio.",
+        "NSSpeechRecognitionUsageDescription": "Natively uses Apple Speech to transcribe meeting audio on your device."
       }
     },
     "win": {
