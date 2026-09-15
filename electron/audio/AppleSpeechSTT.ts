@@ -27,6 +27,86 @@ export interface AppleSpeechRuntime {
   clearTimer: (timer: AppleSpeechTimer) => void;
 }
 
+/** Locale availability for the Settings language picker. */
+export interface AppleSpeechLocales {
+  /** False when the helper is missing, the OS is too old, or the Mac cannot run it. */
+  available: boolean;
+  /** BCP-47 locales Apple can transcribe at all. */
+  supported: string[];
+  /** BCP-47 locales already on disk — the rest download on first use. */
+  installed: string[];
+}
+
+/** Path to the compiled helper (packaged vs development). */
+export function appleSpeechExecutablePath(): string {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'apple-speech', 'natively-apple-speech')
+    : path.join(app.getAppPath(), 'resources', 'apple-speech', 'natively-apple-speech');
+}
+
+const UNAVAILABLE: AppleSpeechLocales = { available: false, supported: [], installed: [] };
+
+/**
+ * One-shot `--locales` query, so Settings can show which languages Apple can
+ * transcribe and which still need a download instead of letting a user pick a
+ * dead end and find out mid-meeting.
+ *
+ * Never throws: every failure (non-macOS, helper not built, old OS, malformed
+ * output, hang) degrades to `available: false`, which the renderer reads as
+ * "don't restrict and don't badge" — the pre-existing behaviour.
+ */
+export function readAppleSpeechLocales(
+  executable = appleSpeechExecutablePath(),
+  deps: { platform?: NodeJS.Platform; spawn?: typeof spawn; timeoutMs?: number } = {},
+): Promise<AppleSpeechLocales> {
+  const platform = deps.platform ?? process.platform;
+  if (platform !== 'darwin') return Promise.resolve(UNAVAILABLE);
+  const spawnFn = deps.spawn ?? spawn;
+  const timeoutMs = deps.timeoutMs ?? 10_000;
+  return new Promise<AppleSpeechLocales>((resolve) => {
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = spawnFn(executable, ['--locales'], { stdio: ['ignore', 'pipe', 'ignore'] });
+    } catch {
+      resolve(UNAVAILABLE); return;
+    }
+    let out = '';
+    let settled = false;
+    const finish = (value: AppleSpeechLocales) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try { if (child.exitCode === null) child.kill(); } catch { /* already gone */ }
+      resolve(value);
+    };
+    const timer = setTimeout(() => finish(UNAVAILABLE), timeoutMs);
+    timer.unref?.();
+    child.stdout?.setEncoding('utf8');
+    child.stdout?.on('data', (chunk: string) => {
+      out += chunk;
+      if (out.length > 200_000) finish(UNAVAILABLE);
+    });
+    child.on('error', () => finish(UNAVAILABLE));
+    child.on('close', () => {
+      for (const line of out.split('\n')) {
+        if (!line.trim()) continue;
+        try {
+          const message = JSON.parse(line);
+          if (message?.type === 'locales') {
+            finish({
+              available: !!message.available,
+              supported: Array.isArray(message.supported) ? message.supported.map(String) : [],
+              installed: Array.isArray(message.installed) ? message.installed.map(String) : [],
+            });
+            return;
+          }
+        } catch { /* not our line */ }
+      }
+      finish(UNAVAILABLE);
+    });
+  });
+}
+
 /** Apple on-device STT, isolated from Electron/ONNX in a Swift child process. */
 export class AppleSpeechSTT extends EventEmitter {
   private child: ChildProcessWithoutNullStreams | null = null;
@@ -46,9 +126,7 @@ export class AppleSpeechSTT extends EventEmitter {
 
   constructor(executable?: string, runtime: Partial<AppleSpeechRuntime> = {}) {
     super();
-    this.executable = executable ?? (app.isPackaged
-      ? path.join(process.resourcesPath, 'apple-speech', 'natively-apple-speech')
-      : path.join(app.getAppPath(), 'resources', 'apple-speech', 'natively-apple-speech'));
+    this.executable = executable ?? appleSpeechExecutablePath();
     this.runtime = {
       platform: process.platform,
       osRelease: os.release,

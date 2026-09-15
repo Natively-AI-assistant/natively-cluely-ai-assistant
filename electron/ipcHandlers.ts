@@ -281,6 +281,8 @@ const GATE_GENERIC_TOKENS = new Set<string>([
 ]);
 
 
+let appleSpeechLocalesCache: { available: boolean; supported: string[]; installed: string[] } | null = null;
+
 export function initializeIpcHandlers(appState: AppState): void {
   const safeHandle = (
     channel: string,
@@ -10842,6 +10844,20 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
     },
   );
+
+  // Which languages Apple Speech can transcribe, and which are already on
+  // disk. Settings uses this to restrict the language list and to mark the
+  // rest as a download, so nobody picks a dead end and discovers it mid-meeting.
+  // Cached for the session: the answer only changes when macOS installs an
+  // asset, and the meeting-time 'preparing' status already covers that case.
+  safeHandle('apple-speech:get-locales', async () => {
+    if (process.platform !== 'darwin') return { available: false, supported: [], installed: [] };
+    if (!appleSpeechLocalesCache) {
+      const { readAppleSpeechLocales } = require('./audio/AppleSpeechSTT');
+      appleSpeechLocalesCache = await readAppleSpeechLocales();
+    }
+    return appleSpeechLocalesCache;
+  });
 
   safeHandle('get-stt-provider', async () => {
     try {

@@ -190,9 +190,14 @@ interface CustomSelectProps {
     /** Greys the control out and blocks the dropdown — used when the active
      *  local STT model doesn't accept this setting (see modelLanguageSupport). */
     disabled?: boolean;
+    /** Optional right-aligned tag per option, keyed by deviceId. Used to mark
+     *  Apple Speech languages as already installed vs downloaded on first use,
+     *  so the wait is visible BEFORE a meeting starts rather than as a silent
+     *  pause afterwards. Kept out of `label` because the label span truncates. */
+    badges?: Record<string, string>;
 }
 
-const CustomSelect: React.FC<CustomSelectProps> = ({ label, icon, value, options, onChange, placeholder = "Select device", disabled = false }) => {
+const CustomSelect: React.FC<CustomSelectProps> = ({ label, icon, value, options, onChange, placeholder = "Select device", disabled = false, badges }) => {
     const t = useT();
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = React.useRef<HTMLDivElement>(null);
@@ -242,7 +247,14 @@ const CustomSelect: React.FC<CustomSelectProps> = ({ label, icon, value, options
                                     className={`w-full text-left px-3 py-2 text-sm rounded-md flex items-center justify-between group transition-colors ${value === device.deviceId ? 'bg-bg-input hover:bg-bg-elevated text-text-primary' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
                                 >
                                     <span className="truncate">{device.label || `Device ${device.deviceId.slice(0, 5)}...`}</span>
-                                    {value === device.deviceId && <Check size={14} className="text-accent-primary" />}
+                                    <span className="flex items-center gap-2 shrink-0 pl-2">
+                                        {badges?.[device.deviceId] && (
+                                            <span className="text-[10px] uppercase tracking-wide text-text-secondary/80 whitespace-nowrap">
+                                                {badges[device.deviceId]}
+                                            </span>
+                                        )}
+                                        {value === device.deviceId && <Check size={14} className="text-accent-primary" />}
+                                    </span>
                                 </button>
                             ))}
                             {options.length === 0 && (
@@ -769,6 +781,16 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     }> | null>(null);
     const [localWhisperConfig, setLocalWhisperConfig] = useState<LocalWhisperChannelConfig | null>(null);
 
+    // Apple Speech locale availability (macOS 26+). Apple transcribes 45
+    // locales, but only 14 of Natively's 30 language entries map to one — the
+    // other 20 fail at meeting start with "does not support language X". This
+    // restricts the list to what Apple can actually do and marks the rest as a
+    // first-use download, so the wait is visible before a meeting rather than
+    // as an unexplained pause during one.
+    const [appleSpeechLocales, setAppleSpeechLocales] = useState<{
+        available: boolean; supported: string[]; installed: string[];
+    } | null>(null);
+
     // AI Response Language
     const [aiResponseLanguage, setAiResponseLanguage] = useState('English');
     const [availableAiLanguages, setAvailableAiLanguages] = useState<any[]>([]);
@@ -1101,6 +1123,58 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         }
     };
 
+    useEffect(() => {
+        if (sttProvider !== 'apple-speech') return;
+        let cancelled = false;
+        window.electronAPI?.getAppleSpeechLocales?.()
+            .then((r) => { if (!cancelled) setAppleSpeechLocales(r); })
+            .catch(() => { if (!cancelled) setAppleSpeechLocales(null); });
+        return () => { cancelled = true; };
+    }, [sttProvider]);
+
+    /** bcp47 -> lower-case, so es-ES and es-es compare equal. */
+    const appleLocaleSets = useMemo(() => {
+        if (sttProvider !== 'apple-speech' || !appleSpeechLocales?.available) return null;
+        return {
+            supported: new Set(appleSpeechLocales.supported.map((l) => l.toLowerCase())),
+            installed: new Set(appleSpeechLocales.installed.map((l) => l.toLowerCase())),
+        };
+    }, [sttProvider, appleSpeechLocales]);
+
+    // Feeds the same allowedLanguageKeySet the local/NVIDIA gates use, so the
+    // unsupported entries disappear from both selects with no new plumbing.
+    const appleLanguageCapability = useMemo(() => {
+        if (!appleLocaleSets) return null;
+        const keys = new Set<string>(['auto']);
+        for (const [key, l] of Object.entries(availableLanguages) as [string, any][]) {
+            const bcp = String(l?.bcp47 ?? '');
+            if (bcp && bcp !== 'auto' && appleLocaleSets.supported.has(bcp.toLowerCase())) keys.add(key);
+        }
+        return keys;
+    }, [appleLocaleSets, availableLanguages]);
+
+    /** Per-variant and per-group install badges for the two language selects. */
+    const appleLanguageBadges = useMemo(() => {
+        if (!appleLocaleSets) return undefined;
+        const variant: Record<string, string> = {};
+        const groupInstalled = new Map<string, boolean>();
+        for (const [key, l] of Object.entries(availableLanguages) as [string, any][]) {
+            const bcp = String(l?.bcp47 ?? '');
+            if (!bcp || bcp === 'auto') continue;
+            if (!appleLocaleSets.supported.has(bcp.toLowerCase())) continue;
+            const installed = appleLocaleSets.installed.has(bcp.toLowerCase());
+            variant[key] = installed ? t('Installed') : t('Download');
+            // A group counts as installed once any of its regions is on disk —
+            // picking that group lands on an installed region by default.
+            groupInstalled.set(l.group, (groupInstalled.get(l.group) ?? false) || installed);
+        }
+        const group: Record<string, string> = {};
+        for (const [name, installed] of groupInstalled) {
+            group[name] = installed ? t('Installed') : t('Download');
+        }
+        return { variant, group };
+    }, [appleLocaleSets, availableLanguages, t]);
+
     // NVIDIA speech models are per-language deployments: the Vietnamese build
     // serves vi-VN and nothing else, and the streaming English ones serve en-US
     // only. Offering the full language list under them would let a user pick a
@@ -1114,7 +1188,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
     // Language keys the active STT backend accepts. Unrestricted for cloud
     // providers; for local-whisper this is the active model's documented set.
-    const allowedLanguageKeySet = localLanguageCapability?.allowedKeys ?? nvidiaLanguageCapability ?? null;
+    const allowedLanguageKeySet = localLanguageCapability?.allowedKeys ?? nvidiaLanguageCapability ?? appleLanguageCapability ?? null;
     const isLanguageEntryAllowed = (key: string) => !allowedLanguageKeySet || allowedLanguageKeySet.has(key);
 
     // Helper to get unique groups (restricted to what the active model accepts)
@@ -3439,6 +3513,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 onChange={handleGroupChange}
                                                 placeholder={t("Select Language")}
                                                 disabled={languageLocked}
+                                                badges={appleLanguageBadges?.group}
                                             />
 
                                             {/* Variant/Accent Selector (Conditional) — greyed out when the
@@ -3454,6 +3529,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         options={currentGroupVariants}
                                                         onChange={handleLanguageChange}
                                                         placeholder={t("Select Region")}
+                                                        badges={appleLanguageBadges?.variant}
                                                         disabled={!!localLanguageCapability && !localLanguageCapability.accentSelectable}
                                                     />
                                                 </div>
@@ -3470,6 +3546,26 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         {' '}{localLanguageCapability.accentSelectable
                                                             ? t('supports English only — language is fixed for this model.')
                                                             : t('supports English only — language and accent are fixed for this model.')}
+                                                    </p>
+                                                </div>
+                                            )}
+                                            {/* Apple Speech: the stored language may be one of the 20
+                                                Natively offers that Apple cannot transcribe. It is filtered
+                                                out of the selects above, so without this the control would
+                                                just sit on its placeholder with no explanation. */}
+                                            {appleLanguageCapability && storedLanguageUnsupported && (
+                                                <div className="flex gap-2 items-center mt-2 px-1">
+                                                    <AlertCircle size={14} className="text-amber-400 shrink-0" />
+                                                    <p className="text-xs text-amber-200/90">
+                                                        {`"${availableLanguages[recognitionLanguage]?.label ?? recognitionLanguage}" ${t("isn't available in Apple Speech — pick one of the listed languages.")}`}
+                                                    </p>
+                                                </div>
+                                            )}
+                                            {appleLanguageCapability && (
+                                                <div className="flex gap-2 items-center mt-2 px-1">
+                                                    <Info size={14} className="text-text-secondary shrink-0" />
+                                                    <p className="text-xs text-text-secondary">
+                                                        {t('Languages marked Download are fetched by macOS the first time you use them — the first meeting starts once that finishes.')}
                                                     </p>
                                                 </div>
                                             )}

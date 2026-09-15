@@ -61,8 +61,31 @@ func flushConverter(
 
 @main struct AppleSpeechHelper {
     static func main() async {
+        // `--locales` is a one-shot query used by Settings to show which
+        // languages Apple can transcribe and which still need a download.
+        // It never starts an analyzer, so it is cheap to call on demand.
+        if CommandLine.arguments.contains("--locales") {
+            do { try await emitLocales() }
+            catch { emit(["type":"error", "message":error.localizedDescription]); exit(1) }
+            return
+        }
         do { try await run() }
         catch { emit(["type":"error", "message":error.localizedDescription]); exit(1) }
+    }
+
+    static func emitLocales() async throws {
+        guard #available(macOS 26.0, *), SpeechTranscriber.isAvailable else {
+            emit(["type":"locales", "supported":[], "installed":[], "available":false])
+            return
+        }
+        let supported = await SpeechTranscriber.supportedLocales
+        let installed = await SpeechTranscriber.installedLocales
+        emit([
+            "type":"locales",
+            "available":true,
+            "supported":supported.map { $0.identifier(.bcp47) },
+            "installed":installed.map { $0.identifier(.bcp47) },
+        ])
     }
     static func run() async throws {
         guard #available(macOS 26.0, *), SpeechTranscriber.isAvailable else {

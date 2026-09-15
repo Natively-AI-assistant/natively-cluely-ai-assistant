@@ -459,3 +459,75 @@ test('an unknown key falls back to the app locale instead of being forwarded', (
   assert.equal(sent, 'de-DE');
   assert.notEqual(sent, 'klingon', 'a settings key must never reach Apple as a locale');
 });
+
+// --- readAppleSpeechLocales: the Settings language picker's data source ------
+// Every failure must degrade to available:false, which the renderer reads as
+// "don't restrict the list and don't badge" — i.e. exactly the behaviour before
+// this existed. A picker that silently hides languages because a probe broke
+// would be worse than one that never annotated them.
+const { readAppleSpeechLocales } = await import(
+  pathToFileURL(path.resolve(__dirname, '../../../dist-electron/electron/audio/AppleSpeechSTT.js')).href
+);
+
+function stubSpawn(behaviour) {
+  return () => {
+    const child = new FakeChild();
+    queueMicrotask(() => behaviour(child));
+    return child;
+  };
+}
+
+test('locales query parses the helper answer', async () => {
+  const result = await readAppleSpeechLocales('/fake/helper', {
+    platform: 'darwin',
+    spawn: stubSpawn((c) => {
+      c.stdout.emit('data', JSON.stringify({
+        type: 'locales', available: true, supported: ['en-US', 'es-ES'], installed: ['en-US'],
+      }) + '\n');
+      c.emit('close', 0, null);
+    }),
+  });
+  assert.deepEqual(result, { available: true, supported: ['en-US', 'es-ES'], installed: ['en-US'] });
+});
+
+test('locales query never spawns anything off macOS', async () => {
+  let spawned = false;
+  const result = await readAppleSpeechLocales('/fake/helper', {
+    platform: 'win32',
+    spawn: () => { spawned = true; throw new Error('must not spawn'); },
+  });
+  assert.equal(spawned, false, 'Windows must not try to run a Mach-O helper');
+  assert.deepEqual(result, { available: false, supported: [], installed: [] });
+});
+
+test('a missing helper, garbage output, or a hang all degrade to unavailable', async () => {
+  const missing = await readAppleSpeechLocales('/fake/helper', {
+    platform: 'darwin',
+    spawn: stubSpawn((c) => c.emit('error', new Error('ENOENT'))),
+  });
+  assert.deepEqual(missing, { available: false, supported: [], installed: [] });
+
+  const garbage = await readAppleSpeechLocales('/fake/helper', {
+    platform: 'darwin',
+    spawn: stubSpawn((c) => { c.stdout.emit('data', 'not json\n'); c.emit('close', 1, null); }),
+  });
+  assert.deepEqual(garbage, { available: false, supported: [], installed: [] });
+
+  const hung = await readAppleSpeechLocales('/fake/helper', {
+    platform: 'darwin',
+    timeoutMs: 20,
+    spawn: stubSpawn(() => { /* never answers, never closes */ }),
+  });
+  assert.deepEqual(hung, { available: false, supported: [], installed: [] }, 'a hung probe must not block Settings forever');
+});
+
+test('an unavailable Mac reports no locales rather than an empty supported list it might act on', async () => {
+  const result = await readAppleSpeechLocales('/fake/helper', {
+    platform: 'darwin',
+    spawn: stubSpawn((c) => {
+      c.stdout.emit('data', JSON.stringify({ type: 'locales', available: false, supported: [], installed: [] }) + '\n');
+      c.emit('close', 0, null);
+    }),
+  });
+  assert.equal(result.available, false);
+});

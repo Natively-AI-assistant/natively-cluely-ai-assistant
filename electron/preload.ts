@@ -300,6 +300,7 @@ interface ElectronAPI {
       | 'natively'
       | 'local-whisper' | 'apple-speech',
   ) => Promise<{ success: boolean; error?: string }>;
+  getAppleSpeechLocales: () => Promise<{ available: boolean; supported: string[]; installed: string[] }>;
   localWhisperGetModels: () => Promise<{ models: any[]; activeModelId: string }>;
   localWhisperGetRecoveryNotice: () => Promise<{
     recovered: true;
@@ -1665,6 +1666,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       | 'local-whisper' | 'apple-speech',
   ) => ipcRenderer.invoke('set-stt-provider', provider),
   getSttProvider: () => ipcRenderer.invoke('get-stt-provider'),
+  getAppleSpeechLocales: () => ipcRenderer.invoke('apple-speech:get-locales'),
   setGroqSttApiKey: (apiKey: string) => ipcRenderer.invoke('set-groq-stt-api-key', apiKey),
   setOpenAiSttApiKey: (apiKey: string) => ipcRenderer.invoke('set-openai-stt-api-key', apiKey),
   setOpenAiSttBaseUrl: (url: string) => ipcRenderer.invoke('set-openai-stt-base-url', url),
