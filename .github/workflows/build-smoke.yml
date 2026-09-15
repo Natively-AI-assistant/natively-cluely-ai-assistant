@@ -99,7 +99,7 @@ jobs:
           {
             echo "### Fork-safe Build Smoke"
             echo "Private premium source is not exposed to fork pull requests."
-            echo "This run compiles the core Electron graph and executes focused Direct Assist, screenshot-priority, SSRF, trace, and coding-task tests."
+            echo "This run compiles the core Electron graph and executes focused Apple Speech, Direct Assist, screenshot-priority, SSRF, trace, and coding-task tests."
             echo "Trusted runs still require and validate the full premium integration."
           } >> "$GITHUB_STEP_SUMMARY"
 

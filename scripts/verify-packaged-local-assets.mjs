@@ -254,6 +254,28 @@ function verifyPackaged(appArg, platformArg) {
     const full = path.join(unpacked, rel);
     if (!exists(full)) errors.push(`Missing unpacked worker: app.asar.unpacked/${rel}`);
   }
+
+  // Apple Speech helper (macOS only). Unlike every other asset above it is not
+  // copied by electron-builder's `files`/`extraResources` — scripts/after-pack.cjs
+  // compiles it straight into Contents/Resources/apple-speech/ per target arch.
+  // That made it the one packaged asset with no verification gate: if the hook
+  // is ever unwired, the app still builds and ships, and the failure surfaces
+  // only at runtime as a spawn ENOENT the moment a user picks Apple Speech.
+  if (platform === 'darwin') {
+    const helper = path.join(resources, 'apple-speech', 'natively-apple-speech');
+    if (!exists(helper)) {
+      errors.push(
+        'Missing Apple Speech helper: Resources/apple-speech/natively-apple-speech ' +
+        '(scripts/after-pack.cjs should have compiled it during afterPack).',
+      );
+    } else {
+      try {
+        fs.accessSync(helper, fs.constants.X_OK);
+      } catch {
+        errors.push('Apple Speech helper is not executable: Resources/apple-speech/natively-apple-speech');
+      }
+    }
+  }
 }
 
 const appIdx = process.argv.indexOf('--app');
