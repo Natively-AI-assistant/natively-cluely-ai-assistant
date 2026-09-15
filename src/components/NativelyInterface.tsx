@@ -1812,11 +1812,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // True for the duration of a user resize drag. Declared up here because the
   // ResizeObserver (above the drag handler) gates its height reporting on it.
   const isResizingRef = useRef(false);
-  // Last height AUTO sizing chose. 0 = not observed yet, which makes the
-  // snap-to-auto check decline rather than guess. Only a FALLBACK now —
-  // measureAutoHeight computes the live answer — but it is what covers the case
-  // where the layout cannot be measured (viewport unmounted, window hidden).
-  const autoHeightRef = useRef(0);
   // ── Streaming-height headroom-buffer state ────────────────────────────
   // See STREAMING_HEIGHT_GROW_BUFFER_PX's comment near the top of this file
   // for the full rationale (an earlier springed/interpolated version of this
@@ -2704,19 +2699,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // clipping window the buffer design exists to close. No dependencies: it
   // only touches a ref, so it's declared here (before reportShellSize, which
   // needs to call it) rather than near driveStreamingHeight further down.
-  // Record the height AUTO sizing settled on. Called from every point that
-  // KNOWS a settled height — the canonical reporter and both animation
-  // onCompletes — because the reporter alone is not enough: it is gated behind
-  // the transition suppression deadline, so after an animation whether it runs
-  // again at all depends on a ResizeObserver fire landing after onComplete
-  // clears that deadline. That is a race, and losing it leaves the fallback
-  // holding a pre-animation height.
-  const recordAutoHeight = useCallback((height: number) => {
-    if (customOverlayHeightRef.current === null && height > 0) {
-      autoHeightRef.current = height;
-    }
-  }, []);
-
   const syncStreamingHeightBaseline = useCallback((height: number) => {
     streamingHeightCommittedRef.current = height;
   }, []);
@@ -2846,7 +2828,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     const measured = contentRef.current.offsetHeight;
     const pinned = customOverlayHeightRef.current;
     const height = pinned !== null ? Math.max(pinned, measured) : measured;
-    recordAutoHeight(measured);
     if (process.env.NODE_ENV === 'development') {
       const scrollEl = scrollContainerRef.current;
       console.log('[overlay-resize] reportShellSize', {
@@ -3359,7 +3340,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           if (settled > 0) {
             resizeOverlayWindow(settled);
             syncStreamingHeightBaseline(settled);
-            recordAutoHeight(settled);
           }
         },
       });
@@ -3426,6 +3406,16 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // exactly when a release needs to consult it (pin, let three answers stream
   // in, drag back: the remembered height is the one from before the pin).
   //
+  // THERE IS DELIBERATELY NO CACHE BEHIND THIS. A previous version kept the last
+  // auto height in a ref as a fallback, refreshed from the reporter and both
+  // animation onCompletes. Instrumented against the real app it was both wrong
+  // and unused: clearing a pin let the reporter accept two STALE heights (553,
+  // then 537, where auto was 527) before onComplete corrected it, and the
+  // fallback never fired once — this function returned the right answer, to the
+  // pixel, every time. A cache that is only consulted when this returns 0 can
+  // only be consulted when there is no contentRef at all, and a release with no
+  // shell has nothing to decide.
+  //
   // chrome + min(natural viewport, the caps that would apply unpinned). The
   // viewport's natural height is not readable while pinned, because the pin is
   // a min-height on it — so the floor is dropped with a DIRECT style write and
@@ -3444,10 +3434,21 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     if (!boxEl || !scrollEl) return contentEl.offsetHeight;
     const chromeHeight = contentEl.offsetHeight - boxEl.offsetHeight;
     if (!(chromeHeight >= 0)) return 0;
+    // RESTORED IN `finally`, and that is not ceremony. framer writes this
+    // property only when the MotionValue behind it CHANGES, and dropping the
+    // floor here does not change it — so a restore that is skipped is never
+    // written again. Probed in the real app by throwing between the write and
+    // the restore: the viewport kept `min-height: 0px` indefinitely, the pin's
+    // floor was gone, and the window sat 221px taller than the panel. That is
+    // the transparent dead strip, arrived at from a new direction.
     const previousMinHeight = scrollEl.style.minHeight;
-    scrollEl.style.minHeight = '0px';
-    const naturalViewport = scrollEl.scrollHeight;
-    scrollEl.style.minHeight = previousMinHeight;
+    let naturalViewport = 0;
+    try {
+      scrollEl.style.minHeight = '0px';
+      naturalViewport = scrollEl.scrollHeight;
+    } finally {
+      scrollEl.style.minHeight = previousMinHeight;
+    }
     const availHeight = typeof window !== 'undefined' ? window.screen?.availHeight ?? 0 : 0;
     // Both bounds scrollMaxH applies when nothing is pinned. The width-derived
     // one is read at the CURRENT panel width; a release that also changes the
@@ -3792,7 +3793,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           const settledHeight = contentRef.current?.offsetHeight ?? 0;
           resizeOverlayWindow(settledHeight);
           syncStreamingHeightBaseline(settledHeight);
-          recordAutoHeight(settledHeight);
         },
       });
     },
@@ -4165,7 +4165,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
               settledWidth,
               settledHeight,
               autoWidth,
-              autoHeight: measureAutoHeight() || autoHeightRef.current,
+              autoHeight: measureAutoHeight(),
             });
 
             if (plan.width === 'auto') {
@@ -4182,12 +4182,27 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
               overlayWindowWidthRef.current = autoWidth;
               setAppliedWindowWidth(autoWidth);
               manualWidthOverrideRef.current = null;
-              codeExpandedRef.current = false;
+              // TARGET THE WIDTH AUTO ACTUALLY WANTS, which is not always the
+              // collapsed one. `codeExpandedRef` still holds the auto expansion
+              // state from before the drag (the drag never writes it; only the
+              // pin branch below does), so it is the answer already. Forcing
+              // collapsed here instead made the panel dip to collapsed and then
+              // glide back up as the scroll scanner re-expanded it — measured in
+              // the real app with a code answer on screen: panelW bottomed out
+              // at 590 and returned to 718, a visible double animation on every
+              // release.
+              //
+              // Handing the decision to the scanner instead does NOT work: it
+              // early-returns when its computed visibility already equals
+              // `codeExpandedRef`, so in the no-code case nothing would move and
+              // the panel would simply stay at the dragged width.
+              const autoPanel = codeExpandedRef.current
+                ? panelWidthForWindow(autoWidth)
+                : collapsedPanelForWindow(autoWidth);
               // Animated, not snapped: this is a release that hands the panel
               // back to auto sizing, and everything else auto sizing does to the
               // width is sprung. (The double-click RESET stays instant on
               // purpose — it reads as "undo", not as a motion.)
-              const autoPanel = defaultCollapsedPanelWidth();
               if (prefersReducedMotionRef.current) shellWidth.set(autoPanel);
               else animate(shellWidth, autoPanel, OVERLAY_RESIZE_SPRING);
             } else if (plan.width === 'pin') {
@@ -4244,7 +4259,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // stay "live" and leave height reporting suppressed.
       window.addEventListener('lostpointercapture', end, { capture: true });
     },
-    [customWindowWidth, shellWidth, measureVerticalCap, reportShellSize],
+    // measureAutoHeight is listed because it closes over SHELL_WIDTH_EXPANDED
+    // (= WINDOW_WIDTH − inset·2, recomputed per render). Without it this
+    // callback keeps its cached closure whenever the other four deps are
+    // unchanged, and the release would size the auto height against a stale
+    // panel width. The one path that changes WINDOW_WIDTH without also changing
+    // `customWindowWidth` is adoptAppliedSize reconciling a width the main
+    // process clamped — a work-area or multi-monitor change, which is why this
+    // is a hygiene fix and not a reproduced one.
+    [customWindowWidth, shellWidth, measureVerticalCap, reportShellSize, measureAutoHeight],
   );
 
   // Double-click any handle to forget the custom size and return to
