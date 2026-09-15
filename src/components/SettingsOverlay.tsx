@@ -3575,7 +3575,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                             )}
 
                                             {sttProvider === 'apple-speech' && (
-                                                <p className="text-sm text-text-secondary">{t('Apple Speech runs transcription on your device. macOS may download the selected language model on first use; “Auto” uses your system language.')}</p>
+                                                <p className="text-xs text-text-secondary">{t('Apple Speech runs transcription on your device. macOS may download the selected language model on first use; “Auto” uses your system language.')}</p>
                                             )}
                                             {/* Local Whisper Model Panel */}
                                             {sttProvider === 'local-whisper' && (
