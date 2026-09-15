@@ -140,8 +140,7 @@ export class AppleSpeechSTT extends EventEmitter {
       if (current() && this.active) this.fail(`Apple Speech stopped unexpectedly (${signal ?? code}). Restart the session.`);
     });
     child.stdin.on('drain', () => { if (current()) { this.blocked = false; this.drain(); } });
-    const locale = this.language === 'auto' ? this.runtime.getLocale()
-      : RECOGNITION_LANGUAGES[this.language]?.bcp47 ?? this.language;
+    const locale = this.resolveLocale();
     child.stdin.write(JSON.stringify({ type: 'init', locale }) + '\n');
     this.armStartupTimer(
       MODEL_START_TIMEOUT_MS,
@@ -206,6 +205,49 @@ export class AppleSpeechSTT extends EventEmitter {
       timer.unref(); child.once('exit', () => clearTimeout(timer));
     }
   }
+  /**
+   * Settings key -> BCP-47 locale for the Swift helper.
+   *
+   * Apple takes a real locale and nothing else: probed against the framework,
+   * `supportedLocale(equivalentTo:)` returns nil for "english" AND for
+   * "spanish", so forwarding an unresolved settings key (the old
+   * `?? this.language`) could only ever fail — it produced
+   * "Apple Speech does not support language english" for anyone whose stored
+   * language predates the English-variants split.
+   *
+   * RECOGNITION_LANGUAGES has a plain key for every language except English,
+   * which exists only as english-us/uk/in/au/ca, so a legacy plain 'english'
+   * misses the map. It is resolved through the group instead, preferring the
+   * variant the machine already runs (en-GB stays en-GB) and falling back to
+   * en-US rather than to a non-English app locale.
+   *
+   * Never fall back to `iso639`: bare 'en' resolves to en-IE (Irish English),
+   * which would silently mis-transcribe rather than fail loudly.
+   */
+  private resolveLocale(): string {
+    const appLocale = this.runtime.getLocale();
+    const key = this.language;
+    if (key === 'auto') return appLocale;
+
+    const direct = RECOGNITION_LANGUAGES[key]?.bcp47;
+    if (direct && direct !== 'auto') return direct;
+
+    // Group match ('english' -> the English family). Case-insensitive because
+    // the settings key is lower-case while `group` is display-cased.
+    const family = Object.values(RECOGNITION_LANGUAGES).filter(
+      (o) => o.group?.toLowerCase() === key.toLowerCase() && o.bcp47 !== 'auto',
+    );
+    if (family.length) {
+      const onThisMachine = family.find((o) => o.bcp47.toLowerCase() === appLocale.toLowerCase());
+      if (onThisMachine) return onThisMachine.bcp47;
+      const language = key.toLowerCase() === 'english' ? 'en-US' : family[0].bcp47;
+      return family.some((o) => o.bcp47 === language) ? language : family[0].bcp47;
+    }
+
+    console.warn(`[AppleSpeech] Unknown recognition language "${key}" — falling back to ${appLocale}.`);
+    return appLocale;
+  }
+
   private armStartupTimer(delayMs: number, message: string) {
     if (this.startupTimer) this.runtime.clearTimer(this.startupTimer);
     this.startupTimer = this.runtime.scheduleTimeout(() => this.fail(message), delayMs);

@@ -405,3 +405,57 @@ test('audio buffered before ready is trimmed, not failed, so the startup timer c
   const drainedBytes = drained.reduce((n, m) => n + Buffer.from(m.pcm, 'base64').length, 0);
   assert.ok(drainedBytes <= 16000 * 2 * 10, `retained tail must stay within the 10s cap, got ${drainedBytes} bytes`);
 });
+
+// Locale resolution. Apple rejects anything that is not a real BCP-47 locale:
+// probed live against the framework, "english" -> nil and "spanish" -> nil, so
+// forwarding an unresolved settings key can only ever fail. Worse, bare "en"
+// resolves to en-IE (Irish English), so falling back to iso639 silently
+// mis-transcribes. Every other provider refuses an unknown key and keeps its
+// default (GoogleSTT warns and returns); this one has to produce a locale, so
+// it falls back to the app locale instead of forwarding garbage.
+function localeSentTo(child) {
+  return JSON.parse(child.stdin.writes[0].trim()).locale;
+}
+
+test('a legacy "english" setting resolves to a real English locale, not the literal string', () => {
+  // 'english' is what installs from before the English-variants split still
+  // have persisted; RECOGNITION_LANGUAGES has a plain key for every language
+  // EXCEPT English, which exists only as english-us/uk/in/au/ca.
+  const { child, runtime } = createHarness({ locale: 'fr-FR' });
+  const stt = new AppleSpeechSTT('/fake/helper', runtime);
+  stt.on('error', () => {});
+  stt.setRecognitionLanguage('english');
+  stt.start();
+  assert.equal(localeSentTo(child), 'en-US', 'a non-English app locale must not drag English to fr-FR');
+});
+
+test('"english" prefers the regional variant the machine already runs', () => {
+  const { child, runtime } = createHarness({ locale: 'en-GB' });
+  const stt = new AppleSpeechSTT('/fake/helper', runtime);
+  stt.on('error', () => {});
+  stt.setRecognitionLanguage('english');
+  stt.start();
+  assert.equal(localeSentTo(child), 'en-GB');
+});
+
+test('explicit region keys and plain language keys both still resolve', () => {
+  for (const [key, expected] of [['english-au', 'en-AU'], ['spanish', 'es-ES'], ['japanese', 'ja-JP']]) {
+    const { child, runtime } = createHarness({ locale: 'en-US' });
+    const stt = new AppleSpeechSTT('/fake/helper', runtime);
+    stt.on('error', () => {});
+    stt.setRecognitionLanguage(key);
+    stt.start();
+    assert.equal(localeSentTo(child), expected, `${key} must map to ${expected}`);
+  }
+});
+
+test('an unknown key falls back to the app locale instead of being forwarded', () => {
+  const { child, runtime } = createHarness({ locale: 'de-DE' });
+  const stt = new AppleSpeechSTT('/fake/helper', runtime);
+  stt.on('error', () => {});
+  stt.setRecognitionLanguage('klingon');
+  stt.start();
+  const sent = localeSentTo(child);
+  assert.equal(sent, 'de-DE');
+  assert.notEqual(sent, 'klingon', 'a settings key must never reach Apple as a locale');
+});
