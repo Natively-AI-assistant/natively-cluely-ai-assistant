@@ -498,6 +498,7 @@ tools/
 # Vision benchmark source documentation + generated reports
 !docs/
 docs/*
+!docs/dev-setup.md
 !docs/VISION_MODEL_BENCHMARK.md
 # Per-release notes are published artifacts (linked from the README), not scratch notes.
 !docs/releases/
