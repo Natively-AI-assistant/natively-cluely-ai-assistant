@@ -440,6 +440,12 @@
   At 16px even .lg-sm's single ring plus a 1px cap ring is a large share of the
   pill. The rim stays — it is the material — and the cap shadow nearly goes.
 */
+/*
+  The green tag lifts to a mid green. The button's #1b352a is a lit surface
+  with a hover above it; a tag has no hover and at 16px the dark tint reads
+  as near-black beside a sky "Beta". #e0fbd8 on #2f7350 is 5.5:1.
+*/
+.lg-button.lg-badge.lg-green { background-color: #2f7350; }
 .lg-button.lg-badge::before { box-shadow: inset 0 0 0 1px var(--lg-rim-1); }
 .lg-button.lg-badge::after  { padding: 1px; opacity: .3; }
 
@@ -601,6 +607,7 @@
     }
     .lg-button.lg-neutral { background-color: #4a4a4a; }
     .lg-button.lg-green   { background-color: #103425; }
+    .lg-button.lg-badge.lg-green { background-color: #103425; }
     .lg-neutral .lg-content { color: #ffffff; }
     .lg-green   .lg-content { color: #eaffe2; }
     .lg-button:focus-visible { outline-width: 4px; }

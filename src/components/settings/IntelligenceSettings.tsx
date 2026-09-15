@@ -364,11 +364,11 @@ const StatusChip: React.FC<{ status: ConnStatus; testing: boolean; onRetry: () =
 
   let body: React.ReactNode;
   if (visual === 'connected') {
-    body = (
-      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-green-500/30 bg-green-500/15 px-2.5 py-0.5 text-[11px] font-medium text-green-400">
-        <Wifi size={12} /> {t('Connected')}
-      </span>
-    );
+    // Same Liquid Glass tag as the "Beta" badge beside the section title, so the
+    // two read as one family. The green tint is the only cue that this one is a
+    // status rather than a label; the other states keep their own chips because
+    // the unreachable one carries a Retry control and the tag is pointer-inert.
+    body = <LiquidGlassBadge variant="green" icon={<Wifi size={10} strokeWidth={2.5} />}>{t('Connected')}</LiquidGlassBadge>;
   } else if (visual === 'checking') {
     body = (
       <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border-subtle bg-bg-input px-2.5 py-0.5 text-[11px] font-medium text-text-secondary">
