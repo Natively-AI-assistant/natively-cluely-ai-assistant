@@ -3767,11 +3767,15 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 </div>
                                             )}
 
-                                            <div className="flex gap-2 items-center mt-2 px-1">
-                                                <Info size={14} className="text-text-secondary shrink-0" />
-                                                <p className="text-xs text-text-secondary">
-                                                    {recognitionLanguage === 'auto'
-                                                        ? autoDetectedLanguage
+                                            {/* Auto mode only. The picker's own label already says this
+                                                is the meeting language, so restating it under every explicit
+                                                choice was noise — and it pushed the genuinely useful notes
+                                                (download state, slot budget) further down the panel. */}
+                                            {recognitionLanguage === 'auto' && (
+                                                <div className="flex gap-2 items-center mt-2 px-1">
+                                                    <Info size={14} className="text-text-secondary shrink-0" />
+                                                    <p className="text-xs text-text-secondary">
+                                                        {autoDetectedLanguage
                                                             ? (() => {
                                                                 const label = Object.values(availableLanguages).find((l: any) =>
                                                                     l.bcp47 === autoDetectedLanguage || l.iso639 === autoDetectedLanguage
@@ -3779,10 +3783,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 return `${t('Auto mode — detected:')} ${label ?? autoDetectedLanguage}`;
                                                               })()
                                                             : t('Auto mode — language will be detected from the first few seconds of audio.')
-                                                        : t('Select the primary language being spoken in the meeting.')
-                                                    }
-                                                </p>
-                                            </div>
+                                                        }
+                                                    </p>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
 
