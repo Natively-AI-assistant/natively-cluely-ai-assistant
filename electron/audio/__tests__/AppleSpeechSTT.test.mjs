@@ -158,6 +158,38 @@ test('starts the helper, waits for ready, drains buffered audio with backpressur
   child.exit(0);
 });
 
+test('preserves finalize behind backpressured audio and flushes exactly once in order', () => {
+  // init succeeds, the first audio chunk fills stdin, then drain releases the
+  // second chunk and the deferred flush in protocol order.
+  const { child, runtime } = createHarness({ writeResults: [true, false, true, true] });
+  const stt = new AppleSpeechSTT('/fake/helper', runtime);
+  stt.on('error', () => {});
+  stt.start();
+  child.stdout.emit('data', '{"type":"ready"}\n');
+
+  const firstPcm = Buffer.from([1, 0, 2, 0]);
+  const secondPcm = Buffer.from([3, 0, 4, 0]);
+  stt.write(firstPcm);
+  stt.write(secondPcm);
+
+  assert.equal(stt.finalize(), true, 'queued finalization must keep the transcript-tail wait open');
+  assert.deepEqual(
+    protocolMessages(child.stdin.writes).map((message) => message.type),
+    ['init', 'audio'],
+    'flush must wait behind the blocked and queued audio',
+  );
+
+  child.stdin.emit('drain');
+  const messages = protocolMessages(child.stdin.writes);
+  assert.deepEqual(messages.map((message) => message.type), ['init', 'audio', 'audio', 'flush']);
+  assert.equal(messages.filter((message) => message.type === 'flush').length, 1);
+  assert.equal(messages[1].pcm, firstPcm.toString('base64'));
+  assert.equal(messages[2].pcm, secondPcm.toString('base64'));
+
+  stt.stop();
+  child.exit(0);
+});
+
 test('uses the injected app locale for automatic language selection', () => {
   const { child, runtime } = createHarness({ locale: 'fr-FR' });
   const stt = new AppleSpeechSTT('/fake/helper', runtime);

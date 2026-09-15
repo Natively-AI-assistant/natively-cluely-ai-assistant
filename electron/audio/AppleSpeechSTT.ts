@@ -37,6 +37,7 @@ export class AppleSpeechSTT extends EventEmitter {
   private pendingBytes = 0;
   private startupTimer: ReturnType<typeof setTimeout> | null = null;
   private blocked = false;
+  private finalizePending = false;
   private installingAsset = false;
   private readonly executable: string;
   private readonly runtime: AppleSpeechRuntime;
@@ -75,7 +76,7 @@ export class AppleSpeechSTT extends EventEmitter {
   setAudioChannelCount(count: number) { if (count !== 1) this.fail('Apple Speech expects mono audio.'); }
   start() {
     if (this.active) return;
-    this.active = true; this.ready = false; this.blocked = false; this.installingAsset = false;
+    this.active = true; this.ready = false; this.blocked = false; this.finalizePending = false; this.installingAsset = false;
     if (this.runtime.platform !== 'darwin' || Number(this.runtime.osRelease().split('.')[0]) < 25) {
       this.fail('Apple Speech requires macOS 26 or later.'); return;
     }
@@ -154,13 +155,22 @@ export class AppleSpeechSTT extends EventEmitter {
       const pcm = this.pending.shift()!; this.pendingBytes -= pcm.length;
       this.blocked = !this.child.stdin.write(JSON.stringify({ type: 'audio', sampleRate: this.sampleRate, pcm: pcm.toString('base64') }) + '\n');
     }
+    if (this.ready && !this.blocked && this.child && !this.pending.length && this.finalizePending) {
+      this.finalizePending = false;
+      this.blocked = !this.child.stdin.write('{"type":"flush"}\n');
+    }
   }
   finalize(): boolean {
-    if (!this.active || !this.ready || !this.child || this.pendingBytes || this.blocked) return false;
-    this.child.stdin.write('{"type":"flush"}\n'); return true;
+    if (!this.active || !this.ready || !this.child) return false;
+    // Preserve finalization behind queued audio or stdin backpressure. Returning
+    // true tells the renderer to keep its full transcript-tail wait open while
+    // drain() sends this flush in order after every preceding audio chunk.
+    this.finalizePending = true;
+    this.drain();
+    return true;
   }
   stop() {
-    this.active = false; this.ready = false; this.installingAsset = false;
+    this.active = false; this.ready = false; this.blocked = false; this.finalizePending = false; this.installingAsset = false;
     if (this.startupTimer) this.runtime.clearTimer(this.startupTimer);
     this.startupTimer = null;
     this.pending = []; this.pendingBytes = 0;
