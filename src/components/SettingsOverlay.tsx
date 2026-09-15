@@ -13,6 +13,7 @@ import { AutoAnswerIcon } from './AutoAnswerIcon';
 import { HiCreditCard } from 'react-icons/hi2';
 import { analytics } from '../lib/analytics/analytics.service';
 import { AboutSection } from './AboutSection';
+import { ErrorBoundary } from './ErrorBoundary';
 import { HelpSettings } from './settings/HelpSettings';
 import { AIProvidersSettings } from './settings/AIProvidersSettings';
 import { PlansSettings } from './settings/PlansSettings';
@@ -2062,6 +2063,18 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                     ? { duration: 0 }
                                     : { duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
                             >
+                            {/* A render error in ANY settings section used to destroy the
+                                whole launcher window. SettingsOverlay sits inside App's
+                                <ErrorBoundary context="Launcher">, so the throw bubbled all
+                                the way up and replaced the launcher with "Launcher crashed" —
+                                measured 2026-09-15 by injecting a throw into a panel.
+
+                                This boundary keeps the blast radius at the section. It needs
+                                no `key` of its own: the motion.div above is keyed on
+                                panelKey, so switching sections remounts this subtree and
+                                clears a latched error — without that, one bad section would
+                                show its fallback on every other tab too. */}
+                            <ErrorBoundary context={`Settings · ${panelKey}`}>
                             {activeTab === 'general' && (
                                 <div className="space-y-6 animated fadeIn">
                                     <div className="space-y-3.5">
@@ -3992,6 +4005,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                             {activeTab === 'about' && (
                                 <AboutSection />
                             )}
+                            </ErrorBoundary>
                             </motion.div>
                         </div>
                     </div>
