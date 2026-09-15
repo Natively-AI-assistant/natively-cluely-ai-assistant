@@ -85,14 +85,14 @@ func flushConverter(
             emit([
                 "type":"status",
                 "phase":"asset-download",
-                "message":"Downloading Apple speech model for \(locale.identifier)…"
+                "message":"Downloading Apple speech model for \(locale.identifier(.bcp47))…"
             ])
             if let request = try await AssetInventory.assetInstallationRequest(supporting:[transcriber]) {
                 try await request.downloadAndInstall()
             }
         }
         guard let format = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith:[transcriber]) else {
-            throw BridgeError(message:"Apple speech model is unavailable for \(locale.identifier).")
+            throw BridgeError(message:"Apple speech model is unavailable for \(locale.identifier(.bcp47)).")
         }
         let analyzer = SpeechAnalyzer(modules:[transcriber])
         let (input, continuation) = AsyncStream<AnalyzerInput>.makeStream()
@@ -108,7 +108,7 @@ func flushConverter(
             }
         }
         try await analyzer.start(inputSequence:input)
-        emit(["type":"ready", "locale":locale.identifier, "sampleRate":format.sampleRate])
+        emit(["type":"ready", "locale":locale.identifier(.bcp47), "sampleRate":format.sampleRate])
         var converter: AVAudioConverter?
         var inputFormat: AVAudioFormat?
         while let line = readLine() {

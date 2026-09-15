@@ -308,7 +308,11 @@ test('rejects unsupported platforms before spawning the helper', () => {
   assert.equal(spawnCalls.length, 0);
   assert.equal(errors.length, 1);
   assert.equal(errors[0].code, 'local_stt_unavailable');
-  assert.match(errors[0].message, /requires macOS 26 or later/i);
+  // A non-macOS host must never be handed macOS troubleshooting (CLAUDE.md
+  // cross-platform contract). Windows reaches this only via a carried-over
+  // credential store, since the settings tile is isMac-gated.
+  assert.match(errors[0].message, /macOS-only/i);
+  assert.doesNotMatch(errors[0].message, /macOS 26 or later/i);
 });
 
 test('rejects pre-macOS-26 Darwin releases before spawning the helper', () => {
@@ -323,4 +327,81 @@ test('rejects pre-macOS-26 Darwin releases before spawning the helper', () => {
   assert.equal(errors.length, 1);
   assert.equal(errors[0].code, 'local_stt_unavailable');
   assert.match(errors[0].message, /requires macOS 26 or later/i);
+});
+
+test('drops a punctuation-only final but keeps the words it already streamed', () => {
+  // A `flush` force-finalizes a still-volatile result and Apple sometimes
+  // answers with debris instead of the words. Live-reproduced against the real
+  // compiled helper: 1 run in 8 returned a final of "......." after correct
+  // partials. finalize() is the Answer button, so that debris would be
+  // attributed to the question the user just asked.
+  const { child, runtime } = createHarness();
+  const stt = new AppleSpeechSTT('/fake/helper', runtime);
+  const transcripts = [];
+  stt.on('transcript', (transcript) => transcripts.push(transcript));
+
+  stt.start();
+  child.stdout.emit('data', '{"type":"ready"}\n');
+  child.stdout.emit(
+    'data',
+    '{"type":"transcript","text":"Second sentence about hiring plans.","isFinal":false}\n' +
+    '{"type":"transcript","text":".......","isFinal":true}\n',
+  );
+
+  assert.deepEqual(
+    transcripts.map((t) => [t.text, t.isFinal]),
+    [['Second sentence about hiring plans.', false]],
+    'the punctuation-only final must not reach the transcript',
+  );
+});
+
+test('a real final still passes, including non-Latin scripts and digit-only answers', () => {
+  const { child, runtime } = createHarness();
+  const stt = new AppleSpeechSTT('/fake/helper', runtime);
+  const transcripts = [];
+  stt.on('transcript', (transcript) => transcripts.push(transcript));
+
+  stt.start();
+  child.stdout.emit('data', '{"type":"ready"}\n');
+  child.stdout.emit(
+    'data',
+    '{"type":"transcript","text":"季度收入增长了15%。","isFinal":true}\n' +
+    '{"type":"transcript","text":"42.","isFinal":true}\n' +
+    '{"type":"transcript","text":"!?…","isFinal":true}\n',
+  );
+
+  assert.deepEqual(
+    transcripts.map((t) => t.text),
+    ['季度收入增长了15%。', '42.'],
+    'the guard must key on letters/digits in ANY script, never on ASCII punctuation alone',
+  );
+});
+
+test('audio buffered before ready is trimmed, not failed, so the startup timer can fire', () => {
+  // Regression: the ten-second pending cap used to hard-fail with "could not
+  // keep up with the audio" whenever the helper was slow to start WITHOUT
+  // announcing an asset download, which made MODEL_START_TIMEOUT_MS (120s)
+  // unreachable any time audio was flowing.
+  const { child, runtime } = createHarness();
+  const stt = new AppleSpeechSTT('/fake/helper', runtime);
+  const errors = [];
+  stt.on('error', (error) => errors.push(error));
+
+  stt.setSampleRate(16000);
+  stt.start();
+  // No 'ready', no asset-download status: 12 seconds of 16 kHz mono Int16
+  // against a 10-second cap.
+  const oneSecond = Buffer.alloc(16000 * 2);
+  for (let i = 0; i < 12; i += 1) stt.write(oneSecond);
+
+  assert.deepEqual(errors, [], 'a slow start must not be reported as the helper failing to keep up');
+  assert.equal(child.stdin.writes.length, 1, 'only the init line — audio stays buffered until ready');
+
+  // Once ready the retained tail drains, bounded to the cap.
+  child.stdout.emit('data', '{"type":"ready"}\n');
+  const drained = protocolMessages(child.stdin.writes.slice(1));
+  assert.ok(drained.length > 0, 'the retained tail must be delivered once ready');
+  assert.ok(drained.every((m) => m.type === 'audio'));
+  const drainedBytes = drained.reduce((n, m) => n + Buffer.from(m.pcm, 'base64').length, 0);
+  assert.ok(drainedBytes <= 16000 * 2 * 10, `retained tail must stay within the 10s cap, got ${drainedBytes} bytes`);
 });

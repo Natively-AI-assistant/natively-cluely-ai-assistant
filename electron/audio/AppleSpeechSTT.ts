@@ -14,6 +14,8 @@ type SpawnAppleSpeechProcess = (
 type AppleSpeechTimer = ReturnType<typeof setTimeout>;
 const MODEL_START_TIMEOUT_MS = 120_000;
 const ASSET_INSTALL_TIMEOUT_MS = 15 * 60_000;
+/** Any letter or digit in any script — punctuation-only finals carry no speech. */
+const HAS_SPEECH_CONTENT = /[\p{L}\p{N}]/u;
 
 /** Runtime seams keep lifecycle tests independent of macOS and the real helper. */
 export interface AppleSpeechRuntime {
@@ -77,7 +79,13 @@ export class AppleSpeechSTT extends EventEmitter {
   start() {
     if (this.active) return;
     this.active = true; this.ready = false; this.blocked = false; this.finalizePending = false; this.installingAsset = false;
-    if (this.runtime.platform !== 'darwin' || Number(this.runtime.osRelease().split('.')[0]) < 25) {
+    if (this.runtime.platform !== 'darwin') {
+      // Reachable on Windows only via a carried-over credential store (the
+      // settings tile is isMac-gated). Never hand a Windows user macOS
+      // troubleshooting — tell them to pick a provider that exists there.
+      this.fail('Apple Speech is macOS-only. Choose a different speech provider in Audio settings.'); return;
+    }
+    if (Number(this.runtime.osRelease().split('.')[0]) < 25) {
       this.fail('Apple Speech requires macOS 26 or later.'); return;
     }
     const generation = ++this.generation;
@@ -101,6 +109,15 @@ export class AppleSpeechSTT extends EventEmitter {
           this.startupTimer = null;
           this.emit('ready'); this.drain();
         } else if (message.type === 'transcript' && typeof message.text === 'string' && message.text.trim()) {
+          // A `flush` force-finalizes a still-volatile result, and Apple
+          // occasionally answers that with punctuation-only debris instead of
+          // the words it had already streamed as partials — observed live as a
+          // final of "......." (1 of 8 runs; another truncated "hiring plans"
+          // to "hiring"). finalize() is wired to the Answer button, so that
+          // debris would land on the question the user just asked. Drop a
+          // final carrying no letter or digit; partials are left alone because
+          // they are replaced by the next one anyway.
+          if (message.isFinal && !HAS_SPEECH_CONTENT.test(message.text)) continue;
           this.emit('transcript', { text: message.text, isFinal: !!message.isFinal, confidence: 0.9 });
         } else if (message.type === 'error') { this.fail(String(message.message)); return; }
         else if (message.type === 'status') {
@@ -138,9 +155,15 @@ export class AppleSpeechSTT extends EventEmitter {
     // Bound buffering to ten seconds. Avoid dropping speech silently.
     const maxPendingBytes = this.sampleRate * 2 * 10;
     if (this.pendingBytes > maxPendingBytes) {
-      if (this.installingAsset) {
-        // Preserve the most recent audio without aborting the system download.
-        // Once ready, transcription resumes from this bounded tail.
+      if (this.installingAsset || !this.ready) {
+        // Preserve the most recent audio without aborting a system download or
+        // a slow analyzer start. Once ready, transcription resumes from this
+        // bounded tail. Trimming while !ready is what makes the startup timers
+        // reachable at all: before this, ten seconds of audio tripped the
+        // "could not keep up" failure long before MODEL_START_TIMEOUT_MS (120s)
+        // could fire, so the startup message was dead code whenever audio was
+        // flowing. Backpressure AFTER ready is still a hard failure below —
+        // that one really is the helper not keeping up.
         while (this.pendingBytes > maxPendingBytes && this.pending.length) {
           this.pendingBytes -= this.pending.shift()!.length;
         }
