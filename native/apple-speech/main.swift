@@ -15,6 +15,33 @@ struct BridgeError: LocalizedError {
     var errorDescription: String? { message }
 }
 
+/// Carries a transcriber failure from the results task back to the main loop.
+///
+/// The results task used to call exit(1) itself. That was a second exit path
+/// running on a background task: it bypassed main()'s error handler, skipped
+/// every defer, and could in principle fire for a session a flush had already
+/// replaced — killing a healthy process over the teardown of one being
+/// discarded. (Measured: that teardown does not throw in practice — four
+/// flush-restart cycles produced zero catches — so this is about having one
+/// exit path, not about a failure seen in the wild.)
+///
+/// The main loop reads audio lines continuously, so it observes a failure
+/// within one chunk (~100ms at the sizes Natively sends) and throws it from
+/// the one place that already knows how to report and exit.
+final class FailureBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var message: String?
+    /// First failure wins; later noise during teardown cannot overwrite it.
+    func set(_ value: String) {
+        lock.lock(); defer { lock.unlock() }
+        if message == nil { message = value }
+    }
+    var current: String? {
+        lock.lock(); defer { lock.unlock() }
+        return message
+    }
+}
+
 final class OneShotPCMInput: @unchecked Sendable {
     private var buffer: AVAudioPCMBuffer?
     init(_ buffer: AVAudioPCMBuffer) { self.buffer = buffer }
@@ -194,6 +221,7 @@ func flushConverter(
         // force a final mid-stream — measured, it destroys recognition of the
         // audio that follows (11% word recall vs 100% without it) and hangs
         // outright when given an explicit boundary time.
+        let failure = FailureBox()
         func startSession() async throws -> (SpeechAnalyzer, AsyncStream<AnalyzerInput>.Continuation, Task<Void, Never>) {
             let t = SpeechTranscriber(locale:locale,preset:.progressiveTranscription)
             let a = SpeechAnalyzer(modules:[t])
@@ -205,8 +233,8 @@ func flushConverter(
                         emit(["type":"transcript", "text":String(result.text.characters), "isFinal":result.isFinal])
                     }
                 } catch {
-                    emit(["type":"error", "message":error.localizedDescription])
-                    exit(1)
+                    // Report, do not terminate: main() owns the single exit path.
+                    failure.set(error.localizedDescription)
                 }
             }
             try await a.start(inputSequence:i)
@@ -217,6 +245,9 @@ func flushConverter(
         var converter: AVAudioConverter?
         var inputFormat: AVAudioFormat?
         while let line = readLine() {
+            // Surface a transcriber failure from the results task at the next
+            // audio chunk, through the one handler that reports and exits.
+            if let message = failure.current { throw BridgeError(message: message) }
             guard line.utf8.count < 2_000_000, let data = line.data(using:.utf8),
                   let message = try JSONSerialization.jsonObject(with:data) as? [String:Any] else {
                 throw BridgeError(message:"Invalid audio message")
@@ -276,6 +307,7 @@ func flushConverter(
         continuation.finish()
         try await analyzer.finalizeAndFinishThroughEndOfInput()
         await results.value
+        if let message = failure.current { throw BridgeError(message: message) }
         emit(["type":"stopped"])
     }
 }

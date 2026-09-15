@@ -277,3 +277,43 @@ test('a flush restarts the analysis session instead of force-finalizing it', () 
   assert.ok(order.every((i) => i >= 0), 'every flush step must be present');
   assert.deepEqual(order, [...order].sort((a, b) => a - b), 'flush steps must run in order');
 });
+
+test('only main() may terminate the helper — no exit from a detached task', () => {
+  // The results task used to call exit(1) itself: a second exit path on a
+  // background task that bypassed main()'s handler and every defer, and could
+  // in principle fire for a session a flush had already replaced. Measured, that
+  // teardown does not throw — four flush-restart cycles produced zero catches —
+  // so this pins the structure rather than a failure seen in the wild.
+  // Strip comments first: the doc comment explaining this very rule contains
+  // the literal exit(1), and counting it made the guard fail against the fixed
+  // source as well as the broken one — a test that can never pass proves nothing.
+  const swift = fs.readFileSync(
+    path.join(repoRoot, 'native', 'apple-speech', 'main.swift'),
+    'utf8',
+  ).split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n');
+
+  // Every exit(1) must sit in main()'s dispatch, which is the only place that
+  // reports the error and returns a non-zero status.
+  const dispatch = /static func main\(\) async \{[\s\S]*?\n    \}/.exec(swift)?.[0];
+  assert.ok(dispatch, 'main() dispatch must still exist');
+  const exitsInMain = (dispatch.match(/exit\(1\)/g) || []).length;
+  const exitsTotal = (swift.match(/exit\(1\)/g) || []).length;
+  assert.equal(
+    exitsTotal, exitsInMain,
+    `all exit(1) must be inside main(); found ${exitsTotal - exitsInMain} elsewhere`,
+  );
+
+  // The results task reports through the box and returns.
+  const results = /for try await result in t\.results \{[\s\S]*?\n                \}/.exec(swift)?.[0];
+  assert.ok(results, 'the results loop must still exist');
+  const tail = swift.slice(swift.indexOf(results), swift.indexOf(results) + 900);
+  assert.match(tail, /failure\.set\(error\.localizedDescription\)/, 'the results task must record the failure');
+  assert.doesNotMatch(tail, /exit\(/, 'the results task must never terminate the process itself');
+
+  // And the main loop has to actually look, or a recorded failure is inert.
+  assert.match(
+    swift,
+    /if let message = failure\.current \{ throw BridgeError\(message: message\) \}/,
+    'the main loop must surface a recorded failure',
+  );
+});
