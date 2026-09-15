@@ -300,8 +300,9 @@ interface ElectronAPI {
       | 'natively'
       | 'local-whisper' | 'apple-speech',
   ) => Promise<{ success: boolean; error?: string }>;
-  getAppleSpeechLocales: () => Promise<{ available: boolean; supported: string[]; installed: string[] }>;
+  getAppleSpeechLocales: () => Promise<{ available: boolean; supported: string[]; installed: string[]; reserved: string[]; maxReserved: number }>;
   installAppleSpeechLocale: (locale: string) => Promise<{ ok: boolean; error?: string }>;
+  releaseAppleSpeechLocale: (locale: string) => Promise<{ ok: boolean; error?: string }>;
   onAppleSpeechInstallProgress: (cb: (data: { locale: string; fraction: number }) => void) => () => void;
   localWhisperGetModels: () => Promise<{ models: any[]; activeModelId: string }>;
   localWhisperGetRecoveryNotice: () => Promise<{
@@ -1670,6 +1671,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getSttProvider: () => ipcRenderer.invoke('get-stt-provider'),
   getAppleSpeechLocales: () => ipcRenderer.invoke('apple-speech:get-locales'),
   installAppleSpeechLocale: (locale: string) => ipcRenderer.invoke('apple-speech:install-locale', locale),
+  releaseAppleSpeechLocale: (locale: string) => ipcRenderer.invoke('apple-speech:release-locale', locale),
   onAppleSpeechInstallProgress: (cb: (data: { locale: string; fraction: number }) => void) => {
     const listener = (_: any, data: any) => cb(data);
     ipcRenderer.on('apple-speech:install-progress', listener);

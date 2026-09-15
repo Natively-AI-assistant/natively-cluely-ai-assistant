@@ -281,7 +281,7 @@ const GATE_GENERIC_TOKENS = new Set<string>([
 ]);
 
 
-let appleSpeechLocalesCache: { available: boolean; supported: string[]; installed: string[] } | null = null;
+let appleSpeechLocalesCache: { available: boolean; supported: string[]; installed: string[]; reserved: string[]; maxReserved: number } | null = null;
 
 export function initializeIpcHandlers(appState: AppState): void {
   const safeHandle = (
@@ -10853,6 +10853,21 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Download one Apple Speech language on demand, so the wait happens in
   // Settings with a visible bar instead of silently at the first meeting.
   // Progress is a fraction only — Apple exposes no transfer size.
+  // Give up one allocated locale so another can be downloaded. Apple caps an
+  // app at 5 and an install takes a slot permanently, so without this a sixth
+  // language is a dead end. DESTRUCTIVE — the asset is purged and must be
+  // downloaded again — so it is only ever reached from an explicit user action.
+  safeHandle('apple-speech:release-locale', async (_e, locale: string) => {
+    if (process.platform !== 'darwin') return { ok: false, error: 'Apple Speech is macOS-only.' };
+    if (typeof locale !== 'string' || !/^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(locale)) {
+      return { ok: false, error: 'Invalid locale.' };
+    }
+    const { releaseAppleSpeechLocale } = require('./audio/AppleSpeechSTT');
+    const result = await releaseAppleSpeechLocale(locale);
+    if (result.ok) appleSpeechLocalesCache = null;
+    return result;
+  });
+
   safeHandle('apple-speech:install-locale', async (event, locale: string) => {
     if (process.platform !== 'darwin') return { ok: false, error: 'Apple Speech is macOS-only.' };
     if (typeof locale !== 'string' || !/^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(locale)) {
@@ -10871,7 +10886,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle('apple-speech:get-locales', async () => {
-    if (process.platform !== 'darwin') return { available: false, supported: [], installed: [] };
+    if (process.platform !== 'darwin') return { available: false, supported: [], installed: [], reserved: [], maxReserved: 0 };
     if (!appleSpeechLocalesCache) {
       const { readAppleSpeechLocales } = require('./audio/AppleSpeechSTT');
       appleSpeechLocalesCache = await readAppleSpeechLocales();

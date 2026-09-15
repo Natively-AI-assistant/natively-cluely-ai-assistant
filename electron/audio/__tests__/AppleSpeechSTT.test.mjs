@@ -487,7 +487,9 @@ test('locales query parses the helper answer', async () => {
       c.emit('close', 0, null);
     }),
   });
-  assert.deepEqual(result, { available: true, supported: ['en-US', 'es-ES'], installed: ['en-US'] });
+  assert.deepEqual(result, {
+    available: true, supported: ['en-US', 'es-ES'], installed: ['en-US'], reserved: [], maxReserved: 0,
+  });
 });
 
 test('locales query never spawns anything off macOS', async () => {
@@ -497,7 +499,7 @@ test('locales query never spawns anything off macOS', async () => {
     spawn: () => { spawned = true; throw new Error('must not spawn'); },
   });
   assert.equal(spawned, false, 'Windows must not try to run a Mach-O helper');
-  assert.deepEqual(result, { available: false, supported: [], installed: [] });
+  assert.deepEqual(result, { available: false, supported: [], installed: [], reserved: [], maxReserved: 0 });
 });
 
 test('a missing helper, garbage output, or a hang all degrade to unavailable', async () => {
@@ -505,20 +507,20 @@ test('a missing helper, garbage output, or a hang all degrade to unavailable', a
     platform: 'darwin',
     spawn: stubSpawn((c) => c.emit('error', new Error('ENOENT'))),
   });
-  assert.deepEqual(missing, { available: false, supported: [], installed: [] });
+  assert.deepEqual(missing, { available: false, supported: [], installed: [], reserved: [], maxReserved: 0 });
 
   const garbage = await readAppleSpeechLocales('/fake/helper', {
     platform: 'darwin',
     spawn: stubSpawn((c) => { c.stdout.emit('data', 'not json\n'); c.emit('close', 1, null); }),
   });
-  assert.deepEqual(garbage, { available: false, supported: [], installed: [] });
+  assert.deepEqual(garbage, { available: false, supported: [], installed: [], reserved: [], maxReserved: 0 });
 
   const hung = await readAppleSpeechLocales('/fake/helper', {
     platform: 'darwin',
     timeoutMs: 20,
     spawn: stubSpawn(() => { /* never answers, never closes */ }),
   });
-  assert.deepEqual(hung, { available: false, supported: [], installed: [] }, 'a hung probe must not block Settings forever');
+  assert.deepEqual(hung, { available: false, supported: [], installed: [], reserved: [], maxReserved: 0 }, 'a hung probe must not block Settings forever');
 });
 
 test('an unavailable Mac reports no locales rather than an empty supported list it might act on', async () => {
@@ -583,4 +585,86 @@ test('install never spawns a Mach-O helper off macOS', async () => {
   });
   assert.equal(spawned, false);
   assert.equal(result.ok, false);
+});
+
+// --- releaseAppleSpeechLocale: the only way back from Apple's 5-slot cap ----
+// Apple allocates at most maximumReservedLocales (5) per app and an install
+// takes a slot permanently — a sixth download fails with "Too many allocated
+// locales, 5 maximum", reproduced live. Releasing is the only recovery and it
+// PURGES the asset (zh-CN vanished from installedLocales in testing), so it is
+// never called automatically to make room; only from an explicit user action.
+const { releaseAppleSpeechLocale } = await import(
+  pathToFileURL(path.resolve(__dirname, '../../../dist-electron/electron/audio/AppleSpeechSTT.js')).href
+);
+
+test('release resolves ok only when the helper confirms release-done', async () => {
+  const ok = await releaseAppleSpeechLocale('zh-CN', '/fake/helper', {
+    platform: 'darwin',
+    spawn: stubSpawn((c) => {
+      c.stdout.emit('data', '{"type":"release-done","locale":"zh-CN","released":true}\n');
+      c.emit('close', 0, null);
+    }),
+  });
+  assert.deepEqual(ok, { ok: true });
+});
+
+test('an exit without release-done is a failure, never a silent success', async () => {
+  const r = await releaseAppleSpeechLocale('zh-CN', '/fake/helper', {
+    platform: 'darwin',
+    spawn: stubSpawn((c) => {
+      c.stdout.emit('data', '{"type":"error","message":"not reserved"}\n');
+      c.emit('close', 1, null);
+    }),
+  });
+  assert.equal(r.ok, false);
+  assert.match(r.error, /not reserved/);
+});
+
+test('release times out rather than leaving Settings stuck on "Removing…"', async () => {
+  const r = await releaseAppleSpeechLocale('zh-CN', '/fake/helper', {
+    platform: 'darwin',
+    timeoutMs: 20,
+    spawn: stubSpawn(() => { /* never answers */ }),
+  });
+  assert.equal(r.ok, false);
+  assert.match(r.error, /timed out/i);
+});
+
+test('release never spawns a Mach-O helper off macOS', async () => {
+  let spawned = false;
+  const r = await releaseAppleSpeechLocale('zh-CN', '/fake/helper', {
+    platform: 'win32',
+    spawn: () => { spawned = true; throw new Error('must not spawn'); },
+  });
+  assert.equal(spawned, false);
+  assert.equal(r.ok, false);
+});
+
+test('the locales probe carries the reservation budget the picker gates on', async () => {
+  const r = await readAppleSpeechLocales('/fake/helper', {
+    platform: 'darwin',
+    spawn: stubSpawn((c) => {
+      c.stdout.emit('data', JSON.stringify({
+        type: 'locales', available: true, supported: ['en-US'], installed: ['en-US'],
+        reserved: ['en-US', 'de-DE'], maxReserved: 5,
+      }) + '\n');
+      c.emit('close', 0, null);
+    }),
+  });
+  assert.deepEqual(r.reserved, ['en-US', 'de-DE']);
+  assert.equal(r.maxReserved, 5);
+});
+
+test('a helper that omits the reservation fields degrades to an empty budget', async () => {
+  // An older helper binary next to a newer app must not make the picker think
+  // zero slots exist and block every download.
+  const r = await readAppleSpeechLocales('/fake/helper', {
+    platform: 'darwin',
+    spawn: stubSpawn((c) => {
+      c.stdout.emit('data', '{"type":"locales","available":true,"supported":["en-US"],"installed":["en-US"]}\n');
+      c.emit('close', 0, null);
+    }),
+  });
+  assert.deepEqual(r.reserved, []);
+  assert.equal(r.maxReserved, 0);
 });

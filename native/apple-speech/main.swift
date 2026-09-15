@@ -68,6 +68,12 @@ func flushConverter(
         // so Settings can show a bar instead of a silent wait. Apple reports a
         // fraction only — Progress.totalUnitCount is 1, not a byte count, and
         // localizedAdditionalDescription is empty — so there is no size to report.
+        if let i = CommandLine.arguments.firstIndex(of: "--release"),
+           i + 1 < CommandLine.arguments.count {
+            do { try await releaseLocale(CommandLine.arguments[i + 1]) }
+            catch { emit(["type":"error", "message":error.localizedDescription]); exit(1) }
+            return
+        }
         if let i = CommandLine.arguments.firstIndex(of: "--install"),
            i + 1 < CommandLine.arguments.count {
             do { try await installLocale(CommandLine.arguments[i + 1]) }
@@ -116,6 +122,26 @@ func flushConverter(
         emit(["type":"install-done", "locale":locale.identifier(.bcp47)])
     }
 
+    /// Free one allocated locale at the user's explicit request.
+    ///
+    /// Apple caps an app at AssetInventory.maximumReservedLocales (5) and an
+    /// installation permanently takes a slot, so a sixth language fails with
+    /// "Too many allocated locales, 5 maximum" and nothing recovers it. This is
+    /// the only way back — but it is DESTRUCTIVE: releasing purged zh-CN from
+    /// installedLocales outright in testing, so the language has to be
+    /// downloaded again afterwards. That is why it is never done automatically
+    /// to make room; the user is asked which language to give up.
+    static func releaseLocale(_ requested: String) async throws {
+        guard #available(macOS 26.0, *), SpeechTranscriber.isAvailable else {
+            throw BridgeError(message:"Apple Speech requires macOS 26 and supported Apple hardware.")
+        }
+        guard let locale = await SpeechTranscriber.supportedLocale(equivalentTo:Locale(identifier:requested)) else {
+            throw BridgeError(message:"Apple Speech does not support language \(requested).")
+        }
+        let released = await AssetInventory.release(reservedLocale: locale)
+        emit(["type":"release-done", "locale":locale.identifier(.bcp47), "released":released])
+    }
+
     static func emitLocales() async throws {
         guard #available(macOS 26.0, *), SpeechTranscriber.isAvailable else {
             emit(["type":"locales", "supported":[], "installed":[], "available":false])
@@ -123,11 +149,14 @@ func flushConverter(
         }
         let supported = await SpeechTranscriber.supportedLocales
         let installed = await SpeechTranscriber.installedLocales
+        let reserved = await AssetInventory.reservedLocales
         emit([
             "type":"locales",
             "available":true,
             "supported":supported.map { $0.identifier(.bcp47) },
             "installed":installed.map { $0.identifier(.bcp47) },
+            "reserved":reserved.map { $0.identifier(.bcp47) },
+            "maxReserved":AssetInventory.maximumReservedLocales,
         ])
     }
     static func run() async throws {
@@ -153,7 +182,7 @@ func flushConverter(
                 "phase":"asset-download",
                 "message":"Downloading Apple speech model for \(locale.identifier(.bcp47))…"
             ])
-            if let request = try await AssetInventory.assetInstallationRequest(supporting:[transcriber]) {
+                if let request = try await AssetInventory.assetInstallationRequest(supporting:[transcriber]) {
                 try await request.downloadAndInstall()
             }
         }

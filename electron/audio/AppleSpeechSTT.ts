@@ -35,6 +35,13 @@ export interface AppleSpeechLocales {
   supported: string[];
   /** BCP-47 locales already on disk — the rest download on first use. */
   installed: string[];
+  /**
+   * Locales this app currently holds allocated. Apple caps this at
+   * `maxReserved` (5) and an install permanently takes a slot, so once it is
+   * full every further download fails with "Too many allocated locales".
+   */
+  reserved: string[];
+  maxReserved: number;
 }
 
 /** Path to the compiled helper (packaged vs development). */
@@ -44,7 +51,7 @@ export function appleSpeechExecutablePath(): string {
     : path.join(app.getAppPath(), 'resources', 'apple-speech', 'natively-apple-speech');
 }
 
-const UNAVAILABLE: AppleSpeechLocales = { available: false, supported: [], installed: [] };
+const UNAVAILABLE: AppleSpeechLocales = { available: false, supported: [], installed: [], reserved: [], maxReserved: 0 };
 
 /**
  * One-shot `--locales` query, so Settings can show which languages Apple can
@@ -97,6 +104,8 @@ export function readAppleSpeechLocales(
               available: !!message.available,
               supported: Array.isArray(message.supported) ? message.supported.map(String) : [],
               installed: Array.isArray(message.installed) ? message.installed.map(String) : [],
+              reserved: Array.isArray(message.reserved) ? message.reserved.map(String) : [],
+              maxReserved: Number.isFinite(message.maxReserved) ? Number(message.maxReserved) : 0,
             });
             return;
           }
@@ -168,6 +177,62 @@ export function installAppleSpeechLocale(
       if (done) finish({ ok: true });
       else finish({ ok: false, error: failure ?? 'The language download did not finish.' });
     });
+  });
+}
+
+/**
+ * Give up one allocated locale, at the user's explicit request.
+ *
+ * DESTRUCTIVE: releasing removes the asset from `installedLocales`, so the
+ * language must be downloaded again to be used. It is never called to make
+ * room automatically — Apple's 5-slot cap is surfaced to the user instead, so
+ * they choose which language to give up rather than losing one silently.
+ */
+export function releaseAppleSpeechLocale(
+  locale: string,
+  executable = appleSpeechExecutablePath(),
+  deps: { platform?: NodeJS.Platform; spawn?: typeof spawn; timeoutMs?: number } = {},
+): Promise<{ ok: boolean; error?: string }> {
+  const platform = deps.platform ?? process.platform;
+  if (platform !== 'darwin') return Promise.resolve({ ok: false, error: 'Apple Speech is macOS-only.' });
+  const spawnFn = deps.spawn ?? spawn;
+  const timeoutMs = deps.timeoutMs ?? 30_000;
+  return new Promise((resolve) => {
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = spawnFn(executable, ['--release', locale], { stdio: ['ignore', 'pipe', 'ignore'] });
+    } catch (e: any) {
+      resolve({ ok: false, error: e?.message ?? 'Could not start Apple Speech.' }); return;
+    }
+    let out = '';
+    let released = false;
+    let failure: string | undefined;
+    let settled = false;
+    const finish = (v: { ok: boolean; error?: string }) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try { if (child.exitCode === null) child.kill(); } catch { /* gone */ }
+      resolve(v);
+    };
+    const timer = setTimeout(() => finish({ ok: false, error: 'Removing the language timed out.' }), timeoutMs);
+    timer.unref?.();
+    child.stdout?.setEncoding('utf8');
+    child.stdout?.on('data', (chunk: string) => {
+      out += chunk;
+      let end: number;
+      while ((end = out.indexOf('\n')) >= 0) {
+        const line = out.slice(0, end); out = out.slice(end + 1);
+        if (!line.trim()) continue;
+        try {
+          const m = JSON.parse(line);
+          if (m?.type === 'release-done') released = true;
+          else if (m?.type === 'error') failure = String(m.message ?? 'Could not remove the language.');
+        } catch { /* not our line */ }
+      }
+    });
+    child.on('error', (e) => finish({ ok: false, error: e.message }));
+    child.on('close', () => finish(released ? { ok: true } : { ok: false, error: failure ?? 'Could not remove the language.' }));
   });
 }
 

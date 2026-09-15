@@ -788,8 +788,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     // first-use download, so the wait is visible before a meeting rather than
     // as an unexplained pause during one.
     const [appleSpeechLocales, setAppleSpeechLocales] = useState<{
-        available: boolean; supported: string[]; installed: string[];
+        available: boolean; supported: string[]; installed: string[]; reserved: string[]; maxReserved: number;
     } | null>(null);
+    const [appleReleasing, setAppleReleasing] = useState<string>('');
     // Live asset download started from Settings. Apple reports a 0..1 fraction
     // and no transfer size, so the bar is a percentage — there is no MB figure
     // to show (Progress.totalUnitCount is 1, not bytes).
@@ -1192,6 +1193,45 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             setAppleInstallError(e?.message || 'The language download did not finish.');
         } finally {
             setAppleInstall(null);
+        }
+    };
+
+    /**
+     * Apple allocates at most `maxReserved` (5) locales per app and an install
+     * takes a slot permanently, so a sixth download fails with "Too many
+     * allocated locales, 5 maximum". Releasing is the only way back and it
+     * PURGES the asset, so the user is shown the limit and picks what to give
+     * up rather than having a language deleted silently to make room.
+     */
+    const appleSlots = useMemo(() => {
+        if (sttProvider !== 'apple-speech' || !appleSpeechLocales?.available) return null;
+        const max = appleSpeechLocales.maxReserved || 0;
+        if (!max) return null;
+        const label = (bcp: string) => {
+            const hit = Object.values(availableLanguages).find(
+                (l: any) => String(l?.bcp47 ?? '').toLowerCase() === bcp.toLowerCase(),
+            ) as any;
+            return hit?.label ? `${hit.group}${hit.label !== hit.group ? ` (${hit.label})` : ''}` : bcp;
+        };
+        return {
+            max,
+            used: appleSpeechLocales.reserved.length,
+            full: appleSpeechLocales.reserved.length >= max,
+            entries: appleSpeechLocales.reserved.map((bcp) => ({ bcp, label: label(bcp) })),
+        };
+    }, [sttProvider, appleSpeechLocales, availableLanguages]);
+
+    const releaseAppleLanguage = async (bcp: string) => {
+        setAppleReleasing(bcp);
+        setAppleInstallError('');
+        try {
+            const r = await window.electronAPI.releaseAppleSpeechLocale(bcp);
+            if (!r?.ok) setAppleInstallError(r?.error || 'Could not remove the language.');
+            setAppleSpeechLocales(await window.electronAPI.getAppleSpeechLocales());
+        } catch (e: any) {
+            setAppleInstallError(e?.message || 'Could not remove the language.');
+        } finally {
+            setAppleReleasing('');
         }
     };
 
@@ -3645,7 +3685,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             </div>
                                                             <button
                                                                 onClick={startAppleDownload}
-                                                                className="shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg bg-bg-input hover:bg-bg-elevated text-text-primary border border-border-subtle transition-colors"
+                                                                disabled={!!appleSlots?.full}
+                                                                title={appleSlots?.full ? t('Remove a downloaded language first.') : undefined}
+                                                                className="shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg bg-bg-input hover:bg-bg-elevated text-text-primary border border-border-subtle transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                                                             >
                                                                 {t('Download')}
                                                             </button>
@@ -3654,6 +3696,41 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     {appleInstallError && (
                                                         <p className="text-[11px] text-amber-200/90 mt-2">{appleInstallError}</p>
                                                     )}
+                                                </div>
+                                            )}
+                                            {/* Apple allocates a fixed number of language slots per app
+                                                and an install takes one permanently, so the cap has to be
+                                                visible and recoverable — otherwise the sixth language just
+                                                fails with Apple's opaque "Too many allocated locales". */}
+                                            {appleSlots && appleSlots.entries.length > 0 && (
+                                                <div className="mt-3 rounded-xl border border-border-subtle bg-bg-card p-3">
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <span className="text-xs font-medium text-text-primary">
+                                                            {t('Downloaded languages')}
+                                                        </span>
+                                                        <span className={`text-[11px] tabular-nums ${appleSlots.full ? 'text-amber-300/90' : 'text-text-secondary'}`}>
+                                                            {appleSlots.used} / {appleSlots.max}
+                                                        </span>
+                                                    </div>
+                                                    <ul className="space-y-1">
+                                                        {appleSlots.entries.map((e) => (
+                                                            <li key={e.bcp} className="flex items-center justify-between gap-3">
+                                                                <span className="text-xs text-text-secondary truncate">{e.label}</span>
+                                                                <button
+                                                                    onClick={() => releaseAppleLanguage(e.bcp)}
+                                                                    disabled={appleReleasing === e.bcp}
+                                                                    className="shrink-0 text-[11px] px-2 py-1 rounded-md text-text-secondary hover:text-text-primary hover:bg-bg-input border border-transparent hover:border-border-subtle transition-colors disabled:opacity-40"
+                                                                >
+                                                                    {appleReleasing === e.bcp ? t('Removing…') : t('Remove')}
+                                                                </button>
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                    <p className="text-[11px] text-text-secondary mt-2">
+                                                        {appleSlots.full
+                                                            ? t('All language slots are in use. Remove one to download another — removing deletes the model, so it has to be downloaded again to use it.')
+                                                            : t('Apple allows a limited number of downloaded languages. Removing one deletes its model.')}
+                                                    </p>
                                                 </div>
                                             )}
                                             {appleLanguageCapability && (
