@@ -14,6 +14,7 @@ import { deriveFallbackKey, encryptCredentialBlob, decryptCredentialBlob } from 
 // used to live here is exactly how the two answers drifted apart.
 import { customProviderSupportsVision, customProviderIsLocal } from '../llm/visionCapability';
 import { readActiveCustomProvider } from '../llm/activeCustomProvider';
+import { normalizeSttLanguageKey } from '../config/languages';
 
 const CREDENTIALS_PATH = path.join(app.getPath('userData'), 'credentials.enc');
 // App-managed AES fallback, used ONLY when the OS keyring (safeStorage) is
@@ -1001,7 +1002,7 @@ export class CredentialsManager {
         // users effectively had before, since the old hint was advisory.
         // Every STT provider implements an 'auto' branch (see the note on
         // AppState.setRecognitionLanguage in main.ts).
-        return this.credentials.sttLanguage || 'auto';
+        return normalizeSttLanguageKey(this.credentials.sttLanguage);
     }
 
     public getAiResponseLanguage(): string {
