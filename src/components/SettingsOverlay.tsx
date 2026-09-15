@@ -718,7 +718,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     // Active STT provider — declared here (not with the rest of the STT
     // settings below) because the local-model language-capability effect and
     // memo that follow depend on it.
-    const [sttProvider, setSttProvider] = useState<'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper'>('none');
+    const [sttProvider, setSttProvider] = useState<'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech'>('none');
 
     // Declared here for the same reason sttProvider is: the NVIDIA
     // language-capability memo below reads it, and which languages that model
@@ -1322,7 +1322,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         return () => unsubscribe();
     }, []); // mount-once: isOpen is checked inside the callback
 
-    const handleSttProviderChange = async (provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper') => {
+    const handleSttProviderChange = async (provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech') => {
         setSttProvider(provider);
         setIsSttDropdownOpen(false);
         setSttTestStatus('idle');
@@ -1519,7 +1519,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     };
 
     const handleTestSttConnection = async () => {
-        if (sttProvider === 'none' || sttProvider === 'google' || sttProvider === 'natively' || sttProvider === 'local-whisper') return;
+        if (sttProvider === 'none' || sttProvider === 'google' || sttProvider === 'natively' || sttProvider === 'local-whisper' || sttProvider === 'apple-speech') return;
         const keyMap: Record<string, string> = {
             groq: sttGroqKey, openai: sttOpenaiKey, deepgram: sttDeepgramKey,
             elevenlabs: sttElevenLabsKey, azure: sttAzureKey, ibmwatson: sttIbmKey,
@@ -3053,6 +3053,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                Windows logo exists under a licence compatible with AGPL-3.0 (it is in
                                                                neither lobehub nor simple-icons — see the README). `isMac` is the same
                                                                platform source the rest of this panel uses. */
+                                                            ...(isMac ? [{ id: 'apple-speech', label: 'Apple Speech', badge: null, desc: 'On-device · macOS 26+ · No API key', color: 'green', icon: <BrandMark provider="apple" />, neutralTile: true }] : []),
                                                             { id: 'local-whisper', label: 'Local Models', badge: null, desc: t('Privacy-first: runs 100% on your device'), color: 'green', icon: <BrandMark provider={isMac ? 'apple' : 'microsoft'} />, neutralTile: true },
                                                         ]}
                                                     />
@@ -3188,7 +3189,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                             )}
 
                                             {/* API Key Input (non-Google providers) */}
-                                            {sttProvider !== 'google' && sttProvider !== 'local-whisper' && sttProvider !== 'natively' && sttProvider !== 'none' && (
+                                            {sttProvider !== 'google' && sttProvider !== 'local-whisper' && sttProvider !== 'apple-speech' && sttProvider !== 'natively' && sttProvider !== 'none' && (
                                                 <div className="bg-bg-card rounded-xl border border-border-subtle p-4 space-y-3">
                                                     <label className="text-xs font-medium text-text-secondary block">
                                                         {sttProvider === 'nvidia_nim' ? 'Nvidia Nim' : sttProvider === 'groq' ? 'Groq' : sttProvider === 'openai' ? 'OpenAI STT' : sttProvider === 'elevenlabs' ? 'ElevenLabs' : sttProvider === 'azure' ? 'Azure' : sttProvider === 'ibmwatson' ? 'IBM Watson' : sttProvider === 'soniox' ? 'Soniox' : 'Deepgram'} API Key
@@ -3376,6 +3377,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 </div>
                                             )}
 
+                                            {sttProvider === 'apple-speech' && (
+                                                <p className="text-sm text-text-secondary">Apple Speech runs transcription on your device. macOS may download the selected language model on first use; “Auto” uses your system language.</p>
+                                            )}
                                             {/* Local Whisper Model Panel */}
                                             {sttProvider === 'local-whisper' && (
                                                 <LocalWhisperModelPanel onModelConfigChanged={setLocalWhisperConfig} />

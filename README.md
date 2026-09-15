@@ -102,6 +102,7 @@ While other tools act as simple API wrappers, Natively is a complete, native int
 
 - **Native Audio Capture (<500ms):** Built with Rust and Zero-Copy ABI transfers, bypassing generic web-audio limitations for ultra-low latency.
 - **Local Whisper STT (On-Device):** 100% on-device speech-to-text using optimized ONNX models (Moonshine-tiny, Moonshine-base, Whisper-large-v3-turbo, distil-large-v3, Parakeet CTC 0.6B). Uses hardware acceleration (CoreML/Metal GPU on Apple Silicon, DirectML on Windows, quantized int8 on CPU) with zero cloud fees or data exposure.
+- **Apple Speech STT (On-Device):** On macOS 26, Natively can transcribe through Apple's `SpeechAnalyzer` and `SpeechTranscriber` without an API key or sending audio to a speech provider.
 - **Dual-Channel Intelligence:** Distinct pipelines for system audio (what they say) and your microphone (what you dictate) ensuring perfect transcription without room noise.
 - **Battle-Tested Stealth Mode:** Completely undetectable. Hides from the dock, disables popups, and disguises the process during screen sharing.
 - **Auto Answer (Beta):** Answers appear on their own the moment the other person finishes a question — Natively decides whether an answer is actually wanted and stays silent when it isn't. Off by default.
@@ -551,14 +552,16 @@ You explicitly control:
 - Node.js (v22.6+ required)
 - Git
 - Rust (required for native audio capture)
+- Xcode 26+ with the macOS 26 SDK (required only to build the Apple Speech helper or package Natively for macOS)
 
 ### AI Credentials & Speech Providers
 
 **Natively is 100% free to use with your own keys.**  
 Connect **any** speech provider and **any** LLM. No subscriptions, no markups, no hidden fees. All keys are stored locally.
 
-### Unlimited Free Transcription (Whisper, Google, Deepgram)
+### Speech-to-Text Providers
 
+- **Apple Speech** (No API Key) - _On-device transcription on macOS 26+_
 - **Soniox** (API Key) - _Ultra-fast, highly accurate streaming STT (recommended)_
 - **NVIDIA Riva / NIM** (API Key) - _Nine streaming models, including multilingual Nemotron and Parakeet_
 - **Google Cloud Speech-to-Text** (Service Account)
@@ -568,6 +571,8 @@ Connect **any** speech provider and **any** LLM. No subscriptions, no markups, n
 - **ElevenLabs** (API Key)
 - **Azure Speech Services** (API Key + Region)
 - **IBM Watson** (API Key + Region)
+
+Apple Speech requires a Mac running macOS 26 or later. Select **Apple Speech** in Audio settings and choose a recognition language. On first use, macOS may download the corresponding speech asset from Apple; the initial startup can therefore take longer and requires a network connection. Once the asset is installed, transcription runs on the device. Language availability is determined by macOS.
 
 ### AI Engine Support (Bring Your Own Key)
 
@@ -584,7 +589,7 @@ Connect Natively to **any** leading model or local inference engine.
 | **Ollama / LocalAI**         | 100% Offline & Private (No API keys needed).                |
 | **OpenAI-Compatible**        | Connect to _any_ custom endpoint (vLLM, LM Studio, etc.)    |
 
-> **Note:** You only need ONE speech provider to get started. We recommend **Google STT** ,**Groq** or **Deepgram** for the fastest real-time performance.
+> **Note:** You only need ONE speech provider to get started. Use **Apple Speech** for on-device transcription on macOS 26+, or **Google STT**, **Groq**, or **Deepgram** for fast cloud transcription.
 
 ---
 
@@ -634,6 +639,16 @@ npm install
 ```bash
 npm run build:native
 ```
+
+### Build Apple Speech Helper (macOS Only)
+
+Regular development and non-macOS builds do not require the helper. To use Apple Speech while developing on macOS, build it explicitly for the current target architecture:
+
+```bash
+npm run build:apple-speech -- --arch arm64
+```
+
+Use `x64` for Intel or `universal` to combine both architectures. This command requires Xcode 26+ with the macOS 26 SDK. Production macOS packaging builds the matching helper automatically.
 
 ### Environment Variables
 
@@ -792,6 +807,7 @@ Natively understands that _listening_ to a meeting and _talking_ to an AI are di
 - **Sample Rate Auto-Detection**: Dynamically detects and syncs true hardware sample rates (e.g., automatically handling 48kHz audio interfaces or external microphones without distortion or downsampling artifacts).
 - **Two-Stage Silence Processing**: Combines adaptive RMS thresholds with **WebRTC Machine Learning VAD** to reject typing and fan noise.
 - **Microphone Input (Your Voice):** A dedicated channel for your voice commands and dictation. Toggle it instantly to ask Natively a private question without muting your meeting software.
+- **Apple Speech (macOS 26+):** Processes both channels through Apple's on-device speech framework, with automatic sample-rate conversion and no speech API key.
 
 ### Spotlight Search & Customization
 
@@ -905,6 +921,7 @@ No raw audio, screenshots, or transcripts are stored or transmitted unless expli
 - **React, Vite, TypeScript 7, TailwindCSS**
 - **Electron 43**
 - **Rust** (native audio with **Zero-Copy ABI Transfers** via `napi::Buffer` — enabling continuous audio capture without V8 garbage collection pressure, achieving significantly lower latency and CPU usage than typical Electron-based competitors)
+- **Swift** (Apple's on-device speech framework on macOS 26+)
 - **SQLite** (local storage with `sqlite-vec`)
 
 ### Supported Models
@@ -922,6 +939,7 @@ No raw audio, screenshots, or transcripts are stored or transmitted unless expli
 - **Minimum:** 4GB RAM
 - **Recommended:** 8GB+ RAM
 - **Optimal:** 16GB+ RAM for local AI
+- **Apple Speech:** A Mac that supports and runs macOS 26 or later; available recognition languages depend on Apple's downloadable speech assets
 
 ---
 

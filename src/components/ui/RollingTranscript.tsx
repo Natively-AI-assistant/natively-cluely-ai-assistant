@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 
 interface ChannelStatus {
-    status: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio';
+    status: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio' | 'preparing';
     error?: string;
     provider?: string;
 }
@@ -25,6 +25,11 @@ const RollingTranscript: React.FC<RollingTranscriptProps> = ({
     const anyAwaitingAudio = intStatus === 'awaiting-audio' || micStatus === 'awaiting-audio';
     const isNormal = intStatus === 'connected' && micStatus === 'connected' && !anyAwaitingAudio;
     const showTranscriptText = intStatus !== 'failed' && micStatus !== 'failed';
+    const preparingMessage = intStatus === 'preparing'
+        ? interviewerChannel?.error
+        : micStatus === 'preparing'
+        ? microphoneChannel?.error
+        : undefined;
 
     useEffect(() => {
         if (containerRef.current && showTranscriptText && text) {
@@ -52,7 +57,7 @@ const RollingTranscript: React.FC<RollingTranscriptProps> = ({
                     >
                         {showTranscriptText && (
                             <span className="inline-flex items-center text-[13px] italic leading-7 text-[var(--overlay-text-muted)] transition-all duration-300">
-                                {text || 'Listening…'}
+                                {text || preparingMessage || 'Listening…'}
                                 {isActive && isNormal && (
                                     <span className="inline-flex items-center ml-2">
                                         <span className="w-[3px] h-[3px] bg-emerald-400/70 rounded-full animate-pulse" />

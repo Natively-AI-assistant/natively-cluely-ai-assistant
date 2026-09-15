@@ -10787,7 +10787,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         | 'soniox'
         | 'nvidia_nim'
         | 'natively'
-        | 'local-whisper',
+        | 'local-whisper'
+        | 'apple-speech',
     ) => {
       try {
         const { CredentialsManager } = require('./services/CredentialsManager');
