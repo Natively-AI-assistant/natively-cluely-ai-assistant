@@ -280,6 +280,77 @@
 .lg-button.lg-sky::after { opacity: .30; }
 
 /*
+  .lg-clear — the material with NO body of its own.
+
+  DERIVED, not measured. The reference screenshot is a dark stage with opaque
+  pills on it; there is nothing in it to sample for a fill that is mostly the
+  surround showing through. Same standing as light mode and .lg-sky.
+
+  Why a fifth variant rather than one of the four. This one exists for a
+  surface the material was already tried on and taken off: the modes manager
+  sidebar (#0e0e0e dark / #f9f9f9 light). What was rejected there was a TINTED
+  chip — the rim read as out of place on a flat panel, and subtracting the rim,
+  then the cap shadow, then the contact shadow left nothing of the material.
+  The inverse move is the one that fits: let the panel through, and let the rim
+  be the only thing the material contributes. `neutral` is a flat #555 measured
+  for a dark stage, `action` would import the legacy action blue into a panel
+  whose accent is periwinkle, and `sky` inverts the lighting model for a light
+  BODY, which is not this.
+
+  THE RIM READS BETTER HERE, NOT WORSE, and that is the whole premise.
+  Measured in Electron at device scale 1, both at .lg-sm .lg-wide and 216px
+  wide, so the variant is the only thing that differs (luma, 0-255):
+
+                            surround  body  top rim      bottom rim
+    neutral on #242424         36      85   104 (+19)    121 (+36)
+    clear   on #0e0e0e         14      28    62 (+34)     69 (+41)
+
+  Absolutely darker, relatively brighter — on BOTH faces. The rim is composited
+  over the button's own fill, and a near-transparent fill is a darker floor to
+  sit on.
+
+  The cap shadow gets a second job for free. ::after is black, so on a
+  near-black panel it pulls the caps back DOWN to the surround — the ends
+  dissolve into the sidebar instead of terminating against it, which is what a
+  clear material should do. That is load-bearing on dark; on light it inverts
+  and has to be pulled right back (see the light block below).
+
+  Tokens: --lg-clear-bg, --lg-clear-hover, and their -light counterparts, so a
+  host whose own control tokens differ can feed them in the way .lg-action
+  reads --legacy-action-*.
+
+  THE LABEL COLOUR, which is the one place this variant needs a line the others
+  do not. The other four each own their body, so each pins a colour against it.
+  Here the body IS the host's surface, so the label has to be the host's own
+  text colour — and it does NOT arrive on its own. `<button>` gets
+  `color: buttontext` from the UA stylesheet, which is an initial value, not an
+  inherited one; the other variants never notice because their
+  `.lg-X .lg-content` rule overrides it. Measured without the line below:
+  rgb(0,0,0) in BOTH themes, i.e. black on #0e0e0e. `color: inherit` on the
+  button is what reconnects it to the host, and it must go on .lg-button rather
+  than on .lg-content, which would only inherit buttontext from its parent.
+  Do not replace it with a fixed colour — that is what lets one class serve
+  both themes.
+*/
+.lg-button.lg-clear {
+    color: inherit;
+    background:
+        linear-gradient(180deg,
+            rgba(255, 255, 255, .055) 0%, rgba(255, 255, 255, 0) 11%,
+            rgba(255, 255, 255, 0) 89%, rgba(255, 255, 255, .055) 100%),
+        var(--lg-clear-bg, rgba(255, 255, 255, .06));
+    /* Achromatic like neutral, so alpha is the only lever — and it is the same
+       step the control it replaces used (.06 -> .10 on --mm-btn-bg-hover). */
+    --lg-tint-hover: var(--lg-clear-hover, rgba(255, 255, 255, .10));
+    --lg-lens-tint: rgba(255, 255, 255, .055);
+    --lg-lens-rim: rgba(255, 255, 255, .30);
+    --lg-lens-rim-soft: rgba(255, 255, 255, .13);
+    --lg-rim-1: rgba(255, 255, 255, .148);
+    --lg-rim-2: rgba(255, 255, 255, .118);
+    --lg-rim-3: rgba(255, 255, 255, .134);
+}
+
+/*
   Light mode is a DERIVED material, not a measured one — the reference
   screenshot is dark only, so this is the same lighting model reasoned through
   rather than sampled.
@@ -308,6 +379,53 @@
 /* the underside shadow already reads; a full cap ring would double it */
 [data-theme='light'] .lg-button.lg-action::after { opacity: .55; }
 [data-theme='light'] .lg-button.lg-action.lg-sm::after { opacity: .32; }
+
+/*
+  .lg-clear in light mode — the one place the layer STRUCTURE has to change.
+
+  For every other variant light mode moves the vertical mask and one
+  box-shadow and leaves the layers alone, because the body is opaque and
+  brighter than nothing. Here the body is the panel (#f9f9f9) with a faint
+  darkening over it, and two of the four layers are then doing nothing:
+
+    THE SPECULAR HAS NOTHING TO CATCH. A white rim on a near-white body is
+    invisible at any alpha. So the rim INVERTS — the perimeter reads as a dark
+    hairline, which is also what the 1px solid rgba(0,0,0,.05) border it
+    replaces was doing, and the underside carries more of it than the top
+    because that is the face in shadow.
+
+    THE LENS INVERTS TOO. A white bloom under the pointer does not show on
+    this body. A darkening does, and it is the same move --mm-btn-bg-hover
+    made (rgba(0,0,0,.04) -> rgba(0,0,0,.08)).
+
+  NO CONTACT SHADOW, deliberately, and this is where .lg-clear parts company
+  with .lg-action and .lg-sky. Both of those cast one because there is a solid
+  body sitting ON the card to cast it. A chip you can see the panel through is
+  not sitting on anything — a drop shadow under it would claim a height the
+  material does not have. The underside inset is the whole of the depth here.
+
+  The cap shadow is pulled back hard. On dark it is doing useful work (the
+  caps dissolve into the near-black panel). On white the same black gradient
+  is a visible smudge on each end, so it drops to .20 — enough that the caps
+  still read as turning away from the light, not enough to blot them.
+*/
+[data-theme='light'] .lg-button.lg-clear {
+    background:
+        linear-gradient(180deg,
+            rgba(17, 17, 26, .020) 0%, rgba(17, 17, 26, 0) 14%,
+            rgba(17, 17, 26, 0) 100%),
+        var(--lg-clear-bg-light, rgba(17, 17, 26, .04));
+    --lg-tint-hover: var(--lg-clear-hover-light, rgba(17, 17, 26, .08));
+    --lg-lens-tint: rgba(17, 17, 26, .045);
+    --lg-lens-rim: rgba(17, 17, 26, .16);
+    --lg-lens-rim-soft: rgba(17, 17, 26, .07);
+    --lg-rim-1: rgba(17, 17, 26, .10);
+    --lg-rim-2: rgba(17, 17, 26, .06);
+    --lg-rim-3: rgba(17, 17, 26, .04);
+    /* the underside is the face in shadow; no drop shadow — see above */
+    box-shadow: inset 0 -1px 0 rgba(17, 17, 26, .07);
+}
+[data-theme='light'] .lg-button.lg-clear::after { opacity: .20; }
 
 /*
   ---------------------------------------------------------------------------
@@ -359,6 +477,42 @@
 .lg-button.lg-sm::before { box-shadow: inset 0 0 0 1px var(--lg-rim-1); }
 /* short side edges on a rect, so the cap shadow needs far less weight */
 .lg-button.lg-sm::after  { padding: 1px; opacity: .5; }
+
+/*
+  ---------------------------------------------------------------------------
+  .lg-wide — for a button whose width comes from its CONTAINER, not its label.
+
+  The cap stops are percentages of WIDTH, and that only holds while width and
+  height keep roughly the reference's proportion. They were tuned on a 535x136
+  pill whose caps were 12.7% of its width. A 30px-tall button stretched to fill
+  a 240px sidebar is 216px wide, so its caps are 15px — 6.9% of the width —
+  while --lg-cap-2 still says 26.5%:
+
+      cap ends at   15px
+      fade ends at  57px   (26.542% of 216)
+
+  Between those two the top face is flat and the rim is still ramping, so the
+  specular spends a quarter of the button's width climbing across something
+  that is not curved. Measured on the top edge of that button (luma, dark):
+
+      distance   2    6   10   15   20   30   45   60
+      with       14   13   29   68   69   69   69   69     full by the cap
+      without    14   13   24   48   57   65   67   69     full at 4x the cap That is the same failure LiquidGlassBadge shipped at tag scale and
+  the Profile Intelligence CTA hit at 196px — third time, so it gets a name.
+
+  The fix is the same one both of those landed on: LENGTHS pinned to the cap
+  radius, which is where the curvature actually ends. Being lengths they are
+  width-invariant, so a wider container cannot re-open it.
+
+  Not folded into .lg-sm, which is a SCALE and is used by label-width buttons
+  whose proportions the percentages still serve. Width is an independent axis.
+  ---------------------------------------------------------------------------
+*/
+.lg-button.lg-wide {
+    --lg-cap-0: 2px;
+    --lg-cap-1: 5px;
+    --lg-cap-2: calc(var(--lg-pill-h) / 2);
+}
 
 /*
   ---------------------------------------------------------------------------
@@ -581,6 +735,13 @@
 .lg-button:disabled.lg-neutral { background-color: #3d3d3d; }
 .lg-button:disabled.lg-green   { background-color: #1a2a24; }
 .lg-button:disabled.lg-action  { filter: saturate(.4) brightness(.85); }
+/*
+  clear has no body to desaturate, so the lever is the alpha it does have.
+  Dropping the fill rather than filtering it is what keeps the panel reading
+  through — a saturate() on a transparent body changes nothing visible.
+*/
+.lg-button:disabled.lg-clear   { background-color: rgba(255, 255, 255, .025); }
+[data-theme='light'] .lg-button:disabled.lg-clear { background-color: rgba(17, 17, 26, .02); }
 .lg-button:disabled::before { opacity: .45; }
 .lg-button:disabled::after  { opacity: .55; }
 .lg-button:disabled .lg-content { opacity: .6; }
@@ -607,6 +768,18 @@
     }
     .lg-button.lg-neutral { background-color: #4a4a4a; }
     .lg-button.lg-green   { background-color: #103425; }
+    /*
+      clear is the only variant with no body of its own, so high contrast is
+      where it has to grow one: a 2px white border on a transparent body over
+      #f9f9f9 is a white line on a white panel. The light rule also has to
+      restate box-shadow — its light block above sets one at (0,3,0) and would
+      otherwise outrank the (0,1,0) .lg-button border this block relies on.
+    */
+    .lg-button.lg-clear   { background-color: #2a2a2a; }
+    [data-theme='light'] .lg-button.lg-clear {
+        background-color: #ffffff;
+        box-shadow: inset 0 0 0 2px rgba(17, 17, 26, .92);
+    }
     .lg-button.lg-badge.lg-green { background-color: #103425; }
     .lg-neutral .lg-content { color: #ffffff; }
     .lg-green   .lg-content { color: #eaffe2; }
