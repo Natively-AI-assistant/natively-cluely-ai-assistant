@@ -31,45 +31,70 @@ const ASK_BAR_EDGE = 0.25;
 /** Blur of the lens rect inside the map. Held under the 6px band: a blur
  *  wider than its own inset flattens the gradient that IS the effect. */
 const ASK_BAR_MAP_BLUR = 4;
-/** How far the band samples the backdrop: |scale| / 2 = 12px. Measured off a
- *  live capture of this pill over the notes: the chromatic offsets that give a
- *  hero card its prism edge fringe 13px type into a rainbow that reads as a
- *  rendering fault, so this ships achromatic and the bend carries the effect
- *  on its own. */
-const ASK_BAR_DISTORTION = -24;
 /*
- * Tint — the flat fill painted OVER the refracted backdrop, so it is what
- * decides whether the field is readable. Clear glass is not: the notes scroll
- * directly behind this pill, and at the 0.06 the material started on, a line of
- * body text passing underneath sat at the same value as the query being typed
- * on top of it.
+ * How hard the lens bends the backdrop: the band samples it |scale| / 2 px away.
  *
- * The two themes need different numbers, and not symmetrically. Dark tints
- * toward black over a backdrop that is already near-black, so the alpha is
- * doing real work at every step — the pill becomes a well, which is how every
- * other field in the app reads. Light tints white over a backdrop that is
- * already near-white, so most of the range changes almost nothing; it is set
- * high mainly to suppress darker UI (a button, a heading) passing behind.
+ * The two themes diverge here, and deliberately. Light is a near-white page
+ * behind a near-white pane — there is very little contrast to bend, so a strong
+ * scale buys nothing and only risks the chromatic edge; -24 is what Evin
+ * approved and it stays. Dark transmits a dark page with bright text on it, and
+ * at -24 the bend was too slight to read as a lens at all, so the refraction is
+ * doubled and it is the lens, rather than the fill, that makes the material
+ * legible as glass.
  *
- * Both were measured, not eyeballed: the same frame captured with a paragraph
- * passing behind the pill and with nothing behind it, differenced over the text
- * zone (15px in from every edge, clear of the refracting band). Each is the
- * lowest tint at which no pixel of that zone moves by more than 6 grey levels
- * between the two — i.e. the lowest tint at which the notes stop showing
- * through the text. Dark needs more than light because it is tinting toward
- * black over a backdrop that is already near-black.
- *
- *   dark   0.25 → 1.99% of the zone over 6 levels, peak 13   (bleed visible)
- *          0.50 → 0.36%, peak 9
- *          0.70 → 0.00%, peak 5                              ← shipped
- *   light  0.35 → 0.39%, peak 9
- *          0.60 → 0.00%, peak 6                              ← shipped
- *
- * Going higher buys nothing and costs the material: by ~0.85 the rim is all
- * that is left of the glass.
+ * Both stay achromatic (the channel offsets are 0): a prism fringe at 13px type
+ * reads as a rendering fault, whatever the scale.
  */
-const ASK_BAR_TINT_DARK = 0.7;
-const ASK_BAR_TINT_LIGHT = 0.6;
+const ASK_BAR_DISTORTION_LIGHT = -24;
+const ASK_BAR_DISTORTION_DARK = -52;
+/*
+ * Tint — the flat fill painted OVER the refracted backdrop, so it decides both
+ * how much of the notes comes through and where the pill sits in the stack.
+ *
+ * The two themes ended up in genuinely different places, from a side-by-side of
+ * six treatments in the running app:
+ *
+ *   LIGHT is a raised opaque-ish surface. White at 0.6 over a near-white page
+ *   is already the raised surface, the notes do not show through, and it was
+ *   approved as-is. Nothing about the light branch has changed since.
+ *
+ *   DARK is a genuinely transparent pane. Evin picked the most transmitting of
+ *   the six, so the notes DO show through here — that is the chosen look, not a
+ *   defect, and it is why the earlier no-bleed floor (0.7, measured) is
+ *   deliberately not met on this branch. What makes the query legible at 0.60
+ *   is that the fill is lighter than the page (--bg-item-surface #27272A over
+ *   --bg-elevated #151515) and the type sits on top of it, not behind it.
+ *
+ * Tinting toward pure black, which is what the component does without a `tint`,
+ * is wrong on both: over this app's dark page it blends to #060606 and reads as
+ * a hole punched in the notes rather than a control resting on them.
+ */
+const ASK_BAR_TINT_DARK = 'rgba(39, 39, 42, 0.60)';   /* --bg-item-surface */
+const ASK_BAR_TINT_LIGHT = 'rgba(255, 255, 255, 0.6)';
+/** Saturation of the transmitted backdrop. Dark leans warmer because there is
+ *  so little light coming through that it needs help to read as glass. */
+const ASK_BAR_SATURATION_DARK = 1.4;
+const ASK_BAR_SATURATION_LIGHT = 1.2;
+
+/*
+ * The send orb — a plain circle, deliberately.
+ *
+ * It sits ON the pill, and the pill is already the glass: it refracts, it
+ * tints, it carries a rim. A second refracting surface nested inside that one
+ * competes with it — two lenses 8px apart, each bending the other's output —
+ * and at 30px the result reads as an artefact rather than as a material. So
+ * the orb contributes no glass of its own and lets the body's show through
+ * around it.
+ *
+ * Which leaves it doing the one job a send affordance has: being findable. A
+ * solid disc against the pill's translucency is the strongest possible signal
+ * for that, and it inverts by theme so the contrast survives both.
+ */
+const ASK_ORB_SIZE = 30;
+/** The disc: white on the dark pill, grey on the light one. */
+const ASK_ORB_FILL = { dark: '#FFFFFF', light: '#8E8E93' };
+/** The arrow, chosen against its own disc rather than against the theme. */
+const ASK_ORB_GLYPH = { dark: '#111113', light: '#FFFFFF' };
 
 const formatTime = (ms: number) => {
     const date = new Date(ms);
@@ -2766,14 +2791,14 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                     blur={ASK_BAR_MAP_BLUR}
                     brightness={60}
                     opacity={0.9}
-                    distortionScale={ASK_BAR_DISTORTION}
+                    distortionScale={isLight ? ASK_BAR_DISTORTION_LIGHT : ASK_BAR_DISTORTION_DARK}
                     redOffset={0}
                     greenOffset={0}
                     blueOffset={0}
                     yChannel="B"
                     displace={0.5}
-                    backgroundOpacity={isLight ? ASK_BAR_TINT_LIGHT : ASK_BAR_TINT_DARK}
-                    saturation={1.2}
+                    tint={isLight ? ASK_BAR_TINT_LIGHT : ASK_BAR_TINT_DARK}
+                    saturation={isLight ? ASK_BAR_SATURATION_LIGHT : ASK_BAR_SATURATION_DARK}
                     className="w-full max-w-[440px] pointer-events-auto"
                     contentClassName="glass-surface__content--bare"
                 >
@@ -2785,12 +2810,21 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                         placeholder={t("Ask about this meeting...")}
                         className="w-full h-full pl-5 pr-12 bg-transparent border-0 text-sm text-text-primary placeholder-text-tertiary/70 focus:outline-none"
                     />
+                    {/* Positioned at 9px rather than with a translate, so the
+                        transform channel stays free for the press. */}
                     <button
+                        type="button"
                         onClick={handleSubmitQuestion}
-                        className={`absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full transition-all duration-200 border border-white/5 ${query.trim() ? 'bg-text-primary text-bg-primary hover:scale-105' : 'bg-bg-item-active text-text-primary hover:bg-bg-item-hover'
-                            }`}
+                        aria-label={t('Ask about this meeting...')}
+                        className="absolute right-2 top-[9px] inline-flex items-center justify-center rounded-full border-0 p-0 appearance-none cursor-pointer transition-transform duration-150 ease-out active:scale-[0.94]"
+                        style={{
+                            width: ASK_ORB_SIZE,
+                            height: ASK_ORB_SIZE,
+                            background: ASK_ORB_FILL[isLight ? 'light' : 'dark'],
+                            color: ASK_ORB_GLYPH[isLight ? 'light' : 'dark'],
+                        }}
                     >
-                        <ArrowUp size={16} className="transform rotate-45" />
+                        <ArrowUp size={14} className="rotate-45" />
                     </button>
                 </GlassSurface>
             </div>

@@ -38,8 +38,20 @@ export interface GlassSurfaceProps {
     blur?: number;
     /** stdDeviation of the final blur on the displaced result. */
     displace?: number;
-    /** Alpha of the flat tint painted under the refraction. */
+    /** Alpha of the flat tint painted under the refraction. Ignored when
+     *  {@link GlassSurfaceProps.tint} is given. */
     backgroundOpacity?: number;
+    /**
+     * The flat fill painted over the refracted backdrop, as a complete CSS
+     * colour — hue and alpha both. Overrides `backgroundOpacity`, and applies
+     * in BOTH themes, so a host that sets it owns the light value too.
+     *
+     * Without it the fill is black in dark theme and white in light, which is
+     * only right when the surface behind is on the far side of the pane from
+     * where the glass wants to sit. Over a dark page a black fill reads as a
+     * hole punched in it; pass the host's own raised-surface colour instead.
+     */
+    tint?: string;
     /** Saturation multiplier applied alongside the displacement. */
     saturation?: number;
     /** How hard the backdrop is pushed. Negative pulls inward. */
@@ -138,6 +150,7 @@ const GlassSurface: React.FC<GlassSurfaceProps> = ({
     blur = 11,
     displace = 0,
     backgroundOpacity = 0,
+    tint,
     saturation = 1,
     distortionScale = -180,
     redOffset = 0,
@@ -273,6 +286,7 @@ const GlassSurface: React.FC<GlassSurfaceProps> = ({
         height: typeof height === 'number' ? `${height}px` : height,
         borderRadius: `${borderRadius}px`,
         ['--glass-frost' as string]: backgroundOpacity,
+        ...(tint ? { ['--glass-tint' as string]: tint } : null),
         ['--glass-saturation' as string]: saturation,
         ['--filter-id' as string]: `url(#${filterId})`,
     };
