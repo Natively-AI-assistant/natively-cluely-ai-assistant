@@ -326,10 +326,14 @@ function ResourceMeter({
           )}
         </span>
       </div>
-      <div className={`${sub ? 'h-[2px]' : 'h-[3px]'} w-full bg-bg-input rounded-full overflow-hidden`}>
+      {/* `natively-meter-*` carries the material (see index.css). The colour
+          is a modifier rather than a Tailwind fill, because the hue drives the
+          specular's bloom as well as the body and the three have to move
+          together. */}
+      <div className={`${sub ? 'h-[2px]' : 'h-[3px]'} natively-meter-track`}>
         <div
-          className={`h-full rounded-full transition-[width] duration-700 ease-out motion-reduce:transition-none ${
-            isOver ? 'bg-red-500' : isHigh ? 'bg-amber-500' : 'bg-accent-primary'
+          className={`natively-meter-fill transition-[width] duration-700 ease-out motion-reduce:transition-none ${
+            isOver ? 'natively-meter-fill--over' : isHigh ? 'natively-meter-fill--high' : ''
           }`}
           style={{ width: `${pct}%` }}
         />
@@ -396,10 +400,10 @@ function KnowledgeUsage({ knowledge, percentOnly = false }: { knowledge: Nativel
           {Math.round(pct)}%
         </span>
       </div>
-      <div className="h-[3px] w-full bg-bg-input rounded-full overflow-hidden">
+      <div className="h-[3px] natively-meter-track">
         <div
-          className={`h-full rounded-full transition-[width] duration-700 ease-out motion-reduce:transition-none ${
-            worstHalf > 100 ? 'bg-red-500' : isHigh ? 'bg-amber-500' : 'bg-accent-primary'
+          className={`natively-meter-fill transition-[width] duration-700 ease-out motion-reduce:transition-none ${
+            worstHalf > 100 ? 'natively-meter-fill--over' : isHigh ? 'natively-meter-fill--high' : ''
           }`}
           style={{ width: `${Math.min(100, Math.max(0, knowledge.visual_percent ?? 0))}%` }}
         />
