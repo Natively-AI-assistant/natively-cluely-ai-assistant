@@ -10147,12 +10147,18 @@ html[data-platform="linux"] body {
      slate-400  hsl(215 20% 65%)   ->  periwinkle-300  hsl(257 82% 80%)
      slate-600  hsl(215 19% 35%)   ->  periwinkle-600  hsl(262 61% 57%)
 
-   The values below sit 30% along that walk on hue and saturation, and only 40%
+   The values below sit 45% along that walk on hue and saturation, and only 40%
    of that on lightness — the lightness is what makes periwinkle shout, so it is
    deliberately the slowest of the three. Rendered at 0 / 18 / 30 / 45% and
    against full periwinkle at DPR 1, each with the amber state directly beneath
    it, because what the tint costs is amber's ability to be the loudest thing
-   on the bar. Past ~45% it stops winning that.
+   on the bar.
+
+   45% IS THE CEILING, not a midpoint. Measured relative luminance: the fill
+   lands at 0.292 against amber's 0.437, so amber is still half again brighter
+   and keeps the eye. Push the walk further and the two converge — at which
+   point the surface is back to the problem this whole rule exists to prevent,
+   a resting colour competing with the one that means something.
 
    Written as hsl() so the walk stays legible: these are positions on a line
    between two named tokens, not two colours someone picked.
@@ -10160,8 +10166,8 @@ html[data-platform="linux"] body {
    Deliberately NOT `--accent-primary` itself: that token is contrast-guarded
    (PeriwinkleContrastGuard.test.mjs) and used across the app, and nothing about
    a usage meter should move if the app's accent is ever retuned. */
-.natively-meter-fill { --meter-hue: hsl(228 39% 67%); }
-[data-theme='light'] .natively-meter-fill { --meter-hue: hsl(229 32% 38%); }
+.natively-meter-fill { --meter-hue: hsl(234 48% 68%); }
+[data-theme='light'] .natively-meter-fill { --meter-hue: hsl(236 38% 39%); }
 .natively-meter-fill--high { --meter-hue: #f59e0b; }
 .natively-meter-fill--over { --meter-hue: #ef4444; }
 
