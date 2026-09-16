@@ -7972,10 +7972,28 @@ html[data-platform="linux"] body {
    periwinkle instead: same family as the surface it sits on, at full
    saturation while the surface stays tinted, so it wins without a fight.
 
-   Two luminances of one hue, inverted per theme, exactly as the tier cards
-   do it: on the DARK plaque the button is the brighter thing (#5C65DB); on
-   the pale LIGHT plaque it is the darker thing (#454FB8, the tier Pro fill's
-   own top stop). Both carry white ink above AA.
+   One hue, two materials, one per theme — the same split the tier cards
+   make. On the DARK plaque the button is the brighter thing: a solid
+   saturated #5C65DB body carrying white ink.
+
+   LIGHT does NOT simply take a darker step of that body. It used to (#454FB8,
+   the tier Pro fill's own top stop) and the result was a navy slab — the
+   heaviest object on a pale card, reading as a modal's confirm button rather
+   than as this card's action. Light now does what the light TIER CARDS do
+   (see `[data-theme='light'] .natively-api-detail-card-pro`): a LIGHTER step
+   of the same hue, a tinted edge, and deep indigo ink. Per the
+   light-body inversion in src/ui-components/design.md, a light body moves the
+   specular onto the TOP face only, darkens the underside, and hands the
+   bottom rim's job to a contact shadow.
+   How light was picked off a rendered ladder, not reasoned: a near-white tint
+   (#F6F7FF → #DFE2F9) was rejected as too light, and the #BFC5F7 → #9EA6EE
+   body below is the step chosen. One step deeper (#8C93EA → #737BE2) is where
+   white ink would start to look right, and it measures only 3.07:1 — so the
+   ink stays dark.
+   Ink is #1F2678. Figures are composited pixels sampled in Electron
+   (capturePage, device scale 2), not stops read off the declaration: the 13px
+   label's band measures 6.05:1 at its darkest at rest and 5.23:1 on hover,
+   both over the 4.5:1 floor.
 
    `data-state` mirrors the four states the button already had (idle / ready /
    saving / done) — it is derived from the existing booleans in the JSX and
@@ -8062,25 +8080,75 @@ html[data-platform="linux"] body {
   box-shadow: 0 2px 6px rgba(69, 79, 184, 0.24) !important;
 }
 
-/* Light: the darker end of the same hue, so it is the darkest thing on a pale
-   plaque the way the dark-theme button is the brightest thing on a dark one. */
+/* Light: a LIGHT periwinkle body of the same hue, built the way the light
+   tier cards are — a hue wash from the top, a lighter-to-mid periwinkle
+   body, a tinted 1px edge — with the ink flipped to the deep end of the ramp.
+   Against `idle` (rgba(0,0,0,0.05) with 0.45 grey ink, further down) it wins
+   on colour, not darkness: a clearly periwinkle body, indigo ink, an edge that
+   is the accent at 0.50, and the only coloured contact shadow on the card. */
 [data-theme='light'] .natively-key-cta[data-state='ready'] {
   background:
-    linear-gradient(180deg,
-      rgba(255, 255, 255, 0.085) 0%, rgba(255, 255, 255, 0) 13%,
-      rgba(255, 255, 255, 0) 87%, rgba(255, 255, 255, 0.085) 100%),
-    #454FB8 !important;
-  color: #FFFFFF !important;
-  border-color: transparent !important;
-  box-shadow: 0 4px 14px rgba(69, 79, 184, 0.32) !important;
+    radial-gradient(circle at 50% 0%, rgba(92, 101, 219, 0.26) 0%, transparent 68%),
+    linear-gradient(180deg, #BFC5F7 0%, #9EA6EE 100%) !important;
+  color: #1F2678 !important;
+  border-color: rgba(69, 79, 184, 0.50) !important;
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.75),
+    inset 0 -2px 5px rgba(69, 79, 184, 0.14),
+    0 4px 14px rgba(69, 79, 184, 0.28) !important;
+}
+
+/* The shared rim above is three near-white rings tuned for the saturated
+   dark-theme body, where they sit top AND bottom; on this lighter body the
+   bottom ring reads as a washed-out lower edge. Scoped to `ready` ONLY: `done` stays the emerald slab in both
+   themes and keeps the shared rim.
+   Top face only, same construction as `.natively-api-pricing-cta-neutral`'s
+   rim: on a light body there is no bounce to pick up underneath, so the
+   bottom half of the vertical mask is dropped and the underside darkening in
+   the rule above does that work instead. */
+[data-theme='light'] .natively-key-cta[data-state='ready']::before {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.70),
+    inset 0 0 0 2px rgba(255, 255, 255, 0.28);
+  -webkit-mask-image:
+    linear-gradient(180deg, #000 0%, #000 6%, transparent 30%, transparent 100%),
+    linear-gradient(90deg, transparent 1.5%, rgba(0, 0, 0, 0.82) 4%, #000 10%, #000 90%, rgba(0, 0, 0, 0.82) 96%, transparent 98.5%);
+  mask-image:
+    linear-gradient(180deg, #000 0%, #000 6%, transparent 30%, transparent 100%),
+    linear-gradient(90deg, transparent 1.5%, rgba(0, 0, 0, 0.82) 4%, #000 10%, #000 90%, rgba(0, 0, 0, 0.82) 96%, transparent 98.5%);
 }
 
 @media (hover: hover) and (pointer: fine) {
-  [data-theme='light'] .natively-key-cta[data-state='ready']:hover,
+  /* Split from `secondary`, which keeps the deep #3E47AC hover it has always
+     had — it rests as an achromatic ghost and needs the saturated arrival to
+     register at all, while `ready` is already coloured at rest and only has
+     to deepen one step. Restating the WHOLE `background`, not a `background-color`: this
+     body is a fully opaque gradient stack, so a base-colour swap would paint
+     under it and show nothing. */
+  [data-theme='light'] .natively-key-cta[data-state='ready']:hover {
+    background:
+      radial-gradient(circle at 50% 0%, rgba(92, 101, 219, 0.30) 0%, transparent 70%),
+      linear-gradient(180deg, #B3BAF5 0%, #9099EA 100%) !important;
+    border-color: rgba(69, 79, 184, 0.60) !important;
+    box-shadow:
+      inset 0 1.5px 0 rgba(255, 255, 255, 0.80),
+      inset 0 -2px 6px rgba(69, 79, 184, 0.16),
+      0 8px 20px rgba(69, 79, 184, 0.34) !important;
+  }
+
   [data-theme='light'] .natively-key-cta[data-state='secondary']:hover {
     background-color: #3E47AC !important;
     box-shadow: 0 7px 20px rgba(69, 79, 184, 0.42) !important;
   }
+}
+
+/* The active press shares the dark rule's scale, but not its glow — a
+   coloured drop shadow that deep under a pale body reads as a smudge. */
+[data-theme='light'] .natively-key-cta[data-state='ready']:active {
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.75),
+    inset 0 -1px 3px rgba(69, 79, 184, 0.14),
+    0 2px 6px rgba(69, 79, 184, 0.20) !important;
 }
 
 /* IDLE / SAVING — an unpressable control must not be the loudest element on
