@@ -9,6 +9,7 @@ import { ThinkingOrb } from 'thinking-orbs';
 import { useToggleInit } from './settings/useToggleInit';
 import { PremiumUpgradeModal, RoleInsightPanel } from '../premium';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
+import { useLensTracking } from '../ui-components/LiquidGlassButton';
 import { truncateResumeSummary } from '../utils/resumeSummary.mjs';
 import { CHECKOUT_URLS } from '../config/urls';
 
@@ -22,7 +23,38 @@ const openExternal = (url: string) => {
 
 // ─── CSS ──────────────────────────────────────────────────────────────────────
 const PI_CSS = `
+    /*
+      Registered so the press-tighten can interpolate the lens size. An
+      unregistered custom property is a token, not a length, and a transition on
+      it is silently a no-op. @property is global by spec, so its own names are
+      prefixed to stay clear of LiquidGlassButton.css's --lg-lens-*.
+    */
+    @property --pi-lens-w { syntax: '<length>'; inherits: true; initial-value: 90px; }
+    @property --pi-lens-h { syntax: '<length>'; inherits: true; initial-value: 40px; }
+
     .pi-root {
+        /*
+          Which face the specular rim lives on. Not a style choice — it falls
+          out of the body and the surround, and the two themes here need
+          opposite answers (see src/ui-components/design.md, and .lg-sky):
+
+            both    a mid-to-dark body on a dark stage. It catches the key light
+                    from above AND a bounce from below, so the rim is symmetric.
+            top     a dark body on a white card. No bounce to catch; the pill
+                    sits ON the card, so the specular stays up top and a contact
+                    shadow does the work the bottom rim used to do.
+            bottom  a LIGHT body, where a bright rim has nothing to do because
+                    the fill already out-shines anything it could catch. The rim
+                    inverts: it becomes the shadow on the underside.
+
+          Percentages of a 36px pill, so the 4%/30% pair is 1.4px/10.8px — the
+          1px ring sits entirely inside the opaque stretch and the fade beyond
+          it is what keeps the mask from clipping the ring's own antialiasing.
+        */
+        --pi-mask-both: linear-gradient(180deg, #000 0%, #000 8%, transparent 30%, transparent 70%, #000 92%, #000 100%);
+        --pi-mask-top: linear-gradient(180deg, #000 0%, #000 4%, transparent 30%, transparent 100%);
+        --pi-mask-bottom: linear-gradient(180deg, transparent 0%, transparent 70%, #000 96%, #000 100%);
+
         --pi-bg: #111111;
         --pi-sidebar-bg: #0a0a0a;
         --pi-border: rgba(255,255,255,0.07);
@@ -30,6 +62,18 @@ const PI_CSS = `
         --pi-primary: rgba(255,255,255,0.85);
         --pi-secondary: rgba(255,255,255,0.55);
         --pi-tertiary: rgba(255,255,255,0.35);
+        /*
+          The sidebar nav has its own four ink tokens rather than borrowing the
+          panel's --pi-secondary / --pi-primary directly. Those two are spent in
+          75 places across body copy, labels and hints, so tuning the nav
+          through them would repaint the whole panel. Here they are the same
+          values the nav has always resolved to; the light theme is where they
+          diverge.
+        */
+        --pi-nav-text: var(--pi-secondary);
+        --pi-nav-text-active: var(--pi-primary);
+        --pi-nav-icon: var(--pi-tertiary);
+        --pi-nav-icon-active: var(--pi-secondary);
         --pi-btn-bg: rgba(255,255,255,0.06);
         --pi-btn-bg-hover: rgba(255,255,255,0.10);
         --pi-btn-border: rgba(255,255,255,0.10);
@@ -64,9 +108,46 @@ const PI_CSS = `
         --pi-ease-expo: cubic-bezier(0.16, 1, 0.3, 1);
         --pi-input-border-focus: color-mix(in srgb, var(--periwinkle-300) 40%, transparent);
         --pi-input-bg-focus: color-mix(in srgb, var(--periwinkle-300) 4%, transparent);
+        /*
+          Liquid Glass on a WHITE pill — the light-body case, which inverts the
+          lighting model everywhere. See .lg-sky in src/ui-components, which is
+          the same inversion for a light blue fill.
+
+          On a light body a white specular has nothing to do: the fill is
+          already brighter than any light it could catch. #ffffff is the
+          extreme of that — there is no headroom left at all, so this pill gets
+          no bright rim, no sheen and no hover lift in luminance. The form comes
+          from the other direction entirely: the UNDERSIDE darkens, the caps sit
+          in shadow, and a real contact shadow separates the pill from the
+          panel. Same four layers as any other body, opposite polarity.
+        */
         --pi-cta-bg: #ffffff;
+        /* Held at the body colour, and it has no choice: #ffffff is the
+           ceiling. The lift, the contact shadow and the lens carry this state,
+           which is what the white pill has always done. */
+        --pi-cta-hover: #ffffff;
         --pi-cta-text: #141414;
         --pi-cta-ring: rgba(0,0,0,0.08);
+        /* A DARK rim, on the bottom face. Inverted from the measured material,
+           because on this body the rim is the shadow rather than the specular.
+           One hairline, not the reference's three rings — see .pi-cta::before. */
+        --pi-cta-rim: rgba(0,0,0,0.17);
+        --pi-cta-rim-mask: var(--pi-mask-bottom);
+        /* No sheen: white over white is invisible, and a DARK sheen would ramp
+           the body, which is the one thing this material never does. */
+        --pi-cta-sheen: none;
+        /* The lens cannot brighten a white body either, so the refraction reads
+           as the dark surround being bent into view — a faint local darkening
+           with a darker rim pickup under the pointer. */
+        --pi-cta-lens-tint: rgba(0,0,0,0.030);
+        --pi-cta-lens-rim: rgba(0,0,0,0.10);
+        --pi-cta-lens-rim-soft: rgba(0,0,0,0.045);
+        /* Visible on white, where it does real work turning the caps. .lg-sky
+           runs .30 on a mid-light fill; pure white needs less or it smudges. */
+        --pi-cta-cap-opacity: 0.22;
+        --pi-cta-shadow: 0 1px 2px rgba(0,0,0,0.22), 0 4px 10px rgba(0,0,0,0.16);
+        --pi-cta-shadow-hover: 0 2px 4px rgba(0,0,0,0.26), 0 8px 18px rgba(0,0,0,0.28);
+        --pi-cta-hc-border: rgba(0,0,0,0.92);
         --pi-close-bg: rgba(255,255,255,0.06);
         --pi-close-hover: rgba(255,255,255,0.12);
         --pi-card-bg: rgba(255,255,255,0.015);
@@ -84,6 +165,26 @@ const PI_CSS = `
         --pi-primary: #374151;
         --pi-secondary: #6b7280;
         --pi-tertiary: #9ca3af;
+        /*
+          The nav rows sit on #f5f5f5, a step off the page rather than a step
+          toward it, and grey-500 text on grey-100 lands at 4.8:1 — legal, but
+          it reads as a disabled list rather than a set of destinations. Each
+          rung moves down one stop: rest grey-500 -> grey-600 (7.6:1), selected
+          grey-700 -> grey-800. The gap between them widens rather than closing,
+          so the selected row is still the darkest thing in the column.
+        */
+        --pi-nav-text: #4b5563;
+        --pi-nav-text-active: #1f2937;
+        /*
+          The glyphs move with their labels. Dark mode runs the icon at 0.35
+          against a 0.55 label — a little under two thirds of the text's weight.
+          Left at grey-400 beside grey-600 text the light nav lands nowhere near
+          that (2.3:1 against the row, versus the label's 6.9:1) and the icons
+          read as washed out rather than as quieter. One stop each restores the
+          dark theme's proportion.
+        */
+        --pi-nav-icon: #6b7280;
+        --pi-nav-icon-active: #4b5563;
         --pi-btn-bg: rgba(0,0,0,0.04);
         --pi-btn-bg-hover: rgba(0,0,0,0.08);
         --pi-btn-border: rgba(0,0,0,0.05);
@@ -108,9 +209,50 @@ const PI_CSS = `
         --pi-cta-accent-border: color-mix(in srgb, var(--periwinkle-600) 24%, transparent);
         --pi-input-border-focus: color-mix(in srgb, var(--periwinkle-600) 40%, transparent);
         --pi-input-bg-focus: color-mix(in srgb, var(--periwinkle-600) 4%, transparent);
-        --pi-cta-bg: #000000;
-        --pi-cta-text: #ffffff;
+        /*
+          Dark grey, not black. This pill was #000000, and black has no headroom
+          BELOW it in the same way white has none above: every gram of specular
+          could only lift it, so the body started reading as dark grey anyway
+          while the rim had to be trimmed away to stop it. Naming the grey is
+          what lets the material work — #222222 takes the measured rim without
+          the body drifting, and it is .lg-neutral's #555555 brought down for a
+          brighter surround (the reference stage was #242424; this card is
+          #f5f5f5, so the pill has to hold its own against white instead of
+          lifting off black). Label #fafafa on it is 11.2:1.
+        */
+        --pi-cta-bg: #222222;
+        /* Achromatic body, so brightness is the only hover lever — a faint cool
+           cast to fake saturation reads as a blue-grey button, not a lit one.
+           x1.32 luminance, the same step .lg-neutral takes (#555 -> #707070). */
+        --pi-cta-hover: #2d2d2d;
+        --pi-cta-text: #fafafa;
         --pi-cta-ring: rgba(255,255,255,0.10);
+        /* Alpha is .lg-neutral's --lg-rim-1. One hairline, not three rings. */
+        --pi-cta-rim: rgba(255,255,255,0.148);
+        /*
+          Top face only. On a dark stage the pill catches a bounce from below
+          and the rim is bright top AND bottom; on a white card there is no
+          bounce — the button sits ON the card, so the specular stays up top,
+          the underside darkens, and a real contact shadow does the work the
+          bottom rim used to do. design.md derives this; it is not measured.
+        */
+        --pi-cta-rim-mask: var(--pi-mask-top);
+        --pi-cta-sheen: linear-gradient(180deg,
+            rgba(255,255,255,0.055) 0%, rgba(255,255,255,0) 14%,
+            rgba(255,255,255,0) 100%);
+        --pi-cta-lens-tint: rgba(255,255,255,0.055);
+        --pi-cta-lens-rim: rgba(255,255,255,0.30);
+        --pi-cta-lens-rim-soft: rgba(255,255,255,0.13);
+        --pi-cta-cap-opacity: 0.5;
+        --pi-cta-shadow:
+            inset 0 -1px 0 rgba(0,0,0,0.28),
+            0 1px 2px rgba(16,24,40,0.16),
+            0 4px 10px rgba(16,24,40,0.10);
+        --pi-cta-shadow-hover:
+            inset 0 -1px 0 rgba(0,0,0,0.28),
+            0 2px 4px rgba(16,24,40,0.18),
+            0 8px 18px rgba(16,24,40,0.16);
+        --pi-cta-hc-border: rgba(255,255,255,0.92);
         --pi-close-bg: rgba(0,0,0,0.05);
         --pi-close-hover: rgba(0,0,0,0.10);
         --pi-card-bg: rgba(0,0,0,0.015);
@@ -396,7 +538,7 @@ const PI_CSS = `
         display: flex; align-items: center; gap: 12px;
         padding: 8px 10px; border-radius: 6px;
         cursor: pointer; font-size: 13px; font-weight: 500;
-        color: var(--pi-secondary); background: transparent;
+        color: var(--pi-nav-text); background: transparent;
         user-select: none; margin-bottom: 2px;
         position: relative; z-index: 1;
         transition: background 180ms cubic-bezier(0.23, 1, 0.32, 1), color 180ms ease, transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
@@ -408,7 +550,7 @@ const PI_CSS = `
         animation: pi-list-in 420ms var(--pi-ease-expo) backwards;
     }
     .pi-nav-item:hover { background: var(--pi-item-hover); }
-    .pi-nav-item.active { color: var(--pi-primary); }
+    .pi-nav-item.active { color: var(--pi-nav-text-active); }
     .pi-nav-item:active { transform: scale(0.97); }
 
     /* Staggered nav entry, on the same 55ms beat as the panel's blocks so the
@@ -425,12 +567,12 @@ const PI_CSS = `
 
     /* Nav icon */
     .pi-nav-item svg {
-        color: var(--pi-tertiary); flex-shrink: 0;
+        color: var(--pi-nav-icon); flex-shrink: 0;
         transition: color 180ms ease, transform 260ms var(--pi-ease-spring);
     }
     /* A hair of scale on the active icon. Nobody will name it; it is the
        difference between the row looking selected and looking alive. */
-    .pi-nav-item.active svg { color: var(--pi-secondary); transform: scale(1.08); }
+    .pi-nav-item.active svg { color: var(--pi-nav-icon-active); transform: scale(1.08); }
 
     /* ── Content boxes ── */
     .pi-content-box {
@@ -482,108 +624,300 @@ const PI_CSS = `
     .pi-root[data-theme='light'] .pi-toggle-card { background: rgba(0,0,0,0.015); }
 
     /* ── CTA pill ── */
+    /*
+      Liquid Glass — the material documented in src/ui-components/design.md,
+      rebuilt at this pill's scale. Four layers, because no single one can be
+      both flat and directional:
+
+        background      the flat tint plus a soft inner sheen
+        ::before        the specular rim, aimed by two composited mask layers
+        ::after         a ring mask that drops the caps into shadow
+        .pi-cta-lens    the pointer-tracked highlight and its local rim pickup
+
+      The instinct is a top-lit vertical gradient, because that is what a glossy
+      button has looked like since Aqua. This material does the opposite: the
+      body does NOT ramp at all, and every gram of depth lives in a rim that is
+      symmetric top and bottom (the pill catches a bounce off the dark stage as
+      well as the key light from above) and dies away across the caps, whose
+      normals turn away from the light. A uniform ring around the whole
+      perimeter is what makes a pill read as a plastic capsule instead of glass.
+
+      Values come from .lg-neutral rather than being re-derived, with two
+      documented departures for scale — see ::before and ::after.
+    */
     .pi-cta {
-        padding: 5px 5px 5px 16px; height: 36px; border-radius: 18px;
-        background: var(--pi-cta-bg); color: var(--pi-cta-text);
+        /*
+          The cap fade, expressed against the cap radius as a LENGTH rather
+          than as a percentage of width. design.md's reference stops are
+          percentages tuned on a 535px pill whose caps were 12.7% of it; on a
+          196px sidebar button the caps are 9% and a percentage fade ends up
+          INSIDE the flat top face, spending the rim's brightest stretch fading
+          across something that is not curved. The ratios below are the
+          reference's own (24/62/142px over a 68px cap radius), so the profile
+          is the measured one and is now width-invariant.
+        */
+        --pi-cta-cap-r: 18px;
+        --pi-cta-cap-mask: linear-gradient(90deg,
+            transparent calc(var(--pi-cta-cap-r) * 0.353),
+            rgba(0,0,0,0.82) calc(var(--pi-cta-cap-r) * 0.912),
+            #000 calc(var(--pi-cta-cap-r) * 2.088),
+            #000 calc(100% - var(--pi-cta-cap-r) * 2.088),
+            rgba(0,0,0,0.82) calc(100% - var(--pi-cta-cap-r) * 0.912),
+            transparent calc(100% - var(--pi-cta-cap-r) * 0.353));
+
+        /* Pointer position, written once per frame by useLensTracking. The
+           names are the shared ones so there is one implementation of the
+           tracking, not two. */
+        --lg-mx: 50%;
+        --lg-my: 50%;
+
+        /*
+          The resting bloom, DECLARED rather than left to the @property initial
+          value. The hero pill's 200x150 covers a 36px button entirely and stops
+          reading as a local highlight; this is .lg-sm's 90x40. Declaring it here
+          rather than on .pi-cta-lens is what gives the press-tighten below a
+          value to return to when the pointer comes up — an initial value is not
+          an author declaration, so the transition would only run one way.
+        */
+        --pi-lens-w: 90px;
+        --pi-lens-h: 40px;
+
+        /*
+          One clock for the whole hover state. The tint and the lens were on
+          separate durations in an earlier build of this material and it read as
+          the surface changing in two overlapping stages. easeInOutSine because
+          velocity starts AND ends at zero, which is what "smooth" means for a
+          cross-fade with no spatial motion — and it is its own mirror, so
+          leaving traces the same path as arriving.
+        */
+        --pi-cta-dur: 300ms;
+        --pi-cta-ease: cubic-bezier(.37, 0, .63, 1);
+
+        /*
+          The label is centred on the PILL, not on the space left over beside
+          the ring. Centring it inside a flex:1 that stops short of the ring
+          puts it (ring + gap) / 2 = 18px left of where the eye expects it, and
+          on a 196px button that is visible. Leading the row with the ring's own
+          footprint makes the flex track symmetric about the pill's centre, so
+          text-align: center is exact — and the label stays in flow, which an
+          absolutely-centred one would not, so a long translation still
+          truncates against the ring instead of running under it.
+        */
+        --pi-cta-pad: 5px;
+        --pi-cta-gap: 10px;
+        --pi-cta-ring-size: 26px;
+        padding: var(--pi-cta-pad);
+        padding-left: calc(var(--pi-cta-pad) + var(--pi-cta-ring-size) + var(--pi-cta-gap));
+        height: 36px; border-radius: 18px;
+        /*
+          Two layers: the inner sheen carries the rim's light a few px inward,
+          and the flat tint sits behind it as background-color, which is what
+          keeps the hover tint animatable. A background shorthand on a hover
+          rule would have to restate the gradient and could not transition.
+        */
+        background: var(--pi-cta-sheen, none), var(--pi-cta-bg);
+        color: var(--pi-cta-text);
         font-size: 13px; font-weight: 600; letter-spacing: -0.01em;
         border: none; cursor: pointer;
-        display: flex; align-items: center; gap: 10px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.12);
-        transition: transform 200ms var(--pi-ease-out), box-shadow 200ms ease;
+        display: flex; align-items: center; gap: var(--pi-cta-gap);
+        /*
+          Two-stage contact shadow, per theme: a 1px seat and a 4px spread. One
+          8px blur alone reads as a glow on a pill this small — the tight stage
+          is what makes it look like it is resting on the panel rather than
+          floating over it. The light theme adds an inset underside here too,
+          which is the half of its rim the mask deliberately does not carry.
+        */
+        box-shadow: var(--pi-cta-shadow);
+        transition:
+            transform 200ms var(--pi-ease-out),
+            box-shadow 200ms ease,
+            background-color var(--pi-cta-dur) var(--pi-cta-ease);
         white-space: nowrap; position: relative; overflow: hidden;
     }
+
     /*
-      Liquid Glass rim — see src/ui-components/design.md. The flat fill stays
-      exactly as it was; the depth moves into a specular rim that sits on the
-      top and bottom faces and dies away across the pill's caps.
+      ::before — the specular rim. ONE hairline ring, not the reference's three.
+      The rim does not scale with the pill: at 136px a 3px rim is 2% of the
+      height, at 36px it is 8%, and three stacked rings read as a bevel rather
+      than as light. This is .lg-sm's collapse, for the same reason.
 
-      The two themes need OPPOSITE treatments, because this CTA inverts: in
-      dark mode it is a WHITE pill (a light body, where a white specular would
-      vanish into the fill, so the underside darkens and a contact shadow does
-      the work), and in light mode it is a BLACK pill (a dark body, which takes
-      the standard bright-top-and-bottom rim).
+      Two mask layers composited with mask-composite:intersect aim it: the
+      vertical one keeps the light on the top and bottom faces, the horizontal
+      one lets it die away across the caps.
 
-      ::before, because ::after is the shimmer sweep on the unlock/trial states.
-      z-index:-1 keeps it above the fill and behind the label, which is a bare
-      child here.
+      z-index 0, not -1. .pi-cta is position:relative with z-index:auto, so it
+      does NOT create a stacking context — a -1 pseudo paints BEHIND the
+      element's own background and the opaque fill hides it completely. The
+      content sits at 2 and the lens at 1, so 0 is the slot just above the fill.
     */
     .pi-cta::before {
         content: '';
         position: absolute;
         inset: 0;
         border-radius: inherit;
-        /*
-          0, not -1. .pi-cta is position:relative with z-index:auto, so it does
-          NOT create a stacking context — a -1 pseudo paints BEHIND the
-          element's own background and the opaque fill hides it completely.
-          The label span and .pi-cta-ring are both z-index:1, so 0 is exactly
-          the slot between the fill and the content.
-        */
         z-index: 0;
         pointer-events: none;
-        box-shadow:
-            inset 0 0 0 1px rgba(255,255,255,0.55),
-            inset 0 0 0 2px rgba(255,255,255,0.22);
-        -webkit-mask-image:
-            linear-gradient(180deg, #000 0%, #000 8%, transparent 34%, transparent 100%),
-            linear-gradient(90deg, transparent 2px, rgba(0,0,0,0.82) 9px, #000 24px, #000 calc(100% - 24px), rgba(0,0,0,0.82) calc(100% - 9px), transparent calc(100% - 2px));
+        box-shadow: inset 0 0 0 1px var(--pi-cta-rim);
+        -webkit-mask-image: var(--pi-cta-rim-mask), var(--pi-cta-cap-mask);
         -webkit-mask-composite: source-in;
-        mask-image:
-            linear-gradient(180deg, #000 0%, #000 8%, transparent 34%, transparent 100%),
-            linear-gradient(90deg, transparent 2px, rgba(0,0,0,0.82) 9px, #000 24px, #000 calc(100% - 24px), rgba(0,0,0,0.82) calc(100% - 9px), transparent calc(100% - 2px));
+        mask-image: var(--pi-cta-rim-mask), var(--pi-cta-cap-mask);
         mask-composite: intersect;
     }
-    /* dark theme = white pill = light body: specular on top only, underside
-       darkens, contact shadow below */
-    .pi-cta {
-        box-shadow:
-            inset 0 -1px 0 rgba(0,0,0,0.16),
-            0 2px 8px rgba(0,0,0,0.12);
-    }
-    /* light theme = black pill = dark body: the full rim, top and bottom */
+
     /*
-      The light theme's pill is pure #000, which has no headroom: every gram of
-      specular can only lift it off black, and the mass of the button starts
-      reading as dark grey. So this rim is a single hairline confined to the
-      very top edge — enough to catch light, not enough to tint the body. The
-      bottom edge is left to the drop shadow, which is what separates a black
-      pill from a white panel anyway.
+      ::after — the caps sit in shadow. The padding-box ring mask confines it to
+      the perimeter and the vertical gradient keeps it clear of the lit faces.
+      1px and half strength, because the side edges of a 36px pill have far less
+      run than the reference's 136px caps.
     */
-    .pi-root[data-theme='light'] .pi-cta::before {
-        box-shadow: inset 0 0 0 1px rgba(255,255,255,0.20);
-        -webkit-mask-image:
-            linear-gradient(180deg, #000 0%, #000 3%, transparent 11%, transparent 100%),
-            linear-gradient(90deg, transparent 2px, rgba(0,0,0,0.82) 9px, #000 26px, #000 calc(100% - 26px), rgba(0,0,0,0.82) calc(100% - 9px), transparent calc(100% - 2px));
-        mask-image:
-            linear-gradient(180deg, #000 0%, #000 3%, transparent 11%, transparent 100%),
-            linear-gradient(90deg, transparent 2px, rgba(0,0,0,0.82) 9px, #000 26px, #000 calc(100% - 26px), rgba(0,0,0,0.82) calc(100% - 9px), transparent calc(100% - 2px));
-    }
-    .pi-root[data-theme='light'] .pi-cta {
-        box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+    .pi-cta::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        padding: 1px;
+        background: linear-gradient(180deg,
+            rgba(0,0,0,0) 0%, rgba(0,0,0,0) 6%,
+            rgba(0,0,0,0.90) 50%,
+            rgba(0,0,0,0) 94%, rgba(0,0,0,0) 100%);
+        -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+        -webkit-mask-composite: xor;
+                mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+                mask-composite: exclude;
+        opacity: var(--pi-cta-cap-opacity);
+        pointer-events: none;
+        z-index: 0;
     }
 
-    .pi-cta:hover { transform: translateY(-1px) scale(1.01); box-shadow: 0 6px 16px rgba(0,0,0,0.28); }
-    .pi-cta:active { transform: scale(0.96); box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
-    .pi-cta-ring {
-        width: 26px; height: 26px; border-radius: 50%;
-        background: var(--pi-cta-ring);
-        display: flex; align-items: center; justify-content: center;
-        transition: transform 280ms var(--pi-ease-out);
-        position: relative; z-index: 1;
+    /*
+      The lens. Glass does not brighten uniformly when you point at it — it
+      refracts toward whatever is nearest, so the highlight tracks the pointer
+      and the rim picks up light only on the edge closest to it. Both effects
+      come from this one element: a flat tint plus an inset ring, shaped by a
+      radial mask parked under the cursor.
+
+      A real element because ::before and ::after are both spoken for.
+    */
+    .pi-cta-lens {
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        background: var(--pi-cta-lens-tint);
+        box-shadow:
+            inset 0 0 0 1px var(--pi-cta-lens-rim),
+            inset 0 0 0 2px var(--pi-cta-lens-rim-soft);
+        -webkit-mask-image: radial-gradient(var(--pi-lens-w) var(--pi-lens-h) at var(--lg-mx) var(--lg-my),
+            #000 0%, rgba(0,0,0,0.5) 40%, transparent 74%);
+                mask-image: radial-gradient(var(--pi-lens-w) var(--pi-lens-h) at var(--lg-mx) var(--lg-my),
+            #000 0%, rgba(0,0,0,0.5) 40%, transparent 74%);
+        opacity: 0;
+        /* Opacity and the press-tighten may ease; POSITION MAY NOT. Ease
+           --lg-mx/--lg-my and the highlight trails the cursor, which reads as a
+           delayed glow rather than as refraction. */
+        transition:
+            opacity var(--pi-cta-dur) var(--pi-cta-ease),
+            --pi-lens-w 150ms ease,
+            --pi-lens-h 150ms ease;
+        pointer-events: none;
+        z-index: 1;
     }
-    .pi-cta:hover .pi-cta-ring { transform: translateX(1px) scale(1.05); }
-    /* flattened to the gradient's own midpoint; the depth is the rim now */
-    .pi-cta--trial { background: #8455ef; color:#fff; box-shadow:0 2px 8px rgba(124,58,237,0.30); }
-    .pi-cta--trial .pi-cta-ring { background: rgba(255,255,255,0.18); }
-    .pi-cta--shimmer::after {
-        content: '';
+
+    /*
+      The shimmer sweep, which used to be ::after. Both pseudos belong to the
+      material now, so this gets an element of its own — and it is rendered only
+      for the state that uses it, rather than being a pseudo that every state
+      carries and only one fills in.
+    */
+    .pi-cta-shimmer {
         position: absolute; top: 0; bottom: 0; left: 0; width: 45%;
         background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.09) 50%, transparent 100%);
         animation: pi-shimmer 3.2s cubic-bezier(0.4, 0, 0.6, 1) 2.0s infinite;
         pointer-events: none;
+        z-index: 1;
     }
-    .pi-cta--trial::after {
+    .pi-cta--trial .pi-cta-shimmer {
         background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.14) 50%, transparent 100%);
+    }
+
+    /*
+      Hover gated to a real pointer — on touch, :hover sticks after the tap and
+      the lens would stay parked where the finger left it. :not(:disabled)
+      because :hover matches disabled form controls in Chrome, which would tint
+      a dead button while the lens correctly stayed off.
+    */
+    @media (hover: hover) and (pointer: fine) {
+        .pi-cta:not(:disabled):hover { background-color: var(--pi-cta-hover); }
+        .pi-cta:not(:disabled):hover .pi-cta-lens { opacity: 1; }
+    }
+    /* The lift grows the contact shadow; the press puts it back on the panel.
+       Both read the theme's own shadow so a white pill and a grey one are not
+       sharing one value tuned for the other's surround. */
+    .pi-cta:hover { transform: translateY(-1px) scale(1.01); box-shadow: var(--pi-cta-shadow-hover); }
+    /* :active fires on pointer-down, so the feedback lands on the press rather
+       than the release, and the lens tightens — the material compressing. */
+    .pi-cta:active { transform: scale(0.96); box-shadow: var(--pi-cta-shadow); }
+    .pi-cta:active .pi-cta-lens { --pi-lens-w: 66px; --pi-lens-h: 30px; }
+    /* A keyboard focus has no pointer position, so useLensTracking clears the
+       last hover and the bloom opens from the centre. */
+    .pi-cta:focus-visible .pi-cta-lens { opacity: 1; }
+    /* min-width: 0 is what lets the ellipsis engage inside a flex row — without
+       it the label refuses to shrink below its content and overflows instead. */
+    .pi-cta-label {
+        flex: 1; min-width: 0; text-align: center;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        position: relative; z-index: 2;
+    }
+    .pi-cta-ring {
+        width: var(--pi-cta-ring-size); height: var(--pi-cta-ring-size); border-radius: 50%;
+        flex-shrink: 0;
+        background: var(--pi-cta-ring);
+        display: flex; align-items: center; justify-content: center;
+        transition: transform 280ms var(--pi-ease-out);
+        position: relative; z-index: 2;
+    }
+    .pi-cta:hover .pi-cta-ring { transform: translateX(1px) scale(1.05); }
+    /*
+      The trial pill keeps its own body, and needs its own hover tint: the
+      neutral rule above is (0,3,0) and .pi-cta--trial is (0,1,0), so without
+      this the purple would cross-fade to grey under the pointer. The tint gains
+      saturation and a little luminance while HOLDING its hue (262), so it reads
+      as the same colour lit better rather than as a different colour.
+    */
+    .pi-cta--trial {
+        --pi-cta-bg: #8455ef;
+        --pi-cta-hover: #9468ff;
+        color: #fff;
+        --pi-cta-rim: rgba(240,235,255,0.24);
+        --pi-cta-lens-tint: rgba(240,235,255,0.06);
+        --pi-cta-lens-rim: rgba(245,240,255,0.30);
+        --pi-cta-lens-rim-soft: rgba(245,240,255,0.13);
+        /* A mid-dark body, so unlike either neutral pill it takes the measured
+           symmetric rim — and it keeps it in both themes, because the body is
+           its own colour rather than the theme's. */
+        --pi-cta-rim-mask: var(--pi-mask-both);
+        --pi-cta-sheen: linear-gradient(180deg,
+            rgba(255,255,255,0.090) 0%, rgba(255,255,255,0) 11%,
+            rgba(255,255,255,0) 89%, rgba(255,255,255,0.090) 100%);
+        --pi-cta-cap-opacity: 0.5;
+        --pi-cta-shadow: 0 1px 2px rgba(124,58,237,0.26), 0 4px 10px rgba(124,58,237,0.20);
+        --pi-cta-shadow-hover: 0 2px 4px rgba(124,58,237,0.28), 0 8px 18px rgba(124,58,237,0.30);
+    }
+    .pi-cta--trial .pi-cta-ring { background: rgba(255,255,255,0.18); }
+
+    /*
+      prefers-contrast: more — the whole premise of this material is a rim so
+      subtle it reads as light rather than as an edge, which is precisely what a
+      high-contrast user has asked not to depend on. In that mode the design
+      gives up its own premise: a defined border, and the directional layers off.
+    */
+    @media (prefers-contrast: more) {
+        .pi-cta::before {
+            box-shadow: inset 0 0 0 2px var(--pi-cta-hc-border);
+            -webkit-mask-image: none;
+                    mask-image: none;
+        }
+        .pi-cta::after { opacity: 0; }
+        .pi-cta-lens { display: none; }
     }
 
     /* ── Util buttons ── */
@@ -731,7 +1065,19 @@ const PI_CSS = `
         .pi-nav-item { animation: pi-fade-only 160ms ease backwards; animation-delay: 0ms !important; }
         .pi-list-item  { animation: pi-fade-only 160ms ease backwards; animation-delay: 0ms !important; }
         .pi-press:active, .pi-press-soft:active { transform: none; }
-        .pi-cta--shimmer::after { animation: none; }
+        .pi-cta-shimmer { animation: none; }
+        /* The tint still cross-fades — a hue shift is not vestibular — but the
+           lift, the press and the pointer tracking go. The !important is what
+           makes useLensTracking's inline writes inert, so the setting takes
+           effect live instead of needing the listener torn down. */
+        .pi-cta:hover, .pi-cta:active { transform: none; }
+        .pi-cta-lens {
+            transition: opacity var(--pi-cta-dur) var(--pi-cta-ease);
+            --lg-mx: 50% !important;
+            --lg-my: 50% !important;
+            --pi-lens-w: 150px;
+            --pi-lens-h: 65px;
+        }
         .pi-skeleton { animation: none; opacity: 0.5; }
         /* The handoff keeps its crossfade — that opacity change is the only
            signal that indexing finished — but loses the travel, the scale and
@@ -1587,6 +1933,9 @@ export function ProfileIntelligenceSettings({
     const [licenseLoaded, setLicenseLoaded] = useState(false);
     const hasProfileAccess = isPremium || isTrialActive;
     const theme = useResolvedTheme();
+    /* The CTA's Liquid Glass lens. Shared with LiquidGlassButton so the rAF
+       gate and the focus-clears-the-pointer rule have one implementation. */
+    const ctaLens = useLensTracking<HTMLButtonElement>();
 
     const [activeSection, setActiveSection] = useState('identity');
     // Which way the user just travelled through the nav. The incoming panel
@@ -3379,12 +3728,21 @@ export function ProfileIntelligenceSettings({
                 {/* CTA footer */}
                 <div style={{ padding: '12px', borderTop: '1px solid var(--pi-border)', flexShrink: 0 }}>
                     <button
+                        ref={ctaLens.ref}
                         onClick={() => setIsPremiumModalOpen(true)}
+                        onPointerMove={ctaLens.onPointerMove}
+                        onFocus={ctaLens.onFocus}
                         className={ctaClass}
                         style={{ width: '100%' }}
                         aria-label={isPremium ? 'Manage Pro' : 'Unlock Pro'}
                     >
-                        <span style={{ flex: 1, textAlign: 'left', position: 'relative', zIndex: 1 }}>
+                        {/* Painted above the flat fill and the rim, below the
+                            content. Both pseudos are the material's already. */}
+                        <span className="pi-cta-lens" aria-hidden="true" />
+                        {!isPremium && !isTrialActive
+                            ? <span className="pi-cta-shimmer" aria-hidden="true" />
+                            : null}
+                        <span className="pi-cta-label">
                             {isPremium ? 'Manage Pro' : isTrialActive ? 'Upgrade' : 'Unlock Pro'}
                         </span>
                         <div className="pi-cta-ring">
