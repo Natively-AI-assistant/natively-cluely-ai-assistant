@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { SkillUploadPayload } from './services/skills/SkillValidator';
 import type { NativelyUsageResponse, NativelyPlansResponse } from '../src/types/nativelyUsage';
+import type { CodexModelCatalogResult } from '../src/utils/modelUtils';
 import { PAGE_CAPTURE_FALLBACK_CHANNEL, PAGE_CAPTURE_STARTED_CHANNEL, type PageCaptureFallbackNotice } from './services/pageCaptureFallback';
 
 /**
@@ -689,7 +690,8 @@ interface ElectronAPI {
   codexCliLogout: (config?: any) => Promise<{ success: boolean; action: string; output?: string; error?: string; resolvedPath?: string; config?: any }>;
   codexCliLogin: (config?: any) => Promise<{ success: boolean; action: string; output?: string; error?: string; resolvedPath?: string; config?: any }>;
   codexCliDoctor: (config?: any) => Promise<{ success: boolean; action: string; output?: string; error?: string; resolvedPath?: string; config?: any }>;
-  getCodexCliModels: () => Promise<{ source: 'codex-cli' | 'unavailable'; models: { id: string; name: string }[]; fetchedAt?: string; clientVersion?: string }>;
+  getCodexCliModels: () => Promise<CodexModelCatalogResult>;
+  refreshCodexModels: () => Promise<CodexModelCatalogResult>;
   // ChatGPT OAuth IPCs — replace the old `codex login` CLI subprocess flow.
   // startLogin kicks off the PKCE flow + opens the system browser; the
   // renderer listens for codex:login:complete / :failed events to update UI.
@@ -2346,6 +2348,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   codexCliLogin: (config?: any) => ipcRenderer.invoke('codex-cli:login', config),
   codexCliDoctor: (config?: any) => ipcRenderer.invoke('codex-cli:doctor', config),
   getCodexCliModels: () => ipcRenderer.invoke('codex-cli:models'),
+  refreshCodexModels: () => ipcRenderer.invoke('codex:refresh-models'),
   // ChatGPT OAuth (PKCE) — replaces the old `codex login` CLI subprocess.
   // The renderer listens for `codex:login:complete` / `:failed` /
   // `:signed-out` / `:tokens:refreshed` events for live UI updates.

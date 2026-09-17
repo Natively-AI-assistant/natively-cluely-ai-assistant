@@ -8511,6 +8511,15 @@ async function initializeApp() {
   // Explicitly load credentials into helpers
   appState.processingHelper.loadStoredCredentials();
 
+  // Prime Codex capability metadata from the account-bound on-disk cache.
+  // This is cache-only: startup never contacts the Codex model endpoint.
+  try {
+    const { readCachedCodexModelCatalog, NATIVELY_CODEX_MODELS_CACHE_FILE } = require('./services/CodexModelCatalog') as typeof import('./services/CodexModelCatalog');
+    await readCachedCodexModelCatalog({
+      appCacheFile: path.join(app.getPath('userData'), NATIVELY_CODEX_MODELS_CACHE_FILE),
+    });
+  } catch { /* Codex is optional */ }
+
   // Seed the un-deletable General mode once at startup. Idempotent.
   try {
     const { ModesManager } = require('./services/ModesManager');

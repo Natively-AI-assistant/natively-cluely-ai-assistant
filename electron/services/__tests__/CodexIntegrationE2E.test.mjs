@@ -50,6 +50,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const compiledPath = path.resolve(__dirname, '../../../dist-electron/electron/services/CodexCliService.js');
 const mod = await import(pathToFileURL(compiledPath).href);
 const { CodexCliService, resolveCodexReasoningEffort } = mod;
+const catalogMod = await import(pathToFileURL(path.resolve(__dirname, '../../../dist-electron/electron/services/CodexModelCatalog.js')).href);
+catalogMod.activateCodexModelCatalog(catalogMod.parseCodexModelsPayload({ models: [
+  { slug: 'gpt-5.4', visibility: 'list', supported_reasoning_levels: ['none', 'low', 'medium', 'high', 'xhigh'].map(effort => ({ effort })), service_tiers: [{ id: 'priority', name: 'Fast' }] },
+  { slug: 'gpt-5.3-codex', visibility: 'list', default_reasoning_level: 'low', supported_reasoning_levels: ['low', 'medium', 'high'].map(effort => ({ effort })) },
+  { slug: 'gpt-5-codex', visibility: 'list', default_reasoning_level: 'low', supported_reasoning_levels: ['low', 'medium', 'high'].map(effort => ({ effort })) },
+] }).models);
 
 // A 1x1 PNG. Small enough to stay well inside the raw-image floor/ceiling and
 // real enough that the encoder produces a genuine data URL.
@@ -97,6 +103,13 @@ test('A.4: codex variants reject "none" too and fall back to "low"', async () =>
   // Same family rule as A.2 from the other end of the range: gpt-5-codex has no
   // 'none' tier, so an unguarded pass-through would be rejected by the backend.
   assert.equal(resolveCodexReasoningEffort('gpt-5-codex', 'none'), 'low');
+});
+
+test('A.4b: only provider-advertised service tiers reach the wire', async () => {
+  const accepted = await CodexCliService.buildRequestBody({ prompt: 'hi', model: 'gpt-5.4', serviceTier: 'priority' });
+  assert.equal(accepted.service_tier, 'priority');
+  const rejected = await CodexCliService.buildRequestBody({ prompt: 'hi', model: 'gpt-5.4', serviceTier: 'ultrafast' });
+  assert.equal(rejected.service_tier, undefined);
 });
 
 test('A.5: each image path becomes its own input_image content item', async () => {

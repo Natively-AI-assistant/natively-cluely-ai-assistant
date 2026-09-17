@@ -78,7 +78,10 @@ const ModelSelectorWindow = () => {
     const [availableModels, setAvailableModels] = useState<ModelOption[]>(() => {
         try {
             const cached = localStorage.getItem('cached-models');
-            return cached ? JSON.parse(cached) : [];
+            const models = cached ? JSON.parse(cached) : [];
+            // Codex availability is account-scoped; never resurrect a previous
+            // account's entries from renderer-local cache before auth is checked.
+            return Array.isArray(models) ? models.filter(model => model?.provider !== 'codex-cli') : [];
         } catch { return []; }
     });
     const [isLoading, setIsLoading] = useState<boolean>(() => availableModels.length === 0);
@@ -125,7 +128,7 @@ const ModelSelectorWindow = () => {
                 const codexSignedIn = codexCliConfig?.enabled
                     ? !!(await window.electronAPI?.codexLoginStatus?.().catch(() => null))?.signedIn
                     : false;
-                // The installed Codex CLI's own model list; presets when there is none.
+                // Cache-only. Settings owns asynchronous provider refreshes.
                 const codexModels = codexSignedIn
                     ? codexModelOptions(await window.electronAPI?.getCodexCliModels?.().catch(() => undefined))
                     : [];
@@ -196,9 +199,9 @@ const ModelSelectorWindow = () => {
                 });
 
                 // Codex CLI
-                if (codexCliConfig?.enabled && codexSignedIn) {
-                    const configuredName = codexModels.find(model => model.id === codexCliConfig.model)?.name || prettifyModelId(codexCliConfig.model);
-                    models.push({ id: CODEX_CLI_MODEL.id, name: `${CODEX_CLI_MODEL.name} (${configuredName})`, type: 'codex-cli', provider: 'codex-cli' });
+                const selectedCodexModel = codexModels.find(model => model.id === codexCliConfig?.model);
+                if (codexCliConfig?.enabled && codexSignedIn && selectedCodexModel) {
+                    models.push({ id: CODEX_CLI_MODEL.id, name: `${CODEX_CLI_MODEL.name} (${selectedCodexModel.name})`, type: 'codex-cli', provider: 'codex-cli' });
                     codexModels.forEach(model => {
                         models.push({ id: codexCliSelectorId(model.id), name: model.name, type: 'codex-cli', provider: 'codex-cli' });
                     });
@@ -244,7 +247,7 @@ const ModelSelectorWindow = () => {
                     return isModelAllowed(family, m.id, allowLists[family] || []);
                 });
 
-                localStorage.setItem('cached-models', JSON.stringify(visibleModels));
+                localStorage.setItem('cached-models', JSON.stringify(visibleModels.filter(model => model.provider !== 'codex-cli')));
                 setAvailableModels(visibleModels);
 
                 // 4. Get Current Active Model

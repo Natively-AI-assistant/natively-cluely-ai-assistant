@@ -39,7 +39,9 @@ process.env.CODEX_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-codex-h
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const compiledPath = path.resolve(__dirname, '../../../dist-electron/electron/services/CodexCliService.js');
 const mod = await import(pathToFileURL(compiledPath).href);
-const { CodexCliService, DEFAULT_CODEX_CLI_CONFIG, CODEX_SANDBOX_MODES, resolveCodexReasoningEffort, CODEX_MODEL_REASONING_EFFORTS } = mod;
+const { CodexCliService, DEFAULT_CODEX_CLI_CONFIG, CODEX_SANDBOX_MODES, resolveCodexReasoningEffort } = mod;
+const catalogMod = await import(pathToFileURL(path.resolve(__dirname, '../../../dist-electron/electron/services/CodexModelCatalog.js')).href);
+const seedCapabilities = (models) => catalogMod.activateCodexModelCatalog(catalogMod.parseCodexModelsPayload({ models }).models);
 
 // =============================================================================
 // Defaults + enums
@@ -49,10 +51,10 @@ test('DEFAULT_CODEX_CLI_CONFIG has expected shape', () => {
   assert.equal(DEFAULT_CODEX_CLI_CONFIG.enabled, false);
   // `path` is preserved for IPC backward-compat but is ignored at runtime.
   assert.equal(DEFAULT_CODEX_CLI_CONFIG.path, 'codex');
-  // Issue #558: gpt-5.4 / gpt-5.3-codex are rejected for a ChatGPT account
-  // (live, 2026-09-11). gpt-5.5 answered fastest of the models that work.
-  assert.equal(DEFAULT_CODEX_CLI_CONFIG.model, 'gpt-5.5');
-  assert.equal(DEFAULT_CODEX_CLI_CONFIG.fastModel, 'gpt-5.5');
+  // Models are selected from provider data after authentication, never from a
+  // hardcoded roster.
+  assert.equal(DEFAULT_CODEX_CLI_CONFIG.model, '');
+  assert.equal(DEFAULT_CODEX_CLI_CONFIG.fastModel, '');
   assert.equal(DEFAULT_CODEX_CLI_CONFIG.timeoutMs, 60_000);
   assert.equal(DEFAULT_CODEX_CLI_CONFIG.sandboxMode, 'read-only');
 });
@@ -63,14 +65,6 @@ test('CODEX_SANDBOX_MODES enumerates the three valid modes (deprecated at runtim
   // is preserved so the UI can still render the dropdown without
   // crashing on `normalizeConfig`.
   assert.deepEqual([...CODEX_SANDBOX_MODES], ['read-only', 'workspace-write', 'danger-full-access']);
-});
-
-test('CODEX_MODEL_REASONING_EFFORTS includes none (per OpenAI gpt-5.1+ semantics)', () => {
-  assert.ok(CODEX_MODEL_REASONING_EFFORTS.includes('none'));
-  assert.ok(CODEX_MODEL_REASONING_EFFORTS.includes('low'));
-  assert.ok(CODEX_MODEL_REASONING_EFFORTS.includes('medium'));
-  assert.ok(CODEX_MODEL_REASONING_EFFORTS.includes('high'));
-  assert.ok(CODEX_MODEL_REASONING_EFFORTS.includes('xhigh'));
 });
 
 // =============================================================================
@@ -109,44 +103,29 @@ test('resolveCodexReasoningEffort: returns undefined for empty pick (no body.rea
 });
 
 test('resolveCodexReasoningEffort: honours exact-match valid picks', () => {
-  assert.equal(resolveCodexReasoningEffort('gpt-5.4', 'low'), 'low');
-  assert.equal(resolveCodexReasoningEffort('gpt-5.4', 'medium'), 'medium');
-  assert.equal(resolveCodexReasoningEffort('gpt-5.4', 'high'), 'high');
-  assert.equal(resolveCodexReasoningEffort('gpt-5.4', 'xhigh'), 'xhigh');
-  assert.equal(resolveCodexReasoningEffort('gpt-5.4', 'none'), 'none');
+  catalogMod.resetCodexCatalogRefreshForTest();
+  seedCapabilities([{
+    slug: 'provider-model', visibility: 'list', default_reasoning_level: 'medium',
+    supported_reasoning_levels: ['none', 'low', 'medium', 'high', 'xhigh'].map(effort => ({ effort })),
+  }]);
+  for (const effort of ['none', 'low', 'medium', 'high', 'xhigh']) {
+    assert.equal(resolveCodexReasoningEffort('provider-model', effort), effort);
+  }
 });
 
-test('resolveCodexReasoningEffort: longest-match wins (gpt-5.4-codex vs gpt-5)', () => {
-  // gpt-5.4-codex accepts xhigh; generic gpt-5 does not. The 5.4-codex
-  // entry must win the lookup.
-  assert.equal(resolveCodexReasoningEffort('gpt-5.4-codex', 'xhigh'), 'xhigh');
-  // gpt-5.3-codex does NOT support xhigh — downgrade.
-  assert.equal(resolveCodexReasoningEffort('gpt-5.3-codex', 'xhigh'), 'low');
-});
-
-test('resolveCodexReasoningEffort: case-insensitive model id', () => {
-  assert.equal(resolveCodexReasoningEffort('GPT-5.4', 'xhigh'), 'xhigh');
-  assert.equal(resolveCodexReasoningEffort('Gpt-5-Codex', 'medium'), 'medium');
-});
-
-test('resolveCodexReasoningEffort: unknown model id falls back to [low, medium, high]', () => {
-  assert.equal(resolveCodexReasoningEffort('some-future-model', 'low'), 'low');
-  assert.equal(resolveCodexReasoningEffort('some-future-model', 'xhigh'), 'low');
+test('resolveCodexReasoningEffort: unknown model omits the override', () => {
+  catalogMod.resetCodexCatalogRefreshForTest();
+  assert.equal(resolveCodexReasoningEffort('some-future-model', 'low'), undefined);
+  assert.equal(resolveCodexReasoningEffort('some-future-model', 'xhigh'), undefined);
 });
 
 // =============================================================================
 // normalizeConfig
 // =============================================================================
 
-test('normalizeConfig: downgrades invalid effort for chosen model', () => {
-  // xhigh on gpt-5.1-codex is rejected by the Codex backend → resolver
-  // returns the lowest-latency reasoning effort ('low') so a stale saved
-  // value can't trigger a 400. The reasoning-only filter skips 'none' so we
-  // don't silently turn a high-effort pick into zero reasoning.
-  // (Was gpt-5.3-codex, which normalizeConfig now remaps to the default — the
-  // backend rejects it for a ChatGPT account, issue #558.)
-  const cfg = CodexCliService.normalizeConfig({ model: 'gpt-5.1-codex', modelReasoningEffort: 'xhigh' });
-  assert.equal(cfg.modelReasoningEffort, 'low');
+test('normalizeConfig: preserves safe provider-defined values', () => {
+  const cfg = CodexCliService.normalizeConfig({ model: 'provider-model', modelReasoningEffort: 'future_effort' });
+  assert.equal(cfg.modelReasoningEffort, 'future_effort');
 });
 
 test('normalizeConfig: keeps valid effort for chosen model', () => {
@@ -779,4 +758,3 @@ test('stream(): source uses resetDeadline() on each yielded delta — idle-timer
   assert.match(loopBody, /resetDeadline\(\)/,
     'resetDeadline() must be called inside the for-await loop body — not outside it');
 });
-

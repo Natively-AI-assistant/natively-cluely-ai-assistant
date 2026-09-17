@@ -43,7 +43,7 @@ import fs from 'fs';
 import path from 'path';
 import sharp from 'sharp';
 import { CodexOAuthService } from './CodexOAuthService';
-import { isChatGptUnsupportedCodexModel } from './CodexModelCatalog';
+import { getCodexModelCapabilities } from './CodexModelCatalog';
 import { readCodexCliAuth, type CodexCliAuthState } from './CodexCliAuth';
 
 // Extension → MIME for the RAW fallback path only (the normal path re-encodes
@@ -136,93 +136,30 @@ interface CodexCredential {
 }
 
 export type CodexSandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access';
-export type CodexServiceTier = 'default' | 'fast' | 'flex';
-// 'none' is distinct from undefined: 'none' is the explicit user pick meaning
-// "no reasoning_effort override"; undefined means "user didn't pick one" → also
-// omit the field. 'minimal' is intentionally NOT in this union because no
-// codex-supported model accepts it (OpenAI removed it after the original gpt-5
-// line — see electron/llm/__tests__/OpenAiReasoningEffort.test.mjs).
-export type CodexModelReasoningEffort = 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
+export type CodexServiceTier = string;
+export type CodexModelReasoningEffort = string;
 
 export const CODEX_SANDBOX_MODES: readonly CodexSandboxMode[] = ['read-only', 'workspace-write', 'danger-full-access'] as const;
-export const CODEX_SERVICE_TIERS: readonly CodexServiceTier[] = ['default', 'fast', 'flex'] as const;
-export const CODEX_MODEL_REASONING_EFFORTS: readonly CodexModelReasoningEffort[] = ['none', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'] as const;
-
-// Per-model valid reasoning_effort sets. Mirrors the OpenAI HTTP VALID map at
-// electron/llm/__tests__/OpenAiReasoningEffort.test.mjs:27-45. Sending
-// e.g. xhigh to gpt-5.3-codex over the wire triggers a 400 turn.failed event
-// that our fallback chain swallows into "Let me come back to that in just a
-// moment." The user's pick is validated against the per-model set;
-// unsupported values are silently downgraded to the LOWEST-latency valid
-// value (matches the OpenAI HTTP picker's behaviour).
-//
-// NOTE: this table is now ALSO used for the HTTP request body's
-// reasoning.effort field — the same per-family constraints apply, so
-// keeping it as the single source of truth avoids drift.
-const CODEX_MODEL_REASONING_SETS: ReadonlyArray<readonly [string, readonly CodexModelReasoningEffort[]]> = [
-  // Original gpt-5 line — minimal accepted (not exposed); low/medium/high.
-  ['gpt-5-2025-08-07', ['low', 'medium', 'high']],
-  ['gpt-5-mini',       ['low', 'medium', 'high']],
-  ['gpt-5-nano',       ['low', 'medium', 'high']],
-  // Bare 'gpt-5' (NOT 5.x) — must come AFTER 5.x entries to avoid swallowing them.
-  ['gpt-5',            ['low', 'medium', 'high']],
-  // gpt-5.1+ chat — `none` accepted; `xhigh` only on 5.2+.
-  ['gpt-5.1',          ['none', 'low', 'medium', 'high']],
-  ['gpt-5.2',          ['none', 'low', 'medium', 'high', 'xhigh']],
-  ['gpt-5.4',          ['none', 'low', 'medium', 'high', 'xhigh']],
-  ['gpt-5.5',          ['none', 'low', 'medium', 'high', 'xhigh']],
-  // Provider catalogue as of 2026-09-17 (from live models_cache.json):
-  // 5.6-sol/terra accept up to ultra, luna up to max, 6-astra up to ultra.
-  ['gpt-6-astra',      ['low', 'medium', 'high', 'xhigh', 'max', 'ultra']],
-  ['gpt-6',            ['low', 'medium', 'high', 'xhigh', 'max', 'ultra']],
-  ['gpt-5.6-sol',      ['low', 'medium', 'high', 'xhigh', 'max', 'ultra']],
-  ['gpt-5.6-terra',    ['low', 'medium', 'high', 'xhigh', 'max', 'ultra']],
-  ['gpt-5.6-luna',     ['low', 'medium', 'high', 'xhigh', 'max']],
-  ['gpt-5.6',          ['low', 'medium', 'high', 'xhigh', 'max', 'ultra']],
-  // codex variants — `none` not supported; `xhigh` only on 5.2-codex+.
-  ['gpt-5.5-codex',    ['low', 'medium', 'high', 'xhigh']],
-  ['gpt-5.4-codex',    ['low', 'medium', 'high', 'xhigh']],
-  ['gpt-5.3-codex-spark', ['low', 'medium', 'high']],
-  ['gpt-5.3-codex',    ['low', 'medium', 'high']],
-  ['gpt-5.2-codex',    ['low', 'medium', 'high', 'xhigh']],
-  ['gpt-5.1-codex',    ['low', 'medium', 'high']],
-  ['gpt-5-codex',      ['low', 'medium', 'high']],
-];
+const SAFE_PROVIDER_VALUE = /^[a-z][a-z0-9_-]{0,63}$/i;
 
 /**
- * Resolve the user's reasoning-effort pick against the model's per-family
- * VALID set. Mirrors getOpenAiReasoningEffort() (electron/llm/modelCapabilities.ts:217).
- *
- * Returns the value to emit as `body.reasoning.effort`, or undefined
- * to omit the field entirely (used when pick is undefined/null/empty).
- *
- * Downgrade policy (when the user's pick is NOT in the model's valid set):
- *  - If the user picked 'none' but the model doesn't accept 'none' → 'low'.
- *  - Otherwise → first entry of the valid set with 'none' removed (lowest-
- *    latency REASONING effort, not the lowest-latency of all values).
- *
- * Longest-key match wins so 'gpt-5.4-codex' resolves via its entry, not the
- * generic 'gpt-5' one.
+ * Validate a saved reasoning selection against the provider metadata currently
+ * cached for the selected model. Unknown models omit the override rather than
+ * guessing and risking a 400.
  */
 export function resolveCodexReasoningEffort(
   modelId: string,
   pick?: CodexModelReasoningEffort | string | null,
 ): CodexModelReasoningEffort | undefined {
   if (!pick) return undefined;
-  const id = (modelId || '').toLowerCase();
-  let bestEntry: readonly [string, readonly CodexModelReasoningEffort[]] | null = null;
-  for (const entry of CODEX_MODEL_REASONING_SETS) {
-    if (id.includes(entry[0]) && (!bestEntry || entry[0].length > bestEntry[0].length)) {
-      bestEntry = entry;
-    }
+  const capabilities = getCodexModelCapabilities(modelId);
+  if (!capabilities) return undefined;
+  const valid = capabilities.reasoningLevels.map(level => level.id);
+  if (valid.includes(pick)) return pick;
+  if (capabilities.defaultReasoningLevel && valid.includes(capabilities.defaultReasoningLevel)) {
+    return capabilities.defaultReasoningLevel;
   }
-  const valid = bestEntry ? bestEntry[1] : (['low', 'medium', 'high'] as const);
-  // Exact match → honour the user's pick.
-  if ((valid as readonly string[]).includes(pick)) return pick as CodexModelReasoningEffort;
-  // Unsupported pick. Pick the lowest-latency REASONING effort (skip 'none').
-  const reasoningOnly = (valid as readonly string[]).filter(v => v !== 'none');
-  const fallback = reasoningOnly[0] || valid[0];
-  return fallback as CodexModelReasoningEffort;
+  return valid.find(value => value !== 'none');
 }
 
 export interface CodexCliConfig {
@@ -266,16 +203,11 @@ export interface CodexCliRunOptions {
   sessionId?: string;
 }
 
-// Defaults must work with a ChatGPT sign-in (issue #558: the previous
-// gpt-5.4 / gpt-5.3-codex pair is now rejected — see
-// CHATGPT_UNSUPPORTED_CODEX_MODELS). gpt-5.5 for both: live on 2026-09-11 it had
-// the lowest and steadiest time-to-first-token of the models that work
-// (~1.7-2.0s vs 3-10s for gpt-5.6-terra / gpt-5.6-luna).
 export const DEFAULT_CODEX_CLI_CONFIG: CodexCliConfig = {
   enabled: false,
   path: 'codex', // deprecated — kept so older settings round-trip without resetting
-  model: 'gpt-5.5',
-  fastModel: 'gpt-5.5',
+  model: '',
+  fastModel: '',
   timeoutMs: 60_000,
   sandboxMode: 'read-only', // deprecated
   serviceTier: 'default',
@@ -283,15 +215,12 @@ export const DEFAULT_CODEX_CLI_CONFIG: CodexCliConfig = {
 };
 
 /**
- * The model to send: `value`, unless it is empty or one the backend rejects for
- * a ChatGPT account (CHATGPT_UNSUPPORTED_CODEX_MODELS). Earlier builds persisted
- * such models as defaults, so they are replaced rather than left to fail every
- * call.
+ * Normalize a persisted model id. Catalogue reconciliation in Settings replaces
+ * ids the provider no longer lists; this layer does not maintain another roster.
  */
 export function chatGptCompatibleModel(value: string | undefined, fallback: string): string {
   const model = (value || '').trim();
-  if (!model || isChatGptUnsupportedCodexModel(model)) return fallback;
-  return model;
+  return model || fallback;
 }
 
 // Codex backend endpoint. ChatGPT-subscription OAuth bearer tokens issued by
@@ -365,24 +294,20 @@ export class CodexCliService {
     const sandboxMode = (config.sandboxMode && (CODEX_SANDBOX_MODES as readonly string[]).includes(config.sandboxMode))
       ? config.sandboxMode
       : DEFAULT_CODEX_CLI_CONFIG.sandboxMode;
-    const serviceTier = (config.serviceTier && (CODEX_SERVICE_TIERS as readonly string[]).includes(config.serviceTier))
+    const serviceTier = config.serviceTier && SAFE_PROVIDER_VALUE.test(config.serviceTier)
       ? config.serviceTier
       : DEFAULT_CODEX_CLI_CONFIG.serviceTier;
-    // Pick must be in the union type first; then resolveCodexReasoningEffort
-    // downgrades unsupported values for the chosen model.
-    let modelReasoningEffort: CodexModelReasoningEffort | undefined;
-    if (config.modelReasoningEffort && (CODEX_MODEL_REASONING_EFFORTS as readonly string[]).includes(config.modelReasoningEffort)) {
-      modelReasoningEffort = config.modelReasoningEffort;
-    }
+    const modelReasoningEffort = config.modelReasoningEffort && SAFE_PROVIDER_VALUE.test(config.modelReasoningEffort)
+      ? config.modelReasoningEffort
+      : undefined;
     const modelName = chatGptCompatibleModel(config.model, DEFAULT_CODEX_CLI_CONFIG.model);
-    modelReasoningEffort = resolveCodexReasoningEffort(modelName, modelReasoningEffort);
     return {
       enabled: !!config.enabled,
       // `path` is preserved verbatim for backward-compat (Settings UI
       // may still display it). New HTTP-direct code does not use it.
       path: (config.path || DEFAULT_CODEX_CLI_CONFIG.path).trim() || DEFAULT_CODEX_CLI_CONFIG.path,
       model: modelName,
-      fastModel: chatGptCompatibleModel(config.fastModel, DEFAULT_CODEX_CLI_CONFIG.fastModel),
+      fastModel: chatGptCompatibleModel(config.fastModel, modelName),
       timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_CODEX_CLI_CONFIG.timeoutMs,
       sandboxMode,
       serviceTier,
@@ -536,6 +461,9 @@ export class CodexCliService {
   }
 
   private static async buildRequestBody(options: CodexCliRunOptions): Promise<Record<string, unknown>> {
+    if (!options.model?.trim()) {
+      throw new Error('No Codex model is selected. Open Settings → AI Providers → OpenAI Codex and refresh the model list.');
+    }
     const resolvedEffort = resolveCodexReasoningEffort(options.model, options.modelReasoningEffort);
 
     // Build the user message content array. Always starts with the text
@@ -631,7 +559,8 @@ export class CodexCliService {
       }
     }
 
-    if (options.serviceTier && options.serviceTier !== 'default') {
+    const serviceTiers = getCodexModelCapabilities(options.model)?.serviceTiers.map(tier => tier.id) || [];
+    if (options.serviceTier && options.serviceTier !== 'default' && serviceTiers.includes(options.serviceTier)) {
       body.service_tier = options.serviceTier;
     }
 

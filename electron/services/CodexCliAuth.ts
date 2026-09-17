@@ -26,7 +26,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { resolveCodexHome } from './CodexModelCatalog';
+import { resolveCodexHome } from './CodexPaths';
 
 export const CODEX_AUTH_FILE = 'auth.json';
 

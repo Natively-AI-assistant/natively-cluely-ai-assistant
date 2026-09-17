@@ -11956,13 +11956,23 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  // The Codex model catalogue for the model pickers. Live provider fetch
-  // first (OAuth or CLI `codex login` session), then the installed CLI's
-  // models_cache.json, then 'unavailable' (renderer uses built-in presets).
-  // Never exposes credentials — models only.
+  // Cache reads never make network requests. Settings explicitly invokes the
+  // refresh handler after it has confirmed that ChatGPT auth exists; other
+  // pickers stay cache-only.
   safeHandle('codex-cli:models', async () => {
-    const { readCodexModelCatalog } = require('./services/CodexModelCatalog') as typeof import('./services/CodexModelCatalog');
-    return readCodexModelCatalog();
+    const { readCachedCodexModelCatalog, NATIVELY_CODEX_MODELS_CACHE_FILE } = require('./services/CodexModelCatalog') as typeof import('./services/CodexModelCatalog');
+    return readCachedCodexModelCatalog({
+      appCacheFile: path.join(app.getPath('userData'), NATIVELY_CODEX_MODELS_CACHE_FILE),
+    });
+  });
+
+  safeHandle('codex:refresh-models', async () => {
+    const { refreshCodexModelCatalog, readCachedCodexModelCatalog, NATIVELY_CODEX_MODELS_CACHE_FILE } = require('./services/CodexModelCatalog') as typeof import('./services/CodexModelCatalog');
+    const appCacheFile = path.join(app.getPath('userData'), NATIVELY_CODEX_MODELS_CACHE_FILE);
+    return refreshCodexModelCatalog({
+      appCacheFile,
+      readCached: () => readCachedCodexModelCatalog({ appCacheFile }),
+    });
   });
 
   safeHandle('set-codex-cli-config', (_, config: any) => {
@@ -11991,16 +12001,21 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('test-codex-cli', async (_, config?: any) => {
     try {
-      // The new implementation is HTTP-direct — there is no CLI binary to
-      // validate. The test is now "do we have a valid OAuth token + a
-      // reachable model?". A lightweight probe is a status read; the
-      // Settings UI also has a "Try it" button that issues a real chat
-      // call. This handler returns success=true with the current
-      // normalized config so the Settings UI's "Test" button keeps
-      // working without an error state.
       const current = appState.processingHelper.getLLMHelper().getCodexCliConfig();
       const normalized = CodexCliService.normalizeConfig({ ...current, ...(config || {}) });
       const status = getCodexAuthStatus();
+      if (!status.signedIn) return { success: false, error: 'Not signed in to ChatGPT.' };
+      if (!normalized.model) return { success: false, error: 'No Codex model is selected.' };
+      const { refreshCodexModelCatalog, readCachedCodexModelCatalog, NATIVELY_CODEX_MODELS_CACHE_FILE } = require('./services/CodexModelCatalog') as typeof import('./services/CodexModelCatalog');
+      const appCacheFile = path.join(app.getPath('userData'), NATIVELY_CODEX_MODELS_CACHE_FILE);
+      const catalog = await refreshCodexModelCatalog({
+        appCacheFile,
+        readCached: () => readCachedCodexModelCatalog({ appCacheFile }),
+      });
+      if (catalog.refreshError) return { success: false, error: `Could not reach the Codex model provider (${catalog.refreshError}).` };
+      if (!catalog.models.some(model => model.id === normalized.model)) {
+        return { success: false, error: 'The selected model is no longer offered by the provider.' };
+      }
       return {
         success: true,
         resolvedPath: normalized.path, // legacy field; ignored

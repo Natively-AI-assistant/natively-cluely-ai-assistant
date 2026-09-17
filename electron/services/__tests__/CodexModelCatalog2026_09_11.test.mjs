@@ -1,228 +1,281 @@
-// Issue #558 — the Codex model picker was four hardcoded ids and the shipped
-// defaults were gpt-5.4 / gpt-5.3-codex. Live on 2026-09-11, with a ChatGPT
-// sign-in, the backend rejected three of the four presets and both defaults:
-// "The '<id>' model is not supported when using Codex with a ChatGPT account." The picker now reads the installation's own
-// catalogue — `$CODEX_HOME/models_cache.json`, which the CLI refreshes from the
-// same backend Natively calls — and falls back to the built-in presets only
-// when no catalogue exists (most users never install the CLI: Natively signs in
-// to ChatGPT itself).
-//
-// Every OS-facing input (env, home dir, path flavour, file reader) is injected,
-// so both the macOS and Windows resolution branches run on either host without
-// touching process.platform.
-//
-// Run via: npm run build:electron && node --test electron/services/__tests__/CodexModelCatalog2026_09_11.test.mjs
-
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '../../..');
-
-const catalogMod = await import(pathToFileURL(path.join(root, 'dist-electron/electron/services/CodexModelCatalog.js')).href);
-const { resolveCodexHome, parseCodexModelsCache, readCodexModelCatalog, CHATGPT_UNSUPPORTED_CODEX_MODELS, isChatGptUnsupportedCodexModel } = catalogMod;
-const cliMod = await import(pathToFileURL(path.join(root, 'dist-electron/electron/services/CodexCliService.js')).href);
-const { CodexCliService, chatGptCompatibleModel, DEFAULT_CODEX_CLI_CONFIG, CODEX_NOT_SIGNED_IN_MESSAGE, isCodexAuthError } = cliMod;
-// src/utils/modelUtils.ts is imported for REAL (node >= 22.6 strips the types).
-// file:// URL, not a bare path — a bare `C:\…` import throws on Windows.
+process.env.CODEX_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-codex-catalog-test-'));
+const catalog = await import(pathToFileURL(path.join(root, 'dist-electron/electron/services/CodexModelCatalog.js')).href);
 const modelUtils = await import(pathToFileURL(path.join(root, 'src/utils/modelUtils.ts')).href);
-const { CODEX_CLI_MODEL, CODEX_CLI_MODEL_PRESETS, codexModelOptions, getCodexCliModelDisplayName } = modelUtils;
 
-// Shape of the file the Codex CLI writes (trimmed to the fields we read; the
-// real file carries ~30 more per model).
-const CACHE = JSON.stringify({
-  fetched_at: '2026-08-15T08:21:05.413810Z',
-  client_version: '0.148.0',
+const {
+  CODEX_MODELS_URL,
+  parseCodexModelsPayload,
+  parseCodexModelsCache,
+  readCachedCodexModelCatalog,
+  fetchLiveCodexModels,
+  refreshCodexModelCatalog,
+  resetCodexCatalogRefreshForTest,
+  resolveCodexHome,
+  getCodexModelCapabilities,
+  activateCodexModelCatalog,
+} = catalog;
+
+const MODELS = {
+  fetched_at: '2026-09-17T19:15:54Z',
+  client_version: '0.154.0',
   models: [
-    { slug: 'gpt-5.4-mini', display_name: 'GPT-5.4-Mini', visibility: 'list', priority: 23 },
-    { slug: 'codex-auto-review', display_name: 'Codex Auto Review', visibility: 'hide', priority: 43 },
-    { slug: 'gpt-5.6-terra', display_name: 'GPT-5.6-Terra', visibility: 'list', priority: 2 },
-    { slug: 'gpt-5.5', display_name: 'GPT-5.5', visibility: 'list', priority: 7 },
+    {
+      slug: 'gpt-current', display_name: 'GPT Current', visibility: 'list', priority: 2,
+      default_reasoning_level: 'medium',
+      supported_reasoning_levels: [{ effort: 'low', description: 'Fast' }, { effort: 'medium' }, { effort: 'ultra' }],
+      service_tiers: [{ id: 'priority', name: 'Fast', description: 'Higher usage' }],
+    },
+    { slug: 'hidden', display_name: 'Hidden', visibility: 'hide', priority: 1 },
+    { slug: 'gpt-current', display_name: 'Duplicate', visibility: 'list', priority: 3 },
+    { slug: 'gpt-next', display_name: 'GPT Next', visibility: 'list', priority: 4, supported_reasoning_levels: [] },
   ],
-});
+};
 
-describe('resolveCodexHome', () => {
-  test('macOS: defaults to ~/.codex', () => {
+describe('paths', () => {
+  test('resolves default and overridden Codex homes cross-platform', () => {
     assert.equal(resolveCodexHome({}, '/Users/ana', path.posix), '/Users/ana/.codex');
-  });
-
-  test('Windows: defaults to %USERPROFILE%\\.codex', () => {
-    assert.equal(resolveCodexHome({}, 'C:\\Users\\Ana Maria', path.win32), 'C:\\Users\\Ana Maria\\.codex');
-  });
-
-  test('CODEX_HOME wins on both platforms, surrounding whitespace ignored', () => {
-    assert.equal(resolveCodexHome({ CODEX_HOME: '  /opt/codex ' }, '/Users/ana', path.posix), '/opt/codex');
-    assert.equal(resolveCodexHome({ CODEX_HOME: 'D:\\tools\\codex' }, 'C:\\Users\\Ana', path.win32), 'D:\\tools\\codex');
-  });
-
-  test('a blank CODEX_HOME falls back to the home-dir default', () => {
-    assert.equal(resolveCodexHome({ CODEX_HOME: '   ' }, '/Users/ana', path.posix), '/Users/ana/.codex');
+    assert.equal(resolveCodexHome({}, 'C:\\Users\\Ana', path.win32), 'C:\\Users\\Ana\\.codex');
+    assert.equal(resolveCodexHome({ CODEX_HOME: ' /opt/codex ' }, '/Users/ana', path.posix), '/opt/codex');
   });
 });
 
-describe('parseCodexModelsCache', () => {
-  test('keeps only models the CLI itself lists, in the CLI\'s priority order', () => {
-    assert.deepEqual(parseCodexModelsCache(CACHE).models, [
-      { id: 'gpt-5.6-terra', name: 'GPT-5.6-Terra' },
-      { id: 'gpt-5.5', name: 'GPT-5.5' },
+describe('payload parsing', () => {
+  test('filters visibility, orders, deduplicates, and preserves capabilities', () => {
+    const parsed = parseCodexModelsPayload(MODELS);
+    assert.deepEqual(parsed.models.map(({ id, name }) => ({ id, name })), [
+      { id: 'gpt-current', name: 'GPT Current' },
+      { id: 'gpt-next', name: 'GPT Next' },
+    ]);
+    assert.deepEqual(parsed.models[0].reasoningLevels.map(level => level.id), ['low', 'medium', 'ultra']);
+    assert.deepEqual(parsed.models[0].serviceTiers, [{ id: 'priority', name: 'Fast', description: 'Higher usage' }]);
+    assert.equal(parsed.models[0].defaultReasoningLevel, 'medium');
+    activateCodexModelCatalog(parsed.models);
+    assert.equal(getCodexModelCapabilities('gpt-current').reasoningLevels[2].id, 'ultra');
+  });
+
+  test('rejects malformed schemas and unsafe capability values', () => {
+    assert.equal(parseCodexModelsPayload(null), null);
+    assert.equal(parseCodexModelsPayload({ data: [] }), null);
+    const parsed = parseCodexModelsPayload({ models: [{
+      slug: 'safe', visibility: 'list',
+      supported_reasoning_levels: [{ effort: 'bad value' }, { effort: 'low' }],
+      service_tiers: [{ id: 'priority' }, { id: 'bad/value' }],
+    }] });
+    assert.deepEqual(parsed.models[0].reasoningLevels.map(x => x.id), ['low']);
+    assert.deepEqual(parsed.models[0].serviceTiers.map(x => x.id), ['priority']);
+  });
+
+  test('cache parser never throws', () => {
+    assert.equal(parseCodexModelsCache('nope'), null);
+    assert.equal(parseCodexModelsCache('{}'), null);
+    assert.equal(parseCodexModelsCache(JSON.stringify(MODELS)).models.length, 2);
+  });
+});
+
+describe('cache-only reads', () => {
+  test('signed-out reads do not touch disk or network', async () => {
+    let reads = 0;
+    const result = await readCachedCodexModelCatalog({
+      identity: null,
+      readFile: async () => { reads++; return JSON.stringify(MODELS); },
+    });
+    assert.equal(result.source, 'unavailable');
+    assert.equal(result.refreshError, 'not-signed-in');
+    assert.equal(reads, 0);
+  });
+
+  test('CLI auth reads only the CLI cache', async () => {
+    const reads = [];
+    const result = await readCachedCodexModelCatalog({
+      identity: { source: 'codex-cli', key: null },
+      env: {}, homeDir: '/Users/ana', pathImpl: path.posix,
+      statFile: async () => ({ mtimeMs: 10 }),
+      readFile: async file => { reads.push(file); return JSON.stringify(MODELS); },
+    });
+    assert.equal(result.source, 'codex-cli-cache');
+    assert.deepEqual(reads, ['/Users/ana/.codex/models_cache.json']);
+  });
+
+  test('rejects a CLI cache older than the current CLI login', async () => {
+    const result = await readCachedCodexModelCatalog({
+      identity: { source: 'codex-cli', key: null },
+      env: {}, homeDir: '/Users/ana', pathImpl: path.posix,
+      statFile: async file => ({ mtimeMs: file.endsWith('auth.json') ? 20 : 10 }),
+      readFile: async () => JSON.stringify(MODELS),
+    });
+    assert.equal(result.source, 'unavailable');
+  });
+
+  test('Natively OAuth without an account-bound provider cache returns unavailable', async () => {
+    let reads = 0;
+    const result = await readCachedCodexModelCatalog({
+      identity: { source: 'natively', key: null },
+      appCacheFile: '/tmp/catalog.json',
+      readFile: async () => { reads++; return '{}'; },
+    });
+    assert.equal(result.source, 'unavailable');
+    assert.equal(reads, 0);
+  });
+
+  test('provider cache is accepted only for the active account', async () => {
+    const key = crypto.createHash('sha256').update('account-1').digest('hex');
+    const persisted = JSON.stringify({ schemaVersion: 1, accountKey: key, catalog: parseCodexModelsPayload(MODELS) });
+    const matched = await readCachedCodexModelCatalog({
+      identity: { source: 'natively', key }, appCacheFile: '/cache/catalog.json', readFile: async () => persisted,
+    });
+    assert.equal(matched.source, 'provider-cache');
+    const mismatched = await readCachedCodexModelCatalog({
+      identity: { source: 'natively', key: 'another-account' }, appCacheFile: '/cache/catalog.json', readFile: async () => persisted,
+    });
+    assert.equal(mismatched.source, 'unavailable');
+  });
+});
+
+describe('live provider fetch', () => {
+  const credential = { source: 'natively', accessToken: 'secret', accountId: 'account-1', email: 'a@example.com' };
+
+  test('uses fixed endpoint, optional client version, and scoped headers', async () => {
+    let request;
+    const result = await fetchLiveCodexModels({
+      credential,
+      clientVersion: '0.154.0',
+      fetchFn: async (url, init) => {
+        request = { url, init };
+        return { ok: true, json: async () => MODELS };
+      },
+    });
+    assert.equal(result.error, undefined);
+    assert.equal(request.url, `${CODEX_MODELS_URL}?client_version=0.154.0`);
+    assert.equal(request.init.headers.Authorization, 'Bearer secret');
+    assert.equal(request.init.headers['chatgpt-account-id'], 'account-1');
+    assert.equal(request.init.headers.originator, 'codex_cli_rs');
+    assert.equal(request.init.headers.version, '0.154.0');
+  });
+
+  test('does not fetch before auth exists', async () => {
+    let called = false;
+    const result = await fetchLiveCodexModels({ credential: null, fetchFn: async () => { called = true; } });
+    assert.equal(result.error, 'not-signed-in');
+    assert.equal(called, false);
+  });
+
+  test('classifies HTTP, network, JSON, and schema failures', async () => {
+    for (const [status, expected] of [[401, 'auth'], [403, 'auth'], [429, 'rate-limited'], [500, 'provider']]) {
+      const result = await fetchLiveCodexModels({ credential, fetchFn: async () => ({ ok: false, status }) });
+      assert.equal(result.error, expected);
+    }
+    assert.equal((await fetchLiveCodexModels({ credential, fetchFn: async () => { throw new Error('offline'); } })).error, 'network');
+    assert.equal((await fetchLiveCodexModels({ credential, fetchFn: async () => ({ ok: true, json: async () => null }) })).error, 'invalid-response');
+  });
+});
+
+describe('refresh and account-bound persistence', () => {
+  test('deduplicates concurrent refreshes and persists atomically', async () => {
+    resetCodexCatalogRefreshForTest();
+    const credential = { source: 'natively', accessToken: 'secret', accountId: 'account-1' };
+    let fetches = 0;
+    const writes = [];
+    const renames = [];
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    const opts = {
+      credential,
+      appCacheFile: '/cache/catalog.json',
+      fetchFn: async () => { fetches++; await gate; return { ok: true, json: async () => MODELS }; },
+      writeFile: async (file, data) => { writes.push([file, data]); },
+      rename: async (from, to) => { renames.push([from, to]); },
+    };
+    const a = refreshCodexModelCatalog(opts);
+    const b = refreshCodexModelCatalog(opts);
+    release();
+    const [first, second] = await Promise.all([a, b]);
+    assert.equal(fetches, 1);
+    assert.equal(first.source, 'provider-live');
+    assert.deepEqual(first, second);
+    assert.match(writes[0][0], /^\/cache\/catalog\.json\.\d+\.[\w-]+\.tmp$/);
+    assert.deepEqual(renames, [[writes[0][0], '/cache/catalog.json']]);
+    const persisted = JSON.parse(writes[0][1]);
+    assert.equal(persisted.accountKey, crypto.createHash('sha256').update('account-1').digest('hex'));
+    assert.equal(persisted.catalog.models[0].id, 'gpt-current');
+  });
+
+  test('returns cached data with a sanitized refresh error', async () => {
+    resetCodexCatalogRefreshForTest();
+    const result = await refreshCodexModelCatalog({
+      credential: { source: 'natively', accessToken: 'secret', accountId: 'account-1' },
+      fetchFn: async () => ({ ok: false, status: 429 }),
+      readCached: async () => ({ source: 'provider-cache', models: parseCodexModelsPayload(MODELS).models }),
+    });
+    assert.equal(result.source, 'provider-cache');
+    assert.equal(result.refreshError, 'rate-limited');
+  });
+
+  test('does not deduplicate different accounts or publish a stale account response', async () => {
+    resetCodexCatalogRefreshForTest();
+    const accountA = { source: 'natively', accessToken: 'a', accountId: 'account-a' };
+    const accountB = { source: 'natively', accessToken: 'b', accountId: 'account-b' };
+    let active = accountA;
+    let fetches = 0;
+    const a = refreshCodexModelCatalog({
+      credentialProvider: async () => active,
+      fetchFn: async () => {
+        fetches++;
+        await new Promise(resolve => setTimeout(resolve, 10));
+        return { ok: true, json: async () => MODELS };
+      },
+    });
+    active = accountB;
+    const b = refreshCodexModelCatalog({
+      credentialProvider: async () => active,
+      fetchFn: async () => { fetches++; return { ok: true, json: async () => MODELS }; },
+    });
+    const [stale, current] = await Promise.all([a, b]);
+    assert.equal(fetches, 2);
+    assert.equal(stale.refreshError, 'auth');
+    assert.equal(current.source, 'provider-live');
+  });
+
+  test('replaces an existing cache on Windows when direct rename cannot overwrite it', async () => {
+    resetCodexCatalogRefreshForTest();
+    const calls = [];
+    let first = true;
+    const result = await refreshCodexModelCatalog({
+      credential: { source: 'natively', accessToken: 'secret', accountId: 'account-1' },
+      appCacheFile: 'C:\\cache\\catalog.json',
+      platform: 'win32',
+      fetchFn: async () => ({ ok: true, json: async () => MODELS }),
+      writeFile: async () => {},
+      unlink: async file => { calls.push(['unlink', file]); },
+      rename: async (from, to) => {
+        calls.push(['rename', from, to]);
+        if (first) { first = false; throw Object.assign(new Error('exists'), { code: 'EEXIST' }); }
+      },
+    });
+    assert.equal(result.source, 'provider-live');
+    const temporary = calls.find(call => call[0] === 'rename')[1];
+    assert.match(temporary, /^C:\\cache\\catalog\.json\.\d+\.[\w-]+\.tmp$/);
+    assert.deepEqual(calls.filter(call => call[0] === 'rename'), [
+      ['rename', temporary, 'C:\\cache\\catalog.json'],
+      ['rename', 'C:\\cache\\catalog.json', 'C:\\cache\\catalog.json.bak'],
+      ['rename', temporary, 'C:\\cache\\catalog.json'],
     ]);
   });
-
-  test('drops listed models the backend rejects for a ChatGPT account', () => {
-    // The real cache listed gpt-5.4-mini (visibility "list"); a live request with
-    // a ChatGPT sign-in was refused. The catalogue alone is not proof of use.
-    const ids = parseCodexModelsCache(CACHE).models.map((m) => m.id);
-    assert.ok(!ids.includes('gpt-5.4-mini'));
-    assert.ok(isChatGptUnsupportedCodexModel(' GPT-5.4-Mini '));
-    assert.ok(!isChatGptUnsupportedCodexModel('gpt-5.5'));
-  });
-
-  test('carries fetched_at / client_version so the UI can say how old the list is', () => {
-    const parsed = parseCodexModelsCache(CACHE);
-    assert.equal(parsed.fetchedAt, '2026-08-15T08:21:05.413810Z');
-    assert.equal(parsed.clientVersion, '0.148.0');
-  });
-
-  test('a model without display_name is named by its slug', () => {
-    const raw = JSON.stringify({ models: [{ slug: 'gpt-9', visibility: 'list' }] });
-    assert.deepEqual(parseCodexModelsCache(raw).models, [{ id: 'gpt-9', name: 'gpt-9' }]);
-  });
-
-  test('malformed or empty input yields null, never a throw', () => {
-    assert.equal(parseCodexModelsCache('not json'), null);
-    assert.equal(parseCodexModelsCache('{}'), null);
-    assert.equal(parseCodexModelsCache(JSON.stringify({ models: [] })), null);
-    assert.equal(parseCodexModelsCache(JSON.stringify({ models: [{ visibility: 'list' }, { slug: 'x', visibility: 'hide' }] })), null);
-  });
 });
 
-describe('readCodexModelCatalog', () => {
-  test('macOS: reads models_cache.json from the resolved Codex home', async () => {
-    const reads = [];
-    const catalog = await readCodexModelCatalog({
-      env: {}, homeDir: '/Users/ana', pathImpl: path.posix,
-      readFile: async (p) => { reads.push(p); return CACHE; },
-    });
-    assert.deepEqual(reads, ['/Users/ana/.codex/models_cache.json']);
-    assert.equal(catalog.source, 'codex-cli');
-    assert.equal(catalog.models[0].id, 'gpt-5.6-terra');
-  });
-
-  test('Windows: reads models_cache.json from %USERPROFILE%\\.codex', async () => {
-    const reads = [];
-    const catalog = await readCodexModelCatalog({
-      env: {}, homeDir: 'C:\\Users\\Ana Maria', pathImpl: path.win32,
-      readFile: async (p) => { reads.push(p); return CACHE; },
-    });
-    assert.deepEqual(reads, ['C:\\Users\\Ana Maria\\.codex\\models_cache.json']);
-    assert.equal(catalog.source, 'codex-cli');
-  });
-
-  test('no CLI installed (ENOENT) is "unavailable", not an error', async () => {
-    const catalog = await readCodexModelCatalog({
-      env: {}, homeDir: '/Users/ana', pathImpl: path.posix,
-      readFile: async () => { const e = new Error('ENOENT'); e.code = 'ENOENT'; throw e; },
-    });
-    assert.equal(catalog.source, 'unavailable');
-    assert.deepEqual(catalog.models, []);
-  });
-
-  test('an unreadable or corrupt cache is "unavailable" too', async () => {
-    const corrupt = await readCodexModelCatalog({
-      env: {}, homeDir: '/Users/ana', pathImpl: path.posix, readFile: async () => '{"models":',
-    });
-    assert.equal(corrupt.source, 'unavailable');
-    const denied = await readCodexModelCatalog({
-      env: {}, homeDir: '/Users/ana', pathImpl: path.posix,
-      readFile: async () => { const e = new Error('EACCES'); e.code = 'EACCES'; throw e; },
-    });
-    assert.equal(denied.source, 'unavailable');
-  });
-});
-
-describe('codexModelOptions (renderer)', () => {
-  test('uses the installed CLI\'s catalogue when one was found', () => {
-    const catalogue = parseCodexModelsCache(CACHE).models;
-    assert.deepEqual(codexModelOptions({ source: 'codex-cli', models: catalogue }), catalogue);
-  });
-
-  test('falls back to the built-in presets without a catalogue (CLI not installed, old preload)', () => {
-    assert.deepEqual(codexModelOptions({ source: 'unavailable', models: [] }), CODEX_CLI_MODEL_PRESETS);
-    assert.deepEqual(codexModelOptions(undefined), CODEX_CLI_MODEL_PRESETS);
-    assert.deepEqual(codexModelOptions(null), CODEX_CLI_MODEL_PRESETS);
-  });
-});
-
-describe('presets and defaults', () => {
-  test('no preset, and neither default, is a model the ChatGPT backend rejects', () => {
-    // The renderer preset list and the main-process deny list live in different
-    // bundles; this is what keeps them apart.
-    for (const m of CODEX_CLI_MODEL_PRESETS) assert.ok(!CHATGPT_UNSUPPORTED_CODEX_MODELS.has(m.id), m.id);
-    assert.ok(!CHATGPT_UNSUPPORTED_CODEX_MODELS.has(DEFAULT_CODEX_CLI_CONFIG.model));
-    assert.ok(!CHATGPT_UNSUPPORTED_CODEX_MODELS.has(DEFAULT_CODEX_CLI_CONFIG.fastModel));
-  });
-
-  test('both shipped defaults are presets, so the settings field never opens on an unlisted id', () => {
-    const ids = CODEX_CLI_MODEL_PRESETS.map((m) => m.id);
-    assert.ok(ids.includes(DEFAULT_CODEX_CLI_CONFIG.model), DEFAULT_CODEX_CLI_CONFIG.model);
-    assert.ok(ids.includes(DEFAULT_CODEX_CLI_CONFIG.fastModel), DEFAULT_CODEX_CLI_CONFIG.fastModel);
-  });
-
-  test('catalogue-era ids resolve to real names on surfaces without catalogue access', () => {
-    assert.equal(getCodexCliModelDisplayName('codex-cli:gpt-5.6-terra'), 'GPT-5.6 Terra');
-    assert.equal(getCodexCliModelDisplayName('codex-cli:gpt-5.6-luna'), 'GPT-5.6 Luna');
-  });
-});
-
-describe('persisted ChatGPT-incompatible models', () => {
-  test('persisted ChatGPT-rejected models are replaced by the defaults on load', () => {
-    // main.ts used to fall back to spark for an unset fast model, gpt-5.4 /
-    // gpt-5.3-codex were the shipped defaults, and the Settings card persists
-    // the whole config on sign-in — all of them are sitting in real settings
-    // files (the reporter's had fastModel gpt-5.4). Every call with them 400s.
-    for (const id of CHATGPT_UNSUPPORTED_CODEX_MODELS) {
-      const cfg = CodexCliService.normalizeConfig({ model: id, fastModel: id });
-      assert.equal(cfg.model, DEFAULT_CODEX_CLI_CONFIG.model, id);
-      assert.equal(cfg.fastModel, DEFAULT_CODEX_CLI_CONFIG.fastModel, id);
-    }
-  });
-
-  test('a picked codex-cli:<rejected> runs the configured model instead (LLMHelper.getSelectedCodexCliModel)', () => {
-    assert.equal(chatGptCompatibleModel('gpt-5.3-codex-spark', 'gpt-5.5'), 'gpt-5.5');
-    assert.equal(chatGptCompatibleModel('GPT-5.4', 'gpt-5.5'), 'gpt-5.5');
-    assert.equal(chatGptCompatibleModel('', 'gpt-5.5'), 'gpt-5.5');
-    assert.equal(chatGptCompatibleModel(' gpt-5.6-luna ', 'gpt-5.5'), 'gpt-5.6-luna');
-  });
-
-  test('any other persisted model is kept as chosen, listed or not', () => {
-    const cfg = CodexCliService.normalizeConfig({ model: 'gpt-5.6-luna', fastModel: 'gpt-9-future' });
-    assert.equal(cfg.model, 'gpt-5.6-luna');
-    assert.equal(cfg.fastModel, 'gpt-9-future');
-  });
-
-  test('startup restore has no model literals of its own — normalizeConfig owns the defaults', () => {
-    // A second copy of the defaults in main.ts is how spark shipped as the
-    // fast model while DEFAULT_CODEX_CLI_CONFIG said gpt-5.3-codex.
-    const src = fs.readFileSync(path.join(root, 'electron/main.ts'), 'utf8');
-    const start = src.indexOf('llmHelper.setCodexCliConfig({');
-    assert.ok(start >= 0, 'startup setCodexCliConfig call not found');
-    const block = src.slice(start, src.indexOf('});', start));
-    assert.doesNotMatch(block, /['"]gpt-/);
-  });
-});
-
-describe('wording', () => {
-  test('the provider is not labelled as a local CLI transport', () => {
-    assert.equal(CODEX_CLI_MODEL.name, 'OpenAI Codex');
-    assert.doesNotMatch(CODEX_CLI_MODEL.desc, /local|cli/i);
-  });
-
-  test('the signed-out error names both ways in (Settings, or `codex login`) and still matches isCodexAuthError', () => {
-    assert.match(CODEX_NOT_SIGNED_IN_MESSAGE, /^Not signed in to ChatGPT/);
-    assert.match(CODEX_NOT_SIGNED_IN_MESSAGE, /codex login/);
-    assert.ok(isCodexAuthError(new Error(CODEX_NOT_SIGNED_IN_MESSAGE)));
+describe('renderer helper', () => {
+  test('has no hardcoded fallback roster', () => {
+    assert.deepEqual(modelUtils.codexModelOptions(null), []);
+    assert.deepEqual(modelUtils.codexModelOptions({ source: 'unavailable', models: [] }), []);
+    assert.equal('CODEX_CLI_MODEL_PRESETS' in modelUtils, false);
   });
 });
