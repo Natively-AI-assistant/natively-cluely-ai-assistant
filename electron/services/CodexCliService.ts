@@ -142,11 +142,11 @@ export type CodexServiceTier = 'default' | 'fast' | 'flex';
 // omit the field. 'minimal' is intentionally NOT in this union because no
 // codex-supported model accepts it (OpenAI removed it after the original gpt-5
 // line — see electron/llm/__tests__/OpenAiReasoningEffort.test.mjs).
-export type CodexModelReasoningEffort = 'none' | 'low' | 'medium' | 'high' | 'xhigh';
+export type CodexModelReasoningEffort = 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
 
 export const CODEX_SANDBOX_MODES: readonly CodexSandboxMode[] = ['read-only', 'workspace-write', 'danger-full-access'] as const;
 export const CODEX_SERVICE_TIERS: readonly CodexServiceTier[] = ['default', 'fast', 'flex'] as const;
-export const CODEX_MODEL_REASONING_EFFORTS: readonly CodexModelReasoningEffort[] = ['none', 'low', 'medium', 'high', 'xhigh'] as const;
+export const CODEX_MODEL_REASONING_EFFORTS: readonly CodexModelReasoningEffort[] = ['none', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'] as const;
 
 // Per-model valid reasoning_effort sets. Mirrors the OpenAI HTTP VALID map at
 // electron/llm/__tests__/OpenAiReasoningEffort.test.mjs:27-45. Sending
@@ -171,6 +171,14 @@ const CODEX_MODEL_REASONING_SETS: ReadonlyArray<readonly [string, readonly Codex
   ['gpt-5.2',          ['none', 'low', 'medium', 'high', 'xhigh']],
   ['gpt-5.4',          ['none', 'low', 'medium', 'high', 'xhigh']],
   ['gpt-5.5',          ['none', 'low', 'medium', 'high', 'xhigh']],
+  // Provider catalogue as of 2026-09-17 (from live models_cache.json):
+  // 5.6-sol/terra accept up to ultra, luna up to max, 6-astra up to ultra.
+  ['gpt-6-astra',      ['low', 'medium', 'high', 'xhigh', 'max', 'ultra']],
+  ['gpt-6',            ['low', 'medium', 'high', 'xhigh', 'max', 'ultra']],
+  ['gpt-5.6-sol',      ['low', 'medium', 'high', 'xhigh', 'max', 'ultra']],
+  ['gpt-5.6-terra',    ['low', 'medium', 'high', 'xhigh', 'max', 'ultra']],
+  ['gpt-5.6-luna',     ['low', 'medium', 'high', 'xhigh', 'max']],
+  ['gpt-5.6',          ['low', 'medium', 'high', 'xhigh', 'max', 'ultra']],
   // codex variants — `none` not supported; `xhigh` only on 5.2-codex+.
   ['gpt-5.5-codex',    ['low', 'medium', 'high', 'xhigh']],
   ['gpt-5.4-codex',    ['low', 'medium', 'high', 'xhigh']],

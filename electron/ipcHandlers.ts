@@ -11956,9 +11956,10 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  // The installed Codex CLI's model catalogue, for the model pickers. Reads the
-  // CLI's models_cache.json only — never its credentials. 'unavailable' (no CLI)
-  // tells the renderer to use its built-in presets.
+  // The Codex model catalogue for the model pickers. Live provider fetch
+  // first (OAuth or CLI `codex login` session), then the installed CLI's
+  // models_cache.json, then 'unavailable' (renderer uses built-in presets).
+  // Never exposes credentials — models only.
   safeHandle('codex-cli:models', async () => {
     const { readCodexModelCatalog } = require('./services/CodexModelCatalog') as typeof import('./services/CodexModelCatalog');
     return readCodexModelCatalog();

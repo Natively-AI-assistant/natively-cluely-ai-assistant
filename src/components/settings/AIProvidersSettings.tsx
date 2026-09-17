@@ -1791,7 +1791,7 @@ const CODEX_SERVICE_TIERS = ['default', 'fast', 'flex'] as const;
 // Must mirror CodexCliService.CODEX_MODEL_REASONING_EFFORTS in
 // electron/services/CodexCliService.ts. Kept in sync manually because the
 // Settings UI runs in the renderer (no direct module access to main).
-const CODEX_MODEL_REASONING_EFFORTS = ['none', 'low', 'medium', 'high', 'xhigh'] as const;
+const CODEX_MODEL_REASONING_EFFORTS = ['none', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'] as const;
 
 // Per-model valid reasoning-effort sets (mirrors CodexCliService's
 // CODEX_MODEL_REASONING_SETS). Longest-match wins so gpt-5.4-codex beats
@@ -1807,6 +1807,12 @@ const CODEX_MODEL_REASONING_SETS: ReadonlyArray<readonly [string, readonly strin
     ['gpt-5.2',          ['none', 'low', 'medium', 'high', 'xhigh']],
     ['gpt-5.4',          ['none', 'low', 'medium', 'high', 'xhigh']],
     ['gpt-5.5',          ['none', 'low', 'medium', 'high', 'xhigh']],
+    ['gpt-6-astra',      ['low', 'medium', 'high', 'xhigh', 'max', 'ultra']],
+    ['gpt-6',            ['low', 'medium', 'high', 'xhigh', 'max', 'ultra']],
+    ['gpt-5.6-sol',      ['low', 'medium', 'high', 'xhigh', 'max', 'ultra']],
+    ['gpt-5.6-terra',    ['low', 'medium', 'high', 'xhigh', 'max', 'ultra']],
+    ['gpt-5.6-luna',     ['low', 'medium', 'high', 'xhigh', 'max']],
+    ['gpt-5.6',          ['low', 'medium', 'high', 'xhigh', 'max', 'ultra']],
     ['gpt-5.5-codex',    ['low', 'medium', 'high', 'xhigh']],
     ['gpt-5.4-codex',    ['low', 'medium', 'high', 'xhigh']],
     ['gpt-5.3-codex-spark', ['low', 'medium', 'high']],

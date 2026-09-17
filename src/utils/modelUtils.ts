@@ -83,20 +83,23 @@ export const CODEX_CLI_MODEL = {
 };
 
 /**
- * Built-in Codex models, used when the user has no Codex CLI catalogue to read
- * (see codexModelOptions) — which is most users, since Natively does not need
- * the CLI. Also the name source for surfaces that only have a selector id
- * (getCodexCliModelDisplayName).
+ * Built-in Codex models, used when neither the live Codex backend nor a
+ * Codex CLI catalogue is reachable (see codexModelOptions) — e.g. offline
+ * first launch before any sign-in. The live list is authoritative whenever
+ * the provider answers; these presets only keep the picker usable offline.
  *
- * Each one answered a live request with a ChatGPT sign-in on 2026-09-11. The
- * previous gpt-5.4 / gpt-5.3-codex / gpt-5.3-codex-spark presets are rejected
- * for a ChatGPT account (CHATGPT_UNSUPPORTED_CODEX_MODELS in
+ * Each one is taken from the provider's own catalogue (verified against a
+ * live ChatGPT sign-in on 2026-09-17: gpt-6-astra, gpt-5.6-sol/terra/luna,
+ * gpt-5.5). The previous gpt-5.4 / gpt-5.3-codex / gpt-5.3-codex-spark presets
+ * are rejected for a ChatGPT account (CHATGPT_UNSUPPORTED_CODEX_MODELS in
  * electron/services/CodexModelCatalog.ts); a test keeps the two apart.
  */
 export const CODEX_CLI_MODEL_PRESETS = [
-    { id: 'gpt-5.5', name: 'ChatGPT 5.5' },
+    { id: 'gpt-6-astra', name: 'GPT-6 Astra' },
+    { id: 'gpt-5.6-sol', name: 'GPT-5.6 Sol' },
     { id: 'gpt-5.6-terra', name: 'GPT-5.6 Terra' },
     { id: 'gpt-5.6-luna', name: 'GPT-5.6 Luna' },
+    { id: 'gpt-5.5', name: 'ChatGPT 5.5' },
 ];
 
 /** Result of the `codex-cli:models` IPC — CodexModelCatalog in the main process. */

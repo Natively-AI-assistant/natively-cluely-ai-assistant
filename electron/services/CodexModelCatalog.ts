@@ -30,6 +30,13 @@ import path from 'path';
 export const CODEX_MODELS_CACHE_FILE = 'models_cache.json';
 
 /**
+ * Live Codex model catalogue. Same backend the Codex CLI itself queries —
+ * the provider is authoritative, so the picker never drifts as OpenAI adds
+ * (gpt-6-astra, gpt-5.6-sol) or retires models.
+ */
+export const CODEX_MODELS_URL = 'https://chatgpt.com/backend-api/codex/models';
+
+/**
  * Models the ChatGPT Codex backend rejects for a ChatGPT account — the only
  * auth Natively has — each with the backend's own answer, "The '<id>' model is
  * not supported when using Codex with a ChatGPT account." spark from a captured
@@ -115,12 +122,139 @@ export function parseCodexModelsCache(raw: string): Omit<CodexModelCatalog, 'sou
   };
 }
 
+/**
+ * Parse a live `/backend-api/codex/models` response. Accepts both the CLI
+ * cache shape (`{ models: [{ slug, display_name, visibility, priority }] }`)
+ * and the API shape (`{ models: [{ id, name }] }` / `{ data: [...] }`).
+ * `visibility` is honoured when present; when absent every entry with an id
+ * is kept. Unsupported-for-ChatGPT ids are always dropped.
+ */
+export function parseCodexModelsResponse(data: any): Omit<CodexModelCatalog, 'source'> | null {
+  if (!data || typeof data !== 'object') return null;
+  const rawModels = Array.isArray(data.models) ? data.models : Array.isArray(data.data) ? data.data : null;
+  if (!rawModels) return null;
+
+  const listed = rawModels
+    .filter((m: any) => {
+      if (!m || typeof m !== 'object') return false;
+      const slug = typeof m.slug === 'string' ? m.slug.trim() : typeof m.id === 'string' ? m.id.trim() : '';
+      if (!slug) return false;
+      if (typeof m.visibility === 'string' && m.visibility !== 'list') return false;
+      return !isChatGptUnsupportedCodexModel(slug);
+    })
+    .map((m: any, index: number) => {
+      const id = (typeof m.slug === 'string' ? m.slug.trim() : (m.id as string).trim()) as string;
+      const name =
+        (typeof m.display_name === 'string' && m.display_name.trim()) ||
+        (typeof m.name === 'string' && m.name.trim()) ||
+        id;
+      return {
+        id,
+        name,
+        priority: Number.isFinite(m.priority) ? (m.priority as number) : Number.MAX_SAFE_INTEGER,
+        index,
+      };
+    })
+    .sort((a: any, b: any) => a.priority - b.priority || a.index - b.index);
+  if (listed.length === 0) return null;
+
+  const seen = new Set<string>();
+  const models: CodexCatalogModel[] = [];
+  for (const m of listed) {
+    if (seen.has(m.id)) continue;
+    seen.add(m.id);
+    models.push({ id: m.id, name: m.name });
+  }
+  return {
+    models,
+    fetchedAt: typeof data.fetched_at === 'string' ? data.fetched_at : new Date().toISOString(),
+    clientVersion: typeof data.client_version === 'string' ? data.client_version : undefined,
+  };
+}
+
+/**
+ * Fetch the live catalogue from the ChatGPT Codex backend using whichever
+ * sign-in exists (Natively's own OAuth first, else the CLI's `codex login`
+ * session read from disk). Lazy requires avoid a module cycle
+ * (CodexCliAuth imports resolveCodexHome from here). Any failure — signed
+ * out, offline, non-200, unexpected shape — returns null so callers fall
+ * through to the CLI cache file, then presets.
+ */
+export async function fetchLiveCodexModels(opts: {
+  fetchFn?: typeof fetch;
+  timeoutMs?: number;
+} = {}): Promise<Omit<CodexModelCatalog, 'source'> | null> {
+  let accessToken = '';
+  let accountId: string | undefined;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { CodexOAuthService } = require('./CodexOAuthService') as typeof import('./CodexOAuthService');
+    const oauth = CodexOAuthService.getInstance();
+    if (oauth.getStatus().signedIn) {
+      const token = await oauth.getAccessToken();
+      if (token) {
+        accessToken = token;
+        accountId = oauth.getCachedTokens?.()?.accountId;
+      }
+    }
+  } catch {
+    // Test harness without an initialised OAuth store — fall through to CLI.
+  }
+  if (!accessToken) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { readCodexCliAuth } = require('./CodexCliAuth') as typeof import('./CodexCliAuth');
+      const cli = readCodexCliAuth();
+      if (cli.status === 'ok') {
+        accessToken = cli.accessToken;
+        accountId = cli.accountId;
+      }
+    } catch {
+      // No CLI session either.
+    }
+  }
+  if (!accessToken) return null;
+
+  const fetchFn = opts.fetchFn ?? fetch;
+  const timeoutMs = opts.timeoutMs ?? 8000;
+  try {
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+      originator: 'codex_cli_rs',
+    };
+    if (accountId) headers['chatgpt-account-id'] = accountId;
+    const resp = await fetchFn(CODEX_MODELS_URL, {
+      method: 'GET',
+      headers,
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!resp.ok) return null;
+    return parseCodexModelsResponse(await resp.json().catch(() => null));
+  } catch {
+    return null;
+  }
+}
+
 export async function readCodexModelCatalog(opts: {
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
   pathImpl?: PathImpl;
   readFile?: (filePath: string) => Promise<string>;
+  /** Skip the live fetch (tests, offline). Default: try live first. */
+  skipLive?: boolean;
+  fetchFn?: typeof fetch;
 } = {}): Promise<CodexModelCatalog> {
+  // 1. Live provider catalogue — authoritative, works with or without the CLI.
+  if (!opts.skipLive) {
+    try {
+      const live = await fetchLiveCodexModels({ fetchFn: opts.fetchFn });
+      if (live) return { source: 'codex-cli', ...live };
+    } catch {
+      // Fall through to the CLI cache file.
+    }
+  }
+  // 2. Installed CLI's cache file (offline-friendly, same backend data).
   const pathImpl = opts.pathImpl ?? path;
   const codexHome = resolveCodexHome(opts.env ?? process.env, opts.homeDir ?? os.homedir(), pathImpl);
   const readFile = opts.readFile ?? ((p: string) => fs.promises.readFile(p, 'utf8'));
