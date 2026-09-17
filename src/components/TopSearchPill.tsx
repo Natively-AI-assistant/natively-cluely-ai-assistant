@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import { useT } from '../i18n';
 import { createPortal } from 'react-dom';
 import { Search, Sparkles, FileText } from 'lucide-react';
@@ -104,10 +104,23 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
     const inputRef = useRef<HTMLInputElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
 
+    // The backdrop starts at the bottom of the bar the pill sits in, not at the
+    // top of the window. The bar paints above the backdrop, so covering it
+    // dimmed nothing — but backdrop-filter still blurred the dark strip behind
+    // the bar down into the page, and the bar's crisp bottom edge grew into a
+    // ~10px soft band as the backdrop faded in.
+    const [backdropTop, setBackdropTop] = useState(0);
+
     // Notify parent of expansion changes
     useEffect(() => {
         onExpansionChange?.(state !== 'idle');
     }, [state, onExpansionChange]);
+
+    useLayoutEffect(() => {
+        if (state === 'idle') return;
+        const bar = containerRef.current?.offsetParent;
+        setBackdropTop(bar ? Math.max(0, bar.getBoundingClientRect().bottom) : 0);
+    }, [state]);
 
     // Compute results
     const sessionResults = useMemo(() => {
@@ -246,6 +259,7 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
                             transition={{ duration: 0.15 }}
+                            style={{ top: backdropTop }}
                             className="fixed inset-0 bg-black/30 backdrop-blur-[8px] z-[90]"
                             onClick={close}
                         />
