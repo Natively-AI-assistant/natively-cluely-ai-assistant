@@ -10,22 +10,31 @@ import { TRIAL_SENTINEL_KEY } from '../config/constants';
 import { CredentialsManager } from './CredentialsManager';
 import type { SearchProvider } from '../premium/contracts';
 
+// Keep the private provider modules optional at bundle time. The source-available
+// build intentionally omits premium/, while a Pro build supplies these files at
+// runtime. A local alias prevents esbuild from treating the literal module paths
+// below as mandatory build inputs.
+const loadOptionalPremiumModule = (modulePath: string): Record<string, any> => {
+  const optionalRequire = require;
+  return optionalRequire(modulePath) as Record<string, any>;
+};
+
 export function resolveCompanySearchProvider(): SearchProvider | null {
   const cm = CredentialsManager.getInstance();
 
   const tavilyApiKey = cm.getTavilyApiKey();
   if (tavilyApiKey) {
-    const {
-      TavilySearchProvider,
-    } = require('../../premium/electron/knowledge/TavilySearchProvider');
+    const { TavilySearchProvider } = loadOptionalPremiumModule(
+      '../../premium/electron/knowledge/TavilySearchProvider',
+    );
     return new TavilySearchProvider(tavilyApiKey);
   }
 
   const nativelyKey = cm.getNativelyApiKey();
   if (nativelyKey) {
-    const {
-      NativelySearchProvider,
-    } = require('../../premium/electron/knowledge/NativelySearchProvider');
+    const { NativelySearchProvider } = loadOptionalPremiumModule(
+      '../../premium/electron/knowledge/NativelySearchProvider',
+    );
     // Pass the real trial token when the key is the __trial__ sentinel so the
     // server can authenticate via x-trial-token instead of the invalid key.
     const trialToken = nativelyKey === TRIAL_SENTINEL_KEY ? cm.getTrialToken() : undefined;

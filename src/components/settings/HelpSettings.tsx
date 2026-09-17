@@ -1943,6 +1943,21 @@ hindsight-api`}
                             </p>
                         </div>
 
+                        <div className="p-3 bg-sky-500/10 border border-sky-500/20 rounded-xl mb-4">
+                            <h4 className="text-[13px] font-semibold text-sky-400 flex items-center gap-2 mb-1">
+                                <Globe size={14} /> On-Demand Web Search
+                            </h4>
+                            <p className="text-[11px] text-text-secondary leading-relaxed mb-2">
+                                Turn on the <strong>search icon</strong> beside the send button before typed questions. Natively decides locally whether the query needs current facts, research, or sources; only then does it fetch live results through Tavily or the managed Natively search provider, pass snippets as untrusted web data, and append source links to the answer.
+                            </p>
+                            <p className="text-[11px] text-text-secondary leading-relaxed mb-2">
+                                For meetings, enable <strong>Live Web Research</strong> in <strong>Settings → General</strong>. With Auto Answer enabled, finalized text-only interviewer questions are checked automatically; you do not need to say “search” or press a button.
+                            </p>
+                            <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
+                                Search is off by default. Explicit wording such as “search the web” always triggers it. Add a Tavily key under <strong>Profile Intelligence → Tavily Search</strong>; without a configured provider, Natively explains that live search is unavailable instead of presenting an unsourced answer as current.
+                            </p>
+                        </div>
+
                         <div className="grid gap-3">
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
                                 <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">

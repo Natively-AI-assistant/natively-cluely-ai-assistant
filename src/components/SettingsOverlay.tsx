@@ -647,6 +647,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     const [exportResult, setExportResult] = useState<string | null>(null);
     const [ambientChatEnabled, setAmbientChatEnabled] = useState(false);
     const [autoAnswerEnabled, setAutoAnswerEnabled] = useState(false);
+    const [liveWebSearchEnabled, setLiveWebSearchEnabled] = useState(false);
     const [meetingRetention, setMeetingRetention] = useState<'forever' | '7d' | '30d' | 'never'>('forever');
     const [codeVerification, setCodeVerification] = useState(false);
     const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
@@ -672,6 +673,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             window.electronAPI?.getVerboseLogging?.().then(setVerboseLogging).catch(() => { });
             window.electronAPI?.getAmbientChatEnabled?.().then(setAmbientChatEnabled).catch(() => { });
             window.electronAPI?.getAutoAnswerEnabled?.().then(setAutoAnswerEnabled).catch(() => { });
+            window.electronAPI?.getLiveWebSearchEnabled?.().then(setLiveWebSearchEnabled).catch(() => { });
             window.electronAPI?.getCodeVerification?.().then((v) => setCodeVerification(v === true)).catch(() => { });
             window.electronAPI?.getMeetingRetention?.().then(setMeetingRetention).catch(() => { });
         }
@@ -2406,6 +2408,42 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             }
                                                         }}
                                                         className={autoAnswerEnabled ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
+                                                    />
+                                                </div>
+
+                                                {/* Live Web Research */}
+                                                <div className="flex items-center justify-between px-4 py-3">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                            <Globe size={20} />
+                                                        </div>
+                                                        <div>
+                                                            <div className="flex items-center gap-2">
+                                                                <h3 className="text-sm font-bold text-text-primary">Live Web Research</h3>
+                                                                <LiquidGlassBadge variant="sky">{t('Beta')}</LiquidGlassBadge>
+                                                            </div>
+                                                            <p className="text-xs text-text-secondary mt-0.5">Searches only when an automatic answer needs current sources</p>
+                                                        </div>
+                                                    </div>
+                                                    <SettingsToggle
+                                                        checked={liveWebSearchEnabled}
+                                                        label="Live Web Research"
+                                                        onChange={async () => {
+                                                            const previous = liveWebSearchEnabled;
+                                                            const next = !previous;
+                                                            setLiveWebSearchEnabled(next);
+                                                            try {
+                                                                const result = await window.electronAPI?.setLiveWebSearchEnabled?.(next);
+                                                                if (result && !result.success) {
+                                                                    setLiveWebSearchEnabled(previous);
+                                                                    console.error('[Settings] Failed to set Live Web Research:', result.error);
+                                                                }
+                                                            } catch (err) {
+                                                                setLiveWebSearchEnabled(previous);
+                                                                console.error('[Settings] Exception setting Live Web Research:', err);
+                                                            }
+                                                        }}
+                                                        className={liveWebSearchEnabled ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
                                                     />
                                                 </div>
 

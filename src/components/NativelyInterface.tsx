@@ -16,6 +16,7 @@ import {
   Pencil,
   PointerOff,
   RefreshCw,
+  Search,
   SlidersHorizontal,
   X,
   Zap,
@@ -1276,6 +1277,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const t = useT();
   const [isExpanded, setIsExpanded] = useState(true);
   const [inputValue, setInputValue] = useState('');
+  const [webSearchEnabled, setWebSearchEnabled] = useState(() => {
+    try {
+      return localStorage.getItem('natively_web_search_enabled') === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [availableSkills, setAvailableSkills] = useState<SkillSummary[]>([]);
   const [skillPickerIndex, setSkillPickerIndex] = useState(0);
   const { shortcuts, isShortcutPressed } = useShortcuts();
@@ -8478,6 +8486,13 @@ Provide only the answer, nothing else.`;
     lastManualSubmitRef.current = { text: userText, atMs: nowMs };
 
     const currentAttachments = attachedContext;
+    // Web search is an explicit typed-chat option. Do not let the toggle turn
+    // screenshot, voice, auto-answer, or Direct Assist requests into outbound
+    // search queries without a deliberate text submission.
+    const autoWebSearch = webSearchEnabled
+      && !directAssistEnabled
+      && userText.length > 0
+      && currentAttachments.length === 0;
 
     // Clear inputs immediately
     setInputValue('');
@@ -8610,6 +8625,7 @@ Provide only the answer, nothing else.`;
         userText || 'Analyze this screenshot',
         currentAttachments.length > 0 ? currentAttachments.map((s) => s.path) : undefined,
         conversationContextForSubmit, // Pass freshly-derived context so "answer this" works
+        autoWebSearch ? { webSearch: true } : undefined,
       );
     } catch (err) {
       // R-17: release the claim taken above — see the note at the other call site.
@@ -11430,7 +11446,40 @@ Provide only the answer, nothing else.`;
                     </div>
                   </div>
 
-                  <button
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      data-testid="web-search-toggle"
+                      aria-label={directAssistEnabled
+                        ? t('Web search is unavailable while Direct Assist is enabled')
+                        : t('Automatically search the web when needed')}
+                      aria-pressed={webSearchEnabled && !directAssistEnabled}
+                      title={directAssistEnabled
+                        ? t('Web search is unavailable while Direct Assist is enabled')
+                        : webSearchEnabled
+                        ? t('Auto web search on · searches when needed')
+                        : t('Automatically search the web when needed')}
+                      disabled={directAssistEnabled}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        if (directAssistEnabled) return;
+                        setWebSearchEnabled((previous) => {
+                          const next = !previous;
+                          try { localStorage.setItem('natively_web_search_enabled', String(next)); } catch { /* best effort */ }
+                          return next;
+                        });
+                      }}
+                      className={`w-7 h-7 rounded-lg flex items-center justify-center interaction-base interaction-press ${
+                        webSearchEnabled && !directAssistEnabled
+                          ? 'overlay-icon-surface overlay-icon-surface-hover text-accent-primary'
+                          : 'overlay-icon-surface overlay-text-interactive'
+                      } ${directAssistEnabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+                      style={appearance.iconStyle}
+                    >
+                      <Search className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                    type="button"
                     onClick={handleManualSubmit}
                     disabled={!inputValue.trim()}
                     className={`
@@ -11443,9 +11492,10 @@ Provide only the answer, nothing else.`;
                                     }
                                 `}
                     style={inputValue.trim() ? undefined : appearance.iconStyle}
-                  >
+                    >
                     <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
+                    </button>
+                  </div>
                 </div>
               </div>
 

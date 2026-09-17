@@ -108,6 +108,7 @@ While other tools act as simple API wrappers, Natively is a complete, native int
 - **Auto Answer (Beta):** Answers appear on their own the moment the other person finishes a question — Natively decides whether an answer is actually wanted and stays silent when it isn't. Off by default.
 - **Modes Manager (9 Built-in Personas):** Toggle between General, Technical Interview, Looking for Work, Sales, Recruiting, Team Meet, Lecture, **Seminar** (strict file-grounded Q&A), and **Call Center** — each with its own system prompt and meeting-note template. Build your own on top.
 - **Browser Companion (Chrome):** Press ⌘/Ctrl+Y to pull the page you're looking at — a job description, a coding problem, documentation — straight into your next answer.
+- **On-Demand Web Search:** Turn on the search icon before typed questions to fetch live web results when the query needs current facts, research, or sources, then append source links to the answer. For meetings, **Live Web Research** can be enabled separately in Settings → General; it runs automatically only for finalized questions that need current sources. Both are off by default.
 - **Custom Context & Notes:** A dedicated free-form notes area to paste instructions, crib sheets, or credentials (up to 8,000 characters), automatically injected into real-time LLM prompts.
 - **Rolling Context:** We don't just transcribe; we maintain a "memory window" of the conversation for smarter answers.
 - **Local RAG Memory:** We embed your meetings locally using SQLite vector search so you can ask, "What did John say about the API last week?"
@@ -422,6 +423,7 @@ We've launched the official **$NAT token** on Printr! Holders who maintain a spe
 | Feature | What it does |
 | :------ | :----------- |
 | **Auto Answer** `Beta` | Answers appear on their own the moment the other person finishes a question. Natively judges whether an answer is actually wanted and stays silent when it isn't — no card to dismiss, no button to press. Off by default; enable in **Settings → General**. |
+| **Live Web Research** `Beta` | When enabled alongside Auto Answer, finalized text-only meeting questions are checked locally for a need for current facts, research, or sources. A short, cached lookup enriches the answer and appends verified links; slow or unavailable search never blocks the normal answer. |
 | **Browser Companion** `Chrome` | Press **⌘/Ctrl+Y** to pull the page you're looking at into your next answer — a job description, a coding problem, documentation. One click enables it everywhere. |
 | **Hindsight Long-Term Memory** `Pro` | A local vector database that indexes your past meetings, profiles and documents, so Natively recalls what was said weeks ago — not just this session. Opt-in from Settings. |
 | **Role Insight** `Pro` | Paste a job description and see every requirement pulled out, checked against your profile, and scored for coverage. |

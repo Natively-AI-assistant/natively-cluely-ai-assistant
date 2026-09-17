@@ -11,7 +11,7 @@ import {
     FollowUpQuestionsLLM, WhatToAnswerLLM,
     prepareTranscriptForWhatToAnswer, buildTemporalContext,
     AssistantResponse as LLMAssistantResponse, classifyIntent, hasQuestionSignal, planNextAssistantAction, PlannerDecision,
-    extractLatestQuestion, toCandidateFraming, planAnswer, validateAnswerStructure, isCompleteShortAnswer, detectExplicitCodingContract, detectAndExtractScaffoldMisfire, hasUnrecoveredScaffoldContamination, isScaffoldRegenerationEligible, isCodingAnswerType, isJdFactualLookupNotNegotiationAdvice, resolveFollowUp, resolveFollowUpOrClarify,
+    extractLatestQuestion, toCandidateFraming, planAnswer, validateAnswerStructure, isCompleteShortAnswer, detectExplicitCodingContract, detectAndExtractScaffoldMisfire, hasUnrecoveredScaffoldContamination, isScaffoldRegenerationEligible, isCodingAnswerType, isJdFactualLookupNotNegotiationAdvice, isStealthEvasionQuestion, resolveFollowUp, resolveFollowUpOrClarify,
     isLiveSessionMemoryEnabled, resolveLiveFollowup, toMemoryMode, toSurface, effectiveMemoryMode,
     resolveLiveSessionMemoryConfig, piTelemetry, ageBucket,
     buildContextRoute, summarizeContextRoute, shouldThrottleTrigger,
@@ -61,6 +61,14 @@ import { isIntelligenceFlagEnabled } from './intelligence/intelligenceFlags';
 import { applyAnswerContract } from './intelligence/OutputShapeNormalizer';
 import { LiveTranscriptBrain } from './intelligence/LiveTranscriptBrain';
 import { recordAttribution } from './intelligence/IntelligenceAttribution';
+import {
+    buildWebSearchContext,
+    buildWebSearchSourcesFooter,
+    decideWebSearch,
+    searchWeb,
+    type WebSearchResponse,
+    type WebSearchSource,
+} from './services/WebSearchService';
 // Type-only (fully erased at runtime, adds no require()). `getKnowledgeOrchestrator()`
 // is declared `: any`, so the orchestrator's real result type is invisible here and
 // tsc collapsed the grounding result to `{}`. The structural contract belongs to the
@@ -349,6 +357,14 @@ export class IntelligenceEngine extends EventEmitter {
     // so a new meeting/session doesn't inherit the previous one's history.
     private readonly wtaDiversityGuard = new AnswerDiversityGuard(20);
 
+    // Live Web Research is deliberately a small, opt-in enrichment layer. The
+    // search decision stays local/deterministic; these bounds keep a slow or
+    // unavailable provider from owning the meeting answer path.
+    private readonly liveWebSearchCache = new Map<string, { expiresAt: number; result: WebSearchResponse }>();
+    private readonly LIVE_WEB_SEARCH_CACHE_TTL_MS = 5 * 60 * 1000;
+    private readonly LIVE_WEB_SEARCH_CACHE_LIMIT = 16;
+    private readonly LIVE_WEB_SEARCH_BUDGET_MS = 1500;
+
     // Timestamps for tracking
     /**
      * Lazy access to the meeting-RAG retriever, injected after RAGManager exists.
@@ -446,6 +462,87 @@ export class IntelligenceEngine extends EventEmitter {
     private readonly SPECULATIVE_MIN_WORDS = 7;
     private readonly SPECULATIVE_MIN_CONFIDENCE = 0.75;
     private readonly SPECULATIVE_SIMILARITY_THRESHOLD = 0.75;
+
+    private isLiveWebSearchEnabled(): boolean {
+        try {
+            const { SettingsManager } = require('./services/SettingsManager') as typeof import('./services/SettingsManager');
+            return SettingsManager.getInstance().getLiveWebSearchEnabled() === true;
+        } catch {
+            return false;
+        }
+    }
+
+    private liveWebSearchCacheKey(query: string): string {
+        return query.trim().toLowerCase().replace(/\s+/g, ' ').slice(0, 500);
+    }
+
+    private getCachedLiveWebSearch(query: string): WebSearchResponse | null {
+        const key = this.liveWebSearchCacheKey(query);
+        const entry = this.liveWebSearchCache.get(key);
+        if (!entry) return null;
+        if (entry.expiresAt <= Date.now()) {
+            this.liveWebSearchCache.delete(key);
+            return null;
+        }
+        return {
+            ...entry.result,
+            sources: entry.result.sources.map(source => ({ ...source })),
+        };
+    }
+
+    private cacheLiveWebSearch(query: string, result: WebSearchResponse): void {
+        if (!result.ok) return;
+        const now = Date.now();
+        for (const [key, entry] of this.liveWebSearchCache) {
+            if (entry.expiresAt <= now) this.liveWebSearchCache.delete(key);
+        }
+        while (this.liveWebSearchCache.size >= this.LIVE_WEB_SEARCH_CACHE_LIMIT) {
+            const oldest = this.liveWebSearchCache.keys().next().value as string | undefined;
+            if (!oldest) break;
+            this.liveWebSearchCache.delete(oldest);
+        }
+        this.liveWebSearchCache.set(this.liveWebSearchCacheKey(query), {
+            expiresAt: now + this.LIVE_WEB_SEARCH_CACHE_TTL_MS,
+            result: {
+                ...result,
+                sources: result.sources.map(source => ({ ...source })),
+            },
+        });
+    }
+
+    /** True only for an opted-in, automatic turn that benefits from live facts. */
+    private shouldUseLiveWebSearch(question?: string): boolean {
+        const query = typeof question === 'string' ? question.trim() : '';
+        if (!query || !this.isLiveWebSearchEnabled()) return false;
+        // Do not turn a stealth/evasion request into an external lookup. This
+        // mirrors the existing answer-policy guard used by the WTA pipeline.
+        if (isStealthEvasionQuestion(query)) return false;
+        return decideWebSearch(query).shouldSearch;
+    }
+
+    private async resolveLiveWebSearch(question: string, abortSignal: AbortSignal): Promise<WebSearchResponse | null> {
+        if (!this.shouldUseLiveWebSearch(question) || abortSignal.aborted) return null;
+
+        const cached = this.getCachedLiveWebSearch(question);
+        if (cached) return cached;
+
+        const controller = new AbortController();
+        const abortFromParent = () => controller.abort();
+        abortSignal.addEventListener('abort', abortFromParent, { once: true });
+        try {
+            const { value, timedOut } = await withTimeout(
+                searchWeb(question, { abortSignal: controller.signal }),
+                this.LIVE_WEB_SEARCH_BUDGET_MS,
+                null,
+            );
+            if (timedOut || !value || !value.ok || controller.signal.aborted) return null;
+            this.cacheLiveWebSearch(question, value);
+            return value;
+        } finally {
+            controller.abort();
+            abortSignal.removeEventListener('abort', abortFromParent);
+        }
+    }
 
     // Observe-only answer-relevance telemetry (PR #427 finding, 2026-08-05):
     // when `answerRelevanceGuardLive` is OFF (the default), the NLI verdict is
@@ -760,6 +857,10 @@ export class IntelligenceEngine extends EventEmitter {
             // Don't overwrite a speculative stream that is already in flight.
             if (this.speculativeText !== null) return;
             if (Date.now() - this.lastTriggerTime < this.triggerCooldown) return;
+            // A live-research turn must use the finalized question and fresh
+            // sources. Do not spend a speculative generation that the committed
+            // automatic trigger would be unable to reuse safely.
+            if (this.shouldUseLiveWebSearch(text)) return;
             console.log(`[IntelligenceEngine] Speculative inference fired on interim`, { length: text.length, confidence });
             this.speculativeQuestionId = this.currentAutoCandidateId;
             this.runWhatShouldISay(text, confidence || 0.8, undefined, { speculative: true })
@@ -1001,8 +1102,21 @@ export class IntelligenceEngine extends EventEmitter {
             return;
         }
 
+        const liveWebSearchNeeded = trigger.automatic === true
+            && this.shouldUseLiveWebSearch(trigger.lastQuestion);
+        if (liveWebSearchNeeded) {
+            // A draft without live evidence must never be revealed for a query
+            // whose committed answer will use the web. The next WTA run aborts
+            // any in-flight draft as part of its normal generation supersession.
+            this.speculativeText = null;
+            this.speculativeTextExpiry = Infinity;
+            this.speculativeQuestionId = null;
+            this.speculativeAnswer = null;
+            this.speculativeAdoptedGenerationId = null;
+        }
+
         // If a speculative stream answered (or is answering) this question, reuse it.
-        if (this.speculativeText !== null) {
+        if (this.speculativeText !== null && !liveWebSearchNeeded) {
             const expired = Date.now() > this.speculativeTextExpiry;
             const stale = expired || !trigger.lastQuestion; // empty question — reject conservatively
             if (!stale) {
@@ -1129,6 +1243,9 @@ export class IntelligenceEngine extends EventEmitter {
         if (Date.now() - this.lastTriggerTime < this.triggerCooldown) return;
         const trimmed = (text ?? '').trim();
         if (trimmed.length < 12) return;
+        // Prefetches intentionally stay text-only. The finalized automatic
+        // trigger below owns the bounded web lookup and the source footer.
+        if (this.shouldUseLiveWebSearch(trimmed)) return;
         this.currentAutoCandidateId = questionId;
         this.speculativeQuestionId = questionId;
         console.log(`[IntelligenceEngine] Auto Answer prefetch fired while the judge decides`, { questionId, length: trimmed.length });
@@ -1530,8 +1647,13 @@ export class IntelligenceEngine extends EventEmitter {
         // recorded, no leak.
         const wtaTrace = beginTrace(typeof question === 'string' ? question : '');
         const isSpeculative = options?.speculative === true;
+        const automaticRun = this.nextRunIsAutomatic === true;
         const skipCooldown = options?.skipCooldown === true;
         const forceFresh = options?.forceFresh === true;
+        let liveWebSearchPromise: Promise<WebSearchResponse | null> | null = null;
+        let liveWebSearchContext = '';
+        let liveWebSearchSources: WebSearchSource[] = [];
+        let liveWebSearchUsed = false;
 
         // Manual user action (button press / hotkey) MUST start from a clean
         // speculativeText slate. The previous answer arriving on a manual press
@@ -2214,6 +2336,31 @@ export class IntelligenceEngine extends EventEmitter {
                 isFollowUp: extractedQuestion.isFollowUp,
                 confidence: extractedQuestion.confidence,
             });
+
+            // Start the lookup as soon as the finalized interviewer question is
+            // known so it overlaps the remaining local planning work. Only an
+            // automatic, text-only turn can reach this branch; screen/DOM turns
+            // remain on their existing evidence path.
+            const liveWebSearchQuestion = question || extractedQuestion.latestQuestion || lastInterviewerTurn || '';
+            if (
+                automaticRun
+                && !isSpeculative
+                && !hasImages
+                && !options?.screenContext
+                && !options?.domContext
+                && this.shouldUseLiveWebSearch(liveWebSearchQuestion)
+            ) {
+                const decision = decideWebSearch(liveWebSearchQuestion);
+                trace.mark('context_build_started', {
+                    webSearch: true,
+                    reason: decision.reason,
+                    signals: decision.signals,
+                });
+                liveWebSearchPromise = this.resolveLiveWebSearch(
+                    liveWebSearchQuestion,
+                    whatToAnswerCancellationToken.signal,
+                );
+            }
 
             // QUESTION LEDGER SHADOW parity (WTA audit Phase 2): compare the
             // ledger's top-ranked active ask against the RESOLVED question the
@@ -2984,6 +3131,32 @@ export class IntelligenceEngine extends EventEmitter {
                 availability: snapshotSourceAvailability,
             });
             const answerPlan = canonicalTurn.answerPlan;
+
+            if (liveWebSearchPromise) {
+                const liveWebSearchResult = await liveWebSearchPromise;
+                if (isWtaSuperseded()) {
+                    recordWtaCancellation();
+                    return null;
+                }
+                if (liveWebSearchResult?.ok) {
+                    liveWebSearchUsed = true;
+                    liveWebSearchSources = liveWebSearchResult.sources;
+                    liveWebSearchContext = buildWebSearchContext(liveWebSearchResult);
+                    trace.mark('context_build_completed', {
+                        webSearch: true,
+                        provider: liveWebSearchResult.provider ?? 'unknown',
+                        sourceCount: liveWebSearchSources.length,
+                    });
+                } else {
+                    // Search is enrichment only. The meeting answer continues
+                    // with its normal transcript/profile context if the provider
+                    // is unavailable or misses the small wall-clock budget.
+                    trace.mark('degraded_context', {
+                        webSearch: true,
+                        reason: 'unavailable_or_timeout',
+                    });
+                }
+            }
             // TWO-PLANS DIVERGENCE TELEMETRY (WTA audit F14 residual,
             // observe-only, 2026-08-18): `_wtaPlan` (evidence/source gates,
             // hardcoded source:'what_to_answer') and `canonicalTurn.answerPlan`
@@ -3544,7 +3717,11 @@ export class IntelligenceEngine extends EventEmitter {
             // PORT, so grounded turns carry real evidence instead of composing a
             // no-evidence disclosure. The port is the shared fail-closed factory
             // — the same one the manual-chat handler uses.
-            const wtaV3Prompt = await (async () => {
+            // V3 currently owns the complete user prompt when enabled. Keep the
+            // web-enriched legacy assembly for this turn so external evidence is
+            // actually delivered instead of being silently replaced by V3's
+            // independently composed prompt.
+            const wtaV3Prompt = liveWebSearchUsed ? undefined : await (async () => {
                 try {
                     const { buildV3Prompt } = require('./context-intelligence/orchestration/engine-bridge');
                     // The screen-understanding result (hotkey pre-pass) composed into
@@ -3915,7 +4092,7 @@ export class IntelligenceEngine extends EventEmitter {
             // session transcript and usage, and fed to the NEXT turn as
             // prior_assistant_responses evidence.
             const wtaTruncation = { truncated: false };
-            const stream = this.whatToAnswerLLM.generateStream(preparedTranscript, temporalContext, intentResult, imagePaths, screenContext, options?.promptInstruction, options?.activeSkill, options?.domContext, candidateProfile || undefined, answerPlan, modeContextPromise, requestSnapshot, whatToAnswerCancellationToken.signal, wtaTruncation);
+            const stream = this.whatToAnswerLLM.generateStream(preparedTranscript, temporalContext, intentResult, imagePaths, screenContext, options?.promptInstruction, options?.activeSkill, options?.domContext, candidateProfile || undefined, answerPlan, modeContextPromise, requestSnapshot, whatToAnswerCancellationToken.signal, wtaTruncation, liveWebSearchContext || undefined);
             let streamAborted = false;
             let emittedStreamingToken = false;
             let streamingTokenBuffer = '';
@@ -6175,6 +6352,15 @@ export class IntelligenceEngine extends EventEmitter {
                     }
                 }
             } catch { /* normalizer never blocks the answer */ }
+
+            if (liveWebSearchUsed && !isSpeculative) {
+                const sourceFooter = buildWebSearchSourcesFooter(liveWebSearchSources);
+                const appendSources = (answer: string): string => answer.trim()
+                    ? `${answer.trimEnd()}\n\n${sourceFooter}`
+                    : sourceFooter;
+                finalWtaAnswer = appendSources(finalWtaAnswer);
+                fullAnswer = appendSources(fullAnswer);
+            }
 
             this.session.addAssistantMessage(finalWtaAnswer, wtaWriteDecision, 'what_to_answer');
 

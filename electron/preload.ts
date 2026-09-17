@@ -754,7 +754,7 @@ interface ElectronAPI {
     message: string,
     imagePaths?: string[],
     context?: string,
-    options?: { skipSystemPrompt?: boolean; ignoreKnowledgeMode?: boolean },
+    options?: { skipSystemPrompt?: boolean; ignoreKnowledgeMode?: boolean; webSearch?: boolean },
   ) => Promise<void>;
   onGeminiStreamToken: (callback: (token: string, meta?: { streamId?: number }) => void) => () => void;
   onGeminiStreamDone: (callback: (data?: { finalText?: string; streamId?: number }) => void) => () => void;
@@ -1016,6 +1016,8 @@ interface ElectronAPI {
   setAmbientChatEnabled: (enabled: boolean) => Promise<{ success: boolean }>;
   getAutoAnswerEnabled: () => Promise<boolean>;
   setAutoAnswerEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
+  getLiveWebSearchEnabled: () => Promise<boolean>;
+  setLiveWebSearchEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
   getDirectAssistEnabled: () => Promise<boolean>;
   setDirectAssistEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
   onDirectAssistEnabledChanged: (callback: (enabled: boolean) => void) => () => void;
@@ -2266,7 +2268,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     message: string,
     imagePaths?: string[],
     context?: string,
-    options?: { skipSystemPrompt?: boolean; ignoreKnowledgeMode?: boolean },
+    options?: { skipSystemPrompt?: boolean; ignoreKnowledgeMode?: boolean; webSearch?: boolean },
   ) => ipcRenderer.invoke('gemini-chat-stream', message, imagePaths, context, options),
 
   onGeminiStreamToken: (callback: (token: string, meta?: { streamId?: number }) => void) => {
@@ -2828,6 +2830,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setAmbientChatEnabled: (enabled: boolean) => ipcRenderer.invoke('set-ambient-chat-enabled', enabled),
   getAutoAnswerEnabled: () => ipcRenderer.invoke('get-auto-answer-enabled'),
   setAutoAnswerEnabled: (enabled: boolean) => ipcRenderer.invoke('set-auto-answer-enabled', enabled),
+  getLiveWebSearchEnabled: () => ipcRenderer.invoke('get-live-web-search-enabled'),
+  setLiveWebSearchEnabled: (enabled: boolean) => ipcRenderer.invoke('set-live-web-search-enabled', enabled),
   getDirectAssistEnabled: () => ipcRenderer.invoke('get-direct-assist-enabled'),
   setDirectAssistEnabled: (enabled: boolean) => ipcRenderer.invoke('set-direct-assist-enabled', enabled),
   onDirectAssistEnabledChanged: (callback: (enabled: boolean) => void) => {

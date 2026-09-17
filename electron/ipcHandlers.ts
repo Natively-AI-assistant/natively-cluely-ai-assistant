@@ -20,6 +20,13 @@ import { formatEnvelopeForPrompt } from './services/browser-context/formatEnvelo
 import { BrowserMetadataClassifierService } from './services/browser-context/BrowserMetadataClassifierService';
 import type { BrowserContextCategory, SafeWebsiteMetadata } from './services/browser-context/types';
 import { SettingsManager } from './services/SettingsManager';
+import {
+  buildWebSearchContext,
+  buildWebSearchSourcesFooter,
+  decideWebSearch,
+  searchWeb,
+  type WebSearchSource,
+} from './services/WebSearchService';
 import { RERANK_CANDIDATE_POOL, resolveRerankPoolSize } from './services/modes/rerankPool';
 import { buildRerankProbe } from './services/reranking/rerankProbe';
 import { ProviderStatusRegistry } from './services/ProviderStatusRegistry';
@@ -1237,10 +1244,14 @@ export function initializeIpcHandlers(appState: AppState): void {
       message: string,
       imagePaths?: string[],
       context?: string,
-      options?: { skipSystemPrompt?: boolean; ignoreKnowledgeMode?: boolean },
+      options?: { skipSystemPrompt?: boolean; ignoreKnowledgeMode?: boolean; webSearch?: boolean },
     ): Promise<null> => {
       let myController: AbortController | null = null;
       let _manualFgToken: string | null = null;
+      const webSearchEnabled = options?.webSearch === true;
+      let webSearchRequested = false;
+      let webSearchSources: WebSearchSource[] = [];
+      let webSearchContext = '';
       // Intelligence OS observe-only trace (Phase 1). Hoisted so the catch can record
       // an error + commit. Assigned to the real trace right after planAnswer; until
       // then it's the shared zero-cost NO-OP, so this is free when the flag is off.
@@ -1336,6 +1347,54 @@ export function initializeIpcHandlers(appState: AppState): void {
           }
         }
 
+        // Automatic web-search mode is deliberately owned by the main process:
+        // API keys never cross the preload boundary, and returned page text is
+        // normalized/marked untrusted before it enters the prompt. The local
+        // decision is made before any network call, so an enabled toggle does
+        // not search static questions on every turn.
+        if (webSearchEnabled) {
+          const webQuery = skillStrippedMessage ?? message;
+          // Safety/evasion requests must stay on the existing local policy path;
+          // an external search should never become a side channel for a query
+          // the assistant would otherwise decline.
+          const decision = isStealthEvasionQuestion(webQuery)
+            ? { shouldSearch: false, reason: 'none' as const, signals: [] }
+            : decideWebSearch(webQuery);
+          webSearchRequested = decision.shouldSearch;
+          if (webSearchRequested) {
+            console.log('[WebSearch] automatic search triggered', {
+              streamId: myStreamId,
+              reason: decision.reason,
+              signals: decision.signals,
+            });
+          }
+        }
+        if (webSearchRequested) {
+          const webResult = await searchWeb(skillStrippedMessage ?? message);
+          if (!webResult.ok) {
+            event.sender.send(
+              'gemini-stream-error',
+              webResult.error ?? 'Live web search failed. Try again in a moment.',
+              { streamId: myStreamId },
+            );
+            return null;
+          }
+          webSearchSources = webResult.sources;
+          webSearchContext = buildWebSearchContext(webResult);
+          // A newer request or an explicit stop may have arrived while the
+          // external search was in flight. Do not let the old request continue
+          // into model generation or emit a footer into the new stream.
+          if (myController.signal.aborted
+            || _chatStreamsBySender.get(senderId)?.streamId !== myStreamId) {
+            return null;
+          }
+          console.log('[WebSearch] completed', {
+            streamId: myStreamId,
+            provider: webResult.provider,
+            sourceCount: webSearchSources.length,
+          });
+        }
+
         // ── CONTEXT INTELLIGENCE V3 — wired manual-chat surface ──────────────
         //
         // Deliberately a SHORT-CIRCUIT, not an interleave. The legacy assembly
@@ -1359,7 +1418,8 @@ export function initializeIpcHandlers(appState: AppState): void {
           // evidence plus the CURRENT meeting — a wrong-scope answer that
           // looked grounded. Those turns stay on the legacy transport until a
           // dedicated V3 surface owns them.
-          const callerOwnsPrompt = options?.skipSystemPrompt === true && Boolean(context);
+          const callerOwnsPrompt = (options?.skipSystemPrompt === true && Boolean(context))
+            || webSearchRequested;
           if (!callerOwnsPrompt && isContextIntelligenceV3Enabled()) {
             const { buildV3Prompt } = require('./context-intelligence/orchestration/engine-bridge');
             const { resolveModePolicy, isModeId, resolveModeIdOrWarn } = require('./context-intelligence/policies/mode-policy-registry');
@@ -3810,6 +3870,13 @@ export function initializeIpcHandlers(appState: AppState): void {
           }
         }
 
+        // Web results are external data, not instructions. Add them after the
+        // answer/source contracts have been assembled so later contract branches
+        // cannot accidentally overwrite the user's explicit search evidence.
+        if (webSearchContext) {
+          context = context ? `${webSearchContext}\n\n${context}` : webSearchContext;
+        }
+
         // Prepend active-skill instructions so the model follows them for this
         // turn only. Done after all other context assembly so skill instructions
         // are the first thing the model sees in the user context block.
@@ -5826,6 +5893,24 @@ export function initializeIpcHandlers(appState: AppState): void {
               const tail = stripCannedTail(finalText ?? fullResponse);
               if (tail.stripped) { finalText = tail.text; console.log('[ManualChat] canned tail stripped'); }
             } catch { /* never block done */ }
+
+            // Source links are appended from normalized provider output rather
+            // than trusting the model to reproduce citations. For ordinary text
+            // streams this arrives as one final token; coding streams use the
+            // authoritative finalText path so the footer cannot be swallowed by
+            // the code-fence stripper.
+            if (webSearchRequested) {
+              const footer = buildWebSearchSourcesFooter(webSearchSources);
+              const suffix = `\n\n${footer}`;
+              fullResponse = `${fullResponse.trimEnd()}${suffix}`;
+              if (finalText) {
+                finalText = `${finalText.trimEnd()}${suffix}`;
+              } else if (isCodingChat) {
+                finalText = fullResponse;
+              } else {
+                sendChunk(suffix);
+              }
+            }
             // finalText is set ONLY when repair changed the streamed answer — the
             // renderer replaces the streamed row in place (no double-render). When
             // the streamed answer was already valid, finalText is undefined and the
@@ -6462,6 +6547,21 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('set-auto-answer-enabled', async (_, enabled: boolean) => {
     const persisted = appState.setAutoAnswerEnabled(Boolean(enabled));
+    return persisted
+      ? { success: true }
+      : { success: false, error: 'Settings store is unavailable; the change was not saved.' };
+  });
+
+  // Live web research is a separate opt-in from Auto Answer. When enabled,
+  // IntelligenceEngine applies the local search-need policy only to finalized
+  // automatic interviewer questions; ordinary/manual answers remain unchanged.
+  safeHandle('get-live-web-search-enabled', async () => {
+    return SettingsManager.getInstance().getLiveWebSearchEnabled();
+  });
+
+  safeHandle('set-live-web-search-enabled', async (_, enabled: unknown) => {
+    if (typeof enabled !== 'boolean') return { success: false, error: 'invalid_type' };
+    const persisted = SettingsManager.getInstance().set('liveWebSearchEnabled', enabled);
     return persisted
       ? { success: true }
       : { success: false, error: 'Settings store is unavailable; the change was not saved.' };

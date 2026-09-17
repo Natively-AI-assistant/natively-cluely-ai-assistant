@@ -33,6 +33,11 @@ export interface AppSettings {
     // produced only by the What-to-Answer hotkey, exactly as before. The
     // trigger itself lives in AppState.scheduleAutoAnswer().
     autoAnswerEnabled?: boolean;
+    // Live web research for automatic interviewer answers. Off by default: when
+    // enabled, the answer pipeline may search only when its local query policy
+    // identifies a freshness/research/source request. Typed-chat search has its
+    // separate renderer toggle.
+    liveWebSearchEnabled?: boolean;
     // Direct Assist is the opt-in, single-provider answer path. It deliberately
     // bypasses meeting retrieval and the legacy answer-orchestration pipeline.
     // Keep the persisted default OFF during rollout; the operator kill switch
@@ -428,6 +433,11 @@ export class SettingsManager {
     public getDirectAssistEnabled(): boolean {
         if (this.isDirectAssistKilledByOperator()) return false;
         return this.settings.directAssistEnabled === true;
+    }
+
+    /** Effective live web research state for automatic meeting answers. */
+    public getLiveWebSearchEnabled(): boolean {
+        return this.settings.liveWebSearchEnabled === true;
     }
 
     // ── Smart Browser Context v2 — resolved settings (single default source) ──

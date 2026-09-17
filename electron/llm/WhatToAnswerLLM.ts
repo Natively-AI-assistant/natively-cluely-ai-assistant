@@ -206,6 +206,8 @@ export class WhatToAnswerLLM {
         // Owned by the caller rather than stored on the instance because
         // WhatToAnswerLLM is a long-lived singleton and turns can overlap.
         truncationSink?: { truncated: boolean },
+        /** Bounded external-web evidence for an opted-in automatic live turn. */
+        webSearchContext?: string,
     ): AsyncGenerator<string> {
         const MEASURE = process.env.MEASURE_LATENCY === 'true';
         let tStart = 0, tIntent = 0, tTemporal = 0, tMode = 0, tTrunc = 0, tPrompt = 0, tStreamStart = 0;
@@ -756,6 +758,7 @@ The user triggered this action with a coding problem on screen and NO new questi
                 + estimateTokens(effectiveCandidateProfile || '')
                 + screenTokenEstimate
                 + domTokenEstimate
+                + estimateTokens(webSearchContext || '')
                 + estimateTokens((temporalContext?.previousResponses || []).join('\n'));
             const reservedForFit =
                 (this.llmHelper.getCapabilities().outputBudgetTokens || 2000)
@@ -899,6 +902,7 @@ The user triggered this action with a coding problem on screen and NO new questi
                 modeTemplateType: 'active',
                 screenContext,
                 domContext: processedDomContext,
+                webSearchContext: webSearchContext || undefined,
                 // Prior responses are WITHHELD on a promoted blind screen turn:
                 // there is no question text they could disambiguate, and their
                 // only measured effect was pulling the model into agreeing with

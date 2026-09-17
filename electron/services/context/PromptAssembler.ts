@@ -211,6 +211,8 @@ export class PromptAssembler {
         modeId?: string;
         screenContext?: ScreenContext;
         domContext?: string;
+        /** Bounded external-search evidence. Always treated as untrusted data. */
+        webSearchContext?: string;
         modeContext?: ModeContextSource;
         customContext?: string;
         meetingHistory?: string[];
@@ -301,6 +303,11 @@ export class PromptAssembler {
         // 4. DOM CONTEXT - untrusted page evidence
         if (params.domContext) {
             this.addBlock(packet, this.buildDomContextBlock(params.domContext));
+        }
+
+        // 4b. WEB SEARCH — external evidence, never instructions
+        if (params.webSearchContext?.trim()) {
+            this.addBlock(packet, this.buildWebSearchBlock(params.webSearchContext));
         }
 
         // 5. TRANSCRIPT — untrusted conversation
@@ -445,7 +452,7 @@ ${JSON.stringify({ content: this.escapePromptInjection(pinned) })}
     private escapePromptInjection(
         text: string,
         forceRedactOnInjection = false,
-        blockType: 'dom_context' | 'reference_file' | 'transcript' | 'screen_context' = 'reference_file'
+        blockType: 'dom_context' | 'reference_file' | 'transcript' | 'screen_context' | 'web_search' = 'reference_file'
     ): string {
         if (!text) return '';
 
@@ -683,6 +690,30 @@ ${sanitizedContent}
                 text: evidenceText,
                 chunkId: 'dom_capture',
             }],
+        };
+    }
+
+    /**
+     * Search snippets are third-party content. Keep them below live transcript
+     * and run the same full-block injection defense used for browser evidence.
+     * Source links are rendered by the application after generation, so the
+     * model never needs to invent or trust citation markdown.
+     */
+    private buildWebSearchBlock(webSearchContext: string): ContextBlock {
+        const bounded = webSearchContext.trim().slice(0, 12_000);
+        const sanitized = this.escapePromptInjection(
+            this.escapeUserContent(bounded),
+            true,
+            'web_search',
+        );
+        return {
+            type: 'web_search_context',
+            trustLevel: TrustLevel.UNTRUSTED_REFERENCE,
+            source: 'external_web',
+            tokenBudget: 1_200,
+            content: `<web_search_context trust_level="untrusted" source="external_web">
+${sanitized}
+</web_search_context>`,
         };
     }
 
