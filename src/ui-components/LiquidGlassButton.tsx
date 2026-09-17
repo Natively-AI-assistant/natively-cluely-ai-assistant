@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import './LiquidGlassButton.css';
 
-export type LiquidGlassVariant = 'neutral' | 'green' | 'action' | 'sky';
+export type LiquidGlassVariant = 'neutral' | 'green' | 'action' | 'sky' | 'clear';
 
 export interface LiquidGlassButtonProps
     extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -9,6 +9,13 @@ export interface LiquidGlassButtonProps
      * Which material tint to use. Each variant carries its own rim and lens
      * alphas. `action` reads the host app's own action tokens and has a derived
      * light-mode treatment; add `className="lg-sm"` for UI rather than hero scale.
+     *
+     * `clear` is the odd one out: it has no body of its own, so the host's
+     * surface shows through and the rim is the only thing the material adds.
+     * It is therefore the only variant that does NOT pin a label colour — it
+     * takes `color: inherit` instead (a `<button>`'s UA default is
+     * `buttontext`, not an inherited value), which is what lets one class
+     * serve both themes. Give it a fixed colour and it stops doing that.
      */
     variant?: LiquidGlassVariant;
     /** Optional leading icon. Size it yourself — see design.md on aspect-locked SVGs. */

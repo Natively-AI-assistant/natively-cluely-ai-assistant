@@ -173,7 +173,6 @@ export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onSta
         position:'fixed', inset:0, zIndex:9999,
         display:'flex', alignItems:'center', justifyContent:'center',
         background:'radial-gradient(ellipse 80% 70% at 50% 50%,rgba(139,92,246,.07) 0%,rgba(0,0,0,.9) 100%)',
-        backdropFilter:'blur(12px)', WebkitBackdropFilter:'blur(12px)',
         fontFamily: F,
       } as React.CSSProperties}>
 

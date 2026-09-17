@@ -203,7 +203,6 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
             position: 'fixed', inset: 0, zIndex: 9998,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             background: colors.overlayBg,
-            backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
           }}
           onClick={e => { if (e.target === e.currentTarget) handleDismiss(); }}
         >

@@ -109,7 +109,6 @@ export const TrialPromoToaster: React.FC<Props> = ({
           background: isLight 
             ? 'radial-gradient(ellipse 80% 70% at 50% 50%, rgba(139,92,246,0.04) 0%, rgba(0,0,0,0.3) 100%)'
             : 'radial-gradient(ellipse 80% 70% at 50% 50%, rgba(139,92,246,0.08) 0%, rgba(0,0,0,0.84) 100%)',
-          backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
         } as React.CSSProperties}
         onClick={e => { if (e.target === e.currentTarget) handleDismiss(); }}
       >

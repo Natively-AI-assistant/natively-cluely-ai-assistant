@@ -144,7 +144,6 @@ export const BrowserExtensionToaster: React.FC<Props> = ({ isOpen, onDismiss, on
           position: 'fixed', inset: 0, zIndex: 9998,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           background: isLight ? 'rgba(0,0,0,0.28)' : 'rgba(0,0,0,0.82)',
-          backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
         } as React.CSSProperties}
         onClick={e => { if (e.target === e.currentTarget) handlePermanentDismiss(); }}
       >
