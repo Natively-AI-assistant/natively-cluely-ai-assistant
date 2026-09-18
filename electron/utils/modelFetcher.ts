@@ -10,7 +10,7 @@ export interface ProviderModel {
     label: string;
 }
 
-type Provider = 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim';
+type Provider = 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion';
 
 /**
  * Fetch available models from a provider's API.
@@ -33,9 +33,91 @@ export async function fetchProviderModels(
             return fetchDeepSeekModels(apiKey);
         case 'nvidia_nim':
             return fetchNvidiaNimModels(apiKey);
+        case 'openrouter':
+            return fetchOpenRouterModels(apiKey);
+        case 'fluxion':
+            return fetchFluxionModels(apiKey);
         default:
             throw new Error(`Unknown provider: ${provider}`);
     }
+}
+
+/**
+ * OpenRouter's catalogue — the authoritative list for an account, and the reason
+ * OpenRouter is an opt-in provider (isOptInModelProvider in modelUtils.ts): the
+ * endpoint answered with 444 models on 2026-09-17.
+ *
+ * Unauthenticated on OpenRouter's side — GET /models is public — but the key is
+ * still sent, because this is reached from "Refresh" on a card whose key the
+ * user just saved and an eventual per-account catalogue should Just Work.
+ *
+ * `:batch` ids are dropped. They are not distinct models: every one is a
+ * duplicate of the base id exposed on OpenRouter's asynchronous batch endpoint
+ * (`anthropic/claude-sonnet-5:batch` carries the same description as
+ * `anthropic/claude-sonnet-5`), and Natively only ever issues streaming or
+ * blocking chat calls. Keeping them would have put 74 look-alike rows in the
+ * picker, each one a way to pick a model that cannot answer this app.
+ * `:free` variants are NOT dropped — those are real, callable routes.
+ *
+ * The label is OpenRouter's own `name` ("Anthropic: Claude Sonnet 5"), not the
+ * raw id: unlike NVIDIA's catalogue this one ships display names, and a
+ * vendor-prefixed name is what makes a 400-row list scannable.
+ */
+async function fetchOpenRouterModels(apiKey: string): Promise<ProviderModel[]> {
+    const response = await axios.get('https://openrouter.ai/api/v1/models', {
+        headers: { Authorization: `Bearer ${apiKey}` }, timeout: 15000,
+    });
+    return (response.data?.data || [])
+        .filter((m: any) => m?.id && !String(m.id).endsWith(':batch'))
+        // `openrouter/` is Natively's own routing prefix and is NOT optional:
+        // OpenRouter ids are vendor-namespaced (`openai/gpt-oss-120b`), which
+        // collides head-on with Groq's catalogue and with providerFamily()'s
+        // `includes('openai')` catch-all in ipcHandlers.ts. Without the prefix
+        // an OpenRouter model would be billed to the wrong provider's key.
+        .map((m: any) => ({ id: `openrouter/${m.id}`, label: m.name || m.id }))
+        .sort((a: ProviderModel, b: ProviderModel) => a.label.localeCompare(b.label));
+}
+
+/**
+ * Fluxion AI's catalogue. GET /v1/models is UNDOCUMENTED — the published docs
+ * tell users to copy model names out of the console's Model Marketplace by hand
+ * — but it exists and is group-scoped, which is what makes it the right source:
+ * it returns the models THIS key can actually reach, so the picker cannot offer
+ * one that answers `model_not_found`.
+ *
+ * Group scoping CONFIRMED live 2026-09-18: a Claude-group key saw exactly its
+ * own 11 models out of the 36 in the public catalogue, and requesting `gpt-5.5`
+ * on that key returned HTTP 404 `model_not_found`. That is also why Fluxion is
+ * not an opt-in provider — a fetched catalogue contains no unreachable rows.
+ *
+ * Non-chat ids are dropped. Fluxion's image models answer on
+ * /v1/images/generations, NOT chat/completions (its Help Center §5 says so
+ * explicitly and warns that channel monitoring only probes text endpoints), so
+ * leaving them in would put rows in the picker that cannot answer this app.
+ * `codex-auto-review` is an internal review route, not a chat model.
+ *
+ * The `fluxion/` prefix is NOT optional and NOT cosmetic. Fluxion resells the
+ * real vendors, so its ids are byte-identical to Natively's own defaults —
+ * `claude-sonnet-4-6` and `gpt-5.4` are literally this app's fallback-ladder
+ * entries. Unprefixed, providerFamily() would classify a Fluxion model as
+ * Anthropic/OpenAI/Gemini and the request would be billed to the user's own
+ * key for that vendor, succeed, and look completely normal.
+ */
+const FLUXION_NON_CHAT_MODEL_IDS = new Set([
+    'gpt-image-2',
+    'nano-banana-2',
+    'grok-imagine',
+    'codex-auto-review',
+]);
+
+async function fetchFluxionModels(apiKey: string): Promise<ProviderModel[]> {
+    const response = await axios.get('https://fluxionai.world/v1/models', {
+        headers: { Authorization: `Bearer ${apiKey}` }, timeout: 15000,
+    });
+    return (response.data?.data || [])
+        .filter((m: any) => m?.id && !FLUXION_NON_CHAT_MODEL_IDS.has(String(m.id)))
+        .map((m: any) => ({ id: `fluxion/${m.id}`, label: String(m.id) }))
+        .sort((a: ProviderModel, b: ProviderModel) => a.label.localeCompare(b.label));
 }
 
 async function fetchNvidiaNimModels(apiKey: string): Promise<ProviderModel[]> {

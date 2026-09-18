@@ -114,5 +114,13 @@ export function createProviderRateLimiters() {
         deepseek: new RateLimiter(120, 2.0),  // OpenAI-compatible — conservative default
         litellm: new RateLimiter(120, 2.0),   // OpenAI-compatible proxy — conservative default
         nvidia_nim: new RateLimiter(120, 2.0),
+        // OpenRouter fronts other vendors and enforces its own per-key ceiling,
+        // so this mirrors the NVIDIA budget rather than any single upstream's.
+        openrouter: new RateLimiter(120, 2.0),
+        // Fluxion publishes no rate limits at all (no documented ceiling, and
+        // its own terms reserve the right to throttle per group/channel), so
+        // this is the same conservative gateway default rather than a
+        // documented figure.
+        fluxion: new RateLimiter(120, 2.0),
     };
 }

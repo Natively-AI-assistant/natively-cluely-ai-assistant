@@ -131,6 +131,47 @@ test('mode detector uses calendar title as a signal', () => {
   assert.equal(r.templateType, 'team-meet');
 });
 
+// 2026-09-17: Seminar and Call Center shipped as built-ins but the detector only
+// knew seven templates, and routed the word "seminar" to Lecture. A thesis talk
+// scored Lecture at exactly the 0.5 the Meeting Details banner shows at, so a
+// Seminar meeting offered "Regenerate notes as Lecture"; a support call scored
+// Team Meet on "ticket".
+test('mode detector flags a thesis seminar as seminar, not lecture', () => {
+  const t = [
+    seg('me', 'Welcome everyone to this seminar. Today I am presenting my thesis research.', 0),
+    seg('me', 'This seminar covers my MSc thesis on urban pollinator corridors.', 1000),
+    seg('them', 'Thanks for the talk. How many sites did you survey?', 2000),
+    seg('me', 'Fourteen sites. My thesis compared corridor sites and controls. One limitation is we did not measure yield.', 3000),
+    seg('them', 'What would the next phase of the research look like?', 4000),
+    seg('me', 'Future work is extending the study. Thank you for attending the seminar.', 5000),
+  ];
+  const r = new MeetingModeDetector().detect({ transcript: t, calendarTitle: 'Thesis seminar: pollinator corridors' });
+  assert.equal(r.templateType, 'seminar');
+  assert.ok(r.confidence >= 0.5, `confidence ${r.confidence}`);
+});
+
+test('mode detector flags a customer support call as call-center, not team-meet', () => {
+  const t = [
+    seg('me', 'Thank you for calling Acme support, how can I help?', 0),
+    seg('them', 'My router keeps dropping wifi, I need help with my account.', 1000),
+    seg('me', 'Let me open a ticket. Can you read me your serial number?', 2000),
+    seg('them', 'It is XR-9 4471. Can I get a refund?', 3000),
+    seg('me', 'I will escalate to Tier 2 support, they will call you back.', 4000),
+  ];
+  const r = new MeetingModeDetector().detect({ transcript: t, calendarTitle: 'Customer support call' });
+  assert.equal(r.templateType, 'call-center');
+  assert.ok(r.confidence >= 0.5, `confidence ${r.confidence}`);
+});
+
+test('mode detector still flags a classroom lecture as lecture', () => {
+  const t = [
+    seg('them', 'Today we\'ll cover chapter four. This lecture is on the fundamental theorem of calculus.', 0),
+    seg('them', 'Write down this definition and the formula, it will be on the exam.', 1000),
+  ];
+  const r = new MeetingModeDetector().detect({ transcript: t, calendarTitle: 'MATH 101 lecture' });
+  assert.equal(r.templateType, 'lecture');
+});
+
 // ── Speaker labels ───────────────────────────────────────────────────────────
 
 test('speaker labels: canonical ids + rename resolution', () => {

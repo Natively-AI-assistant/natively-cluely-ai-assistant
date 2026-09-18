@@ -350,6 +350,19 @@ export function initializeIpcHandlers(appState: AppState): void {
         if (modelId.startsWith('codex-cli')) return 'codex-cli';
         if (modelId.startsWith('litellm/')) return 'litellm';
         if (modelId.startsWith('nvidia_nim/')) return 'nvidia_nim';
+        // MUST stay above the groq/openai checks below. OpenRouter ids are
+        // vendor-namespaced, so `openrouter/openai/gpt-oss-120b` is BOTH a
+        // known Groq id and an `includes('openai')` match — classified late it
+        // would be gated by, and billed to, the wrong provider's key.
+        if (modelId.startsWith('openrouter/')) return 'openrouter';
+        // MUST stay above EVERY vendor check below, for a sharper version of the
+        // same reason: Fluxion is a reseller, so its catalogue ids are not merely
+        // look-alikes but the vendors' OWN ids. `fluxion/claude-sonnet-4-6` and
+        // `fluxion/gpt-5.4` strip to this app's literal fallback-ladder defaults.
+        // Classified late, a Fluxion model is gated by — and billed to — the
+        // user's real Anthropic/OpenAI/Gemini key, and nothing about the request
+        // or the answer looks wrong.
+        if (modelId.startsWith('fluxion/')) return 'fluxion';
         if (modelId.startsWith('ollama-')) return 'ollama';
         if (modelId.startsWith('gemini-') || modelId.startsWith('models/')) return 'gemini';
         if (isKnownGroqModel(modelId)) return 'groq';
@@ -392,7 +405,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         // what the user can pick, this one decides what routing accepts. If they
         // diverge the picker offers models the router rejects. A drift guard test
         // pins the two together.
-        const optInFamily = family === 'litellm';
+        const optInFamily = family === 'litellm' || family === 'openrouter';
         const enabledForFamily = cm.getCloudEnabledModels?.(family) || [];
         if (optInFamily) {
           if (!enabledForFamily.includes(modelId)) return false;
@@ -404,6 +417,11 @@ export function initializeIpcHandlers(appState: AppState): void {
           && (antigravityCatalog === null || antigravityCatalog.some(({ id }) => modelId === `antigravity:${id}`));
         if (modelId.startsWith('litellm/')) return has(cm.getLitellmBaseURL());
         if (modelId.startsWith('nvidia_nim/')) return has(cm.getNvidiaNimApiKey());
+        // Above the groq/openai lines for the reason providerFamily() gives.
+        if (modelId.startsWith('openrouter/')) return has(cm.getOpenrouterApiKey());
+        // Above the gemini/groq/openai/claude/deepseek lines for the reason
+        // providerFamily() gives — all five would otherwise claim a Fluxion id.
+        if (modelId.startsWith('fluxion/')) return has(cm.getFluxionApiKey());
         if (modelId.startsWith('ollama-')) return true; // live Ollama probe happens at execution time
         if (allProviders.some((p: any) => p?.id === modelId)) return true;
         if (modelId.startsWith('gemini-') || modelId.startsWith('models/')) return has(cm.getGeminiApiKey());
@@ -429,6 +447,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (!isRetiredId(defaultModel) && modelAvailable(defaultModel)) return null;
 
       let litellmFallbackModel: string | null = null;
+      // Already stored fully prefixed (`openrouter/<vendor>/<model>`), which is
+      // the form modelAvailable() classifies — do not re-prefix.
+      const openrouterFallbackModel: string | null = cm.getPreferredModel?.('openrouter') || null;
       if (has(cm.getLitellmBaseURL())) {
         try {
           const baseURL = (cm.getLitellmBaseURL() || 'http://localhost:4000/v1').replace(/\/+$/, '');
@@ -479,6 +500,13 @@ export function initializeIpcHandlers(appState: AppState): void {
         : modelAvailable('deepseek-v4-flash') ? 'deepseek-v4-flash'
         : (codexConfig.enabled === true && codexSignedIn && modelAvailable('codex-cli')) ? 'codex-cli'
         : (litellmFallbackModel && modelAvailable(litellmFallbackModel)) ? litellmFallbackModel
+        // OpenRouter's equivalent, and cheaper than LiteLLM's: no catalogue
+        // fetch is needed because modelAvailable() already enforces everything
+        // that matters — the key, the disabled switch, and the OPT-IN allow-list
+        // (so an id the user never ticked can never be installed as a default).
+        // Without this rung a user whose only working provider is OpenRouter is
+        // left pinned to a dead default and told "No AI providers configured".
+        : (openrouterFallbackModel && modelAvailable(openrouterFallbackModel)) ? openrouterFallbackModel
         : antigravityFallback ? antigravityFallback
         : allProviders.find((p: any) => modelAvailable(p?.id))?.id
           || null;
@@ -9534,6 +9562,122 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) { return { success: false, error: error.message }; }
   });
 
+  safeHandle('set-openrouter-api-key', async (_, apiKey: string) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cm = CredentialsManager.getInstance();
+      const normalizedKey = (apiKey || '').trim();
+      const keyChanged = cm.getOpenrouterApiKey() !== normalizedKey;
+
+      // ONE OpenRouter key backs THREE consumers: chat, embeddings and
+      // reranking. Same class of silent coupling NVIDIA's handler documents
+      // above, one layer deeper — clearing the key from the AI Providers card
+      // also reverts an OpenRouter reranker to local (decideRevert in
+      // hostedKeyActivation.ts) and leaves an OpenRouter embedding space with no
+      // credential to build a candidate with.
+      //
+      // Read BEFORE the write: setOpenrouterApiKey triggers that revert itself,
+      // so afterwards the reranker already reads 'local' and there would be
+      // nothing left to report.
+      let retrievalDeactivated = false;
+      if (!normalizedKey) {
+        try {
+          const settings = SettingsManager.getInstance();
+          const reranker = (settings.get('reranker') as any) || {};
+          const embedding = (settings.get('embedding') as any) || {};
+          retrievalDeactivated = reranker.provider === 'openrouter' || embedding.provider === 'openrouter';
+        } catch { /* settings unreadable: report nothing rather than guess */ }
+      }
+
+      // A DEGRADED store refuses the write and returns false (locked keychain,
+      // unreadable credentials.enc, key mismatch). Stop BEFORE the live client
+      // is touched: CredentialsManager's refusal promises "the change was NOT
+      // applied in memory either", and handing LLMHelper the key anyway made
+      // chat work this session while the card read "Saved" for a key that was
+      // gone after the next restart. Reproduced live 2026-09-17 on a profile
+      // with an undecryptable credentials.enc. Same shape and error code as
+      // embedding:set-openrouter-key.
+      const saved = cm.setOpenrouterApiKey(normalizedKey);
+      if (saved === false) {
+        return {
+          success: false,
+          error: 'credential_store_degraded',
+          message: 'Could not save the key. Your credential store is unavailable this session.',
+        };
+      }
+      appState.processingHelper.getLLMHelper().setOpenrouterApiKey(normalizedKey);
+
+      // The save above also (de)activates hosted RERANKING on this same key
+      // (activateHostedRetrieval, fire-and-forget inside the setter). Wait for
+      // it, bounded, before broadcasting: the Settings panel re-reads on the
+      // broadcast, and answering first meant it read the reranker as 'local'
+      // while the activation landed ~1s later — so the remove-key dialog never
+      // warned that OpenRouter reranking would be switched off. Reproduced
+      // live 2026-09-17. The four sibling OpenRouter/Jina/Voyage key handlers
+      // already await this for the same reason.
+      await cm.whenHostedRetrievalSettled();
+
+      appState.getIntelligenceManager().resetEngine();
+      appState.getIntelligenceManager().initializeLLMs();
+      if (keyChanged) {
+        await refreshRuntimeDefaultIfUnavailable();
+        broadcastCredentialsChanged();
+      }
+      // Reported so Settings can say WHY retrieval changed, instead of the user
+      // discovering a degraded corpus later.
+      return { success: true, retrievalDeactivated };
+    } catch (error: any) { return { success: false, error: error.message }; }
+  });
+
+  /**
+   * Fluxion takes a key AND a protocol, because the protocol is a property of
+   * the key's group that the key does not expose. They are written together so
+   * a client can never be built for the protocol the user did not choose.
+   *
+   * Deliberately SHORTER than the OpenRouter handler above: Fluxion is
+   * chat-only, so there is no hosted-retrieval coupling to sample before the
+   * write, nothing to await, and no `retrievalDeactivated` to report.
+   */
+  safeHandle('set-fluxion-config', async (_, config: { apiKey?: string; protocol?: 'openai' | 'anthropic' }) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cm = CredentialsManager.getInstance();
+      // OMITTED and EMPTY mean different things, and conflating them would make
+      // the protocol selector delete the user's key. `undefined` = "leave the
+      // key alone, I am only changing the protocol"; `''` = an explicit clear
+      // from the trash button. Same distinction LiteLLM's handler draws with
+      // its `requestedKey.trim() || prevKey`.
+      const storedKey = cm.getFluxionApiKey() || '';
+      const keyOmitted = config?.apiKey === undefined;
+      const normalizedKey = keyOmitted ? storedKey : (config?.apiKey || '').trim();
+      const protocol = config?.protocol === 'anthropic' ? 'anthropic' : 'openai';
+      const keyChanged = storedKey !== normalizedKey;
+      const protocolChanged = cm.getFluxionProtocol() !== protocol;
+
+      // Same degraded-store rule as the OpenRouter handler: stop BEFORE the live
+      // client is touched, or chat works this session against a key that is gone
+      // after the next restart while the card reads "Saved".
+      const saved = cm.setFluxionApiKey(normalizedKey);
+      if (saved === false) {
+        return {
+          success: false,
+          error: 'credential_store_degraded',
+          message: 'Could not save the key. Your credential store is unavailable this session.',
+        };
+      }
+      cm.setFluxionProtocol(protocol);
+      appState.processingHelper.getLLMHelper().setFluxionConfig(normalizedKey, protocol);
+
+      appState.getIntelligenceManager().resetEngine();
+      appState.getIntelligenceManager().initializeLLMs();
+      if (keyChanged || protocolChanged) {
+        await refreshRuntimeDefaultIfUnavailable();
+        broadcastCredentialsChanged();
+      }
+      return { success: true };
+    } catch (error: any) { return { success: false, error: error.message }; }
+  });
+
   safeHandle('set-litellm-config', async (_, config: { apiKey: string; baseURL: string; maxTokens?: number }) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
@@ -10635,6 +10779,11 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasClaudeKey: hasKey(creds.claudeApiKey),
         hasDeepseekKey: hasKey(creds.deepseekApiKey),
         hasNvidiaNimKey: hasKey(creds.nvidiaNimApiKey),
+        hasOpenrouterKey: hasKey(creds.openrouterApiKey),
+        hasFluxionKey: hasKey(creds.fluxionApiKey),
+        // Config, not a secret: Settings must prefill the protocol selector, and
+        // a wrong-but-invisible protocol is the failure this setting exists to stop.
+        fluxionProtocol: creds.fluxionProtocol === 'anthropic' ? 'anthropic' : 'openai',
         hasLitellmBaseURL: hasKey(creds.litellmBaseURL),
         // The base URL is config, not a secret — returned in full so Settings can
         // prefill it (unlike API keys, which are only reported as booleans).
@@ -10685,6 +10834,8 @@ export function initializeIpcHandlers(appState: AppState): void {
             .isNvidiaNimRetiredModelId(creds.nvidia_nimPreferredModel)
             ? undefined
             : creds.nvidia_nimPreferredModel || undefined,
+        openrouterPreferredModel: creds.openrouterPreferredModel || undefined,
+        fluxionPreferredModel: creds.fluxionPreferredModel || undefined,
         // Stored prefixed (`litellm/<model>`) — see StoredCredentials.litellmPreferredModel.
         litellmPreferredModel: creds.litellmPreferredModel || undefined,
         disabledProviders: creds.disabledProviders || [],
@@ -10699,6 +10850,9 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasClaudeKey: false,
         hasDeepseekKey: false,
         hasNvidiaNimKey: false,
+        hasOpenrouterKey: false,
+        hasFluxionKey: false,
+        fluxionProtocol: 'openai',
         hasLitellmBaseURL: false,
         litellmBaseURL: null,
         litellmMaxTokens: null,
@@ -10733,7 +10887,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle(
     'fetch-provider-models',
-    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim', apiKey: string) => {
+    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion', apiKey: string) => {
       try {
         // Fall back to stored key if no key was explicitly provided
         let key = apiKey?.trim();
@@ -10746,6 +10900,8 @@ export function initializeIpcHandlers(appState: AppState): void {
           else if (provider === 'claude') key = cm.getClaudeApiKey();
           else if (provider === 'deepseek') key = cm.getDeepseekApiKey();
           else if (provider === 'nvidia_nim') key = cm.getNvidiaNimApiKey();
+          else if (provider === 'openrouter') key = cm.getOpenrouterApiKey();
+          else if (provider === 'fluxion') key = cm.getFluxionApiKey();
         }
 
         if (!key) {
@@ -10783,7 +10939,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle(
     'set-provider-preferred-model',
-    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'litellm', modelId: string) => {
+    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'litellm', modelId: string) => {
       try {
         const { CredentialsManager } = require('./services/CredentialsManager');
         CredentialsManager.getInstance().setPreferredModel(provider, modelId);
@@ -11685,7 +11841,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle(
     'test-llm-connection',
-    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim', apiKey?: string) => {
+    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion', apiKey?: string) => {
       console.log(`[IPC] Received test-llm-connection request for provider: ${provider}`);
       try {
         if (!apiKey || !apiKey.trim()) {
@@ -11697,6 +11853,8 @@ export function initializeIpcHandlers(appState: AppState): void {
           else if (provider === 'claude') apiKey = creds.getClaudeApiKey();
           else if (provider === 'deepseek') apiKey = creds.getDeepseekApiKey();
           else if (provider === 'nvidia_nim') apiKey = creds.getNvidiaNimApiKey();
+          else if (provider === 'openrouter') apiKey = creds.getOpenrouterApiKey();
+          else if (provider === 'fluxion') apiKey = creds.getFluxionApiKey();
         }
 
         if (!apiKey || !apiKey.trim()) {
@@ -11866,6 +12024,41 @@ export function initializeIpcHandlers(appState: AppState): void {
           }
           if (lastNvidiaError) throw lastNvidiaError;
           if (nvidiaKeyAccepted && !response) return { success: true };
+        }
+        else if (provider === 'openrouter') {
+          // GET /key, NOT a chat completion. This probe asks "was the key
+          // accepted?" and OpenRouter exposes an endpoint that answers exactly
+          // that — so unlike the Groq and NVIDIA legs above it cannot be broken
+          // by a model retirement, and needs no ladder, no classifier and no
+          // entitlement guesswork. VERIFIED 2026-09-17: unauthenticated and
+          // bogus-key requests both return 401 {"error":{"code":401}}, so a 200
+          // is real evidence the credential works.
+          response = await axios.get('https://openrouter.ai/api/v1/key', {
+            headers: { Authorization: `Bearer ${apiKey}` },
+            timeout: 15000,
+          });
+        }
+        else if (provider === 'fluxion') {
+          // GET /v1/models, NOT a chat completion — the same reasoning as the
+          // OpenRouter leg above. Fluxion's model list is GROUP-SCOPED, so a 200
+          // proves the key is valid AND tells us nothing model-specific can
+          // break the probe: no ladder, no classifier, no entitlement guesswork,
+          // and nothing for a model retirement to invalidate the way the Groq
+          // and NVIDIA legs were.
+          //
+          // Bearer is correct for BOTH protocols. Verified live 2026-09-17: the
+          // gateway advertises `Authorization` (Bearer), `x-api-key` and
+          // `x-goog-api-key` on every route, so this probe works for a Claude-
+          // group key even though that key's CHAT traffic goes to /v1/messages.
+          //
+          // Also verified live: unauthenticated returns 401 API_KEY_REQUIRED and
+          // a bogus key returns 401 INVALID_API_KEY, so a 200 is real evidence.
+          // Those two codes are distinct, which is why the catch below reports
+          // them separately instead of one generic failure.
+          response = await axios.get('https://fluxionai.world/v1/models', {
+            headers: { Authorization: `Bearer ${apiKey}` },
+            timeout: 15000,
+          });
         }
 
         if (response && (response.status === 200 || response.status === 201)) {

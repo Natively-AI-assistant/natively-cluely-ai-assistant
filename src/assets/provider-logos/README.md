@@ -45,6 +45,27 @@ identically in both themes. It arrives already `1em`-sized, so unlike
 Before this file existed the provider rendered an `NI` monogram, which the
 speech-selector coverage test flagged as an unrecorded fallback.
 
+### Fluxion AI
+
+The ONE mark here that is not from lobehub — Fluxion is a small aggregator
+gateway and has no entry in any icon set. `fluxion.svg` is derived from the
+glyph in the site's own `/logo.svg` (the two interlocking-S paths), reduced to
+the house shape: a 24x24 viewBox, `1em` sized, `stroke="currentColor"` so it
+adapts to both themes.
+
+What was DROPPED from their file, and why: the rounded background plate and its
+three gradients. Every other mark here is a bare glyph that sits on the tile
+wash the card already draws, so a mark carrying its own #061127 navy plate would
+render as a dark square against that wash.
+
+Two things worth recording for whoever revisits this. Their `logo.svg` has no
+licence statement of any kind, so it is used purely nominatively, to identify
+the provider a card configures — the same basis stated at the top of this file,
+without the MIT grant the lobehub marks carry. And the file's own `<title>` is
+not "Fluxion" but **"Sub2API"**, described there as "subscription routing into
+APIs": the mark predates the Fluxion branding, so do not be surprised if the
+upstream artwork changes name again.
+
 ### Jina
 
 Added for the hosted Jina reranker in Settings → Reranker, which is the only way

@@ -3,7 +3,7 @@ export const STANDARD_CLOUD_MODELS: Record<string, {
     ids: string[];
     names: string[];
     descs: string[];
-    pmKey: 'geminiPreferredModel' | 'openaiPreferredModel' | 'claudePreferredModel' | 'groqPreferredModel' | 'deepseekPreferredModel' | 'nvidia_nimPreferredModel';
+    pmKey: 'geminiPreferredModel' | 'openaiPreferredModel' | 'claudePreferredModel' | 'groqPreferredModel' | 'deepseekPreferredModel' | 'nvidia_nimPreferredModel' | 'openrouterPreferredModel' | 'fluxionPreferredModel';
 }> = {
     gemini: {
         hasKeyCheck: (creds) => !!creds?.hasGeminiKey,
@@ -71,6 +71,71 @@ export const STANDARD_CLOUD_MODELS: Record<string, {
         descs: ['Llama • Nvidia hosted', 'Reasoning • Nvidia hosted', 'Open weights • Nvidia hosted'],
         pmKey: 'nvidia_nimPreferredModel'
     },
+    openrouter: {
+        hasKeyCheck: (creds) => !!creds?.hasOpenrouterKey,
+        // NOT a curated set. OpenRouter is a gateway — its catalogue was 444
+        // models when this was written — so these three exist only so the card
+        // and the overlay picker have SOMETHING to show before the account's own
+        // catalogue is fetched. "Refresh" on the provider card reads
+        // GET /api/v1/models and is the authoritative list.
+        //
+        // OpenRouter is an OPT-IN provider (isOptInModelProvider): an empty
+        // allow-list means NOTHING is selected, so these rows start unticked and
+        // "Set default" on one is the one-click way to put it into routing.
+        // Seeding the allow-list instead would create a selection the user
+        // cannot clear.
+        //
+        // All three take images, so the screenshot path works on a fresh setup;
+        // each also survives stripProviderRoutingPrefix() into a bare id the
+        // capability table already knows (claude-/gpt-/gemini-), which is what
+        // keeps Code Hint from refusing them. Verified against the live
+        // catalogue 2026-09-17.
+        ids: [
+            'openrouter/anthropic/claude-sonnet-5',
+            'openrouter/openai/gpt-5.6-terra',
+            'openrouter/google/gemini-3.8-flash',
+        ],
+        names: ['Claude Sonnet 5 (OpenRouter)', 'GPT-5.6 Terra (OpenRouter)', 'Gemini 3.8 Flash (OpenRouter)'],
+        descs: ['Balanced • Multimodal', 'Reasoning • Multimodal', 'Fastest • Multimodal'],
+        pmKey: 'openrouterPreferredModel'
+    },
+    fluxion: {
+        hasKeyCheck: (creds) => !!creds?.hasFluxionKey,
+        // Like OpenRouter's, these exist only so the card and the overlay picker
+        // have something to show before the account's own catalogue is fetched.
+        // "Refresh" reads GET /v1/models, which on Fluxion is GROUP-SCOPED — it
+        // returns what this key can actually reach — and is authoritative.
+        //
+        // Fluxion is NOT opt-in (deliberately, unlike OpenRouter): its public
+        // catalogue was 36 models on 2026-09-17, and the group scoping means a
+        // fetched list contains no unreachable rows. That puts it in nvidia_nim
+        // territory, not gateway-flood territory.
+        //
+        // ORDER: Claude leads. An earlier version led with the GPT preset on the
+        // theory that a Claude model was unreachable until the user flipped the
+        // protocol selector — driving a real Claude-group key on 2026-09-18
+        // disproved that (it answered on /v1/chat/completions, the default
+        // protocol, without touching the selector).
+        //
+        // With that constraint gone the tie-break is which group a new user is
+        // most likely on, and Claude is 5 of Fluxion's 11 groups and the whole
+        // of its cheapest tier. The first entry is what "Set default" tends to
+        // land on, and a preset outside the key's group is a hard 404
+        // `model_not_found` until Refresh replaces these with the real list.
+        //
+        // Every id here is a REAL entry in the live catalogue (verified against
+        // /api/v1/model-plaza/public, 2026-09-17) and each strips to a bare id
+        // the capability table already knows, which is what keeps Code Hint
+        // from refusing them.
+        ids: [
+            'fluxion/claude-sonnet-5',
+            'fluxion/gpt-5.6-terra',
+            'fluxion/gemini-3.7-flash',
+        ],
+        names: ['Claude Sonnet 5 (Fluxion)', 'GPT-5.6 Terra (Fluxion)', 'Gemini 3.7 Flash (Fluxion)'],
+        descs: ['Balanced • Multimodal', 'Reasoning • Multimodal', 'Fastest • Multimodal'],
+        pmKey: 'fluxionPreferredModel'
+    },
 };
 
 // The id stays 'codex-cli' (persisted in settings and routing), but the provider
@@ -136,15 +201,25 @@ export const prettifyModelId = (id: string): string => {
  * selected, not "everything".
  *
  * Every other provider ships a curated handful of preset models, so "empty =
- * all" is the right default there and stays. A LiteLLM gateway fronts the
- * upstream's entire catalogue — 300+ models is normal — and defaulting that to
- * "all" floods the meeting-overlay picker with a list nobody chose.
+ * all" is the right default there and stays. A GATEWAY fronts the upstream's
+ * entire catalogue — a LiteLLM proxy runs to 300+ models, OpenRouter answered
+ * 444 on 2026-09-17 — and defaulting that to "all" floods the meeting-overlay
+ * picker with a list nobody chose.
+ *
+ * OpenRouter needs this even more than LiteLLM does, because ProviderCard
+ * auto-fetches the catalogue on the model list's FIRST OPEN (`onFirstOpen`,
+ * gated on `hasStoredKey && !hasCatalog`). Under "empty = all" a user who
+ * merely opened the list once would have put all 444 into routing without ever
+ * pressing Refresh.
  *
  * MIRRORED in ipcHandlers.ts modelAvailable(). The two must agree: this one
  * decides what the user can pick, that one decides what routing will accept.
  * A drift guard test pins them together.
  */
-export const isOptInModelProvider = (provider: string): boolean => provider === 'litellm';
+// Fluxion is deliberately ABSENT: 36 models, and its /v1/models is scoped to
+// the key's group, so the auto-fetch cannot flood routing the way OpenRouter's
+// 444 would. Adding it here would also need the mirror in modelAvailable().
+export const isOptInModelProvider = (provider: string): boolean => provider === 'litellm' || provider === 'openrouter';
 
 /**
  * Does `modelId` survive `provider`'s allow-list?

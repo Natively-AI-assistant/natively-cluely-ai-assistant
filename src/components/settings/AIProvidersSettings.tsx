@@ -1179,6 +1179,13 @@ export const CLOUD_PROVIDERS = [
     // Text-only; intentionally NOT part of the screenshot/vision fallback chain.
     { id: 'deepseek' as const, name: 'DeepSeek', placeholder: 'sk-...',     url: 'https://platform.deepseek.com/api_keys' },
     { id: 'nvidia_nim' as const, name: 'Nvidia Nim', placeholder: 'nvapi-...', url: 'https://build.nvidia.com' },
+    // A gateway, not a vendor: its model list is opt-in (isOptInModelProvider),
+    // and ONE key here also backs OpenRouter embeddings and reranking.
+    { id: 'openrouter' as const, name: 'OpenRouter', placeholder: 'sk-or-v1-...', url: 'https://openrouter.ai/keys' },
+    // Also a gateway, but NOT opt-in: 36 models, and its catalogue endpoint is
+    // scoped to the key's group. The one provider here with a second required
+    // setting — see the protocol selector passed as `extraControls` below.
+    { id: 'fluxion' as const, name: 'Fluxion AI', placeholder: 'sk-...', url: 'https://fluxionai.world' },
 ];
 export type CloudProviderId = (typeof CLOUD_PROVIDERS)[number]['id'];
 
@@ -2300,15 +2307,58 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     const [claudeApiKey, setClaudeApiKey] = useState('');
     const [deepseekApiKey, setDeepseekApiKey] = useState('');
     const [nvidiaNimApiKey, setNvidiaNimApiKey] = useState('');
+    const [openrouterApiKey, setOpenrouterApiKey] = useState('');
+    const [fluxionApiKey, setFluxionApiKey] = useState('');
+    /**
+     * Which wire protocol the user's Fluxion key speaks, which is a property
+     * of the KEY'S GROUP and is not discoverable from the key itself. Held in
+     * component state (not just written on save) because the card has to show
+     * the stored value when the panel re-opens — a silently wrong protocol is
+     * exactly the failure this control exists to prevent.
+     */
+    const [fluxionProtocol, setFluxionProtocol] = useState<'openai' | 'anthropic'>('openai');
     /**
      * The active speech provider, so the remove-key confirmation can warn when
      * the NVIDIA key it is about to delete is ALSO the one speech is using —
      * one nvapi- credential authenticates both.
      */
     const [activeSttProvider, setActiveSttProvider] = useState<string>('none');
+    /**
+     * Whether embeddings or reranking are currently running on OpenRouter, so the
+     * remove-key confirmation can warn BEFORE the click that deleting the key
+     * also takes retrieval down with it — the same "say it first, don't let them
+     * discover it later" rule the NVIDIA/speech warning follows. One OpenRouter
+     * credential backs chat, embeddings and reranking.
+     */
+    const [openrouterBacksRetrieval, setOpenrouterBacksRetrieval] = useState(false);
+    const openrouterBacksRetrievalRef = useRef(false);
+    /**
+     * Re-reads whether retrieval runs on OpenRouter. A mount-time read alone was
+     * NOT enough: saving the key activates OpenRouter reranking asynchronously,
+     * so the value read at load went stale the moment a key was saved in this
+     * session (reproduced live 2026-09-17 — reranker 'openrouter', dialog copy
+     * still generic). Called at load, after an OpenRouter save, and again when
+     * the remove dialog opens. A failed read keeps the last known value rather
+     * than inventing or dropping a warning.
+     */
+    const refreshOpenrouterRetrievalCoupling = async (): Promise<boolean> => {
+        try {
+            const [embedding, reranker]: any[] = await Promise.all([
+                window.electronAPI?.getEmbeddingStatus?.().catch(() => null),
+                window.electronAPI?.getRerankerStatus?.().catch(() => null),
+            ]);
+            if (!embedding && !reranker) return openrouterBacksRetrievalRef.current;
+            const backs = embedding?.active?.provider === 'openrouter' || reranker?.provider === 'openrouter';
+            openrouterBacksRetrievalRef.current = backs;
+            setOpenrouterBacksRetrieval(backs);
+            return backs;
+        } catch {
+            return openrouterBacksRetrievalRef.current;
+        }
+    };
 
 
-    // Binds the five key fields to the CLOUD_PROVIDERS table. The useState calls stay
+    // Binds the key fields to the CLOUD_PROVIDERS table. The useState calls stay
     // separate (they are read individually elsewhere); this is only the lookup the
     // render map needs, so adding a provider is a table row plus one line here.
     const keyFields: Record<CloudProviderId, [string, (v: string) => void]> = {
@@ -2318,6 +2368,8 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         claude: [claudeApiKey, setClaudeApiKey],
         deepseek: [deepseekApiKey, setDeepseekApiKey],
         nvidia_nim: [nvidiaNimApiKey, setNvidiaNimApiKey],
+        openrouter: [openrouterApiKey, setOpenrouterApiKey],
+        fluxion: [fluxionApiKey, setFluxionApiKey],
     };
 
     // --- LiteLLM proxy (OpenAI-compatible gateway: baseURL + optional virtual key) ---
@@ -2345,6 +2397,18 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     const [hasStoredKey, setHasStoredKey] = useState<Record<string, boolean>>({});
     const [testStatus, setTestStatus] = useState<Record<string, 'idle' | 'testing' | 'success' | 'error'>>({});
     const [testError, setTestError] = useState<Record<string, string>>({});
+    /**
+     * A key write the main process REFUSED (e.g. `credential_store_degraded`).
+     * Before this, a failed save only stopped the spinner, so the user had no
+     * way to tell a refused key from a saved one. Cleared on the next attempt.
+     */
+    const [keyWriteError, setKeyWriteError] = useState<Record<string, string>>({});
+    const keyWriteFailureText = (result: { error?: string; message?: string } | undefined, action: 'save' | 'remove'): string =>
+        result?.error === 'credential_store_degraded'
+            ? (action === 'save'
+                ? t('Could not save the key: your credential store is unavailable this session. Restart Natively and try again.')
+                : t('Could not remove the key: your credential store is unavailable this session. Restart Natively and try again.'))
+            : (result?.message || result?.error || (action === 'save' ? t('Could not save the key.') : t('Could not remove the key.')));
 
     // --- Custom Providers ---
     const [customProviders, setCustomProviders] = useState<CustomProvider[]>([]);
@@ -2600,6 +2664,8 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         claude: creds.hasClaudeKey,
                         deepseek: creds.hasDeepseekKey || false,
                         nvidia_nim: creds.hasNvidiaNimKey || false,
+                        openrouter: (creds as any).hasOpenrouterKey || false,
+                        fluxion: (creds as any).hasFluxionKey || false,
                         litellm: creds.hasLitellmBaseURL || false,
                         natively: creds.hasNativelyKey || false
                     });
@@ -2617,6 +2683,12 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     if (creds.claudePreferredModel) pm.claude = creds.claudePreferredModel;
                     if (creds.deepseekPreferredModel) pm.deepseek = creds.deepseekPreferredModel;
                     if (creds.nvidia_nimPreferredModel) pm.nvidia_nim = creds.nvidia_nimPreferredModel;
+                    // Already prefixed on disk (`openrouter/<vendor>/<model>`), the same
+                    // form the model list renders — see the LiteLLM note below.
+                    if ((creds as any).openrouterPreferredModel) pm.openrouter = (creds as any).openrouterPreferredModel;
+                    // Already prefixed on disk (`fluxion/<model>`), same rule as above.
+                    if ((creds as any).fluxionPreferredModel) pm.fluxion = (creds as any).fluxionPreferredModel;
+                    setFluxionProtocol((creds as any).fluxionProtocol === 'anthropic' ? 'anthropic' : 'openai');
                     // Already prefixed on disk (`litellm/<model>`), which is the id the
                     // LiteLLM model list renders — no re-prefixing here or the star lands
                     // on no row at all.
@@ -2627,6 +2699,13 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         .then((res: { models?: Record<string, AipModelEntry[]> }) => { if (res?.models) setCloudFetchedModels(res.models); })
                         .catch(() => {});
                     setPreferredModels(pm);
+
+                    // Is retrieval actually running on OpenRouter right now? Only
+                    // asked when a key exists, so an install that has never seen
+                    // OpenRouter makes no IPC calls. Both are best-effort: a
+                    // failure leaves the flag false, which downgrades the remove
+                    // dialog to its generic copy rather than inventing a warning.
+                    if ((creds as any).hasOpenrouterKey) void refreshOpenrouterRetrievalCoupling();
                 }
 
                 // Now it's safe to read fast mode — hasStoredKey is already set so
@@ -3006,8 +3085,15 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         const prevEnabled = cloudEnabledModels;
         const prevPreferred = preferredModels;
         const current = cloudEnabledModels[provider] || [];
-        // An empty allow-list already means "all", so nothing to add in that case.
-        const needsAllow = current.length > 0 && !current.includes(modelId);
+        // An empty allow-list means "all" for most providers, so nothing to add.
+        // For an OPT-IN provider (OpenRouter, LiteLLM) empty means NONE, so the
+        // new default must be added or it is a default that routing rejects:
+        // reproduced live 2026-09-17 — "Set default" on an OpenRouter model
+        // stored the preference, left the allow-list empty, and the model never
+        // appeared in the overlay picker.
+        const needsAllow = isOptInModelProvider(provider)
+            ? !current.includes(modelId)
+            : current.length > 0 && !current.includes(modelId);
         const nextList = needsAllow ? [...current, modelId] : current;
 
         if (needsAllow) setCloudEnabledModelsState(p => ({ ...p, [provider]: nextList }));
@@ -3456,6 +3542,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     const handleSaveKey = async (provider: string, key: string, setter: (val: string) => void) => {
         if (!key.trim()) return;
         setSavingStatus(prev => ({ ...prev, [provider]: true }));
+        setKeyWriteError(prev => ({ ...prev, [provider]: '' }));
         try {
             let result;
             // @ts-ignore
@@ -3469,12 +3556,25 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             // @ts-ignore
             if (provider === 'deepseek') result = await window.electronAPI.setDeepseekApiKey(key);
             if (provider === 'nvidia_nim') result = await window.electronAPI.setNvidiaNimApiKey(key);
+            if (provider === 'openrouter') result = await window.electronAPI.setOpenrouterApiKey(key);
+            // Key and protocol are written together: setFluxionConfig builds ONE
+            // client for the chosen protocol, so sending the key alone would
+            // leave a Claude-group user on the OpenAI endpoint.
+            if (provider === 'fluxion') result = await window.electronAPI.setFluxionConfig({ apiKey: key, protocol: fluxionProtocol });
 
             if (result && result.success) {
+                // The save may have just switched OpenRouter reranking on; the
+                // credentials broadcast does not fire when the same key is saved
+                // again, so re-read here rather than rely on it.
+                if (provider === 'openrouter') void refreshOpenrouterRetrievalCoupling();
                 setSavedStatus(prev => ({ ...prev, [provider]: true }));
                 setHasStoredKey(prev => ({ ...prev, [provider]: true }));
                 setter('');
                 setTimeout(() => setSavedStatus(prev => ({ ...prev, [provider]: false })), 2000);
+            } else if (result && (result as { success?: boolean }).success === false) {
+                // Keep the typed key in the field: nothing was stored, so clearing
+                // it would throw away the only copy.
+                setKeyWriteError(prev => ({ ...prev, [provider]: keyWriteFailureText(result as any, 'save') }));
             }
         } catch (e) {
             console.error(`Failed to save ${provider} key:`, e);
@@ -3542,11 +3642,22 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     };
 
 
-    const handleRemoveKey = (provider: string, setter: (val: string) => void) => {
+    const handleRemoveKey = async (provider: string, setter: (val: string) => void) => {
+        // Read the coupling FRESH before the dialog renders its copy, so the
+        // warning reflects what removing the key will actually do right now.
+        // Bounded: a slow status read must not make the trash button feel dead,
+        // so after 1s the dialog opens on the last known value.
+        if (provider === 'openrouter') {
+            await Promise.race([
+                refreshOpenrouterRetrievalCoupling(),
+                new Promise(resolve => setTimeout(resolve, 1000)),
+            ]);
+        }
         setPendingConfirm({ kind: 'providerKey', provider, setter });
     };
 
     const performRemoveKey = async (provider: string, setter: (val: string) => void) => {
+        setKeyWriteError(prev => ({ ...prev, [provider]: '' }));
         try {
             let result;
             // @ts-ignore
@@ -3560,6 +3671,8 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             // @ts-ignore
             if (provider === 'deepseek') result = await window.electronAPI.setDeepseekApiKey('');
             if (provider === 'nvidia_nim') result = await window.electronAPI.setNvidiaNimApiKey('');
+            if (provider === 'openrouter') result = await window.electronAPI.setOpenrouterApiKey('');
+            if (provider === 'fluxion') result = await window.electronAPI.setFluxionConfig({ apiKey: '', protocol: fluxionProtocol });
 
             if (result && result.success) {
                 setHasStoredKey(prev => ({ ...prev, [provider]: false }));
@@ -3571,6 +3684,20 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 if (provider === 'nvidia_nim' && (result as { sttProviderCleared?: boolean }).sttProviderCleared) {
                     console.log('[Settings] NVIDIA key removed — speech recognition switched off (it shared this key)');
                 }
+                // Same shape, one layer deeper: the OpenRouter key also backs
+                // embeddings and reranking, and clearing it reverts an OpenRouter
+                // reranker to local. The Intelligence tab re-reads on the
+                // credentials-changed broadcast; this records WHY and clears the
+                // local flag so a re-opened dialog does not repeat a stale warning.
+                if (provider === 'openrouter' && (result as { retrievalDeactivated?: boolean }).retrievalDeactivated) {
+                    openrouterBacksRetrievalRef.current = false;
+                    setOpenrouterBacksRetrieval(false);
+                    console.log('[Settings] OpenRouter key removed — embeddings/reranking that used it were switched off');
+                }
+            } else if (result && (result as { success?: boolean }).success === false) {
+                // The key is still stored; say so instead of leaving a trash
+                // button that silently did nothing.
+                setKeyWriteError(prev => ({ ...prev, [provider]: keyWriteFailureText(result as any, 'remove') }));
             }
         } catch (e) {
             console.error(`Failed to remove ${provider} key:`, e);
@@ -3695,11 +3822,19 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 // running on. Said before the click, not discovered afterwards.
                 const alsoDisablesSpeech =
                     pendingConfirm.provider === 'nvidia_nim' && activeSttProvider === 'nvidia_nim';
+                // OpenRouter issues ONE key for chat, embeddings AND reranking.
+                // Removing it here reverts an OpenRouter reranker to the local
+                // model and leaves an OpenRouter embedding space with no
+                // credential — a silently degraded corpus if it is not said here.
+                const alsoDisablesRetrieval =
+                    pendingConfirm.provider === 'openrouter' && openrouterBacksRetrieval;
                 return {
                     title: `${t('Remove the')} ${pendingConfirm.provider} ${t('API key?')}`,
                     description: alsoDisablesSpeech
                         ? t('The stored key is deleted. Speech recognition uses this same key, so it will be switched off too — you will need to pick another speech provider under Audio.')
-                        : t('The stored key is deleted. You will need to paste it again to re-enable this provider.'),
+                        : alsoDisablesRetrieval
+                            ? t('The stored key is deleted. Embeddings and reranking use this same key, so they will fall back to the local models — you can pick another provider under Intelligence.')
+                            : t('The stored key is deleted. You will need to paste it again to re-enable this provider.'),
                     confirmLabel: t('Remove key'),
                 };
             }
@@ -4066,9 +4201,49 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                 onTestConnection={() => handleTestConnection(id, keyValue)}
                                 testStatus={testStatus[id] || 'idle'}
                                 testError={testError[id]}
+                                keyWriteError={keyWriteError[id]}
                                 savingStatus={!!savingStatus[id]}
                                 savedStatus={!!savedStatus[id]}
                                 onPreferredModelChange={(model) => setPreferredModels(prev => ({ ...prev, [id]: model }))}
+                                extraControls={id !== 'fluxion' ? undefined : (
+                                    <div className="aip-provider-row">
+                                        <span className="text-xs aip-muted shrink-0">{t('API format')}</span>
+                                        {/* Two buttons rather than a <select>: there are exactly two
+                                            values. Most users never need this — a real Claude-group
+                                            key was driven live on 2026-09-18 and the default OpenAI
+                                            format worked, because the gateway transcodes. It is an
+                                            escape hatch for a group that refuses that, which one key
+                                            could not rule out. */}
+                                        {(['openai', 'anthropic'] as const).map(proto => (
+                                            <button
+                                                key={proto}
+                                                onClick={() => {
+                                                    setFluxionProtocol(proto);
+                                                    // Persist immediately, but ONLY once a key exists.
+                                                    // apiKey is OMITTED, not empty: the handler reads
+                                                    // undefined as "keep the stored key" and '' as an
+                                                    // explicit clear, so sending '' here would delete
+                                                    // the key the user just saved. Before a key exists
+                                                    // there is nothing to persist against — the save
+                                                    // writes key and protocol together.
+                                                    if (hasStoredKey.fluxion) {
+                                                        void window.electronAPI.setFluxionConfig({ protocol: proto });
+                                                    }
+                                                }}
+                                                className="aip-btn shrink-0"
+                                                data-tone={fluxionProtocol === proto ? 'ok' : undefined}
+                                                title={proto === 'openai'
+                                                    ? t('OpenAI-compatible: /v1/chat/completions. Works for every group, including Claude.')
+                                                    : t('Anthropic-compatible: /v1/messages. Try this only if a Claude group rejects the default.')}
+                                            >
+                                                {proto === 'openai' ? t('OpenAI') : t('Anthropic')}
+                                            </button>
+                                        ))}
+                                        <span className="text-[11px] aip-muted min-w-0 truncate">
+                                            {fluxionProtocol === 'anthropic' ? t('Fallback for Claude groups') : t('Recommended')}
+                                        </span>
+                                    </div>
+                                )}
                             />
                         );
                     })}

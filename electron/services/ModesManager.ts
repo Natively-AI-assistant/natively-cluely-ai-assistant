@@ -225,10 +225,10 @@ export const TEMPLATE_NOTE_SECTIONS: Record<ModeTemplateType, Array<{ title: str
     ],
     // Campaign-3 (2026-07-19): 8th built-in mode — file-grounded Q&A.
     seminar: [
-        { title: 'Question', description: 'The question asked (verbatim or paraphrased).' },
-        { title: 'Answer from your files', description: 'The answer grounded in your reference files / slides / paper. Direct quote or close paraphrase.' },
-        { title: 'Source', description: 'Which file + section the answer came from. Cite the filename and section/heading.' },
-        { title: 'If not in your files', description: 'A short, labeled "not from your reference files" note from general knowledge — never fabricated as if from the files.' },
+        { title: 'Question', description: 'Each question the audience or panel asked, one bullet per question (verbatim or closely paraphrased).' },
+        { title: 'Answer from your files', description: 'For each question, the answer grounded in your reference files / slides / paper, one bullet per question. Direct quote or close paraphrase.' },
+        { title: 'Source', description: 'Which file + section each answer came from. Cite the filename and section/heading.' },
+        { title: 'If not in your files', description: 'For each question your files did not cover, a short, labeled "not from your reference files" note from general knowledge — never fabricated as if from the files.' },
         { title: 'Follow-up you might be asked', description: 'Likely follow-up questions on the same topic the audience or panel could ask next.' },
     ],
     'call-center': [

@@ -29,6 +29,7 @@ import openaiMark from '../../assets/provider-logos/openai.svg?raw';
 import ollamaMark from '../../assets/provider-logos/ollama.svg?raw';
 import nvidiaMark from '../../assets/provider-logos/nvidia.svg?raw';
 import openrouterMark from '../../assets/provider-logos/openrouter.svg?raw';
+import fluxionMark from '../../assets/provider-logos/fluxion.svg?raw';
 import voyageMark from '../../assets/provider-logos/voyage.svg?raw';
 import jinaMark from '../../assets/provider-logos/jina.svg?raw';
 // LiteLLM ships its mark only as a raster favicon (160x160 PNG), so this one is a
@@ -62,6 +63,12 @@ export const AI_PROVIDER_BRANDS: Record<string, { mono: string; brand: string }>
     // variants: OpenRouter lime, Voyage deep teal. The MARKS themselves take the
     // monochrome variant — see the README's "Colour vs monochrome".
     openrouter: { mono: 'OR', brand: '#C8FF00' },
+    // Fluxion publishes no brand guide and ships no monochrome variant, so
+    // this hex is the midpoint of its own logo gradient (#79F4BD → #39D9E7 →
+    // #3875F6). The cyan reads on the dark tile where the #061127 navy of the
+    // logo's background plate would vanish — the legibility rule in the
+    // provider-logos README.
+    fluxion:  { mono: 'FX', brand: '#39D9E7' },
     voyage:   { mono: 'VY', brand: '#012E33' },
     // Jina's teal, taken from their own favicon (dominant non-neutral pixel,
     // 5758 of them) and confirmed against api.jina.ai's docs theme. NOT
@@ -97,6 +104,7 @@ export const AI_PROVIDER_MARKS: Record<string, string> = {
     ollama: ollamaMark,
     nvidia_nim: nvidiaMark,
     openrouter: openrouterMark,
+    fluxion: fluxionMark,
     voyage: voyageMark,
     jina: jinaMark,
 };

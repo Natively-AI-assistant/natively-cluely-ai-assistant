@@ -12,6 +12,8 @@ export const DIRECT_ASSIST_PROVIDERS = [
   'groq',
   'deepseek',
   'nvidia_nim',
+  'openrouter',
+  'fluxion',
   'litellm',
   'ollama',
   'codex-cli',

@@ -52,12 +52,21 @@ const KNOWN_OLLAMA_NATIVE_CTX: Array<[RegExp, number]> = [
  *
  * Two segments come off because a real LiteLLM config names models
  * `<upstream>/<model>` (`litellm/openai/gpt-4o`, `litellm/vertex_ai/gemini-2.5-pro`),
- * which is exactly the shape litellmModelLabel() documents. Only the known
+ * which is exactly the shape litellmModelLabel() documents. OpenRouter is the
+ * same shape and is here for the same reason — `openrouter/anthropic/claude-sonnet-5`
+ * has to reach the predicates below as `claude-sonnet-5` or every OpenRouter
+ * model would be classified as an unknown text-only route. Only the known
  * routing prefixes are stripped — an arbitrary id keeps its slashes, so an
  * Ollama name like `qwen2.5-vl:7b` and a Groq id like `openai/gpt-oss-20b` are
  * untouched.
  */
-const ROUTING_PREFIX_RE = /^(?:litellm|nvidia_nim)\//i;
+// Fluxion is the opposite shape to OpenRouter and the strip is load-bearing for
+// the opposite reason. Its ids are BARE vendor ids (`fluxion/claude-opus-5`),
+// so after the prefix comes off there is no vendor segment left to lose and the
+// result — `claude-opus-5` — is already exactly the id the predicates below
+// know. Do NOT "fix" this to match openrouter's two-segment handling: that
+// would eat the model name itself.
+const ROUTING_PREFIX_RE = /^(?:litellm|nvidia_nim|openrouter|fluxion)\//i;
 export function stripProviderRoutingPrefix(id: string): string {
   if (!ROUTING_PREFIX_RE.test(id)) return id;
   const withoutProvider = id.replace(ROUTING_PREFIX_RE, '');
