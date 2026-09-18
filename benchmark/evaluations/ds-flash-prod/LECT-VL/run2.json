@@ -1,0 +1,440 @@
+{
+ "blind_id": "S-ef76f4c4",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 107894,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 57797,
+  "candidatesTokenCount": 3061,
+  "totalTokenCount": 74141,
+  "cachedContentTokenCount": 36804,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 57797
+   }
+  ],
+  "cacheTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 36804
+   }
+  ],
+  "thoughtsTokenCount": 13283,
+  "serviceTier": "standard"
+ },
+ "fact_count": 90,
+ "evaluation": {
+  "factual_accuracy": 4,
+  "important_information_retention": 9,
+  "hallucination_control": 6,
+  "action_item_retention": 8,
+  "decision_retention": 9,
+  "speaker_attribution": 9,
+  "numeric_accuracy": 5,
+  "entity_retention": 9,
+  "timeline_accuracy": 3,
+  "conclusion_accuracy": 5,
+  "structure": 2,
+  "conciseness": 1,
+  "readability": 3,
+  "overall_summary_quality": 3,
+  "critical_errors": [
+   "Reports the superseded Homework 4 due date (Friday Oct 9) as an active action item and a 'thing to memorize', contradicting the correct Monday Oct 12 date listed in Decisions.",
+   "Reports the superseded midterm coverage (lectures 1-8) in the Summary and 'Things to memorize', contradicting the correct coverage (lectures 1-9) listed elsewhere.",
+   "Reports that Kofi will post the practice midterm in the Action items, contradicting the decision that Ana will post it.",
+   "Hallucinates that leader E commits client 2's write on nodes A, B, and C during the partition, which is impossible since A and B are on the minority side.",
+   "Contains cut-off, incomplete sentences at the end of the Overview and Summary sections."
+  ],
+  "missing_important_information": [
+   "The answer to Jordan's question about fixed priorities (Raft authors tried it but hit availability corner cases, so randomized timeouts were chosen as simpler)."
+  ],
+  "hallucinated_information": [
+   "In the partition scenario, E commits client 2's 'set y to 3' at index 21 term 8 on A, B, C (E is on the majority side with C and D, and cannot reach A and B)."
+  ],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C01",
+    "reported": "Homework 4 (Raft leader election) is due Friday, October 9th at 11:59pm"
+   },
+   {
+    "correction_id": "C04",
+    "reported": "Midterm is Thursday, October 22nd during normal class time in Larkin Hall room 150, covering lectures 1 through 8"
+   },
+   {
+    "correction_id": "C05",
+    "reported": "Kofi will post a practice midterm on Ed by Friday"
+   }
+  ],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [
+   "The broken second-floor espresso machine is jokingly described as a single node with no replicas.",
+   "The coffee cart outside Larkin is jokingly called a Byzantine failure.",
+   "Majority quorums are likened to juries, specifically the unanimous 12-out-of-12 jury in Twelve Angry Men (1957, with Henry Fonda)."
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "partial"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "present"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "partial"
+   },
+   {
+    "id": "F33",
+    "status": "partial"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "present"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "missing"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "partial"
+   },
+   {
+    "id": "F57",
+    "status": "present"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "present"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   },
+   {
+    "id": "F62",
+    "status": "present"
+   },
+   {
+    "id": "F63",
+    "status": "present"
+   },
+   {
+    "id": "F64",
+    "status": "present"
+   },
+   {
+    "id": "F65",
+    "status": "present"
+   },
+   {
+    "id": "F66",
+    "status": "present"
+   },
+   {
+    "id": "F67",
+    "status": "present"
+   },
+   {
+    "id": "F68",
+    "status": "present"
+   },
+   {
+    "id": "F69",
+    "status": "present"
+   },
+   {
+    "id": "F70",
+    "status": "present"
+   },
+   {
+    "id": "F71",
+    "status": "present"
+   },
+   {
+    "id": "F72",
+    "status": "present"
+   },
+   {
+    "id": "F73",
+    "status": "present"
+   },
+   {
+    "id": "F74",
+    "status": "contradicted"
+   },
+   {
+    "id": "F75",
+    "status": "present"
+   },
+   {
+    "id": "F76",
+    "status": "present"
+   },
+   {
+    "id": "F77",
+    "status": "present"
+   },
+   {
+    "id": "F78",
+    "status": "present"
+   },
+   {
+    "id": "F79",
+    "status": "present"
+   },
+   {
+    "id": "F80",
+    "status": "present"
+   },
+   {
+    "id": "F81",
+    "status": "present"
+   },
+   {
+    "id": "F82",
+    "status": "present"
+   },
+   {
+    "id": "F83",
+    "status": "present"
+   },
+   {
+    "id": "F84",
+    "status": "present"
+   },
+   {
+    "id": "F85",
+    "status": "present"
+   },
+   {
+    "id": "F86",
+    "status": "present"
+   },
+   {
+    "id": "F87",
+    "status": "present"
+   },
+   {
+    "id": "F88",
+    "status": "present"
+   },
+   {
+    "id": "F89",
+    "status": "present"
+   },
+   {
+    "id": "F90",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture almost all the information from the transcript but fail critically in structure, conciseness, and timeline accuracy. The model generated an excessive number of sections (Overview, Summary, Core concepts, Examples, Formulas, Things to memorize, Confusing points, Questions to review, Study summary, Action items, Decisions, Open questions, Risks, Follow-up draft) and repeated the same facts in almost all of them. Furthermore, it failed to resolve corrections made during the lecture, reporting superseded values (HW4 due date, midterm coverage, who posts the practice exam) as current facts in some sections while listing the corrections in others. There is also a material hallucination regarding the partition scenario, incorrectly stating that leader E commits a write on nodes A, B, and C, which contradicts the premise of the partition. Finally, the Overview and Summary sections contain cut-off sentences."
+ }
+}

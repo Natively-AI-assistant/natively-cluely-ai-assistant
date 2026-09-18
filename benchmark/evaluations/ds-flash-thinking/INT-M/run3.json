@@ -1,0 +1,320 @@
+{
+ "blind_id": "S-1da3facc",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 59849,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 22227,
+  "candidatesTokenCount": 2218,
+  "totalTokenCount": 31197,
+  "cachedContentTokenCount": 12236,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 22227
+   }
+  ],
+  "cacheTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 12236
+   }
+  ],
+  "thoughtsTokenCount": 6752,
+  "serviceTier": "standard"
+ },
+ "fact_count": 61,
+ "evaluation": {
+  "factual_accuracy": 4,
+  "important_information_retention": 8,
+  "hallucination_control": 5,
+  "action_item_retention": 10,
+  "decision_retention": 10,
+  "speaker_attribution": 9,
+  "numeric_accuracy": 4,
+  "entity_retention": 9,
+  "timeline_accuracy": 9,
+  "conclusion_accuracy": 4,
+  "structure": 3,
+  "conciseness": 2,
+  "readability": 3,
+  "overall_summary_quality": 3,
+  "critical_errors": [
+   "The notes repeatedly present the superseded $128k-$146k salary band and Maya's superseded $155k target as current facts, risks, and open questions, despite also noting the correction elsewhere.",
+   "The notes hallucinate that 'Compensation details beyond equity were not covered in this chunk', which directly contradicts the extensive notes on base salary, bonus, and benefits.",
+   "The summary section cuts off mid-sentence ('and open').",
+   "Extreme repetition throughout the notes (e.g., action items, decisions, open questions, and risks are listed multiple times verbatim)."
+  ],
+  "missing_important_information": [
+   "Maya has about 5 years of experience, starting at Northpaw Studio.",
+   "The Series B funding is mostly for product and engineering hiring."
+  ],
+  "hallucinated_information": [
+   "Compensation details beyond equity were not covered in this chunk; the only equity point was the unresolved 409A strike price question.",
+   "Theo frames himself as a recruiter by offering access to 'someone who isn't a recruiter', and closes the call with Maya by name."
+  ],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C02",
+    "reported": "The $128,000 to $146,000 band is reported as the current band in the Overview, Company details, Risks, and Open Questions."
+   },
+   {
+    "correction_id": "C03",
+    "reported": "Maya's $155,000 target is reported as her current target and a potential blocker in the Overview, Risks, and Open Questions."
+   }
+  ],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [
+   "Maya joking about Figma files with 'four hundred layers named Rectangle'.",
+   "Theo asking Maya to say hi to her cat, and Maya asking him to say hi to Biscuit."
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "missing"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "missing"
+   },
+   {
+    "id": "F16",
+    "status": "partial"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "contradicted"
+   },
+   {
+    "id": "F30",
+    "status": "contradicted"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "present"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "partial"
+   },
+   {
+    "id": "F56",
+    "status": "present"
+   },
+   {
+    "id": "F57",
+    "status": "present"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "present"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture a large amount of the transcript's detail but suffer from severe structural and factual issues. The most critical error is the repeated inclusion of superseded compensation figures ($128k-$146k band and $155k target) as current risks and open questions, despite the notes correctly identifying the updated figures elsewhere. The notes also hallucinate that compensation details beyond equity were not covered, which contradicts the text itself. Structurally, the notes are extremely repetitive, with action items, decisions, and risks duplicated multiple times, and the summary section cuts off mid-sentence."
+ }
+}

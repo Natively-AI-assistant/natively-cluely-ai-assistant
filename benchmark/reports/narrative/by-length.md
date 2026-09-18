@@ -1,0 +1,5 @@
+**Quality does not degrade with transcript length, for any configuration.** The current config retains 96.5% (short), 93.6% (medium), 90.5% (long) and 95.6% (very long). The ~90-99 minute lectures are among the best-retained inputs for every model. This follows from the pipeline design: V3 never summarizes a long prefix in one pass. It extracts per ~3,000-token chunk and reduces deterministically, so each model call sees the same amount of text regardless of meeting length.
+
+The distributed-information test shows no "recency bias" either. Retention of critical+important facts is flat across the early, middle and final thirds. Luna none/low retain final-third facts ~4-6 pp better than earlier ones, the opposite of lost-in-the-middle. The corresponding weakness is **cross-chunk supersession**: when a value set early is corrected later, each chunk reports its own local truth, and the reducer keeps both.
+
+What *does* grow with length is latency. The current config goes from 24 s p50 (short) to 65 s (very long); Luna none/low/medium from 52-58 s to 146-159 s; Luna max from 448 s to 908 s.

@@ -1,0 +1,440 @@
+{
+ "blind_id": "S-25b22706",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 99351,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 57083,
+  "candidatesTokenCount": 2910,
+  "totalTokenCount": 72900,
+  "cachedContentTokenCount": 36804,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 57083
+   }
+  ],
+  "cacheTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 36804
+   }
+  ],
+  "thoughtsTokenCount": 12907,
+  "serviceTier": "standard"
+ },
+ "fact_count": 90,
+ "evaluation": {
+  "factual_accuracy": 4,
+  "important_information_retention": 9,
+  "hallucination_control": 7,
+  "action_item_retention": 9,
+  "decision_retention": 8,
+  "speaker_attribution": 7,
+  "numeric_accuracy": 4,
+  "entity_retention": 9,
+  "timeline_accuracy": 4,
+  "conclusion_accuracy": 7,
+  "structure": 2,
+  "conciseness": 1,
+  "readability": 2,
+  "overall_summary_quality": 3,
+  "critical_errors": [
+   "Reporting superseded values as facts in multiple sections (e.g., Homework 4 due Friday Oct 9, Midterm covers 1-8, 4 nodes tolerate 2 failures) without clearly marking them as superseded in those instances.",
+   "Massive repetition of the same facts across almost every section of the notes.",
+   "Multiple sentences are cut off mid-word or mid-sentence due to apparent length limits or generation errors."
+  ],
+  "missing_important_information": [
+   "The reason for the Homework 4 extension (the autograder was down/flaky).",
+   "The specific impact of the Ledgerline outage (unavailable for 47 minutes, queuing 38,000 authorizations) is missing because the sentence was cut off."
+  ],
+  "hallucinated_information": [
+   "An 'Animation analogy for safety vs liveness' is mentioned, but the transcript contains no animation analogy.",
+   "Stating that 'Ana, not the instructor, will post the practice midterm' implies the instructor was originally supposed to post it, whereas the head TA (Kofi) was the one who originally said he would post it."
+  ],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C01",
+    "reported": "homework 4 on Raft leader election due Friday Oct 9 11:59pm"
+   },
+   {
+    "correction_id": "C02",
+    "reported": "4 nodes tolerate 2 failures — adding the fourth node buys something."
+   },
+   {
+    "correction_id": "C04",
+    "reported": "midterm Oct 22 in Larkin 150 covering lectures 1-8"
+   }
+  ],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [
+   "The broken second-floor espresso machine and the Larkin coffee cart.",
+   "The Twelve Angry Men jury analogy.",
+   "The professor's postmortem joke about how the outage led her to teach the lecture."
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "partial"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "partial"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "present"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "present"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "partial"
+   },
+   {
+    "id": "F57",
+    "status": "present"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "present"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   },
+   {
+    "id": "F62",
+    "status": "present"
+   },
+   {
+    "id": "F63",
+    "status": "present"
+   },
+   {
+    "id": "F64",
+    "status": "present"
+   },
+   {
+    "id": "F65",
+    "status": "present"
+   },
+   {
+    "id": "F66",
+    "status": "present"
+   },
+   {
+    "id": "F67",
+    "status": "present"
+   },
+   {
+    "id": "F68",
+    "status": "present"
+   },
+   {
+    "id": "F69",
+    "status": "present"
+   },
+   {
+    "id": "F70",
+    "status": "present"
+   },
+   {
+    "id": "F71",
+    "status": "present"
+   },
+   {
+    "id": "F72",
+    "status": "present"
+   },
+   {
+    "id": "F73",
+    "status": "present"
+   },
+   {
+    "id": "F74",
+    "status": "present"
+   },
+   {
+    "id": "F75",
+    "status": "present"
+   },
+   {
+    "id": "F76",
+    "status": "present"
+   },
+   {
+    "id": "F77",
+    "status": "present"
+   },
+   {
+    "id": "F78",
+    "status": "present"
+   },
+   {
+    "id": "F79",
+    "status": "present"
+   },
+   {
+    "id": "F80",
+    "status": "present"
+   },
+   {
+    "id": "F81",
+    "status": "present"
+   },
+   {
+    "id": "F82",
+    "status": "present"
+   },
+   {
+    "id": "F83",
+    "status": "present"
+   },
+   {
+    "id": "F84",
+    "status": "present"
+   },
+   {
+    "id": "F85",
+    "status": "present"
+   },
+   {
+    "id": "F86",
+    "status": "present"
+   },
+   {
+    "id": "F87",
+    "status": "present"
+   },
+   {
+    "id": "F88",
+    "status": "present"
+   },
+   {
+    "id": "F89",
+    "status": "present"
+   },
+   {
+    "id": "F90",
+    "status": "present"
+   }
+  ],
+  "rationale": "The candidate notes successfully capture almost all of the important information from the transcript, but they do so by dumping nearly every sentence into massive, repetitive bulleted lists across every section. This extreme lack of conciseness leads to severe readability issues, including multiple sentences being cut off mid-word. Furthermore, the notes report superseded values (such as the old homework deadline, the old midterm coverage, and the incorrect fault tolerance for 4 nodes) as facts in several places, which severely impacts factual and numeric accuracy."
+ }
+}

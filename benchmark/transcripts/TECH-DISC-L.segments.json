@@ -1,0 +1,3137 @@
+{
+ "id": "TECH-DISC-L",
+ "segments": [
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Hey, is this the right link? The calendar invite had two.",
+   "timestamp": 1789480805000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Yeah, this is the one. The other one was from when we booked the big room. Hi Ravi.",
+   "timestamp": 1789480812800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Hi. I think I'm the first one here, which never happens.",
+   "timestamp": 1789480817800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Mark it on the calendar. Pam said she's running two minutes late, she's coming out of the on-call handoff.",
+   "timestamp": 1789480826000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Hey all, sorry, my headphones decided to update themselves right as I clicked join.",
+   "timestamp": 1789480832200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Of course they did. Hi Sam. Did you get any sleep after Tuesday?",
+   "timestamp": 1789480838000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Some. I think I slept like eleven hours last night, so I'm mostly human again.",
+   "timestamp": 1789480844600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Eleven hours. I'm jealous. My kid woke up at five asking if dinosaurs had birthdays.",
+   "timestamp": 1789480851200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "That's a legitimate question though.",
+   "timestamp": 1789480853800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That's what I said. Then I had to explain there were no calendars.",
+   "timestamp": 1789480859600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Okay, I'm here. Sorry, the handoff ran long because the handoff notes were basically a novel this week.",
+   "timestamp": 1789480867400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "No worries, Pam. Everyone's here except Grace, and Grace said she'd join for the last twenty minutes or so, to hear where we landed.",
+   "timestamp": 1789480877600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "So she's skipping the fun part.",
+   "timestamp": 1789480880600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "She's skipping the part where we relive Tuesday, yes.",
+   "timestamp": 1789480884800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, so the plan for today. First, maybe fifteen minutes, a mini post-incident review of the notification outage from Tuesday, September 8th. Not the full write-up, just enough that we agree on what actually happened.",
+   "timestamp": 1789480899400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Then the rest of the time on what we do about it architecturally, because I don't want to just patch the consumer and wait for it to happen again in November.",
+   "timestamp": 1789480912400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Agreed. I've got opinions.",
+   "timestamp": 1789480914600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Ravi has opinions. Shocking.",
+   "timestamp": 1789480916800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "They're good opinions.",
+   "timestamp": 1789480918600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "We'll get there. Let me start with the timeline and people jump in where I get something wrong. I pulled this from the incident channel and from Pam's Grafana snapshots.",
+   "timestamp": 1789480931200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "At 14:02 on Tuesday we deployed notif-worker version 2.14.0. That's the RabbitMQ consumer that pulls notification jobs and sends the SMS through Twilio and the email through Send Grid.",
+   "timestamp": 1789480943400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Right, and just so it's clear for the notes, notif-worker is the consumer. notify-gateway is the HTTP service that clinics hit and that publishes onto the queue. People mixed those up a lot in the channel.",
+   "timestamp": 1789480958400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Yes, thank you. notif-worker consumes, notify-gateway publishes. I'll try to say them slowly.",
+   "timestamp": 1789480964200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "We really named those terribly.",
+   "timestamp": 1789480966800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "It was named in 2021 by someone who left, so we can blame them freely.",
+   "timestamp": 1789480973400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "So 14:02, deploy of notif-worker 2.14.0. At 14:19 the first alert fired, which was the queue depth alert on notifications.v2, and it fired when depth crossed 50,000 messages.",
+   "timestamp": 1789480985200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Pam declared a SEV-2 at 14:31.",
+   "timestamp": 1789480988200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Yeah, that was me. At that point it looked like a slow consumer, nothing dramatic.",
+   "timestamp": 1789480994800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "At 14:45 Sam rolled notif-worker back to 2.13.2.",
+   "timestamp": 1789480998600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "And it did absolutely nothing, which was the most confusing twenty minutes of my year.",
+   "timestamp": 1789481005200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Right, the rollback didn't help, we'll come back to why. At 15:10 we upgraded it to SEV-1 because the depth was climbing past 400,000 and customer success started getting calls from clinics.",
+   "timestamp": 1789481018600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "The backlog peaked at 1.8 million messages at 16:40.",
+   "timestamp": 1789481022800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "1.8 million on the main queue, yes. I have the screenshot, it looks like a ski jump.",
+   "timestamp": 1789481030200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "At 16:52 we made the change that actually stopped the bleeding, then the backlog drained by 18:35, and we called it resolved at 19:12.",
+   "timestamp": 1789481040400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "So from the first alert at 14:19 to resolution at 19:12, that's 4 hours and 53 minutes.",
+   "timestamp": 1789481047800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Feels like it was two days.",
+   "timestamp": 1789481050800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "It did. Metrics. Before the incident, p99 end-to-end delivery latency, meaning from notify-gateway accepting the request to Twilio or SendGrid accepting the send, was 2.1 seconds.",
+   "timestamp": 1789481061800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "At the worst point p99 was 47 minutes.",
+   "timestamp": 1789481065600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "47 minutes for an appointment reminder that says your appointment is in an hour. So, you know, not great.",
+   "timestamp": 1789481073800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And right now, after the fix, p99 is sitting at 3.4 seconds. So we're better, but we're still not back at the 2.1 baseline.",
+   "timestamp": 1789481084000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "I think I know why it's still at 3.4, it's the prefetch, but let's do that later.",
+   "timestamp": 1789481091400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, park it. Error rates. Baseline Twilio 429 rate, so rate-limited responses, is about 0.2% of sends. At peak on Tuesday it was 38% of sends getting a 429.",
+   "timestamp": 1789481103600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "38 percent. Wow.",
+   "timestamp": 1789481105400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And the overall notification failure rate, meaning notifications that never got delivered within the reminder window, was 11% for the incident window.",
+   "timestamp": 1789481114800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Customer impact. From what I've got right now, 312 clinics were affected, around 61,000 patients got late reminders, and 9,400 patients got duplicate SMS messages, some of them got the same reminder three or four times.",
+   "timestamp": 1789481129800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "The duplicate ones are what generated the angry calls. Late reminders people kind of shrug at. Four texts in a row, people think they've been hacked.",
+   "timestamp": 1789481140800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "One patient replied STOP to all four, which, fair.",
+   "timestamp": 1789481145000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, so that's the rough shape. Now, root cause. The working theory in the incident channel on Tuesday was this, and Sam correct me.",
+   "timestamp": 1789481155200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "2.14.0 bumped the RabbitMQ prefetch count on notif-worker from 10 to 200. With 200 unacked messages in memory per pod, the pods started getting OOM killed, every OOM kill dumped 200 messages back onto the queue, and on top of that Twilio started rate-limiting us.",
+   "timestamp": 1789481173800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Yeah, that was the theory I wrote at like 15:30. And the prefetch change is real, it did go from 10 to 200, and pods did get OOM killed.",
+   "timestamp": 1789481186000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "It's a reasonable theory. More in flight, more memory, pods die, redelivery.",
+   "timestamp": 1789481191400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "The OOM kills are definitely in the Kubernetes events. I counted 212 OOM kills across the notif-worker pods between 14:20 and 16:50.",
+   "timestamp": 1789481200800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "212. Okay. So, the other question from the channel. When messages kept failing, Ravi, you said at the time something like, well, at least the poison ones are going to the dead letter queue.",
+   "timestamp": 1789481215000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Yeah, I mean, we've had a DLQ on that queue forever, right? So the ones that failed repeatedly should be sitting in notifications.v2.dlq and we can replay them.",
+   "timestamp": 1789481226800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "So, um, no. That's actually one of the things I found yesterday.",
+   "timestamp": 1789481232200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "What do you mean no?",
+   "timestamp": 1789481234800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "The dead letter exchange exists. It's declared in Terraform, notifications.dlx, and the queue notifications.v2.dlq exists and is bound to it. But the policy that sets x-dead-letter-exchange on notifications.v2 was never applied.",
+   "timestamp": 1789481247800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "The policy in Terraform has a pattern that matches notifications-v2 with a hyphen, and the queue is notifications.v2 with a dot. So the policy matched nothing.",
+   "timestamp": 1789481258800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Oh no.",
+   "timestamp": 1789481260200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "So the DLQ was never enabled on that queue. There are zero messages in it. There have always been zero messages in it. Since, I checked, March 2024.",
+   "timestamp": 1789481272000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "I also assumed it was on. I think everyone assumed it was on. It's in the architecture diagram.",
+   "timestamp": 1789481279800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "The diagram is aspirational, apparently.",
+   "timestamp": 1789481282400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Diagrams are the most optimistic documents in any company.",
+   "timestamp": 1789481286600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, so write that down. DLQ was not enabled on notifications.v2. Messages that failed just got requeued forever. That's a big part of this.",
+   "timestamp": 1789481296800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "And while we're on things people assumed, I'm going to own one. On Tuesday I said in the channel that 2.14.0 had already gone through canary so it probably wasn't the deploy.",
+   "timestamp": 1789481310200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "That was wrong. notif-worker is not on the canary pipeline. Only notify-gateway and the scheduler use the Argo Rollouts canary. notif-worker deploys straight to all replicas.",
+   "timestamp": 1789481321200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Yeah, I didn't realize that either until Pam said it this morning.",
+   "timestamp": 1789481326600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So the thing that sends patient messages has less deployment safety than the thing that accepts them. Cool. Cool cool cool.",
+   "timestamp": 1789481335600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Also going on the list. Okay, Sam, you said you found more yesterday. Tell us what actually happened, because I don't think the prefetch theory explains why the rollback didn't help.",
+   "timestamp": 1789481348600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Right, so that was bugging me all night. If the prefetch bump was the problem, rolling back to 2.13.2 at 14:45 should have put prefetch back to 10 and things should have recovered in a few minutes. They didn't.",
+   "timestamp": 1789481364800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "So yesterday I diffed the full deploy, not just the image. 2.14.0 shipped with a ConfigMap change too. It added RETRY_MODE equals inline.",
+   "timestamp": 1789481374600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Before 2.14.0, when Twilio or SendGrid returned a retryable error, the worker published the message to the delayed retry exchange with a backoff, 5 seconds, then 30, then 2 minutes.",
+   "timestamp": 1789481387200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "With RETRY_MODE inline, which I added for a different reason, for a latency experiment on the email path, the worker does a basic.nack with requeue true immediately. No backoff at all.",
+   "timestamp": 1789481400200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Oh. So every 429 goes straight back onto the head of the queue and gets picked up again in milliseconds.",
+   "timestamp": 1789481408800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Exactly. And the rollback at 14:45 only rolled back the image. The Helm rollback didn't touch the ConfigMap because the ConfigMap is managed in a separate chart. So 2.13.2 was running with RETRY_MODE inline too, because I'd written 2.13.2 to read that variable already, it just defaulted to delayed.",
+   "timestamp": 1789481429000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "So the rollback rolled back nothing that mattered.",
+   "timestamp": 1789481432800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Nothing that mattered, yeah. At 16:52, that change Dana mentioned, that was me flipping RETRY_MODE back to delayed by hand. And within about four minutes the 429 rate started falling.",
+   "timestamp": 1789481445400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, so let me say the refined root cause out loud so we agree.",
+   "timestamp": 1789481451600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "The root cause was not really the prefetch and the OOM kills. The root cause was the RETRY_MODE inline config shipped with 2.14.0, which turned every retryable provider error into an immediate requeue with no backoff. That created a retry storm against Twilio, which drove the 429 rate to 38%, which made more retries, and so on.",
+   "timestamp": 1789481475000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "The OOM kills from prefetch 200 were real but they were an amplifier, a symptom, not the cause.",
+   "timestamp": 1789481482800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Yes. That's accurate. I'd add the trigger too. Something had to push us over Twilio's limit in the first place.",
+   "timestamp": 1789481491400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "That's the Northgate batch.",
+   "timestamp": 1789481493600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Right. At 14:00, Northgate Medical Group uploaded a bulk reminder batch through notify-gateway, 240,000 reminders in one go for their flu clinic campaign. That's normally fine with delayed retries, it just takes a while. With inline retries it was gasoline.",
+   "timestamp": 1789481510200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So trigger is the Northgate batch, root cause is inline retry with no backoff, amplifiers are prefetch 200 and no DLQ.",
+   "timestamp": 1789481519200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "That's a good summary. And a fourth amplifier, which I want Pam to talk about, is the autoscaler.",
+   "timestamp": 1789481527000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Yeah. So KEDA scales notif-worker on queue depth. Max replicas is set to 40. As depth climbed, KEDA did exactly what we told it to, it went from 8 pods to 40 pods by about 15:05.",
+   "timestamp": 1789481542000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Which means five times more consumers all hammering Twilio at the same time. Our Twilio short code throughput is 100 messages per second. Forty pods at six concurrent sends each is 240 attempted sends a second against a 100 per second limit.",
+   "timestamp": 1789481559400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So the autoscaler was basically scaling the attack.",
+   "timestamp": 1789481563200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "The autoscaler DDoSed our own vendor, yes.",
+   "timestamp": 1789481566600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "I feel like that should be on a t-shirt.",
+   "timestamp": 1789481570800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay. One more thing before we leave the incident. The duplicates. Sam, the 9,400 duplicates, is that from the requeue?",
+   "timestamp": 1789481579400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Partly. The main source is the OOM kills. The worker calls Twilio, Twilio accepts the message, and then before we ack the RabbitMQ message the pod gets OOM killed. The message goes back on the queue, another pod picks it up, sends it again. We have no idempotency check at all on the send side.",
+   "timestamp": 1789481602000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Right, at-least-once delivery with no idempotency is just at-least-twice delivery.",
+   "timestamp": 1789481606600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Pretty much.",
+   "timestamp": 1789481608000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "There's one more loss mode I want in the review, because it's the one compliance is going to ask about.",
+   "timestamp": 1789481616600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "The notify-gateway side?",
+   "timestamp": 1789481618400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Yeah. So notify-gateway writes the notification row to Postgres, commits, and then publishes to RabbitMQ with publisher confirms. During the worst part, around 16:00 to 16:45, the broker was under so much pressure that publisher confirms were timing out after 5 seconds.",
+   "timestamp": 1789481635800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "And when the confirm times out, notify-gateway logs an error and moves on. The row is in Postgres with status queued, but the message never made it onto the queue.",
+   "timestamp": 1789481648400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "So those just sit there forever as queued.",
+   "timestamp": 1789481652200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "I ran a query this morning. There are about 2,300 notifications in Postgres with status queued, created during the incident, that never got published. They were never sent. Not late. Never.",
+   "timestamp": 1789481665200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That's the classic dual-write problem. You write to the database and the broker as two separate steps and you pray.",
+   "timestamp": 1789481673800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay. So that's 2,300 lost notifications on top of the late ones and the duplicates. We should decide whether we resend those, but that's maybe not a today question.",
+   "timestamp": 1789481686000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "I'd rather not resend a reminder for an appointment that happened on Tuesday. That's how you get a patient showing up for an appointment that doesn't exist.",
+   "timestamp": 1789481697400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Fair. Let's leave that as an open item. Okay, I think that's the incident. Anything I missed before we move to the what-do-we-do part?",
+   "timestamp": 1789481707600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Just that I'm sorry. The RETRY_MODE thing was my change and I should have split it into its own deploy.",
+   "timestamp": 1789481716200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Appreciate that, Sam, but this is blameless, and honestly the fact that one environment variable could do all this is a system problem. The DLQ, the canary gap, the autoscaler, the dual write. Nobody designed that on purpose.",
+   "timestamp": 1789481732000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Yeah, if one config flag can take down the pipeline, the pipeline is the bug.",
+   "timestamp": 1789481738600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Plus we've all shipped a ConfigMap change with an image change. I did it last week.",
+   "timestamp": 1789481745600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay. Architecture. So the framing I want. We have a peak season coming. Open enrollment starts November 1st, and last year our notification volume roughly tripled from November through mid December.",
+   "timestamp": 1789481758600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Right now we do around 3 million messages a day, so call it 90 million a month. At 3x that's 9 million a day during peak.",
+   "timestamp": 1789481769600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Code freeze for peak is October 23rd. So whatever we do that touches the production pipeline has to be done and soaked before October 23rd. That's about six weeks from today.",
+   "timestamp": 1789481782600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Six weeks and one day.",
+   "timestamp": 1789481785200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Six weeks and one day. Constraints. Team is four engineers, that's me, Ravi, Sam, and Joaquin, who's on parental leave until September 21st. Pam is our SRE but she's shared across three teams.",
+   "timestamp": 1789481799000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "At about half time for platform, realistically.",
+   "timestamp": 1789481802400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "At about half time. Budget. Our messaging line right now, the RabbitMQ cluster on EC2, is about $3,800 a month. And the ceiling finance gave us for messaging this fiscal year is $6,000 a month total.",
+   "timestamp": 1789481817400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Compliance. We're HIPAA. Notification payloads contain PHI, patient names and appointment times. Anything we use has to be covered by our AWS BAA, has to be encrypted at rest with our customer managed KMS keys, and our internal policy is that PHI can't sit in a message broker longer than 14 days.",
+   "timestamp": 1789481838800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "And the auditor flagged in March that RabbitMQ inter-node traffic isn't using TLS. That's still open, by the way. It's on the remediation list with a due date of end of year.",
+   "timestamp": 1789481852200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Which is another point for getting off self-managed RabbitMQ.",
+   "timestamp": 1789481856400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay Ravi, go. You've been waiting.",
+   "timestamp": 1789481859400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay. So. My position is we should move the notification pipeline to Kafka, specifically Amazon MSK, and do it before peak.",
+   "timestamp": 1789481868400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Three reasons. One, replay. If we'd had a log instead of a queue on Tuesday, we could have just reset consumer offsets to 14:00 and reprocessed cleanly after fixing the config. With RabbitMQ, once a message is acked, it's gone.",
+   "timestamp": 1789481885000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Two, backpressure is natural. Consumer lag is a first-class metric. Kafka doesn't care if you have 1.8 million messages sitting in a topic. That's a rounding error for Kafka. It's not in memory, it's on disk.",
+   "timestamp": 1789481900000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Three, ordering per clinic. We could partition by clinic ID and get per-clinic ordering, which we've wanted for the reschedule-then-cancel race condition for like a year.",
+   "timestamp": 1789481911000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "The reschedule-cancel bug is real, I'll give you that one.",
+   "timestamp": 1789481915600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And MSK is HIPAA eligible under the BAA, it supports KMS customer managed keys, and it has TLS in transit, so the auditor finding goes away.",
+   "timestamp": 1789481926600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "What version would we run?",
+   "timestamp": 1789481929200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Kafka 3.6 on MSK, that's what the data team runs for the analytics pipeline, so there's some existing knowledge in the building.",
+   "timestamp": 1789481938600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Some knowledge on a different team, in a different account.",
+   "timestamp": 1789481943200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Sure, but it's not zero.",
+   "timestamp": 1789481945800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Honestly this is basically the talk I saw at QCon San Francisco last year. There was a team from a food delivery company, their order notifications were on RabbitMQ, they had almost exactly our outage, retry storm, and they moved to Kafka in, I think, eight weeks, and their p99 went down like 60%.",
+   "timestamp": 1789481968000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Every conference talk is a success story. Nobody gets on stage and says, we migrated to Kafka and then we hired six more SREs and it was the worst year of our lives.",
+   "timestamp": 1789481981800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That's not fair, they did talk about the pain. There was a whole slide about consumer group rebalancing.",
+   "timestamp": 1789481989600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Was that the talk with the guy who had the slides that were all hand-drawn?",
+   "timestamp": 1789481996200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "No, that was a different one, that was about feature flags. The Kafka one had the really aggressive dark theme with the neon green.",
+   "timestamp": 1789482006400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Oh, I watched that one on YouTube. The speaker kept saying the log is the database.",
+   "timestamp": 1789482013400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Yes. The log is the database.",
+   "timestamp": 1789482016400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "The log is the database until someone asks you to delete a patient's data under the 14 day policy.",
+   "timestamp": 1789482024600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Retention is configurable. You just set retention.ms to 14 days or less on the topic.",
+   "timestamp": 1789482031200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Sure. I'm just saying the talk skipped the part where their topic was full of PHI.",
+   "timestamp": 1789482038200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, we've done the conference, we're back. Ravi, what does MSK cost?",
+   "timestamp": 1789482043600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So I did a quick estimate this morning. Three brokers, kafka.m5.large, across three availability zones, plus some storage. I got roughly $1,900 a month.",
+   "timestamp": 1789482053800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "So that's actually less than the RabbitMQ cluster at $3,800.",
+   "timestamp": 1789482058400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Right. Cheaper, managed, replayable, and fixes the auditor finding. That's my pitch.",
+   "timestamp": 1789482063800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "How long would the migration take though? Because notif-worker is, I mean, it's not small.",
+   "timestamp": 1789482070400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I think six weeks. The producer side in notify-gateway is maybe a week. The consumer rewrite is the bulk of it, maybe three weeks, and then two weeks of dual-running and soak.",
+   "timestamp": 1789482083800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Six weeks is exactly our window to October 23rd.",
+   "timestamp": 1789482088000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "It's tight, but it's doable if we start Monday.",
+   "timestamp": 1789482092200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "What about the retries? That's the thing that actually broke on Tuesday.",
+   "timestamp": 1789482097600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Retry topics. You have a notifications topic, then notifications.retry.30s, notifications.retry.2m, notifications.retry.10m, and then a DLQ topic. It's a well-known pattern, Uber wrote about it years ago.",
+   "timestamp": 1789482108600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "I've read that post. It's a lot of topics.",
+   "timestamp": 1789482112800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "It's a few topics. Topics are cheap.",
+   "timestamp": 1789482116200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, honestly, I came into this thinking we'd just fix the consumer, but the replay argument is pretty compelling after Tuesday. And the auditor finding. And if it's cheaper.",
+   "timestamp": 1789482128400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "It sounds like we're kind of converging on MSK. Let's say, tentatively, the direction is migrate the notification pipeline to Kafka on MSK before the October 23rd freeze.",
+   "timestamp": 1789482140200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Great.",
+   "timestamp": 1789482141200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Ravi, can you write up a two-week spike plan for the Kafka consumer, like a prototype of notif-worker reading from MSK with the retry topics?",
+   "timestamp": 1789482151800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Yeah, I can have the plan by Monday.",
+   "timestamp": 1789482155600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Can I push back before we write that down in pen?",
+   "timestamp": 1789482160600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "It's in pencil. Go ahead.",
+   "timestamp": 1789482163200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Okay. A few things. First, the cost. Ravi, your $1,900, what storage did you assume and did you include data transfer?",
+   "timestamp": 1789482172200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I assumed like 500 gigs per broker. I didn't include data transfer, no.",
+   "timestamp": 1789482178000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Right. So I went through the MSK pricing for exactly this last quarter for the data team's cluster, so I have real numbers.",
+   "timestamp": 1789482187800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "kafka.m5.large is too small for us. At peak we'd be doing 9 million messages a day, with bursts like the Northgate batch, and m5.large brokers were the thing the data team had to upgrade off within a month. They run kafka.m5.xlarge.",
+   "timestamp": 1789482204800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Three m5.xlarge brokers, with storage and provisioned throughput, and cross-AZ replication traffic, because with replication factor 3 every write crosses AZs twice. Cross-AZ transfer is the line nobody puts in the estimate.",
+   "timestamp": 1789482218200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "When I do it with the data team's actual bill as the model, it's about $5,200 a month. Not $1,900.",
+   "timestamp": 1789482226800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "$5,200? That seems really high.",
+   "timestamp": 1789482229400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "I can send you their bill. It's $5,400 for their cluster and ours would be slightly smaller.",
+   "timestamp": 1789482236800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay. If it's based on their actual bill then, yeah, I'll take $5,200. I was clearly underestimating transfer.",
+   "timestamp": 1789482244600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "And then, during migration, we'd be running both. RabbitMQ at $3,800 and MSK at $5,200. That's $9,000 a month for however long we dual-run.",
+   "timestamp": 1789482254800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And the ceiling is $6,000.",
+   "timestamp": 1789482257400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "The ceiling is $6,000. So even the steady state MSK at $5,200 plus the stuff we need anyway, like the extra Postgres capacity, is right at the ceiling. And the dual-run is 50% over it.",
+   "timestamp": 1789482272000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Can I add the timeline thing too, because I'm the one who'd be rewriting the consumer.",
+   "timestamp": 1789482279000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Please.",
+   "timestamp": 1789482280000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "I don't think it's six weeks. notif-worker isn't just a loop that reads a message and calls Twilio. It has the quiet hours logic, so we don't text patients between 9pm and 8am in their local time zone, it has the per-clinic template rendering, it has the opt-out check against the STOP list, it has the SendGrid bounce handling.",
+   "timestamp": 1789482304200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "A lot of that assumes RabbitMQ semantics. Like, the quiet hours logic literally republishes the message to a delayed exchange with a TTL until 8am. In Kafka there's no per-message delay. You'd have to build a scheduler.",
+   "timestamp": 1789482319600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "You'd move quiet hours into the scheduler service. That's where it belongs anyway.",
+   "timestamp": 1789482325400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Maybe, but that's another service to change. And the retry topics, the problem with retry topics is a message in the 10 minute retry topic blocks every message behind it in that partition. So you need enough partitions and you need the consumer to pause and resume per partition. It's doable, I just don't think it's three weeks.",
+   "timestamp": 1789482349200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "What's your number?",
+   "timestamp": 1789482351000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Honestly, realistically, with testing, with the quiet hours move, 10 to 12 weeks for two people. And we have, like, Ravi and me, and Joaquin coming back on the 21st.",
+   "timestamp": 1789482363600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "10 to 12 weeks puts us past the October 23rd freeze. Probably into mid-November, which is the middle of open enrollment.",
+   "timestamp": 1789482372600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I think Sam's padding it, but, okay, even if it's eight weeks it misses the freeze.",
+   "timestamp": 1789482379600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "I'm not padding it. The quiet hours thing alone is two weeks.",
+   "timestamp": 1789482385000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay. And Pam, the other thing you said, the retries.",
+   "timestamp": 1789482389600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Right. The thing that broke on Tuesday was retry with no backoff plus the autoscaler plus no DLQ. Kafka doesn't fix any of those by itself. You can build a retry storm on Kafka just as easily. You can forget to wire up the DLQ topic just as easily. You can autoscale into Twilio's rate limit just as easily.",
+   "timestamp": 1789482413800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "The replay thing is nice, I'm not saying it's not. But replaying 240,000 appointment reminders after a five hour outage isn't actually something we'd want to do, because half of them would be stale.",
+   "timestamp": 1789482428000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Replay is also for debugging, not just for recovery.",
+   "timestamp": 1789482432200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Sure. I'm just saying it's not what would've saved us Tuesday.",
+   "timestamp": 1789482437200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay, that's fair. The retry storm is a consumer design problem, not a broker problem. I'll concede that.",
+   "timestamp": 1789482445000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay. Before we go further, I want to fix one number from the incident part, because customer success sent me the updated list while we were talking.",
+   "timestamp": 1789482456400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "I said 312 clinics affected. That was from Tuesday night. Their updated count, after they matched the delivery logs to clinic accounts, is 420 clinics. So, sorry, 420, not 312.",
+   "timestamp": 1789482469000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "That's a lot more.",
+   "timestamp": 1789482471200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Yeah, the 312 only counted clinics that had called in. 420 is from the logs. Patient numbers are the same, still around 61,000 late and 9,400 duplicates.",
+   "timestamp": 1789482482600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "That matches what I'd expect. Northgate alone is 38 clinic locations.",
+   "timestamp": 1789482487600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay. So, Pam, you mentioned there's a third option. You want to put SQS on the table?",
+   "timestamp": 1789482495000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Yeah. So I'll lay out three options properly. Option one, keep RabbitMQ and fix the consumer and the queue config. Option two, Kafka on MSK. Option three, managed SQS with SNS for fan-out.",
+   "timestamp": 1789482508800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "SQS first. I ran SQS at my last job for about four years, at higher volume than this. For our volume, 90 million messages a month, and let's say each message is three or four API requests, send, receive, delete, some visibility changes, it's in the hundreds of dollars a month.",
+   "timestamp": 1789482529800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "With SNS in front for fanning out to the SMS and email queues, and KMS requests, because KMS calls are billed and people forget that, I get between $600 and $1,100 a month. Let's use $1,100 to be conservative. At peak, 3x volume, maybe $2,500 for those months.",
+   "timestamp": 1789482549600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That's a lot cheaper than MSK.",
+   "timestamp": 1789482552600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "It's a lot cheaper than everything. And it's zero brokers. There's nothing to patch, no Erlang upgrades, no inter-node TLS finding because there are no nodes.",
+   "timestamp": 1789482563600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "And it has what we actually needed on Tuesday built in. Redrive policy to a dead letter queue with maxReceiveCount, so you literally can't create the queue in our Terraform module without the DLQ. Visibility timeout gives you a natural backoff. It's covered under the BAA, and it supports our KMS customer managed keys.",
+   "timestamp": 1789482585800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "What's the catch? Because there's always a catch.",
+   "timestamp": 1789482589600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "A few. Message size limit is 256 kilobytes. Standard queues are at-least-once and not ordered, so we don't get per-clinic ordering, and we absolutely need idempotency. FIFO queues give ordering but have throughput limits we'd need to design around. And there's no replay, once it's deleted it's gone, same as RabbitMQ.",
+   "timestamp": 1789482610600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And the reschedule-cancel race doesn't get fixed.",
+   "timestamp": 1789482614000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Not by the queue, no. You'd fix it with a version number on the appointment, which honestly is how it should be fixed anyway.",
+   "timestamp": 1789482624200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Also the message size. Most of our payloads are tiny, but the insurance card reminder template has an inline image in the email. I think those can be a couple hundred kilobytes. I don't know if any go over 256.",
+   "timestamp": 1789482640800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "That's worth checking. The usual answer is you put the payload in S3 and put a pointer in the message.",
+   "timestamp": 1789482649400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Which is more PHI in more places.",
+   "timestamp": 1789482652800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Encrypted with the same KMS key, but yeah, it's another place.",
+   "timestamp": 1789482657800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, and option one. What does fixing RabbitMQ actually look like?",
+   "timestamp": 1789482662800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "So, the consumer stuff we need no matter what broker we pick. Put retries back on the delayed exchange, but proper exponential backoff, 1 second, 5 seconds, 30 seconds, 2 minutes, 10 minutes, max five attempts, then dead letter. Delete the inline retry mode entirely so nobody can flip it on again.",
+   "timestamp": 1789482684200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Please delete it. Don't just default it off.",
+   "timestamp": 1789482688000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Delete it. Then, on the broker side, upgrade from RabbitMQ 3.11.9 to 3.13.7 and move notifications.v2 from classic mirrored queues to quorum queues.",
+   "timestamp": 1789482697800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Quorum queues have a delivery-limit setting. After N redeliveries the message gets dead-lettered automatically, even if the consumer is buggy and keeps nacking with requeue. So that makes the Tuesday retry loop physically impossible at the broker level.",
+   "timestamp": 1789482713600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Classic mirrored queues are removed in RabbitMQ 4 anyway, so we'd have to do that migration eventually.",
+   "timestamp": 1789482721000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "What does the upgrade cost?",
+   "timestamp": 1789482723600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Quorum queues use more memory and disk, so probably bigger instances. Pam?",
+   "timestamp": 1789482729000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Going from the current m5.large nodes to m5.xlarge for the three node cluster, I'd guess the cluster goes from $3,800 to about $4,300 a month.",
+   "timestamp": 1789482739600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "So option one steady state is around $4,300, under the $6,000 ceiling. Option two, MSK, $5,200 steady, $9,000 during dual-run. Option three, SQS, around $1,100, maybe $2,500 in peak months.",
+   "timestamp": 1789482752200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "And option three also has a dual-run period, but it's cheap to dual-run, it's like $4,900 total.",
+   "timestamp": 1789482759600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Timeline for option one?",
+   "timestamp": 1789482761800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "The consumer fixes, two weeks. The 3.13 upgrade and quorum queue migration, Pam and I did a 3.8 to 3.11 upgrade last year, that took about a week of prep. So realistically three weeks for everything. Well inside the freeze.",
+   "timestamp": 1789482778400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And SQS timeline?",
+   "timestamp": 1789482780200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Honestly, I don't know yet. Faster than Kafka because there's no ordering or partition design, and the visibility timeout maps pretty well to how quiet hours works today. But I wouldn't commit to doing it before October 23rd without a prototype.",
+   "timestamp": 1789482797200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay. So I think I'm hearing the Kafka-before-peak plan doesn't really work.",
+   "timestamp": 1789482802600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Let's not decide it yet, Grace is joining soon and I want her to hear the options. But let's work through the stuff that's the same regardless of broker, because we need it no matter what.",
+   "timestamp": 1789482817600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "First, the outbox pattern for notify-gateway, for the 2,300 lost ones.",
+   "timestamp": 1789482822600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Yeah. So instead of writing the row and then publishing, notify-gateway writes the notification row and an outbox row in the same Postgres transaction. Then a relay process reads the outbox table and publishes, and marks it published when the confirm comes back. If the publish fails, the relay just tries again later. You can't lose a message between the database and the broker anymore.",
+   "timestamp": 1789482849200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "The relay should be its own deployment though. Not a goroutine inside notify-gateway, not a Node worker thread, its own thing with its own alert.",
+   "timestamp": 1789482859800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Agreed. And it's post gress 14, we can use SELECT FOR UPDATE SKIP LOCKED so we can run two relays.",
+   "timestamp": 1789482868400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "The relay publishes at-least-once too, so that's another reason we need idempotency on the consumer side.",
+   "timestamp": 1789482875400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Right. So idempotency. Sam, what's the plan?",
+   "timestamp": 1789482878800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "So my first idea was a Redis key per notification ID. Before sending, SETNX the notification ID with a 24 hour TTL. If the key already exists, skip the send.",
+   "timestamp": 1789482891400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Two problems. One, we don't have Redis in the notification path today, and adding ElastiCache means another BAA review, another KMS config. Two, 24 hours isn't long enough. With the backoff schedule and quiet hours, a message can legitimately be retried up to 72 hours after it was first attempted. Friday night reminder, quiet hours, weekend, whatever.",
+   "timestamp": 1789482914800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Hmm, yeah, the quiet hours delay does stretch it.",
+   "timestamp": 1789482919000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Just use Postgres. We already have the notification row. Add a delivery_attempts table with a unique index on notification ID and channel. Insert before you call Twilio. If the insert conflicts, check the status and skip if it's already sent.",
+   "timestamp": 1789482935600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "The insert is an extra round trip on every send, but it's one indexed insert. That's fine.",
+   "timestamp": 1789482943000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, so the idempotency design is a Postgres unique index on notification ID plus channel, not Redis. Everyone good?",
+   "timestamp": 1789482951200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Yes. Postgres, no Redis.",
+   "timestamp": 1789482953400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay. Autoscaling. Pam.",
+   "timestamp": 1789482955200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "So the principle is the autoscaler must not scale past what the downstream provider can take. Twilio short code is 100 messages per second. Each notif-worker pod runs six concurrent sends.",
+   "timestamp": 1789482968200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "I'd propose cap max replicas at 20, down from 40.",
+   "timestamp": 1789482972800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "20 pods times 6 is 120 per second though. That's still over 100.",
+   "timestamp": 1789482978600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "You're right. Sorry, I was thinking of the old concurrency of five. Okay, so, max replicas 16. 16 times 6 is 96 a second, which is under the 100 limit with a little headroom.",
+   "timestamp": 1789482992800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "And email pods would scale separately? SendGrid's limit is way higher.",
+   "timestamp": 1789482997800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Ideally, yes, split them into two deployments. But for now, 16 for notif-worker, and add a token bucket rate limiter per provider inside the worker so even if someone raises the replicas again we don't exceed 100 a second to Twilio.",
+   "timestamp": 1789483014800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And scale on what? Not depth?",
+   "timestamp": 1789483017800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Not depth. Depth is misleading, the Northgate batch put 240,000 in the queue in about four minutes, which is a totally legitimate thing that should just take 40 minutes to drain. I'd scale on oldest message age, and on consumer utilization.",
+   "timestamp": 1789483034800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I like oldest message age. It's what the patient actually feels.",
+   "timestamp": 1789483039800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, alerts then. Same principle?",
+   "timestamp": 1789483042400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Yeah. Right now we page at queue depth 50,000, which fired at 14:19 on Tuesday but also fires basically every Monday morning when clinics upload their weekly batches. People have learned to ignore it.",
+   "timestamp": 1789483056600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "My proposal. Page when the oldest message age on notifications.v2 is over 120 seconds for 5 minutes. Page when the Twilio 429 rate is over 2% for 5 minutes. Ticket, not page, when the DLQ has any messages at all, and page when the DLQ is over 500 messages.",
+   "timestamp": 1789483076800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "The 429 one would have fired at like 14:10 on Tuesday.",
+   "timestamp": 1789483081800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Probably 14:08. Nine minutes earlier than what we had, and a lot more specific.",
+   "timestamp": 1789483088000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Someone should probably also look into whether we can get Twilio to raise our short code throughput for peak season. Like, is 100 a hard limit or is it just what we asked for three years ago?",
+   "timestamp": 1789483103400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "That's a good question. Let's see if it lands with someone.",
+   "timestamp": 1789483108400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "And someone should really look at whether notify-gateway should throttle giant uploads per clinic. Like Northgate dropping 240,000 in four minutes. Maybe a per clinic rate or something.",
+   "timestamp": 1789483120200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "The product people will hate that. Clinics like hitting the button and having it done.",
+   "timestamp": 1789483126800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "It'd be done. Just done over an hour.",
+   "timestamp": 1789483130600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, we'll put the gateway throttling on the maybe list. I'm not going to force an owner on it today.",
+   "timestamp": 1789483139200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Oh, before I forget, the p99 thing from earlier. The reason we're at 3.4 seconds and not 2.1.",
+   "timestamp": 1789483147000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Yes, go.",
+   "timestamp": 1789483148400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "On Wednesday we rolled forward to 2.14.1, which has RETRY_MODE removed from the config but still has prefetch 200, with the pod memory limit raised so they stop OOMing. With 200 prefetched per pod, a slow send holds up a lot of messages sitting in that pod's buffer. I want to drop prefetch to 30. My guess is that gets us back near 2.1.",
+   "timestamp": 1789483174600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "30 is fine. Just don't ship it in the same deploy as anything else.",
+   "timestamp": 1789483180800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Separate deploy. I have learned.",
+   "timestamp": 1789483183400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Hi everyone, sorry, I thought this started at 3:30 and then realized that's my next one. Can you hear me?",
+   "timestamp": 1789483192000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Hi Grace, yes. Good timing actually, we just finished the options.",
+   "timestamp": 1789483197000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Great. I've got about 20 minutes. Also, just to confirm, is Tuesday officially our worst incident this year, or does the April SSO thing still hold the title?",
+   "timestamp": 1789483208800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "April was worse for employees. Tuesday was worse for patients. So, depends which trophy.",
+   "timestamp": 1789483215000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "I'll take neither trophy, thanks. Okay, Dana, give me the short version.",
+   "timestamp": 1789483220400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Sure. Incident first, very quickly. Tuesday, September 8th, 4 hours and 53 minutes from first alert to resolution. Backlog peaked at 1.8 million messages, p99 delivery latency went from 2.1 seconds to 47 minutes. 420 clinics affected, about 61,000 patients got late reminders, 9,400 got duplicates, and about 2,300 notifications were never sent at all.",
+   "timestamp": 1789483243000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "420. The number I got Tuesday night was 312.",
+   "timestamp": 1789483247200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Yeah, 312 was clinics that called in. 420 is from the delivery logs, customer success confirmed it about half an hour ago.",
+   "timestamp": 1789483256600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Okay, I'll use 420 in the customer note.",
+   "timestamp": 1789483260400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Root cause. Initially we thought it was the prefetch change in notif-worker 2.14.0 causing OOM kills. That was an amplifier. The actual root cause was a config change in the same deploy, RETRY_MODE inline, that made every Twilio 429 immediately requeue with no backoff. Retry storm. The trigger was a 240,000 reminder batch from Northgate Medical Group at 14:00.",
+   "timestamp": 1789483284600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Amplifiers were the autoscaler going to 40 pods against Twilio's 100 per second limit, the dead letter queue which everyone thought was enabled but never was because of a Terraform pattern typo, and notif-worker not being on the canary pipeline.",
+   "timestamp": 1789483301200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "The DLQ was never on? Like, ever?",
+   "timestamp": 1789483304600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Since March 2024, at least, which is when the queue was created. Hyphen versus dot in the policy pattern.",
+   "timestamp": 1789483312800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Wow. Okay. And options?",
+   "timestamp": 1789483315000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Three options. One, keep RabbitMQ, upgrade to 3.13 with quorum queues and fix the consumer. About $4,300 a month, about three weeks. Two, migrate to Kafka on MSK, which Ravi was advocating. About $5,200 a month steady state, $9,000 during dual-run, and Sam estimates 10 to 12 weeks. Three, SQS and SNS, around $1,100 a month, but we don't have a solid timeline without a prototype.",
+   "timestamp": 1789483342000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "I should be honest, around halfway through this meeting I said we were converging on Kafka, but that was before we had Pam's real cost number and Sam's timeline.",
+   "timestamp": 1789483354200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Okay. Let me ask a couple of questions. First, budget. I know someone's going to ask me. The messaging ceiling is $6,000 a month, and I can't get that raised before the next fiscal year, which starts in February. So a $9,000 dual-run month isn't something I can approve. Even for two months.",
+   "timestamp": 1789483376000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Understood.",
+   "timestamp": 1789483377000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Second, the freeze. October 23rd is not moving. Open enrollment starts November 1st and sales has already promised two of the big hospital groups that reminders will be, their word, bulletproof.",
+   "timestamp": 1789483390000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Love that for us.",
+   "timestamp": 1789483392200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Ravi, you were pushing Kafka. Do you still think it's the right call?",
+   "timestamp": 1789483398000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Long term, I still think a log-based system would be nice for replay and ordering. But I'll be honest, the retry storm was a consumer design problem, and Kafka doesn't fix that, and I can't make the timeline work before the freeze. And the cost is above the ceiling. So no, not before peak.",
+   "timestamp": 1789483420200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Okay. Then here's my call, and Dana, tell me if this doesn't match where the team is.",
+   "timestamp": 1789483427600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "We are not migrating to Kafka. Not before peak and I don't want it on the roadmap for after peak either unless something changes. The reasons are the $5,200 steady state and the $9,000 dual-run being over the $6,000 ceiling, the 10 to 12 week estimate missing the October 23rd freeze, it doesn't address the actual root cause, and a team of four with a half time SRE doesn't have Kafka operations experience.",
+   "timestamp": 1789483457400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "For peak season, we stay on RabbitMQ and do option one. Upgrade to 3.13, quorum queues, the consumer fixes, the dead letter queue, the backoff, and all the stuff you said is broker independent.",
+   "timestamp": 1789483471600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "And then SQS is the thing we evaluate after peak. I want a timeboxed prototype so that in January we're choosing based on data, not a conference talk.",
+   "timestamp": 1789483483400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That's fair. I'll take the conference talk comment.",
+   "timestamp": 1789483487200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "That matches where the team is. Just so it's explicit for the notes. Decision: stay on RabbitMQ for peak season with the fixes. Kafka on MSK is rejected. SQS and SNS gets a timeboxed prototype now and a migration decision in January.",
+   "timestamp": 1789483504600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "When in January?",
+   "timestamp": 1789483506400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "The architecture review on January 13th?",
+   "timestamp": 1789483509400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "January 13th works. Decision on SQS at the January 13th architecture review.",
+   "timestamp": 1789483514800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, action items. I'm going to go through them and people shout if the date is wrong.",
+   "timestamp": 1789483522200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Broker independent consumer stuff first. Sam, delete the inline retry mode entirely, put in exponential backoff on the delayed exchange, 1 second, 5 seconds, 30 seconds, 2 minutes, 10 minutes, max five attempts, then dead letter. Plus the token bucket rate limiter for Twilio at 100 per second. By Friday, September 25th.",
+   "timestamp": 1789483543600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Friday the 25th, yes.",
+   "timestamp": 1789483545800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Sam, also, fixing the DLQ policy pattern in Terraform so notifications.v2 actually dead-letters. That one is urgent. By Monday, September 14th.",
+   "timestamp": 1789483554800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Honestly I can do that one today. But Monday for sure.",
+   "timestamp": 1789483559800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Sam, the prefetch change to 30, separate deploy, by Tuesday, September 15th.",
+   "timestamp": 1789483565200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Yep.",
+   "timestamp": 1789483566200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Sam, idempotency. The delivery_attempts table with a unique index on notification ID and channel. By Wednesday, October 7th.",
+   "timestamp": 1789483574000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "October 7th. Okay. That's a lot of Sam.",
+   "timestamp": 1789483577800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "It is a lot of Sam. Tell me if it's too much.",
+   "timestamp": 1789483583200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "It's okay. The backoff and the limiter are the same PR basically.",
+   "timestamp": 1789483588600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Ravi, the RabbitMQ upgrade from 3.11.9 to 3.13.7 and the migration of notifications.v2 to quorum queues with a delivery limit of 5. By Friday, October 9th.",
+   "timestamp": 1789483599600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Actually, wait. Ravi should be on the SQS prototype, that's the thing we need data on, and I don't want him context switching between a broker upgrade and a prototype. Pam, you and Sam did the last RabbitMQ upgrade, right?",
+   "timestamp": 1789483616200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "3.8 to 3.11, yeah. I did most of it.",
+   "timestamp": 1789483620400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Can you take the upgrade instead of Ravi?",
+   "timestamp": 1789483624200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "I can take it. But then something else has to come off my plate, because I was also going to own the alerts, the autoscaling change, the cost estimate, and the runbook.",
+   "timestamp": 1789483637600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay. So, Pam takes the RabbitMQ 3.13.7 upgrade and the quorum queue migration instead of Ravi, same date, Friday October 9th. And I'll take the runbook off Pam.",
+   "timestamp": 1789483649400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Thank you.",
+   "timestamp": 1789483650800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "So, the runbook. Notification backlog runbook, including how to check RETRY_MODE style config drift, how to check the DLQ, how to cap replicas manually, how to pause the Northgate style batches. That's me now, not Pam. By Thursday, September 24th.",
+   "timestamp": 1789483667400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Good. Make sure the runbook explicitly says the rollback has to include the ConfigMap chart.",
+   "timestamp": 1789483674000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Yes, that's the first section.",
+   "timestamp": 1789483676600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Pam, alerts. Page when oldest message age on notifications.v2 is over 120 seconds for 5 minutes, page when Twilio 429 rate is over 2% for 5 minutes, ticket when the DLQ has any message, page when the DLQ is over 500. By Friday, September 18th.",
+   "timestamp": 1789483695200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Oh, actually, one correction on the age one. The nightly batch for next-day appointments at 02:00, the oldest message age routinely gets to about 150 seconds every night while that drains. If we page at 120 we'll page someone every single night and they'll start ignoring it, which is exactly the Monday morning problem again.",
+   "timestamp": 1789483717800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Make it 180 seconds for 5 minutes. That's above the nightly batch and still would have caught Tuesday within minutes.",
+   "timestamp": 1789483726400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, so oldest message age page threshold is 180 seconds, not 120. The rest stays. Friday, September 18th.",
+   "timestamp": 1789483734200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Yep.",
+   "timestamp": 1789483735200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Pam, the autoscaling change. Max replicas from 40 down to 16, and scale on oldest message age instead of depth.",
+   "timestamp": 1789483743800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "The max replicas one I'll do today, it's a one line change. Scaling on age by the 18th with the alerts.",
+   "timestamp": 1789483752800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Pam, cost estimate. A 12 month cost estimate for all three options, including peak months and dual-run for SQS, so Grace has it for budget planning. When?",
+   "timestamp": 1789483764200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Wednesday, September 30th.",
+   "timestamp": 1789483766000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "That works, I have the budget review in the first week of October.",
+   "timestamp": 1789483771800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Ravi, SQS and SNS prototype. Timebox of 5 working days. notif-worker SMS path only, reading from SQS with the redrive policy, visibility timeout backoff, KMS customer managed key, and check the largest payloads against the 256 kilobyte limit. Start Monday, September 28th, readout Friday, October 2nd.",
+   "timestamp": 1789483790800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "5 days. Okay. What happens to the Kafka spike plan I was going to write for Monday?",
+   "timestamp": 1789483798200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "That's dead. Don't write it.",
+   "timestamp": 1789483800800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Fine, I'll grieve privately.",
+   "timestamp": 1789483803000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "We can put the neon green slides on the wall.",
+   "timestamp": 1789483807600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Could you not.",
+   "timestamp": 1789483809400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Ravi, also, and this one's smaller, get notif-worker onto the Argo Rollouts canary pipeline, like notify-gateway. By Friday, October 16th.",
+   "timestamp": 1789483818000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Yeah, that's fine, that's after the spike.",
+   "timestamp": 1789483821400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Outbox pattern in notify-gateway. The outbox table in the same Postgres transaction, and the relay as its own deployment with its own alert. I want Joaquin on that when he's back on the 21st. Due Friday, October 16th. I'll brief him on his first day.",
+   "timestamp": 1789483840000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Is it fair to hand that to someone on their first day back from leave?",
+   "timestamp": 1789483846600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "I talked to him last week, he asked for something self-contained to come back to. This is self-contained.",
+   "timestamp": 1789483854400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Okay. Then let's keep it.",
+   "timestamp": 1789483857000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "I'll also write the architecture decision record for all this, by Tuesday, September 15th.",
+   "timestamp": 1789483863200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "And I'll send the incident note to the 420 clinics through customer success, by Monday, September 14th.",
+   "timestamp": 1789483870600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, I think that's the list.",
+   "timestamp": 1789483873600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "One more thought. At some point we should really do a game day on this pipeline, like actually kill the broker on staging during a big batch and see what happens.",
+   "timestamp": 1789483886600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "That would be great. At some point.",
+   "timestamp": 1789483890000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "At some point. I'm not assigning it today.",
+   "timestamp": 1789483893800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay. Open questions, let me list what we didn't close so they're in the notes.",
+   "timestamp": 1789483900400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "One. The 2,300 notifications that were never sent. Do we resend any of them, contact those patients some other way, or leave it? Pam's worried about stale reminders.",
+   "timestamp": 1789483912200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "I need to think about that one. I don't have an answer and I don't want to guess on a patient safety question.",
+   "timestamp": 1789483922000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, still open. Two, Ravi's question, is Twilio's 100 per second a hard limit on our short code, or is it per account, and can we get it raised for peak? Nobody's taken that.",
+   "timestamp": 1789483936200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I don't know the answer. It's been 100 since before any of us were here.",
+   "timestamp": 1789483942800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Three, do any of the insurance card email payloads exceed 256 kilobytes? The prototype will look at it, but we don't know yet.",
+   "timestamp": 1789483952600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Four, does the quorum queue migration need a maintenance window, or can we do it live with a shovel?",
+   "timestamp": 1789483960800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "I genuinely don't know yet. Last time, for 3.11, we took a 20 minute window at 03:00. Quorum queues might be different, I have to read up.",
+   "timestamp": 1789483972200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Five, Pam's idea of throttling large per clinic uploads at notify-gateway. No owner, no decision, product would need to weigh in.",
+   "timestamp": 1789483981200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "And six, maybe, whether email and SMS should be separate notif-worker deployments. We said ideally, but nobody decided.",
+   "timestamp": 1789483989000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Right. Six, splitting email and SMS deployments, undecided.",
+   "timestamp": 1789483992800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Okay. That's a good list. Thanks all, genuinely, Tuesday was rough and this is a much better place to be. Sam, don't carry this one around, okay?",
+   "timestamp": 1789484004200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Thanks, Grace. I'll try.",
+   "timestamp": 1789484006400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I'll carry it for him. I'll carry the Kafka dream too.",
+   "timestamp": 1789484011400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Put them both in the dead letter queue. Oh wait.",
+   "timestamp": 1789484016000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, on that note, thanks everyone. I'll send the notes and the ADR draft in the channel.",
+   "timestamp": 1789484023400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Thanks, bye.",
+   "timestamp": 1789484024800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  }
+ ],
+ "words": 7522,
+ "speakerCount": 5,
+ "durationMs": 3224800,
+ "startEpochMs": 1789480800000
+}

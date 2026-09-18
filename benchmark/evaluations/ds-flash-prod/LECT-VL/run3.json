@@ -1,0 +1,444 @@
+{
+ "blind_id": "S-40e496b0",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 96717,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 55854,
+  "candidatesTokenCount": 2994,
+  "totalTokenCount": 71187,
+  "cachedContentTokenCount": 36802,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 55854
+   }
+  ],
+  "cacheTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 36802
+   }
+  ],
+  "thoughtsTokenCount": 12339,
+  "serviceTier": "standard"
+ },
+ "fact_count": 90,
+ "evaluation": {
+  "factual_accuracy": 4,
+  "important_information_retention": 10,
+  "hallucination_control": 10,
+  "action_item_retention": 10,
+  "decision_retention": 10,
+  "speaker_attribution": 9,
+  "numeric_accuracy": 4,
+  "entity_retention": 10,
+  "timeline_accuracy": 4,
+  "conclusion_accuracy": 8,
+  "structure": 4,
+  "conciseness": 1,
+  "readability": 3,
+  "overall_summary_quality": 3,
+  "critical_errors": [
+   "Presents the superseded homework 4 deadline (Friday Oct 9) as a fact to memorize.",
+   "Presents the superseded midterm coverage (lectures 1-8) as a fact to memorize.",
+   "Presents the superseded fault tolerance calculation (4 nodes tolerate 2 failures) as a valid example.",
+   "Presents the superseded action item (Kofi posting the practice midterm) as a valid action item.",
+   "The second bullet point in the Summary section is cut off mid-word ('covering lect')."
+  ],
+  "missing_important_information": [],
+  "hallucinated_information": [],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C01",
+    "reported": "Homework 4 (Raft leader election) is due Friday, October 9th at 11:59pm."
+   },
+   {
+    "correction_id": "C02",
+    "reported": "With 4 servers the majority is 3, so 4 nodes tolerate 2 failures — adding that fourth node buys you something."
+   },
+   {
+    "correction_id": "C04",
+    "reported": "The midterm is Thursday, October 22nd during normal class time in Larkin Hall room 150, covering lectures 1 through 8 (up through primary-backup replication)."
+   },
+   {
+    "correction_id": "C05",
+    "reported": "Kofi: Kofi will post a practice midterm on Ed by Friday."
+   }
+  ],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [
+   "The broken second-floor espresso machine is used as a humorous example of a single node with no replicas or failover, causing total liveness loss.",
+   "The Larkin coffee cart is jokingly described as a Byzantine failure that claims to be coffee but is not coffee.",
+   "The lecturer compares majority quorums to juries, describing Twelve Angry Men (the 1957 Henry Fonda original, not the remake): twelve jurors all must agree, a quorum of 12 out of 12.",
+   "4 nodes tolerate 2 failures",
+   "Homework 4 due Friday October 9",
+   "Midterm covers lectures 1 through 8",
+   "Kofi will post the practice midterm"
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "present"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "present"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "present"
+   },
+   {
+    "id": "F57",
+    "status": "present"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "present"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   },
+   {
+    "id": "F62",
+    "status": "present"
+   },
+   {
+    "id": "F63",
+    "status": "present"
+   },
+   {
+    "id": "F64",
+    "status": "present"
+   },
+   {
+    "id": "F65",
+    "status": "present"
+   },
+   {
+    "id": "F66",
+    "status": "present"
+   },
+   {
+    "id": "F67",
+    "status": "present"
+   },
+   {
+    "id": "F68",
+    "status": "present"
+   },
+   {
+    "id": "F69",
+    "status": "present"
+   },
+   {
+    "id": "F70",
+    "status": "present"
+   },
+   {
+    "id": "F71",
+    "status": "present"
+   },
+   {
+    "id": "F72",
+    "status": "present"
+   },
+   {
+    "id": "F73",
+    "status": "present"
+   },
+   {
+    "id": "F74",
+    "status": "present"
+   },
+   {
+    "id": "F75",
+    "status": "present"
+   },
+   {
+    "id": "F76",
+    "status": "present"
+   },
+   {
+    "id": "F77",
+    "status": "present"
+   },
+   {
+    "id": "F78",
+    "status": "present"
+   },
+   {
+    "id": "F79",
+    "status": "present"
+   },
+   {
+    "id": "F80",
+    "status": "present"
+   },
+   {
+    "id": "F81",
+    "status": "present"
+   },
+   {
+    "id": "F82",
+    "status": "present"
+   },
+   {
+    "id": "F83",
+    "status": "present"
+   },
+   {
+    "id": "F84",
+    "status": "present"
+   },
+   {
+    "id": "F85",
+    "status": "present"
+   },
+   {
+    "id": "F86",
+    "status": "present"
+   },
+   {
+    "id": "F87",
+    "status": "present"
+   },
+   {
+    "id": "F88",
+    "status": "present"
+   },
+   {
+    "id": "F89",
+    "status": "present"
+   },
+   {
+    "id": "F90",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture every single detail from the transcript, resulting in perfect retention scores. However, the notes are extremely verbose and repetitive, dumping the same information across multiple sections (Core concepts, Definitions, Examples, Things to memorize, etc.). Crucially, the notes fail to filter out superseded information, presenting the original (incorrect) homework deadline, midterm coverage, and fault tolerance numbers as facts to memorize or act upon, which directly contradicts the final corrections. The inclusion of irrelevant distractors (coffee machine, Twelve Angry Men) and a cut-off sentence in the summary further degrade the quality."
+ }
+}

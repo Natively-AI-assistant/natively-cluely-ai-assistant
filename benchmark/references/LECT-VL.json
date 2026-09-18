@@ -1,0 +1,1556 @@
+{
+  "id": "LECT-VL",
+  "category": "lecture",
+  "natively_mode": "lecture",
+  "length_bucket": "very_long",
+  "speakers": [
+    {
+      "label": "S0",
+      "shown_to_model_as": "Me",
+      "name": "Jordan Reyes",
+      "role": "Undergraduate student in CS 432 (recording the lecture)",
+      "org": "Halden University"
+    },
+    {
+      "label": "S1",
+      "shown_to_model_as": "Speaker 1",
+      "name": "Miriam Castellanos",
+      "role": "Associate Professor of Computer Science, course instructor",
+      "org": "Halden University"
+    },
+    {
+      "label": "S2",
+      "shown_to_model_as": "Speaker 2",
+      "name": "Devin Park",
+      "role": "Undergraduate student in CS 432",
+      "org": "Halden University"
+    },
+    {
+      "label": "S3",
+      "shown_to_model_as": "Speaker 3",
+      "name": "Devon Mitchell",
+      "role": "Undergraduate student in CS 432",
+      "org": "Halden University"
+    },
+    {
+      "label": "S4",
+      "shown_to_model_as": "Speaker 4",
+      "name": "Kofi Mensah",
+      "role": "Head teaching assistant for CS 432",
+      "org": "Halden University"
+    }
+  ],
+  "context": "Recording of Lecture 9 of CS 432 Distributed Systems at Halden University, 'Consensus and the Raft algorithm', taught by Professor Miriam Castellanos with course logistics from head TA Kofi Mensah. The student recording it (Jordan) asks two questions; other students (Devin, Devon) also ask questions. The lecture covers replicated state machines, FLP, quorums, Raft election/replication/safety with worked examples, partitions, membership changes, comparisons with Paxos and real systems, and briefly log compaction.",
+  "facts": [
+    {
+      "id": "F01",
+      "type": "logistics",
+      "importance": "critical",
+      "statement": "Homework 4 (Raft leader election) is now due Monday, October 12 at 11:59pm, moved from Friday October 9 because the autograder was down most of the weekend and still flaky.",
+      "owner": null,
+      "deadline": "Monday, October 12, 11:59pm",
+      "position": "late",
+      "lines": [
+        491,
+        492,
+        493
+      ],
+      "notes": "supersedes the Friday October 9 deadline Kofi announced at the start (C01)"
+    },
+    {
+      "id": "F02",
+      "type": "logistics",
+      "importance": "minor",
+      "statement": "Late days for homework 4 are counted from the new Monday night deadline, not Friday.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        494
+      ],
+      "notes": null
+    },
+    {
+      "id": "F03",
+      "type": "logistics",
+      "importance": "minor",
+      "statement": "Students have 5 late days for the whole semester, with at most 2 usable on any single assignment.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        23
+      ],
+      "notes": null
+    },
+    {
+      "id": "F04",
+      "type": "requirement",
+      "importance": "important",
+      "statement": "Homework 4 covers only leader election and heartbeats in the Go skeleton (AppendEntries used only as an empty heartbeat); log replication and persistence are homework 5.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        19,
+        21
+      ],
+      "notes": null
+    },
+    {
+      "id": "F05",
+      "type": "logistics",
+      "importance": "critical",
+      "statement": "Kofi's (head TA) office hours moved from Wednesdays 2-4pm to Thursdays 3-5pm in Whitaker 214, starting this week.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        24,
+        515
+      ],
+      "notes": null
+    },
+    {
+      "id": "F06",
+      "type": "logistics",
+      "importance": "critical",
+      "statement": "The midterm is Thursday, October 22, during normal class time, in Larkin Hall room 150 (not the usual lecture room).",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        26,
+        27,
+        499
+      ],
+      "notes": null
+    },
+    {
+      "id": "F07",
+      "type": "logistics",
+      "importance": "critical",
+      "statement": "The midterm covers lectures 1 through 9, i.e. it includes today's Raft lecture.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        500,
+        501
+      ],
+      "notes": "supersedes Kofi's earlier 'lectures 1 through 8' (C04)"
+    },
+    {
+      "id": "F08",
+      "type": "logistics",
+      "importance": "critical",
+      "statement": "Log compaction/snapshots (covered at the end of today's lecture) are NOT on the midterm.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        501,
+        504
+      ],
+      "notes": null
+    },
+    {
+      "id": "F09",
+      "type": "logistics",
+      "importance": "important",
+      "statement": "Lecture 10 on Byzantine fault tolerance is not on the midterm; it will be on the final.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        502
+      ],
+      "notes": null
+    },
+    {
+      "id": "F10",
+      "type": "logistics",
+      "importance": "important",
+      "statement": "Students may bring one letter-size sheet of notes (both sides, handwritten or typed) to the midterm; no laptops or phones.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        505
+      ],
+      "notes": null
+    },
+    {
+      "id": "F11",
+      "type": "logistics",
+      "importance": "important",
+      "statement": "The midterm review session is Sunday, October 18, 4-6pm, in the lecture room Whitaker 120.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        509
+      ],
+      "notes": null
+    },
+    {
+      "id": "F12",
+      "type": "action_item",
+      "importance": "important",
+      "statement": "Ana (a TA who wrote most of the questions) will post the practice midterm on Ed by this Friday, instead of Kofi; solutions follow a few days later.",
+      "owner": "Ana",
+      "deadline": "by this Friday",
+      "position": "late",
+      "lines": [
+        512,
+        513
+      ],
+      "notes": "owner changed from Kofi (C05)"
+    },
+    {
+      "id": "F13",
+      "type": "logistics",
+      "importance": "critical",
+      "statement": "Professor Castellanos's Thursday office hours are cancelled (program committee trip); she holds extra office hours Wednesday October 7, 3-4:30pm, in Whitaker 318.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        33,
+        34,
+        514
+      ],
+      "notes": null
+    },
+    {
+      "id": "F14",
+      "type": "logistics",
+      "importance": "important",
+      "statement": "Thursday's lecture 10 on Byzantine fault tolerance will be given by guest lecturer Dr. Joanne Whitfield, a postdoc in the professor's group.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        35
+      ],
+      "notes": null
+    },
+    {
+      "id": "F15",
+      "type": "action_item",
+      "importance": "critical",
+      "statement": "Reading for Thursday: Castro and Liskov, 'Practical Byzantine Fault Tolerance' (1999), sections 1 through 4, before the lecture.",
+      "owner": "all students",
+      "deadline": "before Thursday's lecture (lecture 10)",
+      "position": "late",
+      "lines": [
+        516
+      ],
+      "notes": null
+    },
+    {
+      "id": "F16",
+      "type": "open_question",
+      "importance": "important",
+      "statement": "Left open for Thursday: why Byzantine fault tolerance needs 3f+1 servers when Raft needs only 2f+1 (students should come with a guess).",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        517
+      ],
+      "notes": null
+    },
+    {
+      "id": "F17",
+      "type": "action_item",
+      "importance": "minor",
+      "statement": "Professor Castellanos will post the link to the FLP paper on Ed tonight.",
+      "owner": "Miriam Castellanos",
+      "deadline": "tonight",
+      "position": "early",
+      "lines": [
+        94,
+        519
+      ],
+      "notes": null
+    },
+    {
+      "id": "F18",
+      "type": "action_item",
+      "importance": "minor",
+      "statement": "Professor Castellanos will fix the out-of-date CockroachDB range size slide.",
+      "owner": "Miriam Castellanos",
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        472,
+        521
+      ],
+      "notes": null
+    },
+    {
+      "id": "F19",
+      "type": "action_item",
+      "importance": "minor",
+      "statement": "Someone should remind the professor to post today's slides (no owner assigned).",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        519
+      ],
+      "notes": null
+    },
+    {
+      "id": "F20",
+      "type": "action_item",
+      "importance": "minor",
+      "statement": "Jordan will post their own lecture recording in the class Discord in case the official capture failed.",
+      "owner": "Jordan Reyes",
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        523
+      ],
+      "notes": null
+    },
+    {
+      "id": "F21",
+      "type": "open_question",
+      "importance": "important",
+      "statement": "Undecided whether homework 5's due date moves to after the midterm (Devin's request); the professor and Kofi will discuss and announce on Ed if it changes. Homework 5 is still scheduled for release Tuesday October 13.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        496,
+        497,
+        498
+      ],
+      "notes": null
+    },
+    {
+      "id": "F22",
+      "type": "open_question",
+      "importance": "minor",
+      "statement": "Whether the review session will be recorded is not promised; it depends on the room capture working.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        511
+      ],
+      "notes": null
+    },
+    {
+      "id": "F23",
+      "type": "open_question",
+      "importance": "important",
+      "statement": "Deferred to next Tuesday: leases versus ReadIndex for reads, and Devin's question whether pre-vote fully fixes disruptive servers.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        427,
+        521
+      ],
+      "notes": null
+    },
+    {
+      "id": "F24",
+      "type": "background",
+      "importance": "important",
+      "statement": "Recap of lecture 8: primary-backup replication (VMware fault tolerance paper); the open problem was who decides the primary is dead, since guessing wrong causes split brain; VMware's test-and-set arbiter is itself a single point of failure.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        46,
+        53,
+        55
+      ],
+      "notes": null
+    },
+    {
+      "id": "F25",
+      "type": "concept",
+      "importance": "important",
+      "statement": "Two-phase commit is not consensus: it needs every participant to vote yes and blocks if the coordinator crashes; consensus makes progress with a majority (answer to Devon's question).",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        61,
+        64,
+        66
+      ],
+      "notes": null
+    },
+    {
+      "id": "F26",
+      "type": "concept",
+      "importance": "critical",
+      "statement": "Replicated state machine approach: deterministic state machines on each server applying the same commands in the same order reach the same state, so the problem reduces to keeping a replicated log identical.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        69,
+        72,
+        75
+      ],
+      "notes": null
+    },
+    {
+      "id": "F27",
+      "type": "caveat",
+      "importance": "minor",
+      "statement": "Nondeterministic commands (random, clock) must be evaluated once by the leader and the concrete value put in the log entry; consensus does not fix a nondeterministic state machine.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        78
+      ],
+      "notes": null
+    },
+    {
+      "id": "F28",
+      "type": "concept",
+      "importance": "minor",
+      "statement": "Consensus is hard because servers crash, messages are delayed/dropped/duplicated/reordered, networks partition, and a crashed server cannot be distinguished from a slow one.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        82,
+        84
+      ],
+      "notes": null
+    },
+    {
+      "id": "F29",
+      "type": "concept",
+      "importance": "critical",
+      "statement": "FLP impossibility (Fischer, Lynch, Paterson, 1985): in a fully asynchronous system no deterministic consensus algorithm can guarantee termination if even one process can crash; students should be able to state this and how practical systems get around it.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        87,
+        88,
+        93
+      ],
+      "notes": null
+    },
+    {
+      "id": "F30",
+      "type": "concept",
+      "importance": "important",
+      "statement": "Practical algorithms (Paxos, Raft) sidestep FLP by always guaranteeing safety but guaranteeing progress only when the network behaves reasonably (messages arrive within timeouts).",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        92
+      ],
+      "notes": null
+    },
+    {
+      "id": "F31",
+      "type": "logistics",
+      "importance": "critical",
+      "statement": "The proof of FLP will NOT be on the exam (only the statement and its implications).",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        94
+      ],
+      "notes": null
+    },
+    {
+      "id": "F32",
+      "type": "definition",
+      "importance": "critical",
+      "statement": "Safety: nothing bad ever happens (a violation occurs at a finite point); for consensus, two servers never decide different values for the same log slot.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        98,
+        99
+      ],
+      "notes": null
+    },
+    {
+      "id": "F33",
+      "type": "definition",
+      "importance": "critical",
+      "statement": "Liveness: something good eventually happens (no finite point of violation); for consensus, a value is eventually decided.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        100,
+        101
+      ],
+      "notes": null
+    },
+    {
+      "id": "F34",
+      "type": "concept",
+      "importance": "important",
+      "statement": "Raft never gives up safety, even under partitions and delays; when the network is bad it gives up liveness (may stall). Safety vs liveness definitions and which Raft guarantees unconditionally will be on the exam.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        104,
+        105
+      ],
+      "notes": null
+    },
+    {
+      "id": "F35",
+      "type": "definition",
+      "importance": "critical",
+      "statement": "A quorum is a subset of servers large enough that any two quorums overlap; Raft uses majority quorums, and any two majorities share at least one server, which carries decisions forward.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        109,
+        111,
+        114
+      ],
+      "notes": null
+    },
+    {
+      "id": "F36",
+      "type": "number",
+      "importance": "critical",
+      "statement": "Majority quorum size is floor(n/2)+1: 3 of 5 servers, 2 of 3 servers.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        115,
+        116,
+        117
+      ],
+      "notes": null
+    },
+    {
+      "id": "F37",
+      "type": "number",
+      "importance": "critical",
+      "statement": "To tolerate f crash failures you need 2f+1 servers: 3 servers tolerate 1, 5 tolerate 2, 7 tolerate 3. The quorum formula and 2f+1 will be on the exam.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        119,
+        120,
+        122
+      ],
+      "notes": null
+    },
+    {
+      "id": "F38",
+      "type": "number",
+      "importance": "critical",
+      "statement": "A 4-node cluster (majority 3) tolerates only 1 failure, the same as 3 nodes; even-sized clusters never add fault tolerance (6 tolerates 2, same as 5).",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        238,
+        241
+      ],
+      "notes": "explicit correction of the earlier claim that 4 nodes tolerate 2 failures (C02)"
+    },
+    {
+      "id": "F39",
+      "type": "background",
+      "importance": "important",
+      "statement": "Raft comes from the 2014 paper 'In Search of an Understandable Consensus Algorithm' by Diego Ongaro and John Ousterhout (Stanford), best paper at USENIX ATC; its primary design goal was understandability.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        134,
+        136
+      ],
+      "notes": null
+    },
+    {
+      "id": "F40",
+      "type": "concept",
+      "importance": "minor",
+      "statement": "Raft decomposes consensus into leader election, log replication, and safety (plus membership changes and log compaction as add-ons).",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        139
+      ],
+      "notes": null
+    },
+    {
+      "id": "F41",
+      "type": "concept",
+      "importance": "important",
+      "statement": "Raft uses a strong leader: all client requests go through the leader and log entries flow only from leader to followers; every server is a follower, candidate, or leader.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        143,
+        144,
+        145
+      ],
+      "notes": null
+    },
+    {
+      "id": "F42",
+      "type": "definition",
+      "importance": "critical",
+      "statement": "A term is a monotonically increasing number acting as a logical clock; each term begins with an election and has at most one leader (election safety), and some terms have no leader after a split vote.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        152,
+        154,
+        155
+      ],
+      "notes": null
+    },
+    {
+      "id": "F43",
+      "type": "concept",
+      "importance": "important",
+      "statement": "A server seeing a higher term updates its term and steps down to follower if it was leader or candidate; requests carrying a lower term are rejected.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        157,
+        158
+      ],
+      "notes": null
+    },
+    {
+      "id": "F44",
+      "type": "concept",
+      "importance": "minor",
+      "statement": "Basic Raft needs only two RPCs: RequestVote (candidates, during elections) and AppendEntries (leaders, replicating entries and serving as heartbeat when empty); InstallSnapshot is a third RPC for log compaction.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        162,
+        163
+      ],
+      "notes": null
+    },
+    {
+      "id": "F45",
+      "type": "concept",
+      "importance": "critical",
+      "statement": "Leader election: a follower that hears no valid heartbeat within its election timeout increments its term, becomes candidate, votes for itself, and sends RequestVote in parallel; it wins with votes from a majority of the full cluster (3 of 5).",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        168,
+        170
+      ],
+      "notes": null
+    },
+    {
+      "id": "F46",
+      "type": "concept",
+      "importance": "important",
+      "statement": "Each server votes for at most one candidate per term (first-come, first-served), which together with majority voting guarantees at most one leader per term.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        172,
+        173
+      ],
+      "notes": null
+    },
+    {
+      "id": "F47",
+      "type": "requirement",
+      "importance": "important",
+      "statement": "Persistent state (currentTerm, votedFor, and the log) must be written to stable storage before responding to RPCs; forgetting votedFor can produce two leaders in one term. commitIndex, lastApplied, nextIndex and matchIndex are volatile.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        175,
+        374,
+        375
+      ],
+      "notes": null
+    },
+    {
+      "id": "F48",
+      "type": "number",
+      "importance": "critical",
+      "statement": "Raft uses randomized election timeouts, chosen fresh on each reset from a fixed interval; the paper uses 150-300 milliseconds, which makes split votes rare.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        182,
+        183
+      ],
+      "notes": null
+    },
+    {
+      "id": "F49",
+      "type": "concept",
+      "importance": "minor",
+      "statement": "RequestVote arguments are term, candidateId, lastLogIndex, lastLogTerm; the reply contains term and voteGranted.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        187,
+        188
+      ],
+      "notes": null
+    },
+    {
+      "id": "F50",
+      "type": "concept",
+      "importance": "important",
+      "statement": "Answering Jordan's question on fixed priorities: the Raft authors first tried a ranking system but hit subtle availability corner cases, so they chose randomized timeouts as simpler to reason about.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        192,
+        194,
+        197
+      ],
+      "notes": null
+    },
+    {
+      "id": "F51",
+      "type": "concept",
+      "importance": "minor",
+      "statement": "Raft's safety never depends on timing but liveness does: broadcastTime << electionTimeout << MTBF (roughly 0.5-20ms, 10-500ms, and months).",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        201,
+        205
+      ],
+      "notes": null
+    },
+    {
+      "id": "F52",
+      "type": "requirement",
+      "importance": "important",
+      "statement": "The homework tester allows at most 10 heartbeats per second per server and requires a new leader to be elected within 5 seconds of the old leader failing.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        207,
+        210
+      ],
+      "notes": null
+    },
+    {
+      "id": "F53",
+      "type": "requirement",
+      "importance": "critical",
+      "statement": "For the homework, the recommended randomized election timeout is about 400-800ms, larger than the paper's 150-300ms, because of the tester's heartbeat limit.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        209,
+        211
+      ],
+      "notes": null
+    },
+    {
+      "id": "F54",
+      "type": "requirement",
+      "importance": "minor",
+      "statement": "Reset the election timer only when granting a vote or receiving a valid AppendEntries from the current leader, not on every RequestVote; the #1 homework 4 bug is holding a lock while sending an RPC.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        213,
+        215
+      ],
+      "notes": null
+    },
+    {
+      "id": "F55",
+      "type": "example",
+      "importance": "minor",
+      "statement": "Split vote example: in term 6 leader A crashes; B (212ms) and D (213ms) both run in term 7 and get 2 votes each so term 7 has no leader; D then times out first (160ms) and wins term 8 with 3 votes.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        219,
+        222,
+        223
+      ],
+      "notes": null
+    },
+    {
+      "id": "F56",
+      "type": "example",
+      "importance": "important",
+      "statement": "War story: at payments startup Ledgerline in 2017, the professor's team moved an etcd-based config store from 3 nodes to 4 split 2 in Virginia and 2 in Ohio; when the inter-site link flapped neither side had a majority and the store was unavailable for 47 minutes, queuing about 38,000 payment authorizations (no data lost).",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        228,
+        231,
+        234,
+        235
+      ],
+      "notes": null
+    },
+    {
+      "id": "F57",
+      "type": "conclusion",
+      "importance": "minor",
+      "statement": "To survive losing a whole data center you need three sites, e.g. 2+2+1 = 5 nodes; Ledgerline did this the next quarter at the cost of higher write latency.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        244,
+        245
+      ],
+      "notes": null
+    },
+    {
+      "id": "F58",
+      "type": "definition",
+      "importance": "important",
+      "statement": "Each log entry has a command, the term when the leader received it, and an index (starting at 1). AppendEntries carries term, leaderId, prevLogIndex, prevLogTerm, entries, and leaderCommit; followers reject it if they lack a matching entry at prevLogIndex/prevLogTerm (the consistency check).",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        250,
+        256,
+        259,
+        260
+      ],
+      "notes": null
+    },
+    {
+      "id": "F59",
+      "type": "definition",
+      "importance": "critical",
+      "statement": "Log matching property: if two logs contain an entry with the same index and term, the logs are identical in all entries up through that index (proved by induction via the consistency check).",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        263,
+        264
+      ],
+      "notes": null
+    },
+    {
+      "id": "F60",
+      "type": "concept",
+      "importance": "important",
+      "statement": "The leader repairs inconsistent followers by forcing their logs to match its own: it tracks nextIndex per follower (initialized past its last entry), decrements it on rejection, and tracks matchIndex for commitment; homework 5's backup test needs the skip-by-conflicting-term optimization.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        270,
+        274,
+        276,
+        278
+      ],
+      "notes": null
+    },
+    {
+      "id": "F61",
+      "type": "definition",
+      "importance": "critical",
+      "statement": "Commit index: the highest log index a server knows to be committed (starts at 0, only increases); the leader sends it as leaderCommit and followers set theirs to min(leaderCommit, index of last new entry); lastApplied tracks what has been applied to the state machine.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        283,
+        285,
+        286
+      ],
+      "notes": null
+    },
+    {
+      "id": "F62",
+      "type": "concept",
+      "importance": "minor",
+      "statement": "Committed is a cluster-wide fact (durable, never lost); applied is per server (executed against its local state machine).",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        288
+      ],
+      "notes": null
+    },
+    {
+      "id": "F63",
+      "type": "example",
+      "importance": "important",
+      "statement": "Worked example (5 servers, term 3, leader A): logs by term are A and B 1,1,2,3,3,3; C and E 1,1,2,3,3; D 1,1,2. Index 5 is on 4 of 5 servers so A's commit index is 5; index 6 is only on A and B and is uncommitted.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        293,
+        296,
+        301
+      ],
+      "notes": null
+    },
+    {
+      "id": "F64",
+      "type": "example",
+      "importance": "critical",
+      "statement": "After A crashes: D times out first (155ms), runs in term 4, and is rejected by all (its last log term 2 is older); C times out (170ms), runs in term 5, is rejected by B (same last term, B's log longer) but wins with votes from C, D and E; C's new term-5 entry at index 6 overwrites B's uncommitted term-3 entry.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        308,
+        326,
+        329,
+        335
+      ],
+      "notes": null
+    },
+    {
+      "id": "F65",
+      "type": "concept",
+      "importance": "critical",
+      "statement": "Election restriction: a voter denies its vote if its own log is more up-to-date than the candidate's; up-to-date is compared by the term of the last entry first, and only if equal by log length (so the longest log does not automatically win).",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        312,
+        314,
+        315
+      ],
+      "notes": null
+    },
+    {
+      "id": "F66",
+      "type": "example",
+      "importance": "minor",
+      "statement": "A log with 5 entries ending in term 3 is more up-to-date than a log with 7 entries ending in term 2.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        317,
+        319
+      ],
+      "notes": null
+    },
+    {
+      "id": "F67",
+      "type": "definition",
+      "importance": "critical",
+      "statement": "Leader completeness property: if an entry is committed in a given term, it is present in the logs of the leaders of all higher-numbered terms (because the committing majority and the electing majority overlap).",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        338,
+        345
+      ],
+      "notes": null
+    },
+    {
+      "id": "F68",
+      "type": "logistics",
+      "importance": "important",
+      "statement": "The election restriction, the up-to-date comparison, and leader completeness will be on the exam, likely as a 'given five logs, which servers can become leader' question (not the lecture's exact example).",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        346
+      ],
+      "notes": null
+    },
+    {
+      "id": "F69",
+      "type": "concept",
+      "importance": "critical",
+      "statement": "Commitment rule: a leader only commits entries from its current term by counting replicas; entries from earlier terms are committed indirectly once a current-term entry after them is committed (via log matching).",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        364,
+        365
+      ],
+      "notes": null
+    },
+    {
+      "id": "F70",
+      "type": "example",
+      "importance": "important",
+      "statement": "Figure 8 scenario (Devon's question): an index-2 term-2 entry replicated to a majority (A, B, C) by leader A in term 4 can still be overwritten when E, holding a term-3 entry, wins term 5; it is safe only after A commits a term-4 entry at index 3 on a majority.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        351,
+        360,
+        366
+      ],
+      "notes": null
+    },
+    {
+      "id": "F71",
+      "type": "logistics",
+      "importance": "critical",
+      "statement": "The current-term commitment rule and the Figure 8 scenario will be on the exam ('I promise'); many students lose points writing 'committed once on a majority'.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        370
+      ],
+      "notes": null
+    },
+    {
+      "id": "F72",
+      "type": "concept",
+      "importance": "minor",
+      "statement": "A new leader appends a no-op entry at the start of its term to commit a current-term entry quickly (paper section 8).",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        372
+      ],
+      "notes": null
+    },
+    {
+      "id": "F73",
+      "type": "example",
+      "importance": "critical",
+      "statement": "Partition scenario: 5 servers with leader B in term 7 and commit index 20 are split into a minority {A, B} and a majority {C, D, E}; B appends client 1's 'set x to 7' at index 21 but reaches only 2 of 5 servers, so it cannot commit it or reply to the client.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        387,
+        388,
+        393
+      ],
+      "notes": null
+    },
+    {
+      "id": "F74",
+      "type": "example",
+      "importance": "critical",
+      "statement": "In the partition scenario, on the majority side E times out first (210ms), wins term 8 with votes from C and D, and commits client 2's 'set y to 3' at index 21.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        394,
+        395,
+        396
+      ],
+      "notes": null
+    },
+    {
+      "id": "F75",
+      "type": "concept",
+      "importance": "critical",
+      "statement": "During a partition two leaders can coexist only in different terms, and the older-term leader cannot commit, so safety holds; on healing B sees term 8, steps down, and its uncommitted index-21 entry is overwritten.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        400,
+        403,
+        405
+      ],
+      "notes": null
+    },
+    {
+      "id": "F76",
+      "type": "concept",
+      "importance": "critical",
+      "statement": "Answering Jordan's question: the unacknowledged write is not lost from Raft's perspective; the client times out and retries at the new leader, and clients attach a unique client ID and per-command serial number so the state machine deduplicates retries and each command takes effect exactly once.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        406,
+        408,
+        411,
+        412
+      ],
+      "notes": null
+    },
+    {
+      "id": "F77",
+      "type": "concept",
+      "importance": "important",
+      "statement": "A stale leader can serve stale reads; the fix is for the leader to confirm leadership by exchanging heartbeats with a majority before answering reads (etcd's ReadIndex), or to use leases, which depend on bounded clock drift.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        416,
+        418,
+        420
+      ],
+      "notes": null
+    },
+    {
+      "id": "F78",
+      "type": "concept",
+      "importance": "important",
+      "statement": "An isolated server keeps incrementing its term (e.g. to 12) and on rejoining forces a healthy leader to step down; pre-vote (from Ongaro's dissertation, implemented by etcd) prevents this by asking for hypothetical votes before bumping the term.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        422,
+        425
+      ],
+      "notes": null
+    },
+    {
+      "id": "F79",
+      "type": "concept",
+      "importance": "important",
+      "statement": "Switching cluster configuration directly is unsafe: going from 3 servers to 5, old-config and new-config majorities (e.g. A,B and C,D,E) can elect two leaders in the same term because the majorities do not overlap.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        431,
+        433
+      ],
+      "notes": null
+    },
+    {
+      "id": "F80",
+      "type": "concept",
+      "importance": "important",
+      "statement": "Joint consensus: the leader commits a C-old,new entry during which decisions need separate majorities of both configurations, then commits C-new; new servers join as non-voting learners first, and many implementations instead use single-server changes.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        434,
+        435,
+        438,
+        439
+      ],
+      "notes": null
+    },
+    {
+      "id": "F81",
+      "type": "logistics",
+      "importance": "important",
+      "statement": "For the exam, students need to know why configurations cannot be switched directly, but not the step-by-step joint consensus protocol.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        441
+      ],
+      "notes": null
+    },
+    {
+      "id": "F82",
+      "type": "background",
+      "importance": "important",
+      "statement": "Paxos is Leslie Lamport's algorithm ('The Part-Time Parliament', written around 1990, published 1998; 'Paxos Made Simple', 2001); basic Paxos runs prepare/promise and accept/accepted phases with majorities, and Multi-Paxos runs one instance per log slot with a stable leader.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        443,
+        446,
+        449
+      ],
+      "notes": null
+    },
+    {
+      "id": "F83",
+      "type": "conclusion",
+      "importance": "important",
+      "statement": "Raft is close to a well-specified Multi-Paxos with a strong leader: its log has no holes, a new leader already has all committed entries, and it is a complete specification; fault tolerance (2f+1) and normal-case performance are the same.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        451,
+        452,
+        455
+      ],
+      "notes": null
+    },
+    {
+      "id": "F84",
+      "type": "caveat",
+      "importance": "important",
+      "statement": "Raft is not strictly better than Paxos: the strong leader is a write bottleneck, variants like EPaxos can do better for geo-distributed low-conflict workloads, and easier to understand does not mean faster or more available.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        457,
+        458
+      ],
+      "notes": null
+    },
+    {
+      "id": "F85",
+      "type": "entity",
+      "importance": "important",
+      "statement": "etcd uses Raft and backs Kubernetes cluster state; it recommends 3 or 5 members (discouraging much beyond 7) and defaults to a 100ms heartbeat and 1000ms election timeout. Caveat: using its locks safely requires fencing tokens because leases can expire during client pauses.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        460,
+        461,
+        462,
+        463
+      ],
+      "notes": null
+    },
+    {
+      "id": "F86",
+      "type": "entity",
+      "importance": "minor",
+      "statement": "Consul (HashiCorp) runs Raft only on its 3 or 5 server nodes via HashiCorp's Raft library; client agents are not voters (membership via gossip), and its default read mode relies on leader leasing and can briefly return stale data.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        464,
+        465,
+        466
+      ],
+      "notes": null
+    },
+    {
+      "id": "F87",
+      "type": "entity",
+      "importance": "important",
+      "statement": "CockroachDB splits data into ranges, each its own Raft group usually with 3 replicas (Multi-Raft, with coalesced heartbeats); reads go through leaseholders and cross-range transactions need a separate commit protocol on top of Raft.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        467,
+        468,
+        469
+      ],
+      "notes": null
+    },
+    {
+      "id": "F88",
+      "type": "entity",
+      "importance": "minor",
+      "statement": "Google's Chubby and Spanner use Paxos; ZooKeeper uses its own protocol, Zab.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        473
+      ],
+      "notes": null
+    },
+    {
+      "id": "F89",
+      "type": "caveat",
+      "importance": "important",
+      "statement": "'Uses Raft' does not mean a system is correct: implementations add pre-vote, check-quorum, leases, batching, and snapshots, and Jepsen analyses have found bugs usually in the code around the algorithm.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        474,
+        475
+      ],
+      "notes": null
+    },
+    {
+      "id": "F90",
+      "type": "concept",
+      "importance": "important",
+      "statement": "Log compaction via snapshots: each server independently snapshots its committed state and discards log entries up to the last included index, storing last included index and term (for the consistency check) and the latest configuration; the leader sends InstallSnapshot to followers too far behind. This is homework 6.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        478,
+        480,
+        482,
+        486,
+        489
+      ],
+      "notes": "implicit supersession of 'we'll skip snapshots and log compaction today' (C03)"
+    }
+  ],
+  "corrections": [
+    {
+      "id": "C01",
+      "what": "Homework 4 due date",
+      "initial_value": "Friday, October 9, 11:59pm",
+      "initial_line": 18,
+      "final_value": "Monday, October 12, 11:59pm",
+      "final_line": 493,
+      "explicit": true,
+      "fact_id": "F01"
+    },
+    {
+      "id": "C02",
+      "what": "Number of failures a 4-node cluster tolerates",
+      "initial_value": "4 nodes tolerate 2 failures",
+      "initial_line": 121,
+      "final_value": "4 nodes tolerate 1 failure (same as 3 nodes)",
+      "final_line": 238,
+      "explicit": true,
+      "fact_id": "F38"
+    },
+    {
+      "id": "C03",
+      "what": "Whether log compaction/snapshots are covered in today's lecture",
+      "initial_value": "skip snapshots and log compaction today",
+      "initial_line": 142,
+      "final_value": "log compaction/snapshots covered briefly at the end",
+      "final_line": 478,
+      "explicit": false,
+      "fact_id": "F90"
+    },
+    {
+      "id": "C04",
+      "what": "Midterm coverage",
+      "initial_value": "lectures 1 through 8",
+      "initial_line": 28,
+      "final_value": "lectures 1 through 9 (today's Raft included, snapshots excluded)",
+      "final_line": 500,
+      "explicit": true,
+      "fact_id": "F07"
+    },
+    {
+      "id": "C05",
+      "what": "Who posts the practice midterm",
+      "initial_value": "Kofi",
+      "initial_line": 29,
+      "final_value": "Ana",
+      "final_line": 512,
+      "explicit": true,
+      "fact_id": "F12"
+    }
+  ],
+  "not_decisions": [
+    {
+      "statement": "Using a fixed priority/ranking system instead of randomized election timeouts (Jordan's suggestion; Raft's authors tried and abandoned it)",
+      "lines": [
+        192,
+        194
+      ]
+    },
+    {
+      "statement": "Moving homework 5's due date to after the midterm (requested by Devin; not decided)",
+      "lines": [
+        497,
+        498
+      ]
+    },
+    {
+      "statement": "Allowing two note sheets on the midterm (requested by Devin; rejected)",
+      "lines": [
+        506,
+        507
+      ]
+    },
+    {
+      "statement": "Recording the midterm review session (TA will try, no promise)",
+      "lines": [
+        511
+      ]
+    },
+    {
+      "statement": "Buying a second coffee machine for the third floor (suggested, never agreed)",
+      "lines": [
+        383,
+        384
+      ]
+    },
+    {
+      "statement": "Changing homework 5's due date today (explicitly not changed)",
+      "lines": [
+        496
+      ]
+    },
+    {
+      "statement": "Using leases for reads is presented as an alternative, not as what Raft/etcd does by default (etcd uses ReadIndex)",
+      "lines": [
+        419,
+        420
+      ]
+    }
+  ],
+  "distractors": [
+    {
+      "statement": "Joke that the second-floor espresso machine is a single node with no replicas so the faculty loses liveness; the Larkin coffee cart is a 'Byzantine failure'",
+      "lines": [
+        39,
+        40,
+        43
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Rambling aside about watching Twelve Angry Men (1957, Henry Fonda; 1997 remake with Jack Lemmon) with her daughter; juries as n-of-n quorums",
+      "lines": [
+        126,
+        131
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Devin's assumption that the server with the longest log always wins the election",
+      "lines": [
+        310,
+        311
+      ],
+      "why": "false assumption later corrected"
+    },
+    {
+      "statement": "4 nodes tolerate 2 failures",
+      "lines": [
+        121
+      ],
+      "why": "superseded value (corrected to 1 failure)"
+    },
+    {
+      "statement": "Homework 4 due Friday October 9",
+      "lines": [
+        18
+      ],
+      "why": "superseded value"
+    },
+    {
+      "statement": "Midterm covers lectures 1 through 8",
+      "lines": [
+        28
+      ],
+      "why": "superseded value"
+    },
+    {
+      "statement": "Kofi will post the practice midterm",
+      "lines": [
+        29
+      ],
+      "why": "superseded value (Ana posts it)"
+    },
+    {
+      "statement": "CockroachDB range size of 64 MB from the lecture slides",
+      "lines": [
+        471,
+        472
+      ],
+      "why": "superseded value (outdated slide; ~512 MB now, not to be memorized)"
+    },
+    {
+      "statement": "Three different election timeout figures: paper 150-300ms, homework recommendation 400-800ms, etcd default 1000ms",
+      "lines": [
+        182,
+        209,
+        462
+      ],
+      "why": "multiple similar values in play; must not be conflated"
+    },
+    {
+      "statement": "Two similarly named students, Devin (Park) and Devon (Mitchell)",
+      "lines": [
+        60,
+        507
+      ],
+      "why": "similar-sounding names"
+    },
+    {
+      "statement": "Several Whitaker Hall rooms in play: 120 (lecture/review), 214 (Kofi's office hours), 318 (professor's office)",
+      "lines": [
+        34,
+        509,
+        515
+      ],
+      "why": "similar values"
+    },
+    {
+      "statement": "Stretch break small talk about the broken coffee machine sign and faculty purchase orders",
+      "lines": [
+        381,
+        382
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "The professor's postmortem joke about how the outage led her to teach this lecture",
+      "lines": [
+        247
+      ],
+      "why": "irrelevant"
+    }
+  ],
+  "open_questions_at_end": [
+    "Why Byzantine fault tolerance needs 3f+1 servers rather than 2f+1 (to think about before Thursday's lecture).",
+    "Whether homework 5's due date will move to after the midterm.",
+    "Whether the Sunday October 18 review session will be recorded.",
+    "The tradeoff between leases and ReadIndex for linearizable reads (deferred to next Tuesday).",
+    "Whether pre-vote fully fixes disruptive servers, given interactions with check-quorum and membership changes (Devin's question, deferred to next Tuesday)."
+  ],
+  "summary_must_include": [
+    "Homework 4 now due Monday Oct 12, 11:59pm (moved from Friday) (F01)",
+    "Midterm Thursday Oct 22 in Larkin Hall 150, covering lectures 1-9 but not snapshots; one note sheet (F06, F07, F08, F10)",
+    "Office hours changes: Kofi Thursdays 3-5 Whitaker 214; professor's extra hours Wed Oct 7 3-4:30 instead of Thursday (F05, F13)",
+    "Reading for Thursday's guest BFT lecture: Castro & Liskov PBFT sections 1-4; think about why 3f+1 (F15, F16)",
+    "Replicated state machines motivate consensus; FLP says async deterministic consensus can't guarantee termination with one crash (proof not on exam) (F26, F29, F31)",
+    "Safety vs liveness definitions; Raft always keeps safety (F32, F33, F34)",
+    "Majority quorum floor(n/2)+1 and 2f+1; 4 nodes tolerate only 1 failure (F36, F37, F38)",
+    "Leader election with terms and randomized 150-300ms timeouts (400-800ms for homework) (F42, F45, F48, F52)",
+    "Log replication: AppendEntries consistency check, log matching, commit index (F58, F59, F61)",
+    "Election restriction (last term then length) and leader completeness, shown in 5-server worked example (F65, F67, F64)",
+    "Leader commits only current-term entries by counting replicas (Figure 8), on the exam (F69, F71)",
+    "Network partition scenario: minority leader can't commit, steps down on heal; clients retry with dedup (F73, F75, F76)"
+  ]
+}

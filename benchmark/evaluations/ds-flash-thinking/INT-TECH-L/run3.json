@@ -1,0 +1,394 @@
+{
+ "blind_id": "S-9079bf0b",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 86698,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 35933,
+  "candidatesTokenCount": 1908,
+  "totalTokenCount": 48815,
+  "cachedContentTokenCount": 24512,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 35933
+   }
+  ],
+  "cacheTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 24512
+   }
+  ],
+  "thoughtsTokenCount": 10974,
+  "serviceTier": "standard"
+ },
+ "fact_count": 82,
+ "evaluation": {
+  "factual_accuracy": 6,
+  "important_information_retention": 8,
+  "hallucination_control": 7,
+  "action_item_retention": 4,
+  "decision_retention": 4,
+  "speaker_attribution": 9,
+  "numeric_accuracy": 9,
+  "entity_retention": 9,
+  "timeline_accuracy": 8,
+  "conclusion_accuracy": 6,
+  "structure": 2,
+  "conciseness": 2,
+  "readability": 3,
+  "overall_summary_quality": 4,
+  "critical_errors": [
+   "Categorizing the candidate's hypothetical system design answers as actual project decisions for the interviewing company.",
+   "Categorizing the candidate's past actions at previous jobs as meeting action items.",
+   "Categorizing the candidate's past incidents at previous jobs as project risks for the interviewing company.",
+   "Categorizing answered interview questions as open questions.",
+   "Contradicting itself by stating in 'Open questions' that whether Marcus shipped the reconciliation alert was 'left unanswered', while correctly stating in 'Candidate profile' that he shipped it in week five."
+  ],
+  "missing_important_information": [
+   "Quillbank routes across 3 payment processors, having dropped a fourth last year over badly formatted settlement files.",
+   "Marcus would alert if a payout sits in the unknown state for longer than 24 hours."
+  ],
+  "hallucinated_information": [
+   "The notes claim the interview was cut off by a question about whether he shipped the reconciliation alert on time, and that the answer was left unanswered at the end of the chunk. This is false; he answered it immediately."
+  ],
+  "superseded_values_reported": [],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [
+   "The notes include numerous distractors by treating the hypothetical system design exercise and the candidate's past stories as real, actionable project items for Tessellate Pay."
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "partial"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "missing"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "partial"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "partial"
+   },
+   {
+    "id": "F25",
+    "status": "partial"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "partial"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "partial"
+   },
+   {
+    "id": "F31",
+    "status": "missing"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "partial"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "present"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "partial"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "partial"
+   },
+   {
+    "id": "F57",
+    "status": "present"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "present"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   },
+   {
+    "id": "F62",
+    "status": "present"
+   },
+   {
+    "id": "F63",
+    "status": "present"
+   },
+   {
+    "id": "F64",
+    "status": "present"
+   },
+   {
+    "id": "F65",
+    "status": "present"
+   },
+   {
+    "id": "F66",
+    "status": "present"
+   },
+   {
+    "id": "F67",
+    "status": "present"
+   },
+   {
+    "id": "F68",
+    "status": "present"
+   },
+   {
+    "id": "F69",
+    "status": "present"
+   },
+   {
+    "id": "F70",
+    "status": "present"
+   },
+   {
+    "id": "F71",
+    "status": "present"
+   },
+   {
+    "id": "F72",
+    "status": "present"
+   },
+   {
+    "id": "F73",
+    "status": "partial"
+   },
+   {
+    "id": "F74",
+    "status": "present"
+   },
+   {
+    "id": "F75",
+    "status": "present"
+   },
+   {
+    "id": "F76",
+    "status": "present"
+   },
+   {
+    "id": "F77",
+    "status": "present"
+   },
+   {
+    "id": "F78",
+    "status": "present"
+   },
+   {
+    "id": "F79",
+    "status": "present"
+   },
+   {
+    "id": "F80",
+    "status": "present"
+   },
+   {
+    "id": "F81",
+    "status": "present"
+   },
+   {
+    "id": "F82",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes suffer from a fundamental misunderstanding of the meeting context. The AI treated the candidate's hypothetical system design answers and past stories as actual project decisions, action items, and risks for the interviewing company, rendering the structured blocks largely unusable. Furthermore, the notes are incredibly bloated and repetitive, restating the exact same facts across 11 different sections. While most of the raw information from the transcript is retained, the poor structure, extreme repetition, and misclassification of context severely degrade the quality of the notes."
+ }
+}

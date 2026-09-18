@@ -1,0 +1,348 @@
+{
+ "blind_id": "S-eeddafe3",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 65489,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 34461,
+  "candidatesTokenCount": 2368,
+  "totalTokenCount": 43549,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 34461
+   }
+  ],
+  "thoughtsTokenCount": 6720,
+  "serviceTier": "standard"
+ },
+ "fact_count": 69,
+ "evaluation": {
+  "factual_accuracy": 4,
+  "important_information_retention": 8,
+  "hallucination_control": 6,
+  "action_item_retention": 8,
+  "decision_retention": 4,
+  "speaker_attribution": 8,
+  "numeric_accuracy": 6,
+  "entity_retention": 9,
+  "timeline_accuracy": 6,
+  "conclusion_accuracy": 5,
+  "structure": 2,
+  "conciseness": 2,
+  "readability": 3,
+  "overall_summary_quality": 4,
+  "critical_errors": [
+   "Reported a tentative, later-rejected decision to migrate to Kafka as a final decision.",
+   "Reported a cancelled action item (Ravi's two-week Kafka spike plan) as an active action item.",
+   "Contradicted itself by listing the Kafka migration and spike plan as both approved and rejected/cancelled in different sections.",
+   "Hallucinated Joaquin's return date as October 21 instead of September 21."
+  ],
+  "missing_important_information": [
+   "The date of the outage (Tuesday, September 8th).",
+   "The SEV-2 declaration at 14:31 and upgrade to SEV-1 at 15:10."
+  ],
+  "hallucinated_information": [
+   "Joaquin returns from leave on October 21 (the transcript states September 21st)."
+  ],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C04",
+    "reported": "An eight- to twelve-week Kafka migration"
+   },
+   {
+    "correction_id": "C08",
+    "reported": "The team tentatively selected migration to Kafka on Amazon MSK as the direction for the notification pipeline before the October 23 freeze."
+   },
+   {
+    "correction_id": "C11",
+    "reported": "Ravi will prepare a two-week plan for prototyping notif-worker against MSK with retry topics by Monday."
+   }
+  ],
+  "not_decisions_reported_as_decided": [
+   "Migrating the notification pipeline to Kafka on MSK (floated as the tentative direction at the midpoint, then rejected)",
+   "A two-week Kafka consumer spike plan by Ravi (cancelled)"
+  ],
+  "distractors_included": [],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "missing"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "partial"
+   },
+   {
+    "id": "F05",
+    "status": "missing"
+   },
+   {
+    "id": "F06",
+    "status": "partial"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "partial"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "present"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "missing"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "partial"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "present"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "present"
+   },
+   {
+    "id": "F57",
+    "status": "present"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "present"
+   },
+   {
+    "id": "F61",
+    "status": "missing"
+   },
+   {
+    "id": "F62",
+    "status": "present"
+   },
+   {
+    "id": "F63",
+    "status": "present"
+   },
+   {
+    "id": "F64",
+    "status": "present"
+   },
+   {
+    "id": "F65",
+    "status": "present"
+   },
+   {
+    "id": "F66",
+    "status": "present"
+   },
+   {
+    "id": "F67",
+    "status": "present"
+   },
+   {
+    "id": "F68",
+    "status": "present"
+   },
+   {
+    "id": "F69",
+    "status": "present"
+   }
+  ],
+  "rationale": "The candidate notes suffer from severe structural and conciseness issues, repeating the same information across multiple duplicate sections (e.g., 'Action items' and 'Action items (structured)'). This repetition leads to critical contradictions, such as listing the Kafka migration and Ravi's Kafka spike plan as both approved decisions/action items and rejected/cancelled items in different sections. Additionally, the notes hallucinate Joaquin's return date as October 21 instead of September 21. While most facts are retained, the poor structure and contradictory reporting make the notes highly confusing and unusable in their current state."
+ }
+}

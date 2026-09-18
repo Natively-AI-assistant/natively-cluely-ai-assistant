@@ -1,0 +1,162 @@
+{
+ "blind_id": "S-ea2deacb",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 38474,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 9856,
+  "candidatesTokenCount": 1096,
+  "totalTokenCount": 15185,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 9856
+   }
+  ],
+  "thoughtsTokenCount": 4233,
+  "serviceTier": "standard"
+ },
+ "fact_count": 28,
+ "evaluation": {
+  "factual_accuracy": 9,
+  "important_information_retention": 9,
+  "hallucination_control": 10,
+  "action_item_retention": 10,
+  "decision_retention": 10,
+  "speaker_attribution": 10,
+  "numeric_accuracy": 8,
+  "entity_retention": 10,
+  "timeline_accuracy": 10,
+  "conclusion_accuracy": 9,
+  "structure": 8,
+  "conciseness": 3,
+  "readability": 6,
+  "overall_summary_quality": 7,
+  "critical_errors": [],
+  "missing_important_information": [
+   "Lumenstack Pro includes 2 terabytes of monitored data ingest per month, with overage billed at $0.40 per gigabyte."
+  ],
+  "hallucinated_information": [],
+  "superseded_values_reported": [],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [
+   "The customer retired its mainframe two years ago and does not need the mainframe connector."
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "missing"
+   },
+   {
+    "id": "F03",
+    "status": "partial"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "partial"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "partial"
+   },
+   {
+    "id": "F13",
+    "status": "partial"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "missing"
+   }
+  ],
+  "rationale": "The notes capture almost all critical and important information, including the final negotiated terms, action items, and next steps. However, they omit some minor details such as the 2TB included ingest limit, the $0.40/GB overage fee, and the 15% discount alternative for quarterly billing. The primary issue with the notes is extreme repetition; the exact same set of negotiated terms (54 seats, 24 months, 18% discount, annual upfront, net 45, Oct 15 start) is repeated across eight different sections, severely impacting conciseness and readability."
+ }
+}

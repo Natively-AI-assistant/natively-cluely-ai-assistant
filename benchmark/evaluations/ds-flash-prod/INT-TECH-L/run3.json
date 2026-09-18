@@ -1,0 +1,394 @@
+{
+ "blind_id": "S-a73854f4",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 75261,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 32575,
+  "candidatesTokenCount": 1982,
+  "totalTokenCount": 43723,
+  "cachedContentTokenCount": 24506,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 32575
+   }
+  ],
+  "cacheTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 24506
+   }
+  ],
+  "thoughtsTokenCount": 9166,
+  "serviceTier": "standard"
+ },
+ "fact_count": 82,
+ "evaluation": {
+  "factual_accuracy": 9,
+  "important_information_retention": 9,
+  "hallucination_control": 10,
+  "action_item_retention": 10,
+  "decision_retention": 10,
+  "speaker_attribution": 8,
+  "numeric_accuracy": 10,
+  "entity_retention": 10,
+  "timeline_accuracy": 10,
+  "conclusion_accuracy": 10,
+  "structure": 8,
+  "conciseness": 4,
+  "readability": 6,
+  "overall_summary_quality": 7,
+  "critical_errors": [
+   "Misattributed Alex's out-of-office dates (October 1st and 2nd) to Priya (Me)."
+  ],
+  "missing_important_information": [
+   "The design assumptions of 3,000 peak ledger writes per second and 800 average.",
+   "The final round consists of four sessions: system design deep dive, coding session, cross-functional conversation, and a conversation with VP Dan."
+  ],
+  "hallucinated_information": [],
+  "superseded_values_reported": [],
+  "not_decisions_reported_as_decided": [
+   "Candidate agreed the L5 base band (170-200K CAD) and 190K target base are in range, with no promises made today.",
+   "Candidate will target a last day just after the Nov 15 vest and start Monday, November 23rd.",
+   "Interviewer noted they can later discuss whether anything can be done about the vest, with no promises."
+  ],
+  "distractors_included": [
+   "Alex muted Slack notifications so he could continue the interview instead of joining the incident review.",
+   "His former Ferrow manager was Alex Kowalczyk, who is now at a climate startup.",
+   "Marcus referenced an internal 'unicorn moment' as a lighthearted callout of the technical discussion, worth acknowledging in follow-up."
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "partial"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "partial"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "missing"
+   },
+   {
+    "id": "F08",
+    "status": "missing"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "partial"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "partial"
+   },
+   {
+    "id": "F19",
+    "status": "missing"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "present"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "present"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "partial"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "present"
+   },
+   {
+    "id": "F57",
+    "status": "present"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "present"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   },
+   {
+    "id": "F62",
+    "status": "present"
+   },
+   {
+    "id": "F63",
+    "status": "present"
+   },
+   {
+    "id": "F64",
+    "status": "present"
+   },
+   {
+    "id": "F65",
+    "status": "partial"
+   },
+   {
+    "id": "F66",
+    "status": "present"
+   },
+   {
+    "id": "F67",
+    "status": "present"
+   },
+   {
+    "id": "F68",
+    "status": "partial"
+   },
+   {
+    "id": "F69",
+    "status": "missing"
+   },
+   {
+    "id": "F70",
+    "status": "present"
+   },
+   {
+    "id": "F71",
+    "status": "present"
+   },
+   {
+    "id": "F72",
+    "status": "present"
+   },
+   {
+    "id": "F73",
+    "status": "partial"
+   },
+   {
+    "id": "F74",
+    "status": "present"
+   },
+   {
+    "id": "F75",
+    "status": "present"
+   },
+   {
+    "id": "F76",
+    "status": "present"
+   },
+   {
+    "id": "F77",
+    "status": "present"
+   },
+   {
+    "id": "F78",
+    "status": "present"
+   },
+   {
+    "id": "F79",
+    "status": "present"
+   },
+   {
+    "id": "F80",
+    "status": "contradicted"
+   },
+   {
+    "id": "F81",
+    "status": "present"
+   },
+   {
+    "id": "F82",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture almost all the important information from the interview, including the technical design details, incident story, and logistics. However, there is a misattribution where Alex's out-of-office dates (Oct 1st and 2nd) are attributed to Priya (Me). A few important details are missing, such as the ledger write volume (3,000 peak/800 avg) and the four specific sessions of the final round. The biggest issue with the notes is extreme repetition; the same facts (e.g., the Nov 15 vest, the Nov 23 start date, the exactly-once correction) are repeated across almost every section, making the document bloated and difficult to read. Some non-decisions (like the candidate's target start date) are also incorrectly categorized under Decisions."
+ }
+}
