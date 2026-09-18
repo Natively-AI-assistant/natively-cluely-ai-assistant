@@ -42,7 +42,53 @@ import { ProfileVisualizer, PremiumUpgradeModal } from '../premium';
 import GlassEffectLayer from './ui/GlassEffectLayer';
 import { BrandMark, BrandMonogram } from './ui/BrandMark';
 import { LiquidGlassBadge } from '../ui-components/LiquidGlassBadge';
+import { LiquidGlassButton } from '../ui-components/LiquidGlassButton';
 import icon from './icon.png';
+
+// Process Disguise tiles: Liquid Glass fed this card's own tokens. `.lg-action`
+// otherwise reads the legacy action blue, and `.lg-clear`'s defaults are the
+// modes sidebar's weights, not a tile sitting on --bg-item-surface / --bg-card.
+//
+// The shape is the tile the material replaced, not a pill: 58px (p-3 around a
+// 32px icon chip, plus the old 1px border), rounded-lg, left-aligned. A rounded
+// rect needs the cap fade as px stops that end at the 8px corner — percentage
+// stops would run the specular's ramp far across the flat top (design.md,
+// "Adapting it to an existing UI").
+const DISGUISE_TILE_SHAPE = {
+    '--lg-pill-h': '58px',
+    '--lg-radius': '8px',
+    '--lg-cap-0': '1px',
+    '--lg-cap-1': '3px',
+    '--lg-cap-2': '8px',
+    '--lg-icon-gap': '12px',
+    '--lg-label-weight': 500,
+    padding: '0 12px',
+};
+const SELECTED_PERIWINKLE = 'var(--accent-primary)';
+const SELECTED_PERIWINKLE_LIGHT = 'color-mix(in srgb, var(--periwinkle-200) 50%, var(--periwinkle-300))';
+const DISGUISE_TILE_SELECTED = {
+    ...DISGUISE_TILE_SHAPE,
+    '--legacy-action-bg': SELECTED_PERIWINKLE,
+    '--legacy-action-hover': 'var(--accent-hover)',
+    '--legacy-action-fg': 'var(--on-accent)',
+} as React.CSSProperties;
+// Light theme's accent (periwinkle-600) read too heavy as a whole tile, so the
+// selected tile takes a pale periwinkle halfway between the 200 and 300 steps.
+// A light fill needs the dark foreground (#14102A on it is ~10:1).
+// The opacity slider's knob is fed the same two values, so the selected colour
+// in this panel is one colour and not two that drift apart.
+const DISGUISE_TILE_SELECTED_LIGHT = {
+    ...DISGUISE_TILE_SHAPE,
+    '--legacy-action-bg': SELECTED_PERIWINKLE_LIGHT,
+    '--legacy-action-hover': 'var(--periwinkle-300)',
+    '--legacy-action-fg': 'var(--periwinkle-on-accent-dark)',
+} as React.CSSProperties;
+// `.lg-clear`'s own defaults: a translucent step over the card, so the surface
+// shows through and the rim is what the material adds. An opaque fill
+// (--bg-input) reads as a solid plate sitting in a hole, not as glass.
+const DISGUISE_TILE_RESTING = {
+    ...DISGUISE_TILE_SHAPE,
+} as React.CSSProperties;
 // Shared with the main process so the picker cannot offer a model the ipc
 // validator rejects. Pure data module — no node/electron imports.
 import { NVIDIA_NIM_STT_MODELS, DEFAULT_NVIDIA_NIM_STT_MODEL, allowedLanguageKeysForNvidiaModel } from '../../electron/audio/nvidiaNimSttModels';
@@ -2900,8 +2946,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         onPointerUp={stopPreviewingOpacity}
                                                         onPointerCancel={stopPreviewingOpacity}
                                                         onPointerLeave={stopPreviewingOpacity}
-                                                        className="w-full h-1.5 rounded-full appearance-none bg-bg-input accent-accent-primary"
-                                                        style={{ WebkitAppearance: 'none' } as React.CSSProperties}
+                                                        className="lg-slider w-full h-1.5 rounded-full appearance-none bg-bg-input"
+                                                        style={{
+                                                            WebkitAppearance: 'none',
+                                                            // Same body as the selected Process Disguise tile.
+                                                            '--lg-knob-bg': isLight ? SELECTED_PERIWINKLE_LIGHT : SELECTED_PERIWINKLE,
+                                                        } as React.CSSProperties}
                                                     />
 
                                                     <div className="flex justify-between mt-1.5">
@@ -2920,7 +2970,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                     </div>
 
                                     {/* Process Disguise */}
-                                    {/* Process Disguise */}
                                     <div className={`${isLight ? 'bg-bg-card' : 'bg-bg-item-surface'} rounded-xl p-5 border border-border-subtle`}>
                                         <div className="flex flex-col gap-1 mb-3">
                                             <div className="flex items-center gap-2">
@@ -2934,42 +2983,46 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                             </p>
                                         </div>
 
-                                        <div className={`grid grid-cols-2 gap-3 ${isUndetectable ? 'opacity-50 pointer-events-none' : ''}`}>
+                                        {/* `.lg-clear` inherits its label colour from this grid. No blanket
+                                            opacity when locked: `disabled` dims the parts and keeps the rim
+                                            (ui-components/design.md, States). */}
+                                        <div className={`grid grid-cols-2 gap-3 text-text-secondary ${isUndetectable ? 'pointer-events-none' : ''}`}>
                                             {isUndetectable && (
                                                 <p className="col-span-2 text-xs text-yellow-500/80 -mt-1 mb-1">
                                                     ⚠️ {t('Disable Undetectable mode first to change disguise.')}
                                                 </p>
                                             )}
                                             {[
-                                                { id: 'none', label: 'None (Default)', icon: <Layout size={14} /> },
-                                                { id: 'terminal', label: 'Terminal', icon: <Terminal size={14} /> },
-                                                { id: 'settings', label: 'System Settings', icon: <Settings size={14} /> },
-                                                { id: 'activity', label: 'Activity Monitor', icon: <Activity size={14} /> }
-                                            ].map((option) => (
-                                                <button
-                                                    key={option.id}
-                                                    disabled={isUndetectable}
-                                                    onClick={() => {
-                                                        if (isUndetectable) return;
-                                                        // @ts-ignore
-                                                        setDisguiseMode(option.id);
-                                                        // @ts-ignore
-                                                        window.electronAPI?.setDisguise(option.id);
-                                                        // Analytics
-                                                        analytics.trackModeSelected(`disguise_${option.id}`);
-                                                    }}
-                                                    className={`p-3 rounded-lg border text-left flex items-center gap-3 transition-all ${disguiseMode === option.id
-                                                        ? 'bg-accent-primary border-accent-primary text-on-accent shadow-lg shadow-[var(--accent-shadow-20)]'
-                                                        : 'bg-bg-input border-border-subtle text-text-secondary hover:text-text-primary hover:bg-bg-subtle-hover'
-                                                        } ${isUndetectable ? 'cursor-not-allowed' : ''}`}
-                                                >
-                                                    <div className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${disguiseMode === option.id ? 'bg-on-accent-surface text-on-accent' : 'bg-bg-item-surface text-text-secondary'
-                                                        }`}>
-                                                        {option.icon}
-                                                    </div>
-                                                    <span className="text-xs font-medium">{t(option.label)}</span>
-                                                </button>
-                                            ))}
+                                                // Names match what _applyDisguise renames the app to per platform.
+                                                { id: 'none', label: 'None (Default)', icon: <Layout size={18} strokeWidth={1.75} /> },
+                                                { id: 'terminal', label: isWindows ? 'Command Prompt' : 'Terminal', icon: <Terminal size={18} strokeWidth={1.75} /> },
+                                                { id: 'settings', label: isWindows ? 'Settings' : 'System Settings', icon: <Settings size={18} strokeWidth={1.75} /> },
+                                                { id: 'activity', label: isWindows ? 'Task Manager' : 'Activity Monitor', icon: <Activity size={18} strokeWidth={1.75} /> }
+                                            ].map((option) => {
+                                                const selected = disguiseMode === option.id;
+                                                return (
+                                                    <LiquidGlassButton
+                                                        key={option.id}
+                                                        variant={selected ? 'action' : 'clear'}
+                                                        className="lg-sm lg-tile w-full [&_.lg-content]:justify-start"
+                                                        icon={<span className={selected ? undefined : 'text-text-primary'}>{option.icon}</span>}
+                                                        aria-pressed={selected}
+                                                        disabled={isUndetectable}
+                                                        style={selected ? (isLight ? DISGUISE_TILE_SELECTED_LIGHT : DISGUISE_TILE_SELECTED) : DISGUISE_TILE_RESTING}
+                                                        onClick={() => {
+                                                            if (isUndetectable) return;
+                                                            // @ts-ignore
+                                                            setDisguiseMode(option.id);
+                                                            // @ts-ignore
+                                                            window.electronAPI?.setDisguise(option.id);
+                                                            // Analytics
+                                                            analytics.trackModeSelected(`disguise_${option.id}`);
+                                                        }}
+                                                    >
+                                                        {t(option.label)}
+                                                    </LiquidGlassButton>
+                                                );
+                                            })}
                                         </div>
                                     </div>
 

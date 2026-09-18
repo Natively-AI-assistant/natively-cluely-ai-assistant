@@ -725,6 +725,145 @@
 }
 
 /*
+  ---------------------------------------------------------------------------
+  .lg-tile — the material at TILE scale: a ~56-64px rounded rect, the size of
+  a selectable card rather than of a control in a row.
+
+  DERIVED, not measured, and it exists because .lg-sm's rim is wrong here in
+  the opposite direction to the hero's. The rim does not scale with the box
+  (see the .lg-sm header): 3px is 2% of the 136px reference and 9% of a 32px
+  pill, which is why .lg-sm collapses it to a single hairline. On a 58px tile
+  that hairline is 1.7% — thinner, proportionally, than the reference itself —
+  so the specular has nothing to read as and the tile lands as a flat card with
+  a faint border. Two rings put it back to ~3.4%, between the two.
+
+  Everything else that .lg-sm hands back — the host font, the 12px label and
+  its real leading — is still right at this size, so this class is additive to
+  it: `className="lg-sm lg-tile"`.
+
+  The lens has to grow with the box for the same reason it had to shrink for
+  .lg-sm: 90x40 on a 253x58 tile is a small dot in a wide box rather than a
+  bloom, and the hero's 200x150 is taller than the tile. 150x70 keeps roughly
+  the reference's ratio of bloom to box.
+
+  It must sit after .lg-sm's rim and lens rules: both are (0,2,0)/(0,3,0)
+  against the same element, so source order is what decides.
+  ---------------------------------------------------------------------------
+*/
+.lg-button.lg-tile::before {
+    box-shadow:
+        inset 0 0 0 1px var(--lg-rim-1),
+        inset 0 0 0 2px var(--lg-rim-2);
+}
+/* a rect's side faces are the full height, so the cap shadow carries further
+   than on a pill's semicircular caps — but it is not turning away as hard */
+.lg-button.lg-tile::after { padding: 2px; opacity: .42; }
+.lg-button.lg-tile .lg-lens {
+    --lg-lens-w: 150px;
+    --lg-lens-h: 70px;
+}
+.lg-button.lg-tile:not(:disabled):active .lg-lens {
+    --lg-lens-w: 110px;
+    --lg-lens-h: 52px;
+}
+
+/*
+  ---------------------------------------------------------------------------
+  .lg-slider — the material as a range input's KNOB.
+
+  DERIVED, and the one place the material is built without its own layers. A
+  pseudo-element cannot carry ::before/::after of its own, so the rim, the cap
+  shadow and the contact shadow that the button spreads across three elements
+  all collapse into one box-shadow list on ::-webkit-slider-thumb. The layer
+  ORDER is the same as the button's, first shadow on top:
+
+    top specular      the key light on the upper face
+    underside         the bounce (dark theme) or the shadow (light theme)
+    hairline ring     the rim carried around the whole perimeter
+    contact           the knob sits ON the track, so it casts one in BOTH
+                      themes — unlike .lg-clear, which sits on nothing
+
+  A round knob is all cap: every point on the perimeter curves away, which is
+  why the ring is uniform here and masked on the button. At 18px there is no
+  room for the three-ring falloff either — same reasoning as .lg-sm's collapse
+  to a hairline, one size further down.
+
+  The body is the host's accent, read from its own token the way .lg-action
+  reads --legacy-action-bg, so the knob still reads as that app's control.
+  ---------------------------------------------------------------------------
+*/
+.lg-slider {
+    --lg-knob: 18px;
+    --lg-knob-bg: var(--accent-primary, #b9a1f6);
+}
+
+.lg-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+            appearance: none;
+    width: var(--lg-knob);
+    height: var(--lg-knob);
+    border-radius: 50%;
+    border: 0;
+    /* flat body + the thin top/bottom sheen the material's fill carries */
+    background:
+        linear-gradient(180deg,
+            rgba(255, 255, 255, .20) 0%, rgba(255, 255, 255, 0) 38%,
+            rgba(255, 255, 255, 0) 62%, rgba(255, 255, 255, .10) 100%),
+        var(--lg-knob-bg);
+    box-shadow:
+        inset 0 1.5px 0 -0.5px rgba(255, 255, 255, .55),
+        inset 0 -1.5px 0 -0.5px rgba(255, 255, 255, .26),
+        inset 0 0 0 1px rgba(255, 255, 255, .14),
+        0 1px 2px rgba(0, 0, 0, .40),
+        0 3px 8px rgba(0, 0, 0, .28);
+    cursor: grab;
+    transition: transform 110ms cubic-bezier(.2, .85, .25, 1);
+}
+
+/* Light mode: no bounce from below to catch, so the underside goes to shadow
+   and the contact shadow does the work — the same move light mode makes on
+   .lg-action and .lg-sky. */
+[data-theme='light'] .lg-slider::-webkit-slider-thumb {
+    background:
+        linear-gradient(180deg,
+            rgba(255, 255, 255, .26) 0%, rgba(255, 255, 255, 0) 42%,
+            rgba(255, 255, 255, 0) 100%),
+        var(--lg-knob-bg);
+    box-shadow:
+        inset 0 1.5px 0 -0.5px rgba(255, 255, 255, .45),
+        inset 0 -1.5px 0 -0.5px rgba(17, 17, 26, .30),
+        inset 0 0 0 1px rgba(17, 17, 26, .10),
+        0 1px 2px rgba(17, 17, 26, .22),
+        0 4px 10px rgba(17, 17, 26, .14);
+}
+
+/* The press compresses the material, as on the button — and the pointer is
+   already down on a drag, so this is the whole drag, not a flash. */
+@media (hover: hover) and (pointer: fine) {
+    .lg-slider:not(:disabled)::-webkit-slider-thumb:hover { transform: scale(1.08); }
+}
+.lg-slider:not(:disabled):active::-webkit-slider-thumb { transform: scale(.94); cursor: grabbing; }
+
+/* Keyboard parity with .lg-button's focus ring. */
+.lg-slider:focus-visible {
+    outline: 3px solid rgba(155, 195, 255, .55);
+    outline-offset: 3px;
+}
+
+@media (prefers-contrast: more) {
+    .lg-slider::-webkit-slider-thumb,
+    [data-theme='light'] .lg-slider::-webkit-slider-thumb {
+        box-shadow: 0 0 0 2px currentColor;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .lg-slider::-webkit-slider-thumb { transition: none; }
+    .lg-slider:not(:disabled)::-webkit-slider-thumb:hover,
+    .lg-slider:not(:disabled):active::-webkit-slider-thumb { transform: none; }
+}
+
+/*
   Disabled dims the parts rather than fading the whole element. A blanket
   `opacity: .45` takes the rim with it, so the button stops reading as glass at
   all, and it drops the label to 3.74:1. Desaturating the body and dimming the

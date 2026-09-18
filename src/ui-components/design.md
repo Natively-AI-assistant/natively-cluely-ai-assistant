@@ -568,6 +568,72 @@ Add it whenever the width is set by the container rather than by the label.
 It is deliberately *not* folded into `.lg-sm`, whose label-width buttons keep
 proportions the percentages still serve.
 
+### Tile scale is the rim's other failure: `.lg-tile`
+
+`.lg-sm` collapses the rim to one hairline because at 32px a 3px rim is 9% of
+the height and three rings plus the cap ring swallow the button. On a **58px
+selectable tile** that same hairline is the opposite mistake: 1.7% of the
+height, thinner in proportion than the 136px reference's own 2%, so there is no
+specular to read and the tile lands as a flat card with a faint border. That is
+what "doesn't look like glass" looks like from the inside.
+
+`.lg-tile` puts two rings back (~3.4%) and is *additive* to `.lg-sm`, which is
+still right about the font, the 12px label and its leading:
+
+```tsx
+<LiquidGlassButton variant="clear" className="lg-sm lg-tile" icon={<Terminal size={18} />}>
+    Terminal
+</LiquidGlassButton>
+```
+
+The lens moves for the same reason it had to shrink for `.lg-sm`, in the other
+direction: 90x40 is a dot in a 253x58 box and the hero's 200x150 is taller than
+the tile, so it goes to 150x70 resting / 110x52 pressed. The cap shadow drops to
+2px at `.42` — a rect's side face is the full height, so it carries further than
+a pill's semicircular cap while turning away from the light less sharply.
+
+Derived, not measured, like light mode and the other two late variants. Verified
+by rendering the Process Disguise picker (4 tiles at 253x58, `clear` resting and
+`action` selected) in both themes at device scale 2.
+
+**The body has to stay translucent for any of this to help.** That picker first
+fed `--lg-clear-bg: var(--bg-input)`, an opaque fill *darker* than the card it
+sits on, which reads as a plate in a hole no matter how good the rim is. The
+variant's own defaults — a translucent step over whatever is behind — are what
+let the card show through.
+
+### A knob has no layers: `.lg-slider`
+
+The material as a range input's thumb, and the one place it is built without
+its own element structure. `::-webkit-slider-thumb` cannot carry
+`::before`/`::after`, so the rim, the cap shadow and the contact shadow
+collapse into a single `box-shadow` list, in the button's own layer order:
+top specular, underside, hairline ring, contact.
+
+Two consequences of the shape, both the opposite of the pill's:
+
+**The ring is uniform.** On a pill the specular is masked to the top and bottom
+faces because the caps turn away from the light. A circle is *all* cap — every
+point on the perimeter curves away by the same amount — so there is nothing to
+aim, and the mask would only thin the ring on the two sides that are no
+different from the rest of it.
+
+**The contact shadow is in both themes.** `.lg-clear` has none because a body
+you can see through is not sitting on anything. A knob is sitting on the track,
+in either theme, so it casts one in either theme; only its weight changes.
+
+At 18px the three-ring falloff has nowhere to go, so it is one hairline — the
+same collapse `.lg-sm` makes, one size further down. The body reads
+`--accent-primary` the way `.lg-action` reads `--legacy-action-bg`, so the knob
+stays the host's control colour rather than importing a tint from here.
+
+```tsx
+<input type="range" className="lg-slider w-full h-1.5 rounded-full appearance-none bg-bg-input" />
+```
+
+The host still owns the track. `accent-color` does nothing once the thumb is
+styled, so drop it rather than leaving it to look load-bearing.
+
 ### Light mode is derived, not measured
 
 Everything else in this document was sampled from a reference. Light mode was
