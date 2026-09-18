@@ -16,6 +16,7 @@ export type BrowserContextCategory =
   | 'coding_problem'
   | 'coding_editor'
   | 'interview_assessment'
+  | 'coding_project'
   | 'developer_docs'
   | 'job_description'
   | 'google_docs_visible'
@@ -37,6 +38,14 @@ export type AutoPolicy =
 export type BrowserContextSensitivity = 'low' | 'medium' | 'high' | 'critical';
 
 export type ClassificationConfidence = 'high' | 'medium' | 'low';
+
+export type ProjectFileStatus =
+  | 'included'
+  | 'unreadable'
+  | 'ignored'
+  | 'truncated'
+  | 'unchanged'
+  | 'removed';
 
 /* ────────────────────────── classifier I/O ────────────────────────── */
 
@@ -153,6 +162,32 @@ export interface CodingProblemPayload {
   selectedText?: string;
 }
 
+export interface ProjectFileContext {
+  path: string;
+  language?: string;
+  content?: string;
+  revision?: string;
+  charCount: number;
+  status: ProjectFileStatus;
+  reason?: string;
+}
+
+export interface CodingProjectPayload {
+  workspaceId: string;
+  workspaceName?: string;
+  provider: string;
+  problemStatement?: string;
+  files: ProjectFileContext[];
+  omitted: Array<{ path: string; reason: string }>;
+  selectedPaths: string[];
+  capturedFileCount: number;
+  totalFileCount: number;
+  budgetChars: number;
+  usedChars: number;
+  refreshMode: 'full' | 'changed';
+  baseContextId?: string;
+}
+
 export interface NotesPayload {
   editorType:
     | 'google_docs'
@@ -184,6 +219,7 @@ export const BROWSER_CONTEXT_PARITY = {
     'coding_problem',
     'coding_editor',
     'interview_assessment',
+    'coding_project',
     'developer_docs',
     'job_description',
     'google_docs_visible',
@@ -198,6 +234,7 @@ export const BROWSER_CONTEXT_PARITY = {
   autoPolicies: ['auto', 'auto_if_high_confidence', 'ask', 'manual', 'blocked'],
   sensitivities: ['low', 'medium', 'high', 'critical'],
   confidences: ['high', 'medium', 'low'],
+  projectFileStatuses: ['included', 'unreadable', 'ignored', 'truncated', 'unchanged', 'removed'],
   captureModes: ['auto', 'manual', 'selected_text', 'screenshot_fallback'],
   envelopeFields: [
     'envelopeVersion',

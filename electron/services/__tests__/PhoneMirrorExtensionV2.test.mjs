@@ -148,6 +148,16 @@ async function postDom(port, token, body, origin) {
   return { status: res.status, json };
 }
 
+async function waitForFrame(frames, predicate, timeoutMs = 1000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const frame = frames.find(predicate);
+    if (frame) return frame;
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 
 describe('PhoneMirror v2 — pickTargetExtensionIndex (pure single-target arbitration)', () => {
@@ -457,6 +467,223 @@ describe('PhoneMirror v2 — listTabs round-trip (multi-tab picker)', () => {
     const tabs = await svc.listTabs(250);
     assert.deepEqual(tabs, [], 'silent extension → empty list after timeout');
     ws.close();
+    await svc.stop({ persist: false });
+  });
+});
+
+describe('PhoneMirror v2 — authenticated extension control channel', () => {
+  test('a phone-token socket cannot self-declare as an extension or spoof a capture ack', async () => {
+    const { svc, info } = await freshService();
+    const phone = await connectExtension(info.port, info.token);
+    assert.equal(
+      (await svc.snapshot()).extensionConnected,
+      false,
+      'an extension hello over the phone token must not grant extension capability',
+    );
+
+    const extension = await connectExtension(info.port, info.extToken);
+    extension.ws.send(JSON.stringify({ type: 'active' }));
+    await new Promise((r) => setTimeout(r, 20));
+
+    let settled = false;
+    const capture = svc.requestDomCapture({ timeoutMs: 1000 }).then((result) => {
+      settled = true;
+      return result;
+    });
+    const request = await waitForFrame(
+      extension.frames,
+      (frame) => frame.type === 'capture-dom',
+    );
+    assert.ok(request?.reqId, 'the authenticated extension receives the request');
+
+    phone.ws.send(JSON.stringify({
+      type: 'capture-ack',
+      reqId: request.reqId,
+      status: 'done',
+    }));
+    await new Promise((r) => setTimeout(r, 80));
+    assert.equal(settled, false, 'a phone-token socket cannot settle extension work');
+
+    extension.ws.send(JSON.stringify({
+      type: 'capture-ack',
+      reqId: request.reqId,
+      status: 'done',
+    }));
+    assert.equal((await capture).ok, true);
+
+    phone.ws.close();
+    extension.ws.close();
+    await svc.stop({ persist: false });
+  });
+
+  test('project discovery and capture responses correlate to the exact requested socket', async () => {
+    const { svc, info } = await freshService();
+    const target = await connectExtension(info.port, info.extToken);
+    const other = await connectExtension(info.port, info.extToken);
+    // Make target deterministically win the most-recently-active arbitration.
+    target.ws.send(JSON.stringify({ type: 'active' }));
+    await new Promise((r) => setTimeout(r, 20));
+
+    let settled = false;
+    const discovery = svc.discoverProject({ timeoutMs: 1200 }).then((result) => {
+      settled = true;
+      return result;
+    });
+    const request = await waitForFrame(
+      target.frames,
+      (frame) => frame.type === 'discover-project',
+    );
+    assert.ok(request?.reqId, 'the selected extension receives discover-project');
+
+    const files = Array.from({ length: 100 }, (_, i) => ({
+      path: `src/${'nested/'.repeat(8)}file-${i}.typescript.ts`,
+      language: 'typescript',
+      charCount: 100 + i,
+      revision: `rev-${i}`,
+      readable: true,
+    }));
+    const response = {
+      type: 'project-discovery',
+      reqId: request.reqId,
+      ok: true,
+      tabId: 41,
+      ownerTarget: { frameId: 17, documentId: 'document-large-project' },
+      project: {
+        workspaceId: 'large-project',
+        name: 'Large project',
+        provider: 'test',
+        files,
+        warnings: [],
+        estimatedChars: 14950,
+      },
+    };
+    assert.ok(
+      Buffer.byteLength(JSON.stringify(response), 'utf8') > 4096,
+      'fixture must exercise the expanded project-discovery frame budget',
+    );
+
+    other.ws.send(JSON.stringify(response));
+    await new Promise((r) => setTimeout(r, 80));
+    assert.equal(settled, false, 'a different paired extension cannot win by copying reqId');
+
+    target.ws.send(JSON.stringify(response));
+    const result = await discovery;
+    assert.equal(result.ok, true);
+    assert.equal(result.project.files.length, 100);
+    assert.equal(result.project.workspaceId, 'large-project');
+    assert.equal(result.tabId, 41);
+    assert.ok(result.connectionLease, 'discovery returns an opaque connection lease');
+
+    // Create the exact cross-step race: browser B becomes most recently active
+    // after browser A discovered the project. The lease must still route capture
+    // to A because tab ids are browser-local.
+    other.ws.send(JSON.stringify({ type: 'active' }));
+    await new Promise((r) => setTimeout(r, 20));
+    let captureSettled = false;
+    const capture = svc.requestProjectCapture({
+      workspaceId: 'large-project',
+      selectedPaths: ['src/a.ts'],
+      tabId: result.tabId,
+      connectionLease: result.connectionLease,
+      timeoutMs: 1000,
+    }).then((captureResult) => {
+      captureSettled = true;
+      return captureResult;
+    });
+    const captureRequest = await waitForFrame(
+      target.frames,
+      (frame) => frame.type === 'capture-project',
+    );
+    assert.ok(captureRequest?.reqId);
+    assert.deepEqual(
+      captureRequest.ownerTarget,
+      { frameId: 17, documentId: 'document-large-project' },
+      'capture must reuse the exact frame document bound into the server-side lease',
+    );
+    assert.equal(
+      other.frames.some((frame) => frame.type === 'capture-project'),
+      false,
+      'the newly-active browser must not receive a leased project capture',
+    );
+    other.ws.send(JSON.stringify({
+      type: 'capture-ack',
+      reqId: captureRequest.reqId,
+      status: 'done',
+    }));
+    await new Promise((r) => setTimeout(r, 80));
+    assert.equal(captureSettled, false, 'a different paired extension cannot ack capture');
+    target.ws.send(JSON.stringify({
+      type: 'capture-ack',
+      reqId: captureRequest.reqId,
+      status: 'done',
+      category: 'coding_project',
+    }));
+    assert.equal((await capture).ok, true);
+
+    const targetCaptureCount = target.frames.filter((frame) => frame.type === 'capture-project').length;
+    const otherCaptureCount = other.frames.filter((frame) => frame.type === 'capture-project').length;
+    const wrongTab = await svc.requestProjectCapture({
+      workspaceId: 'large-project',
+      selectedPaths: ['src/a.ts'],
+      tabId: 42,
+      connectionLease: result.connectionLease,
+      timeoutMs: 1000,
+    });
+    assert.deepEqual(wrongTab, { ok: false, reason: 'project-connection-expired' });
+    const stale = await svc.requestProjectCapture({
+      workspaceId: 'large-project',
+      selectedPaths: ['src/a.ts'],
+      connectionLease: 'not-a-real-lease',
+      timeoutMs: 1000,
+    });
+    assert.deepEqual(stale, { ok: false, reason: 'project-connection-expired' });
+    assert.equal(
+      target.frames.filter((frame) => frame.type === 'capture-project').length,
+      targetCaptureCount,
+      'an invalid lease must not silently fall back to browser A',
+    );
+    assert.equal(
+      other.frames.filter((frame) => frame.type === 'capture-project').length,
+      otherCaptureCount,
+      'an invalid lease must not silently fall back to browser B',
+    );
+
+    target.ws.close();
+    other.ws.close();
+    await svc.stop({ persist: false });
+  });
+
+  test('project-discovery frames above the 512 KiB transport ceiling are rejected', async () => {
+    const { svc, info } = await freshService();
+    const extension = await connectExtension(info.port, info.extToken);
+    extension.ws.on('error', () => {});
+
+    const discovery = svc.discoverProject({ timeoutMs: 300 });
+    const request = await waitForFrame(
+      extension.frames,
+      (frame) => frame.type === 'discover-project',
+    );
+    assert.ok(request?.reqId);
+    extension.ws.send(JSON.stringify({
+      type: 'project-discovery',
+      reqId: request.reqId,
+      ok: true,
+      padding: 'x'.repeat(600 * 1024),
+      project: {
+        workspaceId: 'oversized',
+        name: 'Oversized',
+        provider: 'test',
+        files: [{ path: 'src/a.ts', charCount: 1, revision: '1', readable: true }],
+        warnings: [],
+        estimatedChars: 1,
+      },
+    }));
+
+    const result = await discovery;
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, 'timeout', 'oversized response must not settle the request');
+
+    extension.ws.close();
     await svc.stop({ persist: false });
   });
 });
