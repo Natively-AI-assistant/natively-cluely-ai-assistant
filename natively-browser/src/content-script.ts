@@ -15,6 +15,14 @@ import { Readability } from '@mozilla/readability';
 import { extractPageContent, type ExtractResult } from './extract';
 import { smartCapture, type SmartCaptureResult } from './capture/smart-capture';
 import type { BrowserContextCategory, CaptureMode } from './capture/types';
+import {
+  assembleProjectContext,
+  discoverProject,
+  type ExternalProjectFile,
+  type ProjectCaptureResult,
+  type ProjectPageIdentity,
+} from './capture/project-context';
+import type { ProjectFileContext } from './capture/types';
 
 export interface SmartExtractOpts {
   contextId: string;
@@ -39,10 +47,38 @@ export type CaptureRequest =
   // `fullPage` (experimental) attaches the full readable text of any non-sensitive
   // page in auto mode — sensitive pages are still hard-blocked downstream.
   // `classifyOnly`/`extraCategories`/`aiApproved` drive the AI-classifier round-trip.
-  | ({ type: 'natively:smart-extract' } & SmartExtractOpts);
+  | ({ type: 'natively:smart-extract' } & SmartExtractOpts)
+  // Project capture is deliberately separate from the fast single-page path.
+  // `externalFiles` are read-only snapshots from already-loaded editors in the
+  // page's MAIN world; DOM providers fill in visible explorers.
+  | {
+      type: 'natively:project-discover';
+      externalFiles?: ExternalProjectFile[];
+      allowEmpty?: boolean;
+      /** Sanitized identity of the top-level tab that owns an embedded IDE. */
+      pageIdentity?: ProjectPageIdentity;
+    }
+  | {
+      type: 'natively:project-capture';
+      contextId: string;
+      capturedAt: number;
+      selectedPaths: string[];
+      refresh?: boolean;
+      baseContextId?: string;
+      previousSelectedPaths?: string[];
+      previousFiles?: ProjectFileContext[];
+      externalFiles?: ExternalProjectFile[];
+      allowEmpty?: boolean;
+      /** Bounded readable text extracted from the top frame by the service worker. */
+      problemStatement?: string;
+      /** Sanitized identity of the top-level tab that owns an embedded IDE. */
+      pageIdentity?: ProjectPageIdentity;
+    };
 export type CaptureResponse =
   | { ok: true; result: ExtractResult }
   | { ok: true; smart: SmartCaptureResult }
+  | { ok: true; project: ReturnType<typeof discoverProject> }
+  | { ok: true; projectCapture: ProjectCaptureResult }
   | { ok: false; error: string };
 
 const GUARD = '__natively_capture_listener__';
@@ -92,6 +128,48 @@ function runSmartCapture(opts: SmartExtractOpts): SmartCaptureResult {
   });
 }
 
+function runProjectDiscovery(
+  externalFiles?: ExternalProjectFile[],
+  allowEmpty = false,
+  pageIdentity?: ProjectPageIdentity,
+) {
+  return discoverProject(document, pageIdentity || {
+    host: location.hostname,
+    url: location.href,
+    title: document.title,
+  }, externalFiles, { minimumFiles: allowEmpty ? 0 : 2 });
+}
+
+function runProjectCapture(message: Extract<CaptureRequest, { type: 'natively:project-capture' }>): ProjectCaptureResult {
+  const project = runProjectDiscovery(
+    message.externalFiles,
+    message.allowEmpty === true,
+    message.pageIdentity,
+  );
+  if (!project) throw new Error('This page does not expose a readable multi-file workspace');
+
+  // Reuse the proven clean-page extractor for the task statement. The project
+  // assembler applies its own deterministic budget, so file boundaries and the
+  // omissions manifest always remain visible to the model.
+  // The project may live in a cross-origin IDE iframe while the challenge text
+  // lives in the top frame (HackerRank is one example). Prefer the service
+  // worker's bounded top-frame extraction; only fall back to this frame for
+  // older callers that do not provide it.
+  const problemStatement = typeof message.problemStatement === 'string'
+    ? message.problemStatement
+    : runExtraction().text;
+  return assembleProjectContext(project, {
+    contextId: message.contextId,
+    capturedAt: message.capturedAt,
+    selectedPaths: message.selectedPaths,
+    refresh: message.refresh === true,
+    baseContextId: message.baseContextId,
+    previousSelectedPaths: message.previousSelectedPaths,
+    previousFiles: message.previousFiles,
+    problemStatement,
+  });
+}
+
 const w = window as unknown as Record<string, unknown>;
 if (!w[GUARD]) {
   w[GUARD] = true;
@@ -106,6 +184,21 @@ if (!w[GUARD]) {
         if (message.type === 'natively:smart-extract') {
           const smart = runSmartCapture(message);
           sendResponse({ ok: true, smart });
+          return undefined;
+        }
+        if (message.type === 'natively:project-discover') {
+          sendResponse({
+            ok: true,
+            project: runProjectDiscovery(
+              message.externalFiles,
+              message.allowEmpty === true,
+              message.pageIdentity,
+            ),
+          });
+          return undefined;
+        }
+        if (message.type === 'natively:project-capture') {
+          sendResponse({ ok: true, projectCapture: runProjectCapture(message) });
           return undefined;
         }
       } catch (err) {

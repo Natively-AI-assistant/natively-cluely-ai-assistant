@@ -27,6 +27,7 @@ await build({
     path.join(rootDir, 'src', 'capture', 'extractors', 'index.ts'),
     path.join(rootDir, 'src', 'capture', 'smart-capture.ts'),
     path.join(rootDir, 'src', 'capture', 'page-signals.ts'),
+    path.join(rootDir, 'src', 'capture', 'project-context.ts'),
   ],
   bundle: true,
   outdir: path.join(rootDir, 'dist-test'),

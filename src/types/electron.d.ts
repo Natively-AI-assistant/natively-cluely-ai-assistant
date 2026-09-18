@@ -1002,6 +1002,14 @@ export interface ElectronAPI {
   phoneMirrorArmExtension: () => Promise<{ armedMs: number } | { error: string }>;
   phoneMirrorListTabs: () => Promise<{ tabs: Array<{ id: number; title: string; url: string }>; error?: string }>;
   phoneMirrorCaptureTab: (tabId: number) => Promise<{ ok: boolean; reason?: string }>;
+  phoneMirrorDiscoverProject: (tabId?: number) => Promise<BrowserProjectDiscoveryResult>;
+  phoneMirrorCaptureProject: (request: {
+    workspaceId: string;
+    selectedPaths: string[];
+    refresh?: boolean;
+    tabId?: number;
+    connectionLease: string;
+  }) => Promise<BrowserProjectCaptureResult>;
   // Smart Browser Context v2 — pre-answer auto-context pull. Resolves attached:true
   // when a coding page was auto-attached (arrives via onDomContextReceived), else
   // attached:false (answer proceeds without browser context).
@@ -1060,6 +1068,45 @@ export interface DomCaptureMeta {
   firstLine?: string;
 }
 
+export interface BrowserProjectDiscoveryFile {
+  path: string;
+  language?: string;
+  charCount: number;
+  revision: string;
+  readable: boolean;
+  reason?: string;
+  changed?: boolean;
+}
+
+export interface BrowserProjectDiscovery {
+  workspaceId: string;
+  name: string;
+  provider: string;
+  files: BrowserProjectDiscoveryFile[];
+  warnings: string[];
+  estimatedChars: number;
+}
+
+export interface BrowserProjectDiscoveryResult {
+  ok: boolean;
+  reason?: string;
+  project?: BrowserProjectDiscovery;
+  tabId?: number;
+  connectionLease?: string;
+  refreshAvailable?: boolean;
+  previousSelectedPaths?: string[];
+}
+
+export interface BrowserProjectCaptureResult {
+  ok: boolean;
+  reason?: string;
+  category?: string;
+  fileCount?: number;
+  omittedCount?: number;
+  truncatedCount?: number;
+  unchanged?: boolean;
+}
+
 /* ─────────────── Smart Browser Context v2 (RENDERER mirror) ───────────────
  * Duplicated per subsystem (the extension package + electron compile separately
  * and can't share a file). Canonical source: natively-browser/src/capture/types.ts;
@@ -1071,6 +1118,7 @@ export type BrowserContextCategory =
   | 'coding_problem'
   | 'coding_editor'
   | 'interview_assessment'
+  | 'coding_project'
   | 'developer_docs'
   | 'job_description'
   | 'google_docs_visible'
@@ -1092,6 +1140,14 @@ export type AutoPolicy =
 export type BrowserContextSensitivity = 'low' | 'medium' | 'high' | 'critical';
 
 export type ClassificationConfidence = 'high' | 'medium' | 'low';
+
+export type ProjectFileStatus =
+  | 'included'
+  | 'unreadable'
+  | 'ignored'
+  | 'truncated'
+  | 'unchanged'
+  | 'removed';
 
 export type CaptureMode = 'auto' | 'manual' | 'selected_text' | 'screenshot_fallback';
 
@@ -1147,6 +1203,32 @@ export interface CodingProblemPayload {
   visibleCode?: string;
   language?: string;
   selectedText?: string;
+}
+
+export interface ProjectFileContext {
+  path: string;
+  language?: string;
+  content?: string;
+  revision?: string;
+  charCount: number;
+  status: ProjectFileStatus;
+  reason?: string;
+}
+
+export interface CodingProjectPayload {
+  workspaceId: string;
+  workspaceName?: string;
+  provider: string;
+  problemStatement?: string;
+  files: ProjectFileContext[];
+  omitted: Array<{ path: string; reason: string }>;
+  selectedPaths: string[];
+  capturedFileCount: number;
+  totalFileCount: number;
+  budgetChars: number;
+  usedChars: number;
+  refreshMode: 'full' | 'changed';
+  baseContextId?: string;
 }
 
 export interface NotesPayload {

@@ -16361,6 +16361,50 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  // Browser-project picker in the overlay. Discovery returns metadata only;
+  // source bodies are sent later through the existing bounded /dom channel.
+  safeHandle('phone-mirror:discover-project', async (_, tabId?: number) => {
+    try {
+      return await PhoneMirrorService.getInstance().discoverProject({
+        tabId: typeof tabId === 'number' ? tabId : undefined,
+      });
+    } catch (e: any) {
+      console.error('[IPC] phone-mirror:discover-project error:', e);
+      return { ok: false, reason: e?.message || 'failed to discover project' };
+    }
+  });
+
+  safeHandle('phone-mirror:capture-project', async (_, raw?: unknown) => {
+    try {
+      const input = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
+      const workspaceId = typeof input.workspaceId === 'string' ? input.workspaceId.slice(0, 512) : '';
+      const connectionLease = typeof input.connectionLease === 'string'
+        ? input.connectionLease.trim().slice(0, 128)
+        : '';
+      const selectedPaths = Array.isArray(input.selectedPaths)
+        ? (input.selectedPaths as unknown[])
+            .filter((path): path is string => typeof path === 'string')
+            .map((path) => path.trim())
+            .filter(Boolean)
+            .slice(0, 300)
+            .map((path) => path.slice(0, 512))
+        : [];
+      if (!workspaceId) return { ok: false, reason: 'invalid workspaceId' };
+      if (!connectionLease) return { ok: false, reason: 'project-connection-expired' };
+      if (!selectedPaths.length) return { ok: false, reason: 'select at least one project file' };
+      return await PhoneMirrorService.getInstance().requestProjectCapture({
+        workspaceId,
+        selectedPaths,
+        refresh: input.refresh === true,
+        tabId: typeof input.tabId === 'number' ? input.tabId : undefined,
+        connectionLease,
+      });
+    } catch (e: any) {
+      console.error('[IPC] phone-mirror:capture-project error:', e);
+      return { ok: false, reason: e?.message || 'failed to capture project' };
+    }
+  });
+
   // Smart Browser Context v2 — pre-answer auto-context pull. The renderer calls
   // this just before generating an answer; the extension auto-attaches a coding
   // page if one is in front, otherwise resolves attached:false and the answer
