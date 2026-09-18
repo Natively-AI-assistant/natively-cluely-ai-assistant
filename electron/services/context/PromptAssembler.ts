@@ -326,7 +326,12 @@ export class PromptAssembler {
                 type: 'active_mode_custom_instructions',
                 trustLevel: TrustLevel.MODE_POLICY,
                 source: params.modeId ? `mode:${params.modeId}` : 'mode',
-                tokenBudget: 300,
+                // Advisory only — enforceTokenBudget() trims against the packet's
+                // global budget, never a block's own. Kept in step with the
+                // accessor's 2,400-char cap (~600 tokens) and with
+                // LAYER_BUDGET.custom_context so the declared figure does not
+                // contradict what the block can actually carry.
+                tokenBudget: 600,
                 content: `<active_mode_custom_instructions format="json">
 ${JSON.stringify({ content: this.escapePromptInjection(pinned) })}
 </active_mode_custom_instructions>`,

@@ -70,13 +70,46 @@ describe('W2: getActiveModePinnedInstructions', () => {
         assert.match(nego, /180k/);
     });
 
-    test('caps at ~1,200 chars', () => {
+    test('caps at ~2,400 chars (the custom_context layer budget)', () => {
         const mgr = installActiveMode(makeMode({
             customContext: 'pitch the integration story. '.repeat(200),
         }));
         const pinned = mgr.getActiveModePinnedInstructions('sales_answer');
-        assert.ok(pinned.length <= 1_300, `len=${pinned.length}`);
+        assert.ok(pinned.length <= 2_500, `len=${pinned.length}`);
         assert.match(pinned, /\[truncated\]/);
+    });
+
+    // Regression: a multi-paragraph prose context under the cap must survive
+    // WHOLE. Everything past the old 1,200-char cap was unreachable — it is
+    // dropped from this block, and retrieval cannot rescue it because
+    // customContext is scored against MIN_RELEVANCE_SCORE like a reference
+    // file, which a conversational question does not clear.
+    test('prose context within the cap is pinned in full, including its tail', () => {
+        // The fixture is deliberately sized so its LAST paragraph sits between
+        // the old 1,200-char cap and the current 2,400 one: this test fails on
+        // the old constant and passes on the new one.
+        const filler = paragraph =>
+            `${paragraph} The platform answers impact questions about public data products, gathers evidence, and produces a cited report for each request it receives.`;
+        const paragraphs = [
+            filler('OVERVIEW.'),
+            filler('VERIFICATION: every claim is checked against the source it cites before publication.'),
+            filler('BENCHMARK: reports are graded against curated anchor facts per product.'),
+            filler('RELIABILITY: a failed run is retried automatically instead of ending the session.'),
+            filler('REFRESH: the source catalogue is rebuilt by a locked job so it cannot double-run.'),
+            filler('SCORING: the impact score is being redefined so it no longer saturates early.'),
+            'NARRATIVE: when asked what changed this cycle, lead with verification and benchmarking rather than new surfaces.',
+        ].join('\n\n');
+
+        assert.ok(paragraphs.length > 1_200, `fixture must exceed the old cap: ${paragraphs.length}`);
+        assert.ok(paragraphs.length < 2_400, `fixture must fit the new cap: ${paragraphs.length}`);
+
+        const mgr = installActiveMode(makeMode({ customContext: paragraphs }));
+        const pinned = mgr.getActiveModePinnedInstructions('general_meeting_answer');
+
+        assert.doesNotMatch(pinned, /\[truncated\]/);
+        assert.match(pinned, /OVERVIEW\./);
+        // The tail is the assertion that matters: it sat past the old cap.
+        assert.match(pinned, /lead with verification and benchmarking/);
     });
 
     test('custom (user-built) modes surface their name', () => {
