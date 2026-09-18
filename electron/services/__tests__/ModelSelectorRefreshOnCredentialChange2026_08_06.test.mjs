@@ -43,6 +43,11 @@ describe('model selector list invalidation', () => {
     );
   });
 
+  test('the selector rebuilds its list when the Codex catalogue refreshes', () => {
+    assert.match(selector, /onCodexModelsChanged\?\.\(\(\) => \{\s*loadModels\(\);\s*\}\)/);
+    assert.match(ipc, /codex:refresh-models[\s\S]{0,700}send\('codex-models-changed'\)/);
+  });
+
   test('the subscription is torn down with the effect', () => {
     // A leaked listener on a window that outlives every other renderer would
     // keep firing loadModels forever.

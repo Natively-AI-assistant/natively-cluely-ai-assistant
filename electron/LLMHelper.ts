@@ -1904,7 +1904,7 @@ export class LLMHelper {
   public getCodexSelectionAuthError(): string | null {
     if (!this.isCodexCliModel(this.currentModelId)) return null;
     if (this.isProviderDisabled('codex-cli') || !this.codexCliConfig.enabled) return null;
-    if (this.currentModelId === 'codex-cli' && !this.codexCliConfig.model) {
+    if (!this.codexCliConfig.model) {
       return 'No Codex model is selected. Open Settings → AI Providers → OpenAI Codex and refresh the model list.';
     }
     try {

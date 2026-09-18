@@ -3182,6 +3182,18 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     }
                     return next;
                 });
+            } else if (catalog.source === 'provider-live') {
+                setCodexCliConfig(prev => {
+                    const next = {
+                        ...prev,
+                        model: '',
+                        fastModel: '',
+                        modelReasoningEffort: undefined,
+                        serviceTier: 'default',
+                    };
+                    window.electronAPI?.setCodexCliConfig?.(next);
+                    return next;
+                });
             }
         } catch {
             if (run !== codexCatalogRefresh.current) return;
@@ -3916,12 +3928,12 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
 
 <div
                     className={`aip-card p-5 flex items-center justify-between gap-4 ${!canUseFastMode ? 'opacity-50 grayscale' : ''}`}
-                    title={!canUseFastMode ? t("Requires Groq, Natively API, or Codex CLI to be configured") : ""}
+                    title={!canUseFastMode ? t("Requires Groq, Natively API, or OpenAI Codex to be configured") : ""}
                 >
                     <div className="flex-1 min-w-0">
                         {/* No "Needs Groq" badge. It named ONE of the three
                             providers that satisfy canUseFastMode (Groq, Natively
-                            API, Codex CLI), so it read as a hard Groq dependency
+                            API, OpenAI Codex), so it read as a hard Groq dependency
                             that does not exist — and the line below already
                             states the real requirement in full, as does the
                             card's title. A badge carries only what no other
@@ -3929,7 +3941,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('Fast Response Mode')}</label>
                         <p className="text-[10px] aip-muted mt-0.5">{t('Uses the fastest available provider instead of your selected model.')}</p>
                         {!canUseFastMode && (
-                            <p className="text-xs aip-warn-fg mt-0.5 font-medium">{t('Requires Groq, Natively API, or Codex CLI to be configured.')}</p>
+                            <p className="text-xs aip-warn-fg mt-0.5 font-medium">{t('Requires Groq, Natively API, or OpenAI Codex to be configured.')}</p>
                         )}
                     </div>
                     {/* aria-disabled, not disabled: the onClick guard below is the
@@ -3942,7 +3954,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         label={t('Fast Response Mode')}
                         onChange={async () => {
                             if (!canUseFastMode) {
-                                alert(t("Please configure Groq, Natively API, or Codex CLI first to enable Fast Response Mode."));
+                                alert(t("Please configure Groq, Natively API, or OpenAI Codex first to enable Fast Response Mode."));
                                 return;
                             }
                             const newState = !fastResponseMode;
@@ -4336,7 +4348,9 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                         ? t('OpenAI rejected the current ChatGPT session. Sign in again to refresh models.')
                                         : codexModelCatalog?.refreshError === 'rate-limited'
                                             ? t('OpenAI rate-limited the model refresh. Try again shortly.')
-                                            : t('Natively could not fetch models from OpenAI. Check your connection or reconnect ChatGPT. No hardcoded model list will be substituted.')}
+                                            : codexModelCatalog?.source === 'provider-live'
+                                                ? t('OpenAI returned no models available for this account. No hardcoded model list will be substituted.')
+                                                : t('Natively could not fetch models from OpenAI. Check your connection or reconnect ChatGPT. No hardcoded model list will be substituted.')}
                                 </p>
                             )}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

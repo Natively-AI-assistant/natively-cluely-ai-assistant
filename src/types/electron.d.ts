@@ -323,6 +323,7 @@ export interface ElectronAPI {
   // STT Config Events (fired when STT provider/key changes during a meeting)
   onSttConfigChanged: (callback: (data: { configured: boolean; provider: string }) => void) => () => void
   onCredentialsChanged: (callback: () => void) => () => void
+  onCodexModelsChanged: (callback: () => void) => () => void
   // Hindsight: app-managed companion server needs restart to pick up new AI-provider key.
   onHindsightRestartNeeded: (callback: (data: { provider: string }) => void) => () => void
   // Hindsight: lifecycle state broadcasts from the main process. Persistent top-of-overlay

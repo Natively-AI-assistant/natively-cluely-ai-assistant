@@ -105,6 +105,15 @@ describe('authenticated refresh', () => {
     assert.equal((await pending).refreshError, 'auth');
   });
 
+  test('a successful empty catalogue clears stale account models', async () => {
+    resetCodexCatalogForTest();
+    await refreshCodexModelCatalog({ credential, fetchFn: async () => ({ ok: true, json: async () => MODELS }) });
+    const empty = await refreshCodexModelCatalog({ credential, fetchFn: async () => ({ ok: true, json: async () => ({ models: [] }) }) });
+    assert.equal(empty.source, 'provider-live');
+    assert.deepEqual(empty.models, []);
+    assert.deepEqual((await readCachedCodexModelCatalog('account-1')).models, []);
+  });
+
 });
 
 test('renderer helper has no hardcoded fallback roster', () => {

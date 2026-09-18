@@ -11966,7 +11966,13 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('codex:refresh-models', async () => {
     const { refreshCodexModelCatalog } = require('./services/CodexModelCatalog') as typeof import('./services/CodexModelCatalog');
-    return refreshCodexModelCatalog();
+    const catalog = await refreshCodexModelCatalog();
+    if (catalog.source === 'provider-live') {
+      BrowserWindow.getAllWindows().forEach((win) => {
+        if (!win.isDestroyed()) win.webContents.send('codex-models-changed');
+      });
+    }
+    return catalog;
   });
 
   safeHandle('set-codex-cli-config', (_, config: any) => {
@@ -11987,6 +11993,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       sm.set('codexCliServiceTier', normalized.serviceTier);
       sm.set('codexCliModelReasoningEffort', normalized.modelReasoningEffort);
       appState.processingHelper.getLLMHelper().setCodexCliConfig(normalized);
+      BrowserWindow.getAllWindows().forEach((win) => {
+        if (!win.isDestroyed()) win.webContents.send('codex-models-changed');
+      });
       return { success: true, config: normalized };
     } catch (error: any) {
       return { success: false, error: error.message };

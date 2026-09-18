@@ -117,7 +117,6 @@ export function parseCodexModelsPayload(data: any): ParsedCatalog | null {
     seen.add(model.id);
     models.push(model);
   }
-  if (models.length === 0) return null;
   return {
     models,
     fetchedAt: typeof data.fetched_at === 'string' ? data.fetched_at : undefined,

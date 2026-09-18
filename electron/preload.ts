@@ -381,6 +381,7 @@ interface ElectronAPI {
     callback: (data: { configured: boolean; provider: string }) => void,
   ) => () => void;
   onCredentialsChanged: (callback: () => void) => () => void;
+  onCodexModelsChanged: (callback: () => void) => () => void;
 
   // Native Audio Service Events
   onNativeAudioTranscript: (
@@ -1751,6 +1752,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => {
       ipcRenderer.removeListener('credentials-changed', subscription);
     };
+  },
+  onCodexModelsChanged: (callback: () => void) => {
+    const subscription = () => callback();
+    ipcRenderer.on('codex-models-changed', subscription);
+    return () => ipcRenderer.removeListener('codex-models-changed', subscription);
   },
   // Hindsight: the app-managed companion server inherited the OLD AI-provider env at
   // spawn and won't pick up new keys until restart. HindsightManager.notifyHindsightOfKeyChange
