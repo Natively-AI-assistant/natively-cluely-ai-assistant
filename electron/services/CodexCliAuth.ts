@@ -26,7 +26,14 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { resolveCodexHome } from './CodexPaths';
+export function resolveCodexHome(
+  env: NodeJS.ProcessEnv = process.env,
+  homeDir: string = os.homedir(),
+  pathImpl: Pick<typeof path, 'join' | 'resolve'> = path,
+): string {
+  const override = env.CODEX_HOME?.trim();
+  return override ? pathImpl.resolve(override) : pathImpl.join(homeDir, '.codex');
+}
 
 export const CODEX_AUTH_FILE = 'auth.json';
 

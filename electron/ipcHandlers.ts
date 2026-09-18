@@ -11960,19 +11960,13 @@ export function initializeIpcHandlers(appState: AppState): void {
   // refresh handler after it has confirmed that ChatGPT auth exists; other
   // pickers stay cache-only.
   safeHandle('codex-cli:models', async () => {
-    const { readCachedCodexModelCatalog, NATIVELY_CODEX_MODELS_CACHE_FILE } = require('./services/CodexModelCatalog') as typeof import('./services/CodexModelCatalog');
-    return readCachedCodexModelCatalog({
-      appCacheFile: path.join(app.getPath('userData'), NATIVELY_CODEX_MODELS_CACHE_FILE),
-    });
+    const { readCachedCodexModelCatalog } = require('./services/CodexModelCatalog') as typeof import('./services/CodexModelCatalog');
+    return readCachedCodexModelCatalog();
   });
 
   safeHandle('codex:refresh-models', async () => {
-    const { refreshCodexModelCatalog, readCachedCodexModelCatalog, NATIVELY_CODEX_MODELS_CACHE_FILE } = require('./services/CodexModelCatalog') as typeof import('./services/CodexModelCatalog');
-    const appCacheFile = path.join(app.getPath('userData'), NATIVELY_CODEX_MODELS_CACHE_FILE);
-    return refreshCodexModelCatalog({
-      appCacheFile,
-      readCached: () => readCachedCodexModelCatalog({ appCacheFile }),
-    });
+    const { refreshCodexModelCatalog } = require('./services/CodexModelCatalog') as typeof import('./services/CodexModelCatalog');
+    return refreshCodexModelCatalog();
   });
 
   safeHandle('set-codex-cli-config', (_, config: any) => {
@@ -12006,13 +12000,8 @@ export function initializeIpcHandlers(appState: AppState): void {
       const status = getCodexAuthStatus();
       if (!status.signedIn) return { success: false, error: 'Not signed in to ChatGPT.' };
       if (!normalized.model) return { success: false, error: 'No Codex model is selected.' };
-      const { refreshCodexModelCatalog, readCachedCodexModelCatalog, NATIVELY_CODEX_MODELS_CACHE_FILE } = require('./services/CodexModelCatalog') as typeof import('./services/CodexModelCatalog');
-      const appCacheFile = path.join(app.getPath('userData'), NATIVELY_CODEX_MODELS_CACHE_FILE);
-      const catalog = await refreshCodexModelCatalog({
-        appCacheFile,
-        readCached: () => readCachedCodexModelCatalog({ appCacheFile }),
-      });
-      if (catalog.refreshError) return { success: false, error: `Could not reach the Codex model provider (${catalog.refreshError}).` };
+      const { readCachedCodexModelCatalog } = require('./services/CodexModelCatalog') as typeof import('./services/CodexModelCatalog');
+      const catalog = await readCachedCodexModelCatalog();
       if (!catalog.models.some(model => model.id === normalized.model)) {
         return { success: false, error: 'The selected model is no longer offered by the provider.' };
       }

@@ -3364,8 +3364,6 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             const configToTest = saveResult?.config || codexCliConfig;
             const result = await window.electronAPI?.testCodexCli?.(configToTest);
             if (result?.success) {
-                // If the main process auto-detected an install, reflect the
-                // resolved path in the form so the user sees what got picked.
                 if (result.config) setCodexCliConfig(result.config as typeof codexCliConfig);
                 setCodexCliStatus('success');
                 setTimeout(() => setCodexCliStatus('idle'), 3000);
@@ -4291,18 +4289,6 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     </>}
                 </div>
 
-                {/* The Codex CLI's `codex login` works too, read-only: Natively
-                    never refreshes it (that would sign the CLI out), so an
-                    expired one is refreshed from the CLI side. */}
-                {!codexOauthStatus.signedIn && (
-                    <p className="text-xs aip-muted">
-                        {codexOauthStatus.cliLogin === 'expired'
-                            ? t('Your Codex CLI login has expired — run any `codex` command to refresh it, or sign in with ChatGPT here.')
-                            : codexOauthStatus.cliLogin === 'api-key'
-                                ? t('Your Codex CLI is logged in with an API key, which Codex here cannot use — sign in with ChatGPT here, or run `codex login` with your ChatGPT account.')
-                                : t('Or run `codex login` in a terminal — Natively can use that ChatGPT login too.')}
-                    </p>
-                )}
                 {codexOauthStatus.signedIn && codexOauthStatus.source === 'codex-cli' && (
                     <p className="text-xs aip-muted">
                         {t('Natively uses this login read-only. When it expires, run any `codex` command to refresh it.')}
@@ -4324,16 +4310,14 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                         ? t('Refreshing models from OpenAI…')
                                         : codexModelCatalog?.source === 'provider-live'
                                             ? t('Model list fetched from OpenAI')
-                                            : codexModelCatalog?.source === 'provider-cache'
+                                            : codexModelCatalog?.source === 'memory-cache'
                                                 ? t('Using the last model list fetched from OpenAI')
-                                                : codexModelCatalog?.source === 'codex-cli-cache'
-                                                    ? t('Using your Codex CLI model cache')
-                                                    : t('No provider model list is available yet.')}
+                                                : t('No provider model list is available yet.')}
                                     {codexModelCatalog?.fetchedAt && !Number.isNaN(Date.parse(codexModelCatalog.fetchedAt))
                                         ? ` · ${t('updated')} ${new Date(codexModelCatalog.fetchedAt).toLocaleString()}`
                                         : ''}
-                                    {codexModelCatalog?.refreshError
-                                        ? ` · ${t('Refresh failed; the cached list may be stale.')}`
+                                    {codexModelCatalog?.refreshError && codexHasCatalog
+                                        ? ` · ${t('Refresh failed; the in-memory list may be stale.')}`
                                         : ''}
                                 </p>
                                 <button
@@ -4348,9 +4332,11 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                             </div>
                             {!codexHasCatalog && !codexCatalogRefreshing && (
                                 <p className="text-xs aip-warn-fg" role="alert">
-                                    {codexOauthStatus.source === 'codex-cli'
-                                        ? t('No cached models were found. Run any Codex CLI command to refresh its cache, or connect ChatGPT here so Natively can fetch the provider list.')
-                                        : t('Natively could not fetch models from OpenAI. Check your connection or reconnect ChatGPT. As an alternative, install and run the Codex CLI to provide its cached model list. No hardcoded model list will be substituted.')}
+                                    {codexModelCatalog?.refreshError === 'auth'
+                                        ? t('OpenAI rejected the current ChatGPT session. Sign in again to refresh models.')
+                                        : codexModelCatalog?.refreshError === 'rate-limited'
+                                            ? t('OpenAI rate-limited the model refresh. Try again shortly.')
+                                            : t('Natively could not fetch models from OpenAI. Check your connection or reconnect ChatGPT. No hardcoded model list will be substituted.')}
                                 </p>
                             )}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

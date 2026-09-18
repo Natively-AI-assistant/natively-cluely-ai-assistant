@@ -41,7 +41,7 @@ const compiledPath = path.resolve(__dirname, '../../../dist-electron/electron/se
 const mod = await import(pathToFileURL(compiledPath).href);
 const { CodexCliService, DEFAULT_CODEX_CLI_CONFIG, CODEX_SANDBOX_MODES, resolveCodexReasoningEffort } = mod;
 const catalogMod = await import(pathToFileURL(path.resolve(__dirname, '../../../dist-electron/electron/services/CodexModelCatalog.js')).href);
-const seedCapabilities = (models) => catalogMod.activateCodexModelCatalog(catalogMod.parseCodexModelsPayload({ models }).models);
+const seedCapabilities = (models) => catalogMod.activateCodexModelCatalogForTest(catalogMod.parseCodexModelsPayload({ models }).models, 'test-account');
 
 // =============================================================================
 // Defaults + enums
@@ -103,7 +103,7 @@ test('resolveCodexReasoningEffort: returns undefined for empty pick (no body.rea
 });
 
 test('resolveCodexReasoningEffort: honours exact-match valid picks', () => {
-  catalogMod.resetCodexCatalogRefreshForTest();
+  catalogMod.resetCodexCatalogForTest();
   seedCapabilities([{
     slug: 'provider-model', visibility: 'list', default_reasoning_level: 'medium',
     supported_reasoning_levels: ['none', 'low', 'medium', 'high', 'xhigh'].map(effort => ({ effort })),
@@ -114,7 +114,7 @@ test('resolveCodexReasoningEffort: honours exact-match valid picks', () => {
 });
 
 test('resolveCodexReasoningEffort: unknown model omits the override', () => {
-  catalogMod.resetCodexCatalogRefreshForTest();
+  catalogMod.resetCodexCatalogForTest();
   assert.equal(resolveCodexReasoningEffort('some-future-model', 'low'), undefined);
   assert.equal(resolveCodexReasoningEffort('some-future-model', 'xhigh'), undefined);
 });

@@ -98,7 +98,7 @@ export interface CodexCatalogModel {
 
 /** Cached or freshly fetched Codex catalogue returned by the main process. */
 export interface CodexModelCatalogResult {
-    source: 'provider-live' | 'provider-cache' | 'codex-cli-cache' | 'unavailable';
+    source: 'provider-live' | 'memory-cache' | 'unavailable';
     models: CodexCatalogModel[];
     fetchedAt?: string;
     clientVersion?: string;

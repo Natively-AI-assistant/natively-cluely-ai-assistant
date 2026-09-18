@@ -51,11 +51,11 @@ const compiledPath = path.resolve(__dirname, '../../../dist-electron/electron/se
 const mod = await import(pathToFileURL(compiledPath).href);
 const { CodexCliService, resolveCodexReasoningEffort } = mod;
 const catalogMod = await import(pathToFileURL(path.resolve(__dirname, '../../../dist-electron/electron/services/CodexModelCatalog.js')).href);
-catalogMod.activateCodexModelCatalog(catalogMod.parseCodexModelsPayload({ models: [
+catalogMod.activateCodexModelCatalogForTest(catalogMod.parseCodexModelsPayload({ models: [
   { slug: 'gpt-5.4', visibility: 'list', supported_reasoning_levels: ['none', 'low', 'medium', 'high', 'xhigh'].map(effort => ({ effort })), service_tiers: [{ id: 'priority', name: 'Fast' }] },
   { slug: 'gpt-5.3-codex', visibility: 'list', default_reasoning_level: 'low', supported_reasoning_levels: ['low', 'medium', 'high'].map(effort => ({ effort })) },
   { slug: 'gpt-5-codex', visibility: 'list', default_reasoning_level: 'low', supported_reasoning_levels: ['low', 'medium', 'high'].map(effort => ({ effort })) },
-] }).models);
+] }).models, 'test-account');
 
 // A 1x1 PNG. Small enough to stay well inside the raw-image floor/ceiling and
 // real enough that the encoder produces a genuine data URL.
