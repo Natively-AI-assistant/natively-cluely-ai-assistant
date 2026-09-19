@@ -358,9 +358,21 @@ export class SettingsManager {
             console.warn(`[SettingsManager] Refusing to set "${String(key)}": the settings store is degraded this session (see the quarantine warning at startup).`);
             return false;
         }
+        const hadPreviousValue = Object.prototype.hasOwnProperty.call(this.settings, key);
+        const previousValue = this.settings[key];
         this.settings[key] = value;
-        this.saveSettings();
-        return true;
+        if (this.saveSettings()) return true;
+
+        // A write can fail even when the store loaded successfully (for example,
+        // a locked Windows profile, antivirus holding the destination, or a full
+        // disk). Keep the live process aligned with the last durable value so IPC
+        // callers never broadcast a change that will disappear on restart.
+        if (hadPreviousValue) {
+            this.settings[key] = previousValue;
+        } else {
+            delete this.settings[key];
+        }
+        return false;
     }
 
     // Resolved screen-understanding mode with default and runtime validation.
@@ -565,12 +577,10 @@ export class SettingsManager {
         const migrated = LEGACY_SCREEN_MODE_MIGRATION[raw];
         if (migrated) {
             console.warn(`[SettingsManager] Migrating legacy screenUnderstandingMode "${raw}" → "${migrated}" (OCR runtime path removed)`);
-            this.settings.screenUnderstandingMode = migrated;
-            this.saveSettings();
+            this.set('screenUnderstandingMode', migrated);
         } else {
             console.warn(`[SettingsManager] Unknown legacy screenUnderstandingMode "${raw}" — defaulting to vision_first`);
-            this.settings.screenUnderstandingMode = 'vision_first';
-            this.saveSettings();
+            this.set('screenUnderstandingMode', 'vision_first');
         }
     }
 
@@ -628,13 +638,13 @@ export class SettingsManager {
         }
     }
 
-    private saveSettings(): void {
+    private saveSettings(): boolean {
         if (this.settingsUnreadable) {
             console.warn('[SettingsManager] Refusing to save: settings.json was unreadable and could not be quarantined, so writing would overwrite it with an incomplete set. Repair or remove the file, then restart.');
-            return;
+            return false;
         }
+        const tmpPath = this.settingsPath + '.tmp';
         try {
-            const tmpPath = this.settingsPath + '.tmp';
             // R-15: write + fsync + rename. Without the fsync the rename could be
             // durable while the DATA was still in the page cache, so a power loss
             // left a 0-byte settings.json — which is exactly the input that used to
@@ -649,8 +659,16 @@ export class SettingsManager {
                 fs.closeSync(fd);
             }
             fs.renameSync(tmpPath, this.settingsPath);
+            return true;
         } catch (e) {
             console.error('[SettingsManager] Failed to save settings:', e);
+            try {
+                if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+            } catch {
+                // Best-effort cleanup only; the original settings file remains
+                // authoritative and the caller receives false either way.
+            }
+            return false;
         }
     }
 }
