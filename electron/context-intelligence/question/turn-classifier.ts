@@ -53,6 +53,19 @@ export interface ClassificationInput {
    * formula lookup. Names only, never content.
    */
   attachedFileNames?: readonly string[];
+  /** Corpus arbitration verdict (orchestrator → RetrievalPort.probeAnchors):
+   *  a chunk of the attached material holds this question's distinctive terms. */
+  corpusAnchored?: boolean;
+  /** Source types whose own chunks hold this question's distinctive terms
+   *  (orchestrator → RetrievalPort.probeAnchorSources). */
+  anchoredSourceTypes?: readonly SourceType[];
+  /** The turn's ONLY documents are Profile Intelligence ones (résumé / job
+   *  description): no file is attached to the mode. A POSITIVE signal, computed
+   *  by the engine bridge from the two source counts. It is deliberately not
+   *  inferred from a missing `attachedFileNames` — callers may omit that field
+   *  while files ARE attached, and the first cut that inferred it broke the
+   *  narrowing for exactly that case (ModeAttachmentAdmission2026_09_07). */
+  profileOnlyDocuments?: boolean;
   /**
    * The turn is happening inside a live meeting with transcript evidence
    * available (issue #552). True when resolveMeetingEvidence() actually built
@@ -200,8 +213,34 @@ export const canonicalizeSttSpellings = (s: string): string => {
   // don't have a P3 in my notes"). Only identifier-shaped heads (a digit in
   // them) lose the apostrophe; ordinary nouns and contractions are untouched.
   out = out.replace(/\b([a-z]*\d[a-z0-9-]*)'s\b(?=\s+\w)/gi, '$1');
-  out = out.replace(SPOKEN_ID_RE, (m: string, head: string, gap: string, run: string) => {
-    if (PLAIN_ENGLISH_BEFORE.test(head)) return m;
+  out = out.replace(SPOKEN_ID_RE, (m: string, head: string, gap: string, run: string, offset: number, whole: string) => {
+    const countWords = (t: string) => t.trim().split(/[\s-]+/).filter((w) => w && w.toLowerCase() !== 'and').length;
+    // "X and seventy one Y" is two quantities joined by a conjunction, not an
+    // identifier after X (measured 2026-09-19: "forty four people and seventy
+    // one tickets" → "forty four people 71 tickets" — the "and" was eaten).
+    if (/^and\b/i.test(run.trim())) return m;
+    // A NUMBER WORD IS NEVER THE HEAD. The head needs two letters, so in "i n c
+    // forty four seventy one" the spelled-out "c" cannot be one and "forty"
+    // became it: "i n c forty 471" — a corrupted identifier, worse than an
+    // unconverted one. The head is part of the number: convert the whole run
+    // when it is long enough to be an identifier rather than a quantity.
+    if (new RegExp(`^(?:${NUMBER_WORD_RE.source.replace(/^\\b\(\?:|\)\\b$/g, '')})$`, 'i').test(head)) {
+      const whole_run = `${head} ${run}`;
+      const d = countWords(whole_run) >= 3 ? spokenDigitsToNumber(whole_run.trim()) : null;
+      return d ? `${d}${run.slice(run.trimEnd().length)}` : m;
+    }
+    if (PLAIN_ENGLISH_BEFORE.test(head)) {
+      // "the forty-four seventy-one OUTAGE": the noun that makes it an
+      // identifier comes AFTER the number, so the head rule cannot see it and
+      // the turn searched for words the incident log never contains (measured
+      // live 2026-09-19 — the one miss on the full natively stack, 19/20).
+      // Only a clean run of three or more number words, and only before a noun
+      // that names a record; "the two options" and "the twenty percent" stay.
+      const after = whole.slice(offset + m.length);
+      const d = countWords(run) >= 3 && /^\s*(?:outage|incident|ticket|issue|case|bug|alert|postmortem|post-mortem|release|build|invoice|order|pr|pull request)\b/i.test(after)
+        ? spokenDigitsToNumber(run.trim()) : null;
+      return d ? `${head} ${d}${run.slice(run.trimEnd().length)}` : m;
+    }
     if (!NUMBER_WORD_RE.test(run)) return m;
     const digits = spokenDigitsToNumber(run.trim());
     // A lone single digit word after an ordinary lowercase word ("mode two",
@@ -1250,6 +1289,15 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
       && (mentionsAttachedFile(q, input.attachedFileNames) || DOC_DEIXIS_RE.test(q) || namesTitledTask(q))) {
     types.add('DOCUMENT_FACT'); noteWholeQ('DOCUMENT_FACT');
   }
+  // ── Corpus arbitration (2026-09-19) ───────────────────────────────────────
+  // Every rule around this one guesses, from grammar, whether the question is
+  // about the attached material. This one is told: the orchestrator asked the
+  // retrieval port, and a chunk of the material holds the question's
+  // distinctive terms together. Retrieval is cheap and the evidence gate keeps
+  // the last word; skipping it here is unrecoverable.
+  if (modeHoldsDocuments && (input.corpusAnchored === true || (input.anchoredSourceTypes?.length ?? 0) > 0) && !isBareFollowUp(q)) {
+    types.add('DOCUMENT_FACT'); noteWholeQ('DOCUMENT_FACT');
+  }
   // A REMINDER is a lookup in the material, whatever words it contains
   // (2026-09-08, measured): "Remind me, failures 1 error, what was it?" went
   // GENERAL_TECHNICAL because "error" is tech self-talk, retrieval never ran,
@@ -1594,11 +1642,30 @@ const NON_RETRIEVABLE: readonly SourceType[] = ['CONVERSATION_STATE'];
 // is widened unconditionally, and does not need this gate: it runs against
 // chunks that were actually retrieved, and a retrieved chunk is proof a document
 // exists.
-const claimToSource = (claim: ClaimType, hasDocuments: boolean): SourceType[] => {
+const claimToSource = (claim: ClaimType, hasDocuments: boolean, anchored: readonly SourceType[] = [], profileOnlyDocuments = false): SourceType[] => {
   const authoritative = (hasDocuments ? claimAuthority(claim) : CLAIM_AUTHORITY[claim]).authoritative;
   if (!authoritative.length) return [];
   // DOCUMENT_FACT narrows rather than derives — see the override note below.
-  if (claim === 'DOCUMENT_FACT') return DOCUMENT_FACT_RETRIEVAL_SOURCES;
+  // The narrowing keeps identity pools (résumé, job description) OUT of a
+  // document lookup because fanning every lookup across them buried the asked-
+  // for fact. It also made the job description unreachable for any question
+  // that did not say "role"/"position"/"interview" (measured 2026-09-19: 37 of
+  // 45). An identity pool re-enters for ONE turn only when corpus arbitration
+  // found the question's own terms in it — and only if DOCUMENT_FACT's
+  // authority already covers that source.
+  if (claim === 'DOCUMENT_FACT') {
+    // PROFILE-ONLY TURN: documents exist (a résumé / job description in Profile
+    // Intelligence) but NO file is attached to the mode. The narrowing protects
+    // reference-file lookups from being flooded by identity pools; with no
+    // reference file there is nothing to protect, and a plan of
+    // REFERENCE_FILE alone searches nothing. The identity pools ARE the
+    // documents, so a document lookup looks in them (the mode allowlist still
+    // applies downstream).
+    const identityPools = authoritative.filter((src) => !DOCUMENT_FACT_RETRIEVAL_SOURCES.includes(src) && !NON_RETRIEVABLE.includes(src));
+    if (profileOnlyDocuments) return [...DOCUMENT_FACT_RETRIEVAL_SOURCES, ...identityPools];
+    const widened = anchored.filter((src) => authoritative.includes(src) && !DOCUMENT_FACT_RETRIEVAL_SOURCES.includes(src));
+    return widened.length ? [...DOCUMENT_FACT_RETRIEVAL_SOURCES, ...widened] : DOCUMENT_FACT_RETRIEVAL_SOURCES;
+  }
   return authoritative.filter((s) => !NON_RETRIEVABLE.includes(s));
 };
 // RETRIEVAL narrowing (deep-run 2, issue 5): a résumé/JD may still EVIDENCE a
@@ -1702,7 +1769,7 @@ export function classifyTurn(input: ClassificationInput): Classification {
   const wanted = new Set<SourceType>();
   const unreachable = new Set<SourceType>();
   for (const c of claims) {
-    const srcs = claimToSource(c, input.hasAttachedDocuments === true);
+    const srcs = claimToSource(c, input.hasAttachedDocuments === true, input.anchoredSourceTypes ?? [], input.profileOnlyDocuments === true);
     if (!srcs.length) continue;
     const allowedSrcs = srcs.filter((s) => input.policy.allowedSourceTypes.includes(s));
     if (allowedSrcs.length) for (const s of allowedSrcs) wanted.add(s);
@@ -1776,7 +1843,17 @@ export function classifyTurn(input: ClassificationInput): Classification {
     path = 'GROUNDED'; shouldRetrieve = false;
     reason = `question requires ${unsupportedInMode.join(',')}, which mode "${input.policy.id}" does not authorize`;
   } else if (types.includes('AMBIGUOUS') || followUp) {
-    path = 'GROUNDED'; shouldRetrieve = requiredSourceTypes.length > 0 || followUp;
+    // "Retrieve conservatively" retrieved NOTHING for an ambiguous question
+    // that named no source — the comment and the code disagreed. Measured
+    // 2026-09-19 with a job description attached: "Will they help me move
+    // countries and pay for it?" is AMBIGUOUS with no claim, so it went out
+    // with zero evidence while "okay" and "hmm right" (short-fragment rule)
+    // both retrieved. With documents attached and a document pool authorized,
+    // the material is the conservative place to look; the unclaimed plan
+    // consults document pools only and the evidence gate keeps the last word.
+    const ambiguousOverDocuments = input.hasAttachedDocuments === true
+      && DOCUMENT_FACT_RETRIEVAL_SOURCES.some((src) => input.policy.allowedSourceTypes.includes(src));
+    path = 'GROUNDED'; shouldRetrieve = requiredSourceTypes.length > 0 || followUp || ambiguousOverDocuments;
     reason = followUp ? 'follow-up may reference grounded content by pronoun' : 'ambiguous question — retrieve conservatively';
   } else {
     path = 'GROUNDED'; shouldRetrieve = true;

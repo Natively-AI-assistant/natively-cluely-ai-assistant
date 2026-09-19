@@ -60,6 +60,15 @@ export interface AnswerRequest {
   hasAttachedDocuments?: boolean;
   /** Attached file names — filename-role routing (glossary/formula). */
   attachedFileNames?: readonly string[];
+  /** Set by orchestrate() when a port's probeAnchors() said the attached
+   *  material holds this question's terms. Never set by a caller. */
+  corpusAnchored?: boolean;
+  /** Set by orchestrate() from RetrievalPort.probeAnchorSources(). Never by a caller. */
+  anchoredSourceTypes?: readonly SourceType[];
+  /** No mode attachment; the documents are Profile Intelligence ones only. Set by the engine bridge. */
+  profileOnlyDocuments?: boolean;
+  /** How many files are attached to the MODE. Set by the engine bridge; absent = unknown = no scaling. */
+  attachedSourceCount?: number;
   /** The turn is inside a live meeting with transcript evidence available
    *  (issue #552, task 7b) — see ClassificationInput.inLiveMeeting. Passed
    *  straight through to the classifier; never widens `policy` itself. */
@@ -87,6 +96,18 @@ export interface RetrievalPort {
   retrieve(input: {
     decision: Readonly<TurnDecision>;
   }): Promise<{ evidence: EvidenceItem[]; attempts: RetrievalAttemptTrace[] }>;
+  /**
+   * Corpus arbitration (optional): do this port's documents hold the
+   * question's distinctive terms together? Cheap and lexical. Asked only on a
+   * turn decide() sent down the no-retrieval path with documents attached.
+   */
+  probeAnchors?(question: string): boolean;
+  /**
+   * Corpus arbitration, source-aware (optional): the source TYPES whose own
+   * chunks hold the question's distinctive terms together. Lets a turn that
+   * already retrieves reach a document its grammar did not name.
+   */
+  probeAnchorSources?(question: string): SourceType[];
 }
 
 export interface OrchestratorResult {
@@ -175,6 +196,9 @@ export function screenEnrichedQuery(query: string, screenText: string | undefine
 }
 
 /** Decide ONCE. The result is deep-frozen; nothing downstream may reinterpret it. */
+/** Evidence capacity floor for a turn with two or more files attached to the mode. */
+export const MULTI_FILE_EVIDENCE = { accepted: 8, tokens: 2400 } as const;
+
 export function decide(req: AnswerRequest): Readonly<TurnDecision> {
   const basePolicy = resolveModePolicy(req.modeId);   // THROWS on unknown id — fails closed
 
@@ -209,10 +233,28 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
     hasScreenContext: req.hasScreenContext,
     hasAttachedDocuments: req.hasAttachedDocuments,
     attachedFileNames: req.attachedFileNames,
+    corpusAnchored: req.corpusAnchored === true,
+    anchoredSourceTypes: req.anchoredSourceTypes,
+    profileOnlyDocuments: req.profileOnlyDocuments === true,
     inLiveMeeting: Boolean(req.inLiveMeeting),
   });
 
   const optional = policy.allowedSourceTypes.filter((s) => !cls.requiredSourceTypes.includes(s));
+
+  // MULTI-FILE EVIDENCE CAPACITY (2026-09-19, owner-approved). The accepted-
+  // slice fill round-robins across source types and documents, so with a
+  // résumé, a job description and a handbook attached each gets two of six
+  // slots whatever the question is about, and the chunk that answers — ranked
+  // 7th–9th — is cut. Measured with experiments/retrieval-scale (chunk reaches
+  // the prompt, of 162, 5k/15k/30k/70k): lexical 143/142/141/141 → 144/144/
+  // 143/143, vectors 154/154/151/151 → 157/155/154/154; ZERO effect with one
+  // file, and 10 items / 3000 tokens added only noise. Confined to turns with
+  // two or more mode files because that is the only case with a measured
+  // benefit, and it costs evidence tokens on every grounded turn it applies to.
+  const multiFile = (req.attachedSourceCount ?? 0) >= 2 && cls.shouldRetrieve;
+  const acceptedBase = multiFile
+    ? Math.max(policy.retrievalPolicy.maximumAcceptedEvidence, MULTI_FILE_EVIDENCE.accepted)
+    : policy.retrievalPolicy.maximumAcceptedEvidence;
 
   const retrievalPlan: RetrievalPlan = {
     path: cls.path,
@@ -251,7 +293,8 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
     // with the cap at 6 (2026-09-07). Latency is still bounded: the rerank
     // budget is unchanged, only its pool grows.
     maximumCandidates: policy.retrievalPolicy.maximumCandidates * (cls.exhaustive && cls.shouldRetrieve ? 2 : 1),
-    maximumAcceptedEvidence: policy.retrievalPolicy.maximumAcceptedEvidence * (cls.exhaustive && cls.shouldRetrieve ? 3 : 1),
+    maximumAcceptedEvidence: acceptedBase * (cls.exhaustive && cls.shouldRetrieve ? 3 : 1),
+    ...(multiFile ? { evidenceTokens: Math.max(policy.contextBudget.evidenceTokens, MULTI_FILE_EVIDENCE.tokens) } : {}),
     timeoutMs: cls.exhaustive && cls.shouldRetrieve ? 2400 : 1200,
     ...(cls.exhaustive && cls.shouldRetrieve ? { exhaustive: true } : {}),
   };
@@ -804,6 +847,48 @@ export async function orchestrate(
   // of a number nobody measured — splitting it means instrumenting decide().
   const tClassify = clock();
   let decision = decide(effectiveReq);
+
+  // ── Corpus arbitration ────────────────────────────────────────────────────
+  // The classifier decides from grammar whether a question is about the
+  // attached material; it cannot see the material. When it says "no retrieval"
+  // and documents ARE attached, the port is asked whether one of its chunks
+  // holds the question's distinctive terms together — and if so the turn is
+  // decided again as a document lookup. Measured 2026-09-19: "What is
+  // ledger.compaction.window_minutes set to?" and "What is step 6 of the
+  // regional failover runbook?" took the no-retrieval path at every file size
+  // with the handbook attached. Lexical and synchronous; a probe that throws
+  // leaves the first decision standing.
+  if (!decision.retrievalPlan.shouldRetrieve && effectiveReq.hasAttachedDocuments && retrieval?.probeAnchors) {
+    try {
+      const probeQ = (effectiveReq.manualQuestion ?? effectiveReq.transcriptQuestion ?? '').trim();
+      if (probeQ && retrieval.probeAnchors(probeQ)) {
+        const again = decide({ ...effectiveReq, corpusAnchored: true });
+        if (again.retrievalPlan.shouldRetrieve) decision = again;
+      }
+    } catch { /* arbitration must never break a turn */ }
+  }
+
+  // Source-aware arbitration: a turn that DOES retrieve can still be pointed at
+  // the wrong document. Measured 2026-09-19 on the profile path (résumé + job
+  // description, looking-for-work): "How much relocation does the company
+  // cover?", "How often are Settlement Core engineers on call?" and 35 more of
+  // 45 job-description questions planned RESUME + PROFILE_FACT + REFERENCE_FILE
+  // — the job description is planned only when the question happens to say
+  // "role", "position" or "interview" — so the port's planned-type filter
+  // dropped every chunk that could answer them. The port names the source types
+  // whose chunks hold the question's terms; any the plan lacks are offered to
+  // the classifier, which still applies the mode's allowlist.
+  if (decision.retrievalPlan.shouldRetrieve && retrieval?.probeAnchorSources) {
+    try {
+      const probeQ = (effectiveReq.manualQuestion ?? effectiveReq.transcriptQuestion ?? '').trim();
+      const planned = new Set(decision.retrievalPlan.sourceTypes);
+      const missing = probeQ ? retrieval.probeAnchorSources(probeQ).filter((s) => !planned.has(s)) : [];
+      if (missing.length) {
+        const again = decide({ ...effectiveReq, anchoredSourceTypes: missing });
+        if (again.retrievalPlan.shouldRetrieve) decision = again;
+      }
+    } catch { /* arbitration must never break a turn */ }
+  }
   classificationMs = span(tClassify);
 
   // ── T5: a resolved bare follow-up regains its subject's pool ───────────────

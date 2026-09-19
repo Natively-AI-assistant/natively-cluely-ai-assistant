@@ -1631,6 +1631,12 @@ export class ModesManager {
      * mode's files are genuinely indexed and ready, which is exactly the bug
      * this passthrough exists to prevent a future caller from reintroducing.
      */
+    /** Corpus arbitration pass-through — see ModeHybridRetriever.probeAnchors. */
+    public probeReferenceAnchors(_mode: Mode, files: ModeReferenceFile[], question: string): boolean {
+        if (!question?.trim() || !files?.length) return false;
+        return this.modeContextRetriever.probeReferenceAnchors(files, question);
+    }
+
     public async retrieveHybridRaw(mode: Mode, files: ModeReferenceFile[], options: RetrieveOptions): Promise<HybridContext> {
         // Fail-closed on an empty query — same choke-point rule as the
         // buildRetrievedActiveModeContextBlock* twins; see retrievalQueryPolicy.ts.

@@ -265,6 +265,10 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
       // Definite value lookups ground only where documents exist (deep-test D2).
       hasAttachedDocuments: (input.attachedSourceCount ?? 0) > 0
         || (input.profileSourceCount ?? 0) > 0,
+      // Both counts are known here and nowhere downstream: a document lookup on a
+      // turn whose only documents are the résumé / job description looks IN them.
+      profileOnlyDocuments: (input.attachedSourceCount ?? 0) === 0 && (input.profileSourceCount ?? 0) > 0,
+      attachedSourceCount: input.attachedSourceCount,
       attachedFileNames: input.attachedFileNames,
       screenText: input.screenText,
       extraAllowedSourceTypes: input.extraAllowedSourceTypes,

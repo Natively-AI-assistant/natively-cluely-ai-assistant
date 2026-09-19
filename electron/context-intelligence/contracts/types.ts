@@ -249,6 +249,13 @@ export interface RetrievalPlan {
    * budget and rerank pool, and the composer adds the scan-everything rule.
    */
   exhaustive?: boolean;
+  /**
+   * Evidence token budget for THIS turn when it differs from the mode policy's
+   * (before any exhaustive multiplier). Set for multi-file turns — see
+   * MULTI_FILE_EVIDENCE in orchestrator.ts. The mode port and the composer's
+   * packer both read it, so the retriever and the prompt agree on the budget.
+   */
+  evidenceTokens?: number;
 }
 
 // ── The turn decision ───────────────────────────────────────────────────────

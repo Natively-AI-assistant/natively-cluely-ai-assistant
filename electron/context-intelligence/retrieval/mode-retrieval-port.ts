@@ -25,6 +25,8 @@ export interface ModeRetrieverLike {
     rerankPoolMultiplier?: number;
     queryEmbedRetryBudgetMs?: number;
   }) => Promise<{ chunks?: Array<Record<string, unknown>> } | null | undefined>;
+  /** Corpus arbitration: do these files hold the question's distinctive terms together? */
+  probeReferenceAnchors?: (modeInfo: unknown, files: unknown[], question: string) => boolean;
 }
 
 export interface ModeFileLike { id: string; fileName?: string; content?: string }
@@ -235,9 +237,9 @@ export function createModeRetrievalPort(input: ModePortInput): RetrievalPort {
     if (status) documentStatuses.set(f.id, status);
   }
 
-  return createLegacyRetrievalPort({
+  const port = createLegacyRetrievalPort({
     registry: { sourceTypes, activeVersions, chunkVersions, sourceScopes },
-    retrieve: async (query: string, opts: { topK: number; timeoutMs?: number; exhaustive?: boolean }) => {
+    retrieve: async (query: string, opts: { topK: number; timeoutMs?: number; exhaustive?: boolean; tokenBudget?: number }) => {
       if (!input.modeInfo || !input.files.length || !input.modesManager.retrieveHybridRaw) return [];
       // An exhaustive request (RetrievalPlan.exhaustive) needs the RETRIEVER
       // to hand back more than the plan's widened topK can hold at the normal
@@ -245,7 +247,9 @@ export function createModeRetrievalPort(input: ModePortInput): RetrievalPort {
       // widened cap downstream just fills with padding.
       const exhaustive = opts.exhaustive === true;
       const res = await input.modesManager.retrieveHybridRaw(input.modeInfo, input.files, {
-        query, topK: opts.topK, tokenBudget: input.tokenBudget * (exhaustive ? 3 : 1),
+        // The plan's own budget (multi-file turns) wins over the policy budget the
+        // caller constructed this port with, so retriever and packer agree.
+        query, topK: opts.topK, tokenBudget: Math.max(input.tokenBudget, opts.tokenBudget ?? 0) * (exhaustive ? 3 : 1),
         ...(exhaustive ? { rerankPoolMultiplier: 2 } : {}),
         // RERANK ON THE V3 PATH (2026-09-07). This was `allowRerank: false`, and
         // V3 is the default answer path — so a reranker the user selected in
@@ -333,4 +337,12 @@ export function createModeRetrievalPort(input: ModePortInput): RetrievalPort {
       });
     },
   });
+  return {
+    ...port,
+    probeAnchors: (question: string): boolean => {
+      if (!input.modeInfo || !input.files.length || !input.modesManager.probeReferenceAnchors) return false;
+      try { return input.modesManager.probeReferenceAnchors(input.modeInfo, input.files, question) === true; }
+      catch { return false; }
+    },
+  };
 }
