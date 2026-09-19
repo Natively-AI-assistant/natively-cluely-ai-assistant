@@ -95,6 +95,49 @@ export interface EligibilityInputs {
    * machine, and a rerank request is a way for them to leave.
    */
   referenceFilesScopeAllowed: boolean;
+  /**
+   * Populated only when provider === 'custom'. The URL the user configured,
+   * before any normalisation — used to decide whether the endpoint is truly
+   * loopback / private-network so we can relax the privacy gate for it.
+   */
+  customEndpoint?: string;
+}
+
+/**
+ * Return true iff the given URL resolves to a loopback address or a private
+ * (RFC-1918 / RFC-4193 / link-local) host — i.e. the request never leaves
+ * this machine / LAN.
+ *
+ * This is best-effort and intentionally conservative: any ambiguity (parse
+ * failure, bare hostname that isn't `localhost`) returns false so privacy
+ * always wins.
+ */
+export function isLoopbackOrPrivateHost(urlString: string): boolean {
+  let parsed: URL;
+  try { parsed = new URL(urlString); } catch { return false; }
+  const h = parsed.hostname;
+
+  // IPv6 loopback
+  if (h === '::1' || h === '[::1]') return true;
+  // IPv6 link-local (fe80::/10) or Unique Local (fc00::/7)
+  if (/^\[?fe[89ab][0-9a-f]:/i.test(h) || /^\[?f[cd][0-9a-f]{2}:/i.test(h)) return true;
+
+  // Loopback / localhost
+  if (h === 'localhost' || h === '127.0.0.1') return true;
+  // Full 127.0.0.0/8
+  if (/^127\./.test(h)) return true;
+
+  // RFC-1918 private ranges
+  if (/^10\./.test(h)) return true;
+  if (/^192\.168\./.test(h)) return true;
+  // 172.16.0.0/12
+  const m172 = h.match(/^172\.(\d+)\./);
+  if (m172 && Number(m172[1]) >= 16 && Number(m172[1]) <= 31) return true;
+
+  // Link-local 169.254.0.0/16
+  if (/^169\.254\./.test(h)) return true;
+
+  return false;
 }
 
 /**
@@ -108,9 +151,21 @@ export interface EligibilityInputs {
  */
 export function evaluateHostedEligibility(input: EligibilityInputs): HostedEligibility {
   if (input.provider === 'custom') {
-    // Custom endpoint runs on the user's local network / machine (LM Studio, TEI, etc.)
-    // It is allowed in local-only mode, doesn't require cloud data permissions, and key is optional.
     if (!input.model || !input.model.trim()) return { eligible: false, reason: 'no-model' };
+
+    // Custom endpoints pointing at a true loopback / private-network host are
+    // safe in all modes — data never leaves the machine. Public HTTPS custom
+    // endpoints (e.g. a Jina-compatible proxy hosted externally) are subject to
+    // the same privacy rules as other cloud providers.
+    const isPrivate = input.customEndpoint
+      ? isLoopbackOrPrivateHost(input.customEndpoint)
+      : false;
+
+    if (!isPrivate) {
+      if (input.localOnly) return { eligible: false, reason: 'local-only-mode' };
+      if (!input.referenceFilesScopeAllowed) return { eligible: false, reason: 'reference-files-scope-denied' };
+    }
+
     return { eligible: true };
   }
   if (input.provider !== 'natively' && input.provider !== 'openrouter' && input.provider !== 'jina') {
@@ -313,22 +368,29 @@ export function buildHostedRerankPort(): RerankSeamPort | null {
   const apiKey = readHostedApiKey(provider);
   const model = readHostedModel(settings);
 
+  // Read custom endpoint early so the privacy guard in evaluateHostedEligibility
+  // can inspect the host and decide whether it is loopback / private-network.
+  let customEndpointUrl: string | undefined;
+  if (provider === 'custom') {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { SettingsManager } = require('../SettingsManager');
+      customEndpointUrl = SettingsManager.getInstance().get('customRerankerEndpoint');
+    } catch { /* ignored */ }
+  }
+
   const verdict = evaluateHostedEligibility({
     provider,
     hasApiKey: Boolean(apiKey),
     model,
     localOnly: isLocalOnlyMode(),
     referenceFilesScopeAllowed: referenceFilesScopeAllowed(),
+    customEndpoint: customEndpointUrl,
   });
   if (!verdict.eligible) return null;
 
   if (provider === 'custom') {
-    let baseUrl: string | undefined;
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { SettingsManager } = require('../SettingsManager');
-      baseUrl = SettingsManager.getInstance().get('customRerankerEndpoint');
-    } catch { /* ignored */ }
+    const baseUrl = customEndpointUrl;
     if (!baseUrl) return null;
 
     // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -524,12 +586,21 @@ export function isRerankerExplicitlySelected(): boolean {
     // exactly that, and buildHostedRerankPort() already gates on it.
     const provider = settings.provider ?? DEFAULT_RERANKER_SETTINGS.provider;
     if (provider !== 'local') {
+      let customEndpointUrl: string | undefined;
+      if (provider === 'custom') {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const { SettingsManager } = require('../SettingsManager');
+          customEndpointUrl = SettingsManager.getInstance().get('customRerankerEndpoint');
+        } catch { /* ignored */ }
+      }
       const eligible = evaluateHostedEligibility({
         provider,
         hasApiKey: Boolean(readHostedApiKey(provider)),
         model: readHostedModel(settings),
         localOnly: isLocalOnlyMode(),
         referenceFilesScopeAllowed: referenceFilesScopeAllowed(),
+        customEndpoint: customEndpointUrl,
       }).eligible;
       if (eligible) return true;
     }

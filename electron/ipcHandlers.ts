@@ -9028,6 +9028,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       ? (settings.get('localEmbeddingModelId') || storedEmbedding.localModelId || storedEmbedding.model || 'minilm-l6-v2')
       : null;
 
+    // Pre-read the acknowledged set once, outside the map.
+    const ackedSet: unknown = settings.get('embeddingCatalogAcknowledged');
+    const acknowledgedIds: string[] = Array.isArray(ackedSet) ? (ackedSet as string[]) : [];
+
     const models = listEmbeddingCatalogStatus().map((m: any) => ({
       id: m.id,
       name: m.name,
@@ -9042,6 +9046,8 @@ export function initializeIpcHandlers(appState: AppState): void {
       recommended: m.recommended === true,
       bundled: m.bundled === true,
       license: m.license,
+      /** Whether the user has accepted this model's licence (always true when requiresAcknowledgement is false). */
+      acknowledged: !m.license?.requiresAcknowledgement || acknowledgedIds.includes(m.id),
       state: m.status.state,
       bytesOnDisk: m.status.bytesOnDisk,
       selected: isLocalProvider && (selectedId === m.id || selectedId === m.repo),
@@ -9058,6 +9064,23 @@ export function initializeIpcHandlers(appState: AppState): void {
     const model = findEmbeddingCatalogModel(id);
     if (!model) return { success: false, error: 'unknown_model' };
     if (localEmbeddingDownloads.has(id)) return { success: false, error: 'already_downloading' };
+
+    // License gate: models that require explicit acknowledgement must not be
+    // installed until the user has confirmed in the UI.
+    if (model.license?.requiresAcknowledgement) {
+      const { SettingsManager } = require('./services/SettingsManager');
+      const ackedSet: string[] = (SettingsManager.getInstance().get('embeddingCatalogAcknowledged') as any) ?? [];
+      if (!Array.isArray(ackedSet) || !ackedSet.includes(id)) {
+        return {
+          success: false,
+          error: 'license_not_acknowledged',
+          message: `${model.name} requires licence acknowledgement (${model.license.spdx}). Please accept the licence terms before installing.`,
+          requiresAcknowledgement: true,
+          licenseUrl: model.license.url,
+          spdx: model.license.spdx,
+        };
+      }
+    }
 
     const sender = event?.sender;
     let lastSent = 0;
@@ -9122,6 +9145,57 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { success: false, error: 'not_installed', message: `${model.name} is not fully downloaded (missing ${status.missing.join(', ')}).` };
     }
 
+    // License gate: models with requiresAcknowledgement must be explicitly
+    // ack'd via embedding:acknowledge-catalog-license BEFORE they can be activated.
+    if (model.license?.requiresAcknowledgement) {
+      const ackedSet: string[] = (settings.get('embeddingCatalogAcknowledged') as any) ?? [];
+      if (!Array.isArray(ackedSet) || !ackedSet.includes(targetId)) {
+        return {
+          success: false,
+          error: 'license_not_acknowledged',
+          message: `${model.name} requires licence acknowledgement (${model.license.spdx}). Please accept the licence terms in Settings before activating this model.`,
+          requiresAcknowledgement: true,
+          licenseUrl: model.license.url,
+          spdx: model.license.spdx,
+        };
+      }
+    }
+
+    // Pre-activation validation probe.
+    //
+    // Commit NOTHING to settings until we know the model can actually produce a
+    // valid embedding vector. A corrupt or runtime-incompatible model would
+    // otherwise leave the user with a broken embedding provider and no way to
+    // recover other than a manual settings reset.
+    //
+    // `skipSlotGate: true` prevents competing with the live provider's slot —
+    // the probe runs on a throw-away instance that is disposed immediately after.
+    let probeProvider: any = null;
+    try {
+      probeProvider = new LocalEmbeddingProvider({ modelId: targetId, skipSlotGate: true });
+      const probeVec = await Promise.race([
+        probeProvider.embed('embedding model validation probe'),
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error('Validation probe timed out after 20s')), 20_000)),
+      ]);
+      if (!Array.isArray(probeVec) || probeVec.length === 0) {
+        throw new Error('Model loaded but did not produce a valid embedding vector.');
+      }
+      // Confirm the declared dimension matches reality.
+      if (model.dimensions > 0 && probeVec.length !== model.dimensions) {
+        throw new Error(`Expected ${model.dimensions}-d vector but got ${probeVec.length}-d. The model file may be corrupt or a different variant.`);
+      }
+    } catch (probeErr: any) {
+      return {
+        success: false,
+        error: 'validation_failed',
+        message: `${model.name} failed the runtime check: ${String(probeErr?.message || probeErr)}. The model may be corrupt — try re-downloading it.`,
+      };
+    } finally {
+      if (probeProvider) {
+        try { await probeProvider.dispose('validation probe complete'); } catch { /* best effort */ }
+      }
+    }
+
     // Save setting
     const ok1 = settings.set('localEmbeddingModelId', targetId);
     const ok2 = settings.set('embedding', {
@@ -9173,6 +9247,34 @@ export function initializeIpcHandlers(appState: AppState): void {
         message: `Couldn't activate ${model.name}: ${String(e?.message || e)}. Reverted to previous model.`,
       };
     }
+  });
+
+  /**
+   * Record that the user has acknowledged the licence terms for a catalog
+   * embedding model that has `requiresAcknowledgement: true` (e.g. Jina v4/v5
+   * under CC-BY-NC-4.0). Must be called from the UI's licence-acceptance dialog
+   * BEFORE attempting to install or activate such a model.
+   */
+  safeHandle('embedding:acknowledge-catalog-license', async (_evt, id: string) => {
+    const { SettingsManager } = require('./services/SettingsManager');
+    const { findEmbeddingCatalogModel } = require('./rag/embeddingModelCatalog');
+    const model = findEmbeddingCatalogModel(id);
+    if (!model) return { success: false, error: 'unknown_model' };
+    if (!model.license?.requiresAcknowledgement) {
+      // No acknowledgement needed — idempotently succeed so callers don't need to branch.
+      return { success: true };
+    }
+
+    const settings = SettingsManager.getInstance();
+    const existing: unknown = settings.get('embeddingCatalogAcknowledged');
+    const current: string[] = Array.isArray(existing) ? (existing as string[]) : [];
+    if (!current.includes(id)) {
+      const updated = [...current, id];
+      if (!settings.set('embeddingCatalogAcknowledged', updated)) {
+        return { success: false, error: 'settings_store_degraded', message: 'Could not persist licence acknowledgement. Your settings store may be unavailable.' };
+      }
+    }
+    return { success: true };
   });
 
   safeHandle('embedding:test-local-model', async (_evt, id: string) => {

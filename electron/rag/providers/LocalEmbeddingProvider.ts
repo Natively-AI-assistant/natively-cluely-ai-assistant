@@ -266,10 +266,14 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
     const worker = this.worker;
     this.worker = null;          // new work resolves against the new config
     this.loadingPromise = null;
-    if (this.slotRelease) {
-      try { this.slotRelease(); } catch { /* best effort */ }
-      this.slotRelease = null;
-    }
+
+    // slotRelease is NOT called here. The slot must be held until the worker
+    // actually finishes draining — releasing it early would let a replacement
+    // provider claim the slot before this worker's ONNX session is torn down,
+    // defeating the memory-pressure guard. slotRelease is called from inside
+    // terminateWhenDrained() once the thread exits.
+    const pendingSlotRelease = this.slotRelease;
+    this.slotRelease = null;
 
     // An intentional teardown is not a crash. terminate() exits the thread with
     // code 1 and the exit handler only clears the sentinel on code 0, so
@@ -281,6 +285,9 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
     try { clearOnnxLoadSentinel('embeddings', this.model); } catch { /* best effort */ }
 
     if (!worker) {
+      if (pendingSlotRelease) {
+        try { pendingSlotRelease(); } catch { /* best effort */ }
+      }
       this.rejectAllPending(new Error(reason));
       return;
     }
@@ -288,6 +295,9 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
     // Nothing owed — terminate now.
     if (this.pendingRequests.size === 0) {
       try { await worker.terminate(); } catch { /* already gone */ }
+      if (pendingSlotRelease) {
+        try { pendingSlotRelease(); } catch { /* best effort */ }
+      }
       return;
     }
 
@@ -306,7 +316,7 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
     // Detached, not awaited, because initializeEmbeddings() is awaited by the
     // set-config IPC — blocking the drain there would freeze Settings for as
     // long as a reference-file batch takes.
-    void this.terminateWhenDrained(worker);
+    void this.terminateWhenDrained(worker, pendingSlotRelease);
   }
 
   /**
@@ -316,13 +326,20 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
    * generously, since this runs in the background and every pending request
    * already carries its own per-call timeout, so the map empties on its own
    * even if the worker never answers.
+   *
+   * The slot is released AFTER the worker exits so no replacement can claim
+   * the same ONNX slot before this worker's session is torn down.
    */
-  private async terminateWhenDrained(worker: Worker): Promise<void> {
+  private async terminateWhenDrained(worker: Worker, slotRelease?: (() => void) | null): Promise<void> {
     const deadline = Date.now() + DISPOSE_DRAIN_MAX_MS;
     while (this.pendingRequests.size > 0 && Date.now() < deadline) {
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
     try { await worker.terminate(); } catch { /* already gone */ }
+    // Release the slot only after the worker has exited — preserving memory safety.
+    if (slotRelease) {
+      try { slotRelease(); } catch { /* best effort */ }
+    }
   }
 
   private rejectAllPending(err: Error): void {
