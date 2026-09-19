@@ -8,8 +8,8 @@ import { VectorStore, ScoredChunk } from '../../rag/VectorStore';
 import { EmbeddingPipeline } from '../../rag/EmbeddingPipeline';
 import Database from 'better-sqlite3';
 import { buildDocumentMap, resolveTargetSections, sectionAwareChunksFromMap, selectTableOfContentsEntries, sentenceAwareWindows, tabularChunks } from './DocumentMap';
-import { wordsOf } from './lexicalTokens';
-import { CHUNKER_VERSION, semanticChunks } from './semanticChunker';
+import { wordsOf, buildLexicalStats, queryWeights, weightedOverlapScore, anchorTerms, anchorCoverage, corpusAnchorsQuestion, type LexicalStats } from './lexicalTokens';
+import { CHUNKER_VERSION, semanticChunks, normalizeLineEndings } from './semanticChunker';
 import { resolveRerankBudgetMs, rerankBudgetFitsDeadline, type RerankSurface } from '../reranking/rerankBudget';
 import { buildRerankPool, RERANK_CANDIDATE_POOL, resolveRerankPoolSize } from './rerankPool';
 // Round-8 (seminar-fix-2): use the SHARED 6-clause evidence rule so the hybrid
@@ -47,6 +47,8 @@ export interface ModeRetrievedChunk {
      * rerank. Measured on a 23-turn live session with Voyage rerank-2.5-lite.
      */
     rerankScore?: number;
+    /** ANCHOR_BOOST × anchor coverage² when the question named this chunk's distinctive terms; included in `score`. */
+    anchorScore?: number;
     /** Structural/property answerability boost, same story as above. */
     answerabilityScore?: number;
 }
@@ -265,6 +267,11 @@ const indexGate = new IndexConcurrencyGate(MODE_INDEX_MAX_CONCURRENT_FILES);
 const MIN_COMBINED_SCORE = 0.15;
 
 const FTS_WEIGHT = 0.4;  // alpha for combined score: alpha * fts + (1-alpha) * vector
+// Weight of full anchor coverage in rankScore (lexicalTokens.anchorCoverage).
+// Sized against the measured noise band of the vector arm across same-shaped
+// sibling sections (0.6 × ~0.13 ≈ 0.08) and the answerability boosts it must
+// outrank (shape match +0.35 is shared by every sibling, so it cancels).
+const ANCHOR_BOOST = Number(process.env.NATIVELY_RETRIEVAL_ANCHOR_BOOST) || 0.25;
 
 /**
  * F23 — the lexical fallback must NOT reuse the combined-score floor.
@@ -405,6 +412,12 @@ interface ChunkCandidate {
      */
     rerankScore?: number;
     answerabilityScore?: number;
+    /**
+     * ANCHOR_BOOST × (coverage of the query's rare terms)² — see
+     * lexicalTokens.anchorCoverage. Part of rankScore and of admission; absent
+     * when the query has no rare term or the pool is too small for idf.
+     */
+    anchorScore?: number;
     answerabilityBoosts?: string[];
     answerabilityPenalties?: string[];
 }
@@ -995,6 +1008,11 @@ export class ModeHybridRetriever {
      * ingest are SOFT boundaries — they don't close a section.
      */
     private chunkText(content: string): string[] {
+        // One normalisation for all three branches — the row splitter and the
+        // Document Map split on "\n" exactly as the semantic chunker does, and a
+        // CRLF file (any text file authored on Windows) defeated their line
+        // patterns the same way. See semanticChunker.normalizeLineEndings.
+        content = normalizeLineEndings(content);
         // TABULAR data (CSV/TSV) is chunked by ROWS with the header repeated, so a
         // query for one entity retrieves its row with columns labelled instead of a
         // giant undifferentiated blob (which caused fabricated figures on datasets).
@@ -1044,6 +1062,56 @@ export class ModeHybridRetriever {
             }
         }
         return matches / Math.sqrt(queryWords.size * Math.max(1, new Set(chunkWords).size));
+    }
+
+    /**
+     * Corpus statistics for the pool being ranked, built once per retrieve().
+     * Every lexical call site in one retrieve() passes the SAME `allCandidates`
+     * array, so array identity is the cache key; a concurrent retrieve over a
+     * different pool just rebuilds. Null below IDF_MIN_POOL chunks — the legacy
+     * unweighted score is used there (see lexicalTokens.ts).
+     */
+    private lexicalStatsCache: { pool: ChunkCandidate[]; stats: LexicalStats | null; index: Map<string, number> } | null = null;
+
+    private lexicalStatsFor(pool: ChunkCandidate[]): { stats: LexicalStats | null; index: Map<string, number> } {
+        if (this.lexicalStatsCache?.pool === pool) return this.lexicalStatsCache;
+        const stats = buildLexicalStats(pool.map((c) => c.text));
+        const index = new Map<string, number>();
+        pool.forEach((c, i) => index.set(`${c.sourceId}:${c.chunkIndex}`, i));
+        this.lexicalStatsCache = { pool, stats, index };
+        return this.lexicalStatsCache;
+    }
+
+    private idfQueryWords = new WeakMap<Set<string>, Set<string>>();
+
+    /**
+     * Corpus arbitration (lexicalTokens.corpusAnchorsQuestion): does some chunk
+     * of these files hold the question's distinctive terms together? Lexical
+     * and synchronous — no embedding, no model — so the orchestrator can ask it
+     * on a turn the classifier sent down the no-retrieval path. False for a
+     * pool too small for document frequencies to mean anything.
+     */
+    public probeAnchors(files: ModeReferenceFile[], question: string): boolean {
+        try {
+            const pool = this.getModeFileChunks(files);
+            const { stats } = this.lexicalStatsFor(pool);
+            return stats ? corpusAnchorsQuestion(question, stats) : false;
+        } catch {
+            return false; // a probe must never break a turn
+        }
+    }
+
+    /** Lexical score (and anchor boost) for every candidate of `pool`, index-aligned. */
+    private lexicalScores(pool: ChunkCandidate[], queryWords: Set<string>): Array<{ fts: number; anchor: number }> {
+        const { stats } = this.lexicalStatsFor(pool);
+        if (!stats) return pool.map((c) => ({ fts: this.computeFtsScore(c.text, queryWords), anchor: 0 }));
+        const idfWords = this.idfQueryWords.get(queryWords) ?? queryWords;
+        const q = queryWeights(idfWords, stats);
+        const anchors = anchorTerms(idfWords, stats);
+        return pool.map((_, i) => {
+            const cov = anchorCoverage(anchors, stats.sets[i]);
+            return { fts: weightedOverlapScore(q, stats.sets[i], stats.norms[i]), anchor: ANCHOR_BOOST * cov * cov };
+        });
     }
 
     /**
@@ -1425,6 +1493,12 @@ export class ModeHybridRetriever {
             ? normalizeDocumentGroundedRetrievalQuery(query)
             : query).trim();
         const queryWords = new Set(wordsOf(queryText));
+        // The idf-weighted scorer also sees the query's short numeric tokens
+        // ("pod 13", "step 6"). Kept OUT of `queryWords` itself: that set sizes
+        // the adaptive threshold and feeds the legacy small-pool scorer, neither
+        // of which can discount a numeral. Keyed by the set's identity so every
+        // lexical call site in this retrieve() finds it without a signature change.
+        this.idfQueryWords.set(queryWords, new Set(wordsOf(queryText, { shortNumerics: true })));
 
         // Zero-token query short-circuit: if the user input collapses to no
         // searchable tokens after stripping <=2-char words / possessives /
@@ -1561,6 +1635,23 @@ export class ModeHybridRetriever {
             if (candidates.length === 0 && allCandidates.length > 0) {
                 candidates = this.performLexicalRetrieval(allCandidates, queryWords, 0).filter((c) => c.ftsScore > 0);
                 markH4HybridStage('empty_lexical_floor', { candidateCount: candidates.length, pool: allCandidates.length });
+            } else if (candidates.length < THIN_RESULTS_TOPUP_BELOW && allCandidates.length > candidates.length) {
+                // THIN-RESULTS TOP-UP, lexical branch (2026-09-19). The hybrid
+                // branch has had this since 2026-09-11; the branch a key-less
+                // user lives in did not. With one or two chunks over the
+                // threshold the evidence budget went out mostly EMPTY — room for
+                // eight chunks, one sent — and a paraphrased question whose
+                // answer sat in the third-best chunk read as "not in the file".
+                // An unused budget buys nothing; a weak extra costs a slot.
+                const seen = new Set(candidates.map((c) => `${c.sourceId}#${c.chunkIndex}`));
+                const extra = this.performLexicalRetrieval(allCandidates, queryWords, 0)
+                    .filter((c) => c.ftsScore > 0 && !seen.has(`${c.sourceId}#${c.chunkIndex}`))
+                    .sort((a, b) => b.ftsScore - a.ftsScore)
+                    .slice(0, THIN_RESULTS_TOPUP_MAX);
+                if (extra.length) {
+                    candidates = candidates.concat(extra);
+                    markH4HybridStage('thin_results_topup_lexical', { added: extra.length, candidateCount: candidates.length, pool: allCandidates.length });
+                }
             }
         }
 
@@ -1904,6 +1995,7 @@ export class ModeHybridRetriever {
                     ftsScore: c.ftsScore,
                     vectorScore: c.vectorScore,
                     ...(typeof c.rerankScore === 'number' ? { rerankScore: c.rerankScore } : {}),
+                ...(typeof c.anchorScore === 'number' ? { anchorScore: c.anchorScore } : {}),
                     ...(typeof c.answerabilityScore === 'number' ? { answerabilityScore: c.answerabilityScore } : {}),
                     trustLevel: 'untrusted_reference',
                 })),
@@ -1924,6 +2016,7 @@ export class ModeHybridRetriever {
                 ftsScore: c.ftsScore,
                 vectorScore: c.vectorScore,
                 ...(typeof c.rerankScore === 'number' ? { rerankScore: c.rerankScore } : {}),
+                ...(typeof c.anchorScore === 'number' ? { anchorScore: c.anchorScore } : {}),
                 ...(typeof c.answerabilityScore === 'number' ? { answerabilityScore: c.answerabilityScore } : {}),
                 trustLevel: 'untrusted_reference'
             })),
@@ -1965,6 +2058,7 @@ export class ModeHybridRetriever {
 
         try {
             let reranker = this.rerankerOverride;
+            let usingBuiltInLocalReranker = false;
 
             // An enabled reranker EXTENSION takes over this seam — it never runs
             // BESIDE the built-in. That keeps one rerank stage, one budget and
@@ -1993,6 +2087,7 @@ export class ModeHybridRetriever {
             })();
             if (!reranker && productionReranker) {
                 reranker = productionReranker;
+                usingBuiltInLocalReranker = true;
             }
 
             // Telemetry: if the reranker was requested (enabled gate) but
@@ -2107,6 +2202,29 @@ export class ModeHybridRetriever {
             // (defensive) keeps its place after the reranked ones.
             const reordered: ChunkCandidate[] = [];
             const used = new Set<number>();
+            // RANK FUSION FOR THE BUILT-IN CROSS-ENCODER (2026-09-19). The
+            // cross-encoder's order used to REPLACE the first stage's. Measured
+            // with the bundled ms-marco MiniLM over 5k–70k-token fixtures: a
+            // section the first stage ranked 1st on an exact identifier match
+            // ("Project Eyrie-435") was demoted to 6th–9th — a 22M-parameter
+            // model cannot tell same-shaped sibling sections apart — and the
+            // cap-6 cut downstream dropped it. Packed-answer recall, 70k tokens:
+            // no rerank 160/153 (one file / three), replace 156/150, fused
+            // 159/154; at 5k, 159/156 → 159/156 → 160/157. Reciprocal-rank
+            // fusion is scale-free, so it needs no knowledge of what the scores
+            // mean. `pool` is in first-stage order: an index IS a rank.
+            //
+            // ONLY the built-in local model. A hosted reranker (Voyage, Jina,
+            // an extension) is a far stronger judge and was NOT measured —
+            // there are no keys offline — so its order still stands alone.
+            // NATIVELY_RERANK_FUSION=rrf|off forces either way.
+            const fusionEnv = String(process.env.NATIVELY_RERANK_FUSION || '').toLowerCase();
+            const fusion = fusionEnv === 'rrf' || (fusionEnv !== 'off' && usingBuiltInLocalReranker);
+            const RRF_K = Number(process.env.NATIVELY_RERANK_FUSION_K) || 10;
+            if (fusion) {
+                results.forEach((r, rerankRank) => { r.score = 1 / (RRF_K + rerankRank) + 1 / (RRF_K + r.originalIndex); });
+                results.sort((a, b) => b.score - a.score);
+            }
             for (const r of results) {
                 const c = pool[r.originalIndex];
                 if (!c) continue;
@@ -2296,13 +2414,16 @@ export class ModeHybridRetriever {
         // embed failure) — their score is lexical-only and must be judged on
         // the lexical scale (F23), not against the combined floor.
         const vectorless = new Set<string>();
-        for (const candidate of candidates) {
+        const lexical = this.lexicalScores(candidates, queryWords);
+        for (let ci = 0; ci < candidates.length; ci++) {
+            const candidate = candidates[ci];
             const key = `${candidate.sourceId}:${candidate.chunkIndex}`;
-            const ftsScore = this.computeFtsScore(candidate.text, queryWords);
+            const ftsScore = lexical[ci].fts;
+            const anchorScore = lexical[ci].anchor;
             const vec = persisted.get(key) ?? ephemeral.get(key);
             if (!vec) vectorless.add(key);
             const vectorScore = vec ? this.computeVectorScore(queryEmbedding, vec) : 0;
-            scored.push({ ...candidate, ftsScore, vectorScore });
+            scored.push({ ...candidate, ftsScore, vectorScore, ...(anchorScore > 0 ? { anchorScore } : {}) });
         }
 
         // Filter by minimum combined score (adaptive — see retrieve()).
@@ -2317,11 +2438,14 @@ export class ModeHybridRetriever {
         // the transition turn after an embedding-provider promotion, which is
         // exactly a mid-session "the résumé disappeared" symptom.
         return scored.filter(c => {
+            // A chunk holding the query's rare terms is admitted on that alone:
+            // the combined floor exists to drop chunks with no claim on the
+            // question, and naming its entity is the strongest claim there is.
             if (vectorless.has(`${c.sourceId}:${c.chunkIndex}`)) {
-                return c.ftsScore >= toLexicalThreshold(minScore);
+                return c.ftsScore + (c.anchorScore ?? 0) >= toLexicalThreshold(minScore);
             }
             const combined = this.combinedScore(c.ftsScore, c.vectorScore, FTS_WEIGHT);
-            return combined >= minScore;
+            return combined + (c.anchorScore ?? 0) >= minScore;
         });
     }
 
@@ -2334,13 +2458,15 @@ export class ModeHybridRetriever {
         // Lexical SCALE, not combined scale. See MIN_LEXICAL_SCORE (F23).
         minScore: number = MIN_LEXICAL_SCORE
     ): ChunkCandidate[] {
+        const lexical = this.lexicalScores(candidates, queryWords);
         return candidates
-            .map(c => ({
+            .map((c, i) => ({
                 ...c,
-                ftsScore: this.computeFtsScore(c.text, queryWords),
-                vectorScore: 0
+                ftsScore: lexical[i].fts,
+                vectorScore: 0,
+                ...(lexical[i].anchor > 0 ? { anchorScore: lexical[i].anchor } : {}),
             }))
-            .filter(c => c.ftsScore >= minScore);
+            .filter(c => c.ftsScore + (c.anchorScore ?? 0) >= minScore);
     }
 
     private applyAnswerabilityScores(
@@ -2406,7 +2532,7 @@ export class ModeHybridRetriever {
         if (byRerank) {
             return typeof c.rerankScore === 'number' ? c.rerankScore : Number.NEGATIVE_INFINITY;
         }
-        return this.combinedScore(c.ftsScore, c.vectorScore, FTS_WEIGHT) + (c.answerabilityScore ?? 0);
+        return this.combinedScore(c.ftsScore, c.vectorScore, FTS_WEIGHT) + (c.answerabilityScore ?? 0) + (c.anchorScore ?? 0);
     }
 
     /**
@@ -2432,7 +2558,14 @@ export class ModeHybridRetriever {
      */
     private reportedDocGroundedScore(c: ChunkCandidate): number {
         const base = this.combinedScore(c.ftsScore, c.vectorScore, FTS_WEIGHT);
-        return base + Math.max(0, c.answerabilityScore ?? 0);
+        // The anchor term is part of what SELECTED the chunk (rankScore), so by
+        // the rule above it is part of what is reported. Omitting it repeated
+        // the 2026-09-07 rerank-order bug in miniature: V3 re-sorts evidence by
+        // this value (mode-retrieval-port → finalScore → accepted-slice fill,
+        // packer rank), so the retriever chose the named section and the cap-6
+        // cut downstream then dropped it again (measured 2026-09-19: 3–4
+        // EVIDENCE_DROPs per size on the three-file run with the boost live).
+        return base + Math.max(0, c.answerabilityScore ?? 0) + (c.anchorScore ?? 0);
     }
 
     /**
