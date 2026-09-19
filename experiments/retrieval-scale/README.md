@@ -75,13 +75,18 @@ the hosted API was unavailable that day, and is not needed for any of this.
 11. Profile ingest (premium submodule + `main.ts`): nodes are embedded one *batch* per request.
     Ten concurrent single-text requests per batch drew 429s and silently demoted all 238 nodes of
     a long résumé to the bundled model's space.
+12. A stale index is never used: stored vectors are keyed by chunk index, so after a chunker bump
+    chunk *i* was scored with the OLD chunk *i*'s vector, silently. Such files are now ignored for
+    the turn and re-indexed in the background; prewarm re-indexes one mode at a time on activation.
+13. The bundled embedder's vectors are queried when no meeting is running (lexical-only is kept
+    during meetings, where the memory pressure that rule guards against actually occurs).
 9. Spoken identifiers: "the forty-four seventy-one outage" → 4471; a number word is never the
    head ("i n c forty 471" corruption); "X and seventy one Y" keeps its "and".
 
 Tests added: `RetrievalScaleLexical`, `CorpusArbitration`, `ProfileDocumentReachability`,
 `MultiFileEvidenceCapacity`, `PlainTextHeadings`, `EmbeddingProbeReasonLogged`,
-`E2eLocalTestHeader`, `SpokenIdentifierCanon`, `IngestBatchEmbedding` (all `2026_09_19`).
-Full run: 10,953 pass / 0 fail / 56 skipped / 1 todo (the todo pins a known limit: anchors are a bag
+`E2eLocalTestHeader`, `SpokenIdentifierCanon`, `IngestBatchEmbedding`, `StaleIndexVectorsIgnored`,
+`LocalEmbedderVectorsOutsideMeeting` (all `2026_09_19`). Full run: 10,961 pass / 0 fail / 56 skipped / 1 todo (the todo pins a known limit: anchors are a bag
 of words, so "pod 10" and "10 engineers … pod 15" tie).
 
 ## Running the natively stack without production
@@ -103,4 +108,4 @@ only, never to a third-party provider.
 - A low-confidence LLM query rewrite would address the paraphrase residue; it costs latency and
   tokens per turn.
 - Windows: everything is platform-independent TypeScript and the CRLF fix is tested with CRLF
-  input, but none of it has been executed on Windows.
+  input, but none of it has been executed on Windows — see `WINDOWS-CHECKLIST.md`.
