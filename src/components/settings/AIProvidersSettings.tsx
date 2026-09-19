@@ -25,6 +25,7 @@ import {
     AI_PROVIDER_BRANDS,
     AI_PROVIDER_MARKS,
     AI_PROVIDER_MARK_IMAGES,
+    WHITE_ON_TRANSPARENT_MARKS,
 } from '../ui/aiProviderMarks';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { LiquidGlassBadge } from '../../ui-components/LiquidGlassBadge';
@@ -1173,6 +1174,10 @@ export const AipSwitch: React.FC<AipSwitchProps> = ({
  */
 export const CLOUD_PROVIDERS = [
     { id: 'gemini'   as const, name: 'Gemini',   placeholder: 'AIzaSy...',  url: 'https://aistudio.google.com/app/apikey' },
+    // Also a gateway, but NOT opt-in: 36 models, and its catalogue endpoint is
+    // scoped to the key's group. The one provider here with a second required
+    // setting — see the protocol selector passed as `extraControls` below.
+    { id: 'fluxion' as const, name: 'Fluxion AI', placeholder: 'sk-...', url: 'https://fluxionai.world' },
     { id: 'groq'     as const, name: 'Groq',     placeholder: 'gsk_...',    url: 'https://console.groq.com/keys' },
     { id: 'openai'   as const, name: 'OpenAI',   placeholder: 'sk-...',     url: 'https://platform.openai.com/api-keys' },
     { id: 'claude'   as const, name: 'Claude',   placeholder: 'sk-ant-...', url: 'https://console.anthropic.com/settings/keys' },
@@ -1182,10 +1187,6 @@ export const CLOUD_PROVIDERS = [
     // A gateway, not a vendor: its model list is opt-in (isOptInModelProvider),
     // and ONE key here also backs OpenRouter embeddings and reranking.
     { id: 'openrouter' as const, name: 'OpenRouter', placeholder: 'sk-or-v1-...', url: 'https://openrouter.ai/keys' },
-    // Also a gateway, but NOT opt-in: 36 models, and its catalogue endpoint is
-    // scoped to the key's group. The one provider here with a second required
-    // setting — see the protocol selector passed as `extraControls` below.
-    { id: 'fluxion' as const, name: 'Fluxion AI', placeholder: 'sk-...', url: 'https://fluxionai.world' },
 ];
 export type CloudProviderId = (typeof CLOUD_PROVIDERS)[number]['id'];
 
@@ -1252,12 +1253,22 @@ export const AipProviderMark: React.FC<AipProviderMarkProps> = ({ provider, name
                 title={name || provider}
                 style={{ ['--aip-brand' as string]: brand?.brand ?? 'var(--aip-accent)' } as React.CSSProperties}
             >
-                {/* `.brand-mark-raster` (index.css) flattens a white-on-transparent
+                {/* 20px inside the 26px tile, where the inlined SVG marks get 16
+                    (`.aip-tile--mark > svg`). Deliberately different: those are
+                    two-colour vector glyphs that stay crisp small, while these are
+                    detailed raster artwork — Fluxion's monogram and LiteLLM's
+                    favicon — which need the extra pixels to be readable at all.
+                    20 leaves 3px of breathing room per side.
+
+                    `.brand-mark-raster` (index.css) flattens a white-on-transparent
                     mark to black in the light theme. Natively's own icon is drawn
-                    for the dark theme, so without it the tile reads as empty. This
-                    renderer is shared: the natively mark reaches it from Retrieval's
+                    for the dark theme, so without it the tile reads as empty. It is
+                    opt-in (WHITE_ON_TRANSPARENT_MARKS) because on a full-colour
+                    mark that filter paints every pixel black. This renderer is
+                    shared: the natively mark reaches it from Retrieval's
                     Embeddings/Reranker rows, not from any row in this panel. */}
-                <img src={imageSrc} alt="" width={16} height={16} className="object-contain brand-mark-raster" />
+                <img src={imageSrc} alt="" width={20} height={20}
+                    className={`object-contain ${WHITE_ON_TRANSPARENT_MARKS.has(key) ? 'brand-mark-raster' : ''}`} />
             </span>
         );
     }
@@ -2688,7 +2699,18 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     if ((creds as any).openrouterPreferredModel) pm.openrouter = (creds as any).openrouterPreferredModel;
                     // Already prefixed on disk (`fluxion/<model>`), same rule as above.
                     if ((creds as any).fluxionPreferredModel) pm.fluxion = (creds as any).fluxionPreferredModel;
-                    setFluxionProtocol((creds as any).fluxionProtocol === 'anthropic' ? 'anthropic' : 'openai');
+                    // Only adopt the stored protocol when a key actually exists.
+                    // loadCredentials re-runs on EVERY credentials-changed broadcast —
+                    // saving a Gemini key on another card fires one — and an
+                    // unconditional set silently reverted a protocol the user had
+                    // picked but not yet saved (there is nothing to persist against
+                    // before a key exists). They would then hit Save and ship the
+                    // default they had explicitly opted out of, with the UI agreeing
+                    // with disk so nothing looked wrong. With a key stored the stored
+                    // value IS the truth, so cross-window sync still converges.
+                    if ((creds as any).hasFluxionKey) {
+                        setFluxionProtocol((creds as any).fluxionProtocol === 'anthropic' ? 'anthropic' : 'openai');
+                    }
                     // Already prefixed on disk (`litellm/<model>`), which is the id the
                     // LiteLLM model list renders — no re-prefixing here or the star lands
                     // on no row at all.
@@ -3557,10 +3579,14 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             if (provider === 'deepseek') result = await window.electronAPI.setDeepseekApiKey(key);
             if (provider === 'nvidia_nim') result = await window.electronAPI.setNvidiaNimApiKey(key);
             if (provider === 'openrouter') result = await window.electronAPI.setOpenrouterApiKey(key);
-            // Key and protocol are written together: setFluxionConfig builds ONE
-            // client for the chosen protocol, so sending the key alone would
-            // leave a Claude-group user on the OpenAI endpoint.
-            if (provider === 'fluxion') result = await window.electronAPI.setFluxionConfig({ apiKey: key, protocol: fluxionProtocol });
+            // No protocol is passed: the main process PROBES the key's group and
+            // reports what it found. The group is a property of the key that the
+            // key does not reveal, so asking the user was asking them to guess.
+            if (provider === 'fluxion') {
+                result = await window.electronAPI.setFluxionConfig({ apiKey: key });
+                const detected = (result as { protocol?: 'openai' | 'anthropic' })?.protocol;
+                if (detected) setFluxionProtocol(detected);
+            }
 
             if (result && result.success) {
                 // The save may have just switched OpenRouter reranking on; the
@@ -3672,7 +3698,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             if (provider === 'deepseek') result = await window.electronAPI.setDeepseekApiKey('');
             if (provider === 'nvidia_nim') result = await window.electronAPI.setNvidiaNimApiKey('');
             if (provider === 'openrouter') result = await window.electronAPI.setOpenrouterApiKey('');
-            if (provider === 'fluxion') result = await window.electronAPI.setFluxionConfig({ apiKey: '', protocol: fluxionProtocol });
+            if (provider === 'fluxion') result = await window.electronAPI.setFluxionConfig({ apiKey: '' });
 
             if (result && result.success) {
                 setHasStoredKey(prev => ({ ...prev, [provider]: false }));
@@ -4205,42 +4231,17 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                 savingStatus={!!savingStatus[id]}
                                 savedStatus={!!savedStatus[id]}
                                 onPreferredModelChange={(model) => setPreferredModels(prev => ({ ...prev, [id]: model }))}
-                                extraControls={id !== 'fluxion' ? undefined : (
+                                extraControls={id !== 'fluxion' || !hasStoredKey.fluxion ? undefined : (
+                                    /* One muted line, not a label + two buttons + a hint.
+                                       The protocol is DETECTED from the key's group on save
+                                       (see detectFluxionProtocol), so there is nothing here
+                                       for the user to decide — this only reports what was
+                                       found, the way a resolved value should. */
                                     <div className="aip-provider-row">
-                                        <span className="text-xs aip-muted shrink-0">{t('API format')}</span>
-                                        {/* Two buttons rather than a <select>: there are exactly two
-                                            values. Most users never need this — a real Claude-group
-                                            key was driven live on 2026-09-18 and the default OpenAI
-                                            format worked, because the gateway transcodes. It is an
-                                            escape hatch for a group that refuses that, which one key
-                                            could not rule out. */}
-                                        {(['openai', 'anthropic'] as const).map(proto => (
-                                            <button
-                                                key={proto}
-                                                onClick={() => {
-                                                    setFluxionProtocol(proto);
-                                                    // Persist immediately, but ONLY once a key exists.
-                                                    // apiKey is OMITTED, not empty: the handler reads
-                                                    // undefined as "keep the stored key" and '' as an
-                                                    // explicit clear, so sending '' here would delete
-                                                    // the key the user just saved. Before a key exists
-                                                    // there is nothing to persist against — the save
-                                                    // writes key and protocol together.
-                                                    if (hasStoredKey.fluxion) {
-                                                        void window.electronAPI.setFluxionConfig({ protocol: proto });
-                                                    }
-                                                }}
-                                                className="aip-btn shrink-0"
-                                                data-tone={fluxionProtocol === proto ? 'ok' : undefined}
-                                                title={proto === 'openai'
-                                                    ? t('OpenAI-compatible: /v1/chat/completions. Works for every group, including Claude.')
-                                                    : t('Anthropic-compatible: /v1/messages. Try this only if a Claude group rejects the default.')}
-                                            >
-                                                {proto === 'openai' ? t('OpenAI') : t('Anthropic')}
-                                            </button>
-                                        ))}
-                                        <span className="text-[11px] aip-muted min-w-0 truncate">
-                                            {fluxionProtocol === 'anthropic' ? t('Fallback for Claude groups') : t('Recommended')}
+                                        <span className="text-[11px] aip-muted">
+                                            {t('API format')}: {fluxionProtocol === 'anthropic' ? t('Anthropic') : t('OpenAI')}
+                                            {' · '}
+                                            {t('detected from your key')}
                                         </span>
                                     </div>
                                 )}

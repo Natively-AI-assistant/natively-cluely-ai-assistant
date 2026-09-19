@@ -450,6 +450,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Already stored fully prefixed (`openrouter/<vendor>/<model>`), which is
       // the form modelAvailable() classifies — do not re-prefix.
       const openrouterFallbackModel: string | null = cm.getPreferredModel?.('openrouter') || null;
+      // Same contract: stored fully prefixed (`fluxion/<model>`), the form
+      // modelAvailable() classifies. Do not re-prefix.
+      const fluxionFallbackModel: string | null = cm.getPreferredModel?.('fluxion') || null;
       if (has(cm.getLitellmBaseURL())) {
         try {
           const baseURL = (cm.getLitellmBaseURL() || 'http://localhost:4000/v1').replace(/\/+$/, '');
@@ -507,6 +510,12 @@ export function initializeIpcHandlers(appState: AppState): void {
         // Without this rung a user whose only working provider is OpenRouter is
         // left pinned to a dead default and told "No AI providers configured".
         : (openrouterFallbackModel && modelAvailable(openrouterFallbackModel)) ? openrouterFallbackModel
+        // Fluxion earns a rung for the same reason, and the symptom is identical:
+        // its preferred model was already being STORED and returned to the
+        // renderer, but never consulted here, so a Fluxion-only user whose
+        // default went stale fell through to `allProviders.find(...)` -> null and
+        // was told "No AI providers configured" while holding a working key.
+        : (fluxionFallbackModel && modelAvailable(fluxionFallbackModel)) ? fluxionFallbackModel
         : antigravityFallback ? antigravityFallback
         : allProviders.find((p: any) => modelAvailable(p?.id))?.id
           || null;
@@ -9650,8 +9659,40 @@ export function initializeIpcHandlers(appState: AppState): void {
       const storedKey = cm.getFluxionApiKey() || '';
       const keyOmitted = config?.apiKey === undefined;
       const normalizedKey = keyOmitted ? storedKey : (config?.apiKey || '').trim();
-      const protocol = config?.protocol === 'anthropic' ? 'anthropic' : 'openai';
       const keyChanged = storedKey !== normalizedKey;
+
+      // AUTO-DETECT unless the caller names a protocol explicitly. The group a
+      // key belongs to decides which endpoint it may use, and nothing in the key
+      // reveals it — so this used to be a manual toggle the user had to get
+      // right from information they did not have, and getting it wrong produced
+      // a 403 that reads like a dead key. One probe answers it; see
+      // detectFluxionProtocol for the measured rule and why it costs at most one
+      // 1-token completion. Skipped when the key is being CLEARED (nothing to
+      // probe) and when the caller passes a protocol (the escape hatch).
+      let protocol: 'openai' | 'anthropic';
+      let detecting = false;
+      if (config?.protocol === 'openai' || config?.protocol === 'anthropic') {
+        protocol = config.protocol;               // explicit escape hatch wins
+      } else if (!normalizedKey) {
+        protocol = 'openai';                      // clearing: nothing to probe
+      } else {
+        // Save NOW on the universal protocol, detect in the BACKGROUND.
+        //
+        // A probe costs a full TTFT and cannot be made cheaper: Fluxion withholds
+        // response headers until it has content (measured — hdr == firstToken on
+        // every run), so there is no early status to read. Awaiting it made
+        // saving a key take 4-21s depending on the group, to confirm a value
+        // that is already right almost every time: 'openai' is the only protocol
+        // observed to work on every group tested.
+        //
+        // So the save returns immediately and detection corrects the stored value
+        // only if it disagrees, broadcasting so the card re-reads. Worst case a
+        // user on an Anthropic-only group sends one request on the wrong protocol
+        // and gets the actionable 403 — a far better trade than making every save
+        // wait on a probe.
+        protocol = cm.getFluxionProtocol() || 'openai';
+        detecting = true;
+      }
       const protocolChanged = cm.getFluxionProtocol() !== protocol;
 
       // Same degraded-store rule as the OpenRouter handler: stop BEFORE the live
@@ -9665,7 +9706,16 @@ export function initializeIpcHandlers(appState: AppState): void {
           message: 'Could not save the key. Your credential store is unavailable this session.',
         };
       }
-      cm.setFluxionProtocol(protocol);
+      // Checked like the key write above: setFluxionProtocol carries the same
+      // refuseWhileDegraded guard, and dropping its refusal would leave the live
+      // client on the new protocol while disk kept the old one.
+      if (cm.setFluxionProtocol(protocol) === false) {
+        return {
+          success: false,
+          error: 'credential_store_degraded',
+          message: 'Could not save the API format. Your credential store is unavailable this session.',
+        };
+      }
       appState.processingHelper.getLLMHelper().setFluxionConfig(normalizedKey, protocol);
 
       appState.getIntelligenceManager().resetEngine();
@@ -9674,7 +9724,26 @@ export function initializeIpcHandlers(appState: AppState): void {
         await refreshRuntimeDefaultIfUnavailable();
         broadcastCredentialsChanged();
       }
-      return { success: true };
+      if (detecting) {
+        // Deliberately not awaited. Errors are swallowed: a failed probe leaves
+        // the stored value alone, which is the universal protocol.
+        void (async () => {
+          try {
+            const { detectFluxionProtocol } = require('./utils/modelFetcher');
+            const found = await detectFluxionProtocol(normalizedKey);
+            if (found && found !== cm.getFluxionProtocol()) {
+              cm.setFluxionProtocol(found);
+              appState.processingHelper.getLLMHelper().setFluxionConfig(normalizedKey, found);
+              broadcastCredentialsChanged();
+              console.log(`[IPC] Fluxion protocol detected as ${found} — corrected in the background`);
+            }
+          } catch { /* best-effort: the stored protocol stands */ }
+        })();
+      }
+
+      // Reported so the card can say which format is in use instead of showing
+      // a control the user has to reason about.
+      return { success: true, protocol, protocolDetected: detecting };
     } catch (error: any) { return { success: false, error: error.message }; }
   });
 
@@ -10929,7 +10998,21 @@ export function initializeIpcHandlers(appState: AppState): void {
         }
         return { success: true, models };
       } catch (error: any) {
-        console.error(`[IPC] Failed to fetch ${provider} models:`, error);
+        // CRITICAL: do NOT log the raw axios error — it embeds the request config,
+        // including `Authorization: Bearer <apiKey>`, and Node's util.inspect dumps
+        // it verbatim. The file-logger redacts, but console.error ALSO forwards to
+        // the real stdout/stderr, which is not redacted: a dev-mode terminal, a CI
+        // log, or any console-launched packaged build would print the key in full.
+        // Same rule, and the same safe shape, as the test-llm-connection catch below.
+        const safeInfo = {
+          provider,
+          status: error?.response?.status,
+          statusText: error?.response?.statusText,
+          code: error?.code,
+          message: error?.message,
+          responseError: error?.response?.data?.error?.message || error?.response?.data?.message,
+        };
+        console.error('[IPC] Failed to fetch provider models:', safeInfo);
         const msg =
           error?.response?.data?.error?.message || error.message || 'Failed to fetch models';
         return { success: false, error: msg };

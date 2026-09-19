@@ -114,8 +114,15 @@ describe('resolveVisionPolicy', () => {
   test('Codex CLI is NOT a local vision provider', () => {
     assert.equal(isLocalVisionProvider('ollama'), true);
     assert.equal(isLocalVisionProvider('codex'), false, 'Codex CLI routes to chatgpt.com — counting it as local would ship the screenshot');
-    for (const p of ['openai', 'gemini', 'claude', 'groq', 'natively', 'custom_provider']) {
-      assert.equal(isLocalVisionProvider(p), false);
+    // The four GATEWAYS are listed explicitly. isLocalVisionProvider answers
+    // false for anything it does not recognise, so a new remote provider is
+    // safe by default and silently uncovered — and a wrong answer here does not
+    // fail loudly, it ships the screenshot off-device under private_vision.
+    // fluxion is the sharpest case: it resells the real vendors, so a reader
+    // scanning for "is this remote?" sees only familiar model names.
+    for (const p of ['openai', 'gemini', 'claude', 'groq', 'natively', 'custom_provider',
+                     'litellm', 'nvidia_nim', 'openrouter', 'fluxion']) {
+      assert.equal(isLocalVisionProvider(p), false, `${p} routes off-device — counting it as local would ship the screenshot`);
     }
   });
 });

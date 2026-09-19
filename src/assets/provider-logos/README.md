@@ -47,24 +47,27 @@ speech-selector coverage test flagged as an unrecorded fallback.
 
 ### Fluxion AI
 
-The ONE mark here that is not from lobehub — Fluxion is a small aggregator
-gateway and has no entry in any icon set. `fluxion.svg` is derived from the
-glyph in the site's own `/logo.svg` (the two interlocking-S paths), reduced to
-the house shape: a 24x24 viewBox, `1em` sized, `stroke="currentColor"` so it
-adapts to both themes.
+The one mark here that is not from lobehub — Fluxion is a small aggregator
+gateway with no entry in any icon set. `fluxion.png` is the **F monogram** taken
+from their own wordmark logo (`https://fluxionai.world/logo.png`), cropped away
+from the "FluxionAPI" lettering with the white plate unpremultiplied to alpha.
 
-What was DROPPED from their file, and why: the rounded background plate and its
-three gradients. Every other mark here is a bare glyph that sits on the tile
-wash the card already draws, so a mark carrying its own #061127 navy plate would
-render as a dark square against that wash.
+**Why not their orbital-galaxy brand mark** (`docs.fluxionai.world/brand-logo-mark.png`),
+which is the image Fluxion themselves lead with: the tile renders a **16px**
+glyph, and the galaxy is an illustration, not an icon. Rendered at true size it
+is a faint smudge on the dark tile and an unrecognisable grey blob in the light
+one — measured, not assumed. Every other mark here is a simple glyph (a star, an
+asterisk, a monogram) for exactly this reason. The only published copy is also
+flattened onto white, and since the artwork's highlights are white, unflattening
+it to alpha cannot recover the glow that carries the design.
 
-Two things worth recording for whoever revisits this. Their `logo.svg` has no
-licence statement of any kind, so it is used purely nominatively, to identify
-the provider a card configures — the same basis stated at the top of this file,
-without the MIT grant the lobehub marks carry. And the file's own `<title>` is
-not "Fluxion" but **"Sub2API"**, described there as "subscription routing into
-APIs": the mark predates the Fluxion branding, so do not be surprised if the
-upstream artwork changes name again.
+**A third asset to avoid:** `https://fluxionai.world/logo.svg` is an
+interlocking-S glyph whose own `<title>` reads **"Sub2API"** — artwork predating
+the Fluxion branding. It shipped here briefly by mistake.
+
+If Fluxion ever publishes a simplified icon-sized mark, prefer it over the
+monogram. No licence statement accompanies any of these assets, so the mark is
+used purely nominatively, as stated at the top of this file.
 
 ### Jina
 

@@ -144,13 +144,14 @@ export interface StoredCredentials {
     /**
      * Which wire protocol to speak to Fluxion.
      *
-     * Absent → 'openai', which is verified safe for EVERY group: a Claude-group
-     * key was driven live on 2026-09-18 and accepted /v1/chat/completions as
-     * happily as /v1/messages (the gateway transcodes). Fluxion's docs claim the
-     * group binds the protocol; it does not, at least not in that direction.
+     * Absent → 'openai', which is the only protocol measured to work on EVERY
+     * group: a Claude-group key took /v1/chat/completions and /v1/messages
+     * equally (2026-09-18), while a GLM-group key took /v1/chat/completions but
+     * answered /v1/messages with a hard 403 "This group does not allow
+     * /v1/messages dispatch" (2026-09-19).
      *
-     * Kept as a stored setting because one key proves one group. If a group is
-     * ever found that refuses the transcode, this is the escape hatch.
+     * So the Anthropic endpoint is the RESTRICTED one and this setting is a
+     * narrow escape hatch — not, as the docs imply, a per-group requirement.
      */
     fluxionProtocol?: 'openai' | 'anthropic';
     jinaApiKey?: string;

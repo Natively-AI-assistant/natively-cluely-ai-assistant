@@ -231,7 +231,7 @@ export interface ElectronAPI {
   setNvidiaNimApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string; sttProviderCleared?: boolean }>
   /** `retrievalDeactivated` is true when CLEARING the key also switched an OpenRouter embedding/reranker off. */
   setOpenrouterApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string; retrievalDeactivated?: boolean }>
-  setFluxionConfig: (config: { apiKey?: string; protocol?: 'openai' | 'anthropic' }) => Promise<{ success: boolean; error?: string; message?: string }>
+  setFluxionConfig: (config: { apiKey?: string; protocol?: 'openai' | 'anthropic' }) => Promise<{ success: boolean; error?: string; message?: string; protocol?: 'openai' | 'anthropic'; protocolDetected?: boolean }>
   setLitellmConfig: (config: { apiKey: string; baseURL: string; maxTokens?: number }) => Promise<{ success: boolean; error?: string }>
   getAvailableLiteLLMModels: () => Promise<string[]>
   refreshLiteLLMModels: () => Promise<string[]>

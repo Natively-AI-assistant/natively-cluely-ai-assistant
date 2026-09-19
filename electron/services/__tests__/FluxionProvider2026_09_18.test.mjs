@@ -261,15 +261,13 @@ describe('two protocols, because the key does not reveal its group', () => {
       'boot must hydrate the protocol WITH the key, or an anthropic-group user rebuilds an openai client every launch');
   });
 
-  test('changing the protocol does not delete the stored key', () => {
-    // The trap this closes: the selector persists on click, and the handler
-    // writes whatever key it is handed. An omitted key must mean "keep", not "".
+  test('an omitted apiKey still means "keep the stored key"', () => {
+    // The manual toggle that used to call with `{protocol}` alone is gone, but
+    // the distinction is still load-bearing: `undefined` = keep, `''` = clear.
+    // Collapsing them would make any protocol-only write wipe the credential.
     const handler = ipc.slice(ipc.indexOf("safeHandle('set-fluxion-config'"), ipc.indexOf("safeHandle('set-litellm-config'"));
     assert.match(handler, /const keyOmitted = config\?\.apiKey === undefined/);
-    assert.match(handler, /keyOmitted \? storedKey :/,
-      'an omitted apiKey must preserve the stored key — otherwise the protocol toggle wipes it');
-    assert.match(settings, /setFluxionConfig\(\{ protocol: proto \}\)/,
-      'the selector must omit apiKey entirely, not send an empty string');
+    assert.match(handler, /keyOmitted \? storedKey :/);
   });
 
   test('a degraded credential store is reported, not silently half-applied', () => {
@@ -279,6 +277,133 @@ describe('two protocols, because the key does not reveal its group', () => {
     assert.ok(refusal >= 0 && liveClient > refusal,
       'the refusal must be checked BEFORE the live client is touched, or chat works this '
       + 'session against a key that is gone after restart');
+  });
+});
+
+describe('what real keys proved (live: Claude group 09-18, GLM group 09-19)', () => {
+  // These pin FINDINGS, not behaviour — they exist so the next person does not
+  // re-derive the docs' claim from the docs. Everything here was measured:
+  //   GET  /v1/models                      -> 200, exactly 11 claude-* ids
+  //   POST /v1/chat/completions (claude)   -> 200, streamed 19 chunks, [DONE]
+  //   POST /v1/messages         (claude)   -> 200
+  //   POST either, model=gpt-5.5           -> 404 model_not_found
+  test('the code records the ASYMMETRIC protocol rule, not a one-key guess', () => {
+    // Superseded 2026-09-19. The original version of this test asserted the
+    // group does NOT bind the protocol — true of the Claude key it was written
+    // from, false in general: a GLM-group key 403s on /v1/messages. The rule is
+    // asymmetric, so both files must record both observations rather than the
+    // tidier half.
+    for (const [label, src] of [['LLMHelper', llm], ['CredentialsManager', credentials]]) {
+      // `Claude group` and `Claude-group` both occur; match either.
+      assert.match(src, /Claude[- ]group/, `${label} should record the Claude-group observation`);
+      assert.match(src, /GLM[- ]group/, `${label} should record the GLM-group 403`);
+    }
+  });
+
+  test("'openai' is the default protocol, and that is the verified-safe one", () => {
+    assert.match(credentials, /fluxionProtocol === 'anthropic' \? 'anthropic' : 'openai'/,
+      "anything other than an explicit 'anthropic' must fall back to the format proven to work");
+  });
+
+  test('group scoping is what justifies NOT making fluxion opt-in', () => {
+    assert.match(fetcher, /Group scoping CONFIRMED on two keys/,
+      'the fetcher should record why a fetched catalogue has no unreachable rows');
+  });
+});
+
+describe('the protocol selector is load-bearing (measured on a 2nd group, 2026-09-19)', () => {
+  // The first key was a Claude group, which took BOTH protocols — from that one
+  // sample it looked like the selector was only an escape hatch. A GLM-group key
+  // then answered /v1/messages with a hard
+  //   403 {"message":"This group does not allow /v1/messages dispatch"}
+  // while /v1/chat/completions worked. So the ANTHROPIC endpoint is the
+  // restricted one and 'openai' is the only protocol seen to work everywhere.
+  test("'openai' is the default, because it is the universal one", () => {
+    assert.match(credentials, /fluxionProtocol === 'anthropic' \? 'anthropic' : 'openai'/);
+    assert.match(llm, /public setFluxionConfig\(apiKey: string, protocol: 'openai' \| 'anthropic' = 'openai'\)/,
+      "the default argument must be the protocol that works on every group");
+  });
+
+  test('a protocol/group mismatch is explained, not surfaced as a bare 403', () => {
+    // It is the one Fluxion failure a user can fix from Settings, so it must say
+    // which toggle to move. Verified live against the GLM-group key on both the
+    // blocking and streaming paths.
+    assert.match(llm, /does not allow \\\/v1\\\/messages dispatch/,
+      'the explainer must key off the measured 403 body');
+    assert.match(llm, /switch API format to OpenAI/,
+      'the message must name the fix, not just the failure');
+    const calls = [...llm.matchAll(/explainFluxionProtocolMismatch\(e\)/g)];
+    assert.ok(calls.length >= 2,
+      `both anthropic-path call sites must use it, found ${calls.length}`);
+  });
+
+  test('the code no longer claims the group does NOT bind the protocol', () => {
+    // An earlier revision said exactly that, generalising from one Claude key.
+    assert.doesNotMatch(llm, /it does not, at least not in that direction/);
+    assert.match(llm, /403/, 'the measured restriction should be recorded where the clients are built');
+  });
+});
+
+describe('protocol auto-detection', () => {
+  const fn = fetcher.slice(fetcher.indexOf('export async function detectFluxionProtocol'),
+                           fetcher.indexOf('async function fetchNvidiaNimModels'));
+
+  test('the OpenAI endpoint is probed FIRST, because it is the universal one', () => {
+    // Measured: /v1/chat/completions answered 200 on BOTH a Claude-group and a
+    // GLM-group key, while /v1/messages 403s on the latter. Probing the
+    // universal endpoint first makes the common case cost exactly one probe.
+    const chat = fn.indexOf('/v1/chat/completions');
+    const msgs = fn.indexOf('/v1/messages');
+    assert.ok(chat > 0 && msgs > 0, 'both endpoints must be probed');
+    assert.ok(chat < msgs, 'the OpenAI endpoint must be tried before the Anthropic one');
+  });
+
+  test('the probe is 1 token, so detection cannot be expensive', () => {
+    assert.match(fn, /max_tokens: 1/);
+  });
+
+  test('a failed probe falls back to the UNIVERSAL protocol, not the restricted one', () => {
+    // A network blip must not strand someone on /v1/messages, which is the
+    // endpoint that 403s for most groups.
+    const tail = fn.slice(fn.lastIndexOf('return'));
+    assert.match(tail, /return 'openai'/,
+      "the final fallback must be 'openai'");
+  });
+
+  test('detection runs in the BACKGROUND — the save never waits on a probe', () => {
+    // A probe costs a full TTFT and cannot be shortened: Fluxion withholds
+    // headers until it has content, so there is no early status to read.
+    // Awaiting it made a key save take 4-21s to confirm a value that is already
+    // right almost every time.
+    const handler = ipc.slice(ipc.indexOf("safeHandle('set-fluxion-config'"), ipc.indexOf("safeHandle('set-litellm-config'"));
+    assert.doesNotMatch(handler, /protocol = await detectFluxionProtocol/,
+      'detection must not be awaited on the save path');
+    assert.match(handler, /void \(async \(\) => \{/,
+      'it should be fired and forgotten');
+    assert.match(handler, /found !== cm\.getFluxionProtocol\(\)[\s\S]*?broadcastCredentialsChanged\(\)/,
+      'a correction must persist AND broadcast so the card re-reads');
+    assert.match(handler, /config\?\.protocol === 'openai' \|\| config\?\.protocol === 'anthropic'/,
+      'an explicitly passed protocol must still win — that is the escape hatch');
+    assert.match(handler, /else if \(!normalizedKey\)/,
+      'clearing the key must not trigger a probe');
+  });
+
+  test('the blocking adapter STREAMS — the non-streaming endpoint hangs', () => {
+    // Measured on the GLM group: non-streaming /v1/chat/completions completed
+    // 1 of 5 requests (the rest still open at 45s) while streaming answered 5/5
+    // in ~4s. generateWithFluxion feeds runVisionRequest and the non-streaming
+    // cascade, so this decides whether a screenshot works for those users.
+    const fn = llm.slice(llm.indexOf('private async generateWithFluxion'), llm.indexOf('private async * streamWithFluxion'));
+    assert.match(fn, /chat\.completions\.create\(\{ model, messages, stream: true \}/,
+      'the blocking path must stream and accumulate, like generateWithClaude does');
+    assert.doesNotMatch(fn, /chat\.completions\.create\(\{ model, messages \}\)/,
+      'the plain non-streaming call is the one that hangs');
+  });
+
+  test('the detection probe also avoids the hanging endpoint', () => {
+    const fn = fetcher.slice(fetcher.indexOf('export async function detectFluxionProtocol'),
+                             fetcher.indexOf('async function fetchNvidiaNimModels'));
+    assert.match(fn, /stream: true/, 'the probe must use the streaming endpoint');
   });
 });
 
@@ -318,6 +443,66 @@ describe('Test Connection and the catalogue cannot be broken by a model', () => 
   });
 });
 
+describe('review fixes 2026-09-18 — found by adversarial review, all CONFIRMED', () => {
+  test('the SELECTED Fluxion model leads its own screenshot turn', () => {
+    // The bug: the Fluxion rung was seated in `cloud` but never front-loaded,
+    // and orderVisionByHealth sorts unmeasured providers by ASCENDING priority —
+    // so a screenshot on a selected Fluxion model went to whichever other vendor
+    // key existed first. Wrong-vendor billing, inverted: the vendor the user did
+    // NOT choose silently wins the turn.
+    const block = llm.slice(llm.indexOf('const front: VisionStreamProvider[] = []'), llm.indexOf('const backLocal = local.filter'));
+    assert.match(block, /isFluxionModel\(this\.currentModelId\)/,
+      'a selected Fluxion model must be front-loaded like the other three gateways');
+    for (const sibling of ['isLiteLLMModel', 'isNvidiaNimModel', 'isOpenRouterModel']) {
+      assert.match(block, new RegExp(sibling), `${sibling} front-load line went missing`);
+    }
+  });
+
+  test('a Fluxion-only user is told which gateway failed', () => {
+    // Without this they got the flat "add an OpenAI, Claude, Gemini, or Groq key"
+    // — four providers they deliberately did not set up. Same defect the LiteLLM
+    // comment directly above it records having already fixed once.
+    const msg = llm.slice(llm.indexOf("const gateway = this.isLiteLLMModel"), llm.indexOf('No vision-capable provider configured. Add an API key'));
+    assert.match(msg, /isFluxionModel\(this\.currentModelId\) \? 'Fluxion AI gateway'/);
+  });
+
+  test('Fluxion gets the user-endpoint deadline, not a first-party budget', () => {
+    // It queues behind the upstream it fronts, exactly like the other gateways.
+    const fn = llm.slice(llm.indexOf('public isUsingUserEndpoint()'), llm.indexOf('public isUsingUserEndpoint()') + 900);
+    assert.match(fn, /isFluxionModel\(this\.currentModelId\)/);
+  });
+
+  test('the model-catalogue catch never logs the raw axios error', () => {
+    // The raw AxiosError embeds the request config, Authorization header and all.
+    // The file logger redacts; the forwarded stdout/stderr does NOT.
+    const handler = ipc.slice(ipc.indexOf("'fetch-provider-models'"), ipc.indexOf("'set-provider-preferred-model'"));
+    assert.doesNotMatch(handler, /console\.error\([^)]*models:`?,\s*error\)/,
+      'the raw error object must never be handed to console.error — strip to a safe shape first');
+    assert.match(handler, /const safeInfo = \{/, 'it should log the same safe shape the connection test uses');
+  });
+
+  test('the protocol is DETECTED, not asked — the card sends no protocol', () => {
+    // It was a label + two buttons + a hint asking the user to choose between
+    // wire formats, from a group id the key never exposes. Now the main process
+    // probes and the card reports. Pinned because re-adding a manual control
+    // would quietly reintroduce the guess.
+    assert.match(settings, /setFluxionConfig\(\{ apiKey: key \}\)/,
+      'save must not pass a protocol — that is what triggers detection');
+    assert.doesNotMatch(settings, /setFluxionConfig\(\{ protocol: proto \}\)/,
+      'the manual toggle must stay gone');
+    assert.match(settings, /if \(detected\) setFluxionProtocol\(detected\)/,
+      'the card must adopt whatever the probe found');
+  });
+
+  test('an unsaved protocol choice survives an unrelated credentials broadcast', () => {
+    // loadCredentials re-runs on EVERY credentials-changed broadcast (saving any
+    // other provider's key fires one). Unconditional, it reverted a protocol the
+    // user had picked but not yet saved.
+    assert.match(settings, /if \(\(creds as any\)\.hasFluxionKey\) \{\s*\n\s*setFluxionProtocol\(/,
+      'the stored protocol should only be adopted when a key actually exists');
+  });
+});
+
 describe('the provider is reachable from the UI', () => {
   test('fluxion is a cloud provider card', () => {
     assert.match(settings, /id: 'fluxion' as const/);
@@ -337,13 +522,18 @@ describe('the provider is reachable from the UI', () => {
     }
   });
 
-  test('the OpenAI-protocol preset leads, because that is the default protocol', () => {
+  test('the Claude preset leads — Claude is 5 of Fluxion\'s 11 groups', () => {
+    // The original version of this test asserted the GPT preset must lead,
+    // on the theory that a Claude preset was unreachable on the default
+    // protocol. Driving a real Claude-group key on 2026-09-18 DISPROVED that,
+    // so the assertion inverted with the reason. Recorded rather than quietly
+    // swapped: a test that changes direction is worth explaining.
     const entry = modelUtils.slice(modelUtils.indexOf('fluxion: {'), modelUtils.indexOf("pmKey: 'fluxionPreferredModel'"));
     const ids = [...entry.matchAll(/'(fluxion\/[^']+)'/g)].map(m => m[1]);
     assert.equal(
-      ids[0], 'fluxion/gpt-5.6-terra',
-      'the first preset is what "Set default" tends to land on, and a Claude preset '
-      + "is unreachable until the user flips the protocol selector",
+      ids[0], 'fluxion/claude-sonnet-5',
+      'the first preset is what "Set default" tends to land on, and Claude groups '
+      + 'are the largest share of Fluxion\'s catalogue',
     );
   });
 
@@ -361,16 +551,58 @@ describe('the provider is reachable from the UI', () => {
   });
 
   test('the card resolves a real brand mark, not the generic fallback', () => {
-    assert.match(marks, /fluxion: fluxionMark/, 'fluxion must be in AI_PROVIDER_MARKS');
+    // Raster, so it lives in AI_PROVIDER_MARK_IMAGES rather than the inlined-SVG
+    // map — the same treatment litellm gets, for the same reason.
+    assert.match(marks, /fluxion: fluxionMark/, 'fluxion must resolve to a mark');
+    assert.match(marks, /AI_PROVIDER_MARK_IMAGES[\s\S]*?fluxion: fluxionMark/,
+      'a full-colour raster belongs in the <img> registry, not the currentColor one');
     assert.ok(
-      fs.existsSync(path.join(root, 'src/assets/provider-logos/fluxion.svg')),
+      fs.existsSync(path.join(root, 'src/assets/provider-logos/fluxion.png')),
       'the imported mark must exist on disk',
     );
   });
 
-  test('the protocol selector is rendered through the extras slot', () => {
+  test('the mark is the BRAND MARK, not one of the two look-alike assets', () => {
+    // Fluxion serves three different images and two of them are wrong: a stale
+    // interlocking-S glyph self-titled "Sub2API", and the wordmark logo (an F
+    // monogram + the words "FluxionAPI"). Both were shipped here by mistake
+    // before the real mark was identified, so the provenance is pinned.
+    const readme = read('src/assets/provider-logos/README.md');
+    assert.match(readme, /Sub2API/, 'the README must warn about the stale look-alike');
+    assert.match(readme, /16px/, 'the README must record why the galaxy mark was rejected');
+    assert.ok(
+      !fs.existsSync(path.join(root, 'src/assets/provider-logos/fluxion.svg')),
+      'the old derived SVG was the WRONG artwork and must not linger',
+    );
+  });
+
+  test('a full-colour mark is NOT flattened to black in the light theme', () => {
+    // `.brand-mark-raster` applies `filter: brightness(0)`, which exists for
+    // white-on-transparent art (Natively's icon). It was applied to EVERY raster
+    // mark, so it repainted Fluxion's blue monogram solid black on a light tile —
+    // and was quietly doing the same to LiteLLM's. Opt-in, not opt-out.
+    assert.match(marks, /WHITE_ON_TRANSPARENT_MARKS = new Set\(\['natively'\]\)/,
+      'only genuinely white artwork may take the light-theme flatten');
+    for (const f of ['src/components/settings/AIProvidersSettings.tsx', 'src/components/ui/BrandMark.tsx']) {
+      assert.match(read(f), /WHITE_ON_TRANSPARENT_MARKS\.has\(key\)/,
+        `${f} must gate brand-mark-raster on the opt-in set`);
+      assert.doesNotMatch(read(f), /className="object-contain brand-mark-raster"/,
+        `${f} must not apply the flatten unconditionally`);
+    }
+  });
+
+  test('Fluxion renders directly below Gemini', () => {
+    const table = settings.slice(settings.indexOf('export const CLOUD_PROVIDERS = ['));
+    const ids = [...table.slice(0, table.indexOf('];')).matchAll(/id: '([a-z_]+)'/g)].map(m => m[1]);
+    assert.deepEqual(ids.slice(0, 2), ['gemini', 'fluxion'],
+      `CLOUD_PROVIDERS renders in array order; got ${ids.join(', ')}`);
+  });
+
+  test('the extras slot reports the detected format, and only once a key exists', () => {
     assert.match(providerCard, /extraControls\?: React\.ReactNode/);
-    assert.match(settings, /extraControls=\{id !== 'fluxion' \? undefined :/,
-      'only Fluxion should get the selector — the table drives all eight cards');
+    assert.match(settings, /extraControls=\{id !== 'fluxion' \|\| !hasStoredKey\.fluxion \? undefined :/,
+      'only Fluxion gets extras, and there is nothing to report before a key is saved');
+    assert.match(settings, /detected from your key/,
+      'the line must read as a resolved value, not a control');
   });
 });

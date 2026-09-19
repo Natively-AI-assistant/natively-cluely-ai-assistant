@@ -167,6 +167,21 @@ const OPENROUTER_ATTRIBUTION_HEADERS = {
 //   anthropic → POST {base}/v1/messages        (x-api-key, set by the SDK)
 // The Anthropic base URL deliberately has NO /v1: the Anthropic SDK appends
 // `/v1/messages` itself, exactly as Fluxion's own Claude Code instructions say.
+//
+// CONFORMANCE CHECKED against the published docs 2026-09-19, by capturing what
+// both SDKs actually put on the wire: OpenAI -> POST /v1/chat/completions with
+// `Authorization: Bearer`; Anthropic -> POST /v1/messages with `x-api-key` and
+// `anthropic-version: 2023-06-01` (the exact value the docs' curl example
+// shows). No `/v1/v1` duplication — the mistake the Help Center warns about
+// twice — and neither client sends the other's auth header.
+//
+// The docs ALSO describe a `https://fluxionai.world/vip/v1` base for "all-model"
+// group keys. We deliberately do not implement it: probed 2026-09-19,
+// /vip/v1/responses (the only /vip path the docs actually cite) and
+// /vip/v1/{chat/completions,messages,models} ALL return the site's SPA HTML
+// shell with `text/html`, i.e. they are not API routes at all, while the plain
+// /v1 equivalents return real JSON. Supporting /vip/v1 would have meant
+// implementing a dead route.
 const FLUXION_OPENAI_BASE_URL = "https://fluxionai.world/v1"
 const FLUXION_ANTHROPIC_BASE_URL = "https://fluxionai.world"
 const NVIDIA_NIM_BASE_URL = "https://integrate.api.nvidia.com/v1"
@@ -1399,18 +1414,24 @@ export class LLMHelper {
   /**
    * Configure Fluxion AI.
    *
-   * VERIFIED LIVE 2026-09-18 with a Claude-group key, and the result CONTRADICTS
-   * Fluxion's own documentation. The docs say the group fixes the protocol
-   * (Yellow=Anthropic, Green=OpenAI) and that a Claude group answers on
-   * /v1/messages. In fact that key returned 200 on BOTH /v1/chat/completions and
-   * /v1/messages for the same model — the gateway transcodes, and the OpenAI
-   * chunks it streams back still carry Anthropic `msg_…` ids.
+   * MEASURED on two real keys, and the truth is asymmetric — neither the docs'
+   * version nor the simpler story an earlier revision of this comment told:
    *
-   * So 'openai' is a safe default for every group, and this setting is an ESCAPE
-   * HATCH rather than a required match. It is kept because only ONE group type
-   * was provable with one key: if some other group rejects the transcode, the
-   * user can switch instead of being stuck. Exactly one client is built, so a
-   * request can never go out on the protocol the user did not choose.
+   *   Claude group (2026-09-18): 200 on BOTH /v1/chat/completions AND
+   *     /v1/messages for the same model. The gateway transcodes; the OpenAI
+   *     chunks it streams back still carry Anthropic `msg_…` ids. The docs claim
+   *     Claude groups answer on /v1/messages only — that is wrong.
+   *   GLM group (2026-09-19): /v1/chat/completions 200, but /v1/messages is a
+   *     hard **403 `{"message":"This group does not allow /v1/messages
+   *     dispatch","type":"permission_error"}`**.
+   *
+   * So the group DOES gate the protocol, just not the way the docs describe:
+   * the Anthropic endpoint is the RESTRICTED one, and /v1/chat/completions is
+   * the universal one. That makes 'openai' the correct default for every group
+   * — it is the only protocol observed to work on all of them — and makes the
+   * 'anthropic' option a narrow escape hatch, not a per-group requirement.
+   * Exactly one client is built, so a request can never go out on the protocol
+   * the user did not choose.
    *
    * Test Connection and the catalogue fetch do NOT use either client — they are
    * raw axios calls against GET /v1/models with a Bearer header, which the
@@ -5101,6 +5122,23 @@ let isMultimodal = !!(imagePaths?.length);
    * the user as "ask that once more" while the fallback chain never engages,
    * because nothing threw.
    */
+  /**
+   * A protocol/group mismatch is the one Fluxion failure a user can actually fix
+   * from Settings, so it gets named. Measured shape (GLM-group key on
+   * /v1/messages): HTTP 403 `{"message":"This group does not allow /v1/messages
+   * dispatch","type":"permission_error"}`. Without this it surfaces as a bare
+   * 403, which reads like a dead key rather than one wrong toggle.
+   */
+  private explainFluxionProtocolMismatch(err: any): string | null {
+    const status = err?.status ?? err?.response?.status;
+    const body = err?.error?.message ?? err?.response?.data?.message ?? err?.message ?? '';
+    if (status === 403 && /does not allow \/v1\/messages dispatch/i.test(String(body))) {
+      return 'Fluxion rejected the Anthropic API format for this key\'s group. '
+        + 'Open Settings > AI Providers > Fluxion AI and switch API format to OpenAI.';
+    }
+    return null;
+  }
+
   private assertNoFluxionStreamError(chunk: any, model: string): void {
     const err = chunk?.error;
     if (err) {
@@ -5122,6 +5160,17 @@ let isMultimodal = !!(imagePaths?.length);
    * rejected by a strict gateway. getClaudeMaxOutput IS reused — it is keyed on
    * the bare model name, which is exactly what a Fluxion wire id is, and it
    * falls back to 8192 for the non-Claude models an all-model group may serve.
+   *
+   * NO THINKING / EFFORT PARAMETERS, and that is not an omission. Measured
+   * 2026-09-19 against the live gateway on claude-sonnet-5: `thinking:{type:
+   * "adaptive"}`, `thinking:{type:"enabled",budget_tokens:N}`,
+   * `output_config:{effort:"high"}` and `reasoning_effort` on the OpenAI path
+   * ALL returned HTTP 200 with zero thinking blocks and unchanged output. The
+   * giveaway is that `budget_tokens` is a hard 400 on Sonnet 5 at the real
+   * Anthropic API, and so is `thinking:{type:"totally-invalid"}` — both came
+   * back 200 here, as did an invented top-level field. The gateway strips what
+   * it does not recognise, so sending these would cost bytes and buy nothing,
+   * and exposing a thinking control in the UI would be a dead switch.
    */
   private buildFluxionAnthropicRequest(model: string, userMessage: string, systemPrompt?: string, content?: any[]): any {
     return {
@@ -5161,11 +5210,17 @@ let isMultimodal = !!(imagePaths?.length);
       if (!client) throw new Error('Fluxion client not initialized');
       const content = await this.buildFluxionAnthropicContent(userMessage, imagePaths);
       const request = this.buildFluxionAnthropicRequest(model, userMessage, systemPrompt, content);
-      const response = await this.withTimeout(
-        this.withRetry(async () => await client.messages.stream(request).finalMessage()),
-        120000,
-        `Fluxion (${model})`
-      );
+      let response;
+      try {
+        response = await this.withTimeout(
+          this.withRetry(async () => await client.messages.stream(request).finalMessage()),
+          120000,
+          `Fluxion (${model})`
+        );
+      } catch (e: any) {
+        const hint = this.explainFluxionProtocolMismatch(e);
+        throw hint ? new Error(hint) : e;
+      }
       const textBlock = (response as any).content?.find((b: any) => b.type === 'text');
       return textBlock?.text || '';
     }
@@ -5173,15 +5228,34 @@ let isMultimodal = !!(imagePaths?.length);
     const client = this.fluxionOpenAIClient;
     if (!client) throw new Error('Fluxion client not initialized');
     const messages = await this.buildOpenRouterMessages(userMessage, systemPrompt, imagePaths);
-    const response = await this.withTimeout(
-      this.withRetry(() => client.chat.completions.create({ model, messages })),
+    // STREAMS AND ACCUMULATES rather than calling the non-streaming endpoint —
+    // the same trick generateWithClaude uses, for a different reason. Measured
+    // 2026-09-19: Fluxion's NON-streaming /v1/chat/completions hangs on the GLM
+    // group, 1/5 requests completing and the other four still open at 45s, while
+    // the streaming endpoint answered 5/5 in ~4s on the identical key and model.
+    // The Claude group was 5/5 on both. So this path is the one that decides
+    // whether a screenshot turn works at all for a GLM-group user:
+    // runVisionRequest('fluxion') and the non-streaming cloud cascade both land
+    // here, and a hang there is a 60s stall followed by a failure.
+    //
+    // Callers see no difference — the accumulated string is what they already
+    // expected — and the per-chunk error check is strictly better than the
+    // single-response one it replaces.
+    const text = await this.withTimeout(
+      this.withRetry(async () => {
+        const stream = await client.chat.completions.create({ model, messages, stream: true }) as any;
+        let acc = '';
+        for await (const chunk of stream) {
+          this.assertNoFluxionStreamError(chunk, model);
+          const piece = chunk.choices?.[0]?.delta?.content;
+          if (piece) acc += piece;
+        }
+        return acc;
+      }),
       60000,
       `Fluxion (${model})`
     );
-    // Load-bearing on the BLOCKING path: the OpenAI SDK decoder throws on HTTP
-    // status only, so a 200 carrying an error body would return "" as an answer.
-    this.assertNoFluxionStreamError(response, model);
-    return stripLeadingReasoningBlock((response as any).choices?.[0]?.message?.content || '');
+    return stripLeadingReasoningBlock(text || '');
   }
 
   private async * streamWithFluxion(userMessage: string, systemPrompt?: string, imagePaths?: string[], abortSignal?: AbortSignal, modelId?: string): AsyncGenerator<string, void, unknown> {
@@ -5206,6 +5280,9 @@ let isMultimodal = !!(imagePaths?.length);
             yield (event as any).delta.text;
           }
         }
+      } catch (e: any) {
+        const hint = this.explainFluxionProtocolMismatch(e);
+        throw hint ? new Error(hint) : e;
       } finally {
         abortSignal?.removeEventListener('abort', onAbort);
       }
@@ -6726,6 +6803,15 @@ let isMultimodal = !!(imagePaths?.length);
       if (this.isLiteLLMModel(this.currentModelId)) { const l = cloud.find(p => p.id === 'litellm'); if (l) front.push(l); }
       if (this.isNvidiaNimModel(this.currentModelId)) { const n = cloud.find(p => p.id === 'nvidia_nim'); if (n) front.push(n); }
       if (this.isOpenRouterModel(this.currentModelId)) { const o = cloud.find(p => p.id === 'openrouter'); if (o) front.push(o); }
+      // Fluxion belongs here for a sharper version of the same reason. Its rung
+      // IS seated in `cloud`, but at the end of the priority order, and
+      // orderVisionByHealth sorts unmeasured providers by ascending priority —
+      // so without this line a screenshot turn on a SELECTED Fluxion model was
+      // sent to the user's OpenAI/Claude/Gemini/Groq key first. That is the
+      // wrong-vendor billing this whole integration is built to prevent, just
+      // inverted: the other vendor silently wins the turn the user assigned to
+      // the gateway.
+      if (this.isFluxionModel(this.currentModelId)) { const f = cloud.find(p => p.id === 'fluxion'); if (f) front.push(f); }
       const backLocal = local.filter(p => !front.includes(p));
       const backCloud = cloud.filter(p => !front.includes(p));
       ordered = [...front, ...orderVisionByHealth(backCloud, this.visionHealth, nowMs), ...backLocal];
@@ -6739,6 +6825,7 @@ let isMultimodal = !!(imagePaths?.length);
       const gateway = this.isLiteLLMModel(this.currentModelId) ? 'LiteLLM proxy'
         : this.isNvidiaNimModel(this.currentModelId) ? 'NVIDIA NIM endpoint'
         : this.isOpenRouterModel(this.currentModelId) ? 'OpenRouter gateway'
+        : this.isFluxionModel(this.currentModelId) ? 'Fluxion AI gateway'
         : null;
       throw new Error(gateway
         ? `No vision-capable provider configured. The selected ${gateway} model is not available for images — check the proxy is reachable and the model is still configured, or add another vision provider in Settings.`
@@ -8581,6 +8668,33 @@ let isMultimodal = !!(imagePaths?.length);
         name: `OpenRouter (${this.openrouterWireModel(this.currentModelId)})`,
         open: (sig) => this.streamWithOpenRouter(userContent, orSystem, (isMultimodal && imagePaths) ? imagePaths : undefined, sig),
         userContent, finalSystemPrompt: orSystem, thinkingBudget, abortSignal,
+        hasImages: Boolean(isMultimodal && imagePaths?.length),
+      });
+      return;
+    }
+
+    // THE PRIMARY ANSWER PATH. Its absence here was the worst defect in the
+    // whole Fluxion integration and the hardest to see: every vendor predicate
+    // correctly returns false for a `fluxion/` id, so the turn fell all the way
+    // through to step 4's Gemini cascade and was answered by Gemini Flash-Lite
+    // on the USER'S OWN GEMINI KEY — the exact silent wrong-vendor billing the
+    // prefix exists to prevent, with a log line naming Gemini and nothing
+    // anywhere saying Fluxion. On a Fluxion-only profile it instead threw
+    // "No AI provider configured" on every typed question.
+    //
+    // Excluding a family from the predicates fixes MISROUTING to a wrong client;
+    // it does nothing about a dispatch branch that was never written. Those are
+    // two different bugs and only one of them is ordering.
+    if (this.isFluxionModel(this.currentModelId) && this.hasFluxionCredential()) {
+      const fxSystem = this.injectLanguageInstruction(systemPromptOverride || OPENAI_SYSTEM_PROMPT);
+      // Failover for the same reason as the gateways above, and a stronger one:
+      // Fluxion picks its upstream AFTER accepting the request, so a cold or
+      // exhausted channel is a normal outcome rather than an exceptional one.
+      yield* this.streamSelectedProviderWithFailover({
+        id: 'fluxion',
+        name: `Fluxion (${this.fluxionWireModel(this.currentModelId)})`,
+        open: (sig) => this.streamWithFluxion(userContent, fxSystem, (isMultimodal && imagePaths) ? imagePaths : undefined, sig),
+        userContent, finalSystemPrompt: fxSystem, thinkingBudget, abortSignal,
         hasImages: Boolean(isMultimodal && imagePaths?.length),
       });
       return;
@@ -10809,7 +10923,7 @@ let isMultimodal = !!(imagePaths?.length);
     // at its budget comment: an OpenRouter model can be QUEUEING behind the
     // upstream it fronts, so it gets the user-supplied-endpoint budget rather
     // than a first-party provider's tighter one.
-    return this.isLiteLLMModel(this.currentModelId) || this.isNvidiaNimModel(this.currentModelId) || this.isOpenRouterModel(this.currentModelId);
+    return this.isLiteLLMModel(this.currentModelId) || this.isNvidiaNimModel(this.currentModelId) || this.isOpenRouterModel(this.currentModelId) || this.isFluxionModel(this.currentModelId);
   }
 
   /**
