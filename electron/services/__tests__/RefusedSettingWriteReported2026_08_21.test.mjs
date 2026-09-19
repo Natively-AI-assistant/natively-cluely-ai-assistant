@@ -43,7 +43,11 @@ test('no settings IPC handler reports success on a refused write', () => {
   while ((m = re.exec(ipc)) !== null) {
     const next = ipc.indexOf("safeHandle('", m.index + 12);
     const body = ipc.slice(m.index, next === -1 ? ipc.length : next);
-    if (!/\.set\('/.test(body) || !body.includes('success: true')) continue;
+    // Include variable-key writes such as onboarding:set-flag's set(key, value),
+    // not only literal-key set('name', value) calls. The older matcher missed
+    // exactly that production false-success path.
+    if (!/(?:SettingsManager\.getInstance\(\)|\bsm|\bsettings)\.set\s*\(/.test(body)
+      || !body.includes('success: true')) continue;
     if (!body.includes('settings_store_degraded')) offenders.push(m[1]);
   }
   assert.deepEqual(offenders, [],

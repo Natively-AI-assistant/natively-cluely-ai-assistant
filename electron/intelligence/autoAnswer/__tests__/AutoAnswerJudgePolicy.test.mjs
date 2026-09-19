@@ -26,7 +26,7 @@ function policyHelper(overrides = {}) {
   return helper;
 }
 
-test('LLMHelper sizes the judge total for the first viable non-Gemini fallback', () => {
+test('LLMHelper sizes the judge total for the slowest reachable non-Gemini fallback', () => {
   assert.deepEqual(policyHelper({ _client: {} }).getAutoAnswerJudgePolicy(),
     { route: 'gemini_fast', deadlineMs: 2500 });
   assert.deepEqual(policyHelper({ _client: {}, _openaiClient: {} }).getAutoAnswerJudgePolicy(),
@@ -38,6 +38,28 @@ test('LLMHelper sizes the judge total for the first viable non-Gemini fallback',
     { route: 'server_cascade', deadlineMs: 13000 });
   assert.deepEqual(policyHelper({ useOllama: true }).getAutoAnswerJudgePolicy(),
     { route: 'local', deadlineMs: 30000 });
+
+  assert.deepEqual(policyHelper({
+    _openaiClient: {},
+    customProvider: { id: 'custom' },
+  }).getAutoAnswerJudgePolicy(),
+    { route: 'user_endpoint', deadlineMs: 15000 },
+    'a failing 8s OpenAI rung must not abort a healthy custom fallback before its 15s budget');
+
+  assert.deepEqual(policyHelper({
+    _claudeClient: {},
+    nativelyKey: 'test-key',
+  }).getAutoAnswerJudgePolicy(),
+    { route: 'server_cascade', deadlineMs: 13000 },
+    'a direct provider must leave enough time for the later server cascade');
+
+  assert.deepEqual(policyHelper({
+    _openaiClient: {},
+    customProvider: { id: 'custom' },
+    useOllama: true,
+  }).getAutoAnswerJudgePolicy(),
+    { route: 'local', deadlineMs: 30000 },
+    'the shared controller must cover the longest reachable local fallback');
 });
 
 test('a stalled fast Gemini judge yields to the non-Gemini ladder without retrying Gemini there', async () => {

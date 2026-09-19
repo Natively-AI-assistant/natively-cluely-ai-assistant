@@ -4358,29 +4358,42 @@ let isMultimodal = !!(imagePaths?.length);
    * controller supplies the route-aware total deadline and AbortSignal.
    */
   /**
-   * Resolve the hard deadline from the route this judge call will actually use.
-   * The structured fallback ladder has a different order from the selected
-   * answer model, so derive this from its first available provider instead of
-   * guessing from currentModelId.
+   * Resolve the hard deadline from every route this judge call can reach.
+   *
+   * The controller owns one AbortSignal for the whole structured fallback
+   * ladder. Sizing it from only the first configured provider is unsafe: a dead
+   * OpenAI key can fail into a healthy custom endpoint whose valid response
+   * arrives after OpenAI's shorter budget. Use the largest reachable route
+   * budget so a later fallback is not guillotined by an earlier route's policy.
    */
   public getAutoAnswerJudgePolicy(): import('./intelligence/autoAnswer/AutoAnswerJudge').JudgeExecutionPolicy {
     const { judgeExecutionPolicyForRoute } = require('./intelligence/autoAnswer/AutoAnswerJudge') as typeof import('./intelligence/autoAnswer/AutoAnswerJudge');
-    // Gemini is a fast first stage, but its failure must leave enough TOTAL
-    // time for the first non-Gemini fallback below. generateJudgeVerdict gives
-    // Gemini its own 2.5 s sub-budget and then skips it in the fallback ladder.
-    if (this.openaiClient || this.claudeClient) return judgeExecutionPolicyForRoute('default_provider');
-    if (this.isCodexAvailable() || this.useOllama) return judgeExecutionPolicyForRoute('local');
+    const reachable: import('./intelligence/autoAnswer/AutoAnswerJudge').JudgeExecutionPolicy[] = [];
+
+    // Gemini is a fast first stage. generateJudgeVerdict gives it its own 2.5s
+    // sub-budget and skips it in the later ladder, so it governs the total only
+    // when no non-Gemini fallback is available.
+    if (this.openaiClient || this.claudeClient) {
+      reachable.push(judgeExecutionPolicyForRoute('default_provider'));
+    }
+    if (this.isCodexAvailable() || this.useOllama) {
+      reachable.push(judgeExecutionPolicyForRoute('local'));
+    }
     const customProvidersOff = this.isProviderDisabled('custom');
     if (!customProvidersOff && (this.customProvider || this.activeCurlProvider)) {
-      return judgeExecutionPolicyForRoute('user_endpoint', this.observedAnswerLatency());
+      reachable.push(judgeExecutionPolicyForRoute('user_endpoint', this.observedAnswerLatency()));
     }
     const hasNativelyKey = this.nativelyKey || (() => {
       try { return require('./services/CredentialsManager').CredentialsManager.getInstance().getNativelyApiKey() || null; }
       catch { return null; }
     })();
-    if (hasNativelyKey) return judgeExecutionPolicyForRoute('server_cascade');
-    if (this.client) return judgeExecutionPolicyForRoute('gemini_fast');
-    return judgeExecutionPolicyForRoute('gemini_fast');
+    if (hasNativelyKey) {
+      reachable.push(judgeExecutionPolicyForRoute('server_cascade'));
+    }
+
+    if (reachable.length === 0) return judgeExecutionPolicyForRoute('gemini_fast');
+    return reachable.reduce((largest, candidate) =>
+      candidate.deadlineMs > largest.deadlineMs ? candidate : largest);
   }
 
   public async generateJudgeVerdict(
