@@ -116,6 +116,32 @@ test('a finished prefetch does not stamp the trigger cooldown — the dispatch t
     engine.reset();
 });
 
+test('engine-started interim speculation is unkeyed and cannot inherit the previous candidate id', async () => {
+    let release;
+    const gate = new Promise((r) => { release = r; });
+    const { engine } = await makeEngine({ chunks: [ANSWER], gate });
+    // Simulate the stale value that used to survive from the preceding
+    // stoppage. The fixed engine no longer reads this state at all.
+    engine.currentAutoCandidateId = 'q-previous';
+    engine.SPECULATIVE_DEBOUNCE_MS = 0;
+
+    engine.maybeSpeculate({
+        speaker: 'interviewer', text: QUESTION, confidence: 0.95,
+        final: false, timestamp: Date.now(), origin: 'stt',
+    });
+    await new Promise((r) => setTimeout(r, 10));
+    await flush();
+
+    const snapshot = engine.getSpeculativeSnapshot();
+    assert.equal(snapshot.questionId, null,
+        'an interim has no controller candidate id yet, so it must use similarity-only adoption');
+    assert.equal(snapshot.text, QUESTION);
+
+    release();
+    await untilIdle(engine);
+    engine.reset();
+});
+
 test('13-q6: the engine accepts a dispatch while its OWN prefetch is streaming, and reveals it when the stream ends', async () => {
     let release;
     const gate = new Promise((r) => { release = r; });

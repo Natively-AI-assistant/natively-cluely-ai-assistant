@@ -17,15 +17,45 @@
  */
 
 import type { TranscriptTurn } from '../../llm/transcriptCleaner';
+import { totalHardTimeoutMs, type ObservedLatency } from '../../llm/liveDeadlines';
 import type { AutoAnswerDialogueAct } from './AutoAnswerTypes';
 import { tokenContainment } from './AutoAnswerText';
 
 /**
  * Judge must answer inside this or the heuristic verdict stands. Live-probed
  * 2026-08-24: flash-lite answered the 12-case set in 750-1200 ms with one
- * 1.9 s outlier — 2500 leaves headroom for provider rotation. Unfitted placeholder.
+ * 1.9 s outlier — 2500 leaves headroom inside the fast Gemini stage. Slower
+ * fallback transports use judgeExecutionPolicyForRoute below.
  */
 export const JUDGE_DEADLINE_MS = 2500;
+
+/**
+ * The judge does not always use the same transport. Keep its timeout on the
+ * same route table as the answer pipeline so a healthy hosted/custom/local
+ * provider is not declared dead by the flash-lite-specific 2.5 s budget.
+ */
+export type JudgeProviderRoute = 'gemini_fast' | 'default_provider' | 'server_cascade' | 'user_endpoint' | 'local';
+
+export interface JudgeExecutionPolicy {
+    route: JudgeProviderRoute;
+    deadlineMs: number;
+}
+
+export function judgeExecutionPolicyForRoute(
+    route: JudgeProviderRoute,
+    observedUserEndpointLatency?: ObservedLatency | null,
+): JudgeExecutionPolicy {
+    if (route === 'gemini_fast') return { route, deadlineMs: JUDGE_DEADLINE_MS };
+    if (route === 'local') return { route, deadlineMs: totalHardTimeoutMs({ isLocal: true }) };
+    if (route === 'server_cascade') return { route, deadlineMs: totalHardTimeoutMs({ viaServerCascade: true }) };
+    if (route === 'user_endpoint') {
+        return {
+            route,
+            deadlineMs: totalHardTimeoutMs({ isUserEndpoint: true, observedUserEndpointLatency }),
+        };
+    }
+    return { route, deadlineMs: totalHardTimeoutMs({}) };
+}
 /** Prefilter: below this many words (and no '?') a candidate never costs a call. */
 export const JUDGE_MIN_WORDS = 4;
 /** questionText from the judge must be grounded in the candidate at least this much. */

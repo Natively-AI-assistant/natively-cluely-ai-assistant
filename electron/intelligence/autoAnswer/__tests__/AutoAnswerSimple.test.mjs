@@ -24,8 +24,10 @@ import { FakeClock } from './fakeClock.mjs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const Simple = require(path.resolve(__dirname, '../../../../dist-electron/electron/intelligence/autoAnswer/SimpleAutoAnswer.js'));
+const Judge = require(path.resolve(__dirname, '../../../../dist-electron/electron/intelligence/autoAnswer/AutoAnswerJudge.js'));
 const { isMidWordCut } = require(path.resolve(__dirname, '../../../../dist-electron/electron/intelligence/autoAnswer/AutoAnswerText.js'));
 const { SimpleAutoAnswerEngine, STABILITY_MS, ENDPOINT_CONFIRM_MS, RETRY_MS, RETRY_TTL_MS, HELD_MAX_AGE_MS, EARLY_JUDGE_MS } = Simple;
+const { JUDGE_DEADLINE_MS, judgeExecutionPolicyForRoute } = Judge;
 
 const flush = () => new Promise((r) => setImmediate(r));
 const YES = (over = {}) => JSON.stringify({ is_ask: true, directed_at_user: true, complete: true, act: 'question', answerability: 0.95, question_text: null, ...over });
@@ -35,7 +37,7 @@ function makeSimple(judgeImpl, overrides = {}) {
   const clock = new FakeClock();
   const state = {
     enabled: true, meetingActive: true, generation: 1, accepting: true, streaming: false,
-    turns: [], dispatched: [], offered: [], skips: [], events: [], cancelled: [], judgeCalls: [], contentTrace: [],
+    turns: [], dispatched: [], offered: [], skips: [], events: [], cancelled: [], judgeCalls: [], judgeSignals: [], judgePolicies: [], contentTrace: [],
     ...overrides,
   };
   const host = {
@@ -51,7 +53,15 @@ function makeSimple(judgeImpl, overrides = {}) {
     telemetry: (e) => { state.events.push(e); if (e.name === 'auto_answer_ignored') state.skips.push(e.skipReason); },
     logContent: (label, text) => state.contentTrace.push({ label, text }),
     log: () => {},
-    ...(judgeImpl ? { judgeCandidate: (req) => { state.judgeCalls.push(req); return judgeImpl(req, state.judgeCalls.length); } } : {}),
+    ...(state.judgePolicy ? { judgePolicy: () => state.judgePolicy } : {}),
+    ...(judgeImpl ? {
+      judgeCandidate: (req, signal, policy) => {
+        state.judgeCalls.push(req);
+        state.judgeSignals.push(signal);
+        state.judgePolicies.push(policy);
+        return judgeImpl(req, state.judgeCalls.length, signal, policy);
+      },
+    } : {}),
   };
   const engine = new SimpleAutoAnswerEngine(host, clock);
   engine.onMeetingStart();
@@ -176,7 +186,32 @@ test('busy engine: retries and dispatches when it frees up; gives up after the T
   await g.advance(STABILITY_MS + RETRY_TTL_MS + 1000);
   assert.deepEqual(g.texts(), []);
   assert.ok(g.state.skips.includes('engine_busy_or_cooling'));
+  assert.equal(g.engine.lastJudgedKey, '', 'a timeout did not dispatch, so the question must remain retryable');
   assert.equal(g.clock.pendingCount(), 0, 'no leaked retry timer');
+});
+
+test('judge context contains only meeting audio available at candidate commit', async () => {
+  const h = makeSimple(async () => YES());
+  const committedAt = h.clock.now();
+  h.state.turns.push(
+    { role: 'interviewer', text: 'Earlier interviewer context.', timestamp: committedAt - 200 },
+    { role: 'user', text: 'Earlier user context.', timestamp: committedAt - 100 },
+    { role: 'assistant', text: 'A generated draft must never impersonate the user.', timestamp: committedAt - 50 },
+  );
+  h.interviewer('How would you make this deployment resilient?');
+  await h.advance(100);
+  h.user('I would start by using multiple availability zones.');
+  await h.advance(STABILITY_MS + 300);
+
+  assert.equal(h.state.judgeCalls.length, 1);
+  assert.deepEqual(
+    h.state.judgeCalls[0].recentTurns.map(({ role, text }) => ({ role, text })),
+    [
+      { role: 'interviewer', text: 'Earlier interviewer context.' },
+      { role: 'user', text: 'Earlier user context.' },
+    ],
+    'assistant drafts and turns after the candidate cutoff must not reach the judge',
+  );
 });
 
 test('the user\'s own speech never suppresses or cancels an automatic answer (user decision 2026-09-03)', async () => {
@@ -213,6 +248,64 @@ test('judge unavailable → only a trailing ? fires (near-legacy fallback, no fi
   g.interviewer('Why did you choose PostgreSQL over the alternatives here?');
   await g.advance(STABILITY_MS + 300);
   assert.equal(g.texts().length, 1, 'error → ? fallback');
+});
+
+test('the judge deadline follows the provider route instead of always expiring at 2.5 seconds', async () => {
+  let resolveJudge;
+  const policy = { route: 'user_endpoint', deadlineMs: 5000 };
+  const h = makeSimple((_req, _n, _signal, receivedPolicy) => {
+    assert.deepEqual(receivedPolicy, policy);
+    return new Promise((resolve) => { resolveJudge = resolve; });
+  }, { judgePolicy: policy });
+
+  h.interviewer('Please compare optimistic and pessimistic locking for this design');
+  await h.advance(EARLY_JUDGE_MS + 50);
+  assert.equal(h.state.judgeCalls.length, 1);
+
+  await h.advance(JUDGE_DEADLINE_MS + 250);
+  assert.equal(h.state.judgeSignals[0].aborted, false, 'the old flash-lite deadline must not abort a hosted route');
+  assert.equal(h.state.events.some((e) => e.judgeOutcome === 'timeout'), false);
+
+  resolveJudge(YES());
+  await flush(); await flush();
+  assert.equal(h.texts().length, 1, 'a verdict inside the route budget is accepted');
+  const event = h.state.events.find((e) => e.name === 'auto_answer_judged' && e.judgeOutcome === 'verdict');
+  assert.equal(event?.judgeRoute, 'user_endpoint');
+  assert.equal(event?.judgeDeadlineMs, 5000);
+  assert.equal(event?.judgeAborted, false);
+});
+
+test('a judge that exceeds its route budget is aborted and cannot dispatch late', async () => {
+  let resolveJudge;
+  const policy = { route: 'default_provider', deadlineMs: 1000 };
+  const h = makeSimple(() => new Promise((resolve) => { resolveJudge = resolve; }), { judgePolicy: policy });
+
+  h.interviewer('Please compare optimistic and pessimistic locking for this design');
+  await h.advance(EARLY_JUDGE_MS + policy.deadlineMs + 100);
+
+  assert.equal(h.state.judgeSignals[0].aborted, true, 'the provider request must be cancelled, not merely ignored');
+  assert.deepEqual(h.texts(), [], 'the punctuation-free fallback stays silent');
+  const timeout = h.state.events.find((e) => e.name === 'auto_answer_judged' && e.judgeOutcome === 'timeout');
+  assert.equal(timeout?.judgeRoute, 'default_provider');
+  assert.equal(timeout?.judgeDeadlineMs, policy.deadlineMs);
+  assert.equal(timeout?.judgeAborted, true);
+
+  resolveJudge(YES());
+  await flush(); await flush();
+  assert.deepEqual(h.texts(), [], 'a late resolution after abort must never dispatch');
+});
+
+test('judge route policies reuse the shipped provider deadline table', () => {
+  assert.equal(judgeExecutionPolicyForRoute('gemini_fast').deadlineMs, JUDGE_DEADLINE_MS);
+  assert.equal(judgeExecutionPolicyForRoute('default_provider').deadlineMs, 8000);
+  assert.equal(judgeExecutionPolicyForRoute('server_cascade').deadlineMs, 13000);
+  assert.equal(judgeExecutionPolicyForRoute('user_endpoint').deadlineMs, 15000);
+  assert.equal(judgeExecutionPolicyForRoute('local').deadlineMs, 30000);
+  assert.equal(
+    judgeExecutionPolicyForRoute('user_endpoint', { maxMs: 17000, count: 10 }).deadlineMs,
+    20000,
+    'measured user endpoints may expand only to the route table maximum',
+  );
 });
 
 test('a provider endpoint confirms the stop early', async () => {
@@ -255,7 +348,6 @@ test('review#5: a transient judge failure clears the key — the next stoppage r
   h.interviewer('Please compare optimistic and pessimistic locking for this design');   // no '?', no trailing mark
   await h.advance(STABILITY_MS + 100);
   assert.equal(h.state.judgeCalls.length, 1);
-  const { JUDGE_DEADLINE_MS } = require(path.resolve(__dirname, '../../../../dist-electron/electron/intelligence/autoAnswer/AutoAnswerJudge.js'));
   await h.advance(JUDGE_DEADLINE_MS + 100);               // call 1 times out
   h.interviewer('take your time', false);                 // interim re-arms the window, no new final
   await h.advance(STABILITY_MS + 200);
@@ -330,7 +422,6 @@ test('prefetch: a question-shaped candidate starts the answer WHILE the judge de
   h.state.spec = { questionId: null, text: null };
   h.engine.host.prefetchAnswer = (id, text) => { prefetched.push({ id, text }); h.state.spec = { questionId: id, text }; };
   h.engine.host.speculativeSnapshot = () => h.state.spec;
-  h.engine.host.noteCandidate = () => {};
 
   h.interviewer('Why did you choose PostgreSQL over the alternatives here?');
   await h.advance(STABILITY_MS + 100);

@@ -400,11 +400,6 @@ export class IntelligenceEngine extends EventEmitter {
      */
     private automaticTriggerPending = false;
     private automaticTriggerCancelled = false;
-    /**
-     * Auto Answer V3: the controller's current candidate id, so a speculative
-     * run started by maybeSpeculate is keyed to it (V3 Amendment 6 reuse).
-     */
-    private currentAutoCandidateId: string | null = null;
     private speculativeQuestionId: string | null = null;
     /**
      * The question that stamped `lastTriggerTime`. Lets the cooldown distinguish a
@@ -761,7 +756,13 @@ export class IntelligenceEngine extends EventEmitter {
             if (this.speculativeText !== null) return;
             if (Date.now() - this.lastTriggerTime < this.triggerCooldown) return;
             console.log(`[IntelligenceEngine] Speculative inference fired on interim`, { length: text.length, confidence });
-            this.speculativeQuestionId = this.currentAutoCandidateId;
+            // An interim arrives before SimpleAutoAnswer creates the next
+            // candidate id. Reusing the last committed id here falsely marks
+            // this new speculation as an exact match for the prior question.
+            // Leave engine-owned interim speculation unkeyed; adoption must
+            // pass the existing text-similarity guard. Controller prefetches
+            // below remain keyed because they receive the real id explicitly.
+            this.speculativeQuestionId = null;
             this.runWhatShouldISay(text, confidence || 0.8, undefined, { speculative: true })
                 .catch(err => console.error('[IntelligenceEngine] Speculative run error:', err));
         }, this.SPECULATIVE_DEBOUNCE_MS);
@@ -958,7 +959,16 @@ export class IntelligenceEngine extends EventEmitter {
     async handleSuggestionTrigger(trigger: SuggestionTrigger): Promise<void> {
         // An absent confidence is not a low one: the planner substitutes the
         // intent classifier's score. Only an EXPLICIT sub-threshold value skips.
-        if (trigger.confidence !== undefined && trigger.confidence < 0.5) return;
+        if (trigger.confidence !== undefined && trigger.confidence < 0.5) {
+            try {
+                this.emit('suggestion_skipped', {
+                    reason: 'low_confidence',
+                    question: trigger.lastQuestion ?? '',
+                    confidence: trigger.confidence,
+                });
+            } catch { /* a listener must never break the trigger path */ }
+            return;
+        }
 
         if (trigger.automatic) { this.automaticTriggerPending = true; this.automaticTriggerCancelled = false; }
         try {
@@ -1103,11 +1113,6 @@ export class IntelligenceEngine extends EventEmitter {
         return this.activeMode === 'what_to_say';
     }
 
-    /** Auto Answer V3: the controller's current candidate, for keying the speculative prefetch. */
-    noteAutoAnswerCandidate(questionId: string, _candidateGeneration: number): void {
-        this.currentAutoCandidateId = questionId;
-    }
-
     /**
      * Auto Answer (2026-08-25): start the answer WHILE the judge is deciding.
      *
@@ -1129,7 +1134,6 @@ export class IntelligenceEngine extends EventEmitter {
         if (Date.now() - this.lastTriggerTime < this.triggerCooldown) return;
         const trimmed = (text ?? '').trim();
         if (trimmed.length < 12) return;
-        this.currentAutoCandidateId = questionId;
         this.speculativeQuestionId = questionId;
         console.log(`[IntelligenceEngine] Auto Answer prefetch fired while the judge decides`, { questionId, length: trimmed.length });
         this.runWhatShouldISay(trimmed, 0.9, undefined, { speculative: true })
@@ -1259,7 +1263,12 @@ export class IntelligenceEngine extends EventEmitter {
         return this.handleSuggestionTrigger({
             context: options.context,
             lastQuestion: question.text,
-            confidence: question.confidence,
+            // The Auto Answer judge has already made the answer/silent
+            // decision using ANSWER_FLOOR. Forwarding answerability as generic
+            // trigger confidence re-applies the <0.5 native-trigger gate and
+            // silently drops the judge's valid 0.31-0.49 band after the
+            // controller has recorded the question as answered. Leave it
+            // absent so the planner uses its own intent confidence instead.
             automatic: true,
             questionId: question.id,
             answerability: question.answerability,

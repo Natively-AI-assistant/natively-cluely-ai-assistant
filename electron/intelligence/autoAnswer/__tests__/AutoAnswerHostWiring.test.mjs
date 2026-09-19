@@ -59,8 +59,15 @@ test('every IntelligenceManager method the Auto Answer host calls actually exist
 
 test('the engine-side counterparts exist too, so the delegation cannot dangle', () => {
     const engine = read('electron/IntelligenceEngine.ts');
-    for (const name of ['prefetchAutoAnswer', 'noteAutoAnswerCandidate', 'getSpeculativeSnapshot', 'runAutoAnswer']) {
+    for (const name of ['prefetchAutoAnswer', 'getSpeculativeSnapshot', 'runAutoAnswer']) {
         const decl = new RegExp(`^\\s{2,8}(?:public\\s+|private\\s+|protected\\s+)?(?:async\\s+)?${name}\\s*\\(`, 'm');
         assert.ok(decl.test(engine), `IntelligenceEngine.${name} must exist for the manager to delegate to`);
     }
+});
+
+test('the production judge host forwards its route policy, abort signal, and deadline', () => {
+    const block = hostBlock(read('electron/main.ts'));
+    assert.match(block, /judgePolicy:\s*\(\)\s*=>[\s\S]*getAutoAnswerJudgePolicy/);
+    assert.match(block, /judgeCandidate:\s*async\s*\(req,\s*signal,\s*policy\)/);
+    assert.match(block, /generateJudgeVerdict\([\s\S]*signal,[\s\S]*deadlineMs:\s*policy\.deadlineMs/);
 });

@@ -27,7 +27,10 @@ test('set() reports whether the write actually landed', () => {
   assert.ok(/\)\s*:\s*boolean\s*$/.test(sig.trim()),
     'set() must return boolean — as void, a refusal is indistinguishable from a success');
 
-  const body = sm.slice(i, i + 900);
+  // Keep enough of the method to include the persistence-failure rollback.
+  // The explanatory comments are intentionally detailed and can grow without
+  // making this source contract lose sight of the success return.
+  const body = sm.slice(i, i + 1800);
   const refusal = body.slice(body.indexOf('this.settingsUnreadable'));
   assert.ok(/return false/.test(refusal.slice(0, 400)), 'the refusal path must return false');
   assert.ok(/return true/.test(body), 'the success path must return true');
@@ -40,7 +43,11 @@ test('no settings IPC handler reports success on a refused write', () => {
   while ((m = re.exec(ipc)) !== null) {
     const next = ipc.indexOf("safeHandle('", m.index + 12);
     const body = ipc.slice(m.index, next === -1 ? ipc.length : next);
-    if (!/\.set\('/.test(body) || !body.includes('success: true')) continue;
+    // Include variable-key writes such as onboarding:set-flag's set(key, value),
+    // not only literal-key set('name', value) calls. The older matcher missed
+    // exactly that production false-success path.
+    if (!/(?:SettingsManager\.getInstance\(\)|\bsm|\bsettings)\.set\s*\(/.test(body)
+      || !body.includes('success: true')) continue;
     if (!body.includes('settings_store_degraded')) offenders.push(m[1]);
   }
   assert.deepEqual(offenders, [],

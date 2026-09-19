@@ -1206,7 +1206,7 @@ import { GoogleSTT } from "./audio/GoogleSTT"
 import { RestSTT } from "./audio/RestSTT"
 import { DeepgramStreamingSTT } from "./audio/DeepgramStreamingSTT"
 import { isIntelligenceFlagEnabled } from "./intelligence/intelligenceFlags"
-import { buildJudgePrompt } from "./intelligence/autoAnswer/AutoAnswerJudge"
+import { buildJudgePrompt, JUDGE_DEADLINE_MS } from "./intelligence/autoAnswer/AutoAnswerJudge"
 import { SimpleAutoAnswerEngine } from "./intelligence/autoAnswer/SimpleAutoAnswer"
 import { resolveAutoAnswerThresholds } from "./context-intelligence/policies/mode-policy-registry"
 import type { SpeechEdge } from "./audio/speechEdge"
@@ -3232,17 +3232,21 @@ export class AppState {
       });
     },
     cancelAutomaticAnswer: (reason) => this.intelligenceManager.cancelAutomaticAnswer(reason),
-    // Speculative prefetch (2026-08-25): key the engine's own interim
-    // speculation to this candidate, and let the engine start the answer while
-    // the judge is still deciding.
-    noteCandidate: (id, gen) => this.intelligenceManager.noteAutoAnswerCandidate(id, gen),
     speculativeSnapshot: () => this.intelligenceManager.getSpeculativeSnapshot(),
     prefetchAnswer: (id, text) => this.intelligenceManager.prefetchAutoAnswer(id, text),
     ...((process.env.NATIVELY_AUTO_ANSWER_JUDGE || '').toLowerCase() === 'off' ? {} : {
-      judgeCandidate: async (req) => {
+      judgePolicy: () => {
+        const llm = this.processingHelper?.getLLMHelper?.();
+        return llm?.getAutoAnswerJudgePolicy?.()
+          ?? { route: 'gemini_fast' as const, deadlineMs: JUDGE_DEADLINE_MS };
+      },
+      judgeCandidate: async (req, signal, policy) => {
         const llm = this.processingHelper?.getLLMHelper?.();
         if (!llm) return null;
-        return await llm.generateJudgeVerdict(buildJudgePrompt(req));
+        return await llm.generateJudgeVerdict(buildJudgePrompt(req), {
+          signal,
+          deadlineMs: policy.deadlineMs,
+        });
       },
     }),
     modeName: () => {
