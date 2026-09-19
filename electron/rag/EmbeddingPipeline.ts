@@ -1113,8 +1113,15 @@ export class EmbeddingPipeline {
         }
         try {
             await primary.embedQuery('probe');
-        } catch {
-            return false;                          // still down; try again later
+        } catch (error: any) {
+            // Still down; try again later — but SAY SO, and why. This was a bare
+            // `catch { return false }`: measured 2026-09-19, a session sat on
+            // the bundled model for four minutes, the re-probe announced at
+            // boot ("first in 5s") failed every time, and the log held not one
+            // line about it. One line per failed re-probe (at most one a minute).
+            const status = error?.status ? `HTTP ${error.status} · ` : '';
+            console.warn(`[EmbeddingPipeline] ${primary.name} re-probe failed (${status}${String(error?.message ?? error).slice(0, 200)}); still on the fallback, retrying in ${PRIMARY_REPROBE_INTERVAL_MS / 1000}s.`);
+            return false;
         }
         console.log(
             `[EmbeddingPipeline] ${primary.name} recovered — demoting the fallback and `

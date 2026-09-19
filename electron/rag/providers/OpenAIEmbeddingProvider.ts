@@ -1,3 +1,4 @@
+import { describeProbeError } from './probeError';
 import { IEmbeddingProvider } from './IEmbeddingProvider';
 import { embeddingSpaceKey } from '../embeddingSpace';
 
@@ -66,6 +67,8 @@ export class OpenAIEmbeddingProvider implements IEmbeddingProvider {
       return true;
     } catch (error: any) {
       if (error?.permanentAuthFailure) throw error;
+      // Say why — see probeError.ts.
+      console.warn(`[OpenAIEmbeddingProvider] availability probe failed: ${describeProbeError(error)}`);
       return false;
     }
   }

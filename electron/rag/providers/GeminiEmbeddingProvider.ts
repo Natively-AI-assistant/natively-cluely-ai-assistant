@@ -1,3 +1,4 @@
+import { describeProbeError } from './probeError';
 import { IEmbeddingProvider, EmbedOptions } from './IEmbeddingProvider';
 import { embeddingSpaceKey } from '../embeddingSpace';
 
@@ -209,6 +210,8 @@ export class GeminiEmbeddingProvider implements IEmbeddingProvider {
   async isAvailable(): Promise<boolean> {
     try { await this.embed('test'); return true; } catch (error: any) {
       if (error?.permanentAuthFailure) throw error;
+      // Say why — see probeError.ts.
+      console.warn(`[GeminiEmbeddingProvider] availability probe failed: ${describeProbeError(error)}`);
       return false;
     }
   }
