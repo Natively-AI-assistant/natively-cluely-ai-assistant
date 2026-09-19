@@ -471,9 +471,9 @@ const SETTINGS_NAV_ORDER = [
     'plans',
     'ai-providers',
     'retrieval',
-    'skills',
-    'calendar',
     'audio',
+    'calendar',
+    'skills',
     'keybinds',
     'phone-mirror',
     'intelligence',
@@ -2153,11 +2153,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         <Boxes size={16} /> {t('Retrieval')}
                                     </button>
                                     <button
-                                        onClick={() => setActiveTab('skills')}
-                                        className={navItemClass(activeTab === 'skills')}
+                                        onClick={() => setActiveTab('audio')}
+                                        className={navItemClass(activeTab === 'audio')}
                                     >
-                                        {activeTab === 'skills' && navActivePill}
-                                        <Folder size={16} /> {t('Skills')}
+                                        {activeTab === 'audio' && navActivePill}
+                                        <Mic size={16} /> {t('Audio')}
                                     </button>
                                     {/* Temporarily hidden — TODO: re-enable Calendar settings nav item
                                     <button
@@ -2169,11 +2169,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                     </button>
                                     */}
                                     <button
-                                        onClick={() => setActiveTab('audio')}
-                                        className={navItemClass(activeTab === 'audio')}
+                                        onClick={() => setActiveTab('skills')}
+                                        className={navItemClass(activeTab === 'skills')}
                                     >
-                                        {activeTab === 'audio' && navActivePill}
-                                        <Mic size={16} /> {t('Audio')}
+                                        {activeTab === 'skills' && navActivePill}
+                                        <Folder size={16} /> {t('Skills')}
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('keybinds')}
