@@ -2314,7 +2314,31 @@ export class ModeHybridRetriever {
         // unusable (NEVER cross-compare; cosine across spaces is semantically
         // random). Mismatched/missing vectors fall through to the ephemeral
         // embed below and re-indexing is scheduled in the background.
-        const persisted = activeSpace ? this.loadPersistedEmbeddings(fileIds, activeSpace) : new Map<string, number[]>();
+        // STALE-INDEX GATE (2026-09-19). Stored vectors are keyed (file_id,
+        // chunk_index) and paired with the chunks produced RIGHT NOW. When the
+        // index was built from different chunk boundaries — a chunker version
+        // bump, which is what CHUNKER_VERSION in the index hash exists to catch —
+        // chunk i was being scored with the vector of the OLD chunk i: a silent
+        // misalignment, no error, no log. `needsReindexing` described this trap
+        // in its own docblock and had no caller, and neither prewarm nor the
+        // boot retry can see it (index status is read by file id, without the
+        // content). A stale file's vectors are now never loaded: its chunks fall
+        // to the ephemeral-embed / lexical handling below for this turn, and the
+        // file re-indexes in the background — lazily, only for files a question
+        // actually touches.
+        const staleFileIds = new Set<string>();
+        for (const file of files) {
+            if (!fileIds.includes(file.id) || !file.content?.trim()) continue;
+            if (this.getIndexState(file.id) && this.needsReindexing(file)) {
+                staleFileIds.add(file.id);
+                this.indexFile(file).catch(() => { /* logged inside */ });
+            }
+        }
+        if (staleFileIds.size > 0) {
+            console.warn(`[ModeHybridRetriever] ${staleFileIds.size} file(s) were indexed under an older chunker/content hash — ignoring their stored vectors this turn and re-indexing in the background`);
+        }
+        const freshFileIds = fileIds.filter((id) => !staleFileIds.has(id));
+        const persisted = activeSpace && freshFileIds.length ? this.loadPersistedEmbeddings(freshFileIds, activeSpace) : new Map<string, number[]>();
 
         // Chunks WITHOUT a usable persisted vector (cold DB, brand-new upload,
         // provider/space change) keep the pre-W3 behavior: batch-embed them

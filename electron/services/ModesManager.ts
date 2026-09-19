@@ -1239,7 +1239,9 @@ export class ModesManager {
         const files = this.getReferenceFiles(modeId);
         for (const file of files) {
             const { status } = this.modeContextRetriever.getReferenceFileIndexStatus(file.id);
-            if (status !== 'ready') {
+            // `status` cannot see the content; the hash check can (chunker bump →
+            // lazy per-mode re-index, see referenceFileNeedsReindex).
+            if (status !== 'ready' || this.modeContextRetriever.referenceFileNeedsReindex(file)) {
                 await this.modeContextRetriever.indexReferenceFile(file).catch(() => { /* logged inside */ });
             }
         }

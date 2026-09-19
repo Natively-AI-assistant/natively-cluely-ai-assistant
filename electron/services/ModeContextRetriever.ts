@@ -1762,6 +1762,17 @@ export class ModeContextRetriever {
         await retriever.indexFile(file);
     }
 
+    /**
+     * True when the file's index was built from different content or an older
+     * chunker version. Index STATUS is read by file id and cannot see the content,
+     * so such a file reads `ready` forever; prewarm asks this as well, which is
+     * where a chunker bump re-indexes — lazily, one mode at a time, on activation
+     * (owner's choice 2026-09-19), never every file of every mode at boot.
+     */
+    referenceFileNeedsReindex(file: ModeReferenceFile): boolean {
+        try { return this.ensureHybridRetriever()?.needsReindexing(file) ?? false; } catch { return false; }
+    }
+
     /** Corpus arbitration pass-through — see ModeHybridRetriever.probeAnchors. */
     probeReferenceAnchors(files: ModeReferenceFile[], question: string): boolean {
         return this.ensureHybridRetriever()?.probeAnchors(files, question) ?? false;
