@@ -40,6 +40,7 @@
 // object). It is pure and dependency-light so it can be unit-tested directly.
 
 import type { ActiveModeInfo } from './modeProfiles';
+import type { ProviderDataScope } from './ProviderRouter';
 
 /**
  * An immutable, request-scoped snapshot of the mutable state runWhatShouldISay
@@ -85,6 +86,13 @@ export interface WhatToAnswerRequestSnapshot {
   readonly v3Prompt?: {
     readonly system: string;
     readonly user: string;
+    /** Scopes carried by the composed V3 prompt. The WTA transport must use
+     * these instead of re-deriving provenance from the discarded legacy
+     * packet. In particular, OCR-derived active problems remain screenshots. */
+    readonly packedDataScopes?: readonly ProviderDataScope[];
+    /** Scopes embedded in ordinary conversation/reference prose rather than
+     * removable evidence markup. Used for last-boundary fail-closed routing. */
+    readonly messageDataScopes?: readonly ProviderDataScope[];
     /**
      * The evidence block this prompt was composed from — what the model was
      * actually given, as opposed to what a later retrieval happens to return.
@@ -97,6 +105,9 @@ export interface WhatToAnswerRequestSnapshot {
      */
     readonly evidenceBlock?: string;
   };
+  /** Additional provenance carried only by the legacy WTA prompt. V3-owned
+   * turns use v3Prompt.packedDataScopes, which already reflects filtering. */
+  readonly outboundDataScopes?: readonly ProviderDataScope[];
   /** Context OS (H1): when present AND `contextOsEvidencePackEnabled`, the typed
    *  EvidencePack GOVERNS the WTA factual prompt — the raw mode block is replaced
    *  by the rendered contract + evidence pack and the candidate_profile factual

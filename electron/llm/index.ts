@@ -20,6 +20,7 @@ export { acceptRepairedAnswer } from "./repairAcceptance";
 export type { RepairAcceptanceInput, RepairAcceptanceVerdict, RepairRejectionReason } from "./repairAcceptance";
 export {
     cleanTranscript,
+    deduplicateTranscriptEchoes,
     sparsifyTranscript,
     formatTranscriptForLLM,
     prepareTranscriptForWhatToAnswer
@@ -41,7 +42,9 @@ export type { PlannerDecision, PlannerDecisionKind, PlannerInput } from "./Plann
 export { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, shouldScaffold, isStealthEvasionQuestion, isJdFactualLookupNotNegotiationAdvice } from "./AnswerPlanner";
 export { detectAnswerStyle, styleSuppressesScaffold } from "./answerStyle";
 export type { AnswerStyle, AnswerStyleResult } from "./answerStyle";
-export { detectExplicitCodingContract, isCodingContinuation, isBareCodeRequest, looksLikeCodingAnswer, buildPriorCodingContextBlock, buildCodingContractPrompt, explicitContractProducesCode } from "./codingFollowup";
+export { detectExplicitCodingContract, durableCodingConstraintStart, hasDurableCodingConstraint, isCodingContinuation, isCodingPresentationDirective, isBareCodeRequest, looksLikeCodingAnswer, buildPriorCodingContextBlock, buildCodingContractPrompt, explicitContractProducesCode } from "./codingFollowup";
+export { resolveActiveCodingContext, shouldUseActiveCodingProblem, sharesCodingTopic, mergeActiveCodingProblem, isSelfContainedCodingRequest, isHighConfidenceStandaloneCodingProblem } from "./activeCodingContext";
+export type { ActiveCodingContextResolution } from "./activeCodingContext";
 export { resolveCodingPromptSignals, detectSuppliedCodeTemplate, codingTaskKindFor, isBuildTask, isDeicticAsk, type CodingPromptSignals, type CodingTaskKind } from "./codingPromptSignals";
 export type { ExplicitCodingContract, PriorCodingTurn } from "./codingFollowup";
 export { shouldHumanize, shouldHumanizeOutput, detectCorporateFiller, humanizeDirectiveFor, HUMANIZE_DIRECTIVE, humanizeSpokenAnswer, humanizeForAnswerType } from "./humanLikeness";

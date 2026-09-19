@@ -2,6 +2,7 @@ import { LLMHelper } from "../LLMHelper";
 import { CLARIFY_MODE_PROMPT } from "./prompts";
 import { TINY_CLARIFY_PROMPT } from "./tinyPrompts";
 import { resolveV2SystemPrompt, v2TierForPromptTier } from "./promptSystemV2";
+import type { V3TransportPrompt } from "./streamContextPolicy";
 
 export class ClarifyLLM {
     private llmHelper: LLMHelper;
@@ -13,7 +14,7 @@ export class ClarifyLLM {
     /**
      * Generate a clarification question
      */
-    async generate(context: string, v3?: { system: string; user: string }): Promise<string> {
+    async generate(context: string, v3?: V3TransportPrompt): Promise<string> {
         if (!context.trim()) return "";
         try {
             // V3 substitution — see AssistLLM.
@@ -33,7 +34,13 @@ export class ClarifyLLM {
             // 2026-07-04). Same fix applied to RecapLLM/FollowUpLLM/
             // FollowUpQuestionsLLM/BrainstormLLM, which have the identical shape.
             const stream = this.llmHelper.streamChat(fittedContext, undefined, undefined, promptOverride, true,
-                Boolean(v3), [], undefined, undefined, v3 ? { v3Owned: true } : undefined);
+                Boolean(v3), v3?.packedDataScopes ? [...v3.packedDataScopes] : [], undefined, undefined,
+                v3 ? {
+                    v3Owned: true,
+                    ...(v3.messageDataScopes?.length
+                        ? { messageDataScopes: [...v3.messageDataScopes] }
+                        : {}),
+                } : undefined);
             let fullResponse = "";
             for await (const chunk of stream) fullResponse += chunk;
             return fullResponse.trim();
@@ -46,7 +53,7 @@ export class ClarifyLLM {
     /**
      * Generate a clarification question (Streamed)
      */
-    async *generateStream(context: string, v3?: { system: string; user: string }): AsyncGenerator<string> {
+    async *generateStream(context: string, v3?: V3TransportPrompt): AsyncGenerator<string> {
         if (!context.trim()) return;
         try {
             const promptOverride = v3?.system
@@ -56,7 +63,13 @@ export class ClarifyLLM {
             // See generate() above — ignoreKnowledgeMode=true prevents the context
             // blob from being misclassified by the knowledge-mode intent gate.
             yield* this.llmHelper.streamChat(fittedContext, undefined, undefined, promptOverride, true,
-                Boolean(v3), [], undefined, undefined, v3 ? { v3Owned: true } : undefined);
+                Boolean(v3), v3?.packedDataScopes ? [...v3.packedDataScopes] : [], undefined, undefined,
+                v3 ? {
+                    v3Owned: true,
+                    ...(v3.messageDataScopes?.length
+                        ? { messageDataScopes: [...v3.messageDataScopes] }
+                        : {}),
+                } : undefined);
         } catch (error) {
             console.error("[ClarifyLLM] Streaming generation failed:", error);
         }

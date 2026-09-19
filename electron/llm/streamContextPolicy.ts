@@ -19,6 +19,23 @@
 // No LLM, no I/O.
 
 import type { AnswerType, ContextLayer } from './AnswerPlanner';
+import type { ProviderDataScope } from './ProviderRouter';
+
+/**
+ * The transport-relevant subset of a Context Intelligence V3 bridge result.
+ *
+ * `packedDataScopes` describes every scoped payload carried by the composed
+ * prompt. `messageDataScopes` is the narrower subset embedded in ordinary
+ * prose, which cannot be removed safely if policy changes after composition.
+ * Both are optional so older/test callers that provide only system + user keep
+ * their existing behaviour.
+ */
+export interface V3TransportPrompt {
+  system: string;
+  user: string;
+  packedDataScopes?: ProviderDataScope[];
+  messageDataScopes?: ProviderDataScope[];
+}
 
 /**
  * Optional routing info threaded from a caller that already computed an
@@ -30,6 +47,15 @@ export interface StreamRouteOptions {
   answerType?: AnswerType;
   /** The plan's forbidden context layers — the authoritative exclusion list. */
   forbiddenContextLayers?: ContextLayer[];
+  /**
+   * Privacy provenance for scoped data embedded directly in the `message`
+   * argument. This is deliberately distinct from streamChat's broad
+   * extraDataScopes: the legacy omission path can remove a denied `context`,
+   * but cannot safely rediscover and subtract an active problem concatenated
+   * into ordinary message prose. If one of these scopes is denied, the
+   * transport routes locally or stops before cloud dispatch.
+   */
+  messageDataScopes?: ProviderDataScope[];
   /**
    * Round-7 Failure-2: the previous assistant answer, supplied by the caller
    * (the chat handler has it via getLastAssistantMessage()). For a short/

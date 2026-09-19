@@ -9,7 +9,7 @@
 
 import { EventEmitter } from 'events';
 import { LLMHelper } from './LLMHelper';
-import { SessionTracker, type ConversationSurface } from './SessionTracker';
+import { SessionTracker, type CodingQuestionSource, type ConversationSurface } from './SessionTracker';
 import type { TurnIdentity } from './llm/turnIdentity';
 import { IntelligenceEngine } from './IntelligenceEngine';
 import { MeetingPersistence } from './MeetingPersistence';
@@ -295,11 +295,11 @@ export class IntelligenceManager extends EventEmitter {
         return this.engine.runCodeHint(imagePaths, problemStatement);
     }
 
-    setCodingQuestion(question: string, source: 'screenshot' | 'transcript'): void {
+    setCodingQuestion(question: string, source: CodingQuestionSource): void {
         this.session.setCodingQuestion(question, source);
     }
 
-    getDetectedCodingQuestion(): { question: string | null; source: 'screenshot' | 'transcript' | null } {
+    getDetectedCodingQuestion(): { question: string | null; source: CodingQuestionSource | null } {
         return this.session.getDetectedCodingQuestion();
     }
 

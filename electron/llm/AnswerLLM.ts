@@ -6,6 +6,7 @@ import { resolveCodingPromptSignals } from "./codingPromptSignals";
 import type { AnswerPlan } from "./AnswerPlanner";
 import { isCodeVerificationEnabled } from "./codeVerification/verificationEnabled";
 import { resolveV2SystemPrompt, v2TierForPromptTier } from "./promptSystemV2";
+import type { ProviderDataScope } from './ProviderRouter';
 
 export class AnswerLLM {
     private llmHelper: LLMHelper;
@@ -24,8 +25,20 @@ export class AnswerLLM {
      *   universal prompt. Without this the V3 prompt would have to be smuggled
      *   in through `context`, where it would read as evidence rather than as
      *   policy — and evidence is explicitly untrusted data.
+     * @param extraDataScopes All scoped data carried by this call, for provider
+     *   routing/filtering.
+     * @param messageDataScopes The subset embedded directly in `question`; a
+     *   denied scope cannot be removed like a separate context block, so the
+     *   transport must route locally or stop.
      */
-    async generate(question: string, context?: string, answerPlan?: AnswerPlan, systemPromptOverride?: string): Promise<string> {
+    async generate(
+        question: string,
+        context?: string,
+        answerPlan?: AnswerPlan,
+        systemPromptOverride?: string,
+        extraDataScopes: ProviderDataScope[] = [],
+        messageDataScopes: ProviderDataScope[] = [],
+    ): Promise<string> {
         try {
             const promptOverride = systemPromptOverride
                 ?? resolveV2SystemPrompt({ action: 'answer', tier: v2TierForPromptTier(this.llmHelper.getPromptTier()), ...resolveCodingPromptSignals({ answerType: answerPlan?.answerType, question: answerPlan?.question || question }) })
@@ -45,10 +58,11 @@ export class AnswerLLM {
                 promptOverride,
                 isV3Owned,   // ignoreKnowledgeMode
                 isV3Owned,   // skipModeInjection
-                [],
+                extraDataScopes,
                 undefined,
                 undefined,
                 {
+                    messageDataScopes,
                     ...(answerPlan ? { answerType: answerPlan.answerType, forbiddenContextLayers: answerPlan.forbiddenContextLayers } : {}),
                     ...(isV3Owned ? { v3Owned: true } : {}),
                 },

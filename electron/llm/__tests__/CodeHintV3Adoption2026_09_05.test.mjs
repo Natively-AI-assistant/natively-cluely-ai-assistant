@@ -40,7 +40,7 @@ const drain = async (gen) => { const out = []; for await (const t of gen) out.pu
 //            abortSignal, thinkingBudget, routeOptions)
 const ARG = {
   message: 0, images: 1, context: 2, systemPrompt: 3,
-  ignoreKnowledgeMode: 4, skipModeInjection: 5, routeOptions: 9,
+  ignoreKnowledgeMode: 4, skipModeInjection: 5, extraDataScopes: 6, routeOptions: 9,
 };
 
 describe('code hint without V3', () => {
@@ -65,7 +65,12 @@ describe('code hint without V3', () => {
 });
 
 describe('code hint with V3', () => {
-  const v3 = { system: 'V3 SYSTEM PROMPT', user: 'V3 USER CONTENT with <evidence>…</evidence>' };
+  const v3 = {
+    system: 'V3 SYSTEM PROMPT',
+    user: 'V3 USER CONTENT with <evidence>…</evidence>',
+    packedDataScopes: ['reference_files', 'screenshots'],
+    messageDataScopes: ['screenshots'],
+  };
 
   test('uses the V3 system prompt, not the v2 or legacy one', async () => {
     const h = fakeHelper();
@@ -89,7 +94,8 @@ describe('code hint with V3', () => {
     const a = h.calls[0];
     assert.equal(a[ARG.ignoreKnowledgeMode], true, 'a V3-owned prompt must not be re-classified');
     assert.equal(a[ARG.skipModeInjection], true, 'V3 already carries the mode contract; injecting again stacks two');
-    assert.deepEqual(a[ARG.routeOptions], { v3Owned: true });
+    assert.deepEqual(a[ARG.extraDataScopes], v3.packedDataScopes);
+    assert.deepEqual(a[ARG.routeOptions], { v3Owned: true, messageDataScopes: v3.messageDataScopes });
   });
 
   test('images still reach the provider', async () => {

@@ -1187,7 +1187,7 @@ console.error = (...args: any[]) => {
   } catch { }
 };
 
-import { initializeIpcHandlers } from "./ipcHandlers"
+import { initializeIpcHandlers, invalidateIpcChatStreamsForSessionBoundary } from "./ipcHandlers"
 import { WindowHelper } from "./WindowHelper"
 import { SettingsWindowHelper } from "./SettingsWindowHelper"
 import { ModelSelectorWindowHelper } from "./ModelSelectorWindowHelper"
@@ -6282,6 +6282,15 @@ export class AppState {
       }
     }
 
+    // A successful meeting start is a hard session boundary. Do this only
+    // after every permission check that can reject the start, so a failed
+    // attempt does not erase an ad-hoc session. The full reset is intentional:
+    // The lighter mode-context clear leaves fullTranscript/epoch summaries behind, and
+    // WTA's durable-context path would otherwise let the previous meeting's
+    // coding problem leak into this fresh one.
+    invalidateIpcChatStreamsForSessionBoundary();
+    this.intelligenceManager.reset();
+
     // Reset overlay position BEFORE the switch so the new meeting starts in
     // a predictable centered position regardless of where the previous
     // session left it. (Moved up from below so setWindowMode('overlay') reads
@@ -6591,6 +6600,13 @@ export class AppState {
     // The start-side session-reset (in startMeeting) is kept as a safety net
     // for the cold-start / crash-recovery path where endMeeting never ran; on
     // the normal Stop→Start path it is now a no-op (state already clean).
+    // Abort/invalidate every manual-chat stream before the renderer clears its
+    // hidden tree. Otherwise a provider callback already in flight can deliver
+    // tokens after `session-reset` and repopulate the just-cleared overlay (and
+    // SessionTracker) with the meeting that is ending. Do not reset the
+    // IntelligenceManager here: stopMeeting() still needs the transcript below
+    // in order to persist it after the STT drain.
+    invalidateIpcChatStreamsForSessionBoundary();
     this.sendToWindow(this.getWindowHelper().getOverlayWindow(), 'session-reset');
 
     // ─── UX STATE FLIP — SYNCHRONOUS ───────────────────────────────────────

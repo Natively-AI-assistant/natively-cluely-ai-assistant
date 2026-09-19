@@ -123,6 +123,87 @@ function isMeaningfulTurn(turn: TranscriptTurn, cleanedText: string): boolean {
     return true;
 }
 
+const CROSS_CHANNEL_ECHO_WINDOW_MS = 3_000;
+
+function normalizeEchoText(text: string): string {
+    return (text || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9+#\-\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+// Only function words that duplex transcription commonly inserts or drops.
+// Content words are never ignored: one added operation, constraint, direction,
+// or algorithm can change the problem and must consume its own transcript turn.
+const ECHO_FILLER_TOKENS = new Set(['a', 'an', 'the', 'please']);
+
+function normalizeEchoTokens(text: string): string[] {
+    return normalizeEchoText(text)
+        .split(' ')
+        .filter(token => token && !ECHO_FILLER_TOKENS.has(token));
+}
+
+function isNearDuplicateEcho(a: string, b: string): boolean {
+    const left = normalizeEchoText(a);
+    const right = normalizeEchoText(b);
+    if (!left || !right || Math.min(left.length, right.length) < 12) return false;
+    if (left === right) return true;
+    const leftTokens = normalizeEchoTokens(left);
+    const rightTokens = normalizeEchoTokens(right);
+    return leftTokens.length > 0
+        && leftTokens.length === rightTokens.length
+        && leftTokens.every((token, index) => token === rightTokens[index]);
+}
+
+/**
+ * Collapse near-identical duplex STT echoes before the 12-turn budget is
+ * applied. Only opposite live-audio roles are compared; assistant output and
+ * repeated speech on the same channel remain untouched. When one copy is tagged
+ * interviewer, retain that copy so question extraction does not lose the ask.
+ */
+export function deduplicateTranscriptEchoes(turns: TranscriptTurn[]): TranscriptTurn[] {
+    const deduped: TranscriptTurn[] = [];
+
+    for (const turn of turns) {
+        if (turn.role === 'assistant') {
+            deduped.push(turn);
+            continue;
+        }
+
+        let echoIndex = -1;
+        for (let i = deduped.length - 1; i >= 0; i--) {
+            const candidate = deduped[i];
+            // Input is normally chronological, but callers are not required to
+            // pre-sort it. Do not stop at one old/out-of-order candidate and
+            // miss a newer echo earlier in the array.
+            if (Math.abs(turn.timestamp - candidate.timestamp) > CROSS_CHANNEL_ECHO_WINDOW_MS) continue;
+            if (candidate.role === 'assistant' || candidate.role === turn.role) continue;
+            if (isNearDuplicateEcho(candidate.text, turn.text)) {
+                echoIndex = i;
+                break;
+            }
+        }
+
+        if (echoIndex < 0) {
+            deduped.push(turn);
+            continue;
+        }
+
+        const prior = deduped[echoIndex];
+        if (turn.role === 'interviewer' && prior.role !== 'interviewer') {
+            // The retained copy is newer. Remove the earlier echo and append
+            // this turn at its real chronological position; replacing in place
+            // would make question extraction treat an intervening older turn as
+            // the newest question.
+            deduped.splice(echoIndex, 1);
+            deduped.push(turn);
+        }
+    }
+
+    return deduped;
+}
+
 /**
  * Clean transcript buffer
  * Removes fillers, acknowledgements, and non-meaningful turns
@@ -146,7 +227,7 @@ export function cleanTranscript(turns: TranscriptTurn[]): TranscriptTurn[] {
         }
     }
 
-    return cleaned;
+    return deduplicateTranscriptEchoes(cleaned);
 }
 
 /**

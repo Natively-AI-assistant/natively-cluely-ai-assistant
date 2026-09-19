@@ -2,9 +2,17 @@
 // Manages session state, transcript arrays, context windows, and epoch compaction.
 // Extracted from IntelligenceManager to decouple state management from LLM orchestration.
 
-import { RecapLLM } from './llm';
+import type { RecapLLM } from './llm/RecapLLM';
 import { isVerboseLogging } from './verboseLog';
 import type { AttemptId, TurnIdentity } from './llm/turnIdentity';
+import { isCodingAnswerType, planAnswer } from './llm/AnswerPlanner';
+import {
+    isHighConfidenceStandaloneCodingProblem,
+    isSelfContainedCodingRequest,
+    mergeActiveCodingProblem,
+    sharesCodingTopic,
+    shouldUseActiveCodingProblem,
+} from './llm/activeCodingContext';
 
 // Canned-fallback phrases that mean the model gave up entirely, not phrases
 // that might legitimately appear inside a real answer. Matched only when the
@@ -116,6 +124,8 @@ export interface AssistantResponse {
     surface?: ConversationSurface;
 }
 
+export type CodingQuestionSource = 'screenshot' | 'transcript' | 'manual';
+
 export class SessionTracker {
     // Context management (mirrors Swift ContextManager)
     private contextItems: ContextItem[] = [];
@@ -178,8 +188,18 @@ export class SessionTracker {
 
     // Detected coding question from transcript or screenshot extraction
     private detectedCodingQuestion: string | null = null;
-    private codingQuestionSource: 'screenshot' | 'transcript' | null = null;
+    private codingQuestionSource: CodingQuestionSource | null = null;
     private codingQuestionSetAt: number | null = null;
+    // Monotonic lifecycle token. Long-running WTA requests snapshot this before
+    // awaiting providers and only commit if no newer problem/reset won the race.
+    private codingQuestionRevision: number = 0;
+    // Session/mode boundary token for async work whose validity is broader than
+    // the active coding problem. Unlike codingQuestionRevision, normal coding
+    // updates do not advance this, so an unrelated new coding turn does not
+    // cancel a legitimate non-coding manual answer. Resets and mode-context
+    // clears do advance it, preventing pre-boundary async completions from
+    // repopulating the clean SessionTracker.
+    private sessionLifecycleEpoch: number = 0;
 
     // Rolling buffer for multi-segment interviewer question detection
     private recentInterviewerBuffer: { text: string; timestamp: number }[] = [];
@@ -217,31 +237,33 @@ export class SessionTracker {
     /**
      * Set the current coding question.
      * Priority rules (avoids stale Q1 blocking Q2 detection in multi-question interviews):
-     *  - Screenshot → always stored immediately (explicit user action via Solve)
+     *  - Screenshot/manual → always stored immediately (explicit user action)
      *  - Transcript → stored if nothing is known yet, OR if existing question is also from
      *    transcript (newer detection = newer question), OR if screenshot question is stale
      *    (> 3 min old — user likely moved to the next question)
      */
-    setCodingQuestion(question: string, source: 'screenshot' | 'transcript'): void {
+    setCodingQuestion(question: string, source: CodingQuestionSource, forceReplace: boolean = false): void {
         const now = Date.now();
         const trimmed = question.trim();
         if (!trimmed) return;
 
-        if (this.detectedCodingQuestion === null) {
+        if (this.detectedCodingQuestion === null || forceReplace) {
             // Nothing stored — accept any source
             this.detectedCodingQuestion = trimmed;
             this.codingQuestionSource = source;
             this.codingQuestionSetAt = now;
-            console.log(`[SessionTracker] Coding question stored`, { source, length: trimmed.length });
+            this.codingQuestionRevision++;
+            console.log(`[SessionTracker] Coding question stored`, { source, forced: forceReplace, length: trimmed.length });
             return;
         }
 
-        if (source === 'screenshot') {
-            // Screenshot always updates immediately (explicit user Solve action)
+        if (source === 'screenshot' || source === 'manual') {
+            // Explicit user actions always update immediately.
             this.detectedCodingQuestion = trimmed;
             this.codingQuestionSource = source;
             this.codingQuestionSetAt = now;
-            console.log(`[SessionTracker] Coding question updated via screenshot`, { length: trimmed.length });
+            this.codingQuestionRevision++;
+            console.log(`[SessionTracker] Coding question updated via explicit ${source} input`, { length: trimmed.length });
             return;
         }
 
@@ -254,14 +276,23 @@ export class SessionTracker {
             this.detectedCodingQuestion = trimmed;
             this.codingQuestionSource = source;
             this.codingQuestionSetAt = now;
+            this.codingQuestionRevision++;
             console.log(`[SessionTracker] Coding question updated via transcript`, { source: this.codingQuestionSource, stale: isStale, length: trimmed.length });
         } else {
-            console.log(`[SessionTracker] Transcript question ignored — screenshot question is recent (< ${SessionTracker.SCREENSHOT_STALE_MS / 1000}s)`);
+            console.log(`[SessionTracker] Transcript question ignored — explicit question is recent (< ${SessionTracker.SCREENSHOT_STALE_MS / 1000}s)`);
         }
     }
 
-    getDetectedCodingQuestion(): { question: string | null; source: 'screenshot' | 'transcript' | null } {
+    getDetectedCodingQuestion(): { question: string | null; source: CodingQuestionSource | null } {
         return { question: this.detectedCodingQuestion, source: this.codingQuestionSource };
+    }
+
+    getCodingQuestionRevision(): number {
+        return this.codingQuestionRevision;
+    }
+
+    getSessionLifecycleEpoch(): number {
+        return this.sessionLifecycleEpoch;
     }
 
     clearCodingQuestion(): void {
@@ -269,6 +300,7 @@ export class SessionTracker {
         this.codingQuestionSource = null;
         this.codingQuestionSetAt = null;
         this.recentInterviewerBuffer = [];
+        this.codingQuestionRevision++;
     }
 
     /**
@@ -283,7 +315,11 @@ export class SessionTracker {
         this.codingQuestionSource = null;
         this.codingQuestionSetAt = null;
         this.recentInterviewerBuffer = [];
+        this.codingQuestionRevision++;
+        this.sessionLifecycleEpoch++;
         this.lastAssistantMessage = null;
+        this.lastAssistantMessageBySurface = {};
+        this.lastCommittedAttemptBySurface = {};
         this.assistantResponseHistory = [];
         this.lastInterimInterviewer = null;
         console.log('[SessionTracker] Mode-specific session context cleared');
@@ -291,21 +327,69 @@ export class SessionTracker {
 
     /**
      * Heuristic to decide if an interviewer statement looks like a coding question.
-     * Requires ≥2 of the signal patterns and minimum length to avoid false positives
-     * on casual conversation ("can you implement X?" → yes, "sounds good!" → no).
+     * Requires at least two independent signals. Short, high-signal asks are valid
+     * ("Implement an LRU cache with get and put"), so length is only a noise floor.
      */
     private looksLikeCodingQuestion(text: string): boolean {
-        if (text.length < 50) return false;
+        const trimmed = text.trim();
+        if (trimmed.length < 8) return false;
+        if (/\b(?:meeting\s+(?:agenda|notes?|summary)|shared\s+document|api\s+document|message\s+to\s+(?:the\s+)?(?:client|customer))\b/i.test(trimmed)) return false;
+        // A split system-design prompt often starts as a declarative role
+        // narrative rather than an imperative. Paired encrypt/decrypt actors are
+        // high-confidence on their own without restoring generic service/client
+        // nouns that polluted ordinary meeting speech.
+        if (isHighConfidenceStandaloneCodingProblem(trimmed)) return true;
+        // Named algorithms and kata-style problems are effectively unbounded
+        // ("Implement quicksort", "Implement FizzBuzz", ...), so a noun
+        // allow-list will always miss valid Q2s. Reuse the deterministic answer
+        // planner, but only for a syntactically self-contained request; this
+        // keeps conceptual discussion and implementation-planning prose from
+        // replacing the durable interview problem.
+        if (isSelfContainedCodingRequest(trimmed)) {
+            try {
+                const plan = planAnswer({
+                    question: trimmed,
+                    source: 'what_to_answer',
+                    speakerPerspective: 'interviewer',
+                });
+                if (isCodingAnswerType(plan.answerType)) return true;
+            } catch { /* fall through to the dependency-light signals below */ }
+        }
+        if (trimmed.length < 20) return false;
         const patterns = [
             /\b(implement|write|code|solve|design|build|create)\b/i,
+            /\b(reverse|merge|traverse|insert|delete|remove|serialize|deserialize|parse|validate)\b/i,
             /\b(given\s+(an?|the)\s+(array|string|list|tree|graph|matrix|number|integer|node|linked list|stack|queue|heap))\b/i,
             /\b(return|find\s+(all|the|a|any)|count|check\s+if|determine|calculate|maximize|minimize|sort)\b/i,
             /\b(function|method|algorithm|data structure|class)\b/i,
             /\b(O\(n\)|time complexity|space complexity|optimal|efficient|brute force)\b/i,
-            /\b(two sum|three sum|binary search|dynamic programming|BFS|DFS|palindrome|anagram|substring|subarray|rotation)\b/i,
+            /\b(two sum|three sum|binary search|dynamic programming|BFS|DFS|palindrome|anagram|substring|subarray|linked list|LRU|LFU|cache)\b/i,
+            /\b(encryp\w*|encrpt\w*|decryp\w*|descrypt\w*|cipher\w*|cryptograph\w*|key\s*(rotation|version|id)|rotate\w*\s+(the\s+)?(active\s+)?key)\b/i,
+            /\b(endpoint|rest\s+api|graphql|http\s+(?:handler|route|server)|producer|consumer|broker|kafka|payload|socket)\b/i,
         ];
-        const matchCount = patterns.filter(p => p.test(text)).length;
-        return matchCount >= 2;
+        const matchCount = patterns.filter(p => p.test(trimmed)).length;
+        const standaloneImperative = /^(?:please\s+|can you\s+|could you\s+|would you\s+)?(?:implement|write|code|solve|design|build|create|reverse|merge|traverse|insert|delete|remove|serialize|deserialize|parse|validate|encrypt|decrypt|rotate|find|return|count|check|determine|calculate|maximi[sz]e|minimi[sz]e|sort|handle)\b/i.test(trimmed)
+            && /\b(array|string|list|linked list|tree|graph|matrix|node|stack|queue|stream|heap|trie|cache|function|method|class|algorithm|endpoint|rest\s+api|graphql|payload|cipher|key|parser|database|query|sort|search|median|substring|subarray)\b/i.test(trimmed);
+        return matchCount >= 2 || standaloneImperative;
+    }
+
+    private looksLikeNewCodingProblem(text: string): boolean {
+        return isSelfContainedCodingRequest(text)
+            || isHighConfidenceStandaloneCodingProblem(text);
+    }
+
+    private looksLikeCodingConstraint(text: string): boolean {
+        const trimmed = text.trim();
+        return /\b(?:encryp\w*|encrpt\w*|decryp\w*|descrypt\w*|rotate\w*\s+(?:the\s+)?(?:active\s+)?key|key\s+versions?)\b/i.test(trimmed)
+            || /\b(?:instead\s+of|not)\s+(?:doing\s+it\s+)?character\s+by\s+character\b/i.test(trimmed)
+            || /^(?:(?:please\s+)?(?:use|in|using)\s+|)(?:python|javascript|typescript|java|c\+\+|c#|csharp|go|golang|rust|swift|kotlin|ruby|php|sql)(?:\s+please)?[?.!]*$/i.test(trimmed)
+            || /^(?:you\s+can\s+|we\s+can\s+)?assume\b[^.?!]{0,100}\b(?:inputs?|outputs?|capacity|array|string|list|tree|graph|node|keys?|values?|indices|indexes|duplicates?|negatives?|null|empty|valid|sorted|unique)\b/i.test(trimmed)
+            || /^(?:constraints?|requirements?)\s*:\s*[^.?!]{0,120}\b(?:inputs?|outputs?|capacity|array|string|node|keys?|values?|complexity|memory|duplicates?|null|empty|sorted|unique)\b/i.test(trimmed)
+            || /\b(?:must|should|need(?:s|ed)?)\b[^.?!]{0,80}\b(?:encrypt|decrypt|rotate|cache|array|string|node|null|duplicates?|negatives?|input|output|index|complexity)\b/i.test(trimmed)
+            || /\breturn\b[^.?!]{0,40}\b(?:-?\d+|null|none|true|false|error|index|value)\b/i.test(text)
+            || /\bhandle\s+(?:duplicates?|negatives?|empty\s+(?:input|array|string)|nulls?)\b/i.test(trimmed)
+            || /\b(?:in[- ]?place|without\s+(?:extra\s+)?space|constant\s+space|one[- ]?pass|time\s+complexity|space\s+complexity)\b/i.test(trimmed)
+            || /\b(?:at least|at most)\s+(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:keys?|versions?|items?|elements?|nodes?|values?|entries?|bytes?)\b/i.test(trimmed);
     }
 
     // ============================================
@@ -519,11 +603,35 @@ export class SessionTracker {
                 const bufferCutoff = Date.now() - SessionTracker.INTERVIEWER_BUFFER_WINDOW_MS;
                 this.recentInterviewerBuffer = this.recentInterviewerBuffer.filter(e => e.timestamp >= bufferCutoff);
 
-                // Test single segment first; if no match, test accumulated recent turns
-                // (interviewer may state a problem across multiple speech segments)
-                if (this.looksLikeCodingQuestion(segment.text)) {
+                // Maintain one durable active problem. A genuine new standalone
+                // problem replaces it; constraints/clarifications extend it.
+                const active = this.detectedCodingQuestion;
+                const segmentLooksCoding = this.looksLikeCodingQuestion(segment.text);
+                const segmentLooksConstraint = this.looksLikeCodingConstraint(segment.text);
+                if (active && (segmentLooksCoding || segmentLooksConstraint)) {
+                    const belongsToActive = shouldUseActiveCodingProblem(segment.text, active);
+                    const segmentHasNamedTopic = sharesCodingTopic(segment.text, segment.text);
+                    const startsDifferentProblem = segmentLooksCoding
+                        && this.looksLikeNewCodingProblem(segment.text)
+                        && !belongsToActive;
+                    if (startsDifferentProblem) {
+                        this.recentInterviewerBuffer = [{ text: segment.text, timestamp: segment.timestamp }];
+                        // A complete, distinct spoken Q2 is stronger evidence
+                        // than the temporary source-priority stickiness on Q1.
+                        this.setCodingQuestion(segment.text, 'transcript', true);
+                    } else if (belongsToActive || (segmentLooksConstraint && !segmentHasNamedTopic)) {
+                        this.setCodingQuestion(
+                            mergeActiveCodingProblem(active, segment.text),
+                            this.codingQuestionSource ?? 'transcript',
+                        );
+                    }
+                } else if (segmentLooksCoding) {
                     this.setCodingQuestion(segment.text, 'transcript');
-                } else if (this.recentInterviewerBuffer.length > 1) {
+                } else if (!this.detectedCodingQuestion && this.recentInterviewerBuffer.length > 1) {
+                    // Fragment assembly is only for discovering the first active
+                    // problem. Once one exists, unrelated conversation must not
+                    // hitchhike into it merely because an older buffered turn
+                    // still contains coding keywords.
                     const combinedText = this.recentInterviewerBuffer.map(e => e.text).join(' ');
                     if (this.looksLikeCodingQuestion(combinedText)) {
                         this.setCodingQuestion(combinedText, 'transcript');
@@ -798,14 +906,19 @@ export class SessionTracker {
         this.fullTranscript = [];
         this.fullUsage = [];
         this.transcriptEpochSummaries = [];
+        this.currentMeetingMetadata = null;
         this.sessionStartTime = Date.now();
         this.lastAssistantMessage = null;
+        this.lastAssistantMessageBySurface = {};
+        this.lastCommittedAttemptBySurface = {};
         this.assistantResponseHistory = [];
         this.lastInterimInterviewer = null;
         this.detectedCodingQuestion = null;
         this.codingQuestionSource = null;
         this.codingQuestionSetAt = null;
         this.recentInterviewerBuffer = [];
+        this.codingQuestionRevision++;
+        this.sessionLifecycleEpoch++;
     }
 
     // ============================================
@@ -835,6 +948,10 @@ export class SessionTracker {
     private async compactTranscriptIfNeeded(): Promise<void> {
         if (this.fullTranscript.length <= 1800 || this.isCompacting) return;
 
+        // A reset can occur while the recap provider is awaited. Any completion
+        // from the outgoing session must be discarded before it can append an
+        // old summary or slice entries from the newly-started session.
+        const compactionLifecycleEpoch = this.sessionLifecycleEpoch;
         this.isCompacting = true;
         try {
             // Take the oldest 500 entries to summarize
@@ -853,6 +970,7 @@ export class SessionTracker {
                     const epochSummary = await this.recapLLM.generate(
                         `Summarize this conversation segment into 3-5 concise bullet points preserving key topics, decisions, and questions:\n\n${summaryInput}`
                     );
+                    if (this.sessionLifecycleEpoch !== compactionLifecycleEpoch) return;
                     if (epochSummary && epochSummary.trim().length > 0) {
                         this.transcriptEpochSummaries.push(epochSummary.trim());
                         console.log(`[SessionTracker] Epoch summary created (${this.transcriptEpochSummaries.length} total)`);
@@ -862,6 +980,7 @@ export class SessionTracker {
                         this.transcriptEpochSummaries.push(marker);
                     }
                 } catch (e) {
+                    if (this.sessionLifecycleEpoch !== compactionLifecycleEpoch) return;
                     // If summarization fails, store a simple marker
                     const fallback = `[Earlier discussion: ${oldEntries.length} segments summarized without transcript snippets.]`;
                     this.transcriptEpochSummaries.push(fallback);
@@ -874,6 +993,11 @@ export class SessionTracker {
                 this.transcriptEpochSummaries.push(marker);
                 console.warn('[SessionTracker] recapLLM not available — storing plain epoch marker');
             }
+
+            // Defense in depth for any future await added to a non-provider
+            // branch above: all transcript mutations belong to the epoch that
+            // took the snapshot.
+            if (this.sessionLifecycleEpoch !== compactionLifecycleEpoch) return;
 
             // Cap epoch summaries to prevent LLM context window overflow
             if (this.transcriptEpochSummaries.length > SessionTracker.MAX_EPOCH_SUMMARIES) {

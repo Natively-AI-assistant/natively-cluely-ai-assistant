@@ -156,14 +156,18 @@ describe('D2 — denied blocks are removed from the message', () => {
 // user-content assembly all execute exactly as they do in production; the
 // captured argument is the string the provider client would serialize.
 
-function runInner(message, { deny, extraScopes = [], context, imagePaths } = {}) {
+function runInner(message, {
+  deny, extraScopes = [], context, imagePaths, messageDataScopes = [], expectedDispatches = 1,
+  localAvailable = false,
+} = {}) {
   const captured = [];
+  let output = '';
   const h = helper();
-  h.useOllama = false;
+  h.useOllama = localAvailable;
   // Both halves of the 2026-08-01 probe split (pure predicate + explicit
   // mutator). Dispatch sites call the mutating one.
   h.checkOllamaAvailable = async () => false;
-  h.ensureOllamaModelSelected = async () => false;
+  h.ensureOllamaModelSelected = async () => localAvailable;
   h.currentModelId = 'gpt-test';
   h.pickConfiguredCustomProviderForFallback = () => null;
   h.getActiveModeGroundingInfo = () => null;
@@ -180,15 +184,21 @@ function runInner(message, { deny, extraScopes = [], context, imagePaths } = {})
   return (async () => {
     try {
       const gen = LLMHelper.prototype._streamChatInner.call(
-        h, message, imagePaths, context, 'SYS', true, true, extraScopes, undefined, 0, { v3Owned: true },
+        h, message, imagePaths, context, 'SYS', true, true, extraScopes, undefined, 0,
+        { v3Owned: true, messageDataScopes },
       );
-      for await (const _ of gen) { /* drain */ }
+      for await (const token of gen) output += token;
     } finally {
       if (before === undefined) delete process.env[DENY_ENV];
       else process.env[DENY_ENV] = before;
     }
-    assert.equal(captured.length, 1, `expected exactly one provider dispatch, got ${captured.length}`);
-    return { provider: captured[0].provider, payload: captured[0].args[0] };
+    assert.equal(captured.length, expectedDispatches,
+      `expected ${expectedDispatches} provider dispatch(es), got ${captured.length}`);
+    return {
+      provider: captured[0]?.provider ?? null,
+      payload: captured[0]?.args[0] ?? null,
+      output,
+    };
   })();
 }
 
@@ -198,6 +208,16 @@ describe('what actually leaves the process', () => {
     const { provider, payload } = await runInner(msg, { extraScopes: ['reference_files'] });
     assert.equal(provider, 'streamWithOpenai');
     assert.equal(payload, msg, 'allowed-scope behaviour must be byte-identical to today');
+  });
+
+  test('allowed retained message provenance does not change dispatch or payload', async () => {
+    const msg = `ACTIVE CODING PROBLEM: ${SECRET_SPOKEN}`;
+    const { provider, payload } = await runInner(msg, {
+      extraScopes: ['transcript'],
+      messageDataScopes: ['transcript'],
+    });
+    assert.equal(provider, 'streamWithOpenai');
+    assert.equal(payload, msg);
   });
 
   test('reference_files denied: the document text never reaches the provider', async () => {
@@ -235,5 +255,43 @@ describe('what actually leaves the process', () => {
       context: `<transcript>${SECRET_SPOKEN}</transcript>`,
     });
     assert.ok(!payload.includes(SECRET_SPOKEN), 'LEAK: legacy context transcript was sent to the provider');
+  });
+
+  test('retained transcript text embedded in the message fails closed when transcript is denied', async () => {
+    const retained = `ACTIVE CODING PROBLEM: ${SECRET_SPOKEN}`;
+    const { provider, output } = await runInner(retained, {
+      deny: 'transcript',
+      extraScopes: ['transcript'],
+      messageDataScopes: ['transcript'],
+      expectedDispatches: 0,
+    });
+    assert.equal(provider, null, 'protected retained text must not reach a cloud provider');
+    assert.ok(!output.includes(SECRET_SPOKEN), 'the local refusal must not echo protected text');
+    assert.match(output, /No protected context was sent/);
+  });
+
+  test('retained screenshot text embedded in the message fails closed when screenshots are denied', async () => {
+    const retained = `ACTIVE CODING PROBLEM: ${SECRET_CODE}`;
+    const { provider, output } = await runInner(retained, {
+      deny: 'screenshots',
+      extraScopes: ['screenshots'],
+      messageDataScopes: ['screenshots'],
+      expectedDispatches: 0,
+    });
+    assert.equal(provider, null, 'screenshot-derived text must not reach a cloud provider');
+    assert.ok(!output.includes(SECRET_CODE), 'the local refusal must not echo protected text');
+    assert.match(output, /No protected context was sent/);
+  });
+
+  test('a denied retained message routes locally when a local model is available', async () => {
+    const retained = `ACTIVE CODING PROBLEM: ${SECRET_SPOKEN}`;
+    const { provider, output } = await runInner(retained, {
+      deny: 'transcript',
+      extraScopes: ['transcript'],
+      messageDataScopes: ['transcript'],
+      localAvailable: true,
+    });
+    assert.equal(provider, 'streamWithOllama');
+    assert.equal(output, 'ok');
   });
 });
