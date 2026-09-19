@@ -93,6 +93,12 @@ export const RETRIEVAL_FLAGS = {
     default: true,
     why: 'RC6: resolveReference never compared state.scopeId, so the first turn after a scope change used a stale topic',
   },
+  /** One fast-model query rewrite when the first retrieval cannot support a document claim (2026-09-20). */
+  lowConfidenceQueryRewrite: {
+    env: 'NATIVELY_RETRIEVAL_LOW_CONFIDENCE_QUERY_REWRITE',
+    default: true,
+    why: 'a paraphrase sharing no vocabulary with its answer ("Who would be my manager?" vs "reports to the Director of…") has no lexical route and sometimes no semantic one; costs up to 1.5 s, only on turns whose evidence came back NONE',
+  },
 } as const satisfies Record<string, RetrievalFlagSpec>;
 
 export type RetrievalFlagKey = keyof typeof RETRIEVAL_FLAGS;

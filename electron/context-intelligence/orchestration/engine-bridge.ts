@@ -57,6 +57,12 @@ export interface BridgeInput {
   /** How many reference files the active mode has. Lets the composer say "no
    *  document is attached" instead of "the document does not mention it". */
   attachedSourceCount?: number;
+  /**
+   * Bounded fast-model query rewrite for low-confidence retrieval — see
+   * retrieval/llm-query-rewrite.ts. The CALLER binds the model (this module has
+   * no provider imports); absent = off for this turn.
+   */
+  queryRewriter?: import('../retrieval/llm-query-rewrite').QueryRewriter;
   /** Attached file NAMES — deterministic filename-role routing (glossary /
    *  formula sheet, deep-run 2 issue 9). Always populated by call sites;
    *  never gated on debug level (routing must not depend on logging). */
@@ -269,6 +275,7 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
       // turn whose only documents are the résumé / job description looks IN them.
       profileOnlyDocuments: (input.attachedSourceCount ?? 0) === 0 && (input.profileSourceCount ?? 0) > 0,
       attachedSourceCount: input.attachedSourceCount,
+      queryRewriter: input.queryRewriter,
       attachedFileNames: input.attachedFileNames,
       screenText: input.screenText,
       extraAllowedSourceTypes: input.extraAllowedSourceTypes,

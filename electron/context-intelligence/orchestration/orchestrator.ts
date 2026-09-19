@@ -24,6 +24,7 @@ import { CLAIM_AUTHORITY, claimAuthority } from '../policies/source-authority-po
 import { isRetrievalFixEnabled } from '../contracts/retrieval-flags';
 import { classifyTurn, isBareFollowUp, stripSttFillers } from '../question/turn-classifier';
 import type { AnswerTrace, RetrievalAttemptTrace } from '../observability/answer-trace';
+import { mergeRewrittenEvidence, type QueryRewriter, type QueryRewriteOutcome } from '../retrieval/llm-query-rewrite';
 
 export interface AnswerRequest {
   requestId: string;
@@ -69,6 +70,13 @@ export interface AnswerRequest {
   profileOnlyDocuments?: boolean;
   /** How many files are attached to the MODE. Set by the engine bridge; absent = unknown = no scaling. */
   attachedSourceCount?: number;
+  /**
+   * One bounded fast-model call that restates the question in the vocabulary a
+   * document would use (see retrieval/llm-query-rewrite.ts). Injected by the engine
+   * bridge; absent = the feature is off for this turn. Used ONLY when the first
+   * retrieval leaves a document claim unsupported, and only as a ranking query.
+   */
+  queryRewriter?: QueryRewriter;
   /** The turn is inside a live meeting with transcript evidence available
    *  (issue #552, task 7b) — see ClassificationInput.inLiveMeeting. Passed
    *  straight through to the classifier; never widens `policy` itself. */
@@ -1012,8 +1020,54 @@ export async function orchestrate(
   }
 
   const tEvaluate = clock();
-  const answerability = evaluateAnswerability(decision, evidence);
+  let answerability = evaluateAnswerability(decision, evidence);
   evidenceEvaluationMs = span(tEvaluate);
+
+  // ── LOW-CONFIDENCE QUERY REWRITE (2026-09-20) ───────────────────────────
+  // The first pass could not support a claim that REQUIRES the user's own
+  // material — the turn is headed for "I couldn't find that in your documents"
+  // (or, measured live, a confidently wrong answer). Before accepting that, ask
+  // a fast model ONCE to restate the question in document vocabulary and
+  // retrieve again. Bounded by the rewriter's own deadline; every failure mode
+  // (timeout, error, empty, no new words, retrieval throwing) leaves the turn
+  // exactly as the first pass left it.
+  //
+  // What the rewrite may NOT do: it replaces `retrievalPlan.queries` only. The
+  // port ranks with that text, but source-type planning, claim authority, scope
+  // and admission all still read `resolvedQuestion` — a model cannot talk its
+  // way into a source the user's question did not authorize. Answerability is
+  // re-evaluated against the ORIGINAL question too.
+  let queryRewrite: AnswerTrace['queryRewrite'];
+  if (req.queryRewriter && retrieval
+      && decision.retrievalPlan.shouldRetrieve
+      && answerability === 'NONE'
+      && decision.claimRequirements.some((c) => c.authority === 'PRIVATE_SOURCE_REQUIRED')
+      && isRetrievalFixEnabled('lowConfidenceQueryRewrite')) {
+    let outcome: QueryRewriteOutcome;
+    try { outcome = await req.queryRewriter(decision.resolvedQuestion); }
+    catch { outcome = { query: null, reason: 'ERROR', durationMs: 0 }; }
+    let added = 0;
+    if (outcome.query) {
+      const tRewrite = clock();
+      try {
+        const rewritten = freezeTurnDecision({
+          ...decision,
+          retrievalPlan: { ...decision.retrievalPlan, queries: [outcome.query] },
+        } as never);
+        const r2 = await retrieval.retrieve({ decision: rewritten });
+        const merged = mergeRewrittenEvidence(evidence, r2.evidence);
+        added = merged.length - evidence.length;
+        evidence = merged;
+        attempts = [...attempts, ...r2.attempts.map((a) => ({ ...a, strategy: `llm_query_rewrite:${a.strategy}` }))];
+        answerability = evaluateAnswerability(decision, evidence);
+      } catch { /* the first pass stands */ }
+      retrievalMs += span(tRewrite);
+    }
+    queryRewrite = {
+      reason: outcome.reason, durationMs: outcome.durationMs, queryChars: outcome.query?.length ?? 0,
+      addedEvidence: added, answerabilityBefore: 'NONE', answerabilityAfter: answerability,
+    };
+  }
 
   // A question whose required source the MODE forbids is not answerable from
   // model knowledge — that would answer a meeting question out of thin air. It
@@ -1067,6 +1121,7 @@ export async function orchestrate(
     prohibitedSources: [],
     retrievalPath: decision.retrievalPlan.path,
     retrievalAttempts: attempts,
+    ...(queryRewrite ? { queryRewrite } : {}),
     acceptedEvidence: evidence.map((e) => ({
       evidenceId: e.evidenceId, sourceType: e.sourceType, sourceId: e.sourceId,
       versionId: e.versionId, scopeId: e.scopeId, finalScore: e.finalScore,

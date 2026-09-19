@@ -90,6 +90,14 @@ the hosted API was unavailable that day, and is not needed for any of this.
 15. Employment-phrased questions ("Who would be my manager?") plan the JD when the question's terms
     are not in the résumé; the `USER_EMPLOYMENT` prohibition itself is unchanged.
 16. The derived salary estimate says it is an estimate and that a figure stated in the JD wins.
+17. **Low-confidence query rewrite** (`retrieval/llm-query-rewrite.ts`): when the first retrieval leaves
+    a claim that needs the user's own documents with NO supporting evidence, the user's fast model is
+    asked once — 1.5 s hard cap — to restate the question in document vocabulary ("Who would be my
+    manager?" → "reports to, reporting line, director"), and retrieval runs again. The rewrite is a
+    ranking query only: source planning, authority and admission still read the user's question.
+    Timeout / error / no new words ⇒ the turn is exactly the first pass. Offline the trigger covers
+    36 of 432 profile turns (8%) and 14 of the 22 misses left after the semantic arm. Kill switch:
+    `NATIVELY_RETRIEVAL_LOW_CONFIDENCE_QUERY_REWRITE=0`.
 9. Spoken identifiers: "the forty-four seventy-one outage" → 4471; a number word is never the
    head ("i n c forty 471" corruption); "X and seventy one Y" keeps its "and".
 
@@ -114,7 +122,5 @@ only, never to a third-party provider.
 - The local-embedding lexical-only rule (`NATIVELY_KEYLESS_LEXICAL_MANUAL_RETRIEVAL`): offline it
   costs key-less users ~11 of 162 at 70k; live +1/20 (noise). Not flipped — the rule exists for ONNX
   pressure during a live meeting with local STT, which typed turns cannot exercise.
-- A low-confidence LLM query rewrite would address the paraphrase residue; it costs latency and
-  tokens per turn.
 - Windows: everything is platform-independent TypeScript and the CRLF fix is tested with CRLF
   input, but none of it has been executed on Windows — see `WINDOWS-CHECKLIST.md`.
