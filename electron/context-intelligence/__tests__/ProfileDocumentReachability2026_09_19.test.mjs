@@ -163,3 +163,47 @@ describe('a fired intent\'s vocabulary reaches the raw text', () => {
     assert.ok(r.evidence.every((e) => (e.finalScore ?? 0) <= 1));
   });
 });
+
+describe('employment-phrased questions about the JOB (owner decision 2026-09-20: let the corpus decide)', () => {
+  // "Who would be my manager?" is first person, so it is a USER_EMPLOYMENT claim —
+  // and that claim PROHIBITS the job description, on purpose. Measured offline:
+  // JD rows 83% → 87% (5k) and 81% → 85% (70k) with résumé rows unchanged (93%).
+  const Q = 'Who would be my manager?';
+  const plannedWith = async (anchored, extra = {}) => {
+    let planned = null;
+    const stub = { probeAnchors: () => anchored.length > 0, probeAnchorSources: () => anchored,
+      retrieve: async ({ decision }) => { planned = decision.retrievalPlan.sourceTypes; return { evidence: [], attempts: [] }; } };
+    const r = await orchestrate(req(Q, { profileOnlyDocuments: true, ...extra }), stub);
+    return { planned, decision: r.decision };
+  };
+  test('precondition: grammar alone never plans the job description for it', () => {
+    const d = decide(req(Q, { profileOnlyDocuments: true }));
+    assert.ok(d.claimRequirements.every((c) => /^USER_/.test(c.claimType)), JSON.stringify(d.claimRequirements.map((c) => c.claimType)));
+    assert.ok(!d.retrievalPlan.sourceTypes.includes('JOB_DESCRIPTION'));
+  });
+  test('the résumé does not hold the question\'s terms → the JD is planned as a document lookup', async () => {
+    const { planned, decision } = await plannedWith([]);
+    assert.ok(planned.includes('JOB_DESCRIPTION'), String(planned));
+    // The prohibition stands: the USER_* claim still cannot be evidenced by JD text.
+    const user = decision.claimRequirements.find((c) => /^USER_/.test(c.claimType));
+    assert.ok(user && !user.authoritativeSources.includes('JOB_DESCRIPTION'), JSON.stringify(user));
+  });
+  test('the résumé DOES hold them → it is a question about the user; the JD stays out', async () => {
+    const { planned } = await plannedWith(['RESUME']);
+    assert.ok(!planned.includes('JOB_DESCRIPTION'), String(planned));
+  });
+  test('not a profile-only turn, or a mode with no job description → unchanged', async () => {
+    assert.ok(!(await plannedWith([], { profileOnlyDocuments: false })).planned.includes('JOB_DESCRIPTION'));
+    const sales = await plannedWith([], { modeId: 'sales' });
+    assert.ok(!(sales.planned ?? []).includes('JOB_DESCRIPTION'));
+  });
+});
+
+test('the derived salary estimate states that a figure in the job description takes precedence', async () => {
+  const { renderProfileSections } = await load('retrieval/profile-retrieval-port.js');
+  const sections = renderProfileSections('fact', { salary_estimate: { min: 158000, max: 183000, currency: 'EUR', confidence: 'medium', role: 'Principal Engineer', location: 'Rotterdam' } });
+  const est = sections.find((x) => x.boostKey === 'derived_salary');
+  assert.ok(est, JSON.stringify(sections.map((x) => x.boostKey)));
+  assert.match(est.text, /DERIVED ESTIMATE/);
+  assert.match(est.text, /PRECEDENCE: if the job description states a salary[^.]*THAT is what the position pays/);
+});

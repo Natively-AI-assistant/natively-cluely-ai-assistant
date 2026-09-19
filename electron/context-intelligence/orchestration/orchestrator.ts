@@ -882,7 +882,24 @@ export async function orchestrate(
     try {
       const probeQ = (effectiveReq.manualQuestion ?? effectiveReq.transcriptQuestion ?? '').trim();
       const planned = new Set(decision.retrievalPlan.sourceTypes);
-      const missing = probeQ ? retrieval.probeAnchorSources(probeQ).filter((s) => !planned.has(s)) : [];
+      const anchoredIn = probeQ ? retrieval.probeAnchorSources(probeQ) : [];
+      const missing = anchoredIn.filter((s) => !planned.has(s));
+      // EMPLOYMENT-PHRASED QUESTIONS ABOUT THE JOB (owner's decision 2026-09-20:
+      // "let the corpus decide"). In a job-search mode "Who would be my manager?",
+      // "Can I work from home?", "How senior do I need to be?" are first person, so
+      // they classify as USER_* claims — and those PROHIBIT the job description as
+      // a source, deliberately, so a JD requirement can never be presented as the
+      // user's own history. The prohibition stays. But when the résumé does NOT
+      // hold the question's terms, it cannot be what the question is about; on a
+      // profile-only turn the job description is then planned as well, as a
+      // DOCUMENT lookup (DOCUMENT_FACT has authority over it; the USER_* claim
+      // still cannot be evidenced by JD text).
+      const allowsJd = decision.requiredSourceTypes.includes('JOB_DESCRIPTION') || decision.optionalSourceTypes.includes('JOB_DESCRIPTION');
+      const onlyUserClaims = decision.claimRequirements.length > 0 && decision.claimRequirements.every((c) => /^USER_/.test(c.claimType));
+      if (effectiveReq.profileOnlyDocuments && allowsJd && onlyUserClaims && !planned.has('JOB_DESCRIPTION')
+          && !anchoredIn.includes('RESUME') && !missing.includes('JOB_DESCRIPTION')) {
+        missing.push('JOB_DESCRIPTION');
+      }
       if (missing.length) {
         const again = decide({ ...effectiveReq, anchoredSourceTypes: missing });
         if (again.retrievalPlan.shouldRetrieve) decision = again;

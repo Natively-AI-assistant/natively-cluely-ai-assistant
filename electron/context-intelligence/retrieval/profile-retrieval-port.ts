@@ -403,7 +403,11 @@ function renderFactSections(sd: Record<string, unknown>): ProfileSection[] {
           'IMPORTANT: this is a DERIVED ESTIMATE calculated from the résumé '
             + '(role, location, skills and years of experience). It is NOT stated '
             + 'anywhere on the résumé, and it is NOT an offer or a figure from the '
-            + 'job description. Present it as an estimate.',
+            + 'job description. Present it as an estimate. PRECEDENCE: if the job '
+            + 'description states a salary, range, equity or bonus, THAT is what the '
+            + 'position pays — answer a question about the position\'s pay from the '
+            + 'job description, and offer this estimate only as the candidate\'s '
+            + 'market expectation, never in place of a stated figure.',
         ].filter(Boolean).join(' '),
         completeInventory: false,
       });
