@@ -23,7 +23,17 @@ const makeLLMHelper = (calls) => ({
   async *streamChat(...args) { calls.push(args); yield 'tok'; },
 });
 
-const V3 = { system: 'V3_SYS', user: 'V3_USER' };
+const V3 = {
+  system: 'V3_SYS',
+  user: 'V3_USER',
+  packedDataScopes: ['reference_files', 'transcript'],
+  messageDataScopes: ['transcript'],
+};
+
+const assertV3ScopesReachTransport = (call) => {
+  assert.deepEqual(call[6], V3.packedDataScopes);
+  assert.deepEqual(call[9], { v3Owned: true, messageDataScopes: V3.messageDataScopes });
+};
 
 test('AssistLLM: override drives the provider; absence keeps legacy', async () => {
   const { AssistLLM } = require(dist('AssistLLM'));
@@ -36,6 +46,7 @@ test('AssistLLM: override drives the provider; absence keeps legacy', async () =
   assert.equal(calls[0][0], 'V3_USER');
   assert.equal(calls[0][2], undefined, 'the raw context blob must NOT ride along under V3');
   assert.equal(calls[0][3], 'V3_SYS');
+  assertV3ScopesReachTransport(calls[0]);
   // Legacy: instruction as message, context in arg2 — untouched.
   assert.match(calls[1][0], /summarize what is happening/i);
   assert.equal(calls[1][2], 'CTX', 'legacy context untouched without the override');
@@ -50,6 +61,7 @@ test('ClarifyLLM: both paths honour the override', async () => {
   for await (const _ of llm.generateStream('CTX')) { /* drain */ }
   assert.equal(calls[0][0], 'V3_USER');
   assert.equal(calls[0][3], 'V3_SYS');
+  assertV3ScopesReachTransport(calls[0]);
   assert.equal(calls[1][0], 'CTX');
 });
 
@@ -60,6 +72,7 @@ test('BrainstormLLM: override drives the provider', async () => {
   for await (const _ of llm.generateStream('CTX', undefined, V3)) { /* drain */ }
   assert.equal(calls[0][0], 'V3_USER');
   assert.equal(calls[0][3], 'V3_SYS');
+  assertV3ScopesReachTransport(calls[0]);
 });
 
 test('question-resolver gates the proactive adoption: no stable question, no takeover', async () => {

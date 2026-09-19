@@ -232,12 +232,93 @@ describe('composed prompt is the enforcement boundary', () => {
     const allowed = await withEnvDenial(undefined, () => bridge({ conversationSummary: summary }));
     assert.ok(allowed.user.includes(summary), 'baseline must ship the summary — otherwise the denial test is vacuous');
     assert.ok(allowed.packedDataScopes.includes('transcript'));
+    assert.deepEqual(allowed.messageDataScopes, ['transcript'],
+      'conversation prose must tell the final transport that transcript data is embedded in the message');
 
     const denied = await withEnvDenial('transcript', () => bridge({ conversationSummary: summary }));
     assert.ok(!denied.user.includes(summary), 'LEAK: conversation-state text survived a transcript denial');
     assert.ok(!denied.user.includes('How many nodes'), 'LEAK: conversation-state text survived a transcript denial');
     assert.ok(denied.withheldDataScopes.includes('transcript'));
     assert.ok(!denied.packedDataScopes.includes('transcript'));
+    assert.ok(!denied.messageDataScopes.includes('transcript'));
+  });
+
+  test('a screenshot-derived retained referent is declared as screenshot data', async () => {
+    const retainedProblem = 'SECRET_SCREEN_PROBLEM: rotate each encrypted block';
+    const r = await withEnvDenial(undefined, () => bridge({
+      question: 'Solve the active coding problem. Current request: show it in Python',
+      retrieval: port([]),
+      referenceContext: retainedProblem,
+      referenceContextDataScope: 'screenshots',
+    }));
+    assert.ok(r.user.includes(retainedProblem), 'control: an allowed retained problem must reach the prompt');
+    assert.ok(r.packedDataScopes.includes('screenshots'),
+      'OCR/vision text keeps screenshot provenance after it becomes conversation text');
+    assert.ok(r.packedDataScopes.includes('transcript'),
+      'the retained referent rides inside the conversation envelope');
+    assert.ok(r.messageDataScopes.includes('screenshots'),
+      'screenshot-derived prose must remain fail-closed at the final transport boundary');
+    assert.ok(r.messageDataScopes.includes('transcript'),
+      'the retained referent is rendered in the transcript-scoped conversation envelope');
+  });
+
+  test('screenshots denied removes a screenshot-derived retained referent before composition', async () => {
+    const retainedProblem = 'SECRET_SCREEN_PROBLEM: rotate each encrypted block';
+    const r = await withEnvDenial('screenshots', () => bridge({
+      question: 'Solve the active coding problem. Current request: show it in Python',
+      retrieval: port([]),
+      referenceContext: retainedProblem,
+      referenceContextDataScope: 'screenshots',
+    }));
+    assert.ok(!r.user.includes(retainedProblem),
+      'LEAK: a screenshot-derived active problem survived screenshots=false');
+    assert.ok(r.withheldDataScopes.includes('screenshots'));
+    assert.ok(!r.packedDataScopes.includes('screenshots'));
+    assert.ok(!r.messageDataScopes.includes('screenshots'));
+    assert.match(r.user, /privacy setting/i,
+      'an essential retained problem must be reported as withheld, not guessed');
+  });
+
+  test('a scope disabled during retrieval cannot pass the retained-reference TOCTOU window', async () => {
+    const retainedProblem = 'SECRET_SCREEN_PROBLEM: implement a bounded deque';
+    const before = process.env[DENY_PROVIDER_SCOPES_ENV];
+    delete process.env[DENY_PROVIDER_SCOPES_ENV];
+    let retrievalRan = false;
+    try {
+      const r = await bridge({
+        referenceContext: retainedProblem,
+        referenceContextDataScope: 'screenshots',
+        retrieval: {
+          retrieve: async () => {
+            retrievalRan = true;
+            process.env[DENY_PROVIDER_SCOPES_ENV] = 'screenshots';
+            return { evidence: [], attempts: [] };
+          },
+        },
+      });
+      assert.equal(retrievalRan, true, 'control: the policy must change while orchestrate is awaiting retrieval');
+      assert.ok(!r.user.includes(retainedProblem),
+        'LEAK: reference policy was read before retrieval and not rechecked before composition');
+      assert.ok(r.withheldDataScopes.includes('screenshots'));
+    } finally {
+      if (before === undefined) delete process.env[DENY_PROVIDER_SCOPES_ENV];
+      else process.env[DENY_PROVIDER_SCOPES_ENV] = before;
+    }
+  });
+
+  test('transcript denied removes a transcript-derived retained referent before composition', async () => {
+    const retainedProblem = 'SECRET_TRANSCRIPT_PROBLEM: implement a bounded queue';
+    const r = await withEnvDenial('transcript', () => bridge({
+      question: 'Solve the active coding problem. Current request: show it in Rust',
+      retrieval: port([]),
+      referenceContext: retainedProblem,
+      referenceContextDataScope: 'transcript',
+    }));
+    assert.ok(!r.user.includes(retainedProblem),
+      'LEAK: a transcript-derived active problem survived transcript=false');
+    assert.ok(r.withheldDataScopes.includes('transcript'));
+    assert.ok(!r.packedDataScopes.includes('transcript'));
+    assert.match(r.user, /privacy setting/i);
   });
 
   test('MEETING_TRANSCRIPT evidence is withheld under a transcript denial', async () => {

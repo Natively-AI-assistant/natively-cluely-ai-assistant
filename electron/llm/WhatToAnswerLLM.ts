@@ -1020,13 +1020,24 @@ The user triggered this action with a coding problem on screen and NO new questi
             // Buffering does not delay the user's perceived latency because we
             // still yield every token as it arrives; the buffer is just appended.
             const streamedBuffer: string[] = [];
-            const packetScopes: ProviderDataScope[] = [];
-            if (modeContextBlock) packetScopes.push('reference_files');
-            // Candidate resume facts AND prior assistant responses both fall under
-            // the 'profile_history' data scope; push once if either is present.
-            const hasProfileHistory = Boolean(effectiveCandidateProfile)
-                || Boolean(!documentGroundedCustomModeActiveForPrompt && temporalContext?.hasRecentResponses && temporalContext.previousResponses.length > 0);
-            if (hasProfileHistory) packetScopes.push('profile_history');
+            // V3 replaces the legacy packet wholesale, so its bridge-derived,
+            // post-filter scopes replace (not supplement) scopes inferred from
+            // the discarded legacy context. Legacy turns keep their explicit
+            // request provenance, including screenshot-derived retained coding
+            // problems that no longer have image bytes attached.
+            const v3PacketScopes = requestSnapshot?.v3Prompt?.packedDataScopes;
+            const packetScopes: ProviderDataScope[] = v3PacketScopes
+                ? [...v3PacketScopes]
+                : [...(requestSnapshot?.outboundDataScopes ?? [])];
+            if (!requestSnapshot?.v3Prompt) {
+                if (modeContextBlock) packetScopes.push('reference_files');
+                // Candidate resume facts AND prior assistant responses both fall
+                // under the 'profile_history' data scope; push once if either is
+                // present.
+                const hasProfileHistory = Boolean(effectiveCandidateProfile)
+                    || Boolean(!documentGroundedCustomModeActiveForPrompt && temporalContext?.hasRecentResponses && temporalContext.previousResponses.length > 0);
+                if (hasProfileHistory) packetScopes.push('profile_history');
+            }
             // Coding/DSA answers get a small reasoning budget for correctness;
             // everything else streams with thinking off (fastest TTFT). The WTA
             // request signal is threaded to LLMHelper so generation supersession
@@ -1152,7 +1163,15 @@ The user triggered this action with a coding problem on screen and NO new questi
             // composed user prompt — that spliced two governance layers into one
             // turn (V3's system prompt + Context OS's user pack, V3's user
             // prompt discarded). Only set when _v3p actually rides this stream.
-            const _wtaRoute = _v3p ? { ...wtaRouteOptions, v3Owned: true } : wtaRouteOptions;
+            const activeReferentMessageScopes: ProviderDataScope[] = [
+                ...new Set<ProviderDataScope>([
+                    ...(_v3p?.messageDataScopes ?? []),
+                    ...(requestSnapshot?.outboundDataScopes ?? []),
+                ]),
+            ];
+            const _wtaRoute = _v3p
+                ? { ...wtaRouteOptions, v3Owned: true, messageDataScopes: activeReferentMessageScopes }
+                : { ...wtaRouteOptions, messageDataScopes: activeReferentMessageScopes };
             // Prefer the outcome-bearing API so a truncated answer can be kept
             // out of session history. Fourteen existing suites inject a test
             // double that implements only `streamChat`; those double s degrade

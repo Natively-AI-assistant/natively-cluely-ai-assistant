@@ -2,6 +2,7 @@ import { LLMHelper } from "../LLMHelper";
 import { CODE_HINT_PROMPT, buildCodeHintMessage } from "./prompts";
 import { TINY_CODE_HINT_PROMPT } from "./tinyPrompts";
 import { resolveV2SystemPrompt, v2TierForPromptTier } from "./promptSystemV2";
+import type { V3TransportPrompt } from "./streamContextPolicy";
 
 export class CodeHintLLM {
     private llmHelper: LLMHelper;
@@ -27,7 +28,7 @@ export class CodeHintLLM {
         questionContext?: string,
         questionSource?: 'screenshot' | 'transcript' | null,
         transcriptContext?: string,
-        v3?: { system: string; user: string }
+        v3?: V3TransportPrompt
     ): AsyncGenerator<string> {
         try {
             // Vision-required + small model lacking image support → fail loud, not malformed.
@@ -71,10 +72,15 @@ export class CodeHintLLM {
                 // byte-for-byte unchanged.
                 Boolean(v3),   // ignoreKnowledgeMode — a V3-owned prompt must not be re-classified
                 Boolean(v3),   // skipModeInjection — V3's prompt already carries the mode contract
-                [],
+                v3?.packedDataScopes ? [...v3.packedDataScopes] : [],
                 undefined,
                 undefined,
-                v3 ? { v3Owned: true } : undefined
+                v3 ? {
+                    v3Owned: true,
+                    ...(v3.messageDataScopes?.length
+                        ? { messageDataScopes: [...v3.messageDataScopes] }
+                        : {}),
+                } : undefined
             );
         } catch (error) {
             console.error("[CodeHintLLM] Stream failed:", error);

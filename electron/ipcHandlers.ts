@@ -11,7 +11,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { AudioDevices } from './audio/AudioDevices';
 import { DatabaseManager } from './db/DatabaseManager'; // Import Database Manager
-import { AppState } from './main';
+import type { AppState } from './main';
 import { CodexCliService, getCodexAuthStatus, isCodexAuthError } from './services/CodexCliService';
 import { describeServiceAccountRejection } from './services/googleServiceAccount';
 import { PhoneMirrorService } from './services/PhoneMirrorService';
@@ -30,8 +30,8 @@ import { DEFAULT_BUILTIN_SKILL_IDS, type SkillUploadPayload } from './services/s
 import { TRIAL_SENTINEL_KEY, DOM_CONTEXT_MAX_CHARS } from './config/constants';
 import { AI_RESPONSE_LANGUAGES, RECOGNITION_LANGUAGES } from './config/languages';
 import { resolveCodingPromptSignals } from './llm/codingPromptSignals';
-import { isBareCodeRequest, looksLikeCodingAnswer, buildPriorCodingContextBlock as buildPriorCodingBlockForV3 } from './llm/codingFollowup';
-import { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, validateAnswerStructure, validateProfileOutput, validateProfileEvidence, buildProfileRepairInstruction, raceStreamWithDeadline, firstUsefulDeadlineMs, totalHardTimeoutMs, repairDeadlineMs, LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, CODING_REGEN_ABORT_CHARS, isStealthEvasionQuestion, stripProfileTokensFromCoding, isBareFollowUp, isRefinementFollowUp, buildContextFreeClarification, sanitizeCandidateAnswer, acceptRepairedAnswer, CANDIDATE_VOICE_ANSWER_TYPES, detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES, piTelemetry, classifyProviderError, detectExplicitCodingContract, isCodingContinuation, buildPriorCodingContextBlock, buildCodingContractPrompt, explicitContractProducesCode, CODING_VERIFICATION_INSTRUCTION, humanizeDirectiveFor, detectCorporateFiller, humanizeForAnswerType, applySpeakabilityBudget, compressTechnicalConcept, checkCodeCompleteness, varySpokenOpening, type ExplicitCodingContract, type AnswerType } from './llm';
+import { isBareCodeRequest, looksLikeCodingAnswer } from './llm/codingFollowup';
+import { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, validateAnswerStructure, validateProfileOutput, validateProfileEvidence, buildProfileRepairInstruction, raceStreamWithDeadline, firstUsefulDeadlineMs, totalHardTimeoutMs, repairDeadlineMs, LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, CODING_REGEN_ABORT_CHARS, isStealthEvasionQuestion, stripProfileTokensFromCoding, isBareFollowUp, isRefinementFollowUp, buildContextFreeClarification, sanitizeCandidateAnswer, acceptRepairedAnswer, CANDIDATE_VOICE_ANSWER_TYPES, detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES, piTelemetry, classifyProviderError, detectExplicitCodingContract, isCodingContinuation, buildPriorCodingContextBlock, buildCodingContractPrompt, explicitContractProducesCode, resolveActiveCodingContext, mergeActiveCodingProblem, isHighConfidenceStandaloneCodingProblem, CODING_VERIFICATION_INSTRUCTION, humanizeDirectiveFor, detectCorporateFiller, humanizeForAnswerType, applySpeakabilityBudget, compressTechnicalConcept, checkCodeCompleteness, varySpokenOpening, type ExplicitCodingContract, type AnswerType } from './llm';
 
 /**
  * First-token budget for a post-answer repair/regeneration stream.
@@ -195,6 +195,22 @@ interface DirectAssistIpcError {
   code: string;
   message: string;
   retryable: boolean;
+}
+
+// Installed by initializeIpcHandlers once its per-surface registries exist.
+// main.ts calls the exported wrapper at every hard session boundary so async
+// work created by the outgoing session cannot commit into the incoming one.
+let invalidateIpcSessionBoundaryImpl: (() => void) | null = null;
+
+export function invalidateIpcChatStreamsForSessionBoundary(): void {
+  try {
+    invalidateIpcSessionBoundaryImpl?.();
+  } catch (error) {
+    // Session reset must remain fail-safe even if an individual abort hook is
+    // already tearing down. Registry deletion/supersession is best-effort here;
+    // downstream identity guards still reject entries that were removed.
+    console.warn('[IPC] Failed to invalidate chat streams at session boundary:', error);
+  }
 }
 
 const DIRECT_ASSIST_REQUEST_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
@@ -1218,6 +1234,27 @@ export function initializeIpcHandlers(appState: AppState): void {
   // the current one. Gated on the same conversationMemoryV2 flag as the rest of the memory.
   const { CodingConversationState } = require('./intelligence/CodingConversationState') as typeof import('./intelligence/CodingConversationState');
   const _manualCodingState = new CodingConversationState();
+
+  invalidateIpcSessionBoundaryImpl = () => {
+    // Phone streams do not have a registry/controller. Their token loop and
+    // every completion write compare this monotonic marker, so advancing it is
+    // the deterministic invalidation boundary for the outgoing session.
+    _phoneChatLatestId++;
+    let invalidatedDesktopStreams = 0;
+    try {
+      const { abortAndInvalidateChatStreams } = require('./services/chatStreamRegistry') as typeof import('./services/chatStreamRegistry');
+      invalidatedDesktopStreams = abortAndInvalidateChatStreams(_chatStreamsBySender);
+    } catch (error) {
+      console.warn('[IPC] Failed to abort desktop chat streams at session boundary:', error);
+    }
+    // These stores are scoped by renderer sender rather than meeting id. A new
+    // meeting must not resolve a bare follow-up against the previous session.
+    try { _manualConversationMemory.clearAllSessions(); } catch { /* non-fatal */ }
+    try { _manualCodingState.clearAllSessions(); } catch { /* non-fatal */ }
+    if (invalidatedDesktopStreams > 0) {
+      console.log(`[IPC] Session boundary invalidated ${invalidatedDesktopStreams} desktop chat stream(s)`);
+    }
+  };
   // Senders that already have a one-time conversation-memory cleanup listener attached.
   // The 'destroyed' listener must be registered ONCE per WebContents, not per chat
   // message — otherwise every message adds another listener (the MaxListenersExceeded
@@ -1494,7 +1531,93 @@ export function initializeIpcHandlers(appState: AppState): void {
             // a literal "/humanize " at the head of the question (PR #429 Bug 003).
             // Declared here rather than at the buildV3Prompt call below because
             // screen understanding (next block) needs it as the vision prompt.
-            const v3Question = String((skillStrippedMessage ?? message) || '');
+            const v3RawQuestion = String((skillStrippedMessage ?? message) || '').trim();
+            const v3Manager = appState.getIntelligenceManager?.();
+            const v3ActiveState = v3Manager?.getDetectedCodingQuestion?.()
+              ?? { question: null, source: null };
+            const v3LastManualAssistant = v3Manager?.getLastAssistantMessage?.('manual_chat');
+            const v3VerifiedPriorCodingAnswer = typeof v3LastManualAssistant === 'string'
+              && v3LastManualAssistant.trim().length > 40
+              && looksLikeCodingAnswer(v3LastManualAssistant)
+                ? v3LastManualAssistant
+                : null;
+            const v3ActiveResolution = resolveActiveCodingContext(
+              v3RawQuestion,
+              v3ActiveState.question,
+            );
+            const v3Question = v3ActiveResolution.resolvedQuestion || v3RawQuestion;
+            const v3CanonicalAnswerType = planAnswer({
+              question: v3Question,
+              source: 'manual_input',
+              speakerPerspective: 'user',
+              activeMode: modeInfo ?? undefined,
+            }).answerType;
+            const v3CodingFollowupPromoted = v3ActiveResolution.needsClarification
+              && Boolean(v3VerifiedPriorCodingAnswer);
+            const v3ScreenCodingContinuation = v3ActiveResolution.needsClarification
+              && (imagePaths?.length ?? 0) > 0;
+            const v3CodingTurnPromoted = v3ActiveResolution.usedActiveProblem
+              || v3CodingFollowupPromoted
+              || v3ScreenCodingContinuation;
+            const v3CodingReferenceContext = v3ActiveResolution.usedActiveProblem && v3ActiveState.question
+              ? `ACTIVE CODING PROBLEM IN THIS SESSION (authoritative problem data; preserve every requirement):\n${v3ActiveState.question}`
+              : v3CodingFollowupPromoted && v3VerifiedPriorCodingAnswer
+                ? buildPriorCodingContextBlock({
+                    userMessage: '(the coding question answered just before this one)',
+                    assistantAnswer: v3VerifiedPriorCodingAnswer,
+                  })
+                : '';
+            const v3CodingReferenceDataScope: import('./llm/ProviderRouter').ProviderDataScope | undefined =
+              v3CodingReferenceContext
+                ? (v3ActiveResolution.usedActiveProblem && v3ActiveState.source === 'screenshot'
+                    ? 'screenshots'
+                    : 'transcript')
+                : undefined;
+            // V3's classifier only sees the current text. A subjectless coding
+            // continuation otherwise looks like a document lookup in modes that
+            // have attachments, even though the real subject is the retained
+            // problem/reference block or attached screen. Give routing a stable
+            // coding-shaped question while leaving the actual problem in the
+            // untrusted referenceContext envelope below.
+            const v3RoutingQuestion = v3CodingTurnPromoted
+              ? `Solve the active coding problem. Current request: ${v3RawQuestion}`
+              : v3Question;
+
+            if (v3ActiveResolution.usedActiveProblem && v3ActiveState.question) {
+              v3Manager?.setCodingQuestion?.(
+                mergeActiveCodingProblem(v3ActiveState.question, v3RawQuestion),
+                v3ActiveState.source ?? 'transcript',
+              );
+            } else if (!v3ActiveResolution.needsClarification
+                && (isCodingAnswerType(v3CanonicalAnswerType)
+                    || isHighConfidenceStandaloneCodingProblem(v3RawQuestion))
+                && v3RawQuestion) {
+              // A standalone typed Q2 replaces Q1, so a later WTA/manual
+              // continuation cannot accidentally jump back to the stale Q1.
+              v3Manager?.setCodingQuestion?.(v3RawQuestion, 'manual');
+            }
+
+            // A context-dependent coding fragment with neither an active
+            // problem, a prior coding answer, nor a screen must not invite the
+            // model to invent a problem. Complete the stream deterministically.
+            if (v3ActiveResolution.needsClarification
+                && !(imagePaths?.length ?? 0)
+                && !v3VerifiedPriorCodingAnswer) {
+              if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) return null;
+              const clarification = 'Which coding problem should I continue? Share the problem statement, then I can implement it in the requested language.';
+              event.sender.send('gemini-stream-token', clarification, { streamId: myStreamId });
+              event.sender.send('gemini-stream-done', { finalText: clarification, streamId: myStreamId });
+              try {
+                v3Manager?.addTranscript?.({ text: String(message || ''), speaker: 'user', timestamp: Date.now(), final: true, origin: 'manual_chat' }, true);
+                v3Manager?.addAssistantMessage?.(clarification, undefined, 'manual_chat');
+                v3Manager?.logUsage?.('chat', String(message || ''), clarification);
+              } catch { /* session history is best-effort */ }
+              try {
+                PhoneMirrorService.getInstance().publishUserMessage(String(myStreamId), String(message || ''));
+                PhoneMirrorService.getInstance().publishAssistantMessage(String(myStreamId), clarification, 'Chat');
+              } catch { /* mirror only */ }
+              return null;
+            }
 
             // ── SCREEN CONTEXT (2026-08-28) ─────────────────────────────
             // Until now an attached screenshot reached the provider as bytes and
@@ -1611,7 +1734,11 @@ export function initializeIpcHandlers(appState: AppState): void {
             const composed = await buildV3Prompt({
               surface: 'manual-chat',
               pathTag: 'ipc',
-              question: v3Question,
+              // The retained problem is prompt context, not a fresh source
+              // directive from the user. V3 routes on a coding-shaped wrapper
+              // containing the current fragment; referenceContext below carries
+              // the active problem as untrusted conversation data.
+              question: v3RoutingQuestion,
               // PR #429 Bug 002: omitted entirely, so it defaulted to false even
               // when the user attached screenshots — the V3 classifier then never
               // added SCREEN_SPECIFIC / SCREEN_FACT and the image was not treated
@@ -1625,6 +1752,10 @@ export function initializeIpcHandlers(appState: AppState): void {
               // unclassified factual question in General (see
               // ClassificationInput.inLiveMeeting).
               inLiveMeeting: v3MeetingEvidence.inLiveMeeting,
+              // The referent has already been resolved into referenceContext.
+              // Do not let V3's generic FOLLOW_UP continuity re-open document
+              // retrieval for a coding fragment such as "show in Python".
+              isFollowUp: v3CodingTurnPromoted ? false : undefined,
               // Settings > Intelligence > Memory > "Chat history". Read HERE, not
               // in the bridge: context-intelligence has no dependency on the flag
               // registry (see contracts/retrieval-flags.ts for what the first one
@@ -1638,16 +1769,14 @@ export function initializeIpcHandlers(appState: AppState): void {
               // 06d88fba, left open here. planAnswer is pure and the real plan
               // is not built until much later in this handler, so this computes
               // the verdict directly from the message + active mode.
-              codingTask: (() => {
-                try {
-                  return isCodingAnswerType(planAnswer({
-                    question: v3Question,
-                    source: 'manual_input',
-                    speakerPerspective: 'user',
-                    activeMode: modeInfo ?? undefined,
-                  }).answerType);
-                } catch { return undefined; } // fall back to the bridge's own check
-              })(),
+              codingTask: isCodingAnswerType(v3CanonicalAnswerType) || v3CodingTurnPromoted,
+              // Retained problem/answer text is untrusted conversation data.
+              // The bridge places this in the USER conversation envelope and
+              // applies its source privacy scope; it must never be appended to
+              // personaBase's SYSTEM instructions. A problem first read from a
+              // screenshot remains screenshot data after it is retained as text.
+              referenceContext: v3CodingReferenceContext || undefined,
+              referenceContextDataScope: v3CodingReferenceDataScope,
               modeTemplateType: rawMode,
               modeUniqueId: modeInfo?.id ?? null,
               modeName: (modeInfo as any)?.name ?? null,
@@ -1700,9 +1829,9 @@ export function initializeIpcHandlers(appState: AppState): void {
                 // (binary search) with full confidence, once it replied "please
                 // provide the problem description". Same cause, both times.
                 //
-                // The answer the user is looking at is the subject. It rides the
-                // SYSTEM channel, like the legacy path's own contract block, so
-                // no evidence-scope filter can drop it.
+                // The answer the user is looking at is the subject. Its text is
+                // supplied through BridgeInput.referenceContext, which keeps
+                // untrusted session content in the USER conversation envelope.
                 // Extended 2026-08-19 from bare-code-only to EVERY coding
                 // continuation ("what's the complexity", "make it iterative",
                 // "dry run it"): after an overlay answer those had no prior
@@ -1711,48 +1840,21 @@ export function initializeIpcHandlers(appState: AppState): void {
                 // looks like a coding answer (looksLikeCodingAnswer), so
                 // "what's the complexity" typed after a sales answer cannot
                 // drag that answer in as a "prior coding problem".
-                let priorProblem = '';
-                let bareCode = false;
-                if (isBareCodeRequest(v3Question) || isCodingContinuation(v3Question)) {
-                  try {
-                    // IntelligenceManager exposes getLastAssistantMessage()
-                    // directly (its session tracker is PRIVATE with no public
-                    // accessor) — the old chained form reached for a method
-                    // that did not exist, and `as any` + optional chaining
-                    // made that silently return undefined, so this whole guard
-                    // was dead code and every continuation was answered
-                    // context-free.
-                    // No surface argument: "anywhere" is the point, so an
-                    // overlay answer can ground a chat follow-up.
-                    const lastAnywhere = appState.getIntelligenceManager?.()?.getLastAssistantMessage?.();
-                    bareCode = isBareCodeRequest(v3Question);
-                    if (typeof lastAnywhere === 'string' && lastAnywhere.trim().length > 40
-                        && (bareCode || looksLikeCodingAnswer(lastAnywhere))) {
-                      priorProblem = '\n\n' + buildPriorCodingBlockForV3({
-                        userMessage: '(the question answered just before this one)',
-                        assistantAnswer: lastAnywhere,
-                      });
-                    }
-                  } catch { /* guard only; never blocks the answer */ }
-                }
+                const bareCode = isBareCodeRequest(v3RawQuestion);
                 // Contract shape (DSA walkthrough vs implementation), explicit
                 // user format request, and a code template already present in
                 // the message — resolved once, shared with every other surface.
                 const codingSignals = (() => {
                   try {
                     const resolved = resolveCodingPromptSignals({
-                      answerType: planAnswer({
-                        question: v3Question,
-                        source: 'manual_input',
-                        speakerPerspective: 'user',
-                        activeMode: modeInfo ?? undefined,
-                      }).answerType,
+                      answerType: v3CanonicalAnswerType,
                       question: v3Question,
                       // A recalled prior problem IS a prior coding turn: lets
                       // the continuation-only formats (complexity_only /
                       // dry_run_only) fire so "what's the complexity" gets the
                       // analysis instead of a full re-solve.
-                      priorCodingTurnExists: !!priorProblem,
+                      priorCodingTurnExists: v3CodingTurnPromoted,
+                      codingTurnPromoted: v3CodingTurnPromoted,
                     });
                     // ATTACHED-SCREENSHOT promotion, mirroring the WTA surface.
                     // A chat message with an attached screenshot and a question
@@ -1765,8 +1867,12 @@ export function initializeIpcHandlers(appState: AppState): void {
                     // coding problem in prose. The contract's applicability
                     // boundary skips non-coding screenshots.
                     if (!resolved.codingTask
-                        && (imagePaths?.length ?? 0) > 0
-                        && (!v3Question.trim() || require('./llm/codingPromptSignals').isDeicticAsk(v3Question))) {
+                        && require('./llm/codingPromptSignals').isPromotedScreenCodingTurn({
+                          alreadyCoding: false,
+                          question: v3RawQuestion,
+                          hasImages: (imagePaths?.length ?? 0) > 0,
+                          screenText: v3ScreenDescription,
+                        })) {
                       return { codingTask: true, codingTaskKind: 'dsa' } as import('./llm/codingPromptSignals').CodingPromptSignals;
                     }
                     return resolved;
@@ -1776,22 +1882,29 @@ export function initializeIpcHandlers(appState: AppState): void {
                   action: 'answer',
                   tier: v2TierForPromptTier(llmHelper?.getPromptTier?.()),
                   activeMode: modeInfo,
-                  codingTask: codingTask || codingSignals.codingTask || !!priorProblem,
+                  codingTask: codingTask || codingSignals.codingTask || v3CodingTurnPromoted,
                   codingTaskKind: codingSignals.codingTaskKind,
                   // A BARE code request forces code_only; a richer continuation
                   // keeps whatever format the resolver derived (complexity_only,
                   // dry_run_only, or none for "make it iterative").
-                  codingFormat: (priorProblem && bareCode) ? 'code_only' : codingSignals.codingFormat,
+                  codingFormat: (v3CodingTurnPromoted && bareCode) ? 'code_only' : codingSignals.codingFormat,
                   suppliedTemplate: codingSignals.suppliedTemplate,
                   chatSurface: true,
                 });
-                return base ? base + priorProblem : base;
+                return base;
               },
             });
             // Null with the flag on = the bridge caught an error and ALREADY
             // counted/logged the fallback. Fall through to legacy without
             // re-throwing (the outer catch would double-count it).
             if (composed) {
+
+            const v3MessageDataScopes: import('./llm/ProviderRouter').ProviderDataScope[] = [
+              ...new Set<import('./llm/ProviderRouter').ProviderDataScope>([
+                ...(composed.messageDataScopes ?? []),
+                ...(v3CodingReferenceDataScope ? [v3CodingReferenceDataScope] : []),
+              ]),
+            ];
 
             // Context-debug completion hook. The collector was registered by the
             // bridge under this requestId; every exit path below finalizes it
@@ -1844,7 +1957,19 @@ export function initializeIpcHandlers(appState: AppState): void {
               // Without it, a doc-grounded custom mode ran a second, ungoverned
               // retrieval and injected it around V3's filtered evidence, and
               // shapeDocumentGroundedSystemPrompt mutated V3's system prompt.
-              { v3Owned: true },
+              {
+                v3Owned: true,
+                // Only the retained referent needs fail-closed message
+                // handling: evidence markup can be stripped safely, while this
+                // plain conversation prose cannot be rediscovered at the last
+                // boundary if a privacy setting changes after composition.
+                // The prior-answer fallback is retained conversation data too.
+                // Its multiline code/markdown cannot be safely rediscovered and
+                // subtracted if the transcript privacy switch changes after V3
+                // composition, so it needs the same fail-closed marker as an
+                // active problem reference.
+                messageDataScopes: v3MessageDataScopes,
+              },
             );
 
             try {
@@ -2044,6 +2169,18 @@ export function initializeIpcHandlers(appState: AppState): void {
             require('./context-intelligence/observability/rollout-metrics').recordV3Fallback('manual-chat-ipc', v3Err);
           } catch { /* observability only */ }
         }
+
+        // A hard session boundary (or any newer desktop turn) aborts AND
+        // deletes this registry entry. V3 construction can itself await screen
+        // transcription/retrieval and then fail or return null; without this
+        // check the stale request fell through into legacy, re-added its user
+        // transcript, and repopulated the freshly reset coding state before the
+        // later token-loop guards ever ran.
+        if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) {
+          console.log(`[IPC] gemini-chat-stream ${myStreamId} invalidated before legacy fallback for sender ${senderId}`);
+          return null;
+        }
+
         // Renderer-submit mint point for manual chat (Phase 6 Slice 1, context-rebuild):
         // this turn's stable identity, threaded into SourceAuthorityKernel.build below
         // (via buildTurnContractIfEnabled's turnId param) instead of letting the kernel
@@ -2240,12 +2377,38 @@ export function initializeIpcHandlers(appState: AppState): void {
         // input — only the planner sees the stripped variant.
         message = stripEmbeddedAnswerContract(message);
 
+        const manualRawQuestion = message;
+        const manualActiveState = intelligenceManager.getDetectedCodingQuestion?.()
+          ?? { question: null, source: null };
+        const manualActiveResolution = resolveActiveCodingContext(
+          manualRawQuestion,
+          manualActiveState.question,
+        );
+        const manualQuestion = manualActiveResolution.resolvedQuestion || manualRawQuestion;
+        const manualActiveDataScopes: import('./llm/ProviderRouter').ProviderDataScope[] =
+          manualActiveResolution.usedActiveProblem
+            ? [manualActiveState.source === 'screenshot' ? 'screenshots' : 'transcript']
+            : [];
+        if (manualActiveResolution.usedActiveProblem && manualActiveState.question) {
+          intelligenceManager.setCodingQuestion?.(
+            mergeActiveCodingProblem(manualActiveState.question, manualRawQuestion),
+            manualActiveState.source ?? 'transcript',
+          );
+        }
+
         const answerPlan = planAnswer({
-          question: message,
+          question: manualQuestion,
           source: 'manual_input',
           speakerPerspective: 'user',
           activeMode: manualActiveMode,
         });
+        if (!manualActiveResolution.usedActiveProblem
+            && !manualActiveResolution.needsClarification
+            && (isCodingAnswerType(answerPlan.answerType)
+                || isHighConfidenceStandaloneCodingProblem(manualRawQuestion))
+            && manualRawQuestion) {
+          intelligenceManager.setCodingQuestion?.(manualRawQuestion, 'manual');
+        }
 
         // Custom-Mode Source Disambiguation (2026-07-06): build the
         // CustomModeExecutionContract ONCE and resolve the turn's SOURCE
@@ -2325,8 +2488,8 @@ export function initializeIpcHandlers(appState: AppState): void {
               requestId: `manual-chat-${Date.now()}`,
               surface: 'manual-chat',
               scope: { userId: 'local' },
-              originalQuestion: String(message || ''),
-              resolvedQuestion: String(message || ''),
+              originalQuestion: String(manualRawQuestion || ''),
+              resolvedQuestion: String(manualQuestion || ''),
               modeId: manualActiveMode?.id ?? undefined,
               groundingPolicy: (_activeSourceContract?.sourceAuthority ?? undefined) as never,
               retrievalPath: 'GROUNDED',
@@ -2335,7 +2498,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           } catch { /* observability must never break an answer */ }
 
           manualSourceContract = buildCustomModeExecutionContract({
-            question: String(message || ''),
+            question: String(manualRawQuestion || ''),
             streamRoute: 'manual_chat_stream',
             modeId: manualActiveMode?.id ?? null,
             modeUniqueId: manualActiveMode?.id ?? null,
@@ -2357,9 +2520,9 @@ export function initializeIpcHandlers(appState: AppState): void {
             userExplicitSource: _userExplicitSource,
             turnSourceDecision: manualTurnSourceDecision,
           });
-          logArbitratedContract(manualSourceContract, String(message || ''));
+          logArbitratedContract(manualSourceContract, String(manualRawQuestion || ''));
           manualOwnership = resolveSourceOwnership({
-            question: String(message || ''),
+            question: String(manualRawQuestion || ''),
             contract: manualSourceContract,
             profileContextPolicy: answerPlan.profileContextPolicy,
             answerType: answerPlan.answerType,
@@ -2411,7 +2574,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             const { buildTurnContractIfEnabled } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
             turnContract = buildTurnContractIfEnabled({
               surface: 'manual_chat',
-              question: String(message || ''),
+              question: String(manualRawQuestion || ''),
               activeModeId: manualActiveMode?.id ?? null,
               activeModeName: manualActiveMode?.name ?? null,
               sourceAuthority: manualSourceContract.sourceAuthority,
@@ -2445,7 +2608,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                 const shadowResume = (orchestratorForShadow as any)?.activeResume?.structured_data ?? null;
                 const shadowJd = (orchestratorForShadow as any)?.activeJD?.structured_data ?? null;
                 const shadowPack = new ProfileEvidenceService().retrieveEvidence({
-                  question: String(message || ''),
+                  question: String(manualRawQuestion || ''),
                   contract: turnContract,
                   profile: shadowResume,
                   jobDescription: shadowJd,
@@ -2535,6 +2698,37 @@ export function initializeIpcHandlers(appState: AppState): void {
         let explicitCodingContract: ExplicitCodingContract = detectExplicitCodingContract(message);
         let codingPriorProblemBlock = '';
         let codingFollowupResolved = false;
+
+        // On the legacy fallback, an attached image can itself supply the
+        // missing problem for a subjectless continuation such as "show in
+        // Python". Promote the prompt contract without pretending the typed
+        // fragment was a standalone problem.
+        try {
+          const { isPromotedScreenCodingTurn } = require('./llm/codingPromptSignals') as typeof import('./llm/codingPromptSignals');
+          if (isPromotedScreenCodingTurn({
+            alreadyCoding: isCodingChat,
+            question: manualRawQuestion,
+            hasImages: (imagePaths?.length ?? 0) > 0,
+          })) {
+            isCodingChat = true;
+            codingFollowupResolved = true;
+            iTrace.noteContext({ source: 'screen', trustLevel: 'high', requested: true, retrieved: true, included: true, reason: 'coding_followup_screen_problem' });
+          }
+        } catch { /* screen promotion is an additive correctness guard */ }
+
+        // Issue #539: a spoken coding problem can be active even when no coding
+        // assistant answer exists yet. Prefer that explicit session state over
+        // guessing from the last assistant response (which may belong to an old,
+        // unrelated problem or another surface).
+        try {
+          if (manualActiveResolution.usedActiveProblem) {
+            codingPriorProblemBlock = `ACTIVE CODING PROBLEM IN THIS SESSION (authoritative; preserve every requirement):\n${manualActiveResolution.resolvedQuestion}`;
+            codingFollowupResolved = true;
+            isCodingChat = true;
+            iTrace.noteContext({ source: 'live_transcript', trustLevel: 'high', requested: true, retrieved: true, included: true, reason: 'active_coding_problem' });
+          }
+        } catch { /* active coding state is an additive correctness guard */ }
+
         // BARE CODE REQUEST — "code?", "show me the code" — deliberately NOT gated
         // on conversationMemoryV2 (default OFF). This is not a memory FEATURE, it
         // is a correctness guard.
@@ -2560,10 +2754,13 @@ export function initializeIpcHandlers(appState: AppState): void {
             // reached for a session-tracker accessor that does not exist, so
             // it silently returned undefined and this guard never ran. See
             // the V3 twin above.
-            const lastAnywhere = appState.getIntelligenceManager?.()?.getLastAssistantMessage?.();
+            // Same-surface only. Durable active-problem state owns overlay /
+            // screenshot continuity; an arbitrary answer from another surface
+            // is not sufficient authority for this manual continuation.
+            const lastAnywhere = appState.getIntelligenceManager?.()?.getLastAssistantMessage?.('manual_chat');
             const bare = isBareCodeRequest(message);
-            if (typeof lastAnywhere === 'string' && lastAnywhere.trim().length > 40
-                && (bare || looksLikeCodingAnswer(lastAnywhere))) {
+            if (!codingFollowupResolved && typeof lastAnywhere === 'string' && lastAnywhere.trim().length > 40
+                && looksLikeCodingAnswer(lastAnywhere)) {
               codingPriorProblemBlock = buildPriorCodingContextBlock({
                 userMessage: '(the question answered just before this one)',
                 assistantAnswer: lastAnywhere,
@@ -2576,8 +2773,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               // the block was built and then silently dropped, making this
               // guard a no-op for exactly the case it exists to fix. Mirrors
               // the flag-gated recall block's promotion so the two cannot
-              // drift, and matches the V3 twin (which forces its coding task
-              // via `|| !!priorProblem`).
+              // drift, and matches the V3 twin's codingTurnPromoted signal.
               if (!isCodingChat) {
                 isCodingChat = true;
                 iTrace.noteContext({ source: 'conversation_history', trustLevel: 'high', requested: true, retrieved: true, included: true, reason: 'coding_followup_prior_problem' });
@@ -2633,6 +2829,26 @@ export function initializeIpcHandlers(appState: AppState): void {
               }
             } catch { /* memory recall never blocks the answer */ }
           }
+        }
+
+        if (manualActiveResolution.needsClarification
+            && !codingFollowupResolved
+            && !(imagePaths?.length ?? 0)) {
+          const clarification = 'Which coding problem should I continue? Share the problem statement, then I can implement it in the requested language.';
+          if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) return null;
+          event.sender.send('gemini-stream-token', clarification, { streamId: myStreamId });
+          event.sender.send('gemini-stream-done', { finalText: clarification, streamId: myStreamId });
+          try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), clarification); } catch { /* mirror only */ }
+          try { PhoneMirrorService.getInstance().publishDone(String(myStreamId), clarification); } catch { /* mirror only */ }
+          intelligenceManager.addAssistantMessage(clarification, undefined, 'manual_chat');
+          intelligenceManager.logUsage('chat', manualRawQuestion, clarification);
+          chatTrace.markFirstUseful({ via: 'active_coding_problem_missing' });
+          chatTrace.mark('response_completed', { chars: clarification.length, deterministic: true });
+          chatTrace.finish({ chars: clarification.length });
+          iTrace.setRouting({ answerType: answerPlan.answerType, deterministicFastPathUsed: true })
+            .noteFallback('active_coding_problem_missing');
+          commitTrace(iTrace);
+          return null;
         }
 
         // ── INTELLIGENCE ATTRIBUTION accumulator (task Phase 3) ──────────────────
@@ -3729,7 +3945,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
             manualContextOsGeneration = {
               contract: turnContract,
-              turnQuestion: message,
+              turnQuestion: manualQuestion,
               evidencePack: coordinatorResult.pack,
               modeSnapshot: {
                 modeId: manualActiveMode?.id ?? null,
@@ -3894,13 +4110,16 @@ export function initializeIpcHandlers(appState: AppState): void {
           // system prompt, scopes and route the answer got. Keyed by this
           // stream's own controller so a later turn cannot inherit it.
           const _manualAnswerArgs: StreamChatArgs = [
-            message,
+            manualQuestion,
             imagePaths,
             context,
             systemPromptOverride,
             ignoreKnowledge,
             isCodingChat || isSafetyAnswer, // skipModeInjection; safety/coding must not pull active-mode resume/JD/reference context
-            [],    // extraDataScopes
+            // The retained active problem is embedded directly in
+            // manualQuestion. Preserve its source after the hot transcript or
+            // image expires.
+            manualActiveDataScopes,
             myController.signal,
             // Coding gets a small reasoning budget (correctness); everything else
             // streams with thinking off (fastest TTFT).
@@ -3918,6 +4137,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             {
               answerType: answerPlan.answerType,
               forbiddenContextLayers: answerPlan.forbiddenContextLayers,
+              messageDataScopes: manualActiveDataScopes,
               // F-502: the t0-pinned mode. streamContextPolicy documents this as
               // the defence against a mid-request `modes:set-active` leaking a
               // different mode's documents into an answer whose contract is
@@ -3957,7 +4177,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                 ? {
                     contextOsGeneration: (manualContextOsGeneration = {
                       contract: turnContract,
-                      turnQuestion: message,
+                      turnQuestion: manualQuestion,
                       evidencePack: null,
                       modeSnapshot: {
                         modeId: manualActiveMode?.id ?? null,
@@ -6042,7 +6262,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                   const { stripVerificationSpec } = await import('./llm/codingContract');
                   const outcome = await verifyCodingAnswer({
                     answer: verifyTarget,
-                    question: message,
+                    question: manualQuestion,
                     correct: async (repairPrompt: string) => {
                       // Background coding-correction (post-answer). Deadline-guarded
                       // so a stalled provider can't leave a hung background task. 7s
@@ -13378,6 +13598,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('reset-intelligence', async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
+      invalidateIpcChatStreamsForSessionBoundary();
       intelligenceManager.reset();
       return { success: true };
     } catch (error: any) {
@@ -15488,6 +15709,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       {
         const { abortAndInvalidateChatStreams } = require('./services/chatStreamRegistry') as typeof import('./services/chatStreamRegistry');
         abortAndInvalidateChatStreams(_chatStreamsBySender);
+        // Phone streams use their own monotonic completion guard rather than
+        // the desktop registry. Advance it at the same boundary so an answer
+        // planned under the outgoing mode cannot repopulate the cleared state.
+        _phoneChatLatestId++;
       }
       // BUG-MODE-BLEEDING fix: clear mode-specific session context BEFORE switching modes
       // so Interview mode resume/JD context doesn't bleed into the new mode's responses.
@@ -16508,6 +16733,24 @@ export function initializeIpcHandlers(appState: AppState): void {
       const message = stripEmbeddedAnswerContract(cmd.message);
       const phoneMirror = PhoneMirrorService.getInstance();
       const intelligenceManager = appState.getIntelligenceManager();
+      const phoneActiveState = intelligenceManager.getDetectedCodingQuestion();
+      const phoneActiveResolution = resolveActiveCodingContext(
+        message,
+        phoneActiveState.question,
+      );
+      const phoneQuestion = phoneActiveResolution.resolvedQuestion || message;
+      const phoneCodingTurnPromoted = phoneActiveResolution.usedActiveProblem;
+      const phoneActiveDataScopes: import('./llm/ProviderRouter').ProviderDataScope[] =
+        phoneCodingTurnPromoted
+          ? [phoneActiveState.source === 'screenshot' ? 'screenshots' : 'transcript']
+          : [];
+
+      if (phoneCodingTurnPromoted && phoneActiveState.question) {
+        intelligenceManager.setCodingQuestion(
+          mergeActiveCodingProblem(phoneActiveState.question, message),
+          phoneActiveState.source ?? 'transcript',
+        );
+      }
 
       // Document-grounded custom mode (audit 2026-06-27): the phone chat path is
       // a SECOND ungated entry — it captures the rolling snapshot and saves the
@@ -16569,6 +16812,20 @@ export function initializeIpcHandlers(appState: AppState): void {
         streamId: String(myStreamId),
       });
 
+      // Phone chat has no attached image on this command. If a subjectless
+      // coding continuation cannot be resolved from session state, finish the
+      // turn deterministically instead of asking a provider to invent a task.
+      if (phoneActiveResolution.needsClarification) {
+        const clarification = 'Which coding problem should I continue? Share the problem statement, then I can implement it in the requested language.';
+        try { phoneMirror.publishToken(String(myStreamId), clarification); } catch (_) {}
+        try { phoneMirror.publishDone(String(myStreamId), clarification); } catch (_) {}
+        win?.webContents.send('gemini-stream-token', clarification, { streamId: myStreamId, source: 'phone' });
+        win?.webContents.send('gemini-stream-done', { streamId: myStreamId, source: 'phone' });
+        intelligenceManager.addAssistantMessage(clarification, undefined, 'phone_mirror');
+        intelligenceManager.logUsage('chat', message, clarification);
+        return;
+      }
+
       try {
         const llmHelper = appState.processingHelper.getLLMHelper();
         // AbortController so the live-deadline driver can cancel a stalled provider
@@ -16580,13 +16837,15 @@ export function initializeIpcHandlers(appState: AppState): void {
         // Without this, the mode-suffix skip-gate (CHAT_MODE_PROMPT is a "universal
         // override") suppresses injection for non-custom regular modes like
         // lecture/team-meet + a sales question over phone (audit #2, 2026-07-05).
-        let phoneRouteOptions: StreamRouteOptions | undefined;
+        let phoneRouteOptions: StreamRouteOptions | undefined = phoneActiveDataScopes.length
+          ? { messageDataScopes: phoneActiveDataScopes }
+          : undefined;
         let phonePlanForOwnership: any = null;
         try {
           const llmMod = require('./llm');
           if (typeof llmMod.planAnswer === 'function') {
             const phonePlan = llmMod.planAnswer({
-              question: message,
+              question: phoneQuestion,
               source: 'manual_input',
               speakerPerspective: 'user',
               activeMode: (() => { try { return require('./services/ModesManager').ModesManager.getInstance().getActiveModeInfo?.(); } catch { return null; } })(),
@@ -16595,9 +16854,17 @@ export function initializeIpcHandlers(appState: AppState): void {
             phoneRouteOptions = {
               answerType: phonePlan?.answerType || 'unknown_answer',
               forbiddenContextLayers: phonePlan?.forbiddenContextLayers,
+              messageDataScopes: phoneActiveDataScopes,
               // F-502: t0-pinned mode — see phonePinnedModeId above.
               pinnedModeId: phonePinnedModeId,
             };
+            if (!phoneCodingTurnPromoted
+                && (isCodingAnswerType(phonePlan?.answerType)
+                    || isHighConfidenceStandaloneCodingProblem(message))
+                && message) {
+              // Complete phone-entered Q2 replaces Q1 for the next follow-up.
+              intelligenceManager.setCodingQuestion(message, 'manual');
+            }
           }
         } catch { /* plan unavailable — fall back to no routeOptions (legacy behavior) */ }
 
@@ -16692,7 +16959,23 @@ export function initializeIpcHandlers(appState: AppState): void {
           // Best-effort — never break the phone path on the ownership check.
           if (isIntelligenceFlagEnabled('trace')) console.warn('[SOURCE-GUARD] phone ownership check skipped (non-fatal):', pOwnErr?.message);
         }
-        const stream = llmHelper.streamChat(message, undefined, context, resolveManualChatBasePrompt(llmHelper, resolveCodingPromptSignals({ answerType: phoneRouteOptions?.answerType as any, question: message })), false, false, [], phoneController.signal, undefined, phoneRouteOptions);
+        const stream = llmHelper.streamChat(
+          phoneQuestion,
+          undefined,
+          context,
+          resolveManualChatBasePrompt(llmHelper, resolveCodingPromptSignals({
+            answerType: phoneRouteOptions?.answerType as any,
+            question: phoneQuestion,
+            priorCodingTurnExists: phoneCodingTurnPromoted,
+            codingTurnPromoted: phoneCodingTurnPromoted,
+          })),
+          false,
+          false,
+          phoneActiveDataScopes,
+          phoneController.signal,
+          undefined,
+          phoneRouteOptions,
+        );
         let full = '';
         let phoneSuperseded = false;
         // Deadline-guarded (Issue 1) — this is a live streaming surface too: a hung
@@ -16730,7 +17013,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         const phonePerf = performanceHooks({
           llmHelper: llmHelper as any,
           hasImages: false,
-          inputTokens: _estimatePerfTokens(`${message ?? ''}${context ?? ''}`),
+          inputTokens: _estimatePerfTokens(`${phoneQuestion ?? ''}${context ?? ''}`),
           isUserCancelled: () => phoneSuperseded,
           onDiagnostics: (record) => {
             if (record.terminationReason === 'done') return;
@@ -16743,7 +17026,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           interTokenStallMs: phonePerf.interTokenStallMs,
           firstUsefulDeadlineMs: applyAdaptiveTtft(
             firstUsefulDeadlineMs('general_meeting_answer', phoneUsingLocalLlm, phoneViaServerCascade, phoneUsingUserEndpoint, phoneObservedLatency),
-            { llmHelper: llmHelper as any, hasImages: false, inputTokens: _estimatePerfTokens(`${message ?? ''}${context ?? ''}`) },
+            { llmHelper: llmHelper as any, hasImages: false, inputTokens: _estimatePerfTokens(`${phoneQuestion ?? ''}${context ?? ''}`) },
           ),
           isUsefulYet: () => full.trim().length >= 5,
           shouldAbort: () => {

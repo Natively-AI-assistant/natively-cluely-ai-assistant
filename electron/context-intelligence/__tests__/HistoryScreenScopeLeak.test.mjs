@@ -42,12 +42,12 @@ const turn = (sessionId, question, n, extra = {}) => buildV3Prompt({
 });
 
 /** Turn 1 records a screen observation; turn 2 asks a follow-up about it. */
-async function twoTurns(sid) {
+async function twoTurns(sid, followupExtra = {}) {
   store.clearConversationState(sid);
   await turn(sid, 'What is wrong with this code?', 1, { hasScreenContext: true });
   store.recordAnswerSummary(sid, 'Line 14 fails because visited is a list.',
     `VS Code on graph.py; sidebar shows project ${SECRET} with 12 files.`);
-  return turn(sid, 'What was the project name in that screenshot?', 2);
+  return turn(sid, 'What was the project name in that screenshot?', 2, followupExtra);
 }
 
 afterEach(() => { delete process.env[DENY_PROVIDER_SCOPES_ENV]; });
@@ -59,6 +59,9 @@ describe('history screen lines honour the screenshots scope', () => {
     assert.match(t2.user, new RegExp(SECRET),
       'control: without a denial the feature must still work, or this suite proves nothing');
     assert.match(t2.user, /screen attached that turn/);
+    assert.ok(t2.messageDataScopes.includes('transcript'));
+    assert.ok(t2.messageDataScopes.includes('screenshots'),
+      'the final transport must know screen-derived text is embedded in ordinary history prose');
   });
 
   test('with `screenshots` DENIED the screen text does not reach the prompt', async () => {
@@ -72,6 +75,9 @@ describe('history screen lines honour the screenshots scope', () => {
     // (Matching the phrase failed here on the INSTRUCTION, not on any leak.)
     assert.ok(!/\[screen attached that turn\]\s+\w/.test(t2.user),
       'a rendered screen line survived the denial');
+    assert.ok(!t2.messageDataScopes.includes('screenshots'));
+    assert.ok(t2.messageDataScopes.includes('transcript'),
+      'withholding screen lines must not misclassify the surviving conversation prose');
   });
 
   test('the denial is REPORTED, not silent', async () => {
@@ -94,6 +100,8 @@ describe('history screen lines honour the screenshots scope', () => {
     assert.ok(!new RegExp(SECRET).test(t2.user), 'the history block is gone entirely');
     assert.ok(!outbound.includes('screenshots'),
       `nothing was sent, so screenshots must not be declared outbound — got ${JSON.stringify(outbound)}`);
+    assert.ok(!t2.messageDataScopes.includes('transcript'));
+    assert.ok(!t2.messageDataScopes.includes('screenshots'));
   });
 
   test('denying screenshots does not take the rest of the history with it', async () => {
@@ -102,5 +110,33 @@ describe('history screen lines honour the screenshots scope', () => {
     assert.match(t2.user, /What is wrong with this code\?/,
       'the conversation itself is transcript-scoped and must survive');
     assert.match(t2.user, /visited is a list/);
+  });
+
+  test('a screenshot denial enabled during retrieval also scrubs already-rendered history', async () => {
+    delete process.env[DENY_PROVIDER_SCOPES_ENV];
+    let retrievalRan = false;
+    const t2 = await twoTurns('leak-policy-race', {
+      attachedSourceCount: 1,
+      retrieval: {
+        retrieve: async () => {
+          retrievalRan = true;
+          process.env[DENY_PROVIDER_SCOPES_ENV] = 'screenshots';
+          return { evidence: [], attempts: [] };
+        },
+      },
+    });
+
+    assert.equal(retrievalRan, true,
+      'control: the scope must change while orchestrate is awaiting retrieval');
+    assert.ok(!new RegExp(SECRET).test(t2.user),
+      'LEAK: a screen line rendered before retrieval survived the post-retrieval policy');
+    assert.match(t2.user, /What is wrong with this code\?/,
+      'late screenshot denial must retain the transcript-scoped question');
+    assert.match(t2.user, /visited is a list/,
+      'late screenshot denial must retain the transcript-scoped answer');
+    assert.ok(t2.withheldDataScopes.includes('screenshots'));
+    assert.ok(!t2.packedDataScopes.includes('screenshots'));
+    assert.ok(!t2.messageDataScopes.includes('screenshots'));
+    assert.ok(t2.messageDataScopes.includes('transcript'));
   });
 });

@@ -2,6 +2,7 @@ import { LLMHelper } from "../LLMHelper";
 import { BRAINSTORM_MODE_PROMPT } from "./prompts";
 import { TINY_BRAINSTORM_PROMPT } from "./tinyPrompts";
 import { resolveV2SystemPrompt, v2TierForPromptTier } from "./promptSystemV2";
+import type { V3TransportPrompt } from "./streamContextPolicy";
 
 export class BrainstormLLM {
     private llmHelper: LLMHelper;
@@ -14,7 +15,7 @@ export class BrainstormLLM {
      * Generate a "thinking out loud" spoken script (streamed)
      * Context is passed directly as the user message so the LLM sees the problem.
      */
-    async *generateStream(context: string, imagePaths?: string[], v3?: { system: string; user: string }): AsyncGenerator<string> {
+    async *generateStream(context: string, imagePaths?: string[], v3?: V3TransportPrompt): AsyncGenerator<string> {
         if (!context.trim() && !imagePaths?.length) return;
         try {
             // V3 substitution — see AssistLLM.
@@ -27,7 +28,13 @@ export class BrainstormLLM {
             // directly as the user message, not a real question being asked of the
             // candidate, so it must not go through the knowledge-mode intent gate.
             yield* this.llmHelper.streamChat(fittedContext, imagePaths, undefined, promptOverride, true,
-                Boolean(v3), [], undefined, undefined, v3 ? { v3Owned: true } : undefined);
+                Boolean(v3), v3?.packedDataScopes ? [...v3.packedDataScopes] : [], undefined, undefined,
+                v3 ? {
+                    v3Owned: true,
+                    ...(v3.messageDataScopes?.length
+                        ? { messageDataScopes: [...v3.messageDataScopes] }
+                        : {}),
+                } : undefined);
         } catch (error) {
             console.error("[BrainstormLLM] Stream failed:", error);
             yield "I couldn't generate brainstorm approaches. Make sure your question is visible and try again.";

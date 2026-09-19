@@ -23,7 +23,9 @@ import {
     cleanAnswerArtifacts, compressToSpeakable, SCAFFOLD_LABEL_RE, BOLD_PSEUDO_HEADER_RE,
     buildProfileJitPrompt, decideSessionWritePolicy,
     checkAnswerRelevance, AnswerDiversityGuard,
-    speculativeQuestionSimilarity, acceptRepairedAnswer
+    speculativeQuestionSimilarity, acceptRepairedAnswer,
+    resolveActiveCodingContext, mergeActiveCodingProblem, isCodingContinuation,
+    isHighConfidenceStandaloneCodingProblem, isSelfContainedCodingRequest
 } from './llm';
 import {
     validateDocumentGroundedAnswer,
@@ -35,6 +37,8 @@ import {
 } from './llm/documentGroundedPrompt';
 import { HARD_SYSTEM_PROMPT } from './llm/prompts';
 import type { ActiveModeInfo } from './llm/modeProfiles';
+import type { ProviderDataScope } from './llm/ProviderRouter';
+import type { V3TransportPrompt } from './llm/streamContextPolicy';
 import type { WhatToAnswerRequestSnapshot } from './llm/whatToAnswerRequestSnapshot';
 import { resolveCanonicalTurn } from './llm/resolveCanonicalTurn';
 import { performanceHooks, applyAdaptiveTtft, secondaryStreamObserver, slowWorkloadAdvice } from './llm/performance/wiring';
@@ -2208,6 +2212,81 @@ export class IntelligenceEngine extends EventEmitter {
                     }
                 } catch { /* keep extractor result */ }
             }
+
+            // ISSUE #539 — resolve a short implementation/constraint fragment
+            // against the durable, session-scoped coding problem BEFORE any
+            // classifier, retrieval query, source contract, or prompt sees the
+            // turn. The active problem outlives the 180-second hot transcript.
+            const rawWtaQuestion = String(question || extractedQuestion.latestQuestion || lastInterviewerTurn || '').trim();
+            const activeCodingState = this.session.getDetectedCodingQuestion();
+            let effectiveCodingProblem = activeCodingState.question;
+            let effectiveCodingSource = activeCodingState.source;
+            let effectiveCodingRevision = this.session.getCodingQuestionRevision();
+            let codingProblemRecoverySource: 'hot_transcript' | null = null;
+
+            // Heuristic ingestion can miss a terse initial problem. Before
+            // asking for clarification, recover only when no durable problem
+            // is known. Without the active problem's transcript timestamp, a
+            // hot-window scan must never overwrite it: the first matching turn
+            // could be an older Q1 rather than a newer Q2.
+            if (!effectiveCodingProblem && isCodingContinuation(rawWtaQuestion)) {
+                const priorCodingTurn = [...transcriptTurns].reverse().find((turn) => {
+                    const text = String(turn.text || '').trim();
+                    if (turn.role !== 'interviewer' || !text || text.toLowerCase() === rawWtaQuestion.toLowerCase()) return false;
+                    if (isHighConfidenceStandaloneCodingProblem(text)) return true;
+                    if (!isSelfContainedCodingRequest(text)) return false;
+                    try {
+                        return isCodingAnswerType(planAnswer({
+                            question: text,
+                            source: 'what_to_answer',
+                            speakerPerspective: turn.role === 'interviewer' ? 'interviewer' : 'user',
+                            activeMode: snapshotModeInfo,
+                        }).answerType);
+                    } catch { return false; }
+                });
+                const priorCodingProblem = priorCodingTurn?.text.trim() || '';
+                if (priorCodingProblem) {
+                    effectiveCodingProblem = priorCodingProblem;
+                    effectiveCodingSource = 'transcript';
+                    codingProblemRecoverySource = 'hot_transcript';
+                    this.session.setCodingQuestion(effectiveCodingProblem, 'transcript', true);
+                    effectiveCodingRevision = this.session.getCodingQuestionRevision();
+                }
+            }
+            const activeCodingResolution = resolveActiveCodingContext(
+                rawWtaQuestion,
+                effectiveCodingProblem,
+            );
+            const wtaResolvedQuestion = activeCodingResolution.resolvedQuestion || rawWtaQuestion;
+
+            if (activeCodingResolution.needsClarification && !_wtaHasVisualContext) {
+                if (isWtaSuperseded()) {
+                    recordWtaCancellation();
+                    return null;
+                }
+                if (isSpeculative) {
+                    // Auto-answer must not ask the provider to invent a missing
+                    // coding problem or surface a premature clarification.
+                    this.setMode('idle');
+                    trace.mark('repair_used', { reason: 'active_coding_problem_missing_speculative' });
+                    return null;
+                }
+                const clarification = 'Which coding problem should I continue? Share the problem statement, then I can implement it in the requested language.';
+                this.session.addAssistantMessage(clarification, undefined, 'what_to_answer');
+                this.emit('suggested_answer', clarification, rawWtaQuestion || 'inferred', 0.9, generationId);
+                this.setMode('idle');
+                trace.mark('repair_used', { reason: 'active_coding_problem_missing' });
+                return clarification;
+            }
+
+            if (activeCodingResolution.usedActiveProblem) {
+                preparedTranscript = `[ACTIVE CODING PROBLEM — AUTHORITATIVE]\n${wtaResolvedQuestion}\n[/ACTIVE CODING PROBLEM]\n\n${preparedTranscript}`;
+                trace.mark('repair_used', {
+                    reason: 'active_coding_problem_resolved',
+                    source: codingProblemRecoverySource ?? effectiveCodingSource ?? 'unknown',
+                });
+            }
+
             trace.mark('latest_question_extracted', {
                 questionType: extractedQuestion.questionType,
                 detectedSpeaker: extractedQuestion.detectedSpeaker,
@@ -2285,9 +2364,9 @@ export class IntelligenceEngine extends EventEmitter {
             // unawaited through the grounding blocks below — a rejection there
             // would be an unhandled rejection. The intent fallback mirrors the
             // classifier's own Tier-3 default.
-            const wtaResolvedQuestionForKicks = question || extractedQuestion.latestQuestion || lastInterviewerTurn;
+            const wtaResolvedQuestionForKicks = wtaResolvedQuestion;
             const intentPromise = classifyIntent(
-                question || extractedQuestion.latestQuestion || lastInterviewerTurn,
+                wtaResolvedQuestion,
                 preparedTranscript,
                 this.session.getAssistantResponseHistory().length
             ).catch((): { intent: 'general'; confidence: number } => (
@@ -2386,7 +2465,7 @@ export class IntelligenceEngine extends EventEmitter {
                 // was resolved for the TRANSCRIPT's question while the answer
                 // type, context route and prompt were resolved for the TYPED
                 // one — two authorities governing one turn with no tie-break.
-                const _wtaQHoist = question || extractedQuestion.latestQuestion || lastInterviewerTurn || '';
+                const _wtaQHoist = rawWtaQuestion;
                 const _wtaOrchAvail = this.llmHelper.getKnowledgeOrchestrator?.();
                 const _wtaSourceContract = (snapshotModeInfo as any)?.sourceContract ?? null;
                 if (_wtaSourceContract) {
@@ -2654,7 +2733,8 @@ export class IntelligenceEngine extends EventEmitter {
                 // buildTurnContractIfEnabled — i.e. the EVIDENCE and SOURCE
                 // gates — while canonicalTurn drives the answer type and the
                 // prompt. Omitting `question` here made the two disagree.
-                const _wtaQ = question || extractedQuestion.latestQuestion || lastInterviewerTurn || '';
+                const _wtaQ = wtaResolvedQuestion;
+                const _wtaSourceIntentQ = rawWtaQuestion;
                 const _wtaOrchForAvail = this.llmHelper.getKnowledgeOrchestrator?.();
                 // Grounding-campaign2 fix (2026-07-20): these two were `const`
                 // — block-scoped to THIS try block (closes below) — but are
@@ -2694,8 +2774,8 @@ export class IntelligenceEngine extends EventEmitter {
                 // lossless input to the canonical decision; the scalar is the
                 // legacy adapter for callers that haven't been migrated.
                 const { resolveExplicitSourceRequest: _wtaResolveSwitch, resolveExplicitSourceRequests: _wtaResolveSwitches, toLegacyUserExplicitSource: _wtaToLegacySwitch } = require('./intelligence/context-os/explicitSourceSwitch');
-                const _wtaExplicitSwitch = _wtaResolveSwitch(String(_wtaQ));
-                const _wtaExplicitRequests = _wtaResolveSwitches(String(_wtaQ));
+                const _wtaExplicitSwitch = _wtaResolveSwitch(String(_wtaSourceIntentQ));
+                const _wtaExplicitRequests = _wtaResolveSwitches(String(_wtaSourceIntentQ));
                 // JD folds onto the profile family at the legacy layer; the
                 // canonical decision keeps them distinct.
                 const _wtaUserExplicitSource = _wtaExplicitSwitch === 'job_description'
@@ -2752,7 +2832,7 @@ export class IntelligenceEngine extends EventEmitter {
                     }
                 }
                 const _wtaContract = buildCustomModeExecutionContract({
-                    question: String(_wtaQ),
+                    question: String(_wtaSourceIntentQ),
                     streamRoute: 'wta_live',
                     modeId: snapshotModeId ?? null,
                     modeUniqueId: snapshotModeId ?? null,
@@ -2773,7 +2853,7 @@ export class IntelligenceEngine extends EventEmitter {
                     turnSourceDecision: _wtaTurnSourceDecision,
                 });
                 const _wtaOwn = resolveSourceOwnership({
-                    question: String(_wtaQ),
+                    question: String(_wtaSourceIntentQ),
                     contract: _wtaContract,
                     profileContextPolicy: _wtaPlan.profileContextPolicy,
                     answerType: _wtaPlan.answerType,
@@ -2795,7 +2875,7 @@ export class IntelligenceEngine extends EventEmitter {
                 // forbids profile. Null contract (flag off) → legacy gate alone.
                 const _wtaEarlyContract = buildTurnContractIfEnabled({
                     surface: 'what_to_answer',
-                    question: String(_wtaQ),
+                    question: String(_wtaSourceIntentQ),
                     activeModeId: snapshotModeId ?? null,
                     activeModeName: snapshotModeInfo?.name ?? null,
                     sourceAuthority: _wtaContract.sourceAuthority,
@@ -2888,7 +2968,7 @@ export class IntelligenceEngine extends EventEmitter {
                     try {
                         const { planTurn } = await import('./llm/TurnPlanner');
                         _c3TurnPlan = planTurn({
-                            question: extractedQuestion.latestQuestion || lastInterviewerTurn || '',
+                            question: wtaResolvedQuestion,
                             answerType: jitAnswerType,
                             availability: {
                                 hasReferenceFiles: _c3HasRefFiles,
@@ -2917,13 +2997,13 @@ export class IntelligenceEngine extends EventEmitter {
                     if ((resume || jd) && (identityQ || IntelligenceEngine.shouldJitForAnswerType(jitAnswerType))) {
                         const { selectManualProfileEvidence } = await import('./llm/manualProfileIntelligence');
                         const evidence = selectManualProfileEvidence({
-                            question: extractedQuestion.latestQuestion || lastInterviewerTurn || '',
+                            question: wtaResolvedQuestion,
                             profile: resume, jobDescription: jd, source: 'what_to_answer',
                             answerType: jitAnswerType,
                         });
                         if (evidence) {
                             const jit = buildProfileJitPrompt({
-                                question: extractedQuestion.latestQuestion || lastInterviewerTurn || '',
+                                question: wtaResolvedQuestion,
                                 answerType: evidence.answerType,
                                 answerShape: evidence.answerShape,
                                 sourceOwner: evidence.sourceOwner,
@@ -2966,7 +3046,7 @@ export class IntelligenceEngine extends EventEmitter {
             // known but before the main answer plan is consumed downstream.
             const canonicalTurn = resolveCanonicalTurn({
                 answerInput: {
-                    question: question || extractedQuestion.latestQuestion || lastInterviewerTurn,
+                    question: wtaResolvedQuestion,
                     source: question ? 'manual_input' : 'what_to_answer',
                     speakerPerspective: extractedQuestion.detectedSpeaker === 'interviewer' ? 'interviewer' : 'user',
                     extractedQuestion,
@@ -2978,12 +3058,32 @@ export class IntelligenceEngine extends EventEmitter {
                 explicitRequests: (() => {
                     try {
                         const { resolveExplicitSourceRequests } = require('./intelligence/context-os/explicitSourceSwitch');
-                        return resolveExplicitSourceRequests(question || extractedQuestion.latestQuestion || lastInterviewerTurn || '');
+                        return resolveExplicitSourceRequests(rawWtaQuestion);
                     } catch { return []; }
                 })(),
                 availability: snapshotSourceAvailability,
             });
             const answerPlan = canonicalTurn.answerPlan;
+            // Do not let a slower Q1 request overwrite a newer problem/reset
+            // that arrived while classification and retrieval were awaiting.
+            if (this.session.getCodingQuestionRevision() === effectiveCodingRevision
+                && (isCodingAnswerType(answerPlan.answerType)
+                    || isHighConfidenceStandaloneCodingProblem(rawWtaQuestion))) {
+                if (activeCodingResolution.usedActiveProblem && effectiveCodingProblem && rawWtaQuestion
+                ) {
+                    const merged = mergeActiveCodingProblem(effectiveCodingProblem, rawWtaQuestion);
+                    this.session.setCodingQuestion(
+                        merged,
+                        effectiveCodingSource ?? 'transcript',
+                    );
+                } else if ((!activeCodingResolution.isContinuation
+                            || isSelfContainedCodingRequest(rawWtaQuestion))
+                           && rawWtaQuestion) {
+                    // A self-contained coding turn becomes the next durable active
+                    // problem, including typed WTA questions that never passed STT.
+                    this.session.setCodingQuestion(rawWtaQuestion, question ? 'manual' : 'transcript');
+                }
+            }
             // TWO-PLANS DIVERGENCE TELEMETRY (WTA audit F14 residual,
             // observe-only, 2026-08-18): `_wtaPlan` (evidence/source gates,
             // hardcoded source:'what_to_answer') and `canonicalTurn.answerPlan`
@@ -3029,7 +3129,7 @@ export class IntelligenceEngine extends EventEmitter {
                 // is observability on a live answer path, and a shape change in a
                 // legacy type must degrade the trace, never the answer.
                 const _s = this.session as any;
-                const _q = String(question || extractedQuestion?.latestQuestion || '');
+                const _q = wtaResolvedQuestion;
                 recordLegacyTurn({
                     requestId: String((canonicalTurn as any).turnId ?? `wta-${Date.now()}`),
                     surface: 'what-to-answer',
@@ -3083,20 +3183,21 @@ export class IntelligenceEngine extends EventEmitter {
             // One immutable WTA question must drive contract classification,
             // resolver retrieval, and provider prompting. Never re-derive it in
             // downstream request assembly.
-            const wtaTurnQuestion = question || extractedQuestion.latestQuestion || lastInterviewerTurn || '';
+            const wtaTurnQuestion = wtaResolvedQuestion;
             try {
                 const { buildCustomModeExecutionContract: _bldC } = require('./llm/customModeExecutionContract');
                 const { buildTurnContractIfEnabled } = contextOsStatic;
                 const _wtaQ2 = wtaTurnQuestion;
+                const _wtaSourceIntentQ2 = rawWtaQuestion;
                 const _hasProfile2 = Boolean((this.llmHelper.getKnowledgeOrchestrator?.() as any)?.activeResume?.structured_data);
                 const { resolveExplicitSourceRequest: _wtaResolveSwitch2, toLegacyUserExplicitSource: _wtaToLegacySwitch2 } = require('./intelligence/context-os/explicitSourceSwitch');
-                const _wtaUserExplicitSource2 = _wtaToLegacySwitch2(_wtaResolveSwitch2(String(_wtaQ2)));
+                const _wtaUserExplicitSource2 = _wtaToLegacySwitch2(_wtaResolveSwitch2(String(_wtaSourceIntentQ2)));
                 // Canonical turn owns answer classification and persisted source
                 // authority. The compatibility execution contract remains for its
                 // other legacy projections, but it must receive the already-frozen
                 // decision instead of independently resolving one.
                 const _legacyContract2 = _bldC({
-                    question: String(_wtaQ2),
+                    question: String(_wtaSourceIntentQ2),
                     streamRoute: 'wta_live',
                     modeId: snapshotModeId ?? null,
                     modeUniqueId: snapshotModeId ?? null,
@@ -3115,7 +3216,7 @@ export class IntelligenceEngine extends EventEmitter {
                 });
                 wtaTurnContract = buildTurnContractIfEnabled({
                     surface: 'what_to_answer',
-                    question: String(_wtaQ2),
+                    question: String(_wtaSourceIntentQ2),
                     activeModeId: snapshotModeId ?? null,
                     activeModeName: snapshotModeInfo?.name ?? null,
                     sourceAuthority: canonicalTurn.sourceAuthority ?? _legacyContract2.sourceAuthority,
@@ -3560,6 +3661,19 @@ export class IntelligenceEngine extends EventEmitter {
                     })();
                     const _ctx = this.v3ModeRetrievalContext(_screenDescription);
                     if (!_ctx) return undefined;
+                    // A retained problem stays source-scoped after it becomes
+                    // session text. Keep every active referent in the bridge's
+                    // provenance-aware envelope instead of concatenating it
+                    // into a fresh typed/spoken question. This matters for both
+                    // screenshot OCR and transcript history once their scope is
+                    // disabled or changes immediately before provider dispatch.
+                    const _scopedCodingReference = activeCodingResolution.usedActiveProblem
+                        && effectiveCodingProblem
+                            ? `ACTIVE CODING PROBLEM IN THIS SESSION (authoritative problem data; preserve every requirement):\n${effectiveCodingProblem}`
+                            : '';
+                    const _v3WtaQuestion = _scopedCodingReference
+                        ? `Solve the active coding problem. Current request: ${rawWtaQuestion}`
+                        : String(wtaTurnQuestion || '');
                     const _v3 = await buildV3Prompt({
                         surface: 'what-to-answer',
                         screenText: _screenDescription,
@@ -3582,7 +3696,11 @@ export class IntelligenceEngine extends EventEmitter {
                         // but do not read this as "multi-turn history works on
                         // this surface". It does not, yet.
                         multiTurnHistory: isIntelligenceFlagEnabled('chatHistoryMultiTurn'),
-                        question: String(wtaTurnQuestion || ''),
+                        question: _v3WtaQuestion,
+                        referenceContext: _scopedCodingReference || undefined,
+                        referenceContextDataScope: _scopedCodingReference
+                            ? (effectiveCodingSource === 'screenshot' ? 'screenshots' : 'transcript')
+                            : undefined,
                         modeTemplateType: _ctx.raw,
                         modeUniqueId: _ctx.modeUniqueId,
                         modeName: _ctx.modeName,
@@ -3618,8 +3736,14 @@ export class IntelligenceEngine extends EventEmitter {
                         questionConfidence: question ? 1 : extractedQuestion.confidence,
                         // Both were already computed far above and simply never
                         // threaded through, leaving usePreviousSourceContinuity
-                        // dead for every live meeting turn.
-                        isFollowUp: extractedQuestion.isFollowUp,
+                        // dead for every live meeting turn. Once durable coding
+                        // state has resolved this turn's referent, however, the
+                        // generic follow-up route must stay off: it would force
+                        // GROUNDED retrieval and reopen unrelated prior-source
+                        // continuity for requests such as "implement this".
+                        isFollowUp: activeCodingResolution.usedActiveProblem
+                            ? false
+                            : extractedQuestion.isFollowUp,
                         // PR #429 Bug 002: options.screenContext is the PERIODIC-CAPTURE
                         // OCR object. A screenshot the user attaches by hand rides in
                         // imagePaths with screenContext null, so this read was always
@@ -3854,6 +3978,16 @@ export class IntelligenceEngine extends EventEmitter {
                         // own note. Carrying it is what makes "never validate
                         // against a block that was never sent" enforceable.
                         evidenceBlock: (_v3 as { evidenceBlock?: string }).evidenceBlock ?? '',
+                        // The WTA transport otherwise derives scopes from the
+                        // discarded legacy packet. Preserve the bridge's actual
+                        // post-filter provenance, including screenshot-derived
+                        // retained coding problems.
+                        packedDataScopes: (_v3 as {
+                            packedDataScopes?: import('./llm/ProviderRouter').ProviderDataScope[];
+                        }).packedDataScopes ?? [],
+                        messageDataScopes: (_v3 as {
+                            messageDataScopes?: import('./llm/ProviderRouter').ProviderDataScope[];
+                        }).messageDataScopes ?? [],
                         // Carried for the source badge: when V3 composed the
                         // prompt, the label must reflect V3's decision, not the
                         // legacy TurnPlan that did not drive the answer.
@@ -3871,6 +4005,9 @@ export class IntelligenceEngine extends EventEmitter {
                 meetingId: meetingMarker,
                 surface: 'what_to_answer' as const,
                 generationId,
+                ...(activeCodingResolution.usedActiveProblem
+                    ? { outboundDataScopes: [effectiveCodingSource === 'screenshot' ? 'screenshots' : 'transcript'] as const }
+                    : {}),
                 ...(wtaContextOsGeneration ? { contextOsGeneration: wtaContextOsGeneration } : {}),
                 ...(wtaV3Prompt ? { v3Prompt: wtaV3Prompt } : {}),
             });
@@ -4389,7 +4526,7 @@ export class IntelligenceEngine extends EventEmitter {
                 let regenerated: string | null = null;
                 try {
                     regenerated = await this.regenerateUsableAnswer({
-                        question: question || extractedQuestion.latestQuestion || lastInterviewerTurn || '',
+                        question: wtaResolvedQuestion,
                         transcript: preparedTranscript,
                         evidenceBlock: (requestSnapshot as any)?.v3Prompt?.evidenceBlock,
                         turnKey: whatToAnswerCancellationToken.signal,
@@ -4400,7 +4537,7 @@ export class IntelligenceEngine extends EventEmitter {
                 } catch { regenerated = null; }
                 // W6b: topic-aware graceful retry — now an honest "no answer came
                 // back, press again" line, never a request to repeat.
-                fullAnswer = regenerated ?? buildGracefulRetry(question || extractedQuestion.latestQuestion || lastInterviewerTurn);
+                fullAnswer = regenerated ?? buildGracefulRetry(wtaResolvedQuestion);
             }
 
             // LEAKED-SCHEMA-STUB GUARD + PROVIDER-TRANSPORT-ERROR GUARD — MUST run
@@ -4742,7 +4879,7 @@ export class IntelligenceEngine extends EventEmitter {
             // not on extractedQuestion alone, which is only the third source and
             // would skip repairs that had a perfectly good `question` or
             // `answerPlan.question` available.
-            const scaffoldQuestion = question || answerPlan.question || extractedQuestion.latestQuestion || lastInterviewerTurn || '';
+            const scaffoldQuestion = answerPlan.question || wtaResolvedQuestion;
             // RC-3 (session C, 2026-08-21): the regeneration gate now consults
             // isScaffoldRegenerationEligible instead of excluding the technical
             // types outright. Live, "what's a semaphore?" shipped the full
@@ -4890,7 +5027,7 @@ export class IntelligenceEngine extends EventEmitter {
                     // declineYieldsToAttachedImages (refusalPolicy.ts).
                     && !_wtaHasVisualContext
                     && this.currentGenerationId === generationId) {
-                    const docQuestion = (answerPlan.question || question || extractedQuestion.latestQuestion || lastInterviewerTurn || '').trim();
+                    const docQuestion = (answerPlan.question || wtaResolvedQuestion).trim();
                     // T4 (2026-08-28) — see the long note at the docContextBlock
                     // assignment below. `_v3Composed` says the answer was grounded in
                     // V3's evidence, so that is what it must be validated against.
@@ -5300,7 +5437,7 @@ export class IntelligenceEngine extends EventEmitter {
                         // from question||extractedQuestion.latestQuestion||lastInterviewerTurn
                         // at plan-build time, so reading it here restores the real question.
                         const safeQuestion = IntelligenceEngine.sanitizeManualContextText(
-                            answerPlan.question || question || extractedQuestion.latestQuestion || lastInterviewerTurn || '',
+                            answerPlan.question || wtaResolvedQuestion,
                             1000,
                         );
                         // Wrap the repair directive in an explicit instruction block and
@@ -5510,7 +5647,7 @@ export class IntelligenceEngine extends EventEmitter {
                         // ALWAYS ANSWER (2026-09-07): regenerate once; the honest
                         // line is the last resort, not the response.
                         const regenerated = await this.regenerateUsableAnswer({
-                            question: question || extractedQuestion.latestQuestion || lastInterviewerTurn || '',
+                            question: wtaResolvedQuestion,
                             transcript: preparedTranscript,
                             evidenceBlock: requestSnapshot.v3Prompt?.evidenceBlock,
                             turnKey: whatToAnswerCancellationToken.signal,
@@ -5550,7 +5687,7 @@ export class IntelligenceEngine extends EventEmitter {
                 if (process.env.NATIVELY_TRACE_LONGCTX === '1') {
                     try {
                         console.log('[TRACE:LONGCTX] false_no_content_claim_discard', JSON.stringify({
-                            question: question || extractedQuestion.latestQuestion || lastInterviewerTurn || null,
+                            question: wtaResolvedQuestion || null,
                             rawAnswer: fullAnswer,
                             answerType: answerPlan?.answerType,
                             extractionConfidence: extractedQuestion.confidence,
@@ -5627,7 +5764,7 @@ export class IntelligenceEngine extends EventEmitter {
             // inside.
             try {
                 const { recordShadowDecision } = require('./llm/routing/shadowRun') as typeof import('./llm/routing/shadowRun');
-                const _shadowTurn = (question || extractedQuestion.latestQuestion || lastInterviewerTurn || '').trim();
+                const _shadowTurn = wtaResolvedQuestion.trim();
                 if (_shadowTurn) {
                     void recordShadowDecision({
                         turn: _shadowTurn,
@@ -5664,7 +5801,7 @@ export class IntelligenceEngine extends EventEmitter {
                 if (process.env.NATIVELY_TRACE_LONGCTX === '1') {
                     try {
                         console.log('[TRACE:LONGCTX] nonanswer_sentinel_discard', JSON.stringify({
-                            question: question || extractedQuestion.latestQuestion || lastInterviewerTurn || null,
+                            question: wtaResolvedQuestion || null,
                             rawAnswer: fullAnswer,
                             answerType: answerPlan?.answerType,
                             isSpeculative,
@@ -5675,7 +5812,7 @@ export class IntelligenceEngine extends EventEmitter {
                     // ALWAYS ANSWER (2026-09-07): a manual press regenerates once
                     // before any canned line is considered.
                     const regenerated = await this.regenerateUsableAnswer({
-                        question: question || extractedQuestion.latestQuestion || lastInterviewerTurn || '',
+                        question: wtaResolvedQuestion,
                         transcript: preparedTranscript,
                         evidenceBlock: requestSnapshot.v3Prompt?.evidenceBlock,
                         turnKey: whatToAnswerCancellationToken.signal,
@@ -5737,7 +5874,7 @@ export class IntelligenceEngine extends EventEmitter {
                     && !isDocGroundedAnswerType(answerPlan.answerType)) {
                     const { assessAnswerCoverage, shouldAttemptClauseRepair, buildClauseRepairInstruction } =
                         require('./llm/answerCoverage') as typeof import('./llm/answerCoverage');
-                    const coverageQuestion = answerPlan.question || question || extractedQuestion.latestQuestion || lastInterviewerTurn || '';
+                    const coverageQuestion = answerPlan.question || wtaResolvedQuestion;
                     const coverage = assessAnswerCoverage(coverageQuestion, fullAnswer);
                     if (coverage.multiPart) {
                         trace.mark('validation_completed', { reason: 'clause_coverage', incomplete: coverage.incomplete, missing: coverage.missing.length });
@@ -5880,7 +6017,7 @@ export class IntelligenceEngine extends EventEmitter {
                 && !isDocGroundedAnswerType(answerPlan.answerType)
                 && !ANSWER_RELEVANCE_EXCLUDED_ANSWER_TYPES.has(answerPlan.answerType)) {
                 try {
-                    const relevanceQuestion = question || extractedQuestion.latestQuestion || lastInterviewerTurn || '';
+                    const relevanceQuestion = wtaResolvedQuestion;
                     // Observe-only kill-switch (2026-07-19, see
                     // answerRelevanceGuardLive's doc comment in
                     // intelligenceFlags.ts): validation run-032 proved this guard's
@@ -6624,7 +6761,7 @@ export class IntelligenceEngine extends EventEmitter {
          * `code-hint`, and `screenshot` is what that turn actually is.
          */
         pinned?: { question: string; surface?: 'assist' | 'screenshot'; source?: 'screenshot' | 'transcript' | 'manual' },
-    ): Promise<{ system: string; user: string } | null> {
+    ): Promise<V3TransportPrompt | null> {
         try {
             const { isContextIntelligenceV3Enabled } = require('./context-intelligence/contracts/flag');
             if (!isContextIntelligenceV3Enabled()) return null;
@@ -6693,7 +6830,33 @@ export class IntelligenceEngine extends EventEmitter {
                 conversationSummary: ctx.conversationWindow(60),
                 retrieval: ctx.port as any,
             });
-            return _v3 ? { system: _v3.system, user: _v3.user } : null;
+            if (!_v3) return null;
+
+            // The bridge reports the scopes carried by packed evidence and
+            // conversation prose. A pinned question has one additional source
+            // that only this caller knows about: code-hint can reuse OCR text
+            // from a screenshot or a problem retained from the transcript.
+            // That text is embedded directly in the composed user message, so
+            // it belongs in BOTH sets. Manual text is the user's current input,
+            // not retained provider-scoped context, and adds no scope here.
+            const pinnedDataScope: ProviderDataScope | null = pinned?.source === 'screenshot'
+                ? 'screenshots'
+                : pinned?.source === 'transcript'
+                    ? 'transcript'
+                    : null;
+            const packedDataScopes = new Set<ProviderDataScope>(_v3.packedDataScopes ?? []);
+            const messageDataScopes = new Set<ProviderDataScope>(_v3.messageDataScopes ?? []);
+            if (pinnedDataScope) {
+                packedDataScopes.add(pinnedDataScope);
+                messageDataScopes.add(pinnedDataScope);
+            }
+
+            return {
+                system: _v3.system,
+                user: _v3.user,
+                packedDataScopes: [...packedDataScopes],
+                messageDataScopes: [...messageDataScopes],
+            };
         } catch { return null; }
     }
 
@@ -7081,7 +7244,13 @@ export class IntelligenceEngine extends EventEmitter {
         // The FOURTH V3 surface ('manual-chat' via pathTag 'engine'). It reads
         // the ring at the buildV3Prompt call below and, like the other two live
         // surfaces, had no writer — so its own answers never became history.
+        const manualSessionEpoch = this.session.getSessionLifecycleEpoch();
         const manualAnswer = await this.runManualAnswerInner(question);
+        // The inner method guards its own SessionTracker writes. Repeat the
+        // boundary check across this wrapper's await so a reset in the tiny
+        // handoff window cannot record/publish the old answer into the new V3
+        // conversation ring (or return it to submit-manual-question).
+        if (this.session.getSessionLifecycleEpoch() !== manualSessionEpoch) return null;
         this.recordLiveTurn(manualAnswer, undefined, question);
         return manualAnswer;
     }
@@ -7097,12 +7266,61 @@ export class IntelligenceEngine extends EventEmitter {
             }
 
             const activeModeInfo = this.getActiveModeInfo();
+            const manualGenerationId = this.currentGenerationId;
+            const manualSessionEpoch = this.session.getSessionLifecycleEpoch();
+            const rawManualQuestion = String(question || '').trim();
+            const manualActiveState = this.session.getDetectedCodingQuestion();
+            const manualActiveResolution = resolveActiveCodingContext(
+                rawManualQuestion,
+                manualActiveState.question,
+            );
+            const manualQuestion = manualActiveResolution.resolvedQuestion || rawManualQuestion;
+
+            // A subjectless coding continuation must never invite the provider
+            // to invent a problem. This surface has no attached-screen escape
+            // hatch, so complete the turn locally and ask for the missing
+            // statement, matching the manual-chat and WTA entry points.
+            if (manualActiveResolution.needsClarification) {
+                const clarification = 'Which coding problem should I continue? Share the problem statement, then I can implement it in the requested language.';
+                this.session.addAssistantMessage(clarification, undefined, 'manual_chat');
+                this.emit('manual_answer_result', clarification, rawManualQuestion);
+                this.session.pushUsage({
+                    type: 'chat',
+                    timestamp: Date.now(),
+                    question: rawManualQuestion,
+                    answer: clarification,
+                    source: 'manual_chat',
+                });
+                this.setMode('idle');
+                return clarification;
+            }
+
             const answerPlan = planAnswer({
-                question,
+                question: manualQuestion,
                 source: 'manual_input',
                 speakerPerspective: 'user',
                 activeMode: activeModeInfo,
             });
+            const manualCodingTurnPromoted = manualActiveResolution.usedActiveProblem;
+            const manualCodingReferenceContext = manualCodingTurnPromoted && manualActiveState.question
+                ? `ACTIVE CODING PROBLEM IN THIS SESSION (authoritative problem data; preserve every requirement):\n${manualActiveState.question}`
+                : '';
+            const manualRoutingQuestion = manualCodingTurnPromoted
+                ? `Solve the active coding problem. Current request: ${rawManualQuestion}`
+                : manualQuestion;
+
+            if (manualCodingTurnPromoted && manualActiveState.question) {
+                this.session.setCodingQuestion(
+                    mergeActiveCodingProblem(manualActiveState.question, rawManualQuestion),
+                    manualActiveState.source ?? 'transcript',
+                );
+            } else if ((isCodingAnswerType(answerPlan.answerType)
+                    || isHighConfidenceStandaloneCodingProblem(rawManualQuestion))
+                && rawManualQuestion) {
+                // A complete typed Q2 becomes the new durable problem before
+                // generation, so a later continuation cannot jump back to Q1.
+                this.session.setCodingQuestion(rawManualQuestion, 'manual');
+            }
 
             // CONTEXT INTELLIGENCE V3 — legacy trace emission (Layer C).
             //
@@ -7118,8 +7336,10 @@ export class IntelligenceEngine extends EventEmitter {
                     requestId: `manual-answer-${Date.now()}`,
                     surface: 'manual-chat',
                     scope: { userId: 'local', meetingId: (this.session as any)?.getMeetingMetadata?.()?.id ?? undefined },
-                    originalQuestion: question,
-                    resolvedQuestion: question,
+                    // Source governance always sees what the user actually
+                    // supplied; only planning/prompting use the resolved form.
+                    originalQuestion: rawManualQuestion,
+                    resolvedQuestion: manualQuestion,
                     modeId: (activeModeInfo as any)?.templateType ?? undefined,
                     // groundingPolicy deliberately omitted — there is none.
                     authorizedSources: [],
@@ -7151,13 +7371,28 @@ export class IntelligenceEngine extends EventEmitter {
                         // the two call sites' traces separable (they previously
                         // both recorded legacyPath 'v3-manual-chat').
                         pathTag: 'engine',
-                        question,
+                        question: manualRoutingQuestion,
+                        // The retained problem has already resolved the referent;
+                        // do not let generic V3 follow-up routing re-open an
+                        // unrelated document source for "show in Python".
+                        isFollowUp: manualCodingTurnPromoted ? false : undefined,
+                        codingTask: isCodingAnswerType(answerPlan.answerType) || manualCodingTurnPromoted,
+                        // Session content is untrusted conversation data, never
+                        // a SYSTEM instruction. Preserve screenshot provenance so
+                        // the bridge can enforce the user's provider-data policy.
+                        referenceContext: manualCodingReferenceContext || undefined,
+                        referenceContextDataScope: manualCodingTurnPromoted
+                            && manualActiveState.source === 'screenshot'
+                                ? 'screenshots'
+                                : 'transcript',
                         modeTemplateType: _ctx.raw,
                         modeUniqueId: _ctx.modeUniqueId,
                         modeName: _ctx.modeName,
                         attachedSourceCount: _ctx.attachedSourceCount,
+                        attachedFileNames: _ctx.attachedFileNames,
                         profileSourceCount: _ctx.profileSourceCount,
                         resolvedProfileSources: _ctx.resolvedProfileSources,
+                        extraAllowedSourceTypes: _ctx.extraAllowedSourceTypes as never[],
                         // See ClassificationInput.inLiveMeeting (task 7b, issue
                         // #552) — every buildV3Prompt call built from
                         // v3ModeRetrievalContext() passes this through.
@@ -7185,10 +7420,31 @@ export class IntelligenceEngine extends EventEmitter {
                 } catch { return null; }
             })();
 
+            // A meeting/session reset may land while V3 retrieval is awaiting.
+            // Do not start a provider request planned against the old session.
+            if (this.session.getSessionLifecycleEpoch() !== manualSessionEpoch) {
+                if (this.currentGenerationId === manualGenerationId) this.setMode('idle');
+                return null;
+            }
+
             if (_v3) {
                 // V3 owns the system prompt entirely; the legacy universal prompt
                 // and the raw context blob are both bypassed.
-                answer = await this.answerLLM.generate(_v3.user, undefined, answerPlan, _v3.system);
+                answer = await this.answerLLM.generate(
+                    _v3.user,
+                    undefined,
+                    answerPlan,
+                    _v3.system,
+                    _v3.packedDataScopes ?? [],
+                    [
+                        ...new Set<import('./llm/ProviderRouter').ProviderDataScope>([
+                            ...(_v3.messageDataScopes ?? []),
+                            ...(manualCodingTurnPromoted
+                                ? [manualActiveState.source === 'screenshot' ? 'screenshots' as const : 'transcript' as const]
+                                : []),
+                        ]),
+                    ],
+                );
             } else {
                 // R5 (2026-08-12, review finding): the broad flag stripped the
                 // live transcript from this fallback for template-seeded modes
@@ -7202,13 +7458,33 @@ export class IntelligenceEngine extends EventEmitter {
                 const context = _docEnforced || isCodingAnswerType(answerPlan.answerType)
                     ? undefined
                     : this.session.getFormattedContext(120);
-                answer = await this.answerLLM.generate(question, context, answerPlan);
+                answer = await this.answerLLM.generate(
+                    manualQuestion,
+                    context,
+                    answerPlan,
+                    undefined,
+                    manualCodingTurnPromoted
+                        ? [manualActiveState.source === 'screenshot' ? 'screenshots' : 'transcript']
+                        : [],
+                    manualCodingTurnPromoted
+                        ? [manualActiveState.source === 'screenshot' ? 'screenshots' : 'transcript']
+                        : [],
+                );
+            }
+
+            // AnswerLLM has its own provider await. A reset cannot reliably
+            // cancel every provider, so make the post-await commit conditional
+            // on the same session still being active. Returning null also keeps
+            // runManualAnswer's conversation-ring wrapper from recording it.
+            if (this.session.getSessionLifecycleEpoch() !== manualSessionEpoch) {
+                if (this.currentGenerationId === manualGenerationId) this.setMode('idle');
+                return null;
             }
             const structureValidation = validateAnswerStructure(
                 answerPlan.answerType, answer,
                 require('./llm/codingPromptSignals').resolveCodingPromptSignals({
                     answerType: answerPlan.answerType,
-                    question: answerPlan.question || question || '',
+                    question: answerPlan.question || manualQuestion || '',
                 }).codingFormat ?? null,
             );
             if (!structureValidation.ok && structureValidation.repaired) {
@@ -7228,12 +7504,12 @@ export class IntelligenceEngine extends EventEmitter {
                 // fixed to match this function's own source: 'manual_input'
                 // plan and the pushUsage({source: 'manual_chat'}) call below.
                 this.session.addAssistantMessage(answer, undefined, 'manual_chat');
-                this.emit('manual_answer_result', answer, question);
+                this.emit('manual_answer_result', answer, rawManualQuestion);
 
                 this.session.pushUsage({
                     type: 'chat',
                     timestamp: Date.now(),
-                    question: question,
+                    question: rawManualQuestion,
                     answer: answer,
                     source: 'manual_chat',
                 });
@@ -7271,12 +7547,25 @@ export class IntelligenceEngine extends EventEmitter {
                 return "Please configure your API Keys in Settings to use this feature.";
             }
 
+            const explicitProblemStatement = problemStatement?.trim();
+            if (explicitProblemStatement) {
+                this.session.setCodingQuestion(explicitProblemStatement, 'screenshot');
+            }
+
             // Resolve question context from available sources (priority order)
             const sessionQuestion = this.session.getDetectedCodingQuestion();
-            const questionContext = problemStatement ?? sessionQuestion.question ?? null;
-            const questionSource = problemStatement
+            const questionContext = explicitProblemStatement ?? sessionQuestion.question ?? null;
+            const questionSource = explicitProblemStatement
                 ? 'screenshot'
                 : sessionQuestion.source;
+            // CodeHintLLM's transport distinguishes visual extraction from
+            // text context. A manually typed active problem is text context,
+            // so map it to the existing transcript transport category.
+            const codeHintQuestionSource = questionSource === 'screenshot'
+                ? 'screenshot'
+                : questionSource
+                    ? 'transcript'
+                    : null;
 
             // Pull transcript as fallback context when no question is pinned
             const transcriptContext = questionContext === null
@@ -7296,12 +7585,12 @@ export class IntelligenceEngine extends EventEmitter {
             // problem statement is what the user is actually working on, and the
             // most recent spoken question may be about something else entirely.
             const codeHintV3 = await this.buildV3ForTranscriptSurface('code-hint', questionContext
-                ? { question: questionContext, surface: 'screenshot', source: questionSource === 'transcript' ? 'transcript' : 'screenshot' }
+                ? { question: questionContext, surface: 'screenshot', source: questionSource ?? 'transcript' }
                 : undefined);
             const stream = this.codeHintLLM.generateStream(
                 imagePaths,
                 questionContext ?? undefined,
-                questionSource,
+                codeHintQuestionSource,
                 transcriptContext ?? undefined,
                 codeHintV3 ?? undefined
             );
@@ -7364,10 +7653,14 @@ export class IntelligenceEngine extends EventEmitter {
                 this.setMode('idle');
                 return "Please configure your API Keys in Settings to use this feature.";
             }
+            const explicitProblemStatement = problemStatement?.trim();
+            if (explicitProblemStatement) {
+                this.session.setCodingQuestion(explicitProblemStatement, 'screenshot');
+            }
 
             let context = this.session.getFormattedContext(180);
             // Prepend the problem statement so the LLM knows exactly what to brainstorm
-            const resolvedProblem = problemStatement?.trim() ||
+            const resolvedProblem = explicitProblemStatement ||
                 this.session.getDetectedCodingQuestion().question?.trim();
 
             if (!context.trim() && !resolvedProblem && (!imagePaths || imagePaths.length === 0)) {

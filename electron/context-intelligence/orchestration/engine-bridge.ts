@@ -126,6 +126,20 @@ export interface BridgeInput {
   realtimeInstruction?: string;
   conversationSummary?: string;
   /**
+   * Caller-supplied unverified referent for this turn (for example, a retained
+   * coding problem or a verified prior coding answer). It is rendered in the
+   * USER conversation envelope, never the SYSTEM persona, and is therefore
+   * subject to the privacy scope declared by referenceContextDataScope.
+   */
+  referenceContext?: string;
+  /**
+   * Provenance of referenceContext. Most retained conversation state is a
+   * transcript; a problem recovered from a screenshot remains screenshot data
+   * even after OCR/vision turned it into text. Defaults to `transcript` for
+   * backwards compatibility with callers that predate source-aware referents.
+   */
+  referenceContextDataScope?: ProviderDataScope;
+  /**
    * Multi-turn chat history (Settings > Intelligence > Memory > "Chat history").
    *
    * Passed IN rather than read here on purpose: this subsystem has no dependency
@@ -211,8 +225,12 @@ export interface BridgeResult {
    * enforced nothing. Pass this straight into streamChat's `extraDataScopes`.
    */
   packedDataScopes: ProviderDataScope[];
-  /** Scopes whose evidence a privacy setting withheld from this turn. Empty on
-   *  a normal turn. Present so callers can log/surface the withholding. */
+  /** Subset of packed scopes embedded in ordinary conversation/reference
+   * prose. Unlike tagged evidence, this material cannot be reliably removed at
+   * the final transport boundary if policy changes after composition. */
+  messageDataScopes: ProviderDataScope[];
+  /** Scopes whose evidence or scoped reference material a privacy setting
+   *  withheld from this turn. Empty on a normal turn. */
   withheldDataScopes: ProviderDataScope[];
   /** Set when a context-debug collector is open for this turn (deferred
    *  completion) — the transport looks it up by this id to record the final
@@ -276,6 +294,13 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
     // as a labelled referent — never evidence). Read BEFORE orchestrate(),
     // which advances the state with THIS turn's question.
     let convoSummary = input.conversationSummary;
+    // A screen-free twin of the rendered history. History is assembled before
+    // retrieval so it cannot accidentally include the current turn, but the
+    // provider policy is intentionally read after retrieval. Keeping this twin
+    // lets the post-await policy atomically discard screen-derived prose if the
+    // setting changes while orchestration is in flight (without discarding the
+    // otherwise-allowed transcript history with it).
+    let convoSummaryWithoutScreens = input.conversationSummary;
     // A caller-supplied summary (the live-transcript surfaces) is real content
     // by construction; the session fallback below decides for itself.
     //
@@ -317,6 +342,7 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
     let convoHasContent = input.multiTurnHistory === false
       ? false
       : Boolean(input.conversationSummary) && COMPLETED_EXCHANGE_RE.test(input.conversationSummary!);
+    let convoHasContentWithoutScreens = convoHasContent;
     // Set when the rendered history actually contains a [screen attached…]
     // line, so packedDataScopes can declare `screenshots` truthfully rather
     // than filing screen content under `transcript`.
@@ -343,6 +369,7 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
         // not history, and the composer must not relax its no-evidence notice
         // on the strength of it.
         convoHasContent = turns.length > 0;
+        convoHasContentWithoutScreens = convoHasContent;
         if (turns.length) {
           // ENFORCE the mode's declared conversation budget, oldest dropped
           // first. The ring is already bounded by construction, but a full ring
@@ -415,6 +442,10 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
             ...(t.screen && !screensDenied ? [`[screen attached that turn] ${t.screen}`] : []),
             `Assistant: ${t.a}`,
           ].join('\n')).join('\n\n');
+          convoSummaryWithoutScreens = turns.map((t) => [
+            `User: ${t.q}`,
+            `Assistant: ${t.a}`,
+          ].join('\n')).join('\n\n');
           historyCarriesScreenText = renderedScreen;
           // The CURRENT question is not in the ring yet (its answer does not
           // exist), so nothing here duplicates it.
@@ -425,6 +456,7 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
           // without ever recording an answer.
           convoSummary = `Previous question: ${cs.previousQuestion}`
             + (cs.previousAnswerSummary ? `\nPrevious answer (referent only, NOT evidence): ${cs.previousAnswerSummary}` : '');
+          convoSummaryWithoutScreens = convoSummary;
         }
       } catch { /* continuity must never break a turn */ }
     } else if (input.multiTurnHistory !== false) {
@@ -501,6 +533,46 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
     // would go stale outside the bundle that wrote it.
     const scopePolicy = readProviderScopePolicy();
     const scopeFilter = filterEvidenceByProviderScopes(result.evidence, scopePolicy);
+    // History rendering necessarily happens before orchestrate(), but its
+    // privacy decision must not. A settings change while retrieval awaits used
+    // to leave already-rendered screen text in convoSummary even though the
+    // post-await evidence filter observed screenshots=false. Restore the
+    // screen-free twin so this one live policy snapshot controls everything
+    // composed for the provider.
+    if (historyCarriesScreenText && isScopeDenied('screenshots', scopePolicy)) {
+      convoSummary = convoSummaryWithoutScreens;
+      convoHasContent = convoHasContentWithoutScreens;
+      historyCarriesScreenText = false;
+      historyScreenWithheld = true;
+    }
+    // Per-turn referents are untrusted conversation data, not instructions.
+    // Keep the block bounded before it enters the shared prompt packer. This is
+    // intentionally outside the multi-turn toggle: an explicitly resolved
+    // active problem is required to answer this turn, not optional chat memory.
+    //
+    // Resolve it against the SAME post-orchestration policy snapshot as the
+    // evidence below. Reading/merging before the await opened a TOCTOU window:
+    // screenshots could be disabled during retrieval while the already-merged
+    // screenshot text survived under the still-allowed transcript scope.
+    const referenceContext = String(input.referenceContext || '').trim().slice(0, 3_200);
+    const referenceContextDataScope = input.referenceContextDataScope ?? 'transcript';
+    let referenceContextWithheldScope: ProviderDataScope | null = null;
+    if (referenceContext && isScopeDenied(referenceContextDataScope, scopePolicy)) {
+      // The retained referent is current-turn material, not optional history:
+      // report its removal to the composer so it cannot guess the missing
+      // problem from general knowledge. Do not merge it first and try to scrub
+      // prose later; the evidence filter cannot see conversation text.
+      referenceContextWithheldScope = referenceContextDataScope;
+    } else if (referenceContext) {
+      convoSummary = convoSummary
+        ? `${referenceContext}\n\n${convoSummary}`
+        : referenceContext;
+      convoHasContent = true;
+      // Text produced from a screenshot is still screenshot data. Carry both
+      // scopes because the reference rides inside the conversation envelope:
+      // transcript governs that envelope; screenshots governs its provenance.
+      if (referenceContextDataScope === 'screenshots') historyCarriesScreenText = true;
+    }
     // EVIDENCE withholding only. Everything downstream reads this set as "this
     // turn's evidence was filtered": absenceContract() returns '' on any entry,
     // privacyWithholdingNotice PRE-EMPTS noEvidenceNotice entirely, and the
@@ -509,6 +581,7 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
     // untouched — the user asked something unrelated two turns later and was
     // told to refuse because the Screenshots setting withheld the material.
     const withheldScopes = new Set<ProviderDataScope>(scopeFilter.withheldScopes);
+    if (referenceContextWithheldScope) withheldScopes.add(referenceContextWithheldScope);
 
     // Conversation continuity is CONVERSATION_STATE data, which maps to the
     // transcript scope. It reaches the prompt as prose rather than as an
@@ -589,6 +662,9 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
     // safe (over-declaring, never under-), but answering "did screen content go
     // out this turn?" is the line's only job, so a wrong `true` defeats it.
     if (historyCarriesScreenText && convoSummary) packedDataScopes.add('screenshots');
+    const messageDataScopes = new Set<ProviderDataScope>();
+    if (convoSummary) messageDataScopes.add('transcript');
+    if (historyCarriesScreenText && convoSummary) messageDataScopes.add('screenshots');
 
     // ── Per-turn source line ────────────────────────────────────────────────
     // The one thing production could not answer about itself. A cross-mode
@@ -648,7 +724,7 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
         // Privacy withholding (2026-08-01). Identity/counts only. A turn that
         // answered thinly because the user switched a data scope off was
         // previously indistinguishable in the logs from a retrieval miss.
-        privacyWithheldCount: scopeFilter.withheldCount,
+        privacyWithheldCount: scopeFilter.withheldCount + (referenceContextWithheldScope ? 1 : 0),
         privacyWithheldScopes: [...auditWithheldScopes],
         outboundScopes: [...packedDataScopes],
         // Deep-test D5/D6 (2026-08-01): the two signals that turn a masked
@@ -761,6 +837,7 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
       // model was actually given, not the evidence retrieval found.
       evidenceCount: scopeFilter.evidence.length,
       packedDataScopes: [...packedDataScopes],
+      messageDataScopes: [...messageDataScopes],
       withheldDataScopes: [...auditWithheldScopes],
       // GROUNDED with nothing to retrieve means the mode authorizes no source
       // for this question. Distinct from FAST, where none was needed.

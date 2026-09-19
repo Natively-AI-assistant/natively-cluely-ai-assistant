@@ -17,7 +17,7 @@
 // prompt would make that key space unbounded.
 
 import { isCodingAnswerType, type AnswerType } from './AnswerPlanner';
-import { detectExplicitCodingContract, type ExplicitCodingContract } from './codingFollowup';
+import { detectExplicitCodingContract, isCodingContinuation, type ExplicitCodingContract } from './codingFollowup';
 
 /**
  * Which coding contract the turn wants.
@@ -197,7 +197,8 @@ export function isPromotedScreenCodingTurn(input: {
 }): boolean {
   if (input.alreadyCoding) return false;
   const q = (input.question || '').trim();
-  if (q && !isDeicticAsk(q)) return false;
+  const subjectlessAsk = !q || isDeicticAsk(q) || isCodingContinuation(q);
+  if (!subjectlessAsk) return false;
   if (input.hasImages) return true;
   return detectStructuralCodeTemplate(input.screenText);
 }

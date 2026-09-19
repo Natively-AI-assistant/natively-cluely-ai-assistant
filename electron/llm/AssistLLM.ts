@@ -7,6 +7,7 @@ import { LLMHelper } from "../LLMHelper";
 import { UNIVERSAL_ASSIST_PROMPT } from "./prompts";
 import { TINY_ASSIST_PROMPT } from "./tinyPrompts";
 import { resolveV2SystemPrompt, v2TierForPromptTier } from "./promptSystemV2";
+import type { V3TransportPrompt } from "./streamContextPolicy";
 
 export class AssistLLM {
     private llmHelper: LLMHelper;
@@ -20,7 +21,7 @@ export class AssistLLM {
      * @param context - Current conversation context
      * @returns Insight (no post-clamp; prompt enforces brevity)
      */
-    async generate(context: string, abortSignal?: AbortSignal, v3?: { system: string; user: string }): Promise<string> {
+    async generate(context: string, abortSignal?: AbortSignal, v3?: V3TransportPrompt): Promise<string> {
         try {
             if (!context.trim()) {
                 return "";
@@ -51,10 +52,15 @@ export class AssistLLM {
                 promptOverride,
                 Boolean(v3),   // ignoreKnowledgeMode — a V3-owned prompt must not be re-classified
                 true,
-                [],
+                v3?.packedDataScopes ? [...v3.packedDataScopes] : [],
                 abortSignal,
                 undefined,
-                v3 ? { v3Owned: true } : undefined,
+                v3 ? {
+                    v3Owned: true,
+                    ...(v3.messageDataScopes?.length
+                        ? { messageDataScopes: [...v3.messageDataScopes] }
+                        : {}),
+                } : undefined,
             )) {
                 if (abortSignal?.aborted) return "";
                 result += chunk;

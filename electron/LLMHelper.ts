@@ -7383,6 +7383,22 @@ let isMultimodal = !!(imagePaths?.length);
         yield DOCUMENT_GROUNDING_SCOPE_DENIED_MESSAGE;
         return;
       }
+      // Some callers embed retained context directly in `message` (for
+      // example, an active coding problem recovered from a transcript or a
+      // screenshot). The ordinary omission path below can clear `context` and
+      // image bytes, but it cannot reliably rediscover and subtract scoped
+      // prose from the message. Callers identify only that case through
+      // messageDataScopes. Route locally when possible; otherwise stop before
+      // cloud dispatch rather than claiming a scope was omitted while sending
+      // the text unchanged. Ordinary context-only denials keep their existing
+      // omission semantics.
+      const deniedMessageScopes = (routeOptions?.messageDataScopes ?? [])
+        .filter((scope) => deniedOutboundScopes.includes(scope));
+      if (deniedMessageScopes.length > 0 && !ollamaAvailable) {
+        const labels = scopeLabels(deniedMessageScopes);
+        yield `This question depends on retained ${labels} context, but that privacy scope is disabled for cloud providers. No protected context was sent. Re-enable it in Settings > AI Providers > Privacy, or use a local provider, then ask again.`;
+        return;
+      }
       if (ollamaAvailable) {
         const ollamaScopePrompt = this.resolveLocalSystemPrompt(this.injectLanguageInstruction(systemPromptOverride || HARD_SYSTEM_PROMPT));
         yield* this.streamWithOllama(message, context, ollamaScopePrompt, imagePaths, abortSignal);

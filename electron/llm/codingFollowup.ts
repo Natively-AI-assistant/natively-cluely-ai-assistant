@@ -118,6 +118,30 @@ const CONTINUATION_STRONG_RE =
 const CONTINUATION_LOOSE_RE =
   /\b(optimi[sz]e|optimal|improve|make\s+it|refactor|rewrite|convert|faster|more\s+efficient|walk\s+through)\b/i;
 
+// Language/implementation ellipses that only become actionable when the caller
+// has a prior coding problem. Callers already gate promotion on retained coding
+// state (or a prior coding answer), so these must describe the SHAPE of a
+// continuation rather than classify a standalone request as coding.
+//
+// Issue #539 live examples: "show in python", "show the solution in python",
+// "show me how you would implement in python", and "implement this".
+const IMPLEMENTATION_LANGUAGE = String.raw`(?:python|javascript|typescript|java|c\+\+|c#|csharp|go|golang|rust|swift|kotlin|ruby|php|sql)`;
+const IMPLEMENTATION_CONTINUATION_RE = new RegExp([
+  // "show [me] [the solution] in Python" / "can you show it in C++"
+  String.raw`^(?:please\s+)?(?:(?:can|could|would)\s+you\s+)?(?:show|give|provide)(?:\s+me)?(?:\s+how\s+(?:you\s+)?(?:would\s+)?implement(?:\s+(?:it|this|that|the\s+(?:solution|approach)))?|\s+(?:it|this|that)|(?:\s+the)?(?:\s+(?:code|solution|implementation))?)?\s+(?:in|using)\s+${IMPLEMENTATION_LANGUAGE}(?:\s+please)?[?.!]*$`,
+  // "implement this" / "write it in Rust" / "code that in Java"
+  String.raw`^(?:please\s+)?(?:(?:can|could|would)\s+you\s+)?(?:implement|write|code)\s+(?:this|it|that|the\s+(?:solution|approach|algorithm|function|method))(?:\s+(?:in|using)\s+${IMPLEMENTATION_LANGUAGE})?(?:\s+please)?[?.!]*$`,
+  // Very short language-only refinements are meaningful only with a problem.
+  String.raw`^(?:please\s+)?(?:(?:use|switch\s+to)\s+${IMPLEMENTATION_LANGUAGE}|(?:in|using)\s+${IMPLEMENTATION_LANGUAGE}|${IMPLEMENTATION_LANGUAGE}(?:\s+please)?)[?.!]*$`,
+].join('|'), 'i');
+
+// A domain clarification can be context-dependent even without a pronoun.
+// "Encrypt the entire text, not character by character" is a refinement of an
+// active encryption problem; absent that retained problem the live surface asks
+// for clarification instead of inventing an unrelated cipher/problem.
+const CODING_CLARIFICATION_CONTINUATION_RE =
+  /\b(?:encrypt|decrypt|encrpt|descrypt)\b[^.?!]{0,80}\b(?:entire|whole|full)\s+(?:text|message|payload)\b|\b(?:instead\s+of|not)\s+(?:doing\s+it\s+)?character\s+by\s+character\b/i;
+
 /**
  * Is `question` a coding CONTINUATION — a short follow-up that only makes sense
  * relative to a prior coding solution ("give time and space complexity", "dry run
@@ -177,11 +201,50 @@ export function isBareCodeRequest(question: string): boolean {
   return tokens.every((t) => BARE_CODE_TOKENS.has(t));
 }
 
+const DURABLE_CODING_CONSTRAINT_RE =
+  /\b(?:assume|must|should|need(?:s|ed)?|retain|support|accept|reject|rotate|encryp\w*|encrpt\w*|decryp\w*|descrypt\w*|handle\s+(?:duplicates?|negatives?|empty\s+(?:input|array|string)|nulls?)|when\s+(?:absent|missing)|at\s+(?:least|most)|capacity\s+(?:is|must|should)|in[- ]?place|(?:without\s+(?:extra\s+)?|constant\s+)space)\b|\breturn\s+(?:-?\d+|null|none|true|false|an?\s+error|the\s+(?:index|value)|index|value)\b[^.?!]{0,40}\b(?:when|if)\b|\b(?:input\s+is\s+sorted|negative\s+values?)\b|\bO\([^)]*\)/i;
+
+/** Index of a semantic problem constraint, or -1 for a presentation-only turn. */
+export function durableCodingConstraintStart(question: string): number {
+  return (question || '').search(DURABLE_CODING_CONSTRAINT_RE);
+}
+
+export function hasDurableCodingConstraint(question: string): boolean {
+  return durableCodingConstraintStart(question) >= 0;
+}
+
+/** A subjectless requirement that only makes sense when joined to a problem. */
+export function isDurableCodingConstraintFragment(question: string): boolean {
+  const q = lc(question).replace(/[?.!]+$/, '').trim();
+  if (!q || q.split(/\s+/).length > 24) return false;
+  const codingObject = String.raw`(?:inputs?|outputs?|capacity|arrays?|strings?|lists?|trees?|graphs?|nodes?|keys?|values?|indices|indexes|duplicates?|negatives?|nulls?|empty|valid|sorted|unique|cache|complexity|memory|ttl|versions?|encrypt|decrypt|rotate)`;
+  return new RegExp(String.raw`^(?:you\s+can\s+)?assume\b[^.?!]{0,100}\b${codingObject}\b`, 'i').test(q)
+    || /^(?:the\s+)?(?:input|array|string|values?|capacity)\s+(?:is|are|must|should|can|may)\b/i.test(q)
+    || new RegExp(String.raw`^there\s+(?:can|may|might|will)\s+be\b[^.?!]{0,80}\b${codingObject}\b`, 'i').test(q)
+    || /^return\s+(?:-?\d+|null|none|true|false|an?\s+error|the\s+(?:index|value)|index|value)\b[^.?!]{0,40}\b(?:when|if)\b/i.test(q)
+    || /^(?:use|using|with|require|requires?)\s+(?:only\s+)?constant\s+space\b/i.test(q)
+    || /^(?:time|space|time\s+and\s+space)\s+complexit(?:y|ies)\b/i.test(q)
+    || new RegExp(String.raw`^(?:must|should|need(?:s|ed)?\s+to|retain|support|accept|reject)\b[^.?!]{0,80}\b${codingObject}\b`, 'i').test(q)
+    || /^handle\s+(?:duplicates?|negatives?|empty\s+(?:input|array|string)|nulls?)\b/i.test(q);
+}
+
+/** Output/language instructions apply to the current answer, not the durable
+ * problem statement. Keeping them out of retained state prevents contradictory
+ * carry-over such as "show in Python" followed by "show in C++". */
+export function isCodingPresentationDirective(question: string): boolean {
+  const q = lc(question);
+  if (!q) return false;
+  return isBareCodeRequest(q)
+    || IMPLEMENTATION_CONTINUATION_RE.test(q)
+    || (detectExplicitCodingContract(q) !== null && !hasDurableCodingConstraint(q));
+}
+
 export function isCodingContinuation(question: string): boolean {
   const q = lc(question);
   if (!q) return false;
   // A bare code request is ALWAYS a continuation — it has no subject of its own.
   if (isBareCodeRequest(q)) return true;
+  if (IMPLEMENTATION_CONTINUATION_RE.test(q) || CODING_CLARIFICATION_CONTINUATION_RE.test(q)) return true;
   if (detectExplicitCodingContract(q)) return true; // code_only/complexity/dry-run/explain are all continuations-or-constraints
   const words = q.split(/\s+/).filter(Boolean).length;
   // STRONG coding signal: a SHORT message is a follow-up on its own; a LONG one needs a
