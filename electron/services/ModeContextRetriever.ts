@@ -66,6 +66,8 @@ export interface ModeRetrievalOptions {
      * Absent means the tighter live budget — see rerankBudget.ts.
      */
     rerankSurface?: 'live' | 'manual';
+    /** See ModeHybridRetriever.shouldUseLexicalForLocalManualQuery. */
+    meetingActive?: boolean;
     /**
      * The caller's own race deadline for the whole retrieval, in ms. A rerank
      * whose budget cannot fit inside it is skipped rather than started and
@@ -1852,6 +1854,7 @@ export class ModeContextRetriever {
             rerankDeadlineMs: options.rerankDeadlineMs,
             rerankPoolMultiplier: options.rerankPoolMultiplier,
             queryEmbedRetryBudgetMs: options.queryEmbedRetryBudgetMs,
+            meetingActive: options.meetingActive,
         });
 
         diagLog('retrieveHybrid() return', { usedFallback: result.usedFallback, usedHybrid: result.usedHybrid, chunkCount: result.chunks?.length, hasContext: !!result.formattedContext });

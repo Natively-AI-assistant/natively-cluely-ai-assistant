@@ -22,6 +22,7 @@ export interface ModeRetrieverLike {
     query: string; topK: number; tokenBudget: number; allowRerank: boolean;
     forceDocumentGrounding?: boolean;
     rerankSurface?: 'live' | 'manual';
+    meetingActive?: boolean;
     rerankPoolMultiplier?: number;
     queryEmbedRetryBudgetMs?: number;
   }) => Promise<{ chunks?: Array<Record<string, unknown>> } | null | undefined>;
@@ -209,6 +210,12 @@ export interface ModePortInput {
    * default). Absent means live, the tighter of the two.
    */
   rerankSurface?: 'live' | 'manual';
+  /**
+   * Is a meeting / STT session running? A FUNCTION, evaluated at retrieval time —
+   * the live engine only learns it after the port is built. Absent = unknown = the
+   * bundled embedder stays lexical-only (see ModeHybridRetriever).
+   */
+  meetingActive?: () => boolean;
 }
 
 /**
@@ -262,6 +269,7 @@ export function createModeRetrievalPort(input: ModePortInput): RetrievalPort {
         // → low-confidence only) and the budget follows the surface.
         allowRerank: true,
         rerankSurface: input.rerankSurface ?? 'live',
+        ...(input.meetingActive ? { meetingActive: (() => { try { return input.meetingActive!() === true; } catch { return true; } })() } : {}),
         // The plan's retrieval budget reaches the query embed (2026-09-10). The
         // legacy port has always passed `timeoutMs` here and this port ignored
         // it, so the orchestrator's 1200 ms plan bounded nothing: a slow hosted

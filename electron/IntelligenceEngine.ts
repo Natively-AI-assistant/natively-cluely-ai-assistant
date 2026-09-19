@@ -6484,6 +6484,8 @@ export class IntelligenceEngine extends EventEmitter {
             const modePort = createModeRetrievalPort({
                 modesManager: _mm, modeInfo: _mi, files: _files,
                 rerankSurface: 'live',
+                // Read at retrieval time: `inLiveMeeting` is resolved below, after this port exists.
+                meetingActive: () => inLiveMeeting,
                 // Types each file by shape against what this mode authorizes —
                 // a résumé is RESUME here and CANDIDATE_FILE in recruiting.
                 allowedSourceTypes: [...policy.allowedSourceTypes, ...extraSourceTypes],

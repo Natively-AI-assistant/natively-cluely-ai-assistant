@@ -1453,6 +1453,8 @@ export function initializeIpcHandlers(appState: AppState): void {
             } catch { /* debug identity only */ }
             const modePort = createModeRetrievalPort({
               rerankSurface: 'manual',
+              // Typed turns outside a meeting may query the bundled embedder's vectors.
+              meetingActive: () => appState.getIsMeetingActive(),
               modesManager: mm,
               modeInfo,
               files,

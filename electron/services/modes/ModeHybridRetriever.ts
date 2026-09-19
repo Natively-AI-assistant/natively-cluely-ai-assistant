@@ -1158,11 +1158,21 @@ export class ModeHybridRetriever {
      * streaming. Use the existing lexical fallback for manual turns unless the
      * env escape hatch disables this mitigation.
      */
-    private shouldUseLexicalForLocalManualQuery(hasTranscript: boolean): boolean {
+    private shouldUseLexicalForLocalManualQuery(hasTranscript: boolean, meetingActive?: boolean): boolean {
         if (hasTranscript) return false;
         if (!keylessManualRetrievalUsesLexical()) return false;
         const provider = this.embeddingPipeline.getActiveProviderName?.();
-        return provider === 'local';
+        if (provider !== 'local') return false;
+        // OUTSIDE A MEETING THE PRESSURE THIS GUARDS AGAINST DOES NOT EXIST
+        // (2026-09-19, owner's decision). The hotfix is about ONNX arena pressure
+        // stacked with local STT and streaming during a live meeting — but under
+        // forceDocumentGrounding `hasTranscript` is always false, so the rule had
+        // swallowed EVERY V3 turn: a key-less user's vectors were built and never
+        // queried. Measured: of 162 questions at 70k tokens the answer chunk
+        // reached the prompt for 149 lexical-only vs 160 with the same MiniLM
+        // vectors. Only an EXPLICIT "no meeting" lifts it; an unknown state keeps
+        // the conservative behaviour.
+        return meetingActive !== false;
     }
 
     /**
@@ -1443,6 +1453,8 @@ export class ModeHybridRetriever {
          * Absent = the historical ladder (legacy/manual callers).
          */
         queryEmbedRetryBudgetMs?: number;
+        /** Is a meeting / STT session running? Only an explicit `false` lets the bundled embedder's vectors be queried. */
+        meetingActive?: boolean;
     }): Promise<ModeRetrievedContext> {
         const {
             query,
@@ -1546,7 +1558,7 @@ export class ModeHybridRetriever {
 
         let candidates: ChunkCandidate[] = [];
 
-        const usingLexicalForLocalManualQuery = this.shouldUseLexicalForLocalManualQuery(hasTranscript);
+        const usingLexicalForLocalManualQuery = this.shouldUseLexicalForLocalManualQuery(hasTranscript, params.meetingActive);
 
         const h4StageTrace = process.env.NATIVELY_E2E === '1'
             && process.env.NATIVELY_H4_STAGE_TRACE === '1';
