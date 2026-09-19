@@ -515,11 +515,22 @@ test('a missing helper, garbage output, or a hang all degrade to unavailable', a
   });
   assert.deepEqual(garbage, { available: false, supported: [], installed: [], reserved: [], maxReserved: 0 });
 
-  const hung = await readAppleSpeechLocales('/fake/helper', {
-    platform: 'darwin',
-    timeoutMs: 20,
-    spawn: stubSpawn(() => { /* never answers, never closes */ }),
-  });
+  // The production probe deliberately unrefs its timeout so an abandoned
+  // helper cannot keep Electron alive during shutdown. In this isolated Node
+  // test there may be no other referenced handles, so keep the runner alive
+  // long enough to observe that timeout instead of letting Node cancel the
+  // pending Promise with ERR_TEST_FAILURE (seen on macOS CI).
+  const keepRunnerAlive = setTimeout(() => {}, 100);
+  let hung;
+  try {
+    hung = await readAppleSpeechLocales('/fake/helper', {
+      platform: 'darwin',
+      timeoutMs: 20,
+      spawn: stubSpawn(() => { /* never answers, never closes */ }),
+    });
+  } finally {
+    clearTimeout(keepRunnerAlive);
+  }
   assert.deepEqual(hung, { available: false, supported: [], installed: [], reserved: [], maxReserved: 0 }, 'a hung probe must not block Settings forever');
 });
 
