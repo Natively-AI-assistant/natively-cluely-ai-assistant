@@ -37,6 +37,9 @@ import type { RetrievalPort } from '../orchestration/orchestrator';
 import { createLegacyRetrievalPort } from './legacy-retrieval-port';
 import type { LegacyChunk } from './legacy-adapter';
 import { Bm25Index, DEFAULT_BM25 } from './bm25';
+// Pure tokenizer/statistics module — no Electron, no DB — so the rule above holds.
+import { buildLexicalStats, anchoringChunkIndexes } from '../../services/modes/lexicalTokens';
+import { semanticChunks } from '../../services/modes/semanticChunker';
 
 /**
  * 'fact' (2026-08-02) carries DERIVED profile facts — things the app computed
@@ -436,7 +439,13 @@ const INTENT_RULES: IntentRule[] = [
     boosts: { skills: 0.4, requirements: 0.3 } },
   { re: /\b(gpa|cgpa|degree|educat\w*|universit\w*|college|graduat\w*|studied|study)\b/i,
     boosts: { education: 0.45 } },
-  { re: /\b(salary|compensation|pay\b|lpa\b|ctc\b|package|band\b|offer|bonus|benefits?)\b/i,
+  // Equity IS compensation (2026-09-19): "How much ownership of the company comes with the
+  // offer?" fired this rule on "offer" and still missed "New-hire equity grants … vesting over four
+  // years", because no equity word was in the class the raw-text boost matches against.
+  // NOT "ownership" / "shares" / bare "stock": résumés say "took ownership of", "shares
+  // knowledge", "in stock" — measured: with "ownership" in the class it matched over a quarter of
+  // the raw chunks, the discriminative cap switched the rule off, and the SALARY fix was lost too.
+  { re: /\b(salary|compensation|pay\b|lpa\b|ctc\b|package|band\b|offer|bonus|benefits?|equity|stock options?|vest(?:ing|ed|s)?|rsus?|esops?)\b/i,
     boosts: { compensation: 0.5, card_artifact_negotiation: 0.35, derived_salary: 0.5 } },
   { re: /\b(experience|work(ed)?|intern\w*|role\b|position|company|employer|years?|tenure)\b/i,
     boosts: { experience: 0.3, identity: 0.15 } },
@@ -463,6 +472,11 @@ const INTENT_RULES: IntentRule[] = [
   { re: /\b(who am i|my name|name is|e-?mail|phone|mobile|contact (details|info\w*|number)|linkedin|github|portfolio|personal (site|website)|my (background|profile)|about me)\b/i,
     boosts: { identity: 0.45 } },
 ];
+
+/** A raw chunk in a fired intent's vocabulary earns this share of the rule's largest boost… */
+const RAW_INTENT_BOOST_SHARE = 0.7;
+/** …unless more than this share of the raw chunks match it (then the class does not discriminate). */
+const RAW_INTENT_MAX_SHARE = 0.25;
 
 function intentBoosts(query: string): Map<string, number> {
   const m = new Map<string, number>();
@@ -550,33 +564,22 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
       if (!body) continue;
       push(c.title || 'Card', `${c.title ? `${c.title}: ` : ''}${body}`, `card_${c.type ?? 'unknown'}`, false);
     }
-    // LOSSLESS raw-text sections (deep-test D1): ~110-word windows with a one-
-    // line overlap, so a fact with no schema slot is still retrievable. Ranked
-    // by the same BM25 as everything else; the structured sections usually
-    // outrank them on common questions, so this adds recall without disturbing
-    // precision. Deduped against the structured sections by normText via push().
+    // LOSSLESS raw-text sections (deep-test D1), so a fact with no schema slot
+    // is still retrievable. Ranked by the same BM25 as everything else; deduped
+    // against the structured sections by normText via push().
+    //
+    // HEADING-AWARE since 2026-09-19. These were bare ~110-word windows, and a
+    // window carries no memory of the heading above it: "Worked with 7
+    // engineers under Greta Kovalenko" sat in a window that never said WHICH
+    // project, so "Who did you work under on Project Wicket-103?" matched the
+    // project's name in one window and the answer in another, and lost to 40
+    // sibling projects (measured: 12 of 12 such lookups missed on a 15k-token
+    // résumé). The mode path's chunker prefixes every chunk with its heading
+    // path and never splits mid-paragraph; the same one is used here.
     const raw = str(doc.rawText);
     if (raw) {
-      const rawLines = raw.split(/\n+/).map((l) => l.trim()).filter(Boolean);
-      let buf: string[] = [];
-      let words = 0;
-      let part = 1;
-      const flush = () => {
-        if (!buf.length) return;
-        push(`Document text (part ${part})`, buf.join('\n'), 'raw_document', false);
-        part += 1;
-        const overlap = buf[buf.length - 1];
-        buf = overlap ? [overlap] : [];
-        words = overlap ? overlap.split(/\s+/).length : 0;
-      };
-      for (const line of rawLines) {
-        buf.push(line);
-        words += line.split(/\s+/).length;
-        if (words >= 110) flush();
-      }
-      if (buf.length && (part === 1 || buf.length > 1)) {
-        push(`Document text (part ${part})`, buf.join('\n'), 'raw_document', false);
-      }
+      const pieces = semanticChunks(raw);
+      pieces.forEach((piece, n) => push(`Document text (part ${n + 1})`, piece, 'raw_document', false));
     }
 
     if (idx === 0) continue;                                    // nothing renderable ⇒ not registered
@@ -588,7 +591,22 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
 
   if (sourceTypes.size === 0) return null;
 
-  return createLegacyRetrievalPort({
+  // Corpus arbitration over THIS port's chunks (see orchestrator). Statistics
+  // are built once per port — a port is constructed per turn from documents
+  // that do not change within it.
+  let probeStats: ReturnType<typeof buildLexicalStats> | undefined;
+  const anchoredSources = (question: string): SourceType[] => {
+    if (probeStats === undefined) probeStats = buildLexicalStats(chunks.map((c) => `${c.section} ${c.text}`));
+    if (!probeStats) return [];
+    const out = new Set<SourceType>();
+    for (const i of anchoringChunkIndexes(question, probeStats)) {
+      const t = sourceTypes.get(chunks[i].sourceId);
+      if (t) out.add(t);
+    }
+    return [...out];
+  };
+
+  const port = createLegacyRetrievalPort({
     registry: { sourceTypes, activeVersions, chunkVersions, sourceScopes },
     retrieve: async (query: string, opts: { topK: number; sourceTypes?: readonly SourceType[] }): Promise<LegacyChunk[]> => {
       // Only the PLANNED types compete for the top-k (2026-09-11). Measured in
@@ -602,11 +620,32 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
       const index = new Bm25Index(chunks.map((c, i) => ({ id: String(i), text: `${c.section} ${c.text}` })), DEFAULT_BM25);
       const bm25ById = new Map(index.score(query).map((s) => [s.id, s.score]));
       const boosts = intentBoosts(query);
+      // INTENT VOCABULARY REACHES THE RAW TEXT (2026-09-19). An intent rule's
+      // regex is a synonym class — salary|compensation|pay|package|bonus — but
+      // its boost went only to STRUCTURED sections and derived facts. Measured
+      // live on a 15k-token job description: "How much does the position pay?"
+      // boosted the (empty — structuring was lossy) compensation section and
+      // the app's own derived salary ESTIMATE; the raw chunk that says "Base
+      // salary range for this role is $214,000–$262,000" got nothing, because
+      // BM25 cannot match "pay" to "salary" — and the answer stated the
+      // estimate, 158–183k EUR, as fact. A raw chunk whose own text falls in a
+      // fired rule's class now earns a share of that boost. Only when the class
+      // is DISCRIMINATIVE over the raw text: "experience|work|role|company"
+      // matches most of a résumé and would lift everything equally.
+      const firedRules = INTENT_RULES.filter((rule) => rule.re.test(query));
+      const rawIdx = chunks.map((c, i) => (c.boostKey === 'raw_document' ? i : -1)).filter((i) => i >= 0);
+      const rawIntentBoost = new Map<number, number>();
+      for (const rule of firedRules) {
+        const hits = rawIdx.filter((i) => rule.re.test(chunks[i].text));
+        if (hits.length === 0 || hits.length > Math.max(3, rawIdx.length * RAW_INTENT_MAX_SHARE)) continue;
+        const share = Math.max(...Object.values(rule.boosts)) * RAW_INTENT_BOOST_SHARE;
+        for (const i of hits) rawIntentBoost.set(i, Math.max(rawIntentBoost.get(i) ?? 0, share));
+      }
 
       return chunks
         .map((c, i) => {
           const lexical = squash(bm25ById.get(String(i)) ?? 0);
-          const boost = boosts.get(c.boostKey) ?? 0;
+          const boost = (boosts.get(c.boostKey) ?? 0) + (rawIntentBoost.get(i) ?? 0);
           // A boost with NO lexical signal must rank BELOW genuine matches —
           // additive flat boosts were crowding real mode-attachment hits out of
           // the 6-item cap (review finding). ONE exception, by design: a
@@ -652,4 +691,9 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
         }));
     },
   });
+  return {
+    ...port,
+    probeAnchors: (question: string): boolean => { try { return anchoredSources(question).length > 0; } catch { return false; } },
+    probeAnchorSources: (question: string): SourceType[] => { try { return anchoredSources(question); } catch { return []; } },
+  };
 }
