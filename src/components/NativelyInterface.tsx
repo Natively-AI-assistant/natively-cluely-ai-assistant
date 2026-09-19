@@ -1776,6 +1776,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // granted yet. Renders the inline permission banner so we never silently
   // fail — Cluely's onboarding is its UX moat; we mirror it.
   const [stealthPermissionMissing, setStealthPermissionMissing] = useState<boolean>(false);
+  // Set when a screenshot capture (full or selective) fails for a REAL reason
+  // (IPC rejection, or a resolved-but-empty result that wasn't a user
+  // cancel). Without this, takeScreenshot/takeSelectiveScreenshot failures
+  // were only console.error'd — the hotkey looked dead with no on-screen
+  // signal (issue #334). A user cancelling the selective-crop overlay
+  // (`data.cancelled === true`) is NOT an error and must stay silent.
+  const [screenshotAttachError, setScreenshotAttachError] = useState<string | null>(null);
   // Set when KeybindManager reports the stealth-typing global shortcut
   // failed to register (OS already owns it — common with Cmd+Shift+Space
   // if another app claimed it, or with the macOS input source switcher
@@ -5061,6 +5068,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   }, []);
 
   const handleScreenshotAttach = (data: { path: string; preview: string }) => {
+    setScreenshotAttachError(null);
     setIsExpanded(true);
     setAttachedContext((prev) => {
       // Prevent duplicates and cap at 5
@@ -9403,9 +9411,14 @@ Provide only the answer, nothing else.`;
         const data = await window.electronAPI.takeScreenshot();
         if (data && data.path) {
           handleScreenshotAttach(data as { path: string; preview: string });
+        } else {
+          // Resolved with no path — a real capture failure (permission
+          // denial, empty source list, etc.), not a user cancel.
+          setScreenshotAttachError(t('Screenshot capture failed — no image was returned. Please try again.'));
         }
       } catch (err) {
         console.error('Error triggering screenshot:', err);
+        setScreenshotAttachError(t('Screenshot capture failed. Please try again.'));
       }
     },
     selectiveScreenshot: async () => {
@@ -9413,9 +9426,14 @@ Provide only the answer, nothing else.`;
         const data = await window.electronAPI.takeSelectiveScreenshot();
         if (data && !data.cancelled && data.path) {
           handleScreenshotAttach(data as { path: string; preview: string });
+        } else if (data && !data.cancelled) {
+          // Resolved but no path and not a user cancel (Esc / click-away) —
+          // a real capture failure. `cancelled` stays silent by design.
+          setScreenshotAttachError(t('Screenshot capture failed — no image was returned. Please try again.'));
         }
       } catch (err) {
         console.error('Error triggering selective screenshot:', err);
+        setScreenshotAttachError(t('Screenshot capture failed. Please try again.'));
       }
     },
   });
@@ -9444,9 +9462,14 @@ Provide only the answer, nothing else.`;
         const data = await window.electronAPI.takeScreenshot();
         if (data && data.path) {
           handleScreenshotAttach(data as { path: string; preview: string });
+        } else {
+          // Resolved with no path — a real capture failure (permission
+          // denial, empty source list, etc.), not a user cancel.
+          setScreenshotAttachError(t('Screenshot capture failed — no image was returned. Please try again.'));
         }
       } catch (err) {
         console.error('Error triggering screenshot:', err);
+        setScreenshotAttachError(t('Screenshot capture failed. Please try again.'));
       }
     },
     selectiveScreenshot: async () => {
@@ -9454,9 +9477,14 @@ Provide only the answer, nothing else.`;
         const data = await window.electronAPI.takeSelectiveScreenshot();
         if (data && !data.cancelled && data.path) {
           handleScreenshotAttach(data as { path: string; preview: string });
+        } else if (data && !data.cancelled) {
+          // Resolved but no path and not a user cancel (Esc / click-away) —
+          // a real capture failure. `cancelled` stays silent by design.
+          setScreenshotAttachError(t('Screenshot capture failed — no image was returned. Please try again.'));
         }
       } catch (err) {
         console.error('Error triggering selective screenshot:', err);
+        setScreenshotAttachError(t('Screenshot capture failed. Please try again.'));
       }
     },
   };
@@ -11167,6 +11195,21 @@ Provide only the answer, nothing else.`;
                         </OverlayBannerButton>
                       </>
                     }
+                  />
+                )}
+
+                {/* Screenshot capture failure — issue #334: the hotkey used to
+                                    look dead because a failed/empty capture only hit
+                                    console.error, with nothing on screen. A user cancel
+                                    (Esc / click-away on the selective-crop overlay) never
+                                    sets this and stays silent by design. */}
+                {screenshotAttachError && (
+                  <OverlayBanner
+                    className="mb-2"
+                    title={t('Screenshot Capture Failed')}
+                    message={screenshotAttachError}
+                    onDismiss={() => setScreenshotAttachError(null)}
+                    dismissLabel={t('Dismiss')}
                   />
                 )}
 
