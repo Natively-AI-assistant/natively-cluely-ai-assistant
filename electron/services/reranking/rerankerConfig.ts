@@ -16,7 +16,7 @@
 // import despite the note above about esbuild inlining a second copy of each.
 import { TRIAL_SENTINEL_KEY } from '../../config/constants';
 
-export type RerankerProvider = 'local' | 'natively' | 'openrouter' | 'jina';
+export type RerankerProvider = 'local' | 'natively' | 'openrouter' | 'jina' | 'custom';
 
 export interface RerankerSettings {
   /**
@@ -35,6 +35,8 @@ export interface RerankerSettings {
   nativelyModel?: string;
   /** Jina AI model id, e.g. jina-reranker-v3.5. */
   jinaModel?: string;
+  /** User-hosted custom rerank model id (LM Studio, TEI, etc.). */
+  customModel?: string;
   /**
    * A catalogue id from rag/rerankerModelCatalog.ts, or absent for the bundled
    * bge-reranker-base. ONNX entries are read by LocalReranker; GGUF entries are
@@ -105,6 +107,12 @@ export interface EligibilityInputs {
  * than being invited to fix a key that would still not be used.
  */
 export function evaluateHostedEligibility(input: EligibilityInputs): HostedEligibility {
+  if (input.provider === 'custom') {
+    // Custom endpoint runs on the user's local network / machine (LM Studio, TEI, etc.)
+    // It is allowed in local-only mode, doesn't require cloud data permissions, and key is optional.
+    if (!input.model || !input.model.trim()) return { eligible: false, reason: 'no-model' };
+    return { eligible: true };
+  }
   if (input.provider !== 'natively' && input.provider !== 'openrouter' && input.provider !== 'jina') {
     return { eligible: false, reason: 'provider-not-selected' };
   }
@@ -157,6 +165,15 @@ export function readRerankerSettings(): RerankerSettings {
 
 /** The key for a hosted provider. One credential per provider, shared app-wide. */
 export function readHostedApiKey(provider: RerankerProvider): string | undefined {
+  if (provider === 'custom') {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { CredentialsManager } = require('../CredentialsManager');
+      const stored = CredentialsManager.getInstance().getCustomRerankerApiKey?.();
+      if (stored && stored.trim()) return stored.trim();
+    } catch { /* fall through */ }
+    return undefined;
+  }
   if (provider === 'natively') {
     try {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -188,6 +205,15 @@ export function readHostedApiKey(provider: RerankerProvider): string | undefined
 
 /** The model id for whichever hosted provider is selected. */
 export function readHostedModel(settings: RerankerSettings): string | undefined {
+  if (settings.provider === 'custom') {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { SettingsManager } = require('../SettingsManager');
+      return settings.customModel || SettingsManager.getInstance().get('customRerankerModel') || undefined;
+    } catch {
+      return settings.customModel;
+    }
+  }
   if (settings.provider === 'natively') {
     // Falls back to the managed model rather than to undefined: with one model
     // served and nothing to pick, an unset setting must mean "the managed one",
@@ -295,6 +321,46 @@ export function buildHostedRerankPort(): RerankSeamPort | null {
     referenceFilesScopeAllowed: referenceFilesScopeAllowed(),
   });
   if (!verdict.eligible) return null;
+
+  if (provider === 'custom') {
+    let baseUrl: string | undefined;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { SettingsManager } = require('../SettingsManager');
+      baseUrl = SettingsManager.getInstance().get('customRerankerEndpoint');
+    } catch { /* ignored */ }
+    if (!baseUrl) return null;
+
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { OpenRouterReranker } = require('./OpenRouterReranker') as typeof import('./OpenRouterReranker');
+    return new OpenRouterReranker({
+      baseUrl,
+      providerId: 'custom',
+      allowAnonymousApiKey: true,
+      getApiKey: () => readHostedApiKey('custom'),
+      getModel: () => readHostedModel(readRerankerSettings()),
+      onStats: (stats) => {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const { telemetryService } = require('../telemetry/TelemetryService');
+          telemetryService.track({
+            name: 'rerank_request',
+            properties: {
+              provider: 'custom',
+              model: stats.model,
+              requestLatencyMs: stats.requestLatencyMs,
+              candidateCount: stats.candidateCount,
+              ok: stats.ok,
+              failure: stats.failure,
+              costUsd: stats.costUsd,
+              httpStatus: stats.httpStatus,
+            },
+          });
+        } catch { /* telemetry never blocks retrieval */ }
+      },
+      logger: console,
+    });
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { hostedRerankProvider } = require('../../rag/hostedRerankProviders') as typeof import('../../rag/hostedRerankProviders');

@@ -1,80 +1,144 @@
 // electron/rag/providers/localEmbeddingWorker.ts
 //
-// Worker-thread host for LocalEmbeddingProvider's ONNX inference. Mirrors the
-// exact pattern the (since removed) intent classifier worker used.
+// Worker-thread host for LocalEmbeddingProvider. Supports:
+// 1. ONNX models via @huggingface/transformers
+// 2. GGUF models via node-llama-cpp (llama.cpp)
 //
-// WHY (2026-07-05 SIGTRAP crash hardening): 9/9 real macOS crash reports
-// showed the app crashing on the MAIN THREAD inside ONNX Runtime's BFC
-// allocator during a live InferenceSession::Run() call — consistent with
-// multiple ONNX sessions (Whisper STT worker + reranker worker +
-// this local-embedding fallback) being concurrently active in-process. The
-// embedding fallback was the only one of the three still running its
-// pipeline()/inference DIRECTLY on the main process, so it is moved into its
-// own worker_threads.Worker here, matching the isolation the other two
-// already had. Also applies bounded intra/inter-op thread counts (see
-// electron/utils/onnxThreadConfig.ts) to reduce native thread/memory
-// pressure even when multiple sessions are concurrently active.
-//
-// Message protocol:
-//   { type: 'init', requestId, isPackaged, localModelPath, cacheDir }
-//     -> { type: 'ready', requestId } | { type: 'error', requestId, error }
-//   { type: 'embed', requestId, texts: string[] }
-//     -> { type: 'result', requestId, vectors: number[][] } | { type: 'error', requestId, error }
+// Keeps heavy ML computation completely isolated from the Electron main thread.
 
+import * as path from 'path';
+import * as fs from 'fs';
 import { parentPort } from 'worker_threads';
 import { getBoundedOnnxSessionOptions } from '../../utils/onnxThreadConfig';
 import { classifyWorkerFailure } from '../../utils/workerStatus';
 
 if (!parentPort) throw new Error('localEmbeddingWorker must be run as a Worker thread');
 
-const MODEL_ID = 'Xenova/all-MiniLM-L6-v2';
-const DIMENSIONS = 384;
+let runtime: 'onnx' | 'gguf' = 'onnx';
+let currentModelId = 'minilm-l6-v2';
+let currentDimensions = 384;
+let currentPooling: 'mean' | 'cls' | 'last' = 'mean';
 
+// ONNX state
 let pipe: any = null;
-let loadingPromise: Promise<void> | null = null;
 
-// @huggingface/transformers is ESM-only — must use a true dynamic import().
-// `new Function` keeps this opaque to TypeScript's commonjs rewrite (which
-// would otherwise turn `import()` into `require()` and fail for an ESM-only
-// package). See LocalEmbeddingProvider.ts for the full explanation.
+// GGUF state
+let llama: any = null;
+let ggufModel: any = null;
+let ggufContext: any = null;
+
+let loadingPromise: Promise<void> | null = null;
+let lastConfig: any = null;
+let idleTimer: NodeJS.Timeout | null = null;
+const IDLE_UNLOAD_TIMEOUT_MS = 15 * 60 * 1000; // 15m idle timeout to free RAM/VRAM
+
+function resetIdleTimer(): void {
+  if (idleTimer) {
+    clearTimeout(idleTimer);
+  }
+  idleTimer = setTimeout(async () => {
+    console.log('[LocalEmbeddingWorker] Idle for 15 minutes. Unloading weights to free system memory.');
+    await disposeAll();
+  }, IDLE_UNLOAD_TIMEOUT_MS);
+  if (idleTimer && typeof (idleTimer as any).unref === 'function') {
+    (idleTimer as any).unref();
+  }
+}
+
 async function loadTransformers(): Promise<{ pipeline: any; env: any }> {
   return (new Function('return import("@huggingface/transformers")')()) as any;
 }
 
+async function loadLlamaCpp(): Promise<any> {
+  return (new Function('return import("node-llama-cpp")')()) as any;
+}
+
+async function disposeAll(): Promise<void> {
+  if (idleTimer) {
+    clearTimeout(idleTimer);
+    idleTimer = null;
+  }
+  if (ggufContext) {
+    try { await ggufContext.dispose(); } catch { /* ignore */ }
+    ggufContext = null;
+  }
+  if (ggufModel) {
+    try { await ggufModel.dispose(); } catch { /* ignore */ }
+    ggufModel = null;
+  }
+  pipe = null;
+  loadingPromise = null;
+}
+
 async function ensureLoaded(msg: any): Promise<void> {
-  if (pipe) return;
+  if (msg) lastConfig = { ...msg };
+  const targetRuntime = msg.runtime === 'gguf' ? 'gguf' : 'onnx';
+  const targetModelId = msg.modelId || 'minilm-l6-v2';
+
+  if (targetRuntime === runtime && currentModelId === targetModelId) {
+    if (runtime === 'onnx' && pipe) return;
+    if (runtime === 'gguf' && ggufContext) return;
+  } else if (pipe || ggufContext || ggufModel) {
+    await disposeAll();
+  }
+
   if (loadingPromise) return loadingPromise;
 
   loadingPromise = (async () => {
+    runtime = msg.runtime === 'gguf' ? 'gguf' : 'onnx';
+    currentModelId = msg.modelId || 'minilm-l6-v2';
+    currentDimensions = Number(msg.dimensions) || 384;
+    currentPooling = msg.pooling || 'mean';
+
+    if (runtime === 'gguf') {
+      console.log(`[LocalEmbeddingWorker] Loading GGUF embedding model (${currentModelId}) from ${msg.modelPath}...`);
+      const { getLlama } = await loadLlamaCpp();
+      llama = await getLlama({ build: 'never', logLevel: 'error' });
+      ggufModel = await llama.loadModel({ modelPath: msg.modelPath });
+      ggufContext = await ggufModel.createEmbeddingContext({
+        contextSize: 2048,
+      });
+      console.log(`[LocalEmbeddingWorker] GGUF embedding model loaded successfully (${currentDimensions}d).`);
+      parentPort!.postMessage({
+        type: 'status',
+        status: { type: 'ready', backend: 'gguf', modelPath: msg.modelPath },
+      });
+      return;
+    }
+
+    // ONNX via @huggingface/transformers
     const { pipeline, env } = await loadTransformers();
-
     env.allowRemoteModels = false;
-    env.localModelPath = msg.modelPath;
 
-    console.log('[LocalEmbeddingWorker] Loading feature-extraction model (all-MiniLM-L6-v2)...');
-    pipe = await pipeline('feature-extraction', MODEL_ID, {
+    // Resolve local model directory or root
+    const modelPath = msg.modelPath;
+    let targetIdentifier: string;
+
+    if (fs.existsSync(path.join(modelPath, 'config.json'))) {
+      env.localModelPath = path.dirname(path.dirname(modelPath));
+      targetIdentifier = modelPath;
+    } else {
+      env.localModelPath = modelPath;
+      targetIdentifier = msg.hfModelId || 'Xenova/all-MiniLM-L6-v2';
+    }
+
+    console.log(`[LocalEmbeddingWorker] Loading ONNX embedding model (${currentModelId}) from ${modelPath}...`);
+    pipe = await pipeline('feature-extraction', targetIdentifier, {
       local_files_only: true,
-      // dtype MUST be explicit on transformers.js v3. v2 defaulted to the
-      // quantized variant; v3 ignores `quantized` and defaults to fp32, so a
-      // bare pipeline() call asks for onnx/model.onnx — while the installer
-      // ships onnx/model_quantized.onnx and NOTHING else (see
-      // LocalFallbackAssets.ts and scripts/verify-packaged-local-assets.mjs).
-      // In a packaged build that is local_files_only, so the load fails and the
-      // feature silently degrades. scripts/download-models.js already documents
-      // this trap for the DOWNLOAD side; these consumers were missed.
-      // localRerankerWorker already passes `dtype: msg.dtype || 'q8'`.
       dtype: 'q8',
       session_options: getBoundedOnnxSessionOptions(),
     });
-    console.log('[LocalEmbeddingWorker] Feature-extraction model loaded successfully.');
-    parentPort!.postMessage({ type: 'status', status: { type: 'ready', backend: 'onnx', modelPath: msg.modelPath } });
+    console.log(`[LocalEmbeddingWorker] ONNX embedding model loaded successfully (${currentDimensions}d).`);
+    parentPort!.postMessage({
+      type: 'status',
+      status: { type: 'ready', backend: 'onnx', modelPath: msg.modelPath },
+    });
   })();
 
   try {
     await loadingPromise;
   } catch (e) {
-    loadingPromise = null;
-    pipe = null;
+    await disposeAll();
     const failure = classifyWorkerFailure(e);
     parentPort!.postMessage({
       type: 'status',
@@ -94,20 +158,51 @@ parentPort.on('message', async (msg: any) => {
   try {
     if (msg.type === 'init') {
       await ensureLoaded(msg);
+      resetIdleTimer();
       parentPort!.postMessage({ type: 'ready', requestId: msg.requestId });
       return;
     }
 
+    if (msg.type === 'dispose') {
+      lastConfig = null;
+      await disposeAll();
+      parentPort!.postMessage({ type: 'disposed', requestId: msg.requestId });
+      return;
+    }
+
     if (msg.type === 'embed') {
-      if (!pipe) {
-        await ensureLoaded(msg);
+      if ((runtime === 'onnx' && !pipe) || (runtime === 'gguf' && !ggufContext)) {
+        await ensureLoaded(msg.modelPath ? msg : lastConfig);
       }
+      resetIdleTimer();
+
       const texts: string[] = msg.texts;
-      const output = await pipe(texts, { pooling: 'mean', normalize: true });
+
+      if (runtime === 'gguf') {
+        const vectors: number[][] = [];
+        for (const text of texts) {
+          const embedding = await ggufContext.getEmbeddingFor(text);
+          let vec = Array.from(embedding.vector) as number[];
+          if (currentDimensions && vec.length > currentDimensions) {
+            vec = vec.slice(0, currentDimensions);
+            const norm = Math.hypot(...vec);
+            if (norm > 0) {
+              vec = vec.map((v) => v / norm);
+            }
+          }
+          vectors.push(vec);
+        }
+        parentPort!.postMessage({ type: 'result', requestId: msg.requestId, vectors });
+        return;
+      }
+
+      // ONNX inference
+      const output = await pipe(texts, { pooling: currentPooling, normalize: true });
       const batchSize = texts.length;
+      const dims = output.dims && output.dims[1] ? output.dims[1] : currentDimensions;
       const vectors: number[][] = [];
       for (let i = 0; i < batchSize; i++) {
-        vectors.push(Array.from(output.data.slice(i * DIMENSIONS, (i + 1) * DIMENSIONS)) as number[]);
+        vectors.push(Array.from(output.data.slice(i * dims, (i + 1) * dims)) as number[]);
       }
       parentPort!.postMessage({ type: 'result', requestId: msg.requestId, vectors });
       return;
