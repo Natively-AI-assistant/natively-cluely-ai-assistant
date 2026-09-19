@@ -50,6 +50,9 @@ const LOCAL_API_PORT = arg('local-api', '');
 // --profile: PROFILE INTELLIGENCE path — real résumé + JD ingest (structuring LLM, chunk, embed), a
 // looking-for-work mode with NO files attached, then graded questions about both documents.
 const PROFILE = has('profile');
+// --structuring: ingest the REALISTIC résumés (gen-resume.mjs) and compare what the structuring LLM
+// kept with the exact ground truth. No questions are asked; cost = the ingest's own LLM calls.
+const STRUCTURING = has('structuring');
 // --natively-key-from-env NAME: read NAME from natively-api/.env and set it as the natively API key
 // INSIDE THE ISOLATED INSTANCE ONLY. The value is never printed and never written to the results.
 const KEY_ENV_NAME = arg('natively-key-from-env', '');
@@ -62,7 +65,7 @@ const WORK = arg('work', path.join(os.tmpdir(), 'natively-retrieval-scale-live')
 const UD = path.join(WORK, 'userData');
 const REAL_UD = path.join(os.homedir(), 'Library/Application Support/natively');
 const LOG = path.join(os.homedir(), 'Documents/natively_debug.log');
-const OUT = arg('out', path.join(HERE, 'out', `live_${LABEL}_${PROFILE ? 'profile' : KIND}${PLAIN ? '_plain' : ''}.json`));
+const OUT = arg('out', path.join(HERE, 'out', `live_${LABEL}_${STRUCTURING ? 'structuring' : PROFILE ? 'profile' : KIND}${PLAIN ? '_plain' : ''}.json`));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const say = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 
@@ -192,7 +195,31 @@ try {
     await sleep(8000); // let the embedding pipeline re-resolve its provider
   }
 
-  if (PROFILE) {
+  if (STRUCTURING) {
+    const truth = JSON.parse(fs.readFileSync(path.join(HERE, 'out/realistic_truth.json'), 'utf8'));
+    // Surname match: the extractor may normalise or trim the name it returns.
+    const sameName = (got, want) => typeof got === 'string' && got.toLowerCase().includes(String(want).split(' ').pop().toLowerCase());
+    for (const size of SIZES) {
+      const t = truth[size]; if (!t) { say(`no realistic résumé for ${size}`); continue; }
+      await invoke('__e2e__:clear-profile').catch(() => null);
+      const fp = path.join(HERE, 'out', `realistic_resume_${size}.txt`);
+      const t0 = Date.now();
+      // Fire and do NOT wait for the whole ingest: structured data is saved before the (slow,
+      // per-role) STAR generation. Poll the state until THIS résumé's name appears.
+      evalOn(ws, `window.electronAPI.e2eInvoke('__e2e__:ingest-profile-doc', ${JSON.stringify({ filePath: fp, docType: 'resume' })})`, 1800000).catch(() => null);
+      let st = null;
+      for (let i = 0; i < 180; i++) { await sleep(5000); st = await invoke('__e2e__:profile-state').catch(() => null); if (sameName(st?.resumeName, t.name)) break; }
+      const got = sameName(st?.resumeName, t.name);
+      const row = { size, truth: t, structuredAfterS: Math.round((Date.now() - t0) / 1000), reached: got, mode: st?.resumeExtractionMode ?? null,
+        experience: st?.resumeExperienceCount ?? null, bullets: st?.resumeBulletCount ?? null, projects: st?.resumeProjectCount ?? null, skills: st?.resumeSkillCount ?? null, education: st?.resumeEducationCount ?? null, certifications: st?.resumeCertificationCount ?? null };
+      rows.push(row);
+      const pct = (a, b) => (a == null ? ' n/a' : `${String(a).padStart(3)}/${String(b).padEnd(3)} ${String(Math.round((100 * a) / b)).padStart(3)}%`);
+      say(`[${size}] ${got ? 'structured' : 'NOT STRUCTURED'} after ${row.structuredAfterS}s mode=${row.mode}  roles ${pct(row.experience, t.experience)}  bullets ${pct(row.bullets, t.bullets)}  projects ${pct(row.projects, t.projects)}  skills ${pct(row.skills, t.skills)}  edu ${pct(row.education, t.education)}  certs ${pct(row.certifications, t.certifications)}`);
+      fs.writeFileSync(OUT, JSON.stringify(rows, null, 1));
+      // let the ingest chain (STAR generation) finish before the next résumé is queued behind it
+      for (let i = 0; i < 240; i++) { const s2 = await invoke('__e2e__:profile-state').catch(() => null); if ((s2?.nodeCount ?? 0) > 0) break; await sleep(5000); }
+    }
+  } else if (PROFILE) {
     const size = SIZES[0];
     const cleared = await invoke('__e2e__:clear-profile').catch((e) => ({ error: e.message }));
     say('isolated copy: profile cleared →', JSON.stringify(cleared).slice(0, 100));
@@ -276,7 +303,7 @@ try {
 }
 
 const tally = {};
-for (const r of rows) { const k = PROFILE ? `${r.size} ${r.kind}` : `${r.size}`; (tally[k] ??= {}); tally[k][r.verdict] = (tally[k][r.verdict] ?? 0) + 1; }
+for (const r of STRUCTURING ? [] : rows) { const k = PROFILE ? `${r.size} ${r.kind}` : `${r.size}`; (tally[k] ??= {}); tally[k][r.verdict] = (tally[k][r.verdict] ?? 0) + 1; }
 say(`\nlive tier  label=${LABEL} kind=${KIND}${PLAIN ? ' (plain text)' : ''}  turns=${rows.length}`);
 for (const [k, v] of Object.entries(tally)) say(`  ${k.padEnd(5)} ${JSON.stringify(v)}`);
 say(`-> ${path.relative(ROOT, OUT)}   (app logs: ${WORK})`);

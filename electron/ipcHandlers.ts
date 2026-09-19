@@ -17439,6 +17439,14 @@ export function initializeIpcHandlers(appState: AppState): void {
           resumeName: activeResume?.identity?.name ?? null,
           resumeExperienceCount: Array.isArray(activeResume?.experience) ? activeResume.experience.length : 0,
           resumeProjectCount: Array.isArray(activeResume?.projects) ? activeResume.projects.length : 0,
+          // Structuring-completeness visibility (retrieval-scale campaign, 2026-09-20):
+          // how much of a LONG résumé survives the structuring LLM, and whether the
+          // ingest silently fell back to the heuristic extractor.
+          resumeBulletCount: Array.isArray(activeResume?.experience)
+            ? activeResume.experience.reduce((n: number, e: any) => n + (Array.isArray(e?.bullets) ? e.bullets.length : 0), 0) : 0,
+          resumeCertificationCount: Array.isArray(activeResume?.certifications) ? activeResume.certifications.length : 0,
+          resumeAchievementCount: Array.isArray(activeResume?.achievements) ? activeResume.achievements.length : 0,
+          resumeExtractionMode: activeResume?._extraction_mode ?? null,
           // Education/skills extraction visibility (E2E diagnosis of retrieval gaps).
           resumeEducationCount: Array.isArray(activeResume?.education) ? activeResume.education.length : 0,
           resumeEducation: Array.isArray(activeResume?.education)

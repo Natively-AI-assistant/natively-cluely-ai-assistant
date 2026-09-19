@@ -107,6 +107,34 @@ Tests added: `RetrievalScaleLexical`, `CorpusArbitration`, `ProfileDocumentReach
 `LocalEmbedderVectorsOutsideMeeting` (all `2026_09_19`). Full run: 10,961 pass / 0 fail / 56 skipped / 1 todo (the todo pins a known limit: anchors are a bag
 of words, so "pod 10" and "10 engineers … pod 15" tie).
 
+## Structuring completeness on realistic résumés (live, 2026-09-20)
+
+`gen-resume.mjs` writes plain-text résumés with exact ground truth; `live.mjs --structuring` ingests
+each through the real pipeline and compares what the structuring LLM kept.
+
+| résumé | roles | bullets | projects | skills / edu / certs | structured after |
+|---|---|---|---|---|---|
+| 2k tokens | 5/5 | 30/30 | 3/3 | 24/24 · 2/2 · 3/3 | 125 s |
+| 5k | 14/14 | 84/84 | 6/6 | all | 290 s |
+| 15k | 45/45 | 270/270 | 12/12 | all | 893 s |
+| 30k (92 roles) | not reached — still queued behind the 15k résumé's story generation when the 15-minute poll ended | | | | — |
+
+**Completeness is not the problem: nothing was dropped at any size that finished.** An earlier note in
+this campaign ("structuring kept 5 of ~120 entries") came from a 120-role synthetic fixture, not from
+anything résumé-shaped, and does not reproduce.
+
+**Time was the problem, and most of it was one defect.** Every structured call tried the profile's own
+OpenAI key first; it answered 429 on 140 of 141 calls, and each failure cost ~9.7 s of retry backoff
+before Gemini flash-lite answered in ~4.4 s: 1,334 s waiting on a rung that never succeeded, against
+654 s of useful work. The Gemini rungs had a 429 circuit breaker; the OpenAI and Claude rungs did not.
+They now do (`structured:openai` / `structured:claude`, structured ladder only — chat is unchanged).
+The times above are BEFORE that fix and include the queueing behind the previous résumé's stories.
+
+Proposal, not built: nothing for completeness. For latency, re-measure after the breaker; if a long
+résumé is still slow the next lever is the per-role story generation, which is awaited inside the
+ingest chain on purpose (`IngestConcurrencyStarLoss2026_08_02`) and should not be made concurrent
+without that test's author.
+
 ## Running the natively stack without production
 
 `live.mjs --local-api <port>` points the app at a locally run natively-api using its local-test

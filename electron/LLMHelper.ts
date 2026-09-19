@@ -4410,13 +4410,22 @@ let isMultimodal = !!(imagePaths?.length);
 
     // Priority 1: OpenAI
     if (this.openaiClient) {
-      providers.push({ name: `OpenAI (${OPENAI_MODEL})`, execute: () => this.generateWithOpenai(message) });
+      // Breaker key (2026-09-20): the Gemini rungs below have always had one; this
+      // rung did not. Measured on a live 45-role résumé ingest with a
+      // rate-limited OpenAI key: 140 of 141 structured calls spent ~9.7 s in
+      // 429 backoff HERE before Gemini answered in ~4.4 s — 1,334 s of a
+      // 33-minute ingest, on a provider that never once succeeded. With the key,
+      // two consecutive 429s open the breaker and the ladder skips this rung
+      // for the cooldown. Scoped to the structured ladder: chat's handling of
+      // the same client is unchanged.
+      providers.push({ name: `OpenAI (${OPENAI_MODEL})`, execute: () => this.generateWithOpenai(message, undefined, undefined, undefined, 'structured:openai') });
     }
 
     // Priority 2: Claude (now safe — generateWithClaude streams internally, so the SDK's
     // 10-minute pre-flight gate on large max_tokens is bypassed).
     if (this.claudeClient) {
-      providers.push({ name: `Claude (${CLAUDE_MODEL})`, execute: () => this.generateWithClaude(message) });
+      // Same breaker as the OpenAI rung above, for the same reason.
+      providers.push({ name: `Claude (${CLAUDE_MODEL})`, execute: () => this.generateWithClaude(message, undefined, undefined, undefined, 'structured:claude') });
     }
 
     // Priority 3: Gemini cascade — flash-lite → 3.7-flash ONLY (cheapest/fastest
@@ -4899,7 +4908,7 @@ let isMultimodal = !!(imagePaths?.length);
    * Non-streaming OpenAI generation with proper system/user separation.
    * PREFIX CACHING: see streamWithOpenai for the caching contract.
    */
-  private async generateWithOpenai(userMessage: string, systemPrompt?: string, imagePaths?: string[], modelId?: string): Promise<string> {
+  private async generateWithOpenai(userMessage: string, systemPrompt?: string, imagePaths?: string[], modelId?: string, circuitKey?: string): Promise<string> {
     if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
     if (!this.openaiClient) throw new Error("OpenAI client not initialized");
     this.assertOutboundScopes('openai', userMessage, imagePaths);
@@ -4940,7 +4949,7 @@ let isMultimodal = !!(imagePaths?.length);
       provider: 'openai', classification: 'sdk_request_object_before_serialization', payload: request,
     });
     const response = await this.withTimeout(
-      this.withRetry(() => this.openaiClient!.chat.completions.create(request)),
+      this.withRetry(() => this.openaiClient!.chat.completions.create(request), 3, circuitKey),
       60000,
       `OpenAI (${model})`
     );
@@ -5448,7 +5457,7 @@ let isMultimodal = !!(imagePaths?.length);
   /**
    * Non-streaming Claude generation with proper system/user separation
    */
-  private async generateWithClaude(userMessage: string, systemPrompt?: string, imagePaths?: string[], modelId?: string): Promise<string> {
+  private async generateWithClaude(userMessage: string, systemPrompt?: string, imagePaths?: string[], modelId?: string, circuitKey?: string): Promise<string> {
     if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
     if (!this.claudeClient) throw new Error("Claude client not initialized");
     // Was MISSING entirely — this method accepts imagePaths and builds base64
@@ -5499,7 +5508,7 @@ let isMultimodal = !!(imagePaths?.length);
       this.withRetry(async () => {
         const stream = this.claudeClient!.messages.stream(request);
         return await stream.finalMessage();
-      }),
+      }, 3, circuitKey),
       120000,
       `Claude (${model})`
     );
