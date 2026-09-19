@@ -23,7 +23,7 @@ async function makeEngine() {
   return { engine, session };
 }
 
-test('handleSuggestionTrigger stays silent for low confidence without emitting or storing history', async () => {
+test('handleSuggestionTrigger reports an explicit low-confidence skip without answering or storing history', async () => {
   const { engine, session } = await makeEngine();
   let answerCalls = 0;
   engine.whatToAnswerLLM = {
@@ -33,8 +33,10 @@ test('handleSuggestionTrigger stays silent for low confidence without emitting o
     },
   };
   const events = [];
+  const skips = [];
   engine.on('suggested_answer', answer => events.push(answer));
   engine.on('suggested_answer_token', token => events.push(token));
+  engine.on('suggestion_skipped', event => skips.push(event));
 
   await engine.handleSuggestionTrigger({
     context: 'quiet filler',
@@ -44,6 +46,7 @@ test('handleSuggestionTrigger stays silent for low confidence without emitting o
 
   assert.equal(answerCalls, 0);
   assert.deepEqual(events, []);
+  assert.deepEqual(skips, [{ reason: 'low_confidence', question: 'quiet filler', confidence: 0.2 }]);
   assert.deepEqual(session.getFullUsage(), []);
   assert.equal(session.getFullTranscript().some(segment => segment.speaker === 'assistant'), false);
 });

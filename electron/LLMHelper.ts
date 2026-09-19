@@ -2576,7 +2576,7 @@ export class LLMHelper {
     return text;
   }
 
-  private async callOllama(prompt: string, imagePath?: string | string[], systemPrompt?: string): Promise<string> {
+  private async callOllama(prompt: string, imagePath?: string | string[], systemPrompt?: string, abortSignal?: AbortSignal): Promise<string> {
     try {
       let images: string[] | undefined;
       const imagePaths = Array.isArray(imagePath) ? imagePath : imagePath ? [imagePath] : [];
@@ -2631,7 +2631,9 @@ export class LLMHelper {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(ollamaBody),
-        signal: AbortSignal.timeout(120_000),
+        signal: abortSignal
+          ? AbortSignal.any([AbortSignal.timeout(120_000), abortSignal])
+          : AbortSignal.timeout(120_000),
       });
 
       if (!response.ok) {
@@ -4351,28 +4353,78 @@ let isMultimodal = !!(imagePaths?.length);
    * which made borderline judge verdicts flip live (meeting 680519c8: the
    * "have you heard of wordle?" candidate judged rhetorical ~1 run in 3; the
    * same prompt at temperature 0 + responseMimeType json is stable 3/3).
-   * Gemini flash-lite → 3.7-flash directly; any failure falls back to the
-   * generateContentStructured ladder so the judge still answers when Gemini
-   * is down (the controller's deadline bounds the total wait either way).
+   * Gemini flash-lite → 3.7-flash directly inside a shared 2.5 s fast-stage
+   * budget; any failure falls back to the non-Gemini structured ladder. The
+   * controller supplies the route-aware total deadline and AbortSignal.
    */
-  public async generateJudgeVerdict(message: string): Promise<string> {
+  /**
+   * Resolve the hard deadline from the route this judge call will actually use.
+   * The structured fallback ladder has a different order from the selected
+   * answer model, so derive this from its first available provider instead of
+   * guessing from currentModelId.
+   */
+  public getAutoAnswerJudgePolicy(): import('./intelligence/autoAnswer/AutoAnswerJudge').JudgeExecutionPolicy {
+    const { judgeExecutionPolicyForRoute } = require('./intelligence/autoAnswer/AutoAnswerJudge') as typeof import('./intelligence/autoAnswer/AutoAnswerJudge');
+    // Gemini is a fast first stage, but its failure must leave enough TOTAL
+    // time for the first non-Gemini fallback below. generateJudgeVerdict gives
+    // Gemini its own 2.5 s sub-budget and then skips it in the fallback ladder.
+    if (this.openaiClient || this.claudeClient) return judgeExecutionPolicyForRoute('default_provider');
+    if (this.isCodexAvailable() || this.useOllama) return judgeExecutionPolicyForRoute('local');
+    const customProvidersOff = this.isProviderDisabled('custom');
+    if (!customProvidersOff && (this.customProvider || this.activeCurlProvider)) {
+      return judgeExecutionPolicyForRoute('user_endpoint', this.observedAnswerLatency());
+    }
+    const hasNativelyKey = this.nativelyKey || (() => {
+      try { return require('./services/CredentialsManager').CredentialsManager.getInstance().getNativelyApiKey() || null; }
+      catch { return null; }
+    })();
+    if (hasNativelyKey) return judgeExecutionPolicyForRoute('server_cascade');
+    if (this.client) return judgeExecutionPolicyForRoute('gemini_fast');
+    return judgeExecutionPolicyForRoute('gemini_fast');
+  }
+
+  public async generateJudgeVerdict(
+    message: string,
+    opts?: { signal?: AbortSignal; deadlineMs?: number },
+  ): Promise<string> {
+    opts?.signal?.throwIfAborted();
     if (this.client) {
+      const { JUDGE_DEADLINE_MS } = require('./intelligence/autoAnswer/AutoAnswerJudge') as typeof import('./intelligence/autoAnswer/AutoAnswerJudge');
+      const fastStageSignal = AbortSignal.any(
+        [opts?.signal, AbortSignal.timeout(Math.min(JUDGE_DEADLINE_MS, opts?.deadlineMs ?? JUDGE_DEADLINE_MS))]
+          .filter(Boolean) as AbortSignal[],
+      );
       for (const modelId of [GEMINI_FLASH_LITE_MODEL, GEMINI_FLASH_MODEL]) {
         try {
           await this.rateLimiters.gemini.acquire();
+          opts?.signal?.throwIfAborted();
           // @ts-ignore
           const res = await this.client.models.generateContent({
             model: modelId,
             contents: [{ role: 'user', parts: [{ text: message }] }],
-            config: { maxOutputTokens: 256, temperature: 0, responseMimeType: 'application/json' },
+            config: {
+              maxOutputTokens: 256,
+              temperature: 0,
+              responseMimeType: 'application/json',
+              abortSignal: fastStageSignal,
+            },
           });
           const parts = res.candidates?.[0]?.content?.parts ?? [];
           const text = res.text ?? (Array.isArray(parts) ? parts : [parts]).map((p: any) => p?.text ?? '').join('');
           if (text) return text;
-        } catch { /* try the next model, then the structured ladder */ }
+        } catch (error) {
+          if (opts?.signal?.aborted) throw error;
+          if (fastStageSignal.aborted) break;
+          // try the next model, then the structured ladder
+        }
       }
     }
-    return this.generateContentStructured(message, { preferFast: true });
+    return this.generateContentStructured(message, {
+      preferFast: true,
+      signal: opts?.signal,
+      deadlineMs: opts?.deadlineMs,
+      skipGemini: Boolean(this.client),
+    });
   }
 
   public async generateContentStructured(
@@ -4391,7 +4443,7 @@ let isMultimodal = !!(imagePaths?.length);
     // fallback carries `purpose:'extraction'` so the server runs its own
     // flash-lite→3.7-flash-only loop (never MiniMax/Pro/Scout). The MAX_ROTATIONS
     // loop below gives the 3-cycle retry-then-fail behavior.
-    opts?: { preferFast?: boolean },
+    opts?: { preferFast?: boolean; signal?: AbortSignal; deadlineMs?: number; skipGemini?: boolean },
   ): Promise<string> {
     type ProviderAttempt = { name: string; execute: () => Promise<string> };
     const providers: ProviderAttempt[] = [];
@@ -4406,17 +4458,17 @@ let isMultimodal = !!(imagePaths?.length);
     };
     // `opts.preferFast` retained for API compatibility; ordering no longer
     // depends on it (the Gemini block always leads with flash-lite).
-    void opts;
+    opts?.signal?.throwIfAborted();
 
     // Priority 1: OpenAI
     if (this.openaiClient) {
-      providers.push({ name: `OpenAI (${OPENAI_MODEL})`, execute: () => this.generateWithOpenai(message) });
+      providers.push({ name: `OpenAI (${OPENAI_MODEL})`, execute: () => this.generateWithOpenai(message, undefined, undefined, undefined, opts?.signal) });
     }
 
     // Priority 2: Claude (now safe — generateWithClaude streams internally, so the SDK's
     // 10-minute pre-flight gate on large max_tokens is bypassed).
     if (this.claudeClient) {
-      providers.push({ name: `Claude (${CLAUDE_MODEL})`, execute: () => this.generateWithClaude(message) });
+      providers.push({ name: `Claude (${CLAUDE_MODEL})`, execute: () => this.generateWithClaude(message, undefined, undefined, undefined, opts?.signal) });
     }
 
     // Priority 3: Gemini cascade — flash-lite → 3.7-flash ONLY (cheapest/fastest
@@ -4427,18 +4479,23 @@ let isMultimodal = !!(imagePaths?.length);
     // on the real extraction code it gave no quality gain over flash-lite at ~4×
     // latency. MiniMax is likewise excluded (it under-extracts). This is the
     // flash-lite→3.7-flash extraction pattern.
-    if (this.client) {
+    if (this.client && !opts?.skipGemini) {
       const buildGeminiProvider = (modelId: string): ProviderAttempt => ({
         name: `Gemini (${modelId})`,
         execute: async () => {
           // Call the API directly with the target model instead of touching shared state.
           await this.rateLimiters.gemini.acquire();
+          opts?.signal?.throwIfAborted();
           const response = await this.withRetry(async () => {
             // @ts-ignore
             const res = await this.client!.models.generateContent({
               model: modelId,
               contents: [{ role: 'user', parts: [{ text: message }] }],
-              config: { maxOutputTokens: MAX_OUTPUT_TOKENS, temperature: 0.4 }
+              config: {
+                maxOutputTokens: MAX_OUTPUT_TOKENS,
+                temperature: 0.4,
+                ...(opts?.signal ? { abortSignal: opts.signal } : {}),
+              }
             });
             const candidate = res.candidates?.[0];
             if (!candidate) return '';
@@ -4472,7 +4529,7 @@ let isMultimodal = !!(imagePaths?.length);
     if (this.isCodexAvailable()) {
       providers.push({
         name: `Codex CLI (${this.codexCliConfig.model})`,
-        execute: () => this.generateWithCodexCli(message),
+        execute: () => this.generateWithCodexCli(message, undefined, false, undefined, opts?.signal),
       });
     }
 
@@ -4480,7 +4537,7 @@ let isMultimodal = !!(imagePaths?.length);
     if (this.useOllama && await this.ensureOllamaModelSelected()) {
       providers.push({
         name: `Ollama (${this.ollamaModel})`,
-        execute: () => this.callOllama(message)
+        execute: () => this.callOllama(message, undefined, undefined, opts?.signal)
       });
     }
 
@@ -4497,13 +4554,14 @@ let isMultimodal = !!(imagePaths?.length);
           message,
           '',
           undefined,
-          this.customProvider!.responsePath
+          this.customProvider!.responsePath,
+          opts?.signal,
         )
       });
     } else if (this.activeCurlProvider && !customProvidersOff) {
       providers.push({
         name: `cURL Provider (${this.activeCurlProvider.name})`,
-        execute: () => this.chatWithCurl(message)
+        execute: () => this.chatWithCurl(message, undefined, undefined, opts?.signal)
       });
     }
 
@@ -4518,7 +4576,11 @@ let isMultimodal = !!(imagePaths?.length);
         // it runs its dedicated flash-lite→3.7-flash-only loop (3 cycles then
         // hard-fail) and NEVER falls through to MiniMax/Pro/Scout. Older servers
         // ignore the unknown field and route via their normal flash-first chain.
-        execute: () => this.generateWithNatively(message, undefined, undefined, { purpose: 'extraction' })
+        execute: () => this.generateWithNatively(message, undefined, undefined, {
+          purpose: 'extraction',
+          timeoutMs: opts?.deadlineMs,
+          signal: opts?.signal,
+        })
       });
     }
 
@@ -4539,9 +4601,11 @@ let isMultimodal = !!(imagePaths?.length);
         const backoffMs = 1000 * rotation;
         console.log(`[LLMHelper] 🔄 Structured generation rotation ${rotation + 1}/${MAX_ROTATIONS} after ${backoffMs}ms backoff...`);
         await this.delay(backoffMs);
+        opts?.signal?.throwIfAborted();
       }
 
       for (const provider of providers) {
+        opts?.signal?.throwIfAborted();
         const permanentFailureKey = permanentFailureKeyFor(provider.name);
         if (permanentlyDeadProviders.has(permanentFailureKey)) {
           continue;
@@ -4556,6 +4620,7 @@ let isMultimodal = !!(imagePaths?.length);
           console.warn(`[LLMHelper] ⚠️ ${provider.name} returned empty response`);
           lastFailureByProvider.set(provider.name, 'empty response');
         } catch (error: any) {
+          if (opts?.signal?.aborted) throw error;
           const reason = (error?.message ?? String(error)).toString().slice(0, 240);
           console.warn(`[LLMHelper] ⚠️ Structured generation: ${provider.name} failed: ${reason}`);
           lastFailureByProvider.set(provider.name, reason);
@@ -4899,12 +4964,13 @@ let isMultimodal = !!(imagePaths?.length);
    * Non-streaming OpenAI generation with proper system/user separation.
    * PREFIX CACHING: see streamWithOpenai for the caching contract.
    */
-  private async generateWithOpenai(userMessage: string, systemPrompt?: string, imagePaths?: string[], modelId?: string): Promise<string> {
+  private async generateWithOpenai(userMessage: string, systemPrompt?: string, imagePaths?: string[], modelId?: string, abortSignal?: AbortSignal): Promise<string> {
     if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
     if (!this.openaiClient) throw new Error("OpenAI client not initialized");
     this.assertOutboundScopes('openai', userMessage, imagePaths);
 
     await this.rateLimiters.openai.acquire();
+    abortSignal?.throwIfAborted();
 
     // Use explicit override, then current model if it's OpenAI, else baseline constant
     const model = modelId || (this.isOpenAiModel(this.currentModelId) ? this.currentModelId : OPENAI_MODEL);
@@ -4940,7 +5006,7 @@ let isMultimodal = !!(imagePaths?.length);
       provider: 'openai', classification: 'sdk_request_object_before_serialization', payload: request,
     });
     const response = await this.withTimeout(
-      this.withRetry(() => this.openaiClient!.chat.completions.create(request)),
+      this.withRetry(() => this.openaiClient!.chat.completions.create(request, { signal: abortSignal })),
       60000,
       `OpenAI (${model})`
     );
@@ -5307,7 +5373,7 @@ let isMultimodal = !!(imagePaths?.length);
   }
 
   // The handler for cURL requests
-  public async chatWithCurl(userMessage: string, systemPrompt?: string, imagePath?: string): Promise<string> {
+  public async chatWithCurl(userMessage: string, systemPrompt?: string, imagePath?: string, abortSignal?: AbortSignal): Promise<string> {
     if (!this.activeCurlProvider) throw new Error("No cURL provider active");
     this.assertOutboundScopes('custom_curl', userMessage, imagePath ? [imagePath] : undefined);
 
@@ -5424,6 +5490,7 @@ let isMultimodal = !!(imagePaths?.length);
         headers: headers,
         data: data,
         timeout: 60_000,
+        signal: abortSignal,
         // The URL above is the only destination that passed the SSRF policy.
         // Never replay the prompt, credentials, or image body to an unchecked
         // redirect target.
@@ -5440,6 +5507,7 @@ let isMultimodal = !!(imagePaths?.length);
       return JSON.stringify(answer); // Fallback if they pointed to an object
 
     } catch (error: any) {
+      if (abortSignal?.aborted) throw (abortSignal.reason ?? error);
       console.error("[LLMHelper] cURL Execution Error:", error.message);
       return `Error: ${error.message}`;
     }
@@ -5448,7 +5516,7 @@ let isMultimodal = !!(imagePaths?.length);
   /**
    * Non-streaming Claude generation with proper system/user separation
    */
-  private async generateWithClaude(userMessage: string, systemPrompt?: string, imagePaths?: string[], modelId?: string): Promise<string> {
+  private async generateWithClaude(userMessage: string, systemPrompt?: string, imagePaths?: string[], modelId?: string, abortSignal?: AbortSignal): Promise<string> {
     if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
     if (!this.claudeClient) throw new Error("Claude client not initialized");
     // Was MISSING entirely — this method accepts imagePaths and builds base64
@@ -5457,6 +5525,7 @@ let isMultimodal = !!(imagePaths?.length);
     this.assertOutboundScopes('claude', userMessage, imagePaths);
 
     await this.rateLimiters.claude.acquire();
+    abortSignal?.throwIfAborted();
 
     // Use explicit override, then current model if it's Claude, else stable fallback
     const model = modelId || (this.isClaudeModel(this.currentModelId) ? this.currentModelId : CLAUDE_MODEL);
@@ -5497,8 +5566,21 @@ let isMultimodal = !!(imagePaths?.length);
     });
     const response = await this.withTimeout(
       this.withRetry(async () => {
+        abortSignal?.throwIfAborted();
         const stream = this.claudeClient!.messages.stream(request);
-        return await stream.finalMessage();
+        const onAbort = () => {
+          try {
+            stream.abort();
+          } catch {
+            // The stream may already have closed while the deadline fired.
+          }
+        };
+        abortSignal?.addEventListener('abort', onAbort, { once: true });
+        try {
+          return await stream.finalMessage();
+        } finally {
+          abortSignal?.removeEventListener('abort', onAbort);
+        }
       }),
       120000,
       `Claude (${model})`
@@ -5534,6 +5616,7 @@ let isMultimodal = !!(imagePaths?.length);
     context: string,
     imagePath?: string,
     responsePath?: string,
+    abortSignal?: AbortSignal,
   ): Promise<string> {
     this.assertOutboundScopes('custom_provider', combinedMessage, imagePath ? [imagePath] : undefined);
 
@@ -5630,6 +5713,9 @@ let isMultimodal = !!(imagePaths?.length);
 
     // 5. Execute Fetch (30s timeout — same as RestSTT uploads)
     const customAbort = new AbortController();
+    const onCallerAbort = () => customAbort.abort(abortSignal?.reason);
+    abortSignal?.addEventListener('abort', onCallerAbort, { once: true });
+    if (abortSignal?.aborted) onCallerAbort();
     const customTimeout = setTimeout(() => customAbort.abort(), 30_000);
     try {
       const serializedBody = JSON.stringify(body);
@@ -5671,6 +5757,8 @@ let isMultimodal = !!(imagePaths?.length);
       clearTimeout(customTimeout);
       console.error("Custom Provider Error:", error);
       throw error;
+    } finally {
+      abortSignal?.removeEventListener('abort', onCallerAbort);
     }
   }
 

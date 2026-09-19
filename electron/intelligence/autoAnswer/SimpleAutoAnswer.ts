@@ -36,7 +36,8 @@ import type { TranscriptTurn } from '../../llm/transcriptCleaner';
 import type { Clock, ClockTimer } from './AutoAnswerClock';
 import { systemClock } from './AutoAnswerClock';
 import {
-    JUDGE_DEADLINE_MS, JUDGE_CONTEXT_TURNS, parseJudgeVerdict, routeForVerdict, type JudgeRequest,
+    JUDGE_DEADLINE_MS, JUDGE_CONTEXT_TURNS, parseJudgeVerdict, routeForVerdict,
+    type JudgeExecutionPolicy, type JudgeRequest,
 } from './AutoAnswerJudge';
 import { isMidWordCut, joinTranscriptParts, normalizeForCompare } from './AutoAnswerText';
 import type { AutoAnswerThresholds } from './AutoAnswerPolicy';
@@ -171,10 +172,10 @@ export interface SimpleAutoAnswerHost {
     retractOffer?(questionId: string, reason: string): void;
     /** See answerStreamActive: retired 2026-09-03, supplied but never called. */
     cancelAutomaticAnswer?(reason: 'user_barge_in'): boolean;
+    /** Provider-aware timeout policy for the judge call. */
+    judgePolicy?(): JudgeExecutionPolicy;
     /** The judge call (same hook as V3): raw model reply, parsed here. */
-    judgeCandidate?(req: JudgeRequest): Promise<string | null>;
-    /** Key the engine's speculative cache to this candidate. */
-    noteCandidate?(questionId: string, candidateGeneration: number): void;
+    judgeCandidate?(req: JudgeRequest, signal: AbortSignal, policy: JudgeExecutionPolicy): Promise<string | null>;
     /** What the engine currently holds speculatively, for keyed reuse. */
     speculativeSnapshot?(): { questionId: string | null; text: string | null };
     /** Start the answer WHILE the judge decides (see PREFETCH_MIN_ANSWERABILITY). */
@@ -386,9 +387,6 @@ export class SimpleAutoAnswerEngine {
         });
         this.lastJudgedKey = key;
         this.host.logContent?.(`judging ${id} (${words}w)`, candidate);
-        // Key any speculation the engine starts on its own interims to THIS
-        // candidate, so the dispatch below can claim it by id.
-        this.host.noteCandidate?.(id, this.sequence);
         this.maybePrefetch(id, candidate, now);
         void this.consult(id, candidate, now, early);
     }
@@ -428,7 +426,27 @@ export class SimpleAutoAnswerEngine {
         const generation = this.host.meetingGeneration();
         let timer: ClockTimer | null = null;
         let timedOut = false;
-        const turns = this.turnsBefore(committedAt);
+        const fallbackPolicy: JudgeExecutionPolicy = { route: 'gemini_fast', deadlineMs: JUDGE_DEADLINE_MS };
+        let judgePolicy = fallbackPolicy;
+        try {
+            const configured = this.host.judgePolicy?.();
+            if (configured && Number.isFinite(configured.deadlineMs) && configured.deadlineMs > 0) {
+                judgePolicy = {
+                    route: configured.route,
+                    // All currently supported route budgets fit inside 30 s.
+                    // Clamp a malformed host value rather than letting one bad
+                    // setting make Auto Answer wait forever.
+                    deadlineMs: Math.min(30_000, Math.max(250, Math.round(configured.deadlineMs))),
+                };
+            }
+        } catch { /* provider policy is advisory; retain the measured fast default */ }
+        const judgeAbort = new AbortController();
+        // `committedAt` is when the quiet-window timer fired. The judge's
+        // transcript cutoff is the candidate's final speech event instead;
+        // user speech during that quiet window belongs to the next turn and
+        // must not make this ask look as though it was already answered.
+        const candidateCutoff = this.pending.at(-1)?.at ?? committedAt;
+        const turns = this.turnsBefore(candidateCutoff);
         const parts = this.pending.map(p => ({ speaker: p.speaker, text: p.text }));
         let raw: string | null = null;
         let outcome: 'verdict' | 'timeout' | 'error' | 'unparseable' | 'absent' = 'verdict';
@@ -445,12 +463,18 @@ export class SimpleAutoAnswerEngine {
                         modeName: this.host.modeName?.() ?? null,
                         questionId: id,
                         lastAnsweredText: this.lastAnsweredText,
-                    }),
+                    }, judgeAbort.signal, judgePolicy),
                     new Promise<null>((resolve) => {
-                        timer = this.clock.setTimeout(() => { timedOut = true; resolve(null); }, JUDGE_DEADLINE_MS);
+                        timer = this.clock.setTimeout(() => { timedOut = true; resolve(null); }, judgePolicy.deadlineMs);
                     }),
                 ]);
-                if (timedOut) outcome = 'timeout';
+                if (timedOut) {
+                    outcome = 'timeout';
+                    // Promise.race alone only stops waiting; without this the
+                    // provider keeps consuming a connection/quota and can run
+                    // into the next question after its result is already stale.
+                    judgeAbort.abort(new Error('auto_answer_judge_deadline'));
+                }
             } catch {
                 outcome = 'error';
             } finally {
@@ -458,6 +482,11 @@ export class SimpleAutoAnswerEngine {
             }
         }
         const judgeMs = this.clock.now() - committedAt;
+        const judgeTelemetry = {
+            judgeRoute: judgePolicy.route,
+            judgeDeadlineMs: judgePolicy.deadlineMs,
+            judgeAborted: timedOut,
+        } as const;
         // Parse FIRST (it is pure and cheap), so that a verdict about to be
         // discarded still reaches telemetry. Live run 2026-08-25: 25 of 28
         // verdicts were dropped here and the record could not say whether a
@@ -466,7 +495,7 @@ export class SimpleAutoAnswerEngine {
         // Superseded: more interviewer speech arrived, the meeting moved on.
         if (seq !== this.judgeSeq || !this.host.isMeetingActive() || this.host.meetingGeneration() !== generation) {
             this.emit({
-                name: 'auto_answer_judged', questionId: id, judgeOutcome: 'stale', judgeMs,
+                name: 'auto_answer_judged', questionId: id, judgeOutcome: 'stale', judgeMs, ...judgeTelemetry,
                 supersededBy: !this.host.isMeetingActive() ? 'meeting_ended'
                     : this.host.meetingGeneration() !== generation ? 'meeting_reset'
                     : (this.judgeSeqCause ?? undefined),
@@ -497,7 +526,11 @@ export class SimpleAutoAnswerEngine {
         }
         if (!verdict) {
             if (outcome === 'verdict') outcome = 'unparseable';
-            if (outcome !== 'absent') this.emit({ name: 'auto_answer_judged', questionId: id, judgeOutcome: outcome as 'timeout' | 'error' | 'unparseable', judgeMs });
+            if (outcome !== 'absent') this.emit({
+                name: 'auto_answer_judged', questionId: id,
+                judgeOutcome: outcome as 'timeout' | 'error' | 'unparseable', judgeMs,
+                ...judgeTelemetry,
+            });
             // A transient judge failure must not silence the question forever
             // (review 2026-08-25): clear the key so the next stoppage retries.
             this.lastJudgedKey = '';
@@ -511,7 +544,7 @@ export class SimpleAutoAnswerEngine {
             return;
         }
         this.emit({
-            name: 'auto_answer_judged', questionId: id, judgeOutcome: 'verdict', judgeMs,
+            name: 'auto_answer_judged', questionId: id, judgeOutcome: 'verdict', judgeMs, ...judgeTelemetry,
             judgeIsAsk: verdict.isAsk, judgeDirectedAtUser: verdict.directedAtUser,
             dialogueAct: verdict.act, answerability: verdict.answerability,
         });
@@ -576,6 +609,10 @@ export class SimpleAutoAnswerEngine {
             if (!this.host.engineAccepting()) {
                 if (this.clock.now() >= deadline) {
                     this.parkedAttempt = null;
+                    // No dispatch occurred. Release the dedup key so a later
+                    // stoppage can retry this question instead of treating it
+                    // as one that was already handled.
+                    this.lastJudgedKey = '';
                     this.emit({ name: 'auto_answer_ignored', questionId: id, skipReason: 'engine_busy_or_cooling' });
                     return;
                 }
@@ -586,9 +623,10 @@ export class SimpleAutoAnswerEngine {
             this.parkedAttempt = null;
             const q = this.question(id, text, answerability, act, committedAt);
             // If the engine already has an answer in flight for THIS question
-            // (our prefetch, or its own interim speculation keyed by
-            // noteCandidate), adopt it instead of starting over — that is the
-            // whole point of prefetching.
+            // (our controller-owned prefetch), adopt it instead of starting
+            // over — that is the whole point of prefetching. Engine-owned
+            // interim speculation is deliberately unkeyed and must pass the
+            // engine's similarity check instead.
             const snapshot = this.host.speculativeSnapshot?.();
             const reuseSpeculative = Boolean(snapshot && snapshot.questionId === id && snapshot.text);
             this.lastAnsweredText = text;
@@ -618,9 +656,16 @@ export class SimpleAutoAnswerEngine {
     }
 
     private turnsBefore(cutoff: number): TranscriptTurn[] {
-        // Judge context: the hot window minus the pending finals themselves.
+        // Judge context is meeting audio as it existed when this candidate was
+        // committed. Assistant drafts are not a speaker; AutoAnswerJudge would
+        // otherwise label them USER and make later asks look already answered.
+        // Excluding post-cutoff turns also prevents the user's immediate reply
+        // from indirectly cancelling Auto Answer through the judge while the
+        // user channel itself is intentionally inert.
         const pendingSet = new Set(this.pending.map(p => normalizeForCompare(p.text)));
         return this.host.recentTurns()
+            .filter(t => t.role === 'interviewer' || t.role === 'user')
+            .filter(t => t.timestamp <= cutoff)
             .filter(t => !(t.role === 'interviewer' && pendingSet.has(normalizeForCompare(t.text))))
             .slice(-JUDGE_CONTEXT_TURNS);
     }

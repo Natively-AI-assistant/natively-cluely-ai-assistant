@@ -203,6 +203,10 @@ export interface AutoAnswerTelemetryEvent {
     judgeIsAsk?: boolean;
     judgeDirectedAtUser?: boolean;
     judgeMs?: number;
+    /** Provider-route timeout policy used for this judge call; never contains transcript text. */
+    judgeRoute?: 'gemini_fast' | 'default_provider' | 'server_cascade' | 'user_endpoint' | 'local';
+    judgeDeadlineMs?: number;
+    judgeAborted?: boolean;
     /**
      * Implicit usefulness signal (2026-08-25). Nothing in this feature ever
      * recorded whether an automatic answer was any GOOD, so every threshold
