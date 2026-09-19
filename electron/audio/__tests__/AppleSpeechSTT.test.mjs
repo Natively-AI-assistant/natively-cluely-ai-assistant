@@ -477,6 +477,20 @@ function stubSpawn(behaviour) {
   };
 }
 
+/**
+ * Production deliberately unrefs helper timeouts so they cannot keep Electron
+ * alive during shutdown. An isolated Node test may have no other referenced
+ * handles, so retain the runner while asserting those timeout paths.
+ */
+async function observeUnrefedTimeout(work, keepAliveMs = 100) {
+  const keepRunnerAlive = setTimeout(() => {}, keepAliveMs);
+  try {
+    return await work();
+  } finally {
+    clearTimeout(keepRunnerAlive);
+  }
+}
+
 test('locales query parses the helper answer', async () => {
   const result = await readAppleSpeechLocales('/fake/helper', {
     platform: 'darwin',
@@ -515,22 +529,13 @@ test('a missing helper, garbage output, or a hang all degrade to unavailable', a
   });
   assert.deepEqual(garbage, { available: false, supported: [], installed: [], reserved: [], maxReserved: 0 });
 
-  // The production probe deliberately unrefs its timeout so an abandoned
-  // helper cannot keep Electron alive during shutdown. In this isolated Node
-  // test there may be no other referenced handles, so keep the runner alive
-  // long enough to observe that timeout instead of letting Node cancel the
-  // pending Promise with ERR_TEST_FAILURE (seen on macOS CI).
-  const keepRunnerAlive = setTimeout(() => {}, 100);
-  let hung;
-  try {
-    hung = await readAppleSpeechLocales('/fake/helper', {
+  const hung = await observeUnrefedTimeout(() =>
+    readAppleSpeechLocales('/fake/helper', {
       platform: 'darwin',
       timeoutMs: 20,
       spawn: stubSpawn(() => { /* never answers, never closes */ }),
-    });
-  } finally {
-    clearTimeout(keepRunnerAlive);
-  }
+    }),
+  );
   assert.deepEqual(hung, { available: false, supported: [], installed: [], reserved: [], maxReserved: 0 }, 'a hung probe must not block Settings forever');
 });
 
@@ -632,11 +637,13 @@ test('an exit without release-done is a failure, never a silent success', async 
 });
 
 test('release times out rather than leaving Settings stuck on "Removing…"', async () => {
-  const r = await releaseAppleSpeechLocale('zh-CN', '/fake/helper', {
-    platform: 'darwin',
-    timeoutMs: 20,
-    spawn: stubSpawn(() => { /* never answers */ }),
-  });
+  const r = await observeUnrefedTimeout(() =>
+    releaseAppleSpeechLocale('zh-CN', '/fake/helper', {
+      platform: 'darwin',
+      timeoutMs: 20,
+      spawn: stubSpawn(() => { /* never answers */ }),
+    }),
+  );
   assert.equal(r.ok, false);
   assert.match(r.error, /timed out/i);
 });
