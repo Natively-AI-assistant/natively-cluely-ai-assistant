@@ -96,7 +96,24 @@ export const DEFAULT_CHUNK_OPTIONS: Required<SemanticChunkOptions> = {
  *   v1 — 140-word windows, leaf heading only (pre-2026-08-28).
  *   v2 — boundary-driven units with heading-path prefixes.
  */
-export const CHUNKER_VERSION = 2;
+// 3 (2026-09-19): plain-text heading detection — extracted PDFs/DOCX now chunk
+// on their headings. Markdown output is unchanged, but the version is part of
+// the index hash, so every file re-indexes once (owner-approved).
+export const CHUNKER_VERSION = 3;
+
+// ── Line endings ────────────────────────────────────────────────────────────
+//
+// WINDOWS LINE ENDINGS BROKE HEADING DETECTION (found 2026-09-19). Everything
+// below splits on "\n". A file authored on Windows ends its lines "\r\n", the
+// "\r" stays on the line, and `HEADING_RE`'s `(.*)$` cannot cross it (`.` does
+// not match a line terminator) — so a CRLF markdown file had NO headings: one
+// section, size-only cuts, no `[context: …]` on any chunk. Measured on the same
+// 5k-token résumé: LF → 36 chunks, 35 with a heading path; CRLF → 12 chunks, 0
+// with one. Nothing upstream normalised it (the extractor returns a text file's
+// bytes as they are). A bare "\r" (classic Mac) is treated the same way.
+export function normalizeLineEndings(text: string): string {
+  return text.includes('\r') ? text.replace(/\r\n?/g, '\n') : text;
+}
 
 // ── Parsing ─────────────────────────────────────────────────────────────────
 
@@ -171,6 +188,109 @@ function unitsOf(body: string[]): Unit[] {
   return units;
 }
 
+// ── Plain-text headings ─────────────────────────────────────────────────────
+//
+// A PDF or DOCX extracts to plain text: no `#`, no bold. With no heading the
+// whole document was ONE section, chunks were cut on size alone, and a chunk
+// routinely held the tail of one project and the head of the next with nothing
+// saying which was which. Measured 2026-09-19 (experiments/retrieval-scale, the
+// same résumé and job description as markdown vs as extracted text): the chunk
+// that answers reached the prompt for 85% of questions vs 74–76% at 15k–70k
+// tokens.
+//
+// Runs ONLY when the document has no ATX heading at all, so a markdown file
+// chunks exactly as before. Deliberately conservative — a missed heading is
+// the status quo, a false one splits a paragraph:
+//   • the line stands alone: blank (or start / page marker) before it, and
+//     after it a blank line or a bullet;
+//   • 2–80 characters, at most 10 words, contains a letter, starts with a
+//     letter or digit;
+//   • not a bullet, table row, key: value pair, e-mail/URL line, and no
+//     sentence punctuation (`.` `;` `?` `!`, or more than one comma);
+//   • ALL CAPS, or Title Case (most significant words capitalised).
+//
+// Plain text has no levels, so structure is read from REPETITION: a title that
+// recurs ("Highlights", "Team", "SLOs") is a label INSIDE an entry and stays
+// body text; a title that occurs once or twice ("Project Drift-102 — Pellucid
+// Health") opens a section. That reproduces what the markdown form of the same
+// document yields — `### Project …` is the section, the bold labels are body —
+// and puts the project's name on the chunk that holds its team line. Promoting
+// the recurring labels to sub-headings was tried first and rejected: a
+// 15k-token résumé became 237 fragments ("Project X / Stack: …" as a chunk of
+// its own) against 87 for the markdown form — nearly three times the embedding
+// cost, and six evidence slots that hold almost no text.
+
+const ATX_RE = /^\s*#{1,6}\s+\S/;
+const BULLET_RE = /^\s*(?:[-*•–·▪◦]|\d+[.)])\s+/;
+/** `Label: rest` — a field ("Stack: Go") or a labelled entry title ("Service: atlas-api-3"). */
+const LABELLED_RE = /^([^:]{1,40}):\s+\S/;
+const SMALL_WORDS = new Set(['a', 'an', 'and', 'as', 'at', 'by', 'for', 'from', 'in', 'of', 'on', 'or', 'the', 'to', 'vs', 'via', 'with']);
+/** A title occurring this often is a recurring label inside entries, not a section heading. */
+const REPEATED_HEADING_MIN = 3;
+
+function looksLikePlainHeading(line: string, allowLabelled = false): boolean {
+  const t = line.trim();
+  if (t.length < 2 || t.length > 80) return false;
+  if (!/[A-Za-z]/.test(t) || !/^[A-Za-z0-9]/.test(t)) return false;
+  if (BULLET_RE.test(line) || TABLE_ROW_RE.test(line) || PAGE_MARKER_RE.test(line)) return false;
+  if (/[.;?!]$/.test(t) || /[;?!]/.test(t) || /\.\s/.test(t)) return false;
+  if ((t.match(/,/g) ?? []).length > 1) return false;
+  if (/[@]|https?:|www\./i.test(t)) return false;
+  if (!allowLabelled && LABELLED_RE.test(t)) return false;      // "Stack: Go, Rust" is a field, not a title
+  const words = t.replace(/:$/, '').split(/\s+/);
+  if (words.length > 10) return false;
+  // A labelled title's NAME has whatever case the thing has ("Service:
+  // quasar-ingest-api"); only the label is expected to read like a title.
+  const labelOnly = allowLabelled ? LABELLED_RE.exec(t)?.[1] : undefined;
+  if (labelOnly !== undefined) return /^[A-Z]/.test(labelOnly.trim());
+  const letters = t.replace(/[^A-Za-z]/g, '');
+  if (letters.length >= 3 && letters === letters.toUpperCase()) return true;
+  const significant = words.filter((w) => /^[A-Za-z]/.test(w) && !SMALL_WORDS.has(w.toLowerCase()));
+  if (significant.length === 0) return false;
+  const capitalised = significant.filter((w) => /^[A-Z]/.test(w)).length;
+  return capitalised / significant.length >= 0.6;
+}
+
+function plainTextHeadings(lines: string[]): Map<number, Heading> {
+  const out = new Map<number, Heading>();
+  if (lines.some((l) => ATX_RE.test(l))) return out;
+  const blank = (i: number) => i < 0 || i >= lines.length || lines[i].trim() === '' || PAGE_MARKER_RE.test(lines[i]);
+  const found: Array<{ i: number; text: string }> = [];
+  const labelled: Array<{ i: number; text: string }> = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (!blank(i - 1) || blank(i)) continue;
+    if (!(blank(i + 1) || BULLET_RE.test(lines[i + 1]))) continue;
+    if (i + 1 >= lines.length) continue;                          // a last line heads nothing
+    if (HEADING_RE.test(lines[i])) continue;                       // numbered sections keep their own rule
+    if (looksLikePlainHeading(lines[i])) found.push({ i, text: lines[i].trim().replace(/:$/, '') });
+    else if (looksLikePlainHeading(lines[i], true)) labelled.push({ i, text: lines[i].trim() });
+  }
+  // LABELLED ENTRY TITLES: "Team profile: Growth Platform", "Service: atlas-
+  // api-3". One such line is indistinguishable from a field; a label that
+  // recurs on standalone lines with a DIFFERENT title each time is a list of
+  // entries. Without this a plain-text job description or handbook had no
+  // entry boundaries at all, and a detected section ("Minimum qualifications")
+  // ran on through every entry after it (measured: the one cell that got
+  // worse, 5k, 86% → 84%).
+  const byLabel = new Map<string, Set<string>>();
+  for (const f of labelled) {
+    const label = LABELLED_RE.exec(f.text)![1].toLowerCase();
+    (byLabel.get(label) ?? byLabel.set(label, new Set()).get(label)!).add(f.text.toLowerCase());
+  }
+  for (const f of labelled) {
+    const label = LABELLED_RE.exec(f.text)![1].toLowerCase();
+    if ((byLabel.get(label)?.size ?? 0) >= REPEATED_HEADING_MIN) found.push(f);
+  }
+  found.sort((a, b) => a.i - b.i);
+  const counts = new Map<string, number>();
+  for (const f of found) counts.set(f.text.toLowerCase(), (counts.get(f.text.toLowerCase()) ?? 0) + 1);
+  for (const f of found) {
+    if ((counts.get(f.text.toLowerCase()) ?? 0) >= REPEATED_HEADING_MIN) continue;   // a recurring label, not a section
+    out.set(f.i, { level: 2, text: f.text });
+  }
+  return out;
+}
+
 function parseSections(content: string): Section[] {
   const sections: Section[] = [];
   const stack: Heading[] = [];
@@ -185,9 +305,12 @@ function parseSections(content: string): Section[] {
     body = [];
   };
 
-  for (const line of content.split('\n')) {
+  const lines = content.split('\n');
+  const plain = plainTextHeadings(lines);
+  for (let li = 0; li < lines.length; li++) {
+    const line = lines[li];
     if (PAGE_MARKER_RE.test(line)) { body.push(line); continue; }
-    const h = headingOf(line);
+    const h = plain.get(li) ?? headingOf(line);
     if (!h) { body.push(line); continue; }
     flush();
     // Pop siblings and deeper levels; what remains is this heading's ancestry.
@@ -308,6 +431,7 @@ export function semanticChunks(
   const o = { ...DEFAULT_CHUNK_OPTIONS, ...options };
   const chunks: string[] = [];
 
+  content = normalizeLineEndings(content);
   const sections = parseSections(content);
   const dropRoot = hasSingleRoot(sections);
   sections.forEach((section, index) => {

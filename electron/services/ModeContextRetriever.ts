@@ -1,5 +1,6 @@
 import { Mode, ModeReferenceFile } from './ModesManager';
 import { wordsOf } from './modes/lexicalTokens';
+import { normalizeLineEndings } from './modes/semanticChunker';
 import { ModeHybridRetriever, ModeRetrievedContext as HybridContext } from './modes/ModeHybridRetriever';
 import { VectorStore } from '../rag/VectorStore';
 import { EmbeddingPipeline } from '../rag/EmbeddingPipeline';
@@ -244,6 +245,8 @@ function levenshtein1(a: string, b: string): boolean {
 }
 
 function chunkText(content: string, fineChunk: boolean = false): string[] {
+    // CRLF → LF before any line pattern runs (semanticChunker.normalizeLineEndings).
+    content = normalizeLineEndings(content);
     // TABULAR data (CSV/TSV) → row-aware chunks with the header repeated, so a
     // query for one entity retrieves its labelled row instead of a giant blob
     // (prose chunkers made the model fabricate dataset figures). Mirror of
@@ -799,6 +802,8 @@ function getCachedDocumentMap(fileId: string, content: string): DocumentMap {
  * then keeps the existing chunkText() path (flat-prose fixtures, slide decks).
  */
 function sectionAwareChunks(fileId: string, content: string): string[] | null {
+    // CRLF → LF before any line pattern runs (semanticChunker.normalizeLineEndings).
+    content = normalizeLineEndings(content);
     const map = getCachedDocumentMap(fileId, content);
     // Delegates to the shared chunker in DocumentMap so the lexical and hybrid
     // retrievers produce identical section-tagged chunks (single source of
@@ -1755,6 +1760,11 @@ export class ModeContextRetriever {
         const retriever = this.ensureHybridRetriever();
         if (!retriever) return;
         await retriever.indexFile(file);
+    }
+
+    /** Corpus arbitration pass-through — see ModeHybridRetriever.probeAnchors. */
+    probeReferenceAnchors(files: ModeReferenceFile[], question: string): boolean {
+        return this.ensureHybridRetriever()?.probeAnchors(files, question) ?? false;
     }
 
     /** Index status for the Modes Manager UI badge. */
