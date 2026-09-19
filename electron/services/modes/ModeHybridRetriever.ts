@@ -925,6 +925,24 @@ export class ModeHybridRetriever {
     }
 
     /** Remove a deleted file's chunks + index state. */
+    /**
+     * Drop every index whose file id starts with `prefix` except `keepId`. Profile
+     * documents are indexed under `profile:<kind>:<contentHash>` (they are not mode
+     * reference files and have no row to cascade from), so a re-upload would
+     * otherwise leave the previous version's chunks and vectors behind for good.
+     */
+    public pruneFileIndexesByPrefix(prefix: string, keepId: string): number {
+        try {
+            const ids = (this.db.prepare("SELECT file_id AS id FROM mode_reference_index_state WHERE file_id LIKE ? ESCAPE '\\'")
+                .all(`${prefix.replace(/[\\%_]/g, (c) => `\\${c}`)}%`) as Array<{ id: string }>).map((r) => r.id).filter((id) => id !== keepId);
+            for (const id of ids) this.removeFileIndex(id);
+            return ids.length;
+        } catch (e) {
+            console.warn('[ModeHybridRetriever] pruneFileIndexesByPrefix failed:', e);
+            return 0;
+        }
+    }
+
     public removeFileIndex(fileId: string): void {
         try {
             this.db.prepare('DELETE FROM mode_reference_chunks WHERE file_id = ?').run(fileId);

@@ -192,3 +192,89 @@ export function collectV3ProfileSources(orchestrator: unknown): CollectedProfile
     return EMPTY;
   }
 }
+
+// ── Semantic arm for the profile documents' raw text ────────────────────────
+//
+// The V3 profile port ranks with BM25 only. Rather than build a second vector
+// stack, each profile document's RAW TEXT is indexed by the mode retriever as a
+// pseudo reference file — `profile:<kind>:<contentHash>` — so chunking, batched
+// embedding, embedding-space handling, stale-index detection, hybrid ranking and
+// reranking all come from the one place that already does them. The pseudo-files
+// are never rows in the reference-file table: no UI lists them, and they are not
+// counted as mode attachments.
+
+const PROFILE_FILE_PREFIX = 'profile:';
+const PROFILE_PSEUDO_MODE = { id: '__profile_raw__' };
+
+export interface ProfilePseudoFile { id: string; modeId: string; fileName: string; content: string; createdAt: string; docSourceId: string; kind: string }
+
+export function profilePseudoFiles(docs: ReadonlyArray<{ kind: string; sourceId: string; versionId: string; fileName: string; rawText?: string | null }>): ProfilePseudoFile[] {
+  return docs
+    .filter((d) => d.kind !== 'fact' && typeof d.rawText === 'string' && d.rawText.trim().length > 0)
+    .map((d) => ({
+      id: `${PROFILE_FILE_PREFIX}${d.kind}:${d.versionId}`, modeId: PROFILE_PSEUDO_MODE.id, fileName: d.fileName,
+      content: d.rawText as string, createdAt: '', docSourceId: d.sourceId, kind: d.kind,
+    }));
+}
+
+interface ProfileRawModesManager {
+  retrieveHybridRaw?: (mode: unknown, files: unknown[], opts: Record<string, unknown>) => Promise<{ chunks?: Array<Record<string, unknown>> } | null | undefined>;
+  indexReferenceFile?: (file: unknown) => Promise<void>;
+  pruneReferenceFileIndexesByPrefix?: (prefix: string, keepId: string) => number;
+}
+
+/**
+ * The function the profile port takes as `rawRetriever`. Null when there is no
+ * raw text or no retriever — the port then keeps its BM25 raw chunks.
+ */
+export function buildProfileRawRetriever(
+  modesManager: ProfileRawModesManager | null | undefined,
+  docs: Parameters<typeof profilePseudoFiles>[0],
+  opts: { tokenBudget: number; rerankSurface: 'live' | 'manual'; meetingActive?: () => boolean },
+): ((query: string, o: { topK: number }) => Promise<Array<{ sourceId: string; text: string; chunkIndex: number; score: number }>>) | null {
+  const files = profilePseudoFiles(docs);
+  if (!modesManager?.retrieveHybridRaw || files.length === 0) return null;
+  const docIdByFile = new Map(files.map((f) => [f.id, f.docSourceId]));
+  return async (query, o) => {
+    let meetingActive: boolean | undefined;
+    try { meetingActive = opts.meetingActive ? opts.meetingActive() === true : undefined; } catch { meetingActive = true; }
+    const res = await modesManager.retrieveHybridRaw!(PROFILE_PSEUDO_MODE, files, {
+      query, topK: o.topK, tokenBudget: opts.tokenBudget, allowRerank: true, rerankSurface: opts.rerankSurface,
+      forceDocumentGrounding: true, ...(meetingActive === undefined ? {} : { meetingActive }),
+    });
+    const out: Array<{ sourceId: string; text: string; chunkIndex: number; score: number }> = [];
+    for (const c of res?.chunks ?? []) {
+      const docId = docIdByFile.get(String(c.sourceId ?? ''));
+      if (!docId) continue;
+      const rerank = typeof c.rerankScore === 'number' ? c.rerankScore : undefined;
+      out.push({ sourceId: docId, text: String(c.text ?? ''), chunkIndex: Number(c.chunkIndex ?? 0), score: Number(rerank ?? c.score ?? 0) });
+    }
+    return out;
+  };
+}
+
+/**
+ * Index the profile documents' raw text (idempotent; the retriever skips a file
+ * whose hash, space and chunker version are current) and drop the indexes of
+ * superseded versions. Called after an ingest — fire and forget — and safe to
+ * call again: a document ingested before this shipped is otherwise indexed
+ * lazily, by the retriever, the first time a question touches it.
+ */
+export async function indexProfileRawText(modesManager: ProfileRawModesManager | null | undefined, orchestrator: unknown): Promise<number> {
+  if (!modesManager?.indexReferenceFile) return 0;
+  const files = profilePseudoFiles(collectV3ProfileSources(orchestrator).docs as never);
+  for (const f of files) {
+    try { modesManager.pruneReferenceFileIndexesByPrefix?.(`${PROFILE_FILE_PREFIX}${f.kind}:`, f.id); } catch { /* non-fatal */ }
+    await modesManager.indexReferenceFile(f).catch(() => { /* logged inside */ });
+  }
+  return files.length;
+}
+
+/** Fire-and-forget wrapper for the ingest handlers: never throws, never blocks the upload. */
+export function kickProfileRawIndex(orchestrator: unknown): void {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { ModesManager } = require('../ModesManager');
+    void indexProfileRawText(ModesManager.getInstance(), orchestrator).catch(() => { /* non-fatal */ });
+  } catch { /* non-fatal: the retriever indexes lazily on first use */ }
+}

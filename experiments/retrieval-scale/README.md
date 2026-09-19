@@ -12,7 +12,8 @@ Nothing here is imported by the app.
 |---|---|---|
 | `gen-fixtures.mjs` | Seeded fake résumé, job description and engineering handbook at four sizes → `out/`. 10 planted facts per document (lexical / paraphrase / STT phrasings), 12 **sibling** facts (questions about the filler itself — the only kind that gets harder with size), absent-fact questions. 672 questions. | node |
 | `run-offline.mjs` | MODE path: real `ModeHybridRetriever` → V3 orchestrator + mode port → packer. `--stack lexical\|local\|vector`, `--scenario single\|trio`, `--plain` (as a PDF extracts), `--rerank`, `--fullrank`, `--cap/--tokens`. | `npm run build:electron`; run with `ELECTRON_RUN_AS_NODE=1 ./node_modules/.bin/electron` (better-sqlite3 is Electron-ABI) |
-| `run-profile.mjs` | PROFILE path: real `createProfileRetrievalPort` → orchestrator → packer, résumé + JD as profile documents. `--plain`, `--mode`. | node |
+| `run-profile.mjs` | PROFILE path: real `createProfileRetrievalPort` → orchestrator → packer, résumé + JD as profile documents. `--plain`, `--mode`, `--vectors` (binds the semantic arm to a real `ModeHybridRetriever` + MiniLM). | node; `--vectors` as `run-offline` |
+| `gen-resume.mjs` | Realistic résumés (2k / 5k / 15k / 30k tokens) with ground truth, for measuring how complete LLM structuring is. Used by `live.mjs --structuring`. | node |
 | `analyze.mjs` | Stage breakdown of a result file: NOT_ROUTED / RETRIEVER_MISS / EVIDENCE_DROP / PACK_DROP. `--list`. | node |
 | `debug-query.mjs` | Full ranking for one query, with the needle's scores. | as `run-offline` |
 | `live.mjs` | The REAL app + REAL providers, graded answers. **Billed.** Isolated profile copy (read-only sqlite backup), debug-log protection, raw CDP. `--stack local`, `--env K=V`, `--mix para`, `--natively-key-from-env NAME` (refuses to launch unless the API reports ready), `--local-api PORT`, `--profile`. macOS paths only. | built app |
@@ -29,8 +30,10 @@ No LLM is involved except in `live.mjs`.
 | mode · markdown · vectors, three files | 150 / 141 / 142 / 140 | 159 / 157 / 156 / 156 |
 | mode · **plain text** · lexical, one file | 143 / 130 / 120 / 120 | 147 / 146 / 146 / 146 |
 | mode · **plain text** · vectors, one file | 142 / 132 / 123 / 127 | 152 / 151 / 150 / 151 |
-| profile · markdown (% of 108) | 32 / 29 / 32 / 31 % | 86 / 85 / 85 / 85 % |
-| profile · plain text (% of 108) | not measured | 84 / 83 / 84 / 84 % |
+| profile · markdown, BM25 only (% of 108) | 32 / 29 / 32 / 31 % | 90 / 90 / 89 / 89 % |
+| profile · plain text, BM25 only (% of 108) | not measured | 90 / 89 / 90 / 90 % |
+| profile · markdown, **+ semantic arm** | — | 95 / 95 / 94 / 94 % |
+| profile · plain text, **+ semantic arm** | — | 94 / 94 / 94 / 94 % |
 
 "Vectors" is the bundled MiniLM — a lower bound for hosted embedders. Plain text is what every PDF
 and DOCX becomes; it was the hidden size effect (the committed chunker got *worse* as files grew).
@@ -80,6 +83,13 @@ the hosted API was unavailable that day, and is not needed for any of this.
     the turn and re-indexed in the background; prewarm re-indexes one mode at a time on activation.
 13. The bundled embedder's vectors are queried when no meeting is running (lexical-only is kept
     during meetings, where the memory pressure that rule guards against actually occurs).
+14. Profile Intelligence has a **semantic arm** (`PI-VECTOR-ARM-DESIGN.md`): résumé/JD raw text is
+    indexed through the mode retriever (at ingest and lazily) and joins BM25 as a rank-matched
+    interleave. Replacing BM25 outright was built first and failed the gate on plain-text JDs.
+    A 5-second query-embedding memo stops a turn with mode files embedding the same question twice.
+15. Employment-phrased questions ("Who would be my manager?") plan the JD when the question's terms
+    are not in the résumé; the `USER_EMPLOYMENT` prohibition itself is unchanged.
+16. The derived salary estimate says it is an estimate and that a figure stated in the JD wins.
 9. Spoken identifiers: "the forty-four seventy-one outage" → 4471; a number word is never the
    head ("i n c forty 471" corruption); "X and seventy one Y" keeps its "and".
 
@@ -101,7 +111,6 @@ only, never to a third-party provider.
 
 - The hosted API was unavailable for part of the campaign; the natively leg was run against a locally
   started server instead (see above).
-- `PI-VECTOR-ARM-DESIGN.md` — three questions before the profile path gets a semantic arm.
 - The local-embedding lexical-only rule (`NATIVELY_KEYLESS_LEXICAL_MANUAL_RETRIEVAL`): offline it
   costs key-less users ~11 of 162 at 70k; live +1/20 (noise). Not flipped — the rule exists for ONNX
   pressure during a live meeting with local STT, which typed turns cannot exercise.

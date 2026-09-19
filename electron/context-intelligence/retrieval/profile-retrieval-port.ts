@@ -113,6 +113,27 @@ export interface ProfilePortInput {
    * duplicate is served once, from the mode attachment it was compared against.
    */
   excludeVersionIds?: readonly string[];
+  /**
+   * SEMANTIC ARM for the raw document text (2026-09-20, owner-approved design:
+   * experiments/retrieval-scale/PI-VECTOR-ARM-DESIGN.md). This port ranks with BM25
+   * only, so a paraphrase with no shared vocabulary ("How senior do I need to be?"
+   * vs "9+ years building distributed backend systems") had no route to its chunk
+   * — live, those misses came back as WRONG answers, not refusals. The callers bind
+   * this to the mode retriever's index over the same raw text (hybrid lexical +
+   * vector + rerank), so there is one vector stack, not two. Returned chunks carry
+   * the PROFILE document's sourceId. Absent, throwing or empty ⇒ the BM25 raw
+   * chunks are used exactly as before.
+   */
+  rawRetriever?: (query: string, opts: { topK: number }) => Promise<RawRetrievedChunk[]>;
+}
+
+export interface RawRetrievedChunk {
+  /** The ProfileDocLike.sourceId this text came from — NOT the index's pseudo-file id. */
+  sourceId: string;
+  text: string;
+  chunkIndex: number;
+  /** Hybrid / rerank score; clamped into [0, 1] here. */
+  score: number;
 }
 
 const TYPE_FOR_KIND: Record<ProfileDocKind, SourceType> = {
@@ -646,8 +667,43 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
         for (const i of hits) rawIntentBoost.set(i, Math.max(rawIntentBoost.get(i) ?? 0, share));
       }
 
-      return chunks
-        .map((c, i) => {
+      // The semantic arm, when the caller wired one. Its chunks JOIN the BM25
+      // raw-text chunks — a UNION, deduplicated by text with the better score
+      // kept. The first cut REPLACED the BM25 raw chunks and failed its own gate:
+      // measured on plain-text job descriptions, lexical questions fell from 100%
+      // to 91–95%, because when the hybrid ranker misses a lexically obvious
+      // chunk, BM25's hit went with it. The two arms fail differently; neither
+      // may silence the other.
+      let semanticRaw: RawRetrievedChunk[] = [];
+      if (input.rawRetriever) {
+        try { semanticRaw = (await input.rawRetriever(query, { topK: Math.max(1, opts.topK) })) ?? []; }
+        catch { semanticRaw = []; }
+        semanticRaw = semanticRaw.filter((r) => r && typeof r.text === 'string' && r.text.trim() && sourceTypes.has(r.sourceId));
+      }
+      const useSemantic = semanticRaw.length > 0;
+      const discriminative = firedRules.filter((rule) => {
+        const hits = rawIdx.filter((i) => rule.re.test(chunks[i].text)).length;
+        return hits > 0 && hits <= Math.max(3, rawIdx.length * RAW_INTENT_MAX_SHARE);
+      });
+      const semanticScored = semanticRaw.map((r) => {
+        const fileName = chunks.find((c) => c.sourceId === r.sourceId)?.fileName ?? '';
+        const intent = discriminative.filter((rule) => rule.re.test(r.text))
+          .reduce((mx, rule) => Math.max(mx, Math.max(...Object.values(rule.boosts)) * RAW_INTENT_BOOST_SHARE), 0);
+        const c: PortChunk = { sourceId: r.sourceId, fileName, section: 'Document text', text: r.text, chunkIndex: 100_000 + r.chunkIndex, boostKey: 'raw_document', completeInventory: false, policyOnly: false } as PortChunk;
+        return { c, score: Math.min(1, Math.max(0, r.score) + intent) };
+      });
+
+      const normText = (t: string) => t.replace(/^\[context:[^\]]*\]\s*/i, '').replace(/\s+/g, ' ').trim().toLowerCase();
+      const semanticByText = new Map<string, { c: PortChunk; score: number }>();
+      for (const row of semanticScored) {
+        const k = `${row.c.sourceId}|${normText(row.c.text)}`;
+        const prev = semanticByText.get(k);
+        if (!prev || row.score > prev.score) semanticByText.set(k, row);
+      }
+
+      const scoredChunks = chunks
+        .map((c, i) => ({ c, i }))
+        .map(({ c, i }) => {
           const lexical = squash(bm25ById.get(String(i)) ?? 0);
           const boost = (boosts.get(c.boostKey) ?? 0) + (rawIntentBoost.get(i) ?? 0);
           // A boost with NO lexical signal must rank BELOW genuine matches —
@@ -667,7 +723,35 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
             ? (boost > 0 ? 0.6 : 0)
             : (lexical > 0 ? Math.min(1, lexical * 0.85 + boost) : boostOnly);
           return { c, score };
-        })
+        });
+
+      // RANK-MATCHED INTERLEAVE. The two arms score on different scales — BM25's
+      // squashed score sits near 0.7–0.9 for any chunk sharing the question's
+      // words, a hybrid cosine blend near 0.3–0.5 for a correct paraphrase hit —
+      // so a plain union sorted by score let lexical look-alikes push every
+      // semantic hit past the cap (measured: the union gained 2 points where
+      // replacement gained 5). The semantic arm's rank-r chunk is therefore
+      // lifted to at least the BM25 raw arm's rank-r score: the arms alternate,
+      // neither scale wins by being louder. Same text from both → ONE row.
+      if (useSemantic) {
+        const bm25RawDesc = scoredChunks.filter((s) => s.c.boostKey === 'raw_document').map((s) => s.score).sort((a, b) => b - a);
+        const rowByKey = new Map<string, { c: PortChunk; score: number }>();
+        for (const row of scoredChunks) if (row.c.boostKey === 'raw_document') rowByKey.set(`${row.c.sourceId}|${normText(row.c.text)}`, row);
+        const ranked = [...semanticByText.entries()].sort((a, b) => b[1].score - a[1].score);
+        ranked.forEach(([k, sem], rank) => {
+          // + epsilon: on an exact tie the semantic row goes FIRST. Near-identical
+          // sections (a JD's twelve team blurbs) tie to the last digit under BM25,
+          // and a tie broken by chunk index put every one of them ahead of the
+          // semantic hit — the interleave silently degraded to "BM25, then the rest".
+          const lifted = Math.max(sem.score, Math.min(1, (bm25RawDesc[rank] ?? 0) + 1e-6));
+          const twin = rowByKey.get(k);
+          if (twin) { twin.score = Math.max(twin.score, lifted); semanticByText.delete(k); }
+          else sem.score = lifted;
+        });
+      }
+
+      return scoredChunks
+        .concat([...semanticByText.values()].map((row) => ({ ...row, i: -1 })))
         .filter((s) => s.score > 0.05)
         .filter((s) => !planned || planned.has(sourceTypes.get(s.c.sourceId) as SourceType))
         .sort((a, b) => b.score - a.score || a.c.chunkIndex - b.c.chunkIndex)

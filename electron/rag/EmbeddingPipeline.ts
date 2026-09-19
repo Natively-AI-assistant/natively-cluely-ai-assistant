@@ -24,6 +24,8 @@ const EMBED_TIMEOUT_MS = 30_000;
 // lexical fallback never fired because the call eventually succeeded. Ingest
 // keeps the 30s budget; a query gets 3s and then lexical retrieval answers.
 const QUERY_EMBED_TIMEOUT_MS = 3_000;
+/** How long an identical query's vector is reused (see queryEmbedMemo). */
+const QUERY_EMBED_MEMO_TTL_MS = 5_000;
 
 // ── T13 / RC12: query-path hysteresis (2026-08-28) ──────────────────────────
 //
@@ -936,7 +938,40 @@ export class EmbeddingPipeline {
      * Get embedding for a search query (may use different prefix for asymmetric models).
      * Routes through embedWithTimeout() so a frozen API cannot stall the query path.
      */
+    /**
+     * QUERY-EMBEDDING MEMO (2026-09-20). One turn can ask for the SAME query
+     * vector more than once: the mode port and the profile port are separate by
+     * design and each embeds the question, and the legacy port's targeted retry
+     * embeds it again. Keyed by (active space, text), a few seconds, and it holds
+     * the PROMISE so two concurrent callers share one request. A rejection is
+     * never kept — the failure-streak accounting below must see every real
+     * failure, and a retry must be able to succeed.
+     */
+    // Created on first use, not as a field initialiser: a pipeline built with
+    // Object.create(prototype) — every hysteresis test does — has no fields, and
+    // an optimisation must not be able to throw on the query path.
+    private queryEmbedMemo?: Map<string, { at: number; promise: Promise<number[]> }>;
+
     async getEmbeddingForQuery(
+        text: string,
+        opts?: { retryBudgetMs?: number },
+    ): Promise<number[]> {
+        const space = this.provider?.space ?? this.provider?.name ?? 'none';
+        const key = `${space}\u0000${text}`;
+        const now = Date.now();
+        const memo = (this.queryEmbedMemo ??= new Map());
+        const hit = memo.get(key);
+        if (hit && now - hit.at < QUERY_EMBED_MEMO_TTL_MS) return hit.promise;
+        if (memo.size > 32) {
+            for (const [k, v] of memo) if (now - v.at >= QUERY_EMBED_MEMO_TTL_MS) memo.delete(k);
+        }
+        const promise = this.getEmbeddingForQueryUncached(text, opts);
+        memo.set(key, { at: now, promise });
+        promise.catch(() => { if (memo.get(key)?.promise === promise) memo.delete(key); });
+        return promise;
+    }
+
+    private async getEmbeddingForQueryUncached(
         text: string,
         opts?: {
             /**

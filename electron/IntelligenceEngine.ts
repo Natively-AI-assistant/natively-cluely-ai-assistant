@@ -6506,11 +6506,18 @@ export class IntelligenceEngine extends EventEmitter {
                     const collected = collectV3ProfileSources(this.llmHelper.getKnowledgeOrchestrator?.() ?? null);
                     if (collected.docs.length) {
                         const { createProfileRetrievalPort } = require('./context-intelligence/retrieval/profile-retrieval-port');
+                        // Semantic arm over the documents' raw text (see v3ProfileSources).
+                        const { buildProfileRawRetriever } = require('./services/knowledge/v3ProfileSources');
+                        const profileRawRetriever = buildProfileRawRetriever(_mm, collected.docs, {
+                            tokenBudget: policy.contextBudget.evidenceTokens, rerankSurface: 'live',
+                            meetingActive: () => inLiveMeeting,
+                        });
                         profilePort = createProfileRetrievalPort({
                             docs: collected.docs,
                             allowedSourceTypes: policy.allowedSourceTypes,
                             profileSources: policy.profileSources,
                             userId: 'local',
+                            ...(profileRawRetriever ? { rawRetriever: profileRawRetriever } : {}),
                         });
                         if (profilePort) {
                             profileSourceCount = collected.docs.length;

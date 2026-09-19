@@ -26,7 +26,10 @@ const arg = (k, d) => { const i = argv.indexOf(`--${k}`); return i >= 0 ? argv[i
 const MODE = arg('mode', 'looking-for-work');
 const STRUCTURED = arg('structured', 'heuristic');
 const SIZES = arg('sizes', '5k,15k,30k,70k').split(',');
-const OUT = arg('out', path.join(HERE, 'out', `profile_${MODE}_${STRUCTURED}${argv.includes('--plain') ? '_plain' : ''}.json`));
+// --vectors: bind the profile port's semantic arm to a REAL ModeHybridRetriever with the bundled
+// MiniLM (a lower bound for hosted embedders). Needs sqlite → run with ELECTRON_RUN_AS_NODE=1 electron.
+const VECTORS = argv.includes('--vectors');
+const OUT = arg('out', path.join(HERE, 'out', `profile_${MODE}_${STRUCTURED}${argv.includes('--plain') ? '_plain' : ''}${argv.includes('--vectors') ? '_vectors' : ''}.json`));
 const keep = console.log; console.warn = () => {}; console.info = () => {}; console.log = () => {};
 const say = (...a) => keep(...a);
 
@@ -35,7 +38,26 @@ const { createProfileRetrievalPort } = dist('electron/context-intelligence/retri
 const { resolveModePolicy } = dist('electron/context-intelligence/policies/mode-policy-registry.js');
 const { packContext } = dist('electron/context-intelligence/generation/context-packer.js');
 const { heuristicResumeExtract, heuristicJDExtract } = dist('premium/electron/knowledge/HeuristicExtractor.js');
-const MAX_PROFILE_DOCUMENT_CHARS = 200_000; // premium/electron/knowledge/DocumentReader.ts
+const MAX_PROFILE_DOCUMENT_CHARS = 200_000;
+const { buildProfileRawRetriever, profilePseudoFiles } = dist('electron/services/knowledge/v3ProfileSources.js');
+const { normalizeDocumentGroundedRetrievalQuery } = dist('electron/llm/documentGroundedPrompt.js');
+let extractor = null;
+async function embed(texts) {
+  if (!extractor) { const tf = await import('@huggingface/transformers'); tf.env.allowRemoteModels = false; tf.env.localModelPath = path.join(ROOT, 'resources/models'); extractor = await tf.pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', { dtype: 'q8' }); }
+  const out = []; for (let i = 0; i < texts.length; i += 16) out.push(...(await extractor(texts.slice(i, i + 16), { pooling: 'mean', normalize: true })).tolist()); return out;
+}
+async function makeRawRetriever(docs) {
+  const { ModeHybridRetriever } = dist('electron/services/modes/ModeHybridRetriever.js');
+  const Database = require('better-sqlite3');
+  const space = 'natively:all-minilm-l6-v2:384';
+  const hr = new ModeHybridRetriever(new Database(':memory:'), { searchSimilar: async () => [], hasEmbeddings: () => false }, {
+    isReady: () => true, getActiveProviderName: () => 'natively', getActiveSpaceKey: () => space, getActiveProviderMaxBatch: () => 32,
+    getEmbeddingForQuery: async (q) => (await embed([q]))[0], getEmbedding: async (q) => (await embed([q]))[0], getEmbeddingsWithFallback: async (t) => ({ embeddings: await embed(t), space }) });
+  for (const f of profilePseudoFiles(docs)) await hr.indexFile(f);
+  // Mirrors ModeContextRetriever.retrieveHybrid's forwarding.
+  const mm = { retrieveHybridRaw: (mode, files, o) => hr.retrieve({ query: normalizeDocumentGroundedRetrievalQuery(o.query), modeId: mode.id, files, tokenBudget: o.tokenBudget, topK: o.topK, hasTranscript: false, allowRerank: false, forceDocumentGrounding: true, rerankSurface: o.rerankSurface }) };
+  return buildProfileRawRetriever(mm, docs, { tokenBudget: policy.contextBudget.evidenceTokens, rerankSurface: 'manual', meetingActive: () => false });
+} // premium/electron/knowledge/DocumentReader.ts
 
 const unesc = (s) => s.replace(/&quot;/g, '"').replace(/&apos;|&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 const norm = (s) => unesc(s).toLowerCase().replace(/\s+/g, ' ').trim();
@@ -53,7 +75,8 @@ for (const size of SIZES) {
     return { kind, sourceId: `p-${kind}`, versionId: 'v1', fileName: `${kind}_${size}.md`, structured, rawText, chars: rawText.length };
   });
   for (const d of docs) if (d.chars > MAX_PROFILE_DOCUMENT_CHARS) say(`NOTE [${size}] ${d.fileName}: ${d.chars} chars > ${MAX_PROFILE_DOCUMENT_CHARS} — the real upload REJECTS this file (DocumentReader); retrieval below is hypothetical`);
-  const port = createProfileRetrievalPort({ docs, allowedSourceTypes: policy.allowedSourceTypes, profileSources: policy.profileSources, userId: 'local' });
+  const rawRetriever = VECTORS ? await makeRawRetriever(docs) : null;
+  const port = createProfileRetrievalPort({ docs, allowedSourceTypes: policy.allowedSourceTypes, profileSources: policy.profileSources, userId: 'local', ...(rawRetriever ? { rawRetriever } : {}) });
   if (!port) { say(`[${size}] no profile port (mode ${MODE} has no profileSources?)`); continue; }
   for (const q of questions.filter((x) => x.size === size)) {
     const r = await orchestrate({ requestId: q.id, requestSequence: 1, surface: 'manual_chat', modeId: MODE, scope: { userId: 'local' }, sessionId: `s-${q.id}`, manualQuestion: q.question, hasAttachedDocuments: true, attachedFileNames: [], profileOnlyDocuments: true /* what engine-bridge sets: 0 mode files, 2 profile docs */ }, port);

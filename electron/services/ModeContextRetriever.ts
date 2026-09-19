@@ -1787,6 +1787,11 @@ export class ModeContextRetriever {
         return retriever.getFileIndexStatus(fileId);
     }
 
+    /** See ModeHybridRetriever.pruneFileIndexesByPrefix. */
+    pruneReferenceFileIndexesByPrefix(prefix: string, keepId: string): number {
+        return this.ensureHybridRetriever()?.pruneFileIndexesByPrefix(prefix, keepId) ?? 0;
+    }
+
     /** Drop a deleted file's persisted chunks + index state. */
     removeReferenceFileIndex(fileId: string): void {
         this.ensureHybridRetriever()?.removeFileIndex(fileId);

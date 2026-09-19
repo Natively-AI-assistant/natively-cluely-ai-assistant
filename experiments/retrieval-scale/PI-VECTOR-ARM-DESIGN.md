@@ -1,6 +1,8 @@
 # Profile Intelligence: a semantic arm for the V3 profile path
 
-Status: **design for review — nothing here is built.** Owner asked for design first (2026-09-19).
+Status: **built 2026-09-20** with the owner's answers to the three questions at the end (index at
+ingest *and* lazily; yes to the query-embedding memo; structured sections stay on BM25).
+One thing below turned out wrong and the measurement caught it — see "What the measurement changed".
 
 ## The gap
 
@@ -83,7 +85,29 @@ cosine → rerank (with rank fusion for the built-in model) → token-budget sel
 bundled MiniLM, as `run-offline.mjs --stack vector` does). Ship only if the paraphrase column rises
 and no lexical/sibling cell falls, at all four sizes, markdown and `--plain`.
 
-## Open questions for the owner
+## What the measurement changed
+
+Step 2 of the proposal says the semantic result is used *instead of* BM25 for the raw-document
+chunks. Built that way, it failed the ship gate above: on plain-text job descriptions the lexical
+column fell from 100% to 91–95% and the JD rows from ~87% to 81–85%. When the hybrid ranker missed a
+lexically obvious chunk, BM25's hit had been thrown away with the rest.
+
+| profile path, % of 108 in the prompt, 5k / 15k / 30k / 70k | markdown | plain text |
+|---|---|---|
+| BM25 only (before) | 90 / 90 / 89 / 89 | 90 / 89 / 90 / 90 |
+| semantic **replaces** BM25 raw chunks | 95 / 95 / 94 / 95 | 91 / 90 / 89 / 89 — JD lexical 91–95% ✗ |
+| **union**, sorted by score | 92 / 92 / 91 / 92 | 91 / 92 / 93 / 93 |
+| union, **rank-matched interleave** (shipped) | 95 / 95 / 94 / 94 | 94 / 94 / 94 / 94 |
+
+Shipped: the arms are a union, the same text is one row, and the semantic arm's rank-*r* chunk is
+lifted to at least the BM25 raw arm's rank-*r* score (semantic first on an exact tie). A plain
+score-sorted union wastes most of the gain because the scales differ — BM25's squashed score for any
+word-sharing chunk sits far above a correct paraphrase hit's hybrid score. With the interleave the
+lexical and sibling columns are 100% in all 16 cells and no cell is below BM25-only.
+
+MiniLM, reranker off — a lower bound for hosted embedders, and not a live measurement.
+
+## Open questions for the owner (answered 2026-09-19 — kept for the record)
 
 1. Index at ingest (pays the embed even if the user never asks a profile question) **and** lazily —
    or lazily only?

@@ -1511,11 +1511,18 @@ export function initializeIpcHandlers(appState: AppState): void {
                 const collected = collectV3ProfileSources(llmHelper.getKnowledgeOrchestrator?.() ?? null);
                 if (collected.docs.length) {
                   const { createProfileRetrievalPort } = require('./context-intelligence/retrieval/profile-retrieval-port');
+                  // Semantic arm over the documents' raw text (see v3ProfileSources).
+                  const { buildProfileRawRetriever } = require('./services/knowledge/v3ProfileSources');
+                  const v3ProfileRawRetriever = buildProfileRawRetriever(mm, collected.docs, {
+                    tokenBudget: policy.contextBudget.evidenceTokens, rerankSurface: 'manual',
+                    meetingActive: () => appState.getIsMeetingActive(),
+                  });
                   v3ProfilePort = createProfileRetrievalPort({
                     docs: collected.docs,
                     allowedSourceTypes: policy.allowedSourceTypes,
                     profileSources: policy.profileSources,
                     userId: V3_USER_ID,
+                    ...(v3ProfileRawRetriever ? { rawRetriever: v3ProfileRawRetriever } : {}),
                   });
                   if (v3ProfilePort) {
                     v3ProfileCounts = collected.counts;
@@ -14417,6 +14424,8 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
       const { DocType } = require('../premium/electron/knowledge/types');
       const result = await orchestrator.ingestDocument(resolvedPath, DocType.RESUME);
+      // Index the raw text for the profile path's semantic arm (fire and forget).
+      if (result?.success) { try { require('./services/knowledge/v3ProfileSources').kickProfileRawIndex(orchestrator); } catch { /* non-fatal */ } }
       if (!result?.success && path.extname(resolvedPath).toLowerCase() === '.doc') {
         return { success: false, error: 'Legacy Word .doc files are not supported. Save the file as .docx and upload it again.' };
       }
@@ -14641,6 +14650,8 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
       const { DocType } = require('../premium/electron/knowledge/types');
       const result = await orchestrator.ingestDocument(resolvedPath, DocType.JD);
+      // Index the raw text for the profile path's semantic arm (fire and forget).
+      if (result?.success) { try { require('./services/knowledge/v3ProfileSources').kickProfileRawIndex(orchestrator); } catch { /* non-fatal */ } }
       if (!result?.success && path.extname(resolvedPath).toLowerCase() === '.doc') {
         return { success: false, error: 'Legacy Word .doc files are not supported. Save the file as .docx and upload it again.' };
       }
@@ -15191,6 +15202,8 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       const { DocType } = require('../premium/electron/knowledge/types');
       const result = await orchestrator.ingestDocument(resolved, DocType.JD);
+      // Index the raw text for the profile path's semantic arm (fire and forget).
+      if (result?.success) { try { require('./services/knowledge/v3ProfileSources').kickProfileRawIndex(orchestrator); } catch { /* non-fatal */ } }
       if (result?.success) {
         try {
           orchestrator.setKnowledgeMode(true);
@@ -15252,6 +15265,8 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       const { DocType } = require('../premium/electron/knowledge/types');
       const result = await orchestrator.ingestDocument(staged, DocType.JD);
+      // Index the raw text for the profile path's semantic arm (fire and forget).
+      if (result?.success) { try { require('./services/knowledge/v3ProfileSources').kickProfileRawIndex(orchestrator); } catch { /* non-fatal */ } }
       if (result?.success) {
         try {
           orchestrator.setKnowledgeMode(true);
@@ -17362,6 +17377,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         const { DocType } = require('../premium/electron/knowledge/types');
         const dt = params.docType === 'jd' ? DocType.JD : DocType.RESUME;
         const result = await orchestrator.ingestDocument(params.filePath, dt);
+        // Index the raw text for the profile path's semantic arm (fire and forget).
+        if (result?.success) { try { require('./services/knowledge/v3ProfileSources').kickProfileRawIndex(orchestrator); } catch { /* non-fatal */ } }
         if (result?.success) {
           try {
             orchestrator.setKnowledgeMode(true);
