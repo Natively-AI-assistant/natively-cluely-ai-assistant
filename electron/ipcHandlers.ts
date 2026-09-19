@@ -12232,12 +12232,23 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  // The installed Codex CLI's model catalogue, for the model pickers. Reads the
-  // CLI's models_cache.json only — never its credentials. 'unavailable' (no CLI)
-  // tells the renderer to use its built-in presets.
+  // Cache reads never make network requests. Settings explicitly invokes the
+  // refresh handler after it has confirmed that ChatGPT auth exists; other
+  // pickers stay cache-only.
   safeHandle('codex-cli:models', async () => {
-    const { readCodexModelCatalog } = require('./services/CodexModelCatalog') as typeof import('./services/CodexModelCatalog');
-    return readCodexModelCatalog();
+    const { readCachedCodexModelCatalog } = require('./services/CodexModelCatalog') as typeof import('./services/CodexModelCatalog');
+    return readCachedCodexModelCatalog();
+  });
+
+  safeHandle('codex:refresh-models', async () => {
+    const { refreshCodexModelCatalog } = require('./services/CodexModelCatalog') as typeof import('./services/CodexModelCatalog');
+    const catalog = await refreshCodexModelCatalog();
+    if (catalog.source === 'provider-live') {
+      BrowserWindow.getAllWindows().forEach((win) => {
+        if (!win.isDestroyed()) win.webContents.send('codex-models-changed');
+      });
+    }
+    return catalog;
   });
 
   safeHandle('set-codex-cli-config', (_, config: any) => {
@@ -12258,6 +12269,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       sm.set('codexCliServiceTier', normalized.serviceTier);
       sm.set('codexCliModelReasoningEffort', normalized.modelReasoningEffort);
       appState.processingHelper.getLLMHelper().setCodexCliConfig(normalized);
+      BrowserWindow.getAllWindows().forEach((win) => {
+        if (!win.isDestroyed()) win.webContents.send('codex-models-changed');
+      });
       return { success: true, config: normalized };
     } catch (error: any) {
       return { success: false, error: error.message };
@@ -12266,16 +12280,16 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('test-codex-cli', async (_, config?: any) => {
     try {
-      // The new implementation is HTTP-direct — there is no CLI binary to
-      // validate. The test is now "do we have a valid OAuth token + a
-      // reachable model?". A lightweight probe is a status read; the
-      // Settings UI also has a "Try it" button that issues a real chat
-      // call. This handler returns success=true with the current
-      // normalized config so the Settings UI's "Test" button keeps
-      // working without an error state.
       const current = appState.processingHelper.getLLMHelper().getCodexCliConfig();
       const normalized = CodexCliService.normalizeConfig({ ...current, ...(config || {}) });
       const status = getCodexAuthStatus();
+      if (!status.signedIn) return { success: false, error: 'Not signed in to ChatGPT.' };
+      if (!normalized.model) return { success: false, error: 'No Codex model is selected.' };
+      const { readCachedCodexModelCatalog } = require('./services/CodexModelCatalog') as typeof import('./services/CodexModelCatalog');
+      const catalog = await readCachedCodexModelCatalog();
+      if (!catalog.models.some(model => model.id === normalized.model)) {
+        return { success: false, error: 'The selected model is no longer offered by the provider.' };
+      }
       return {
         success: true,
         resolvedPath: normalized.path, // legacy field; ignored

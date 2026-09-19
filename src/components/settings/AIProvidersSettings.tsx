@@ -1805,44 +1805,6 @@ type ProviderTabId = (typeof PROVIDER_TABS)[number]['id'];
 const tabButtonId = (id: ProviderTabId) => `aip-tab-${id}`;
 const tabPanelId = (id: ProviderTabId) => `aip-tabpanel-${id}`;
 
-const CODEX_SERVICE_TIERS = ['default', 'fast', 'flex'] as const;
-// Must mirror CodexCliService.CODEX_MODEL_REASONING_EFFORTS in
-// electron/services/CodexCliService.ts. Kept in sync manually because the
-// Settings UI runs in the renderer (no direct module access to main).
-const CODEX_MODEL_REASONING_EFFORTS = ['none', 'low', 'medium', 'high', 'xhigh'] as const;
-
-// Per-model valid reasoning-effort sets (mirrors CodexCliService's
-// CODEX_MODEL_REASONING_SETS). Longest-match wins so gpt-5.4-codex beats
-// gpt-5. The dropdown hides unsupported values per the currently-selected
-// model so a user can't pick e.g. xhigh for gpt-5.3-codex (which the codex
-// CLI binary rejects with a 400).
-const CODEX_MODEL_REASONING_SETS: ReadonlyArray<readonly [string, readonly string[]]> = [
-    ['gpt-5-2025-08-07', ['low', 'medium', 'high']],
-    ['gpt-5-mini',       ['low', 'medium', 'high']],
-    ['gpt-5-nano',       ['low', 'medium', 'high']],
-    ['gpt-5',            ['low', 'medium', 'high']],
-    ['gpt-5.1',          ['none', 'low', 'medium', 'high']],
-    ['gpt-5.2',          ['none', 'low', 'medium', 'high', 'xhigh']],
-    ['gpt-5.4',          ['none', 'low', 'medium', 'high', 'xhigh']],
-    ['gpt-5.5',          ['none', 'low', 'medium', 'high', 'xhigh']],
-    ['gpt-5.5-codex',    ['low', 'medium', 'high', 'xhigh']],
-    ['gpt-5.4-codex',    ['low', 'medium', 'high', 'xhigh']],
-    ['gpt-5.3-codex-spark', ['low', 'medium', 'high']],
-    ['gpt-5.3-codex',    ['low', 'medium', 'high']],
-    ['gpt-5.2-codex',    ['low', 'medium', 'high', 'xhigh']],
-    ['gpt-5.1-codex',    ['low', 'medium', 'high']],
-    ['gpt-5-codex',      ['low', 'medium', 'high']],
-];
-
-function getValidCodexReasoningEfforts(modelId: string): readonly string[] {
-    const id = (modelId || '').toLowerCase();
-    let best: readonly [string, readonly string[]] | null = null;
-    for (const entry of CODEX_MODEL_REASONING_SETS) {
-        if (id.includes(entry[0]) && (!best || entry[0].length > best[0].length)) best = entry;
-    }
-    return best ? best[1] : ['low', 'medium', 'high'];
-}
-
 // LiteLLM max-output-token presets — the standard per-model output budgets
 // (powers of two used across the LiteLLM model registry). '' = Auto: resolve
 // each model's real budget from the proxy's /model/info, fallback 8192.
@@ -1947,21 +1909,16 @@ const ModelSelect: React.FC<ModelSelectProps> = ({ value, options, onChange, pla
  * which showed the same id twice — once as editable text, once as the dropdown's
  * value. The dropdown is now the whole control.
  *
- * `options` is the installed Codex CLI's catalogue when one exists, otherwise
- * the built-in presets (codexModelOptions). A model already persisted from
- * elsewhere still renders and stays selected (it is prepended), so no existing
- * configuration breaks. When the list came from the CLI, such a value is marked
- * as not in it — the CLI dropping a model is the best signal we have that the
- * backend no longer offers it. Without a CLI list there is nothing to compare
- * against, so no marker.
+ * A persisted value that is absent from the current provider catalogue remains
+ * visible long enough for the user to understand why it was replaced.
  */
 const CodexCliModelField: React.FC<{
     label: string;
     value: string;
     options: { id: string; name: string }[];
-    fromCodexCli: boolean;
+    hasCatalog: boolean;
     onSelect: (value: string) => void;
-}> = ({ label, value, options, fromCodexCli, onSelect }) => {
+}> = ({ label, value, options, hasCatalog, onSelect }) => {
     const t = useT();
     return (
     <label className="space-y-1 block min-w-0">
@@ -1969,7 +1926,7 @@ const CodexCliModelField: React.FC<{
         <ModelSelect
             value={value}
             options={value && !options.some(option => option.id === value)
-                ? [{ id: value, name: fromCodexCli ? `${prettifyModelId(value)} (${t('not in your Codex CLI list')})` : prettifyModelId(value) }, ...options]
+                ? [{ id: value, name: hasCatalog ? `${prettifyModelId(value)} (${t('not in the current provider list')})` : prettifyModelId(value) }, ...options]
                 : options}
             onChange={onSelect}
             placeholder={t("Select a model")}
@@ -2478,12 +2435,15 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         requestAnimationFrame(() => tabRefs.current[nextId]?.focus());
     };
 
-    // --- Local (Codex CLI) ---
-    const [codexCliConfig, setCodexCliConfig] = useState({ enabled: false, path: 'codex', model: 'gpt-5.5', fastModel: 'gpt-5.5', timeoutMs: 60000, sandboxMode: 'read-only' as string, serviceTier: 'default', modelReasoningEffort: undefined as string | undefined });
-    // The installed Codex CLI's model list (models_cache.json); null until read.
+    // --- OpenAI Codex ---
+    const [codexCliConfig, setCodexCliConfig] = useState({ enabled: false, path: 'codex', model: '', fastModel: '', timeoutMs: 60000, sandboxMode: 'read-only' as string, serviceTier: 'default', modelReasoningEffort: undefined as string | undefined });
     const [codexModelCatalog, setCodexModelCatalog] = useState<CodexModelCatalogResult | null>(null);
     const codexModels = codexModelOptions(codexModelCatalog);
-    const codexModelsFromCli = codexModelCatalog?.source === 'codex-cli' && codexModelCatalog.models.length > 0;
+    const codexHasCatalog = codexModels.length > 0;
+    const selectedCodexModel = codexModels.find(model => model.id === codexCliConfig.model);
+    const [codexCatalogRefreshing, setCodexCatalogRefreshing] = useState(false);
+    const codexAuthLoad = useRef(0);
+    const codexCatalogRefresh = useRef(0);
     const [codexCliStatus, setCodexCliStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
     const [codexCliError, setCodexCliError] = useState('');
     const [codexAuthAction, setCodexAuthAction] = useState<'idle' | 'status' | 'logout' | 'login' | 'doctor'>('idle');
@@ -2659,6 +2619,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     // Load Initial Data
     useEffect(() => {
         const loadCredentials = async () => {
+            const codexRun = ++codexAuthLoad.current;
             try {
                 setCredentialsLoaded(false);
                 // Load credentials FIRST so canUseFastMode is correct before we set fastResponseMode.
@@ -2734,20 +2695,24 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 // canUseFastMode will be correct when the enforcement effect runs.
                 // @ts-ignore
                 const cliConfig = await window.electronAPI?.getCodexCliConfig?.();
-                if (cliConfig) setCodexCliConfig(cliConfig as typeof codexCliConfig);
-                const cliCatalog = await window.electronAPI?.getCodexCliModels?.().catch(() => null);
-                if (cliCatalog) setCodexModelCatalog(cliCatalog);
-
+                if (cliConfig && codexRun === codexAuthLoad.current) setCodexCliConfig(cliConfig as typeof codexCliConfig);
                 // Codex OAuth status — read once on mount so the Settings UI
                 // shows the right state without waiting for a user click.
                 const signIn = await readCodexSignInStatus();
                 if (signIn) {
-                    setCodexOauthStatus(signIn);
+                    // Cache-only first: never block Settings on the network.
+                    const cached = signIn.signedIn
+                        ? await window.electronAPI?.getCodexCliModels?.().catch(() => null)
+                        : null;
+                    if (codexRun === codexAuthLoad.current) {
+                        if (cached) setCodexModelCatalog(cached);
+                        setCodexOauthStatus(signIn);
+                    }
                     // A `codex login` session makes Codex usable with no sign-in
                     // step in Natively, so nothing else would flip `enabled` on
                     // (Natively's own sign-in does it in onCodexLoginComplete).
                     // The provider switch on the card stays the user's off switch.
-                    if (signIn.source === 'codex-cli' && cliConfig && !cliConfig.enabled) {
+                    if (codexRun === codexAuthLoad.current && signIn.source === 'codex-cli' && cliConfig && !cliConfig.enabled) {
                         const result = await window.electronAPI?.setCodexCliConfig?.({ ...cliConfig, enabled: true });
                         if (result?.config) setCodexCliConfig(result.config as typeof codexCliConfig);
                     }
@@ -2896,9 +2861,9 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 opts.push({ id: pm, name: prettifyModelId(pm) });
             }
         }
-        if (isCodexReady && isProviderEnabled('codex-cli')) {
-            const configuredName = codexModels.find(model => model.id === codexCliConfig.model)?.name || prettifyModelId(codexCliConfig.model);
-            opts.push({ id: CODEX_CLI_MODEL.id, name: `${CODEX_CLI_MODEL.name} (${configuredName})` });
+        const configuredCodexModel = codexModels.find(model => model.id === codexCliConfig.model);
+        if (isCodexReady && configuredCodexModel && isProviderEnabled('codex-cli')) {
+            opts.push({ id: CODEX_CLI_MODEL.id, name: `${CODEX_CLI_MODEL.name} (${configuredCodexModel.name})` });
             codexModels.forEach(model => {
                 const id = codexCliSelectorId(model.id);
                 if (!opts.find(o => o.id === id)) {
@@ -3269,6 +3234,10 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             }
             if (api?.onCodexSignedOut) {
                 unsubs.push(api.onCodexSignedOut(() => {
+                    ++codexAuthLoad.current;
+                    ++codexCatalogRefresh.current;
+                    setCodexModelCatalog(null);
+                    setCodexCatalogRefreshing(false);
                     setCodexOauthStatus({ signedIn: false });
                     setCodexAuthStatus('idle');
                     setCodexAuthMessage(t('Signed out of ChatGPT.'));
@@ -3286,6 +3255,67 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         } catch { /* subscriptions are best-effort */ }
         return () => { for (const u of unsubs) try { u(); } catch { /* noop */ } };
     }, []);
+
+    const refreshCodexCatalog = useCallback(async () => {
+        if (!codexOauthStatus.signedIn || !window.electronAPI?.refreshCodexModels) return;
+        const run = ++codexCatalogRefresh.current;
+        setCodexCatalogRefreshing(true);
+        try {
+            const catalog = await window.electronAPI.refreshCodexModels();
+            if (run !== codexCatalogRefresh.current) return;
+            setCodexModelCatalog(catalog);
+            if (catalog.models.length > 0) {
+                setCodexCliConfig(prev => {
+                    const ids = new Set(catalog.models.map(model => model.id));
+                    const model = ids.has(prev.model) ? prev.model : catalog.models[0].id;
+                    const fastModel = ids.has(prev.fastModel) ? prev.fastModel : model;
+                    const selected = catalog.models.find(item => item.id === model);
+                    const effortIds = new Set(selected?.reasoningLevels.map(level => level.id) || []);
+                    const tierIds = new Set(selected?.serviceTiers.map(tier => tier.id) || []);
+                    const next = {
+                        ...prev,
+                        model,
+                        fastModel,
+                        modelReasoningEffort: prev.modelReasoningEffort && effortIds.has(prev.modelReasoningEffort)
+                            ? prev.modelReasoningEffort
+                            : undefined,
+                        serviceTier: prev.serviceTier === 'default' || tierIds.has(prev.serviceTier)
+                            ? prev.serviceTier
+                            : 'default',
+                    };
+                    if (next.model !== prev.model || next.fastModel !== prev.fastModel
+                        || next.modelReasoningEffort !== prev.modelReasoningEffort
+                        || next.serviceTier !== prev.serviceTier) {
+                        window.electronAPI?.setCodexCliConfig?.(next);
+                    }
+                    return next;
+                });
+            } else if (catalog.source === 'provider-live') {
+                setCodexCliConfig(prev => {
+                    const next = {
+                        ...prev,
+                        model: '',
+                        fastModel: '',
+                        modelReasoningEffort: undefined,
+                        serviceTier: 'default',
+                    };
+                    window.electronAPI?.setCodexCliConfig?.(next);
+                    return next;
+                });
+            }
+        } catch {
+            if (run !== codexCatalogRefresh.current) return;
+            setCodexModelCatalog(prev => prev ? { ...prev, refreshError: 'network' } : {
+                source: 'unavailable', models: [], refreshError: 'network',
+            });
+        } finally {
+            if (run === codexCatalogRefresh.current) setCodexCatalogRefreshing(false);
+        }
+    }, [codexOauthStatus.signedIn, codexOauthStatus.source, codexOauthStatus.email]);
+
+    // The first authenticated Settings mount and every later Settings reload
+    // refresh asynchronously. Signed-out mounts never contact the provider.
+    useEffect(() => { void refreshCodexCatalog(); }, [refreshCodexCatalog]);
 
     // Load Screen Understanding (vision routing) settings
     useEffect(() => {
@@ -3454,8 +3484,6 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             const configToTest = saveResult?.config || codexCliConfig;
             const result = await window.electronAPI?.testCodexCli?.(configToTest);
             if (result?.success) {
-                // If the main process auto-detected an install, reflect the
-                // resolved path in the form so the user sees what got picked.
                 if (result.config) setCodexCliConfig(result.config as typeof codexCliConfig);
                 setCodexCliStatus('success');
                 setTimeout(() => setCodexCliStatus('idle'), 3000);
@@ -3494,7 +3522,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 if (result?.success) {
                     setCodexAuthStatus('success');
                     setCodexAuthMessage(`${t('Signed in to ChatGPT')}${result.email ? ` ${t('as')} ${result.email}` : ''}.`);
-                    setCodexOauthStatus({ signedIn: true, email: result.email, expiresAt: result.expiresAt });
+                    setCodexOauthStatus({ signedIn: true, source: 'natively', email: result.email, expiresAt: result.expiresAt });
                 } else {
                     setCodexAuthStatus('error');
                     setCodexAuthMessage(result?.error || t('Codex sign-in failed.'));
@@ -4061,12 +4089,12 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
 
 <div
                     className={`aip-card p-5 flex items-center justify-between gap-4 ${!canUseFastMode ? 'opacity-50 grayscale' : ''}`}
-                    title={!canUseFastMode ? t("Requires Groq, Natively API, or Codex CLI to be configured") : ""}
+                    title={!canUseFastMode ? t("Requires Groq, Natively API, or OpenAI Codex to be configured") : ""}
                 >
                     <div className="flex-1 min-w-0">
                         {/* No "Needs Groq" badge. It named ONE of the three
                             providers that satisfy canUseFastMode (Groq, Natively
-                            API, Codex CLI), so it read as a hard Groq dependency
+                            API, OpenAI Codex), so it read as a hard Groq dependency
                             that does not exist — and the line below already
                             states the real requirement in full, as does the
                             card's title. A badge carries only what no other
@@ -4074,7 +4102,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('Fast Response Mode')}</label>
                         <p className="text-[10px] aip-muted mt-0.5">{t('Uses the fastest available provider instead of your selected model.')}</p>
                         {!canUseFastMode && (
-                            <p className="text-xs aip-warn-fg mt-0.5 font-medium">{t('Requires Groq, Natively API, or Codex CLI to be configured.')}</p>
+                            <p className="text-xs aip-warn-fg mt-0.5 font-medium">{t('Requires Groq, Natively API, or OpenAI Codex to be configured.')}</p>
                         )}
                     </div>
                     {/* aria-disabled, not disabled: the onClick guard below is the
@@ -4087,7 +4115,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         label={t('Fast Response Mode')}
                         onChange={async () => {
                             if (!canUseFastMode) {
-                                alert(t("Please configure Groq, Natively API, or Codex CLI first to enable Fast Response Mode."));
+                                alert(t("Please configure Groq, Natively API, or OpenAI Codex first to enable Fast Response Mode."));
                                 return;
                             }
                             const newState = !fastResponseMode;
@@ -4449,18 +4477,6 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     </>}
                 </div>
 
-                {/* The Codex CLI's `codex login` works too, read-only: Natively
-                    never refreshes it (that would sign the CLI out), so an
-                    expired one is refreshed from the CLI side. */}
-                {!codexOauthStatus.signedIn && (
-                    <p className="text-xs aip-muted">
-                        {codexOauthStatus.cliLogin === 'expired'
-                            ? t('Your Codex CLI login has expired — run any `codex` command to refresh it, or sign in with ChatGPT here.')
-                            : codexOauthStatus.cliLogin === 'api-key'
-                                ? t('Your Codex CLI is logged in with an API key, which Codex here cannot use — sign in with ChatGPT here, or run `codex login` with your ChatGPT account.')
-                                : t('Or run `codex login` in a terminal — Natively can use that ChatGPT login too.')}
-                    </p>
-                )}
                 {codexOauthStatus.signedIn && codexOauthStatus.source === 'codex-cli' && (
                     <p className="text-xs aip-muted">
                         {t('Natively uses this login read-only. When it expires, run any `codex` command to refresh it.')}
@@ -4476,12 +4492,41 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 {/* Model + settings — only shown once signed in */}
                 {codexOauthStatus.signedIn && (
                         <>
-                            {codexModelsFromCli && (
-                                <p className="text-xs aip-muted">
-                                    {t('Model list from your Codex CLI')}
+                            <div className="flex items-center justify-between gap-3">
+                                <p className={`text-xs ${codexModelCatalog?.refreshError ? 'aip-warn-fg' : 'aip-muted'}`} role="status">
+                                    {codexCatalogRefreshing
+                                        ? t('Refreshing models from OpenAI…')
+                                        : codexModelCatalog?.source === 'provider-live'
+                                            ? t('Model list fetched from OpenAI')
+                                            : codexModelCatalog?.source === 'memory-cache'
+                                                ? t('Using the last model list fetched from OpenAI')
+                                                : t('No provider model list is available yet.')}
                                     {codexModelCatalog?.fetchedAt && !Number.isNaN(Date.parse(codexModelCatalog.fetchedAt))
-                                        ? ` · ${t('updated')} ${new Date(codexModelCatalog.fetchedAt).toLocaleDateString()}`
+                                        ? ` · ${t('updated')} ${new Date(codexModelCatalog.fetchedAt).toLocaleString()}`
                                         : ''}
+                                    {codexModelCatalog?.refreshError && codexHasCatalog
+                                        ? ` · ${t('Refresh failed; the in-memory list may be stale.')}`
+                                        : ''}
+                                </p>
+                                <button
+                                    type="button"
+                                    className="aip-btn-secondary shrink-0"
+                                    disabled={codexCatalogRefreshing}
+                                    onClick={() => { void refreshCodexCatalog(); }}
+                                >
+                                    <RefreshCw size={13} className={codexCatalogRefreshing ? 'animate-spin' : ''} />
+                                    {t('Refresh')}
+                                </button>
+                            </div>
+                            {!codexHasCatalog && !codexCatalogRefreshing && (
+                                <p className="text-xs aip-warn-fg" role="alert">
+                                    {codexModelCatalog?.refreshError === 'auth'
+                                        ? t('OpenAI rejected the current ChatGPT session. Sign in again to refresh models.')
+                                        : codexModelCatalog?.refreshError === 'rate-limited'
+                                            ? t('OpenAI rate-limited the model refresh. Try again shortly.')
+                                            : codexModelCatalog?.source === 'provider-live'
+                                                ? t('OpenAI returned no models available for this account. No hardcoded model list will be substituted.')
+                                                : t('Natively could not fetch models from OpenAI. Check your connection or reconnect ChatGPT. No hardcoded model list will be substituted.')}
                                 </p>
                             )}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -4489,17 +4534,30 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                     label={t("Model")}
                                     value={codexCliConfig.model}
                                     options={codexModels}
-                                    fromCodexCli={codexModelsFromCli}
+                                    hasCatalog={codexHasCatalog}
                                     onSelect={(model) => {
-                                        setCodexCliConfig(prev => ({ ...prev, model }));
-                                        saveCodexCliConfig({ ...codexCliConfig, model });
+                                        const selected = codexModels.find(item => item.id === model);
+                                        const efforts = new Set(selected?.reasoningLevels.map(level => level.id) || []);
+                                        const tiers = new Set(selected?.serviceTiers.map(tier => tier.id) || []);
+                                        const next = {
+                                            ...codexCliConfig,
+                                            model,
+                                            modelReasoningEffort: codexCliConfig.modelReasoningEffort && efforts.has(codexCliConfig.modelReasoningEffort)
+                                                ? codexCliConfig.modelReasoningEffort
+                                                : undefined,
+                                            serviceTier: codexCliConfig.serviceTier === 'default' || tiers.has(codexCliConfig.serviceTier)
+                                                ? codexCliConfig.serviceTier
+                                                : 'default',
+                                        };
+                                        setCodexCliConfig(next);
+                                        saveCodexCliConfig(next);
                                     }}
                                 />
                                 <CodexCliModelField
                                     label={t("Fast Mode Model")}
                                     value={codexCliConfig.fastModel}
                                     options={codexModels}
-                                    fromCodexCli={codexModelsFromCli}
+                                    hasCatalog={codexHasCatalog}
                                     onSelect={(fastModel) => {
                                         setCodexCliConfig(prev => ({ ...prev, fastModel }));
                                         saveCodexCliConfig({ ...codexCliConfig, fastModel });
@@ -4509,32 +4567,25 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                     <span className="aip-label">{t('Reasoning Effort')}</span>
                                     <ModelSelect
                                         value={(() => {
-                                            const valid = getValidCodexReasoningEfforts(codexCliConfig.model);
                                             if (!codexCliConfig.modelReasoningEffort) return '';
-                                            return valid.includes(codexCliConfig.modelReasoningEffort)
+                                            return selectedCodexModel?.reasoningLevels.some(level => level.id === codexCliConfig.modelReasoningEffort)
                                                 ? codexCliConfig.modelReasoningEffort
                                                 : '';
                                         })()}
-                                        options={(() => {
-                                            const valid = getValidCodexReasoningEfforts(codexCliConfig.model);
-                                            return [
-                                                { id: '', name: t('None (default)') },
-                                                ...CODEX_MODEL_REASONING_EFFORTS
-                                                    .filter(e => e !== 'none' && valid.includes(e))
-                                                    .map(e => ({ id: e, name: e.charAt(0).toUpperCase() + e.slice(1) })),
-                                            ];
-                                        })()}
+                                        options={[
+                                            { id: '', name: t('Provider default') },
+                                            ...(selectedCodexModel?.reasoningLevels || []).map(level => ({ id: level.id, name: level.name })),
+                                        ]}
                                         onChange={(effort) => saveCodexCliConfig({ ...codexCliConfig, modelReasoningEffort: effort || undefined })}
                                         placeholder={t("None (default)")}
                                     />
                                     {(() => {
-                                        const valid = getValidCodexReasoningEfforts(codexCliConfig.model);
                                         const saved = codexCliConfig.modelReasoningEffort;
-                                        if (saved && !valid.includes(saved)) {
+                                        if (saved && !selectedCodexModel?.reasoningLevels.some(level => level.id === saved)) {
                                             return (
                                                 <p className="aip-meta aip-warn-fg flex items-center gap-1.5">
                                                     <AipBadge tone="warn" label={t('Unsupported')} />
-                                                    '{saved}' {t("unsupported by this model — will default to 'low'.")}
+                                                    '{saved}' {t('is not advertised for this model; the provider default will be used.')}
                                                 </p>
                                             );
                                         }
@@ -4545,8 +4596,11 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                     <span className="aip-label">{t('Service Tier')}</span>
                                     <ModelSelect
                                         value={codexCliConfig.serviceTier ?? 'default'}
-                                        options={CODEX_SERVICE_TIERS.map(t => ({ id: t, name: t.charAt(0).toUpperCase() + t.slice(1) }))}
-                                        onChange={(serviceTier) => saveCodexCliConfig({ ...codexCliConfig, serviceTier: serviceTier as typeof CODEX_SERVICE_TIERS[number] })}
+                                        options={[
+                                            { id: 'default', name: t('Default') },
+                                            ...(selectedCodexModel?.serviceTiers || []).map(tier => ({ id: tier.id, name: tier.name })),
+                                        ]}
+                                        onChange={(serviceTier) => saveCodexCliConfig({ ...codexCliConfig, serviceTier })}
                                         placeholder={t("Default")}
                                     />
                                 </label>

@@ -2053,6 +2053,7 @@ export class LLMHelper {
     // accepts the router's 'codex'.
     if (this.isProviderDisabled('codex-cli')) return false;
     if (!this.codexCliConfig.enabled) return false;
+    if (!this.codexCliConfig.model) return false;
     try {
       // Natively's own ChatGPT sign-in OR the Codex CLI's `codex login`.
       return getCodexAuthStatus().signedIn;
@@ -2073,6 +2074,9 @@ export class LLMHelper {
   public getCodexSelectionAuthError(): string | null {
     if (!this.isCodexCliModel(this.currentModelId)) return null;
     if (this.isProviderDisabled('codex-cli') || !this.codexCliConfig.enabled) return null;
+    if (!this.codexCliConfig.model) {
+      return 'No Codex model is selected. Open Settings → AI Providers → OpenAI Codex and refresh the model list.';
+    }
     try {
       const status = getCodexAuthStatus();
       return status.signedIn ? null : codexSignedOutMessage(status);
