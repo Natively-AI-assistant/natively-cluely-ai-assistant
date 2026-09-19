@@ -1,0 +1,75 @@
+#!/usr/bin/env node
+// Profile Intelligence (résumé + JD) retrieval-scale harness.
+//
+// Drives the REAL V3 profile path — createProfileRetrievalPort → orchestrate()
+// → packContext() — over the generated résumé/JD fixtures, as profile
+// documents (NOT mode attachments). No LLM, no DB.
+//
+//   node experiments/retrieval-scale/run-profile.mjs [--mode looking-for-work] [--structured heuristic|none] [--sizes 5k,15k]
+//
+// `structured`: what the ingest's structuring step produced.
+//   heuristic  premium HeuristicExtractor — what a user gets when the
+//              structuring LLM call fails or times out (silent fallback)
+//   none       raw text only — the lossless floor the port always has
+// A real LLM extraction sits between/above these; it cannot be produced offline.
+import fs from 'node:fs';
+import path from 'node:path';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.resolve(HERE, '../..');
+const require = createRequire(import.meta.url);
+const dist = (p) => require(path.join(ROOT, 'dist-electron', p));
+const argv = process.argv.slice(2);
+const arg = (k, d) => { const i = argv.indexOf(`--${k}`); return i >= 0 ? argv[i + 1] : d; };
+const MODE = arg('mode', 'looking-for-work');
+const STRUCTURED = arg('structured', 'heuristic');
+const SIZES = arg('sizes', '5k,15k,30k,70k').split(',');
+const OUT = arg('out', path.join(HERE, 'out', `profile_${MODE}_${STRUCTURED}${argv.includes('--plain') ? '_plain' : ''}.json`));
+const keep = console.log; console.warn = () => {}; console.info = () => {}; console.log = () => {};
+const say = (...a) => keep(...a);
+
+const { orchestrate } = dist('electron/context-intelligence/orchestration/orchestrator.js');
+const { createProfileRetrievalPort } = dist('electron/context-intelligence/retrieval/profile-retrieval-port.js');
+const { resolveModePolicy } = dist('electron/context-intelligence/policies/mode-policy-registry.js');
+const { packContext } = dist('electron/context-intelligence/generation/context-packer.js');
+const { heuristicResumeExtract, heuristicJDExtract } = dist('premium/electron/knowledge/HeuristicExtractor.js');
+const MAX_PROFILE_DOCUMENT_CHARS = 200_000; // premium/electron/knowledge/DocumentReader.ts
+
+const unesc = (s) => s.replace(/&quot;/g, '"').replace(/&apos;|&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+const norm = (s) => unesc(s).toLowerCase().replace(/\s+/g, ' ').trim();
+const carries = (text, q) => { const t = norm(text); return q.must.every((m) => t.includes(norm(m).slice(0, 90))); };
+
+const policy = resolveModePolicy(MODE);
+const questions = JSON.parse(fs.readFileSync(path.join(HERE, 'out/questions.json'), 'utf8')).filter((q) => q.kind !== 'reference' && q.must?.length);
+const rows = [];
+for (const size of SIZES) {
+  const docs = ['resume', 'jd'].map((kind) => {
+    // --plain: what a PDF extraction yields — no markdown heading marks, no bold.
+    const md = fs.readFileSync(path.join(HERE, 'out', `${kind}_${size}.md`), 'utf8');
+    const rawText = argv.includes('--plain') ? md.replace(/^#+\s*/gm, '').replace(/\*\*/g, '').replace(/^```$/gm, '') : md;
+    const structured = STRUCTURED === 'none' ? null : (kind === 'resume' ? heuristicResumeExtract(rawText) : heuristicJDExtract(rawText));
+    return { kind, sourceId: `p-${kind}`, versionId: 'v1', fileName: `${kind}_${size}.md`, structured, rawText, chars: rawText.length };
+  });
+  for (const d of docs) if (d.chars > MAX_PROFILE_DOCUMENT_CHARS) say(`NOTE [${size}] ${d.fileName}: ${d.chars} chars > ${MAX_PROFILE_DOCUMENT_CHARS} — the real upload REJECTS this file (DocumentReader); retrieval below is hypothetical`);
+  const port = createProfileRetrievalPort({ docs, allowedSourceTypes: policy.allowedSourceTypes, profileSources: policy.profileSources, userId: 'local' });
+  if (!port) { say(`[${size}] no profile port (mode ${MODE} has no profileSources?)`); continue; }
+  for (const q of questions.filter((x) => x.size === size)) {
+    const r = await orchestrate({ requestId: q.id, requestSequence: 1, surface: 'manual_chat', modeId: MODE, scope: { userId: 'local' }, sessionId: `s-${q.id}`, manualQuestion: q.question, hasAttachedDocuments: true, attachedFileNames: [], profileOnlyDocuments: true /* what engine-bridge sets: 0 mode files, 2 profile docs */ }, port);
+    const packed = packContext(r.decision, r.evidence, { evidenceTokens: policy.contextBudget.evidenceTokens * (r.decision.retrievalPlan.exhaustive ? 3 : 1), conversationTokens: policy.contextBudget.conversationTokens, transcriptTokens: policy.contextBudget.transcriptTokens });
+    const rej = r.trace.retrievalAttempts.flatMap((a) => a.rejections ?? []).map((x) => x.reason);
+    rows.push({ id: q.id, kind: q.kind, size, variant: q.variant, type: q.type, retrieved: r.decision.retrievalPlan.shouldRetrieve === true, planned: r.decision.retrievalPlan.sourceTypes, claims: r.decision.claimRequirements.map((c) => c.claimType),
+      retr: null, evid: r.evidence.some((e) => carries(e.content, q)), pack: packed.evidenceBlock.split('</evidence>').some((b) => carries(b, q)), evidCount: r.evidence.length, packCount: packed.includedEvidenceIds.length, fallback: r.trace.fallbackUsed, rejections: [...new Set(rej)] });
+  }
+}
+fs.writeFileSync(OUT, JSON.stringify(rows, null, 1));
+const rate = (xs, f) => (xs.length ? `${Math.round((100 * xs.filter(f).length) / xs.length)}%`.padStart(4) : '   -');
+say(`\nprofile path  mode=${MODE} structured=${STRUCTURED}  (${rows.length} questions)`);
+say('size  kind     n   routed  evid  pack   | lex  para  stt | planted sibling (pack)');
+for (const size of SIZES) for (const kind of ['resume', 'jd', 'ALL']) {
+  const xs = rows.filter((r) => r.size === size && (kind === 'ALL' || r.kind === kind));
+  if (!xs.length) continue;
+  say(`${size.padEnd(5)} ${kind.padEnd(7)} ${String(xs.length).padStart(3)}  ${rate(xs, (r) => r.retrieved)}   ${rate(xs, (r) => r.evid)}  ${rate(xs, (r) => r.pack)}   | ${['lex', 'para', 'stt'].map((v) => rate(xs.filter((r) => r.variant === v), (r) => r.pack)).join('  ')} | ${rate(xs.filter((r) => r.type !== 'sibling'), (r) => r.pack)}    ${rate(xs.filter((r) => r.type === 'sibling'), (r) => r.pack)}`);
+}
+say(`-> ${path.relative(ROOT, OUT)}`);
