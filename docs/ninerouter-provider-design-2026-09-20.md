@@ -175,12 +175,30 @@ Presence gate is the **base URL**, not the key (`modelAvailable`,
   active-model options. `aiProviderMarks.ts`: brand + mark.
 - Tests (see below).
 
-### Phase 2 — Vision
+### Phase 2 — Vision — DONE (2026-09-21)
 
-`VisionProviderRegistry` builder + `buildVisionProviders()` seat, selected-only
-like every gateway (`isConfigured: !!baseURL && isSelected`), plus the
-front-load at `LLMHelper.ts:6812` and the streaming vision rung at `:6718`.
-Gated on per-model `capabilities.vision` rather than assumed true.
+Registry builder + `buildVisionProviders()` seat, the streaming vision rung,
+the blocking cascade branch, the `generateWithProviderForVision` arm, and the
+front-load. Selected-only like every gateway.
+
+`supportsVision` is **answered, not assumed** — the one place this integration
+deliberately diverges from LiteLLM. Live: 30 of 47 capable, 17 not.
+
+**Measured, and it changes the argument**: sending an image to one of the 17
+returns **HTTP 200**. 9Router does not reject it; the upstream answers without
+having seen it. So the alternative to this gate is not an error the chain can
+fail over from — it is a confident answer that silently ignored the
+screenshot.
+
+LiteLLM's lesson is kept in the other direction: an empty capability set means
+the catalogue was never fetched, which is UNKNOWN, never "no", and still seats
+the rung. The registry needs this synchronously with no handle on LLMHelper's
+cache, so discovery persists the vision-capable subset beside the model list
+and both drop together on a repoint.
+
+Live-verified: a real PNG through `streamWithNinerouter` to
+`gemini/gemini-3.6-flash` returned "Red" in 7.9s
+(`scripts/verify-ninerouter-vision.mjs`).
 
 ### Phase 3 — Embeddings
 
@@ -314,5 +332,5 @@ tier answered, never as the identity of the selected model.
   answered for the normal path; what the response looks like when 9Router
   exhausts a tier and falls through to another provider mid-request is still
   unseen, and would need a deliberately exhausted upstream to produce.
-- **Phases 2-4 are not built**: vision, embeddings, Direct Assist and the
-  overlay model picker.
+- **Phases 3-4 are not built**: embeddings, Direct Assist and the overlay
+  model picker.
