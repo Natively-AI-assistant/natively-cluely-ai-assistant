@@ -129,6 +129,49 @@ Tests added: `RetrievalScaleLexical`, `CorpusArbitration`, `ProfileDocumentReach
 `LocalEmbedderVectorsOutsideMeeting` (all `2026_09_19`). Full run: 10,961 pass / 0 fail / 56 skipped / 1 todo (the todo pins a known limit: anchors are a bag
 of words, so "pod 10" and "10 engineers … pod 15" tie).
 
+## READ THIS FIRST — what real files and independent review found (2026-09-21)
+
+The owner doubted this work ("vibe coded, chances of it not working are very high"). He was right, and
+three checks that did not share my assumptions showed it. **Every "plain text" number further down this
+file came from regex-stripping markdown, which keeps the blank lines a real PDF does not have. They
+describe no real file.** The rows below replace them.
+
+**1. Real files through the app's real extractor.** The fixtures were printed to real PDFs (Electron
+`printToPDF`) and real DOCX (`textutil`) and read back with `extractSafeDocumentText` (pdf-parse /
+mammoth). A real PDF: blank-line ratio 0.02, lines hard-wrapped near 80 characters, bullet marks gone,
+`[Page N]` markers — the heading detector found **0 of 36…425 headings on all twelve files**. A real
+DOCX: a blank line after *every* paragraph, so each config line and table cell became a heading —
+1,252 false headings in one 70k handbook. Harness: `--text-dir <dir> --text-ext pdf|docx`.
+
+| mode path, real files, of 162, 5k/15k/30k/70k | before | after the dense-text detector |
+|---|---|---|
+| PDF · vectors | 103 / 125 / 114 / 129 | 154 / 154 / 152 / 151 |
+| PDF · lexical | 101 / 122 / 114 / 124 | 143 / 142 / 141 / 141 |
+| DOCX · vectors | 156 / 156 / 154 / 154 | 156 / 156 / 153 / 152 (false headings 1,252 → 7) |
+| DOCX · lexical | 146 / 146 / 145 / 145 | 145 / 144 / 143 / 143 |
+
+**2. Held-out questions**, written by an agent that was allowed to read only the three 15k documents
+(`--questions`; 120 answerable, needles verified unique). Of 120: markdown 105 vectors / 98 lexical, real
+PDF 105 / 96, real DOCX 103 / 96 — **87%, against the 98% my own questions report.** Lexical questions
+98–100%, paraphrases 85–90% with vectors and 67% without, spoken-style 74–77%. The spoken-style
+questions are the weakest class and the next thing to work on.
+
+**3. Four independent review agents**, read-only, required to confirm by running the built code. They
+confirmed 20+ defects behind a fully green test suite; the fixes are commits `b531366d`, `d3dd18cd`,
+`79c6e841` and premium `d9a334e`. The ones that mattered most: the stale-index gate protected exactly
+one query; a failed embedding batch fell to a path that demotes the session to the bundled model (the
+bug batching was written to fix — my test stubbed the failing path away); the rate-limit breaker
+disabled structured generation for a user whose only provider is OpenAI; a deleted résumé's text and
+vectors stayed on disk; the query rewrite fired on 8 of 18 ordinary live interview turns, could take a
+turn from NONE to FULL by writing the word "experience", and its model call could fall into a
+multi-provider ladder with a subprocess; the semantic arm lost on pure paraphrases (the case it exists
+for), had no deadline and failed silently.
+
+Still open, for the owner: on a profile-only turn the corpus rule for employment questions can report
+job-description evidence as support for a question about the user's own past ("Have I ever been on
+call?" → FULL). A blunt exclusion was written and reverted within the hour — it made job-description
+questions unanswerable. Not re-run live: nothing in this section has been exercised in the running app.
+
 ## Sentence-case headings were invisible in extracted text (2026-09-20)
 
 Chunker v3's plain-text heading detection accepted Title Case and ALL CAPS only. 7 of a job
