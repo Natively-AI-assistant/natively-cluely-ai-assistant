@@ -12413,45 +12413,49 @@ let isMultimodal = !!(imagePaths?.length);
 
     // ATTEMPT 3: Gemini Flash-Lite (cheapest/fastest — leads the Gemini cascade).
     // 3 attempts with linear backoff before dropping to full Flash.
-    console.log(`[LLMHelper] Attempting Gemini Flash-Lite for summary...`);
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        const text = await this.withTimeout(
-          this.generateContent(contents, GEMINI_FLASH_LITE_MODEL),
-          45000,
-          `Gemini Flash-Lite Summary (Attempt ${attempt})`
-        );
-        if (text.trim().length > 0) {
-          console.log(`[LLMHelper] ✅ Gemini Flash-Lite summary generated successfully (Attempt ${attempt}).`);
-          return this.processResponse(text);
-        }
-      } catch (e: any) {
-        console.warn(`[LLMHelper] ⚠️ Gemini Flash-Lite attempt ${attempt}/3 failed: ${e.message}`);
-        if (attempt < 3) {
-          await new Promise(r => setTimeout(r, 1000 * attempt)); // Linear backoff
+    if (this.client) {
+      console.log(`[LLMHelper] Attempting Gemini Flash-Lite for summary...`);
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const text = await this.withTimeout(
+            this.generateContent(contents, GEMINI_FLASH_LITE_MODEL),
+            45000,
+            `Gemini Flash-Lite Summary (Attempt ${attempt})`
+          );
+          if (text.trim().length > 0) {
+            console.log(`[LLMHelper] ✅ Gemini Flash-Lite summary generated successfully (Attempt ${attempt}).`);
+            return this.processResponse(text);
+          }
+        } catch (e: any) {
+          console.warn(`[LLMHelper] ⚠️ Gemini Flash-Lite attempt ${attempt}/3 failed: ${e.message}`);
+          if (attempt < 3) {
+            await new Promise(r => setTimeout(r, 1000 * attempt)); // Linear backoff
+          }
         }
       }
-    }
 
-    // ATTEMPT 4: Gemini Flash (with 2 retries = 3 attempts total)
-    console.log(`[LLMHelper] ⚠️ Flash-Lite exhausted. Switching to Gemini Flash...`);
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        const text = await this.withTimeout(
-          this.generateWithFlash(contents),
-          45000,
-          `Gemini Flash Summary (Attempt ${attempt})`
-        );
-        if (text.trim().length > 0) {
-          console.log(`[LLMHelper] ✅ Gemini Flash summary generated successfully (Attempt ${attempt}).`);
-          return this.processResponse(text);
-        }
-      } catch (e: any) {
-        console.warn(`[LLMHelper] ⚠️ Gemini Flash attempt ${attempt}/3 failed: ${e.message}`);
-        if (attempt < 3) {
-          await new Promise(r => setTimeout(r, 1000 * attempt)); // Linear backoff
+      // ATTEMPT 4: Gemini Flash (with 2 retries = 3 attempts total)
+      console.log(`[LLMHelper] ⚠️ Flash-Lite exhausted. Switching to Gemini Flash...`);
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const text = await this.withTimeout(
+            this.generateWithFlash(contents),
+            45000,
+            `Gemini Flash Summary (Attempt ${attempt})`
+          );
+          if (text.trim().length > 0) {
+            console.log(`[LLMHelper] ✅ Gemini Flash summary generated successfully (Attempt ${attempt}).`);
+            return this.processResponse(text);
+          }
+        } catch (e: any) {
+          console.warn(`[LLMHelper] ⚠️ Gemini Flash attempt ${attempt}/3 failed: ${e.message}`);
+          if (attempt < 3) {
+            await new Promise(r => setTimeout(r, 1000 * attempt)); // Linear backoff
+          }
         }
       }
+    } else {
+      console.log(`[LLMHelper] Gemini client not initialized — skipping Gemini Flash-Lite / Flash.`);
     }
 
     // ATTEMPT 5: Gemini Pro

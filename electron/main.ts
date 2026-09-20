@@ -8182,8 +8182,8 @@ export class AppState {
         appName = "Natively";
         if (isMac) {
           iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "natively.icns")
-            : path.join(app.getAppPath(), "assets/natively.icns");
+            ? path.join(process.resourcesPath, "assets/icon.png")
+            : path.join(app.getAppPath(), "assets/icon.png");
         } else if (isWin) {
           iconPath = app.isPackaged
             ? path.join(process.resourcesPath, "assets/icons/win/icon.ico")
@@ -8225,7 +8225,7 @@ export class AppState {
       if (isMac) {
         // Skip dock icon update when dock is hidden to avoid potential flicker
         if (!this.isUndetectable) {
-          if (app.dock) app.dock.setIcon(image);  // app.dock is macOS-only (undefined elsewhere); isMac gated at 7244
+          if (app.dock && !image.isEmpty()) app.dock.setIcon(image);  // app.dock is macOS-only (undefined elsewhere); isMac gated at 7244
         }
       } else {
         // Windows/Linux: Update all window icons
