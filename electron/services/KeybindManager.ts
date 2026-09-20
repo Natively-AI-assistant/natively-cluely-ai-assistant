@@ -25,7 +25,7 @@ export const DEFAULT_KEYBINDS: KeybindConfig[] = [
     { id: 'general:toggle-mouse-passthrough', label: 'Toggle Mouse Passthrough', accelerator: 'CommandOrControl+Shift+B', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+B' },
     { id: 'general:process-screenshots', label: 'Process Screenshots', accelerator: 'CommandOrControl+Enter', isGlobal: true, defaultAccelerator: 'CommandOrControl+Enter' },
     { id: 'general:capture-and-process', label: 'Capture Screen & Ask AI (Global)', accelerator: 'CommandOrControl+Shift+Enter', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+Enter' },
-    { id: 'general:reset-cancel', label: 'Reset / Cancel', accelerator: 'CommandOrControl+R', isGlobal: true, defaultAccelerator: 'CommandOrControl+R' },
+    { id: 'general:reset-cancel', label: 'Reset / Cancel', accelerator: 'CommandOrControl+R', isGlobal: false, defaultAccelerator: 'CommandOrControl+R' },
     { id: 'general:take-screenshot', label: 'Take Screenshot', accelerator: 'CommandOrControl+H', isGlobal: true, defaultAccelerator: 'CommandOrControl+H' },
     { id: 'general:selective-screenshot', label: 'Selective Screenshot', accelerator: 'CommandOrControl+Shift+H', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+H' },
     // Capture the active browser tab's page context via the companion extension;
@@ -104,13 +104,30 @@ export class KeybindManager {
         this.notifyChordsChanged();
     }
 
-    private shouldRegister(actionId: string): boolean {
+    private globalShortcutsEnabled: boolean = true;
+
+    public getGlobalShortcutsEnabled(): boolean {
+        return this.globalShortcutsEnabled;
+    }
+
+    public setGlobalShortcutsEnabled(enabled: boolean): void {
+        if (this.globalShortcutsEnabled === enabled) return;
+        this.globalShortcutsEnabled = enabled;
+        console.log(`[KeybindManager] globalShortcutsEnabled set to: ${enabled}`);
+        this.save();
+        this.registerGlobalShortcuts();
+        this.broadcastUpdate();
+    }
+
+    public shouldRegister(actionId: string): boolean {
+        if (!this.globalShortcutsEnabled) return false;
         if (this.activeMode === 'overlay') return true;
 
-        // In launcher mode, register visibility + movement shortcuts
+        // In launcher mode, register visibility shortcuts
         if (actionId === 'general:toggle-visibility') return true;
         if (actionId === 'general:toggle-mouse-passthrough') return true;
-        if (actionId.startsWith('window:move-')) return true;
+        // Issue #517: window:move-* is intentionally NOT registered in launcher mode
+        // to prevent hijacking Ctrl+Shift+Arrow text selection in foreground applications.
 
         // Screenshot & screen-analyze shortcuts must work globally in BOTH modes.
         // Without these, Cmd+H / Cmd+Shift+H / Cmd+Shift+Enter do nothing in
@@ -197,21 +214,29 @@ export class KeybindManager {
             if (fs.existsSync(this.filePath)) {
                 const data = JSON.parse(fs.readFileSync(this.filePath, 'utf-8'));
 
+                const keybindsList: any[] = Array.isArray(data)
+                    ? data
+                    : (data && Array.isArray(data.keybinds) ? data.keybinds : []);
+
+                if (data && !Array.isArray(data) && typeof data.globalShortcutsEnabled === 'boolean') {
+                    this.globalShortcutsEnabled = data.globalShortcutsEnabled;
+                }
+
                 // Migrate renamed IDs so saved user customizations survive renames
                 const ID_MIGRATIONS: Record<string, string> = {
                     'chat:recap': 'chat:dynamicAction4',
                     'chat:followup': 'chat:followUp',  // casing fix — persisted keybinds.json may have old casing
                 };
-                for (const fileKb of data) {
-                    if (ID_MIGRATIONS[fileKb.id]) {
+                for (const fileKb of keybindsList) {
+                    if (fileKb && ID_MIGRATIONS[fileKb.id]) {
                         fileKb.id = ID_MIGRATIONS[fileKb.id];
                     }
                 }
 
                 // Validate and merge
                 let hadConflicts = false;
-                for (const fileKb of data) {
-                    if (this.keybinds.has(fileKb.id)) {
+                for (const fileKb of keybindsList) {
+                    if (fileKb && this.keybinds.has(fileKb.id)) {
                         const current = this.keybinds.get(fileKb.id)!;
 
                         // Drop an accelerator Electron cannot even convert (e.g. a
@@ -264,10 +289,13 @@ export class KeybindManager {
 
     private save() {
         try {
-            const data = Array.from(this.keybinds.values()).map(kb => ({
-                id: kb.id,
-                accelerator: kb.accelerator
-            }));
+            const data = {
+                globalShortcutsEnabled: this.globalShortcutsEnabled,
+                keybinds: Array.from(this.keybinds.values()).map(kb => ({
+                    id: kb.id,
+                    accelerator: kb.accelerator
+                }))
+            };
             const tmpPath = this.filePath + '.tmp';
             fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2));
             fs.renameSync(tmpPath, this.filePath);
@@ -332,6 +360,7 @@ export class KeybindManager {
     public resetKeybinds() {
         this.keybinds.clear();
         DEFAULT_KEYBINDS.forEach(kb => this.keybinds.set(kb.id, { ...kb }));
+        this.globalShortcutsEnabled = true;
         this.save();
         this.registerGlobalShortcuts();
         this.broadcastUpdate();
@@ -685,6 +714,16 @@ export class KeybindManager {
             this.resetKeybinds();
             this.notifyChordsChanged();
             return this.getAllKeybinds();
+        });
+
+        ipcMain.handle('keybinds:get-global-enabled', () => {
+            return this.getGlobalShortcutsEnabled();
+        });
+
+        ipcMain.handle('keybinds:set-global-enabled', (_, enabled: boolean) => {
+            this.setGlobalShortcutsEnabled(Boolean(enabled));
+            this.notifyChordsChanged();
+            return true;
         });
     }
 

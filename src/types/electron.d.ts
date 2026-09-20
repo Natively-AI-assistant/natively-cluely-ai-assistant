@@ -836,6 +836,8 @@ export interface ElectronAPI {
   onKeybindRegistrationSucceeded: (callback: (data: { id: string; accelerator: string }) => void) => () => void
   /** Snapshot of currently-failing registrations, for renderers that mount after the boot-time pass. */
   getKeybindRegistrationFailures: () => Promise<Array<{ id: string; accelerator: string }>>
+  getGlobalShortcutsEnabled: () => Promise<boolean>
+  setGlobalShortcutsEnabled: (enabled: boolean) => Promise<boolean>
 
   onGlobalShortcut: (callback: (data: { action: string }) => void) => () => void
 

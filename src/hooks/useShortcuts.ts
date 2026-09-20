@@ -221,6 +221,28 @@ export const useShortcuts = () => {
         return () => { cancelled = true; };
     }, []);
 
+    const [globalShortcutsEnabled, setGlobalShortcutsEnabledState] = useState<boolean>(true);
+
+    // Load global shortcuts enabled on mount
+    useEffect(() => {
+        let mounted = true;
+        window.electronAPI?.getGlobalShortcutsEnabled?.().then((enabled) => {
+            if (mounted && typeof enabled === 'boolean') {
+                setGlobalShortcutsEnabledState(enabled);
+            }
+        }).catch(() => {});
+        return () => { mounted = false; };
+    }, []);
+
+    const setGlobalShortcutsEnabled = useCallback(async (enabled: boolean) => {
+        setGlobalShortcutsEnabledState(enabled);
+        try {
+            await window.electronAPI.setGlobalShortcutsEnabled(enabled);
+        } catch (error) {
+            console.error('Failed to set global shortcuts enabled:', error);
+        }
+    }, []);
+
     // Load from Main Process on mount
     useEffect(() => {
         const fetchKeybinds = async () => {
@@ -309,6 +331,7 @@ export const useShortcuts = () => {
         try {
             const defaults = await window.electronAPI.resetKeybinds();
             mapBackendToFrontend(defaults);
+            setGlobalShortcutsEnabledState(true);
         } catch (error) {
             console.error('Failed to reset keybinds:', error);
         }
@@ -378,6 +401,8 @@ export const useShortcuts = () => {
         updateShortcut,
         resetShortcuts,
         isShortcutPressed,
-        conflicts
+        conflicts,
+        globalShortcutsEnabled,
+        setGlobalShortcutsEnabled
     };
 };

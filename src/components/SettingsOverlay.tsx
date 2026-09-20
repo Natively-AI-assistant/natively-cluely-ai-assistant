@@ -650,7 +650,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
            click of a deep link did nothing at all. */
     }, [isOpen, initialTab, initialTabSeq]);
 
-    const { shortcuts, updateShortcut, resetShortcuts, conflicts } = useShortcuts();
+    const { shortcuts, updateShortcut, resetShortcuts, globalShortcutsEnabled, setGlobalShortcutsEnabled, conflicts } = useShortcuts();
     // Small badge shown next to a shortcut row when globalShortcut.register()
     // failed for it (another app/OS already owns that key combo). The
     // KeyRecorder right next to it is the fix — recording a new combo
@@ -3056,14 +3056,33 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                             <h3 className="text-lg font-bold text-text-primary mb-1">{t('Keyboard shortcuts')}</h3>
                                             <p className="text-xs text-text-secondary">{t('Natively works with these easy to remember commands.')}</p>
                                         </div>
-                                        <button
-                                            onClick={resetShortcuts}
-                                            className="flex items-center gap-2 px-4 py-1.5 rounded-full border border-border-subtle bg-bg-subtle/30 hover:bg-bg-subtle hover:border-green-500/30 transition-all duration-200 text-xs font-medium text-text-secondary hover:text-green-500 active:scale-95 mt-1"
-                                        >
-                                            <RotateCcw size={13} strokeWidth={2.5} />
-                                            {t('Restore Default')}
-                                        </button>
+                                        <div className="flex items-center gap-4">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-xs font-medium text-text-secondary">{t('Global shortcuts')}</span>
+                                                <SettingsToggle
+                                                    checked={globalShortcutsEnabled}
+                                                    label={t('Global shortcuts')}
+                                                    onChange={() => setGlobalShortcutsEnabled(!globalShortcutsEnabled)}
+                                                    className={globalShortcutsEnabled ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
+                                                />
+                                            </div>
+                                            <button
+                                                onClick={resetShortcuts}
+                                                className="flex items-center gap-2 px-4 py-1.5 rounded-full border border-border-subtle bg-bg-subtle/30 hover:bg-bg-subtle hover:border-green-500/30 transition-all duration-200 text-xs font-medium text-text-secondary hover:text-green-500 active:scale-95"
+                                            >
+                                                <RotateCcw size={13} strokeWidth={2.5} />
+                                                {t('Restore Default')}
+                                            </button>
+                                        </div>
                                     </div>
+
+                                    {!globalShortcutsEnabled && (
+                                        <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20">
+                                            <p className="text-xs text-blue-200/90 leading-snug">
+                                                {t('Global shortcuts are currently disabled. Keybinds will only trigger when Natively is focused, leaving system-wide shortcuts untouched.')}
+                                            </p>
+                                        </div>
+                                    )}
 
                                     {/* Surfaces globalShortcut.register() failures in bulk — e.g. on
                                         Windows, another running app (screenshot tool, clipboard
