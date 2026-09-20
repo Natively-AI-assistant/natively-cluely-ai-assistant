@@ -11,6 +11,8 @@ import { CustomEmbeddingProvider } from './providers/CustomEmbeddingProvider';
 import { OpenRouterEmbeddingProvider } from './providers/OpenRouterEmbeddingProvider';
 import { VoyageEmbeddingProvider } from './providers/VoyageEmbeddingProvider';
 import { probeOpenRouterEmbeddingDimensions } from './openrouterEmbeddingModels';
+import { probeNinerouterEmbeddingDimensions } from './ninerouterEmbeddingModels';
+import { NinerouterEmbeddingProvider } from './providers/NinerouterEmbeddingProvider';
 import { probeVoyageEmbeddingDimensions } from './voyageEmbeddingModels';
 import { STATIC_EMBEDDING_MODELS } from './embeddingCatalog';
 
@@ -69,6 +71,13 @@ export interface AppAPIConfig {
   customEmbeddingKey?: string;
   /** OpenRouter — one key, many vendors' embedding models. */
   openrouterKey?: string;
+  /** 9Router: the BASE URL is the gate, not the key — a stock instance runs
+   *  with REQUIRE_API_KEY=false and is legitimately keyless. */
+  ninerouterBaseUrl?: string;
+  ninerouterKey?: string;
+  ninerouterEmbeddingModel?: string;
+  /** MEASURED width. Absent means the model is not configurable yet. */
+  ninerouterEmbeddingDims?: number;
   openrouterEmbeddingModel?: string;
   /** MEASURED width; OpenRouter's model list carries none. */
   openrouterEmbeddingDims?: number;
@@ -139,7 +148,12 @@ export class EmbeddingProviderResolver {
   // changes the active embedding SPACE and strands every persisted vector —
   // exactly the thrash this hysteresis exists to prevent.
   private static readonly CLOUD_PROVIDER_NAMES = new Set([
-    'openai', 'gemini', 'natively', 'voyage', 'openrouter', 'custom',
+    // 'ninerouter' is here even though it is usually a LOCALHOST round-trip.
+    // The set is about whether a probe can fail transiently, not about who
+    // owns the box: 9Router forwards to a real upstream, so its probe carries
+    // every rate limit and blip the upstream has, and a single-attempt demote
+    // would change the active embedding SPACE and strand the corpus.
+    'openai', 'gemini', 'natively', 'voyage', 'openrouter', 'custom', 'ninerouter',
   ]);
 
   /**
@@ -279,6 +293,29 @@ export class EmbeddingProviderResolver {
         console.warn(
           `[EmbeddingProviderResolver] Voyage model '${voyModel}' has no measured dimensions `
           + `(got ${String(voyDims)}) — skipping it rather than assuming a width.`
+        );
+      }
+    }
+
+    // 9Router sits with the other cloud providers for scope purposes: the
+    // instance is the user's, but it forwards to third-party vendors, so the
+    // same privacy gate applies.
+    const nrBase = (config.ninerouterBaseUrl || '').trim();
+    const nrModel = (config.ninerouterEmbeddingModel || '').trim();
+    const nrDims = config.ninerouterEmbeddingDims;
+    if (nrBase && nrModel) {
+      if (typeof nrDims === 'number' && Number.isInteger(nrDims) && nrDims > 0) {
+        pushScoped('ninerouter_embeddings', () => new NinerouterEmbeddingProvider({
+          apiKey: config.ninerouterKey, model: nrModel, dimensions: nrDims, baseUrl: nrBase,
+        }));
+      } else {
+        // Same rule as Ollama, the custom endpoint, OpenRouter and Voyage — and
+        // it bites hardest here, because /v1/models/info reports no width for 5
+        // of the 6 models a stock instance serves, so "unmeasured" is the normal
+        // starting state rather than an edge case.
+        console.warn(
+          `[EmbeddingProviderResolver] 9Router model '${nrModel}' has no measured dimensions `
+          + `(got ${String(nrDims)}) — skipping it rather than assuming a width.`
         );
       }
     }
@@ -470,6 +507,27 @@ export class EmbeddingProviderResolver {
     return { ...config, openrouterEmbeddingDims: found };
   }
 
+  /** Same contract as withMeasuredOllamaDims, for 9Router. */
+  static async withMeasuredNinerouterDims(config: AppAPIConfig): Promise<AppAPIConfig> {
+    const model = (config.ninerouterEmbeddingModel || '').trim();
+    const base = (config.ninerouterBaseUrl || '').trim();
+    // Base URL, not key: a keyless instance is a legitimate configuration.
+    if (!base || !model) return config;
+    const dims = config.ninerouterEmbeddingDims;
+    if (typeof dims === 'number' && Number.isInteger(dims) && dims > 0) return config;
+
+    const found = await probeNinerouterEmbeddingDimensions(model, config.ninerouterKey, base);
+    if (found == null) {
+      // Expected, not exceptional: 9Router lists models whose upstream account
+      // is dead or unreachable, and the probe is the only thing that tells them
+      // apart from working ones.
+      console.warn(`[EmbeddingProviderResolver] Could not measure embedding width for 9Router model '${model}' — leaving it unconfigured.`);
+      return config;
+    }
+    console.log(`[EmbeddingProviderResolver] Measured 9Router model '${model}' at ${found}d.`);
+    return { ...config, ninerouterEmbeddingDims: found };
+  }
+
   /** Same contract as withMeasuredOllamaDims, for Voyage. */
   static async withMeasuredVoyageDims(config: AppAPIConfig): Promise<AppAPIConfig> {
     const model = (config.voyageEmbeddingModel || '').trim();
@@ -514,11 +572,12 @@ export class EmbeddingProviderResolver {
     // set-config (which awaits initializeEmbeddings, blocking the IPC reply).
     const pinned = config.embeddingMode === 'manual' ? (config.embeddingProvider || '') : '';
     const wanted = (name: string) => !pinned || pinned === name;
-    const [ollamaCfg, customCfg, orCfg, voyCfg] = await Promise.all([
+    const [ollamaCfg, customCfg, orCfg, voyCfg, nrCfg] = await Promise.all([
       wanted('ollama') ? EmbeddingProviderResolver.withMeasuredOllamaDims(config) : config,
       wanted('custom') ? EmbeddingProviderResolver.withMeasuredCustomDims(config) : config,
       wanted('openrouter') ? EmbeddingProviderResolver.withMeasuredOpenRouterDims(config) : config,
       wanted('voyage') ? EmbeddingProviderResolver.withMeasuredVoyageDims(config) : config,
+      wanted('ninerouter') ? EmbeddingProviderResolver.withMeasuredNinerouterDims(config) : config,
     ]);
     // Each helper returns a copy of `config` with at most its OWN dims field
     // filled, so merging the four is safe and order-independent.
@@ -528,6 +587,7 @@ export class EmbeddingProviderResolver {
       customEmbeddingDims: customCfg.customEmbeddingDims,
       openrouterEmbeddingDims: orCfg.openrouterEmbeddingDims,
       voyageEmbeddingDims: voyCfg.voyageEmbeddingDims,
+      ninerouterEmbeddingDims: nrCfg.ninerouterEmbeddingDims,
     };
     const { candidates, embeddingsDenied } = EmbeddingProviderResolver.buildCandidatesWithScope(measured);
     const chosenProvider = measured.embeddingMode === 'manual' ? (measured.embeddingProvider || '') : '';
