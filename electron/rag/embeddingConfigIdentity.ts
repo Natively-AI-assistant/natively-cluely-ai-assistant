@@ -28,6 +28,8 @@ export interface EmbeddingCredentialStore {
   /** Optional bearer token for a user-hosted endpoint. */
   getCustomEmbeddingApiKey?(): string | undefined;
   getOpenrouterApiKey?(): string | undefined;
+  getNinerouterApiKey?(): string | undefined;
+  getNinerouterBaseURL?(): string | undefined;
   getVoyageApiKey?(): string | undefined;
 }
 
@@ -51,6 +53,11 @@ export interface EmbeddingConfigSources {
   openrouterKey?: string;
   openrouterEmbeddingModel?: string;
   openrouterEmbeddingDims?: number;
+  /** 9Router: base URL is the gate, key optional (REQUIRE_API_KEY defaults off). */
+  ninerouterBaseUrl?: string;
+  ninerouterKey?: string;
+  ninerouterEmbeddingModel?: string;
+  ninerouterEmbeddingDims?: number;
   voyageKey?: string;
   voyageEmbeddingModel?: string;
   voyageEmbeddingDims?: number;
@@ -95,6 +102,10 @@ export function embeddingConfigFrom(sources: EmbeddingConfigSources): AppAPIConf
     openrouterKey: clean(sources.openrouterKey),
     openrouterEmbeddingModel: clean(sources.openrouterEmbeddingModel),
     openrouterEmbeddingDims: sources.openrouterEmbeddingDims,
+    ninerouterBaseUrl: clean(sources.ninerouterBaseUrl),
+    ninerouterKey: clean(sources.ninerouterKey),
+    ninerouterEmbeddingModel: clean(sources.ninerouterEmbeddingModel),
+    ninerouterEmbeddingDims: sources.ninerouterEmbeddingDims,
     voyageKey: clean(sources.voyageKey),
     voyageEmbeddingModel: clean(sources.voyageEmbeddingModel),
     voyageEmbeddingDims: sources.voyageEmbeddingDims,
@@ -139,6 +150,8 @@ export function resolveEmbeddingCredentials(
   const nativelyApiKey = pick('nativelyApiKey', () => store.getNativelyApiKey());
   const customEmbeddingKey = pick('customEmbeddingKey', () => store.getCustomEmbeddingApiKey?.());
   const openrouterKey = pick('openrouterKey', () => store.getOpenrouterApiKey?.());
+  const ninerouterKey = pick('ninerouterKey', () => store.getNinerouterApiKey?.());
+  const ninerouterBaseUrl = pick('ninerouterBaseUrl', () => store.getNinerouterBaseURL?.());
   const voyageKey = pick('voyageKey', () => store.getVoyageApiKey?.());
 
   // Gemini embedding key POOL: the effective key + GEMINI_API_KEY(_2.._6)/GOOGLE
@@ -252,6 +265,10 @@ export function buildEmbeddingConfig(overrides: Partial<EmbeddingConfigSources> 
     ? { openrouterEmbeddingModel: chosen.model, openrouterEmbeddingDims: chosen.dimensions }
     : {};
 
+  const ninerouterFromSettings = (chosen?.mode === 'manual' && chosen?.provider === 'ninerouter')
+    ? { ninerouterEmbeddingModel: chosen.model, ninerouterEmbeddingDims: chosen.dimensions }
+    : {};
+
   const cloudFromSettings = (chosen?.mode === 'manual' && chosen?.provider === 'openai')
     ? { openaiEmbeddingModel: chosen.model, openaiEmbeddingDims: chosen.dimensions }
     : (chosen?.mode === 'manual' && chosen?.provider === 'gemini')
@@ -267,7 +284,7 @@ export function buildEmbeddingConfig(overrides: Partial<EmbeddingConfigSources> 
   // therefore dropped entirely before.
   const choice = { embeddingMode: chosen?.mode, embeddingProvider: effectiveProvider };
 
-  return resolveEmbeddingCredentials({ providerDataScopes, ...choice, ...ollamaFromSettings, ...cloudFromSettings, ...openrouterFromSettings, ...voyageFromSettings, ...localViaOllama, ...customFromSettings, ...overrides }, cm);
+  return resolveEmbeddingCredentials({ providerDataScopes, ...choice, ...ollamaFromSettings, ...cloudFromSettings, ...openrouterFromSettings, ...ninerouterFromSettings, ...voyageFromSettings, ...localViaOllama, ...customFromSettings, ...overrides }, cm);
 }
 
 /**
@@ -302,6 +319,13 @@ export function embeddingConfigChanged(prev: AppAPIConfig, next: AppAPIConfig): 
     norm(prev.customEmbeddingKey) !== norm(next.customEmbeddingKey) ||
     norm(prev.openrouterKey) !== norm(next.openrouterKey) ||
     norm(prev.openrouterEmbeddingModel) !== norm(next.openrouterEmbeddingModel) ||
+    // All three change the VECTOR SPACE for 9Router. The BASE URL especially:
+    // its space key carries the host, so repointing at another instance is a
+    // different space even for an identical model id.
+    norm(prev.ninerouterBaseUrl) !== norm(next.ninerouterBaseUrl) ||
+    norm(prev.ninerouterEmbeddingModel) !== norm(next.ninerouterEmbeddingModel) ||
+    (prev.ninerouterEmbeddingDims || 0) !== (next.ninerouterEmbeddingDims || 0) ||
+    norm(prev.ninerouterKey) !== norm(next.ninerouterKey) ||
     (prev.openrouterEmbeddingDims || 0) !== (next.openrouterEmbeddingDims || 0) ||
     norm(prev.voyageKey) !== norm(next.voyageKey) ||
     norm(prev.voyageEmbeddingModel) !== norm(next.voyageEmbeddingModel) ||

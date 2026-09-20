@@ -8060,6 +8060,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     const customEndpoint = SettingsManager.getInstance().get('customEmbeddingEndpoint') || '';
     // Public listing: fetched with the key when present, without it otherwise.
     const { listOpenRouterEmbeddingModels } = require('./rag/openrouterEmbeddingModels');
+    const { listNinerouterEmbeddingModels } = require('./rag/ninerouterEmbeddingModels');
 
     /* CONCURRENT, not one await after another.
      *
@@ -8075,12 +8076,19 @@ export function initializeIpcHandlers(appState: AppState): void {
      * swallow their own errors and resolve to [] — none of them can reject, so
      * this cannot fail where the sequential version would have succeeded.
      */
-    const [ollamaModels, customModels, openrouterModels] = await Promise.all([
+    const [ollamaModels, customModels, openrouterModels, ninerouterModels] = await Promise.all([
       listOllamaEmbeddingModels(url),
       customEndpoint
         ? require('./rag/customEmbeddingModels').listCustomEmbeddingModels(customEndpoint, cm.getCustomEmbeddingApiKey?.())
         : Promise.resolve([]),
       listOpenRouterEmbeddingModels({ apiKey: cm.getOpenrouterApiKey?.() }),
+      // Only when an instance is configured — otherwise this would probe
+      // localhost:20128 on every catalogue open for everyone who has never
+      // heard of 9Router, which is the speculative-probe cost the comment
+      // above exists to avoid.
+      cm.getNinerouterBaseURL?.()
+        ? listNinerouterEmbeddingModels({ baseUrl: cm.getNinerouterBaseURL(), apiKey: cm.getNinerouterApiKey?.() })
+        : Promise.resolve([]),
     ]);
 
     // Still sequential, deliberately: this only runs when Ollama listed nothing,
@@ -8103,6 +8111,9 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasOpenrouterKey: !!cm.getOpenrouterApiKey?.(),
         hasVoyageKey: !!cm.getVoyageApiKey?.(),
         openrouterModels,
+        ninerouterModels,
+        ninerouterConfigured: !!cm.getNinerouterBaseURL?.(),
+        ninerouterEndpoint: cm.getNinerouterBaseURL?.() || undefined,
         hasOpenaiKey: !!cm.getOpenaiApiKey(),
         hasGeminiKey: !!cm.getGeminiApiKey(),
         hasNativelyKey: !!cm.getNativelyApiKey(),
@@ -8155,6 +8166,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           case 'ollama':     return { ...base, ollamaEmbeddingModel: choice.model, ollamaEmbeddingDims: undefined };
           case 'voyage':     return { ...base, voyageEmbeddingModel: choice.model, voyageEmbeddingDims: undefined };
           case 'openrouter': return { ...base, openrouterEmbeddingModel: choice.model, openrouterEmbeddingDims: undefined };
+          case 'ninerouter': return { ...base, ninerouterEmbeddingModel: choice.model, ninerouterEmbeddingDims: undefined };
           case 'openai':     return { ...base, openaiEmbeddingModel: choice.model, openaiEmbeddingDims: undefined };
           case 'gemini':     return { ...base, geminiEmbeddingModel: choice.model, geminiEmbeddingDims: undefined };
           case 'custom':     return { ...base, customEmbeddingModel: choice.model, customEmbeddingDims: undefined };
@@ -8165,10 +8177,12 @@ export function initializeIpcHandlers(appState: AppState): void {
         // Measure EVERY provider's width, not just Ollama's: resolve() calls all
         // four helpers, so a test path that calls one reports a reachable
         // custom/OpenRouter/Voyage model as 'not configured'.
-      const measured = await EmbeddingProviderResolver.withMeasuredVoyageDims(
-        await EmbeddingProviderResolver.withMeasuredOpenRouterDims(
-          await EmbeddingProviderResolver.withMeasuredCustomDims(
-            await EmbeddingProviderResolver.withMeasuredOllamaDims(config),
+      const measured = await EmbeddingProviderResolver.withMeasuredNinerouterDims(
+        await EmbeddingProviderResolver.withMeasuredVoyageDims(
+          await EmbeddingProviderResolver.withMeasuredOpenRouterDims(
+            await EmbeddingProviderResolver.withMeasuredCustomDims(
+              await EmbeddingProviderResolver.withMeasuredOllamaDims(config),
+            ),
           ),
         ),
       );
