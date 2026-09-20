@@ -1511,12 +1511,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                 const collected = collectV3ProfileSources(llmHelper.getKnowledgeOrchestrator?.() ?? null);
                 if (collected.docs.length) {
                   const { createProfileRetrievalPort } = require('./context-intelligence/retrieval/profile-retrieval-port');
-                  // Semantic arm over the documents' raw text (see v3ProfileSources).
-                  const { buildProfileRawRetriever } = require('./services/knowledge/v3ProfileSources');
-                  const v3ProfileRawRetriever = buildProfileRawRetriever(mm, collected.docs, {
-                    tokenBudget: policy.contextBudget.evidenceTokens, rerankSurface: 'manual',
-                    meetingActive: () => appState.getIsMeetingActive(),
-                  });
+                  const v3ProfileRawRetriever = require('./services/knowledge/v3ProfileSources').buildProfileRawRetriever(mm, collected.docs, { tokenBudget: policy.contextBudget.evidenceTokens, rerankSurface: 'manual', meetingActive: () => appState.getIsMeetingActive() });
                   v3ProfilePort = createProfileRetrievalPort({
                     docs: collected.docs,
                     allowedSourceTypes: policy.allowedSourceTypes,
@@ -10495,6 +10490,8 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   // End trial via BYOK path: wipe Pro-ingested data, clear trial token + natively key.
   safeHandle('trial:end-byok', async () => {
+    // Profile raw-text indexes hold the résumé/JD text and vectors; clear them even if the orchestrator is absent.
+    try { require('./services/knowledge/v3ProfileSources').wipeProfileRawIndexes(); } catch { /* non-fatal */ }
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
@@ -10535,6 +10532,8 @@ export function initializeIpcHandlers(appState: AppState): void {
           const { DocType } = require('../premium/electron/knowledge/types');
           orchestrator.deleteDocumentsByType(DocType.RESUME);
           orchestrator.deleteDocumentsByType(DocType.JD);
+          // …and their raw-text indexes (text + vectors under profile:<kind>:<version>).
+          try { require('./services/knowledge/v3ProfileSources').kickProfileRawIndex(orchestrator); } catch { /* non-fatal */ }
         }
       } catch {
         /* ignore */
@@ -10594,6 +10593,8 @@ export function initializeIpcHandlers(appState: AppState): void {
   // trial token or natively key. Called automatically when trial expires so that
   // profile intelligence data can't linger in SQLite after the trial window closes.
   safeHandle('trial:wipe-profile-data', async () => {
+    // Profile raw-text indexes hold the résumé/JD text and vectors; clear them even if the orchestrator is absent.
+    try { require('./services/knowledge/v3ProfileSources').wipeProfileRawIndexes(); } catch { /* non-fatal */ }
     try {
       // 1. Disable knowledge mode + wipe orchestrator in-memory caches
       try {
@@ -10603,6 +10604,8 @@ export function initializeIpcHandlers(appState: AppState): void {
           const { DocType } = require('../premium/electron/knowledge/types');
           orchestrator.deleteDocumentsByType(DocType.RESUME);
           orchestrator.deleteDocumentsByType(DocType.JD);
+          // …and their raw-text indexes (text + vectors under profile:<kind>:<version>).
+          try { require('./services/knowledge/v3ProfileSources').kickProfileRawIndex(orchestrator); } catch { /* non-fatal */ }
         }
       } catch {
         /* ignore — orchestrator may not be initialised */

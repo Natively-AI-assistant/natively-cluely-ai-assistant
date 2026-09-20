@@ -99,8 +99,11 @@ describe('binding to the mode retriever', () => {
     let seen = null;
     const mm = { retrieveHybridRaw: async (_m, files, o) => { seen = { files, o }; return { chunks: [{ sourceId: 'profile:jd:hashA', text: 'T', chunkIndex: 2, score: 0.4, rerankScore: 0.9 }, { sourceId: 'someone-elses-file', text: 'X', chunkIndex: 0, score: 1 }] }; } };
     const rr = buildProfileRawRetriever(mm, docs, { tokenBudget: 1800, rerankSurface: 'manual', meetingActive: () => false });
-    const out = await rr('q', { topK: 12 });
-    assert.deepEqual(out, [{ sourceId: 'p-jd', text: 'T', chunkIndex: 2, score: 0.9 }]);
+    const out = await rr('q', { topK: 12, timeoutMs: 900 });
+    // The FIRST-STAGE score, not rerankScore: fusion caps rerank scores near 0.2, a different scale,
+    // and preferring it pushed every reranked row under the port's relevance gate (review finding).
+    assert.deepEqual(out, [{ sourceId: 'p-jd', text: 'T', chunkIndex: 2, score: 0.4 }]);
+    assert.equal(seen.o.timeoutMs, 900); assert.equal(seen.o.queryEmbedRetryBudgetMs, 900);
     assert.equal(seen.o.forceDocumentGrounding, true); assert.equal(seen.o.allowRerank, true);
     assert.equal(seen.o.meetingActive, false); assert.equal(seen.o.tokenBudget, 1800);
     assert.deepEqual(seen.files.map((f) => f.id), ['profile:jd:hashA']);
@@ -109,12 +112,44 @@ describe('binding to the mode retriever', () => {
     assert.equal(buildProfileRawRetriever({}, docs, { tokenBudget: 1, rerankSurface: 'live' }), null);
     assert.equal(buildProfileRawRetriever({ retrieveHybridRaw: async () => null }, [{ ...docs[0], rawText: '' }], { tokenBudget: 1, rerankSurface: 'live' }), null);
   });
-  test('indexing prunes superseded versions of the same kind before indexing the current one', async () => {
+  test('with NO active document every kind is pruned — deleting a résumé must not leave its text and vectors on disk', async () => {
     const calls = [];
     const mm = { indexReferenceFile: async (f) => { calls.push(['index', f.id]); }, pruneReferenceFileIndexesByPrefix: (prefix, keep) => { calls.push(['prune', prefix, keep]); return 1; } };
-    const orchestrator = { getActiveProfileContext: undefined };
-    // collectV3ProfileSources reads the orchestrator; with nothing active it yields no docs → nothing to do.
-    assert.equal(await indexProfileRawText(mm, orchestrator), 0);
-    assert.deepEqual(calls, []);
+    assert.equal(await indexProfileRawText(mm, { getActiveProfileContext: undefined }), 0);
+    // before AND after indexing, for both kinds, keeping nothing
+    assert.deepEqual(calls, [['prune', 'profile:resume:', ''], ['prune', 'profile:jd:', ''], ['prune', 'profile:resume:', ''], ['prune', 'profile:jd:', '']]);
+  });
+  test('runs are serialised: a second run does not start while the first is still indexing', async () => {
+    const order = []; let release;
+    const gate = new Promise((r) => { release = r; });
+    const mm = { indexReferenceFile: async () => {}, pruneReferenceFileIndexesByPrefix: (prefix) => { order.push(prefix); return 0; } };
+    const slow = { ...mm, pruneReferenceFileIndexesByPrefix: (prefix) => { order.push('slow:' + prefix); return 0; }, indexReferenceFile: async () => { await gate; } };
+    const a = indexProfileRawText(slow, { getActiveProfileContext: undefined });
+    const b = indexProfileRawText(mm, { getActiveProfileContext: undefined });
+    release(); await Promise.all([a, b]);
+    assert.ok(order.lastIndexOf('slow:profile:jd:') < order.indexOf('profile:resume:'), order.join(' '));
+  });
+});
+
+describe('review fixes to the interleave (2026-09-20)', () => {
+  const PARA = 'Tell me about coaching teenagers at the weekend.';
+  const R = ['# Résumé', '', ...Array.from({ length: 40 }, (_, i) => `### Project Alder-${i}\n\nRebuilt the billing reconciler for ledger ${i} with a team of ${3 + i} engineers.\n`),
+    '### Outside work', '', 'Runs a robotics club for secondary-school pupils on Saturdays at Makerspace Alfama.', ''].join('\n');
+  const rdocs = [{ kind: 'resume', sourceId: 'p-r', versionId: 'v1', fileName: 'r.md', structured: { identity: { name: 'A B' }, experience: [{ company: 'X', role: 'Engineer', start_date: '2019-01', end_date: null, bullets: [] }], projects: [], skills: {}, education: [] }, rawText: R }];
+  const rport = (rr) => createProfileRetrievalPort({ docs: rdocs, allowedSourceTypes: policy.allowedSourceTypes, profileSources: policy.profileSources, userId: 'u', rawRetriever: rr });
+  const HIT = '[context: Outside work] Runs a robotics club for secondary-school pupils on Saturdays at Makerspace Alfama.';
+  test('PURE paraphrase: every BM25 raw score is 0, and the arm\'s hit still reaches the evidence (floor above boost-only)', async () => {
+    const r = await orchestrate(req(PARA), rport(async () => [{ sourceId: 'p-r', text: HIT, chunkIndex: 41, score: 0.26 }]));
+    assert.ok(r.evidence.some((e) => /robotics club/.test(e.content)), r.evidence.map((e) => `${e.finalScore.toFixed(2)} ${e.content.slice(0, 50)}`).join('\n'));
+  });
+  test('an IRRELEVANT row the retriever was obliged to return is not lifted', async () => {
+    const r = await orchestrate(req(PARA), rport(async () => [{ sourceId: 'p-r', text: HIT, chunkIndex: 41, score: 0.5 }, { sourceId: 'p-r', text: '[context: Project Alder-3] Rebuilt the billing reconciler for ledger 3 with a team of 6 engineers. <<obliged>>', chunkIndex: 3, score: 0.12 }]));
+    assert.ok(!r.evidence.some((e) => e.content.includes('<<obliged>>') && e.finalScore >= 0.39), 'a 0.12 row was lifted');
+  });
+  test('the arm has a deadline: a stalled retriever costs the arm, not the turn', async () => {
+    const t0 = Date.now();
+    const r = await orchestrate(req('How many engineers are on Project Alder-7?'), rport(() => new Promise(() => {})));
+    assert.ok(Date.now() - t0 < 3000, `turn took ${Date.now() - t0} ms`);
+    assert.ok(r.evidence.some((e) => /Alder-7\b/.test(e.content)), 'BM25 evidence was held back by the stalled arm');
   });
 });

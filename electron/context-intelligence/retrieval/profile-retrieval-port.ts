@@ -124,7 +124,7 @@ export interface ProfilePortInput {
    * the PROFILE document's sourceId. Absent, throwing or empty ⇒ the BM25 raw
    * chunks are used exactly as before.
    */
-  rawRetriever?: (query: string, opts: { topK: number }) => Promise<RawRetrievedChunk[]>;
+  rawRetriever?: (query: string, opts: { topK: number; timeoutMs?: number }) => Promise<RawRetrievedChunk[]>;
 }
 
 export interface RawRetrievedChunk {
@@ -500,9 +500,15 @@ const INTENT_RULES: IntentRule[] = [
 
 /** A raw chunk in a fired intent's vocabulary earns this share of the rule's largest boost… */
 /** Same weight the mode path uses (ModeHybridRetriever.ANCHOR_BOOST). */
-const PROFILE_ANCHOR_BOOST = Number(process.env.NATIVELY_RETRIEVAL_ANCHOR_BOOST) || 0.25;
+// `Number(env) || 0.25` made "=0" mean 0.25 — the switch could not switch off (review finding).
+const PROFILE_ANCHOR_BOOST = ((v) => (Number.isFinite(v) && v >= 0 ? v : 0.25))(parseFloat(process.env.NATIVELY_RETRIEVAL_ANCHOR_BOOST ?? ''));
 /** The boost applies only when at most this share of the chunks earns it. */
 const PROFILE_ANCHOR_MAX_SHARE = 0.1;
+/** Semantic-arm lift (see the interleave): minimum own score, share of the arm's best, floor and how many rows get it. */
+const SEMANTIC_ARM_MIN_SCORE = 0.2;
+const SEMANTIC_ARM_MIN_SHARE = 0.5;
+const SEMANTIC_ARM_FLOOR = 0.4;
+const SEMANTIC_ARM_FLOOR_ROWS = 3;
 const RAW_INTENT_BOOST_SHARE = 0.7;
 /** …unless more than this share of the raw chunks match it (then the class does not discriminate). */
 const RAW_INTENT_MAX_SHARE = 0.25;
@@ -629,6 +635,10 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
     if (!probeStats) return [];
     const out = new Set<SourceType>();
     for (const i of anchoringChunkIndexes(question, probeStats)) {
+      // The app's OWN derived text (the salary estimate and its disclaimer) is not
+      // a document: "Which skills and years of experience matter for a role in
+      // this location?" anchored on the disclaimer's wording (review finding).
+      if (chunks[i].policyOnly) continue;
       const t = sourceTypes.get(chunks[i].sourceId);
       if (t) out.add(t);
     }
@@ -637,7 +647,7 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
 
   const port = createLegacyRetrievalPort({
     registry: { sourceTypes, activeVersions, chunkVersions, sourceScopes },
-    retrieve: async (query: string, opts: { topK: number; sourceTypes?: readonly SourceType[] }): Promise<LegacyChunk[]> => {
+    retrieve: async (query: string, opts: { topK: number; timeoutMs?: number; sourceTypes?: readonly SourceType[]; intentQuery?: string }): Promise<LegacyChunk[]> => {
       // Only the PLANNED types compete for the top-k (2026-09-11). Measured in
       // technical-interview: "Tell me about your education — degree, school,
       // coursework" planned [RESUME, …] without JOB_DESCRIPTION, but the JD's
@@ -648,7 +658,13 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
       const planned = opts.sourceTypes?.length ? new Set(opts.sourceTypes) : null;
       const index = new Bm25Index(chunks.map((c, i) => ({ id: String(i), text: `${c.section} ${c.text}` })), DEFAULT_BM25);
       const bm25ById = new Map(index.score(query).map((s) => [s.id, s.score]));
-      const boosts = intentBoosts(query);
+      // POLICY reads the user's question, RANKING reads the query (review finding,
+      // reproduced). A model-rewritten query once carried the word "experience":
+      // that fired the employment intent, admitted the complete-experience
+      // inventory at 0.6 with no term match, and "What is my biggest weakness?"
+      // went from NONE to FULL — a model talking evidence into existence.
+      const asked = opts.intentQuery ?? query;
+      const boosts = intentBoosts(asked);
       // INTENT VOCABULARY REACHES THE RAW TEXT (2026-09-19). An intent rule's
       // regex is a synonym class — salary|compensation|pay|package|bonus — but
       // its boost went only to STRUCTURED sections and derived facts. Measured
@@ -708,7 +724,7 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
         // reshuffles near-ties.
         return cov >= PROBE_MIN_COVERAGE ? PROFILE_ANCHOR_BOOST * cov * cov : 0;
       };
-      const firedRules = INTENT_RULES.filter((rule) => rule.re.test(query));
+      const firedRules = INTENT_RULES.filter((rule) => rule.re.test(asked));
       const rawIdx = chunks.map((c, i) => (c.boostKey === 'raw_document' ? i : -1)).filter((i) => i >= 0);
       const rawIntentBoost = new Map<number, number>();
       for (const rule of firedRules) {
@@ -727,8 +743,22 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
       // may silence the other.
       let semanticRaw: RawRetrievedChunk[] = [];
       if (input.rawRetriever) {
-        try { semanticRaw = (await input.rawRetriever(query, { topK: Math.max(1, opts.topK) })) ?? []; }
-        catch { semanticRaw = []; }
+        // A DEADLINE and a VOICE (review finding, reproduced): the arm was awaited
+        // with no budget — a 6 s embedding stall held back BM25 evidence that was
+        // already computed and the turn took 6,008 ms — and a throwing arm left
+        // no trace anywhere. It now gets the plan's timeout, and losing it costs
+        // only the arm: the BM25 evidence goes out.
+        const budgetMs = Math.max(200, opts.timeoutMs ?? 1200);
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          semanticRaw = (await Promise.race([
+            input.rawRetriever(query, { topK: Math.max(1, opts.topK), timeoutMs: budgetMs }),
+            new Promise<RawRetrievedChunk[]>((_, reject) => { timer = setTimeout(() => reject(new Error(`semantic arm exceeded ${budgetMs} ms`)), budgetMs); }),
+          ])) ?? [];
+        } catch (e) {
+          console.warn(`[ProfileRetrievalPort] semantic arm unavailable this turn (${e instanceof Error ? e.message : String(e)}); using BM25 only`);
+          semanticRaw = [];
+        } finally { if (timer) clearTimeout(timer); }
         semanticRaw = semanticRaw.filter((r) => r && typeof r.text === 'string' && r.text.trim() && sourceTypes.has(r.sourceId));
       }
       const useSemantic = semanticRaw.length > 0;
@@ -789,16 +819,41 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
         const rowByKey = new Map<string, { c: PortChunk; score: number }>();
         for (const row of scoredChunks) if (row.c.boostKey === 'raw_document') rowByKey.set(`${row.c.sourceId}|${normText(row.c.text)}`, row);
         const ranked = [...semanticByText.entries()].sort((a, b) => b[1].score - a[1].score);
-        ranked.forEach(([k, sem], rank) => {
-          // + epsilon: on an exact tie the semantic row goes FIRST. Near-identical
-          // sections (a JD's twelve team blurbs) tie to the last digit under BM25,
-          // and a tie broken by chunk index put every one of them ahead of the
-          // semantic hit — the interleave silently degraded to "BM25, then the rest".
-          const lifted = Math.max(sem.score, Math.min(1, (bm25RawDesc[rank] ?? 0) + 1e-6));
+        // Four corrections from an adversarial review that ran the real arm (2026-09-20):
+        //  · RELEVANCE GATE — the lift used to apply to whatever the arm returned.
+        //    The retriever guarantees every file a row, so a résumé question got
+        //    the JD's title line (native 0.18) lifted into slot 2 of 6. Only rows
+        //    near the arm's best are lifted; heading-only chunks never are.
+        //  · FLOOR — on a PURE paraphrase every BM25 raw score is 0, so the lift
+        //    lifted to nothing and the right chunk (0.26) lost to five boost-only
+        //    sections at 0.30: the arm failed in exactly the case it exists for.
+        //    Its top rows now sit just above the boost-only ceiling (0.35) and
+        //    below a policy-admitted inventory (0.6).
+        //  · SCALE — the arm's reported score includes its own answerability and
+        //    anchor boosts (sibling sections reached 0.83); it may not exceed the
+        //    BM25 arm's best on its own say-so.
+        //  · TIES — an exact lexical match keeps first place. The semantic row goes
+        //    first only when BM25 itself is tied at that rank (near-identical
+        //    sections), where a chunk-index tie-break would bury it behind all of them.
+        const armBest = ranked.length ? ranked[0][1].score : 0;
+        const ceiling = Math.max(bm25RawDesc[0] ?? 0, SEMANTIC_ARM_FLOOR);
+        let rank = 0;
+        for (const [k, sem] of ranked) {
+          const body = normText(sem.c.text);
+          const relevant = sem.score >= SEMANTIC_ARM_MIN_SCORE && sem.score >= armBest * SEMANTIC_ARM_MIN_SHARE && body.length >= 40;
+          let target = Math.min(sem.score, ceiling);
+          if (relevant) {
+            const at = bm25RawDesc[rank] ?? 0;
+            const tied = rank + 1 < bm25RawDesc.length && Math.abs(at - bm25RawDesc[rank + 1]) < 1e-9;
+            const lifted = at > 0 ? Math.min(1, Math.max(0, at + (tied ? 1e-6 : -1e-6))) : 0;
+            const floor = rank < SEMANTIC_ARM_FLOOR_ROWS ? SEMANTIC_ARM_FLOOR - rank * 0.01 : 0;
+            target = Math.max(target, lifted, floor);
+            rank += 1;
+          }
           const twin = rowByKey.get(k);
-          if (twin) { twin.score = Math.max(twin.score, lifted); semanticByText.delete(k); }
-          else sem.score = lifted;
-        });
+          if (twin) { twin.score = Math.max(twin.score, target); semanticByText.delete(k); }
+          else sem.score = target;
+        }
       }
 
       return scoredChunks

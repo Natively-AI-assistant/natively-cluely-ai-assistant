@@ -121,11 +121,15 @@ export function numeralTokens(lowercased: string): string[] {
 // Same pattern as numeralTokens: the parts are EXTRA tokens, never
 // replacements, so retrieval BY the full identifier keeps working.
 function hyphenSubTokens(base: string[], shortNumerics = false): string[] {
+  // Set membership, not Array.includes: on one 546 kB table chunk (atomic, never
+  // split) the includes-in-a-loop version took 3.1 s, and 6.9 s on 633 kB of
+  // hyphenated ids — on the main process, inside retrieve() (review finding).
   const extra: string[] = [];
+  const seen = new Set(base);
   for (const w of base) {
     if (!w.includes('-')) continue;
     for (const part of w.split('-')) {
-      if ((shortNumerics ? keepToken(part) : part.length > 2) && !base.includes(part) && !extra.includes(part)) extra.push(part);
+      if ((shortNumerics ? keepToken(part) : part.length > 2) && !seen.has(part)) { seen.add(part); extra.push(part); }
     }
   }
   return extra;
@@ -178,7 +182,8 @@ export function wordsOf(text: string, options: WordsOfOptions = {}): string[] {
   if (!/\d/.test(lower) && !/\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|billion)\b/.test(lower)) {
     return withHyphens;
   }
-  const extra = numeralTokens(lower).filter((t) => t.length > 2 && !withHyphens.includes(t));
+  const present = new Set(withHyphens);
+  const extra = numeralTokens(lower).filter((t) => t.length > 2 && !present.has(t));
   return extra.length ? withHyphens.concat(extra) : withHyphens;
 }
 
@@ -331,6 +336,9 @@ const PROBE_FUNCTION_WORDS = new Set(('what whats which who whom whose when wher
   + 'there their they them then than can could should would will shall may might must not but you your yours '
   + 'our ours his her its any some all each every tell give show say said says please just like also get got '
   + 'set out off over under again more most very much many').split(' '));
+
+/** Is this a question word / auxiliary / pronoun that no document chunk can meaningfully 'contain'? */
+export function isProbeFunctionWord(word: string): boolean { return PROBE_FUNCTION_WORDS.has(word); }
 
 export const PROBE_MIN_ANCHORS = 2;
 export const PROBE_MIN_COVERAGE = 0.6;

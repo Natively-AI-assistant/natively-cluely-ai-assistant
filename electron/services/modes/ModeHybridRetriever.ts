@@ -8,7 +8,7 @@ import { VectorStore, ScoredChunk } from '../../rag/VectorStore';
 import { EmbeddingPipeline } from '../../rag/EmbeddingPipeline';
 import Database from 'better-sqlite3';
 import { buildDocumentMap, resolveTargetSections, sectionAwareChunksFromMap, selectTableOfContentsEntries, sentenceAwareWindows, tabularChunks } from './DocumentMap';
-import { wordsOf, buildLexicalStats, queryWeights, weightedOverlapScore, anchorTerms, anchorCoverage, corpusAnchorsQuestion, type LexicalStats } from './lexicalTokens';
+import { wordsOf, buildLexicalStats, queryWeights, weightedOverlapScore, anchorTerms, anchorCoverage, corpusAnchorsQuestion, isProbeFunctionWord, type LexicalStats } from './lexicalTokens';
 import { CHUNKER_VERSION, semanticChunks, normalizeLineEndings } from './semanticChunker';
 import { resolveRerankBudgetMs, rerankBudgetFitsDeadline, type RerankSurface } from '../reranking/rerankBudget';
 import { buildRerankPool, RERANK_CANDIDATE_POOL, resolveRerankPoolSize } from './rerankPool';
@@ -271,7 +271,7 @@ const FTS_WEIGHT = 0.4;  // alpha for combined score: alpha * fts + (1-alpha) * 
 // Sized against the measured noise band of the vector arm across same-shaped
 // sibling sections (0.6 × ~0.13 ≈ 0.08) and the answerability boosts it must
 // outrank (shape match +0.35 is shared by every sibling, so it cancels).
-const ANCHOR_BOOST = Number(process.env.NATIVELY_RETRIEVAL_ANCHOR_BOOST) || 0.25;
+const ANCHOR_BOOST = ((v) => (Number.isFinite(v) && v >= 0 ? v : 0.25))(parseFloat(process.env.NATIVELY_RETRIEVAL_ANCHOR_BOOST ?? ''));   // "=0" switches it off
 
 /**
  * F23 — the lexical fallback must NOT reuse the combined-score floor.
@@ -750,6 +750,19 @@ export class ModeHybridRetriever {
             return;
         }
 
+        // A re-index under a DIFFERENT hash starts by dropping the old rows (review
+        // finding, reproduced 2026-09-20). This line writes the NEW hash before any
+        // vector exists, so from here on `needsReindexing()` is false — and for as
+        // long as the job ran (or forever, if it then failed) every query paired
+        // the OLD vectors with the NEW chunks again: the stale-index gate protected
+        // exactly one query. With the rows gone there is nothing stale to load;
+        // those chunks are embedded for the turn or scored lexically, as for any
+        // file that is still indexing.
+        const previous = this.getIndexState(file.id);
+        if (previous && previous.fileHash !== contentHash) {
+            try { this.db.prepare('DELETE FROM mode_reference_chunks WHERE file_id = ?').run(file.id); this.chunkCache.delete(file.id); }
+            catch (e) { console.warn('[ModeHybridRetriever] could not clear a stale index before re-indexing:', e); }
+        }
         this.updateIndexState(file.id, contentHash, chunks.length, 'indexing', activeSpace, 0);
         try {
             // Large files (e.g. a 14k-row CSV → hundreds of chunks) can't be embedded
@@ -933,8 +946,13 @@ export class ModeHybridRetriever {
      */
     public pruneFileIndexesByPrefix(prefix: string, keepId: string): number {
         try {
-            const ids = (this.db.prepare("SELECT file_id AS id FROM mode_reference_index_state WHERE file_id LIKE ? ESCAPE '\\'")
-                .all(`${prefix.replace(/[\\%_]/g, (c) => `\\${c}`)}%`) as Array<{ id: string }>).map((r) => r.id).filter((id) => id !== keepId);
+            // BOTH tables: a job interrupted between its two writes leaves chunk
+            // rows with no state row (or the reverse), and either is user text.
+            const like = `${prefix.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+            const ids = [...new Set((this.db.prepare(
+                "SELECT file_id AS id FROM mode_reference_index_state WHERE file_id LIKE ? ESCAPE '\\' "
+                + "UNION SELECT file_id AS id FROM mode_reference_chunks WHERE file_id LIKE ? ESCAPE '\\'",
+            ).all(like, like) as Array<{ id: string }>).map((r) => r.id))].filter((id) => id !== keepId);
             for (const id of ids) this.removeFileIndex(id);
             return ids.length;
         } catch (e) {
@@ -1125,7 +1143,11 @@ export class ModeHybridRetriever {
         if (!stats) return pool.map((c) => ({ fts: this.computeFtsScore(c.text, queryWords), anchor: 0 }));
         const idfWords = this.idfQueryWords.get(queryWords) ?? queryWords;
         const q = queryWeights(idfWords, stats);
-        const anchors = anchorTerms(idfWords, stats);
+        // Anchors come from CONTENT words (review finding, reproduced): with raw
+        // query words, "how"/"did"/"you" were anchors — rarer in a handbook than
+        // the project's own name — and the true chunk got 0.034 of a 0.25 boost
+        // while two unrelated "interview questions" chunks got 0.099 each.
+        const anchors = anchorTerms(new Set([...idfWords].filter((w) => !isProbeFunctionWord(w))), stats);
         return pool.map((_, i) => {
             const cov = anchorCoverage(anchors, stats.sets[i]);
             return { fts: weightedOverlapScore(q, stats.sets[i], stats.norms[i]), anchor: ANCHOR_BOOST * cov * cov };
@@ -2359,9 +2381,15 @@ export class ModeHybridRetriever {
         const staleFileIds = new Set<string>();
         for (const file of files) {
             if (!fileIds.includes(file.id) || !file.content?.trim()) continue;
-            if (this.getIndexState(file.id) && this.needsReindexing(file)) {
+            const state = this.getIndexState(file.id);
+            if (!state) continue;
+            if (this.needsReindexing(file)) {
                 staleFileIds.add(file.id);
                 this.indexFile(file).catch(() => { /* logged inside */ });
+            } else if (state.status === 'indexing' || state.status === 'failed' || state.status === 'pending') {
+                // Hash current, vectors not: a job is writing them, or died doing
+                // so. Whatever rows exist are not a complete, aligned set.
+                staleFileIds.add(file.id);
             }
         }
         if (staleFileIds.size > 0) {
