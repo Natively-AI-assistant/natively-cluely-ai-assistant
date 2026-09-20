@@ -99,8 +99,17 @@ export interface NativelyPlanLimits {
   embedding_tokens: number;
   reranker_tokens: number;
   research_credits_usd: number;
-  /** Research runs — the integer the research gate actually compares. */
+  /**
+   * Search CREDITS — the integer the research gate actually compares. Counted
+   * runs until 2026-09-21; /v1/search now bills each query at its true Tavily
+   * cost, so a run is many credits. Divide by `research_credits_per_run` before
+   * showing a user anything labelled "runs".
+   */
   search_requests: number;
+  /** Complete company researches this plan promises (10 on every paid tier). */
+  research_runs?: number;
+  /** Credits one complete run costs — the credits→runs conversion factor. */
+  research_credits_per_run?: number;
 }
 
 export interface NativelyUsageResponse {

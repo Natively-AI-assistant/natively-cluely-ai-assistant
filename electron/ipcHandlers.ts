@@ -14821,9 +14821,17 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle('profile:research-company', async (_, companyName: string) => {
+  // forceRefresh defaults to FALSE — the cheap call (2026-09-21). This used to
+  // hardcode `true`, which skipped the 24h company_dossiers cache on every
+  // click. That mattered because a JD upload ALREADY researches the company:
+  // ingest step 9 fires the AOT pipeline, whose Phase 1 is this same engine,
+  // spending 7-10 Tavily queries at depth 'advanced' (2 credits each). The
+  // renderer had no way to learn that dossier had landed, so it showed the
+  // "Research Now" CTA, and the CTA bought the identical dossier a second time.
+  // Only the explicit "Refresh" pill passes true now.
+  safeHandle('profile:research-company', async (_, companyName: string, forceRefresh: boolean = false) => {
     try {
-      console.log(`[CompanyIntel-research] invoked for companyName="${companyName}"`);
+      console.log(`[CompanyIntel-research] invoked for companyName="${companyName}" forceRefresh=${forceRefresh}`);
       // Premium gate
       if (!isProOrTrialActive()) {
         return {
@@ -14862,7 +14870,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             min_years_experience: activeJD.min_years_experience,
           }
         : {};
-      const dossier = await engine.researchCompany(companyName, jdCtx, true);
+      const dossier = await engine.researchCompany(companyName, jdCtx, forceRefresh);
       console.log(`[CompanyIntel-research] engine returned dossier=${dossier ? 'YES (' + (dossier.hiring_strategy?.length || 0) + 'b)' : 'NULL'}`);
       const searchQuotaExhausted = (engine.searchProvider as any)?.quotaExhausted === true;
       return { success: true, dossier, searchQuotaExhausted };
