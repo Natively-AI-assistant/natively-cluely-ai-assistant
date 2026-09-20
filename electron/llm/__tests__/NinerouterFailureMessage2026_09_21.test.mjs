@@ -32,73 +32,72 @@ const { describeNinerouterFailure, NINEROUTER_EMPTY_ANSWER } =
 const err = (status, message) => Object.assign(new Error(message), { status });
 const say = (e, model = 'cc/claude-opus-5') => describeNinerouterFailure(e, model);
 
-describe('every message names the model and says what to DO', () => {
+describe('every message names the MODEL and nothing else', () => {
+  // The contract: the user picked a row labelled `claude-opus-5`, so that is
+  // what a failure calls it. Natively's `ninerouter/` routing prefix and
+  // 9Router's upstream alias (`cc/`, `cx/`) are plumbing they never chose.
   const CASES = [
-    [401, '[claude/claude-opus-5] [401]: {"type":"error","error":{"message":"OAuth token expired"}}'],
-    [410, '[nvidia/z-ai/glm-5.2] [410]: {"type":"aborted"}'],
-    [429, '[gemini/gemini-3.6-flash] [429]: {"error":{"message":"You exceeded your current quota"}}'],
+    [401, '401 [claude/claude-opus-5] [401]: {"type":"error","error":{"message":"OAuth token expired"}}'],
+    [410, '410 [nvidia/z-ai/glm-5.2] [410]: {"type":"aborted"}'],
+    [429, '429 [gemini/gemini-3.6-flash] [429]: {"error":{"message":"You exceeded your current quota"}}'],
     [404, 'No active credentials for provider: alicode'],
-    [400, '[minimax/MiniMax-M2.7] [400]: {"error":{"message":"invalid params, context window exceeded"}}'],
-    [500, '[x/y] [500]: upstream boom'],
+    [400, '400 [minimax/MiniMax-M2.7] [400]: {"error":{"message":"invalid params, context window exceeded"}}'],
+    [500, '500 [x/y] [500]: upstream boom'],
   ];
   for (const [status, raw] of CASES) {
-    test(`${status} names the model and gives an action`, () => {
-      const m = say(err(status, raw));
-      assert.match(m, /cc\/claude-opus-5/, 'the model must be named — the user picked it');
-      assert.match(m, /did not produce an answer/i, 'the familiar line must still be there');
-      assert.ok(m.length < 400, 'it has to fit a chat bubble');
+    test(`${status}: bare name, familiar lead, no plumbing`, () => {
+      const m = say(err(status, raw), 'cc/claude-opus-5');
+      assert.match(m, /^claude-opus-5 did not produce an answer\./,
+        'it must open with the bare model name and the familiar line');
+      assert.doesNotMatch(m, /\bcc\//, 'the routing alias must not appear');
+      assert.doesNotMatch(m, /ninerouter\//, 'the internal prefix must not appear');
+      assert.ok(m.length < 320, 'it has to fit a chat bubble');
       assert.doesNotMatch(m, /\{|\}|"type"/, 'raw JSON must not reach the user');
     });
   }
+
+  test('a fully prefixed id is reduced to the last segment', () => {
+    const m = say(err(429, 'quota'), 'ninerouter/gemini/gemini-3.5-flash-lite');
+    assert.match(m, /^gemini-3\.5-flash-lite did not produce an answer\./);
+  });
 });
 
-describe('each cause gets its own remedy', () => {
-  test('401 sends the user to reconnect the account, not to check their key', () => {
-    // The commonest failure by far: 27 of 47 models on the reference instance.
-    // It is 9ROUTER's upstream account that expired, not the user's Natively
-    // key and not their 9Router key — so "check your API key" would be wrong.
-    const m = say(err(401, '[claude/claude-opus-5] [401]: {"error":{"message":"OAuth token expired"}}'));
-    assert.match(m, /9Router/, 'it must point at 9Router, not at Natively');
-    assert.match(m, /reconnect|sign in|dashboard/i);
-    assert.doesNotMatch(m, /your (Natively )?API key/i, 'must not blame the user\'s own key');
+describe('each cause still gets its own remedy', () => {
+  test('401 points at the account, not at the user\'s own key', () => {
+    const m = say(err(401, '401 [claude/claude-opus-5] [401]: expired'), 'cc/claude-opus-5');
+    assert.match(m, /account is no longer authorised/i);
+    assert.match(m, /reconnect/i);
+    // The ONE place a destination survives: "reconnect it" with nowhere to go
+    // is not a remedy.
+    assert.match(m, /9Router dashboard/);
+    assert.doesNotMatch(m, /your (Natively )?API key/i);
   });
 
-  test('410 says the model is gone, so retrying is pointless', () => {
-    const m = say(err(410, '[nvidia/z-ai/glm-5.2] [410]: {"type":"aborted"}'), 'nvidia/z-ai/glm-5.2');
-    assert.match(m, /retired|no longer/i);
-    assert.match(m, /another model|different model/i);
+  test('410 says retired, and does NOT invite a retry', () => {
+    const m = say(err(410, '410 [nvidia/z-ai/glm-5.2] [410]: aborted'), 'nvidia/z-ai/glm-5.2');
+    assert.match(m, /^glm-5\.2 did not produce an answer\./);
+    assert.match(m, /retired/i);
     assert.doesNotMatch(m, /try again|retry/i, 'retrying a retired model never works');
   });
 
   test('429 says wait — the opposite advice to 410', () => {
-    const m = say(err(429, '[gemini/x] [429]: quota'), 'gemini/x');
-    assert.match(m, /quota|rate limit/i);
-    assert.match(m, /try again|wait|later/i);
+    const m = say(err(429, '429 [gemini/x] [429]: quota'), 'gemini/gemini-3.6-flash');
+    assert.match(m, /quota|rate.?limit/i);
+    assert.match(m, /try again|shortly|later/i);
   });
 
   test('a context overflow blames the request, not the account', () => {
-    const m = say(err(400, '[minimax/MiniMax-M2.7] [400]: invalid params, context window exceeded'), 'minimax/MiniMax-M2.7');
-    assert.match(m, /too (large|long)|context/i);
-    assert.match(m, /shorter|shorten|smaller/i);
-    assert.doesNotMatch(m, /reconnect|dashboard/i, 'nothing is wrong with the account here');
+    const m = say(err(400, '400 [minimax/MiniMax-M2.7] [400]: invalid params, context window exceeded'), 'minimax/MiniMax-M2.7');
+    assert.match(m, /too large|context window/i);
+    assert.match(m, /shorter|smaller|bigger window/i);
+    assert.doesNotMatch(m, /reconnect/i, 'nothing is wrong with the account here');
   });
 
-  test('it names the upstream as the DASHBOARD lists it, not the alias', () => {
-    // The OpenAI SDK puts its own status in front of 9Router's relayed text, so
-    // the real message is `401 [claude/claude-opus-5] [401]: …`. An anchored
-    // regex missed that and fell back to the alias from the model id — telling
-    // the user to reconnect their "cc" account, which appears nowhere in the
-    // 9Router dashboard. It is listed as "claude".
-    const m = say(err(401, '401 [claude/claude-opus-5] [401]: {"error":{"message":"expired"}}'), 'cc/claude-opus-5');
-    assert.match(m, /claude account/i, 'must use the upstream name the dashboard shows');
-    assert.doesNotMatch(m, /\bcc account\b/i, 'the routing alias is not what the user reconnects');
-    assert.match(m, /cc\/claude-opus-5/, 'but the MODEL is still the one the user picked');
-  });
-
-  test('"No active credentials for provider: X" names X, not the model', () => {
+  test('404 offers to add an account', () => {
     const m = say(err(404, 'No active credentials for provider: alicode'), 'alicode/glm-5');
-    assert.match(m, /alicode/);
-    assert.match(m, /dashboard|add|connect/i);
+    assert.match(m, /^glm-5 did not produce an answer\./);
+    assert.match(m, /no working account/i);
+    assert.match(m, /add one/i);
   });
 });
 
@@ -107,26 +106,29 @@ describe('the silent case: a 200 with no text', () => {
     // MiniMax-M3 and gemma-4-31b-it both do this on the reference instance:
     // HTTP 200, a well-formed SSE stream, and zero content deltas. Nothing
     // throws, so without this the user sees an empty bubble.
-    // The sentinel is an internal marker, not prose — only the MESSAGE has to
-    // read like the rest of the app.
     assert.equal(typeof NINEROUTER_EMPTY_ANSWER, 'string');
     const m = describeNinerouterFailure(new Error(NINEROUTER_EMPTY_ANSWER), 'minimax/MiniMax-M3');
-    assert.match(m, /did not produce an answer/i);
-    assert.match(m, /minimax\/MiniMax-M3/);
-    assert.match(m, /no text|nothing|empty/i);
-    assert.match(m, /another model|different model/i);
+    assert.match(m, /^MiniMax-M3 did not produce an answer\./);
+    assert.match(m, /no text/i);
+    assert.match(m, /another model/i);
   });
 });
 
 describe('it never makes things worse', () => {
   test('an unrecognised error still yields a usable line', () => {
-    const m = say(new Error('something entirely unexpected'), 'x/y');
-    assert.match(m, /did not produce an answer/i);
-    assert.match(m, /x\/y/);
+    const m = say(new Error('something entirely unexpected'), 'ninerouter/x/y-model');
+    assert.match(m, /^y-model did not produce an answer\./);
   });
 
   test('no key or token is ever echoed', () => {
     const m = say(err(401, 'Bearer sk-048783e49fcaece4-babrx7-507610ec rejected'), 'x/y');
-    assert.doesNotMatch(m, /sk-[0-9a-f]/, 'a key in an upstream message must not be relayed to the UI');
+    assert.doesNotMatch(m, /sk-[0-9a-f]/, 'a key in an upstream message must not reach the UI');
+  });
+
+  test('a degenerate id does not produce a blank subject', () => {
+    for (const id of ['', '/', 'solo']) {
+      const m = describeNinerouterFailure(err(429, 'quota'), id);
+      assert.ok(m.trim().length > 20 && !m.startsWith(' '), `id ${JSON.stringify(id)} -> ${m}`);
+    }
   });
 });

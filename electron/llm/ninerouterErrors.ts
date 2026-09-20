@@ -37,81 +37,76 @@ function redact(text: string): string {
 }
 
 /**
- * 9Router prefixes a relayed error with `[upstream/model] [status]:`. Pull the
- * upstream's REAL name out of it.
+ * The bare model name, as the rest of the UI already shows it.
  *
- * Deliberately NOT anchored to the start: the OpenAI SDK puts its own status in
- * front, so the text is `401 [claude/claude-opus-5] [401]: …`. Anchoring made
- * this miss and fall through to the alias, and the alias is the wrong word to
- * put in the message — the user picked `cc/claude-opus-5`, but their dashboard
- * lists that account as "claude", which is what they have to go and reconnect.
+ * Two prefixes stack on these ids and neither means anything to the person
+ * reading the message: Natively's `ninerouter/` routing prefix, and 9Router's
+ * own upstream alias (`cc/`, `cx/`, `alicode/`). The user picked a row labelled
+ * "claude-opus-5", so that is what a failure should call it.
+ *
+ * Same last-segment rule as gatewayModelLabel in src/utils/modelUtils.ts,
+ * restated because electron/ never imports from src/.
  */
-function upstreamOf(raw: string, fallbackModel: string): string {
-  const m = /\[([A-Za-z0-9_.-]+)\/[^\]]*\]\s*\[\d{3}\]/.exec(raw);
-  if (m) return m[1];
-  const byProvider = /No active credentials for provider:\s*([\w.-]+)/i.exec(raw);
-  if (byProvider) return byProvider[1];
-  return fallbackModel.split('/')[0] || fallbackModel;
+function bareModelName(model: string): string {
+  const parts = String(model || '').split('/').filter(Boolean);
+  return parts.length ? parts[parts.length - 1] : String(model || 'The model');
 }
 
 /**
- * One sentence of cause plus one of remedy, prefixed with the app's familiar
+ * One sentence of cause plus one of remedy, opening with the app's familiar
  * "did not produce an answer" phrasing so it reads like every other failure.
  *
- * `model` is the id the USER picked (the 9Router wire id, e.g.
- * `cc/claude-opus-5`) — always named, because with 47 selectable models
- * "the model failed" does not identify which one.
+ * Names ONLY the model. The upstream provider, the routing alias and the proxy
+ * are plumbing the user never chose. The single exception is the destination in
+ * a remedy — "reconnect it" without saying where is not a remedy.
  */
 export function describeNinerouterFailure(error: unknown, model: string): string {
   const err = error as { status?: number; message?: string } | undefined;
   const raw = redact(String(err?.message || ''));
   const status = Number(err?.status) || Number(/\[(\d{3})\]/.exec(raw)?.[1]) || 0;
-  const lead = `${model} did not produce an answer.`;
+  const name = bareModelName(model);
+  const lead = `${name} did not produce an answer.`;
 
   if (raw.includes(NINEROUTER_EMPTY_ANSWER)) {
-    return `${lead} 9Router accepted the request and returned no text — some models only stream their reasoning. Pick another model.`;
+    return `${lead} It returned no text — some models only stream their reasoning. Pick another model.`;
   }
-
-  const upstream = upstreamOf(raw, model);
 
   if (status === 401 || status === 403) {
     // The commonest failure by a wide margin, and the one most likely to be
-    // misread: it is 9ROUTER's account for the upstream that expired, not the
-    // user's Natively key and not their 9Router key.
-    return `${lead} 9Router's ${upstream} account is no longer authorised — its sign-in or API key has expired. `
-      + `Reconnect it in the 9Router dashboard under Providers, or pick another model.`;
+    // misread: the expired credential belongs to the account behind this model,
+    // not to the user's own Natively key.
+    return `${lead} Its account is no longer authorised — the sign-in or API key has expired. `
+      + `Reconnect it in the 9Router dashboard, or pick another model.`;
   }
 
   if (status === 410) {
-    // Distinct from 429 on purpose: retrying is futile, so the message must not
-    // suggest it. 9Router's catalogue can list models a vendor has removed.
-    return `${lead} ${upstream} has retired this model, so 9Router can no longer route to it. `
-      + `Pick another model — 9Router's list can lag the provider.`;
+    // Distinct from 429 on purpose: retrying is futile, so the wording must not
+    // invite it.
+    return `${lead} This model has been retired and can no longer be reached. Pick another model.`;
   }
 
   if (status === 429) {
-    return `${lead} ${upstream} is rate-limited or out of quota. Try again shortly, or pick another model.`;
+    return `${lead} It is rate-limited or out of quota. Try again shortly, or pick another model.`;
   }
 
   if (status === 404) {
-    return `${lead} 9Router has no working account for ${upstream}. `
-      + `Add one in the 9Router dashboard under Providers, or pick another model.`;
+    return `${lead} There is no working account for it. Add one in the 9Router dashboard, or pick another model.`;
   }
 
   if (status === 400 && /context|too (long|large)|max.*token/i.test(raw)) {
-    return `${lead} The request was too large for this model's context window. `
+    return `${lead} The request was too large for its context window. `
       + `Send a shorter message, or pick a model with a bigger window.`;
   }
 
   if (status >= 500) {
-    return `${lead} ${upstream} returned a server error through 9Router. Try again shortly, or pick another model.`;
+    return `${lead} The server returned an error. Try again shortly, or pick another model.`;
   }
 
   if (status === 400) {
-    return `${lead} 9Router rejected the request for this model. Pick another model, or check the model's settings.`;
+    return `${lead} The request was rejected for this model. Pick another model, or check its settings.`;
   }
 
   // Unknown shape — still name the model and still lead with the familiar line,
   // so the message degrades to "less specific" rather than "less useful".
-  return `${lead} 9Router could not complete the request${raw ? ` (${raw.slice(0, 120)})` : ''}.`;
+  return `${lead} The request could not be completed${raw ? ` (${raw.slice(0, 120)})` : ''}.`;
 }
