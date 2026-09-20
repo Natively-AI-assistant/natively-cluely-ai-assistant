@@ -2043,6 +2043,16 @@ export function ProfileIntelligenceSettings({
     const [companyDossier, setCompanyDossier] = useState<any>(null);
     const [companySearchQuotaExhausted, setCompanySearchQuotaExhausted] = useState(false);
 
+    // Apply the dossier carried by a getProfileData() payload (2026-09-21).
+    // getProfileData returns the wrapper { dossier, sources, last_checked } from
+    // some paths and the inner dossier from others, so unwrap once here instead
+    // of at each call site. Setting null is CORRECT and load-bearing: a new JD
+    // means a new company, and the previous company's dossier must not linger.
+    const applyCompanyDossier = (data: any) => {
+        const cd = data?.companyDossier;
+        setCompanyDossier(cd ? (cd.dossier ?? cd) : null);
+    };
+
     // Cover Letter
     const [coverLetter, setCoverLetter] = useState<any>(null);
     const [coverLetterGenerating, setCoverLetterGenerating] = useState(false);
@@ -2111,8 +2121,7 @@ export function ProfileIntelligenceSettings({
             // dossier directly. Unwrap so the Company Intel panel always sees the
             // inner dossier shape — required by the live-search vs LLM-only branch.
             if (data?.companyDossier) {
-                const cd = data.companyDossier;
-                setCompanyDossier(cd?.dossier ?? cd);
+                applyCompanyDossier(data);
             }
             // Fallback path — if the full profile payload's companyDossier is
             // missing for any reason (cache race, schema mismatch), fetch it
@@ -2174,6 +2183,10 @@ export function ProfileIntelligenceSettings({
                 if (stopped) return;
                 if (data) setProfileData(data);
                 setProfileStatus(st);
+                // An ADOPTED JD ingest lands here instead of in doJdUpload, so it
+                // needs the same dossier hydration — otherwise a JD uploaded just
+                // before this panel mounted keeps showing the CTA.
+                if (data && jdSettled) applyCompanyDossier(data);
 
                 if (resumeSettled) {
                     profileDetachedRef.current = false;
@@ -2199,6 +2212,56 @@ export function ProfileIntelligenceSettings({
         timer = setTimeout(tick, 1500);
         return cleanup;
     }, [profileUploading, jdUploading, adoptTick]);
+
+    // Wait out the fire-and-forget AOT run (2026-09-21).
+    //
+    // Uploading a JD automatically researches the company — ingest step 9 calls
+    // aotPipeline.runForJD(), whose Phase 1 spends 7-10 Tavily queries and writes
+    // the dossier to company_dossiers. But runForJD is NOT awaited in production,
+    // so profileUploadJD acks long before the dossier exists, and ingest pushes no
+    // event when it lands. The panel therefore sat on null and offered to research
+    // a company it had just researched — and that CTA used to force-refresh, so
+    // accepting the offer bought the same dossier a second time.
+    //
+    // getProfileData already publishes aotStatus.companyResearch; runForJD sets it
+    // to 'running' synchronously, before its first await, so it is reliably visible
+    // by the time the upload ack returns. Poll until it settles, then hydrate.
+    // Keyed on the status value itself, so this also covers mounting mid-research.
+    useEffect(() => {
+        let stopped = false;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        // Declared ABOVE the guard and returned on every path, for the reason
+        // spelled out on the adopted-ingest effect above: a bare `return` out of
+        // an effect that arms a polling timer is safe only while the guard stays
+        // above every schedule site, which is not an invariant to leave to a
+        // future edit.
+        const cleanup = () => { stopped = true; if (timer) clearTimeout(timer); };
+        if (profileData?.aotStatus?.companyResearch !== 'running') return cleanup;
+        // Bound the poll. Company research is ~10 sequential queries behind a 2s
+        // rate limiter plus an LLM summarise, so it can legitimately run past a
+        // minute — but a pipeline that died without setting 'done' or 'failed'
+        // must not leave a timer ticking for the life of the window.
+        let remaining = 90; // 90 x 2s = 3 minutes
+        const tick = async () => {
+            try {
+                const data: any = await window.electronAPI?.profileGetProfile?.();
+                if (stopped) return;
+                if (data) {
+                    setProfileData(data);
+                    if (data.aotStatus?.companyResearch !== 'running') {
+                        // Settled — 'done' hydrates the dossier, 'failed' clears to
+                        // null and the CTA legitimately reappears (and is now free
+                        // to click, since nothing was cached).
+                        applyCompanyDossier(data);
+                        return;
+                    }
+                }
+            } catch { /* transient IPC failure — keep polling */ }
+            if (!stopped && --remaining > 0) timer = setTimeout(tick, 2000);
+        };
+        timer = setTimeout(tick, 2000);
+        return cleanup;
+    }, [profileData?.aotStatus?.companyResearch]);
 
     const handleRemoveTavilyKey = async () => {
         if (!confirm('Remove your Tavily API key?')) return;
@@ -2258,6 +2321,12 @@ export function ProfileIntelligenceSettings({
                 const data = await window.electronAPI?.profileGetProfile?.();
                 if (token.cancelled) return;
                 if (data) setProfileData(data);
+                // Clear the previous company's dossier and pick up the new one if
+                // it somehow already exists (cached from an earlier session at the
+                // same company). Usually it does NOT: ingest fires the AOT pipeline
+                // fire-and-forget, so this ack lands ~20-60s before company research
+                // finishes. The aotStatus poll below is what catches that.
+                applyCompanyDossier(data);
                 setJdUploadStatus('ready');
             } else {
                 setJdError(result?.error || 'JD upload failed');
@@ -2301,12 +2370,16 @@ export function ProfileIntelligenceSettings({
         await doJdUpload(fileResult.filePath);
     };
 
-    const doCompanyResearch = async () => {
+    // forceRefresh MUST be passed explicitly by each call site. Never wire this
+    // as onClick={doCompanyResearch} — React hands the MouseEvent to the first
+    // parameter, and a truthy object would silently force-refresh every click,
+    // re-buying 14-20 Tavily credits of dossier that is already cached.
+    const doCompanyResearch = async (forceRefresh: boolean) => {
         const company = profileData?.activeJD?.company;
         if (!company) return;
         setCompanyResearching(true); setCompanySearchQuotaExhausted(false);
         try {
-            const result = await window.electronAPI?.profileResearchCompany?.(company);
+            const result = await window.electronAPI?.profileResearchCompany?.(company, forceRefresh);
             if (result?.success && result.dossier) setCompanyDossier(result.dossier);
             if (result?.searchQuotaExhausted) setCompanySearchQuotaExhausted(true);
         } catch { /**/ }
@@ -2979,6 +3052,15 @@ export function ProfileIntelligenceSettings({
         // render below it instead of replacing it. Company research keys off
         // the active JD's company, not the resume.
         const loaded = !!companyDossier;
+        // The JD upload's automatic research is ALREADY spending (2026-09-21).
+        // Without this, the 20-60s AOT window renders "Ready to research →
+        // Research Now" — the exact screen that trained the habit of clicking it
+        // — and a click there fires a SECOND query set concurrently with the run
+        // in flight. It also re-resolves the provider on the shared singleton
+        // engine mid-run, minting a new session UUID, so the server bills the
+        // remainder of the AOT run as another research run too. Show the skeleton
+        // that already exists instead: the work is genuinely underway.
+        const aotResearching = profileData?.aotStatus?.companyResearch === 'running';
         return (
             <>
                 {/* Header — Refresh pill sits next to the title once the dossier is
@@ -2994,7 +3076,7 @@ export function ProfileIntelligenceSettings({
                         </p>
                     </div>
                     {loaded && (
-                        <button className="pi-pill-btn pi-press" disabled={companyResearching} onClick={doCompanyResearch}>
+                        <button className="pi-pill-btn pi-press" disabled={companyResearching} onClick={() => doCompanyResearch(true)}>
                             <RefreshCw size={12} className={companyResearching ? 'pi-spinner' : ''} />
                             {companyResearching ? 'Refreshing' : 'Refresh'}
                         </button>
@@ -3039,7 +3121,7 @@ export function ProfileIntelligenceSettings({
                         Web search credits exhausted — showing AI-only research.
                     </div>
                 )}
-                {!companyDossier && !companyResearching && companyName && (
+                {!companyDossier && !companyResearching && !aotResearching && companyName && (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
                         <div style={{ width: 40, height: 40, borderRadius: 20, background: 'var(--pi-accent-subtle)', border: '1px solid var(--pi-badge-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             <Building2 size={18} style={{ color: 'var(--pi-accent-icon)' }} />
@@ -3053,13 +3135,13 @@ export function ProfileIntelligenceSettings({
                         <button
                             className="pi-pill-btn pi-press"
                             style={{ color: 'var(--pi-cta-accent-text)', borderColor: 'var(--pi-cta-accent-border)', background: 'var(--pi-accent-subtle)', fontWeight: 600, padding: '8px 20px' }}
-                            onClick={doCompanyResearch}
+                            onClick={() => doCompanyResearch(false)}
                         >
                             Research Now
                         </button>
                     </div>
                 )}
-                {companyResearching && companyName && (
+                {(companyResearching || aotResearching) && companyName && (
                     <div className="pi-cascade" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                         {/* Work Culture skeleton — overall rating + 4 sub-ratings grid.
                             Card shell is solid (no pulse); only the inner text placeholders breathe. */}

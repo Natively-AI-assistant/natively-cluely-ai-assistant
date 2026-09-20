@@ -212,7 +212,11 @@ test('gemini-chat-stream handler supersedes only the current sender and passes s
     // every assertion below it silently described code it was not looking at.
     const handlerStart = ipcHandlersSrc.search(/const\s+_geminiChatStreamHandler\s*=/);
     assert.ok(handlerStart >= 0, 'could not locate the _geminiChatStreamHandler implementation');
-    const handlerRegion = ipcHandlersSrc.slice(handlerStart, handlerStart + 40_000);
+    // The window is a search bound, not a contract. At 40_000 it failed FALSELY on
+    // 2026-09-21: the first supersession check had drifted to +40,555 as the V3
+    // call above it grew (real-time prompt channel, query rewriter) — the handler
+    // was correct, the slice just stopped 555 chars short of it.
+    const handlerRegion = ipcHandlersSrc.slice(handlerStart, handlerStart + 80_000);
 
     assert.ok(
         /const\s+senderId\s*=\s*event\.sender\.id/.test(handlerRegion),

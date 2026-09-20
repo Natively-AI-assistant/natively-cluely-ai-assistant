@@ -3,6 +3,7 @@ import type { ExtractedQuestion } from './transcriptQuestionExtractor';
 import { CODING_CONTRACT, CODING_CONTRACT_IMPL, CODING_VERIFICATION_INSTRUCTION } from './codingContract';
 import { detectAnswerStyle, type AnswerStyle } from './answerStyle';
 import { classifyTargetSpeakability, classifyShortBand, shortBandTargetWords, HARD_MAX_WORDS, SPOKEN_FULL_MAX_WORDS } from './speakability';
+import { analyzeUserInstructions, getRegisteredUserInstructions, userInstructionsOverrideAppLength } from './userInstructionContract';
 import { applyModeFallback, type ActiveModeInfo } from './modeProfiles';
 import { classifyDocumentQuestionShape } from './documentGroundedPrompt';
 import { includesPlannerTerm } from '../services/modes/retrievalTextMatch';
@@ -2345,7 +2346,20 @@ export const formatAnswerPlanForPrompt = (plan: AnswerPlan, includeVerificationS
   // cue — SPOKEN_FULL / STRUCTURED_FULL and explicit styles own their own length, so emit
   // nothing for them (additive, non-conflicting). Prompt-guidance only; the deterministic
   // trimmer is unchanged.
-  const _lengthLine = renderLengthDirectiveForPlan(plan);
+  // The app's length target is a DEFAULT, here exactly as on the V3 composer
+  // (ComposeInput.defaultLengthDirective). Found 2026-09-20 by the real-wiring
+  // E2E with V3 switched OFF: the first fix split the length channel only on
+  // the V3 path, so this legacy <answer_contract> — V3's fallback, and every
+  // surface that assembles through here — still sent "roughly 40 to 60 words
+  // ... Hard ceiling: never go past 75" beside the user's own "Answer in 100
+  // words.". Same registry the coding-format resolver asks; no provider (every
+  // unit test) or a throwing one ⇒ unchanged behaviour.
+  const _userSetsLength = (() => {
+    try {
+      return userInstructionsOverrideAppLength(analyzeUserInstructions(getRegisteredUserInstructions()));
+    } catch { return false; }
+  })();
+  const _lengthLine = _userSetsLength ? '' : renderLengthDirectiveForPlan(plan);
   const lengthDirective = _lengthLine ? `\n\n${_lengthLine}` : '';
   // Speakable-by-default (manual regression 2026-06-12): scaffolded profile
   // templates become internal thinking structure; the rendered answer is

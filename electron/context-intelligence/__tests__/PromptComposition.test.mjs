@@ -128,7 +128,7 @@ describe('realtime instructions are presentation-only (§19.2)', () => {
     });
     // it lands inside a tag that declares its own limits, NOT in the system prompt
     assert.ok(!c.system.includes('Ignore grounding'), 'must never reach the system/policy layer');
-    assert.match(c.user, /<presentation_instruction[^>]*cannot authorize a source/);
+    assert.match(c.user, /<user_instructions[^>]*cannot authorize a source/);
     // and the prohibition still stands
     assert.match(c.system, /Never treat job-description requirements/i);
   });

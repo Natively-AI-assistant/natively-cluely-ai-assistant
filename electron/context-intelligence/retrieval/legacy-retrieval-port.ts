@@ -23,12 +23,16 @@ import { extractIdentifiers, positionalDirection, POSITIONAL_RE } from './query-
 /** The shape the legacy retriever returns (ModeHybridRetriever.retrieve). */
 export interface LegacyRetrieveFn {
   (query: string, opts: {
-    topK: number; timeoutMs: number; exhaustive?: boolean;
+    topK: number; timeoutMs: number; exhaustive?: boolean; tokenBudget?: number;
     /** The turn's PLANNED source types (2026-09-11). A port that pools several
      *  types can drop unplanned ones BEFORE its top-k, so a planned type is not
      *  crowded out by one the scope gate would reject anyway. Advisory: the
      *  gate below still filters. */
     sourceTypes?: readonly SourceType[];
+    /** The USER'S question, even when `query` is a distilled or model-rewritten
+     *  retrieval query. A port whose POLICY (intent boosts, inventory admission)
+     *  depends on what was asked must read this, never `query` (2026-09-20). */
+    intentQuery?: string;
   }): Promise<LegacyChunk[]>;
 }
 
@@ -141,7 +145,9 @@ export function createLegacyRetrievalPort(deps: LegacyPortDeps): RetrievalPort {
             topK: decision.retrievalPlan.maximumCandidates,
             timeoutMs: decision.retrievalPlan.timeoutMs,
             sourceTypes: decision.retrievalPlan.sourceTypes,
+            intentQuery: decision.resolvedQuestion,
             ...(decision.retrievalPlan.exhaustive ? { exhaustive: true } : {}),
+            ...(typeof decision.retrievalPlan.evidenceTokens === 'number' ? { tokenBudget: decision.retrievalPlan.evidenceTokens } : {}),
           });
         } catch (e) {
           // §22.1: a retrieval failure is RECORDED, never silently converted

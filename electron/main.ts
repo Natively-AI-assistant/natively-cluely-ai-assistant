@@ -2617,6 +2617,17 @@ export class AppState {
         if (typeof this.knowledgeOrchestrator.setEmbedWithMetadataFn === 'function') {
           this.knowledgeOrchestrator.setEmbedWithMetadataFn(embedWithProducerMetadata);
         }
+        // Ingest embeds its nodes a BATCH at a time through this (2026-09-19): ten
+        // concurrent single-text requests per batch drew 429s from the embed route
+        // and silently demoted a whole résumé's nodes to the bundled model's space.
+        if (typeof (this.knowledgeOrchestrator as any).setEmbedBatchWithMetadataFn === 'function') {
+          (this.knowledgeOrchestrator as any).setEmbedBatchWithMetadataFn(async (texts: string[]) => {
+            const pipeline = self.ragManager?.getEmbeddingPipeline();
+            if (!pipeline) throw new Error('RAG pipeline not available');
+            await pipeline.waitForReady();
+            return await pipeline.getEmbeddingsWithFallback(texts);
+          });
+        }
         // Report the active document-embedder's composite space so the orchestrator
         // can detect knowledge nodes embedded in an OLD space (e.g. after a
         // gemini-embedding-001 → -2 upgrade) and re-embed them, instead of silently

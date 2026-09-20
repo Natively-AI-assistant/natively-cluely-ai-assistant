@@ -55,7 +55,7 @@ describe('F23 — lexical floor is on the lexical scale', () => {
 
   test('lexical retrieval ADMITS it at the default floor', () => {
     const out = P.performLexicalRetrieval.call(
-      { computeFtsScore: P.computeFtsScore },
+      { computeFtsScore: P.computeFtsScore, lexicalScores: P.lexicalScores, lexicalStatsFor: P.lexicalStatsFor, idfQueryWords: new WeakMap() },
       [candidate(RESUME)],
       new Set(wordsOf(QUERY)),
     );
@@ -65,7 +65,7 @@ describe('F23 — lexical floor is on the lexical scale', () => {
 
   test('noise is still rejected — the floor was corrected, not removed', () => {
     const out = P.performLexicalRetrieval.call(
-      { computeFtsScore: P.computeFtsScore },
+      { computeFtsScore: P.computeFtsScore, lexicalScores: P.lexicalScores, lexicalStatsFor: P.lexicalStatsFor, idfQueryWords: new WeakMap() },
       [candidate('Completely unrelated content about gardening and weather patterns.')],
       new Set(wordsOf(QUERY)),
     );
@@ -76,7 +76,7 @@ describe('F23 — lexical floor is on the lexical scale', () => {
     // Passing the combined-scale floor explicitly must behave like the default,
     // not re-introduce the bug at the call sites.
     const admitted = P.performLexicalRetrieval.call(
-      { computeFtsScore: P.computeFtsScore },
+      { computeFtsScore: P.computeFtsScore, lexicalScores: P.lexicalScores, lexicalStatsFor: P.lexicalStatsFor, idfQueryWords: new WeakMap() },
       [candidate(RESUME)],
       new Set(wordsOf(QUERY)),
       0.15 * 0.4,

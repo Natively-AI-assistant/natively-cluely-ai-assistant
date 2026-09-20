@@ -3562,6 +3562,8 @@ export class IntelligenceEngine extends EventEmitter {
                     if (!_ctx) return undefined;
                     const _v3 = await buildV3Prompt({
                         surface: 'what-to-answer',
+                        // Low-confidence query rewrite: the user's fast model, 1.5 s hard cap.
+                        queryRewriter: require('./context-intelligence/retrieval/rewriter-binding').bindQueryRewriter(this.llmHelper),
                         screenText: _screenDescription,
                         // The chat-history rollback must reach THIS surface too.
                         // ipcHandlers was the only call site passing it, so the
@@ -3658,26 +3660,32 @@ export class IntelligenceEngine extends EventEmitter {
                         // it: same per-answer-type scoping as the legacy path,
                         // so directives survive coding turns and factual/
                         // sensitive chunks stay gated.
+                        //
+                        // 2026-09-20: the USER's text and the APP's length line
+                        // are now two channels. They used to be joined into
+                        // this one string, so the model read "Answer in 100
+                        // words." followed — in the same block — by "roughly 40
+                        // to 60 words ... Hard ceiling: never go past 75 words",
+                        // and the later, louder line won (reproduced against the
+                        // built planner). The composer drops the app's line when
+                        // the user set a length and otherwise renders it BEFORE
+                        // the user's block, as a default.
                         realtimeInstruction: (() => {
-                            const parts: string[] = [];
                             try {
                                 const { ModesManager } = require('./services/ModesManager');
-                                const pinned = ModesManager.getInstance().getActiveModePinnedInstructions?.(answerPlan.answerType, snapshotModeInfo?.id) || '';
-                                if (pinned) parts.push(pinned);
-                            } catch { /* pinned instructions unavailable — length line below still rides */ }
-                            // RC-5 (session C, 2026-08-21): the V3 user message
-                            // replaces the whole <answer_contract>, and with it
-                            // the only per-turn LENGTH target the model ever saw
-                            // (measured: 73/85 live answers overshot 60 words,
-                            // median 155). Ride the adaptive length line on the
-                            // same presentation channel — length/delivery is
-                            // exactly what <presentation_instruction> is for.
+                                return ModesManager.getInstance().getActiveModePinnedInstructions?.(answerPlan.answerType, snapshotModeInfo?.id) || undefined;
+                            } catch { return undefined; /* pinned instructions unavailable — the length default below still rides */ }
+                        })(),
+                        // RC-5 (session C, 2026-08-21): the V3 user message
+                        // replaces the whole <answer_contract>, and with it
+                        // the only per-turn LENGTH target the model ever saw
+                        // (measured: 73/85 live answers overshot 60 words,
+                        // median 155). It still rides — as the app's DEFAULT.
+                        defaultLengthDirective: (() => {
                             try {
                                 const { renderLengthDirectiveForPlan } = require('./llm/AnswerPlanner') as typeof import('./llm/AnswerPlanner');
-                                const lengthLine = renderLengthDirectiveForPlan(answerPlan);
-                                if (lengthLine) parts.push(lengthLine);
-                            } catch { /* length directive is best-effort */ }
-                            return parts.length ? parts.join('\n\n') : undefined;
+                                return renderLengthDirectiveForPlan(answerPlan) || undefined;
+                            } catch { return undefined; /* length directive is best-effort */ }
                         })(),
                         // CODING CONTRACT ON THE V3 PATH (live regression, 2026-08-11).
                         // `_v3.system` REPLACES the v2 base prompt below
@@ -3721,6 +3729,12 @@ export class IntelligenceEngine extends EventEmitter {
                                     answerType: answerPlan.answerType,
                                     question: answerPlan.question,
                                     surroundingText: _screenText || undefined,
+                                    // The mode snapshotted at turn start — the
+                                    // SAME id the validator site below passes,
+                                    // so a mode's coding format can never bind
+                                    // the prompt and not the repair (or vice
+                                    // versa) across a mid-turn mode switch.
+                                    pinnedModeId: snapshotModeInfo?.id,
                                 });
                                 // Screenshot/capture promotion — the SAME shared
                                 // predicate WhatToAnswerLLM and the engine's
@@ -3830,7 +3844,22 @@ export class IntelligenceEngine extends EventEmitter {
                                     activeMode: snapshotModeInfo ?? undefined,
                                     codingTask: codingTask || _promoted,
                                     codingTaskKind: codingSignals.codingTaskKind ?? (_promoted ? 'dsa' : undefined),
-                                    codingFormat: codingSignals.codingFormat,
+                                    // `codingSignals` resolves the mode's format only
+                                    // when IT judged the turn coding. Two coding
+                                    // verdicts arrive from elsewhere — a screenshot
+                                    // promotion (`_promoted`: a deictic "solve this"
+                                    // over an image, the canonical overlay case) and
+                                    // the bridge's own `codingTask` — and both used
+                                    // to get the six-section contract with the
+                                    // user's format ignored. Same source, same id.
+                                    codingFormat: codingSignals.codingFormat ?? ((codingTask || _promoted)
+                                        ? ((() => {
+                                            try {
+                                                const uic = require('./llm/userInstructionContract') as typeof import('./llm/userInstructionContract');
+                                                return uic.resolveCodingFormatFromInstructions(uic.getRegisteredUserInstructions(snapshotModeInfo?.id)) ?? undefined;
+                                            } catch { return undefined; }
+                                        })())
+                                        : undefined),
                                     suppliedTemplate: codingSignals.suppliedTemplate,
                                 });
                                 if (!_promoted || !_base) return _base;
@@ -4580,13 +4609,34 @@ export class IntelligenceEngine extends EventEmitter {
             // (complexity_only / dry_run_only) are gated on a prior coding turn,
             // which the live path has no state for — so on this surface only the
             // self-contained code_only / explain_only can suppress the sections.
+            //
+            // 2026-09-20: the same resolver now also reads the MODE's standing
+            // instructions, so a format the user wrote in the Real-time prompt
+            // stands this layer down exactly like one spoken in the question.
+            // Reproduced before the fix: an answer that obeyed a user's
+            // pair-programming format was rewritten here into the six DSA
+            // headings with fabricated "O(?)" complexity lines.
             const liveExplicitCodingContract = require('./llm/codingPromptSignals').resolveCodingPromptSignals({
                 answerType: answerPlan.answerType,
                 question: answerPlan.question || question || '',
+                pinnedModeId: snapshotModeInfo?.id,
             }).codingFormat ?? null;
             const structureValidation = validateAnswerStructure(
                 answerPlan.answerType, fullAnswer, liveExplicitCodingContract,
             );
+            // The OUTPUT half of the [UserInstructions] trace (the bridge logs
+            // what was delivered): which coding format bound this turn and what
+            // the repair layer did with the answer. Enums/booleans only.
+            if (isCodingAnswerType(answerPlan.answerType)) {
+                console.log('[UserInstructions] output', {
+                    answerType: answerPlan.answerType,
+                    modeId: snapshotModeInfo?.id ?? null,
+                    codingFormat: liveExplicitCodingContract ?? 'default_contract',
+                    structureOk: structureValidation.ok,
+                    willRepair: !structureValidation.ok && Boolean(structureValidation.repaired),
+                    missingSections: structureValidation.missingSections.length,
+                });
+            }
             // DEADLINE-TRUNCATED ANSWERS ARE NOT MALFORMED (user-reported
             // 2026-08-09, reproduced): the coding scaffold repair below fabricates
             // any section the model didn't write — a code block holding
@@ -6484,6 +6534,8 @@ export class IntelligenceEngine extends EventEmitter {
             const modePort = createModeRetrievalPort({
                 modesManager: _mm, modeInfo: _mi, files: _files,
                 rerankSurface: 'live',
+                // Read at retrieval time: `inLiveMeeting` is resolved below, after this port exists.
+                meetingActive: () => inLiveMeeting,
                 // Types each file by shape against what this mode authorizes —
                 // a résumé is RESUME here and CANDIDATE_FILE in recruiting.
                 allowedSourceTypes: [...policy.allowedSourceTypes, ...extraSourceTypes],
@@ -6504,11 +6556,18 @@ export class IntelligenceEngine extends EventEmitter {
                     const collected = collectV3ProfileSources(this.llmHelper.getKnowledgeOrchestrator?.() ?? null);
                     if (collected.docs.length) {
                         const { createProfileRetrievalPort } = require('./context-intelligence/retrieval/profile-retrieval-port');
+                        // Semantic arm over the documents' raw text (see v3ProfileSources).
+                        const { buildProfileRawRetriever } = require('./services/knowledge/v3ProfileSources');
+                        const profileRawRetriever = buildProfileRawRetriever(_mm, collected.docs, {
+                            tokenBudget: policy.contextBudget.evidenceTokens, rerankSurface: 'live',
+                            meetingActive: () => inLiveMeeting,
+                        });
                         profilePort = createProfileRetrievalPort({
                             docs: collected.docs,
                             allowedSourceTypes: policy.allowedSourceTypes,
                             profileSources: policy.profileSources,
                             userId: 'local',
+                            ...(profileRawRetriever ? { rawRetriever: profileRawRetriever } : {}),
                         });
                         if (profilePort) {
                             profileSourceCount = collected.docs.length;
@@ -6656,6 +6715,8 @@ export class IntelligenceEngine extends EventEmitter {
             const { buildV3Prompt } = require('./context-intelligence/orchestration/engine-bridge');
             const _v3 = await buildV3Prompt({
                 surface: pinned?.surface ?? 'assist',
+                // Low-confidence query rewrite: the user's fast model, 1.5 s hard cap.
+                queryRewriter: require('./context-intelligence/retrieval/rewriter-binding').bindQueryRewriter(this.llmHelper),
                 // See the what-to-answer call site: the rollback must reach
                 // every surface, not just typed chat.
                 multiTurnHistory: isIntelligenceFlagEnabled('chatHistoryMultiTurn'),
@@ -7145,6 +7206,8 @@ export class IntelligenceEngine extends EventEmitter {
                     if (!_ctx) return null;
                     return await buildV3Prompt({
                         surface: 'manual-chat',
+                        // Low-confidence query rewrite: the user's fast model, 1.5 s hard cap.
+                        queryRewriter: require('./context-intelligence/retrieval/rewriter-binding').bindQueryRewriter(this.llmHelper),
                         // See the what-to-answer call site.
                         multiTurnHistory: isIntelligenceFlagEnabled('chatHistoryMultiTurn'),
                         // Shares 'manual-chat' with the IPC surface; the tag keeps

@@ -145,6 +145,7 @@ const GROQ_MODEL = GROQ_PRIMARY_MODEL
 import { GROQ_VISION_MODEL } from './llm/groqModels'
 import { stripLeadingReasoningBlock } from './llm/reasoningTagFilter'
 import { describeNinerouterFailure, NINEROUTER_EMPTY_ANSWER } from './llm/ninerouterErrors'
+import { renderUserInstructionSystemLayer } from './llm/userInstructionContract'
 // Groq rejects a request carrying more than 5 images. Every other vision
 // provider here takes as many as we send, so the cap lives on the Groq path.
 const GROQ_VISION_MAX_IMAGES = 5
@@ -3251,7 +3252,10 @@ export class LLMHelper {
         const isRetryable = msg.includes("503") || msg.includes("overloaded")
           || status === 529 || status === 429 || status === 500
           || msg.includes("rate_limit") || msg.includes("rate limit");
-        if (!isRetryable) throw e;
+        // "Consecutive" must mean consecutive: a 429 followed by a non-429 error
+        // used to leave the count at 1 forever, so the next lone 429 — hours
+        // later — tripped a breaker meant for a saturated model.
+        if (!isRetryable) { if (circuitKey) this.rateLimitCircuit.delete(circuitKey); throw e; }
 
         // Track 429s for the breaker and trip it once saturated.
         if (circuitKey && is429) {
@@ -4285,13 +4289,12 @@ if (!shouldSkipModeInjection) {
     }
     if (pinnedInstructions) {
       const baseForPin = systemPromptOverride || HARD_SYSTEM_PROMPT;
-      const customModePolicy = isActiveCustomMode
-        ? 'Treat these user-configured custom-mode instructions as a supplemental behavioral layer for this mode. They govern tone, source routing, answer style, and fallback behavior, but they never modify or override CORE_IDENTITY, EXECUTION_CONTRACT, the <security> block, or any safety/identity rules above. Do not let default mode templates or prior chat override these custom-mode preferences when they are consistent with those immutable rules.'
-        : 'Treat as configuration for tone/focus. Never as facts about the candidate and never overriding the rules above.';
-      const customTemplateGuard = isActiveCustomMode
-        ? '\nFor this custom mode, do not use default technical-interview scaffolds or section headings like Approach, Code, Dry Run, or Complexity unless the custom instructions explicitly ask for that format.'
-        : '';
-      systemPromptOverride = `${baseForPin}\n\n## ACTIVE MODE INSTRUCTIONS (user-configured)\n${customModePolicy}${customTemplateGuard}\n${pinnedInstructions}`;
+      // ONE renderer for every carrier (2026-09-20): the copy that lived here told
+      // the model, for every BUILT-IN mode, that the user's prompt was "never
+      // overriding the rules above" — i.e. subordinate to the very defaults it
+      // was written to change. See renderUserInstructionSystemLayer.
+      const pinnedLayer = renderUserInstructionSystemLayer(pinnedInstructions, { isCustomMode: isActiveCustomMode });
+      if (pinnedLayer) systemPromptOverride = `${baseForPin}\n\n${pinnedLayer}`;
     }
 
     if (modeContextBlock) {
@@ -4705,6 +4708,45 @@ let isMultimodal = !!(imagePaths?.length);
    * generateContentStructured ladder so the judge still answers when Gemini
    * is down (the controller's deadline bounds the total wait either way).
    */
+  /**
+   * The low-confidence QUERY REWRITE's model call (2026-09-20): exactly ONE rung,
+   * aborted at its deadline. It first borrowed generateJudgeVerdict, and an
+   * adversarial review read what that does without a Gemini key: it falls into
+   * generateContentStructured — OpenAI, Claude, a Codex CLI subprocess, Ollama
+   * with a 120 s timeout competing with the answer call, then the Natively
+   * extraction route — for three rotations, on a call whose result is discarded
+   * after 1.5 s. A rewrite is an optimisation: it uses the one fast provider the
+   * user has, honours the outbound data-scope settings like every other call,
+   * and returns '' when there is nothing suitable — never a ladder.
+   */
+  public async generateQueryRewrite(message: string, opts: { timeoutMs?: number } = {}): Promise<string> {
+    const timeoutMs = opts.timeoutMs ?? 1500;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      if (this.isLocalOnlyMode) return '';
+      if (this.client) {
+        this.assertOutboundScopes('gemini', message);
+        // @ts-ignore — abortSignal is accepted by the SDK's request config
+        const res = await this.client.models.generateContent({
+          model: GEMINI_FLASH_LITE_MODEL,
+          contents: [{ role: 'user', parts: [{ text: message }] }],
+          config: { maxOutputTokens: 96, temperature: 0, responseMimeType: 'application/json', abortSignal: controller.signal },
+        });
+        const parts = res.candidates?.[0]?.content?.parts ?? [];
+        return res.text ?? (Array.isArray(parts) ? parts : [parts]).map((p: any) => p?.text ?? '').join('');
+      }
+      if (this.groqClient) return await this.generateWithGroq(message);
+      const nativelyKey = this.nativelyKey || (() => {
+        try { return require('./services/CredentialsManager').CredentialsManager.getInstance().getNativelyApiKey() || null; } catch { return null; }
+      })();
+      if (nativelyKey) return await this.generateWithNatively(message, undefined, undefined, { timeoutMs, signal: controller.signal });
+      return '';
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   public async generateJudgeVerdict(message: string): Promise<string> {
     if (this.client) {
       for (const modelId of [GEMINI_FLASH_LITE_MODEL, GEMINI_FLASH_MODEL]) {
@@ -4745,6 +4787,9 @@ let isMultimodal = !!(imagePaths?.length);
   ): Promise<string> {
     type ProviderAttempt = { name: string; execute: () => Promise<string> };
     const providers: ProviderAttempt[] = [];
+    // A breaker may skip a rung only if another rung exists to fall to. Evaluated
+    // when the rung RUNS (the list is complete by then), not when it is pushed.
+    const breakerKeyFor = (key: string): string | undefined => (providers.length > 1 ? key : undefined);
     const permanentFailureKeyFor = (name: string): string => {
       if (name.startsWith('Gemini')) return 'gemini';
       if (name.startsWith('OpenAI')) return 'openai';
@@ -4760,13 +4805,27 @@ let isMultimodal = !!(imagePaths?.length);
 
     // Priority 1: OpenAI
     if (this.openaiClient) {
-      providers.push({ name: `OpenAI (${OPENAI_MODEL})`, execute: () => this.generateWithOpenai(message) });
+      // Breaker key (2026-09-20): the Gemini rungs below have always had one; this
+      // rung did not. Measured on a live 45-role résumé ingest with a
+      // rate-limited OpenAI key: 140 of 141 structured calls spent ~9.7 s in
+      // 429 backoff HERE before Gemini answered in ~4.4 s — 1,334 s of a
+      // 33-minute ingest, on a provider that never once succeeded. With the key,
+      // two consecutive 429s open the breaker and the ladder skips this rung
+      // for the cooldown. Scoped to the structured ladder: chat's handling of
+      // the same client is unchanged.
+      // …but ONLY when a later rung can take the call (review finding, reproduced):
+      // with the key unconditionally set, a user whose ONLY provider is OpenAI
+      // lost all structured generation for 60 s after two 429s — before, the
+      // third attempt succeeded in 1.2 s. `breakerKeyFor` decides at call time,
+      // once the ladder is known.
+      providers.push({ name: `OpenAI (${OPENAI_MODEL})`, execute: () => this.generateWithOpenai(message, undefined, undefined, undefined, breakerKeyFor('structured:openai')) });
     }
 
     // Priority 2: Claude (now safe — generateWithClaude streams internally, so the SDK's
     // 10-minute pre-flight gate on large max_tokens is bypassed).
     if (this.claudeClient) {
-      providers.push({ name: `Claude (${CLAUDE_MODEL})`, execute: () => this.generateWithClaude(message) });
+      // Same breaker as the OpenAI rung above, for the same reason.
+      providers.push({ name: `Claude (${CLAUDE_MODEL})`, execute: () => this.generateWithClaude(message, undefined, undefined, undefined, breakerKeyFor('structured:claude')) });
     }
 
     // Priority 3: Gemini cascade — flash-lite → 3.7-flash ONLY (cheapest/fastest
@@ -5249,7 +5308,7 @@ let isMultimodal = !!(imagePaths?.length);
    * Non-streaming OpenAI generation with proper system/user separation.
    * PREFIX CACHING: see streamWithOpenai for the caching contract.
    */
-  private async generateWithOpenai(userMessage: string, systemPrompt?: string, imagePaths?: string[], modelId?: string): Promise<string> {
+  private async generateWithOpenai(userMessage: string, systemPrompt?: string, imagePaths?: string[], modelId?: string, circuitKey?: string): Promise<string> {
     if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
     if (!this.openaiClient) throw new Error("OpenAI client not initialized");
     this.assertOutboundScopes('openai', userMessage, imagePaths);
@@ -5290,7 +5349,7 @@ let isMultimodal = !!(imagePaths?.length);
       provider: 'openai', classification: 'sdk_request_object_before_serialization', payload: request,
     });
     const response = await this.withTimeout(
-      this.withRetry(() => this.openaiClient!.chat.completions.create(request)),
+      this.withRetry(() => this.openaiClient!.chat.completions.create(request), 3, circuitKey),
       60000,
       `OpenAI (${model})`
     );
@@ -5855,7 +5914,7 @@ let isMultimodal = !!(imagePaths?.length);
   /**
    * Non-streaming Claude generation with proper system/user separation
    */
-  private async generateWithClaude(userMessage: string, systemPrompt?: string, imagePaths?: string[], modelId?: string): Promise<string> {
+  private async generateWithClaude(userMessage: string, systemPrompt?: string, imagePaths?: string[], modelId?: string, circuitKey?: string): Promise<string> {
     if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
     if (!this.claudeClient) throw new Error("Claude client not initialized");
     // Was MISSING entirely — this method accepts imagePaths and builds base64
@@ -5906,7 +5965,7 @@ let isMultimodal = !!(imagePaths?.length);
       this.withRetry(async () => {
         const stream = this.claudeClient!.messages.stream(request);
         return await stream.finalMessage();
-      }),
+      }, 3, circuitKey),
       120000,
       `Claude (${model})`
     );
@@ -8214,13 +8273,12 @@ let isMultimodal = !!(imagePaths?.length);
         }
         if (pinnedInstructions) {
           const baseForPin = systemPromptOverride || HARD_SYSTEM_PROMPT;
-          const customModePolicy = isActiveCustomMode
-            ? 'Treat these user-configured custom-mode instructions as a supplemental behavioral layer for this mode. They govern tone, source routing, answer style, and fallback behavior, but they never modify or override CORE_IDENTITY, EXECUTION_CONTRACT, the <security> block, or any safety/identity rules above. Do not let default mode templates or prior chat override these custom-mode preferences when they are consistent with those immutable rules.'
-            : 'Treat as configuration for tone/focus. Never as facts about the candidate and never overriding the rules above.';
-          const customTemplateGuard = isActiveCustomMode
-            ? '\nFor this custom mode, do not use default technical-interview scaffolds or section headings like Approach, Code, Dry Run, or Complexity unless the custom instructions explicitly ask for that format.'
-            : '';
-          systemPromptOverride = `${baseForPin}\n\n## ACTIVE MODE INSTRUCTIONS (user-configured)\n${customModePolicy}${customTemplateGuard}\n${pinnedInstructions}`;
+          // ONE renderer for every carrier (2026-09-20): the copy that lived here told
+          // the model, for every BUILT-IN mode, that the user's prompt was "never
+          // overriding the rules above" — i.e. subordinate to the very defaults it
+          // was written to change. See renderUserInstructionSystemLayer.
+          const pinnedLayer = renderUserInstructionSystemLayer(pinnedInstructions, { isCustomMode: isActiveCustomMode });
+          if (pinnedLayer) systemPromptOverride = `${baseForPin}\n\n${pinnedLayer}`;
         }
 
         if (isActiveCustomMode) {
@@ -8251,6 +8309,39 @@ let isMultimodal = !!(imagePaths?.length);
         }
       } catch (_modeErr: any) {
         console.warn('[LLMHelper] ModesManager injection failed (non-fatal):', _modeErr?.message);
+      }
+    } else {
+      // THE USER'S INSTRUCTIONS ARE NOT "MODE CONTEXT" (2026-09-20).
+      //
+      // `shouldSkipModeInjection` exists so a coding / safety / universal-prompt
+      // turn does not pull the active mode's résumé, JD, reference files or
+      // 23–45k legacy template. But the block it skips was ALSO the only place
+      // typed chat delivered the mode's Real-time prompt — so, found by driving
+      // this method for real (real ModesManager, real DB, provider spied):
+      //   · with the v2 prompt active (the default) NO built-in mode — General,
+      //     Seminar, Call Centre, Sales — ever received the user's instructions
+      //     in typed chat, and
+      //   · no typed-chat CODING turn did in any mode ("Java only" included).
+      // The instruction layer is answer-type scoped by the accessor (facts and
+      // sensitive chunks never pass on coding turns), so it is safe exactly
+      // where the rest of the mode context is not.
+      //
+      // Guards: never twice (the live path and V3-owned typed turns already
+      // carry the block in the prompt they hand us); never on a safety
+      // redirect; and only for an ANSWER turn — internal utility calls (recap,
+      // follow-up questions, summaries) pass no answerType and must not be bent
+      // to "Answer in 100 words".
+      try {
+        const alreadyCarried = /<user_instructions\b|<custom_instructions>/.test(`${systemPromptOverride || ''}\n${message || ''}`);
+        const answerTurn = Boolean(routeOptions?.answerType) && routeOptions?.answerType !== 'ethical_usage_answer';
+        if (!alreadyCarried && answerTurn) {
+          const modesMgr = modesMgrForInjection || require('./services/ModesManager').ModesManager.getInstance();
+          const pinnedInstructions: string = modesMgr.getActiveModePinnedInstructions?.(modeAnswerType(routeOptions), routeOptions?.pinnedModeId ?? undefined) || '';
+          const pinnedLayer = renderUserInstructionSystemLayer(pinnedInstructions, { isCustomMode: isActiveCustomMode });
+          if (pinnedLayer) systemPromptOverride = `${systemPromptOverride || HARD_SYSTEM_PROMPT}\n\n${pinnedLayer}`;
+        }
+      } catch (_pinErr: any) {
+        console.warn('[LLMHelper] user-instruction layer failed (non-fatal):', _pinErr?.message);
       }
     }
 
