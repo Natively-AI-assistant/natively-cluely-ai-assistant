@@ -448,7 +448,12 @@ function PlanAllowances({ limits }: { limits: NativelyPlanLimits | undefined }) 
     ['AI', `${formatCompact(limits.ai_tokens)} tokens`],
     ['Voice', `${limits.transcription_minutes.toLocaleString('en-US')} min`],
     ['Knowledge', `${formatCompact(limits.embedding_tokens)} + ${formatCompact(limits.reranker_tokens)} tokens`],
-    ['Research', `${formatUsd(limits.research_credits_usd)}`],
+    // Runs, not dollars (2026-09-21). The allowance is sold as a count of
+    // complete company researches; the dollar figure underneath is the credit
+    // budget that funds them and means nothing to a buyer on its own.
+    ['Research', limits.research_runs != null
+      ? `${limits.research_runs} company researches`
+      : `${formatUsd(limits.research_credits_usd)}`],
   ];
   return (
     <div className="mt-3">

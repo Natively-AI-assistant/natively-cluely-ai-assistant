@@ -34,7 +34,12 @@ function planSpec(limits: NativelyPlanLimits | undefined, includesPro: boolean):
   return [
     `${formatCompact(limits.ai_tokens)} AI tokens`,
     `${limits.transcription_minutes.toLocaleString('en-US')} min voice`,
-    `${formatUsd(limits.research_credits_usd)} research`,
+    // Runs, not dollars: "$1.60 research" tells a buyer nothing, and the product
+    // promise is a count of company researches. Falls back to the dollar figure
+    // only if an older server omits research_runs.
+    limits.research_runs != null
+      ? `${limits.research_runs} company researches`
+      : `${formatUsd(limits.research_credits_usd)} research`,
     ...(includesPro ? ['Pro App included'] : []),
   ].join(' · ');
 }
@@ -242,6 +247,17 @@ function ChooseState({ usage, plans, error, reduced, onPro, onMax, onUltra, onSt
   onPro:()=>void; onMax:()=>void; onUltra:()=>void; onStandard:()=>void; onByok:()=>void;
 }) {
   const sttMin = (usage.stt_seconds/60).toFixed(1);
+  // `usage.search` is the CREDIT counter (2026-09-21) — /v1/search bills each
+  // query at its true Tavily cost, so one company research is ~20, not 1.
+  // Printing it under a "research runs" label told a trial user who ran a single
+  // research that they had used 20 of their 3. Round UP: a partially spent run
+  // has already consumed a run slot from the customer's point of view.
+  const creditsPerRun = plans?.trial?.research_credits_per_run
+    ?? plans?.standard?.research_credits_per_run
+    ?? 0;
+  const researchRunsUsed = creditsPerRun > 0
+    ? Math.ceil((usage.search ?? 0) / creditsPerRun)
+    : (usage.search ?? 0);
   // Qualitative until the catalog lands — see planSpec.
   const spec = (key: string, includesPro: boolean, fallback: string) =>
     planSpec(plans?.[key], includesPro) ?? fallback;
@@ -256,7 +272,7 @@ function ChooseState({ usage, plans, error, reduced, onPro, onMax, onUltra, onSt
         <div>
           <div style={{fontSize:'14px',fontWeight:650,color:C.t1,letterSpacing:'-.02em',lineHeight:1.2}}>Keep the momentum going</div>
           <div style={{fontSize:'11.5px',color:C.t4,marginTop:'2px'}}>
-            {formatCompact(usage.ai_tokens ?? 0)} AI tokens · {sttMin} min voice · {usage.search} research runs used in your trial
+            {formatCompact(usage.ai_tokens ?? 0)} AI tokens · {sttMin} min voice · {researchRunsUsed} research runs used in your trial
           </div>
         </div>
       </div>

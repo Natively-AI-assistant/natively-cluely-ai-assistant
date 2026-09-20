@@ -1453,6 +1453,8 @@ export function initializeIpcHandlers(appState: AppState): void {
             } catch { /* debug identity only */ }
             const modePort = createModeRetrievalPort({
               rerankSurface: 'manual',
+              // Typed turns outside a meeting may query the bundled embedder's vectors.
+              meetingActive: () => appState.getIsMeetingActive(),
               modesManager: mm,
               modeInfo,
               files,
@@ -1509,11 +1511,13 @@ export function initializeIpcHandlers(appState: AppState): void {
                 const collected = collectV3ProfileSources(llmHelper.getKnowledgeOrchestrator?.() ?? null);
                 if (collected.docs.length) {
                   const { createProfileRetrievalPort } = require('./context-intelligence/retrieval/profile-retrieval-port');
+                  const v3ProfileRawRetriever = require('./services/knowledge/v3ProfileSources').buildProfileRawRetriever(mm, collected.docs, { tokenBudget: policy.contextBudget.evidenceTokens, rerankSurface: 'manual', meetingActive: () => appState.getIsMeetingActive() });
                   v3ProfilePort = createProfileRetrievalPort({
                     docs: collected.docs,
                     allowedSourceTypes: policy.allowedSourceTypes,
                     profileSources: policy.profileSources,
                     userId: V3_USER_ID,
+                    ...(v3ProfileRawRetriever ? { rawRetriever: v3ProfileRawRetriever } : {}),
                   });
                   if (v3ProfilePort) {
                     v3ProfileCounts = collected.counts;
@@ -1648,6 +1652,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             const composed = await buildV3Prompt({
               surface: 'manual-chat',
               pathTag: 'ipc',
+              queryRewriter: require('./context-intelligence/retrieval/rewriter-binding').bindQueryRewriter(llmHelper),
               question: v3Question,
               // PR #429 Bug 002: omitted entirely, so it defaulted to false even
               // when the user attached screenshots — the V3 classifier then never
@@ -10513,6 +10518,8 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   // End trial via BYOK path: wipe Pro-ingested data, clear trial token + natively key.
   safeHandle('trial:end-byok', async () => {
+    // Profile raw-text indexes hold the résumé/JD text and vectors; clear them even if the orchestrator is absent.
+    try { require('./services/knowledge/v3ProfileSources').wipeProfileRawIndexes(); } catch { /* non-fatal */ }
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
@@ -10553,6 +10560,8 @@ export function initializeIpcHandlers(appState: AppState): void {
           const { DocType } = require('../premium/electron/knowledge/types');
           orchestrator.deleteDocumentsByType(DocType.RESUME);
           orchestrator.deleteDocumentsByType(DocType.JD);
+          // …and their raw-text indexes (text + vectors under profile:<kind>:<version>).
+          try { require('./services/knowledge/v3ProfileSources').kickProfileRawIndex(orchestrator); } catch { /* non-fatal */ }
         }
       } catch {
         /* ignore */
@@ -10612,6 +10621,8 @@ export function initializeIpcHandlers(appState: AppState): void {
   // trial token or natively key. Called automatically when trial expires so that
   // profile intelligence data can't linger in SQLite after the trial window closes.
   safeHandle('trial:wipe-profile-data', async () => {
+    // Profile raw-text indexes hold the résumé/JD text and vectors; clear them even if the orchestrator is absent.
+    try { require('./services/knowledge/v3ProfileSources').wipeProfileRawIndexes(); } catch { /* non-fatal */ }
     try {
       // 1. Disable knowledge mode + wipe orchestrator in-memory caches
       try {
@@ -10621,6 +10632,8 @@ export function initializeIpcHandlers(appState: AppState): void {
           const { DocType } = require('../premium/electron/knowledge/types');
           orchestrator.deleteDocumentsByType(DocType.RESUME);
           orchestrator.deleteDocumentsByType(DocType.JD);
+          // …and their raw-text indexes (text + vectors under profile:<kind>:<version>).
+          try { require('./services/knowledge/v3ProfileSources').kickProfileRawIndex(orchestrator); } catch { /* non-fatal */ }
         }
       } catch {
         /* ignore — orchestrator may not be initialised */
@@ -14444,6 +14457,8 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
       const { DocType } = require('../premium/electron/knowledge/types');
       const result = await orchestrator.ingestDocument(resolvedPath, DocType.RESUME);
+      // Index the raw text for the profile path's semantic arm (fire and forget).
+      if (result?.success) { try { require('./services/knowledge/v3ProfileSources').kickProfileRawIndex(orchestrator); } catch { /* non-fatal */ } }
       if (!result?.success && path.extname(resolvedPath).toLowerCase() === '.doc') {
         return { success: false, error: 'Legacy Word .doc files are not supported. Save the file as .docx and upload it again.' };
       }
@@ -14668,6 +14683,8 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
       const { DocType } = require('../premium/electron/knowledge/types');
       const result = await orchestrator.ingestDocument(resolvedPath, DocType.JD);
+      // Index the raw text for the profile path's semantic arm (fire and forget).
+      if (result?.success) { try { require('./services/knowledge/v3ProfileSources').kickProfileRawIndex(orchestrator); } catch { /* non-fatal */ } }
       if (!result?.success && path.extname(resolvedPath).toLowerCase() === '.doc') {
         return { success: false, error: 'Legacy Word .doc files are not supported. Save the file as .docx and upload it again.' };
       }
@@ -14804,9 +14821,17 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle('profile:research-company', async (_, companyName: string) => {
+  // forceRefresh defaults to FALSE — the cheap call (2026-09-21). This used to
+  // hardcode `true`, which skipped the 24h company_dossiers cache on every
+  // click. That mattered because a JD upload ALREADY researches the company:
+  // ingest step 9 fires the AOT pipeline, whose Phase 1 is this same engine,
+  // spending 7-10 Tavily queries at depth 'advanced' (2 credits each). The
+  // renderer had no way to learn that dossier had landed, so it showed the
+  // "Research Now" CTA, and the CTA bought the identical dossier a second time.
+  // Only the explicit "Refresh" pill passes true now.
+  safeHandle('profile:research-company', async (_, companyName: string, forceRefresh: boolean = false) => {
     try {
-      console.log(`[CompanyIntel-research] invoked for companyName="${companyName}"`);
+      console.log(`[CompanyIntel-research] invoked for companyName="${companyName}" forceRefresh=${forceRefresh}`);
       // Premium gate
       if (!isProOrTrialActive()) {
         return {
@@ -14845,7 +14870,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             min_years_experience: activeJD.min_years_experience,
           }
         : {};
-      const dossier = await engine.researchCompany(companyName, jdCtx, true);
+      const dossier = await engine.researchCompany(companyName, jdCtx, forceRefresh);
       console.log(`[CompanyIntel-research] engine returned dossier=${dossier ? 'YES (' + (dossier.hiring_strategy?.length || 0) + 'b)' : 'NULL'}`);
       const searchQuotaExhausted = (engine.searchProvider as any)?.quotaExhausted === true;
       return { success: true, dossier, searchQuotaExhausted };
@@ -15218,6 +15243,8 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       const { DocType } = require('../premium/electron/knowledge/types');
       const result = await orchestrator.ingestDocument(resolved, DocType.JD);
+      // Index the raw text for the profile path's semantic arm (fire and forget).
+      if (result?.success) { try { require('./services/knowledge/v3ProfileSources').kickProfileRawIndex(orchestrator); } catch { /* non-fatal */ } }
       if (result?.success) {
         try {
           orchestrator.setKnowledgeMode(true);
@@ -15279,6 +15306,8 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       const { DocType } = require('../premium/electron/knowledge/types');
       const result = await orchestrator.ingestDocument(staged, DocType.JD);
+      // Index the raw text for the profile path's semantic arm (fire and forget).
+      if (result?.success) { try { require('./services/knowledge/v3ProfileSources').kickProfileRawIndex(orchestrator); } catch { /* non-fatal */ } }
       if (result?.success) {
         try {
           orchestrator.setKnowledgeMode(true);
@@ -17389,6 +17418,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         const { DocType } = require('../premium/electron/knowledge/types');
         const dt = params.docType === 'jd' ? DocType.JD : DocType.RESUME;
         const result = await orchestrator.ingestDocument(params.filePath, dt);
+        // Index the raw text for the profile path's semantic arm (fire and forget).
+        if (result?.success) { try { require('./services/knowledge/v3ProfileSources').kickProfileRawIndex(orchestrator); } catch { /* non-fatal */ } }
         if (result?.success) {
           try {
             orchestrator.setKnowledgeMode(true);
@@ -17447,6 +17478,14 @@ export function initializeIpcHandlers(appState: AppState): void {
           resumeName: activeResume?.identity?.name ?? null,
           resumeExperienceCount: Array.isArray(activeResume?.experience) ? activeResume.experience.length : 0,
           resumeProjectCount: Array.isArray(activeResume?.projects) ? activeResume.projects.length : 0,
+          // Structuring-completeness visibility (retrieval-scale campaign, 2026-09-20):
+          // how much of a LONG résumé survives the structuring LLM, and whether the
+          // ingest silently fell back to the heuristic extractor.
+          resumeBulletCount: Array.isArray(activeResume?.experience)
+            ? activeResume.experience.reduce((n: number, e: any) => n + (Array.isArray(e?.bullets) ? e.bullets.length : 0), 0) : 0,
+          resumeCertificationCount: Array.isArray(activeResume?.certifications) ? activeResume.certifications.length : 0,
+          resumeAchievementCount: Array.isArray(activeResume?.achievements) ? activeResume.achievements.length : 0,
+          resumeExtractionMode: activeResume?._extraction_mode ?? null,
           // Education/skills extraction visibility (E2E diagnosis of retrieval gaps).
           resumeEducationCount: Array.isArray(activeResume?.education) ? activeResume.education.length : 0,
           resumeEducation: Array.isArray(activeResume?.education)
