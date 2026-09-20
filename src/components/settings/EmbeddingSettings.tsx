@@ -28,6 +28,8 @@ export interface LocalCatalogEmbeddingModel {
     recommended: boolean;
     bundled?: boolean;
     license: { spdx: string; url: string; commercialUseRestricted: boolean; requiresAcknowledgement: boolean };
+    /** true when requiresAcknowledgement is false, or the user has already acknowledged this model's terms. */
+    acknowledged: boolean;
     state: 'not-installed' | 'partial' | 'installed';
     bytesOnDisk: number;
     selected: boolean;
@@ -358,6 +360,17 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
     const [localModelError, setLocalModelError] = useState<string | null>(null);
     const [localFilterTab, setLocalFilterTab] = useState<'all' | 'installed' | 'recommended'>('all');
     const [localModelQuery, setLocalModelQuery] = useState('');
+    /**
+     * When non-null, the inline license dialog is shown for this model.
+     * The user must accept before install/use proceeds.
+     *
+     * The `pendingAction` field records what the user wanted to do so we can
+     * resume it after acceptance — avoiding an extra button press.
+     */
+    const [licenseDialogModel, setLicenseDialogModel] = useState<{
+        model: LocalCatalogEmbeddingModel;
+        pendingAction: 'install' | 'use';
+    } | null>(null);
 
     const loadLocalEmbeddingModels = useCallback(async () => {
         try {
@@ -438,21 +451,39 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
     }, [refresh]);
 
     const installLocalModel = useCallback(async (id: string) => {
+        // Guard: model needs licence acknowledgement
+        const m = localModels.find(x => x.id === id);
+        if (m?.license?.requiresAcknowledgement && !m.acknowledged) {
+            setLicenseDialogModel({ model: m, pendingAction: 'install' });
+            return;
+        }
         setBusyLocalModelId(id);
         setLocalModelError(null);
         try {
             const res = await window.electronAPI.installLocalEmbeddingModel?.(id);
             if (res && !res.success) {
-                setLocalModelError(res.message || res.error || t('Download failed.'));
+                if (res.error === 'license_not_acknowledged') {
+                    // Backend also guards — sync frontend state and open dialog.
+                    const candidate = localModels.find(x => x.id === id);
+                    if (candidate) setLicenseDialogModel({ model: candidate, pendingAction: 'install' });
+                } else {
+                    setLocalModelError(res.message || res.error || t('Download failed.'));
+                }
             }
             await loadLocalEmbeddingModels();
         } finally {
             setBusyLocalModelId(null);
             setLocalModelProgress(prev => { const next = { ...prev }; delete next[id]; return next; });
         }
-    }, [loadLocalEmbeddingModels, t]);
+    }, [localModels, loadLocalEmbeddingModels, t]);
 
     const useLocalModel = useCallback(async (id: string | null) => {
+        // Guard: model needs licence acknowledgement
+        const m = localModels.find(x => x.id === id);
+        if (m?.license?.requiresAcknowledgement && !m.acknowledged) {
+            setLicenseDialogModel({ model: m, pendingAction: 'use' });
+            return;
+        }
         setBusyLocalModelId(id ?? 'minilm-l6-v2');
         setLocalModelError(null);
         try {
@@ -464,7 +495,12 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
             });
             const res = await Promise.race([callPromise, timeoutPromise]);
             if (res && !res.success) {
-                setLocalModelError(res.message || res.error || t('Could not activate this embedding model.'));
+                if (res.error === 'license_not_acknowledged') {
+                    const candidate = localModels.find(x => x.id === id);
+                    if (candidate) setLicenseDialogModel({ model: candidate, pendingAction: 'use' });
+                } else {
+                    setLocalModelError(res.message || res.error || t('Could not activate this embedding model.'));
+                }
             }
             if (res?.reindexRequired && (res.incompatibleCount ?? 0) > 0) {
                 setReindexing(true);
@@ -479,7 +515,7 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
         } finally {
             setBusyLocalModelId(null);
         }
-    }, [loadLocalEmbeddingModels, refresh, t]);
+    }, [localModels, loadLocalEmbeddingModels, refresh, t]);
 
     const removeLocalModel = useCallback(async (id: string) => {
         setBusyLocalModelId(id);
@@ -1319,97 +1355,151 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                                         </div>
 
                                         <div className="shrink-0 flex items-center gap-1.5 flex-nowrap">
-                                            {!installed && (
-                                                busy ? (
-                                                    <button
-                                                        type="button"
-                                                        className="aip-btn"
-                                                        data-size="sm"
-                                                        onClick={() => void window.electronAPI.cancelLocalEmbeddingModel?.(m.id)}
-                                                    >
-                                                        <X size={12} strokeWidth={1.75} aria-hidden="true" />
-                                                        <span>{t('Cancel')}</span>
-                                                    </button>
-                                                ) : (
-                                                    <button
-                                                        type="button"
-                                                        className="aip-btn"
-                                                        data-size="sm"
-                                                        disabled={busyLocalModelId !== null || testingLocalModelId !== null}
-                                                        onClick={() => void installLocalModel(m.id)}
-                                                    >
-                                                        <Download size={12} strokeWidth={1.75} aria-hidden="true" />
-                                                        <span>{t('Download')}</span>
-                                                    </button>
-                                                )
-                                            )}
-
-                                            {installed && !isSelected && (
+                                            {/* Licence gate: show Accept button instead of Download/Use when acknowledgement is needed */}
+                                            {m.license?.requiresAcknowledgement && !m.acknowledged ? (
                                                 <button
                                                     type="button"
                                                     className="aip-btn"
                                                     data-size="sm"
                                                     data-variant="accent"
-                                                    disabled={busyLocalModelId !== null || testingLocalModelId !== null}
-                                                    onClick={() => void useLocalModel(m.id)}
+                                                    disabled={busyLocalModelId !== null}
+                                                    onClick={async () => {
+                                                        const res = await window.electronAPI.acknowledgeLocalEmbeddingCatalogModel?.(m.id);
+                                                        if (res?.success) {
+                                                            await loadLocalEmbeddingModels();
+                                                            // Resume the intended action automatically.
+                                                            const pending = licenseDialogModel?.pendingAction;
+                                                            setLicenseDialogModel(null);
+                                                            if (pending === 'use' && m.state === 'installed') {
+                                                                void useLocalModel(m.id);
+                                                            } else {
+                                                                void installLocalModel(m.id);
+                                                            }
+                                                        }
+                                                    }}
+                                                    title={t('Accept the licence terms to enable download and activation')}
                                                 >
-                                                    {busy ? <Loader2 size={12} className="animate-spin" aria-hidden="true" /> : null}
-                                                    <span>{t('Use')}</span>
+                                                    <Check size={12} strokeWidth={1.75} aria-hidden="true" />
+                                                    <span>{t('Accept licence')}</span>
                                                 </button>
-                                            )}
-
-                                            {isSelected && (
-                                                <button
-                                                    type="button"
-                                                    className="aip-btn"
-                                                    data-size="sm"
-                                                    disabled={busyLocalModelId !== null || testingLocalModelId !== null}
-                                                    onClick={() => void testLocalModel(m.id)}
-                                                    title={t('Benchmark model latency and check hardware acceleration')}
-                                                >
-                                                    {testingLocalModelId === m.id ? (
-                                                        <Loader2 size={12} className="animate-spin" aria-hidden="true" />
-                                                    ) : (
-                                                        <Zap size={12} strokeWidth={1.75} aria-hidden="true" />
+                                            ) : (
+                                                <>
+                                                    {!installed && (
+                                                        busy ? (
+                                                            <button
+                                                                type="button"
+                                                                className="aip-btn"
+                                                                data-size="sm"
+                                                                onClick={() => void window.electronAPI.cancelLocalEmbeddingModel?.(m.id)}
+                                                            >
+                                                                <X size={12} strokeWidth={1.75} aria-hidden="true" />
+                                                                <span>{t('Cancel')}</span>
+                                                            </button>
+                                                        ) : (
+                                                            <button
+                                                                type="button"
+                                                                className="aip-btn"
+                                                                data-size="sm"
+                                                                disabled={busyLocalModelId !== null || testingLocalModelId !== null}
+                                                                onClick={() => void installLocalModel(m.id)}
+                                                            >
+                                                                <Download size={12} strokeWidth={1.75} aria-hidden="true" />
+                                                                <span>{t('Download')}</span>
+                                                            </button>
+                                                        )
                                                     )}
-                                                    <span>{testingLocalModelId === m.id ? t('Testing…') : t('Test')}</span>
-                                                </button>
-                                            )}
 
-                                            {installed && !isSelected && (
-                                                <button
-                                                    type="button"
-                                                    className="aip-btn"
-                                                    data-size="sm"
-                                                    data-variant="ghost"
-                                                    disabled={busyLocalModelId !== null || testingLocalModelId !== null}
-                                                    onClick={() => void testLocalModel(m.id)}
-                                                    title={t('Benchmark model latency (Metal GPU / CPU)')}
-                                                >
-                                                    {testingLocalModelId === m.id ? (
-                                                        <Loader2 size={12} className="animate-spin" aria-hidden="true" />
-                                                    ) : (
-                                                        <Zap size={12} strokeWidth={1.75} aria-hidden="true" />
+                                                    {installed && !isSelected && (
+                                                        <button
+                                                            type="button"
+                                                            className="aip-btn"
+                                                            data-size="sm"
+                                                            data-variant="accent"
+                                                            disabled={busyLocalModelId !== null || testingLocalModelId !== null}
+                                                            onClick={() => void useLocalModel(m.id)}
+                                                        >
+                                                            {busy ? <Loader2 size={12} className="animate-spin" aria-hidden="true" /> : null}
+                                                            <span>{t('Use')}</span>
+                                                        </button>
                                                     )}
-                                                    <span className="hidden sm:inline">{testingLocalModelId === m.id ? t('Testing…') : t('Test')}</span>
-                                                </button>
-                                            )}
 
-                                            {installed && !isSelected && !m.bundled && (
-                                                <button
-                                                    type="button"
-                                                    className="aip-btn"
-                                                    data-size="sm"
-                                                    data-variant="danger-ghost"
-                                                    disabled={busyLocalModelId !== null || testingLocalModelId !== null}
-                                                    onClick={() => void removeLocalModel(m.id)}
-                                                    title={t('Remove model')}
-                                                >
-                                                    <Trash2 size={12} strokeWidth={1.75} aria-hidden="true" />
-                                                </button>
+                                                    {isSelected && (
+                                                        <button
+                                                            type="button"
+                                                            className="aip-btn"
+                                                            data-size="sm"
+                                                            disabled={busyLocalModelId !== null || testingLocalModelId !== null}
+                                                            onClick={() => void testLocalModel(m.id)}
+                                                            title={t('Benchmark model latency and check hardware acceleration')}
+                                                        >
+                                                            {testingLocalModelId === m.id ? (
+                                                                <Loader2 size={12} className="animate-spin" aria-hidden="true" />
+                                                            ) : (
+                                                                <Zap size={12} strokeWidth={1.75} aria-hidden="true" />
+                                                            )}
+                                                            <span>{testingLocalModelId === m.id ? t('Testing…') : t('Test')}</span>
+                                                        </button>
+                                                    )}
+
+                                                    {installed && !isSelected && (
+                                                        <button
+                                                            type="button"
+                                                            className="aip-btn"
+                                                            data-size="sm"
+                                                            data-variant="ghost"
+                                                            disabled={busyLocalModelId !== null || testingLocalModelId !== null}
+                                                            onClick={() => void testLocalModel(m.id)}
+                                                            title={t('Benchmark model latency (Metal GPU / CPU)')}
+                                                        >
+                                                            {testingLocalModelId === m.id ? (
+                                                                <Loader2 size={12} className="animate-spin" aria-hidden="true" />
+                                                            ) : (
+                                                                <Zap size={12} strokeWidth={1.75} aria-hidden="true" />
+                                                            )}
+                                                            <span className="hidden sm:inline">{testingLocalModelId === m.id ? t('Testing…') : t('Test')}</span>
+                                                        </button>
+                                                    )}
+
+                                                    {installed && !isSelected && !m.bundled && (
+                                                        <button
+                                                            type="button"
+                                                            className="aip-btn"
+                                                            data-size="sm"
+                                                            data-variant="danger-ghost"
+                                                            disabled={busyLocalModelId !== null || testingLocalModelId !== null}
+                                                            onClick={() => void removeLocalModel(m.id)}
+                                                            title={t('Remove model')}
+                                                        >
+                                                            <Trash2 size={12} strokeWidth={1.75} aria-hidden="true" />
+                                                        </button>
+                                                    )}
+                                                </>
                                             )}
                                         </div>
                                     </div>
+
+                                    {/* Inline licence notice — shown only when the model requires acknowledgement and hasn't been accepted yet */}
+                                    {m.license?.requiresAcknowledgement && !m.acknowledged && (
+                                        <div className="aip-inline-warn flex items-center gap-2 text-[10.5px]" role="note">
+                                            <AlertCircle size={11} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />
+                                            <span className="flex-1 min-w-0">
+                                                {t('Licence requires acceptance before downloading.')}
+                                                {m.license.url && (
+                                                    <> {' '}
+                                                        <a
+                                                            href={m.license.url}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="underline hover:opacity-80 inline-flex items-center gap-0.5"
+                                                            aria-label={`${t('View')} ${m.license.spdx} ${t('licence')}`}
+                                                        >
+                                                            {m.license.spdx} <ExternalLink size={9} strokeWidth={1.75} aria-hidden="true" />
+                                                        </a>
+                                                    </>
+                                                )}
+                                            </span>
+                                        </div>
+                                    )}
 
                                     <div className="text-[10.5px] aip-muted pl-4 flex items-center gap-2 flex-wrap pt-0.5">
                                         <AipBadge tone="neutral" label={`${m.dimensions}d`} />

@@ -2053,6 +2053,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   useLocalEmbeddingModel: (id: string | null) => ipcRenderer.invoke('embedding:use-local-model', id),
   testLocalEmbeddingModel: (id: string) => ipcRenderer.invoke('embedding:test-local-model', id),
   revealLocalEmbeddingModelsFolder: () => ipcRenderer.invoke('embedding:reveal-folder'),
+  acknowledgeLocalEmbeddingCatalogModel: (id: string) => ipcRenderer.invoke('embedding:acknowledge-catalog-license', id),
   onLocalEmbeddingModelProgress: (callback: (p: { id: string; fraction: number; currentFile: string }) => void) => {
     const subscription = (_e: any, payload: any) => callback(payload);
     ipcRenderer.on('embedding:model-progress', subscription);

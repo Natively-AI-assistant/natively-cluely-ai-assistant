@@ -612,6 +612,8 @@ export interface ElectronAPI {
       contextLength?: number
       recommended: boolean; bundled?: boolean
       license: { spdx: string; url: string; commercialUseRestricted: boolean; requiresAcknowledgement: boolean }
+      /** true when requiresAcknowledgement is false, or the user has already accepted. */
+      acknowledged: boolean
       state: 'not-installed' | 'partial' | 'installed'
       bytesOnDisk: number
       selected: boolean
@@ -624,16 +626,22 @@ export interface ElectronAPI {
   }>
   installLocalEmbeddingModel: (id: string) => Promise<{
     success: boolean; error?: string; message?: string; digests?: Record<string, string>
+    /** Present when error === 'license_not_acknowledged'. */
+    requiresAcknowledgement?: boolean; licenseUrl?: string; spdx?: string
   }>
   cancelLocalEmbeddingModel: (id: string) => Promise<{ success: boolean; error?: string }>
   removeLocalEmbeddingModel: (id: string) => Promise<{ success: boolean; error?: string; message?: string }>
   useLocalEmbeddingModel: (id: string | null) => Promise<{
     success: boolean; activeId?: string | null; dimensions?: number; reindexRequired?: boolean; incompatibleCount?: number; error?: string; message?: string
+    /** Present when error === 'license_not_acknowledged'. */
+    requiresAcknowledgement?: boolean; licenseUrl?: string; spdx?: string
   }>
   testLocalEmbeddingModel: (id: string) => Promise<{
     success: boolean; latencyMs?: number; dimensions?: number; runtime?: 'onnx' | 'gguf'; accelerator?: string; error?: string; message?: string
   }>
   revealLocalEmbeddingModelsFolder: () => Promise<{ success: boolean }>
+  /** Persist the user's acceptance of a catalog model's licence terms. Must be called before install/use on models where requiresAcknowledgement is true. */
+  acknowledgeLocalEmbeddingCatalogModel: (id: string) => Promise<{ success: boolean; error?: string; message?: string }>
   onLocalEmbeddingModelProgress: (callback: (p: { id: string; fraction: number; currentFile: string }) => void) => () => void
 
   listExtensions: () => Promise<{
