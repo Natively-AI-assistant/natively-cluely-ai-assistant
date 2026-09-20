@@ -57,6 +57,15 @@ After the semantic arm, the query rewrite, the anchor boost and the ingest break
 | **natively** (voyage-4 2048d + rerank-2.5-lite) via the local API | **24/24** correct. Both "promoted to Staff Engineer" questions, the salary, equity and years-of-experience paraphrases that were wrong or refused before all answer from the document. Answer latency p50 1.8 s / p95 3.7 s. The rewrite pass ran on 4 retrieval attempts. |
 | own chat provider + **bundled MiniLM** embedder (no natively service — see note) | 22/24. Fixed the same four paraphrases; the "promoted to Staff Engineer" pair was WRONG (the line did not reach the prompt). That run predates the anchor boost, and the pair passes offline with it; not re-run live. |
 
+**Local stack, mode path, 70k plain-text reference file, paraphrase-heavy mix** (20 more turns, after
+chunker v4 and the rewrite): **19/20**, one false refusal — was 16–17/20 with three. The refusal ("How
+hard can a single customer hammer the API before throttling?") came back PARTIAL with six evidence
+items at ~0.15, so the rewrite — then triggered by answerability NONE only — never ran. It now also
+runs when the best evidence item scores under 0.3 on a non-FULL turn: offline, on the lexical stack
+every non-NONE miss is below that line and none of the 529 turns above it misses, and on the vector
+stack almost no turn is below it, so it costs a vector user nothing. That second trigger is unit-tested
+and measured offline; it has NOT been re-run live (the approved turn budget is spent: 242).
+
 Note: the MiniLM row was not planned. The local API had exited (its database watchdog) and nothing in
 the driver noticed; `live.mjs` now refuses to start a `--local-api` run without a healthy server. The
 grader also scored "seven engineers" WRONG against a gold "7" in both runs — fixed; the numbers above

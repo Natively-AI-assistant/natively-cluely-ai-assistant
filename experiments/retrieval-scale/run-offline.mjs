@@ -204,6 +204,7 @@ for (const size of SIZES) {
         pack: key ? packed.evidenceBlock.split('</evidence>').some((b) => carries(b, key)) : null,
         evidCount: r.evidence.length, packCount: packed.includedEvidenceIds.length,
         answerability: r.answerability, fallback: r.trace.fallbackUsed, rejections: [...new Set(rej)],
+        topScore: r.evidence.reduce((m, e) => Math.max(m, e.finalScore ?? 0), 0),
         full, query: r.decision.retrievalPlan.queries?.[0],
         usedHybrid: lastRetr?.usedHybrid, usedFallback: lastRetr?.usedFallback, ms: Date.now() - t1,
       });

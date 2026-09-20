@@ -207,6 +207,9 @@ export function screenEnrichedQuery(query: string, screenText: string | undefine
 /** Evidence capacity floor for a turn with two or more files attached to the mode. */
 export const MULTI_FILE_EVIDENCE = { accepted: 8, tokens: 2400 } as const;
 
+/** Best-evidence score under which a non-FULL first pass counts as low-confidence (see the rewrite trigger). */
+const LOW_CONFIDENCE_TOP_SCORE = 0.3;
+
 export function decide(req: AnswerRequest): Readonly<TurnDecision> {
   const basePolicy = resolveModePolicy(req.modeId);   // THROWS on unknown id — fails closed
 
@@ -1046,10 +1049,25 @@ export async function orchestrate(
   // and admission all still read `resolvedQuestion` — a model cannot talk its
   // way into a source the user's question did not authorize. Answerability is
   // re-evaluated against the ORIGINAL question too.
+  //
+  // TWO triggers, both meaning "the first pass did not find it":
+  //   · answerability NONE — nothing supports the claim;
+  //   · WEAK evidence — the best item scores under LOW_CONFIDENCE_TOP_SCORE.
+  //     Answerability can read PARTIAL off six chunks that each share one
+  //     common word with the question: measured live on the lexical stack,
+  //     "How hard can a single customer hammer the API before throttling?"
+  //     came back PARTIAL with every item at ~0.15, the rewrite stayed out,
+  //     and the turn refused. Offline (mode path, plain text, 644 retrieving
+  //     turns): on the lexical stack every non-NONE miss sits below 0.3 and
+  //     there is not one miss above it (0 of 529); on the vector stack almost
+  //     no turn is below 0.3 at all, so this costs a vector user nothing.
+  const topScore = evidence.reduce((m, e) => Math.max(m, e.finalScore ?? 0), 0);
+  const weakEvidence = evidence.length > 0 && answerability !== 'FULL' && topScore < LOW_CONFIDENCE_TOP_SCORE;
+  const answerabilityBefore = answerability;
   let queryRewrite: AnswerTrace['queryRewrite'];
   if (req.queryRewriter && retrieval
       && decision.retrievalPlan.shouldRetrieve
-      && answerability === 'NONE'
+      && (answerability === 'NONE' || weakEvidence)
       && decision.claimRequirements.some((c) => c.authority === 'PRIVATE_SOURCE_REQUIRED')
       && isRetrievalFixEnabled('lowConfidenceQueryRewrite')) {
     let outcome: QueryRewriteOutcome;
@@ -1074,7 +1092,7 @@ export async function orchestrate(
     }
     queryRewrite = {
       reason: outcome.reason, durationMs: outcome.durationMs, queryChars: outcome.query?.length ?? 0,
-      addedEvidence: added, answerabilityBefore: 'NONE', answerabilityAfter: answerability,
+      addedEvidence: added, answerabilityBefore, answerabilityAfter: answerability,
     };
   }
 

@@ -140,3 +140,46 @@ describe('in the orchestrator', () => {
     assert.deepEqual(calls, []);
   });
 });
+
+// Second trigger (2026-09-20, later the same day). Answerability can read PARTIAL off chunks that
+// each share one common word with the question. Measured live on the lexical stack: "How hard can a
+// single customer hammer the API before throttling?" came back PARTIAL with six items at ~0.15, the
+// rewrite stayed out, the turn refused. Offline (644 retrieving turns, plain text): on the lexical
+// stack every non-NONE miss has a best score under 0.3 and none of the 529 turns above it misses.
+describe('weak evidence is low confidence too', () => {
+  const MODE = 'looking-for-work';
+  const policy = resolveModePolicy(MODE);
+  const structuredResume = { identity: { name: 'A B' }, skills: { Languages: ['TypeScript', 'Python'] }, skills_flat: ['TypeScript', 'Python'], experience: [], projects: [], education: [] };
+  const structuredJd = { title: 'Engineer', company: 'Helix', requirements: ['Kubernetes in production'], technologies: ['Kubernetes'], nice_to_haves: [] };
+  const realPort = () => createProfileRetrievalPort({ docs: [
+    { kind: 'resume', sourceId: 'p-r', versionId: 'v1', fileName: 'resume', structured: structuredResume },
+    { kind: 'jd', sourceId: 'p-j', versionId: 'v1', fileName: 'jd', structured: structuredJd }],
+  allowedSourceTypes: policy.allowedSourceTypes, profileSources: policy.profileSources, userId: 'u' });
+  const Q = 'Do I have Kubernetes experience?';
+  const req = (extra) => ({ requestId: 'r', requestSequence: 1, surface: 'manual_chat', modeId: MODE, scope: { userId: 'u' }, sessionId: `s-${Math.random()}`, manualQuestion: Q, ...extra });
+  // A port that returns ONLY the job-description side of the real evidence, at a chosen score: the
+  // JD claim is supported, the user-skill claim is not → PARTIAL, by construction.
+  const jdOnlyAt = async (score) => {
+    const full = await orchestrate(req({}), realPort());
+    const jd = full.evidence.filter((e) => e.sourceType === 'JOB_DESCRIPTION').map((e) => ({ ...e, finalScore: score }));
+    assert.ok(jd.length > 0, 'fixture: no JD evidence');
+    return { retrieve: async () => ({ evidence: jd, attempts: [] }) };
+  };
+  const spy = (calls) => async (q) => { calls.push(q); return { query: null, reason: 'EMPTY', durationMs: 1 }; };
+
+  test('PARTIAL with every item under 0.3 → the rewriter IS asked', async () => {
+    const calls = []; const r = await orchestrate(req({ queryRewriter: spy(calls) }), await jdOnlyAt(0.15));
+    assert.equal(r.trace.queryRewrite?.answerabilityBefore, 'PARTIAL', `answerability was ${r.answerability}`);
+    assert.equal(calls.length, 1);
+  });
+  test('control: the same PARTIAL turn with solid evidence → NOT asked', async () => {
+    const calls = []; const r = await orchestrate(req({ queryRewriter: spy(calls) }), await jdOnlyAt(0.8));
+    assert.equal(r.answerability, 'PARTIAL'); assert.deepEqual(calls, []);
+  });
+  test('control: FULL is never second-guessed, however low the scores', async () => {
+    const calls = []; const full = await orchestrate(req({}), realPort());
+    const weakAll = { retrieve: async () => ({ evidence: full.evidence.map((e) => ({ ...e, finalScore: 0.1 })), attempts: [] }) };
+    const r = await orchestrate(req({ queryRewriter: spy(calls) }), weakAll);
+    assert.equal(r.answerability, 'FULL'); assert.deepEqual(calls, []);
+  });
+});
