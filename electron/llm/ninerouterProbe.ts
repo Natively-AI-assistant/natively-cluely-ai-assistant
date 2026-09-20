@@ -130,10 +130,30 @@ export async function probeNinerouter(
     };
   }
 
-  // Anything else means the request got PAST authentication, which is the only
-  // thing this probe set out to establish. A 400 (invalid model format) is the
-  // expected success signal; a 404 or even a 200 from some future build is
-  // equally proof that the credential was accepted, so none of them is treated
-  // as a failure.
+  if (resp.status === 404) {
+    // The route is not there, so the base URL is wrong — found by running this
+    // probe against a live instance, where pasting the dashboard URL instead of
+    // the API base reported success:
+    //
+    //   POST .../dashboard/v1/chat/completions -> 404
+    //   POST .../v1/chat/completions           -> 401 (keyless, correct path)
+    //
+    // Auth is evaluated before routing on a real instance, so reaching a 404 at
+    // all means the request never got as far as the chat endpoint. Reporting
+    // that as "the key works" is the same false green this probe exists to
+    // prevent, one layer further in.
+    return {
+      ok: false,
+      reason: 'unreachable',
+      status: 404,
+      error: `No chat endpoint at ${trimmedURL}. Check the URL — 9Router's API base is the dashboard address plus /v1, for example http://localhost:20128/v1.`,
+    };
+  }
+
+  // Anything else means the request got PAST authentication AND reached the
+  // chat endpoint, which is what this probe set out to establish. A 400
+  // ("Invalid model format") is the expected signal, since the model id is
+  // deliberately unroutable; a 2xx from some future build is equally proof the
+  // credential was accepted.
   return { ok: true, status: resp.status };
 }

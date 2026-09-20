@@ -94,6 +94,25 @@ describe('a 9Router id is classified before every vendor catch-all', () => {
   });
 });
 
+describe('a 9Router-only user gets a fallback default', () => {
+  test('refreshRuntimeDefaultIfUnavailable has a 9Router rung', () => {
+    // The symptom without one is written on the OpenRouter rung beside it: "a
+    // user whose only working provider is OpenRouter is left pinned to a dead
+    // default and told 'No AI providers configured'". Fluxion earned its rung
+    // after exactly that, with its preferred model already stored and returned
+    // to the renderer but never consulted here.
+    //
+    // Cheap for the same reason theirs is: no catalogue fetch, because
+    // modelAvailable() already enforces the base URL, the disabled switch and
+    // the opt-in allow-list, so an id the user never ticked cannot be installed.
+    const fn = ipc.slice(ipc.indexOf('const refreshRuntimeDefaultIfUnavailable'), ipc.indexOf("console.warn('[IPC] refreshRuntimeDefaultIfUnavailable"));
+    assert.match(fn, /const ninerouterFallbackModel[^\n]*getPreferredModel\?\.\('ninerouter'\)/,
+      'the stored 9Router default must be read');
+    assert.match(fn, /ninerouterFallbackModel && modelAvailable\(ninerouterFallbackModel\)/,
+      'and consulted in the ladder, gated through modelAvailable like every other rung');
+  });
+});
+
 describe('credentials round-trip', () => {
   test('PreferredModelProvider and the matching field both exist', () => {
     // The getter builds the key by concatenation (`${provider}PreferredModel`),

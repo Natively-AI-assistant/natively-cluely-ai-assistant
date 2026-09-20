@@ -465,6 +465,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Same contract: stored fully prefixed (`fluxion/<model>`), the form
       // modelAvailable() classifies. Do not re-prefix.
       const fluxionFallbackModel: string | null = cm.getPreferredModel?.('fluxion') || null;
+      // Same contract again: stored fully prefixed (`ninerouter/<alias>/<model>`),
+      // the form modelAvailable() classifies. Do not re-prefix.
+      const ninerouterFallbackModel: string | null = cm.getPreferredModel?.('ninerouter') || null;
       if (has(cm.getLitellmBaseURL())) {
         try {
           const baseURL = (cm.getLitellmBaseURL() || 'http://localhost:4000/v1').replace(/\/+$/, '');
@@ -528,6 +531,14 @@ export function initializeIpcHandlers(appState: AppState): void {
         // default went stale fell through to `allProviders.find(...)` -> null and
         // was told "No AI providers configured" while holding a working key.
         : (fluxionFallbackModel && modelAvailable(fluxionFallbackModel)) ? fluxionFallbackModel
+        // 9Router earns a rung on the same evidence, and it is the cheap kind
+        // rather than LiteLLM's: no catalogue fetch, because modelAvailable()
+        // already enforces the base URL, the disabled switch and the OPT-IN
+        // allow-list, so an id the user never ticked can never be installed as
+        // a default. Without it a 9Router-only user whose default went stale
+        // falls through to `allProviders.find(...)` -> null and is told "No AI
+        // providers configured" while holding a working instance.
+        : (ninerouterFallbackModel && modelAvailable(ninerouterFallbackModel)) ? ninerouterFallbackModel
         : antigravityFallback ? antigravityFallback
         : allProviders.find((p: any) => modelAvailable(p?.id))?.id
           || null;

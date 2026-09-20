@@ -95,10 +95,33 @@ describe('the probe reports what actually happened', () => {
 
   test('a keyless instance that accepts the request is reported working', async () => {
     // REQUIRE_API_KEY defaults to false in 9Router, so this is a normal local
-    // install and must not be reported as broken.
-    const { fn } = stubFetch({ status: 404, body: { error: { message: 'model not found' } } });
+    // install and must not be reported as broken. 400 is what a reachable
+    // chat-completions route says about an unroutable model id.
+    const { fn } = stubFetch({ status: 400, body: { error: { message: 'Invalid model format' } } });
     const r = await probeNinerouter('http://localhost:20128/v1', '', { fetchImpl: fn });
     assert.equal(r.ok, true);
+  });
+
+  test('404 is a WRONG BASE URL, not a working instance', async () => {
+    // Found by running the probe against the live instance: pasting the
+    // dashboard URL instead of the API base returned ok:true, so the card said
+    // "9Router answered. The key works." about an address that will never
+    // serve a completion. Treating every non-401 as success is the same
+    // false-green this probe exists to prevent, one layer in.
+    //
+    //   POST http://localhost:20128/dashboard/v1/chat/completions -> 404
+    //   POST http://localhost:20128/nope/v1/chat/completions      -> 404
+    //   POST http://localhost:20128/v1/chat/completions           -> 401
+    //
+    // A 404 means the ROUTE is absent. Auth is checked before routing on a real
+    // instance (a keyless POST to the right path 401s), so reaching a 404 at all
+    // says the path is wrong.
+    const { fn } = stubFetch({ status: 404, body: {} });
+    const r = await probeNinerouter('http://localhost:20128/dashboard', '', { fetchImpl: fn });
+    assert.equal(r.ok, false);
+    assert.equal(r.reason, 'unreachable');
+    assert.match(r.error, /URL|address|path/i,
+      'the user pasted the wrong URL — say that, do not blame their key or their server');
   });
 
   test('a refused connection is an unreachable instance, not a bad key', async () => {
