@@ -45,6 +45,31 @@ identically in both themes. It arrives already `1em`-sized, so unlike
 Before this file existed the provider rendered an `NI` monogram, which the
 speech-selector coverage test flagged as an unrecorded fallback.
 
+### 9Router
+
+`ninerouter.png` is the **digit 9** from 9Router's own favicon
+(`public/favicon.svg` in `decolua/9router`, MIT — full text in
+`LICENSE.ninerouter` beside this file), rendered to raster and kept white on
+transparency.
+
+Their published mark is that digit in white on a rounded square filled with an
+orange gradient (`#f97815` -> `#c2590a`). Only the **glyph** is vendored, not
+the tile: every mark here sits on the panel's OWN tile, which already applies a
+brand wash, so shipping their tile too would nest one rounded square inside
+another. The wash colour is the gradient's start stop, recorded in
+`AI_PROVIDER_BRANDS` — so the pair reproduces their mark rather than replacing
+it.
+
+It is therefore in `WHITE_ON_TRANSPARENT_MARKS`: the art is genuinely white, so
+the light theme needs the `brightness(0)` flatten to make it visible. That set
+is opt-in precisely because the same filter destroys a full-colour mark, which
+is why the orange never enters the PNG.
+
+Their other official variant, `public/icons/icon-512.svg`, is a white "9R" on
+near-black — the same glyph idea with a second letter and no brand colour. The
+favicon is taken because the wash needs a brand hex, and because one character
+reads better than two at the 16px the tile actually renders.
+
 ### Fluxion AI
 
 The one mark here that is not from lobehub — Fluxion is a small aggregator

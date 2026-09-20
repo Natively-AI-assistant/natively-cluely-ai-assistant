@@ -4921,7 +4921,10 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                             </div>
                             {hasStoredKey.ninerouter && (
                                 <div className="flex items-center gap-2 shrink-0">
-                                    <AipBadge tone="ok" label={t('Configured')} />
+                                    {/* No "Configured" badge: the card already says so three
+                                        times over — the fields are filled, Remove has
+                                        appeared, and the switch itself only renders once
+                                        there is a configuration to switch. */}
                                     <AipSwitch
                                         checked={!disabledProviders.includes('ninerouter')}
                                         onChange={() => handleToggleProvider('ninerouter', disabledProviders.includes('ninerouter'))}
