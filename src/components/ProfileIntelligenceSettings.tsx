@@ -2228,10 +2228,15 @@ export function ProfileIntelligenceSettings({
     // by the time the upload ack returns. Poll until it settles, then hydrate.
     // Keyed on the status value itself, so this also covers mounting mid-research.
     useEffect(() => {
-        if (profileData?.aotStatus?.companyResearch !== 'running') return;
         let stopped = false;
         let timer: ReturnType<typeof setTimeout> | undefined;
+        // Declared ABOVE the guard and returned on every path, for the reason
+        // spelled out on the adopted-ingest effect above: a bare `return` out of
+        // an effect that arms a polling timer is safe only while the guard stays
+        // above every schedule site, which is not an invariant to leave to a
+        // future edit.
         const cleanup = () => { stopped = true; if (timer) clearTimeout(timer); };
+        if (profileData?.aotStatus?.companyResearch !== 'running') return cleanup;
         // Bound the poll. Company research is ~10 sequential queries behind a 2s
         // rate limiter plus an LLM summarise, so it can legitimately run past a
         // minute — but a pipeline that died without setting 'done' or 'failed'
