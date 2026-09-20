@@ -612,3 +612,9 @@ scripts/intent-benchmark/reports/hybrid-rules-proto-head-cs.json
 scripts/intent-benchmark/reports/hybrid-tight-cs.json
 scripts/intent-benchmark/reports/hybrid-wide-cs.json
 scripts/intent-benchmark/reports/none-always-answer-cs.json
+
+# 9Router provider — the design records endpoint behaviour verified against a
+# live instance (auth split by HTTP verb, capabilities carried on /v1/models)
+# that is not recoverable from the vendor's docs, plus the reasoning behind the
+# `ninerouter` internal id. A later session changing this provider needs it.
+!docs/ninerouter-provider-design-2026-09-20.md
