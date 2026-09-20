@@ -363,6 +363,13 @@ export function initializeIpcHandlers(appState: AppState): void {
         // user's real Anthropic/OpenAI/Gemini key, and nothing about the request
         // or the answer looks wrong.
         if (modelId.startsWith('fluxion/')) return 'fluxion';
+        // MUST stay above every vendor check below, same as the three gateways
+        // above. 9Router namespaces its catalogue by upstream, so
+        // `ninerouter/openai/gpt-5` is an includes('openai') match and
+        // `ninerouter/gemini/gemini-3.6-flash` would be claimed by the gemini-
+        // branch. Classified late, a 9Router model is gated by — and billed to —
+        // the user's own vendor key, and nothing about the answer looks wrong.
+        if (modelId.startsWith('ninerouter/')) return 'ninerouter';
         if (modelId.startsWith('ollama-')) return 'ollama';
         if (modelId.startsWith('gemini-') || modelId.startsWith('models/')) return 'gemini';
         if (isKnownGroqModel(modelId)) return 'groq';
@@ -405,7 +412,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         // what the user can pick, this one decides what routing accepts. If they
         // diverge the picker offers models the router rejects. A drift guard test
         // pins the two together.
-        const optInFamily = family === 'litellm' || family === 'openrouter';
+        const optInFamily = family === 'litellm' || family === 'openrouter' || family === 'ninerouter';
         const enabledForFamily = cm.getCloudEnabledModels?.(family) || [];
         if (optInFamily) {
           if (!enabledForFamily.includes(modelId)) return false;
@@ -422,6 +429,11 @@ export function initializeIpcHandlers(appState: AppState): void {
         // Above the gemini/groq/openai/claude/deepseek lines for the reason
         // providerFamily() gives — all five would otherwise claim a Fluxion id.
         if (modelId.startsWith('fluxion/')) return has(cm.getFluxionApiKey());
+        // Above the vendor lines for the reason providerFamily() gives. Gated on
+        // the BASE URL, not a key: 9Router's own REQUIRE_API_KEY defaults to
+        // false, so a stock local instance is legitimately keyless and gating on
+        // a key would make a working install unselectable.
+        if (modelId.startsWith('ninerouter/')) return has(cm.getNinerouterBaseURL());
         if (modelId.startsWith('ollama-')) return true; // live Ollama probe happens at execution time
         if (allProviders.some((p: any) => p?.id === modelId)) return true;
         if (modelId.startsWith('gemini-') || modelId.startsWith('models/')) return has(cm.getGeminiApiKey());
@@ -9859,6 +9871,130 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+
+  safeHandle('set-ninerouter-config', async (_, config: { apiKey: string; baseURL: string; maxTokens?: number }) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cm = CredentialsManager.getInstance();
+      // Change detection, so the Hindsight restart-nudge only fires on a real
+      // change — same guard, same reason, as set-litellm-config.
+      const prevKey = cm.getNinerouterApiKey() || '';
+      const prevUrl = cm.getNinerouterBaseURL() || '';
+      const prevMaxTokens = cm.getNinerouterMaxTokens();
+      const newUrl = config?.baseURL || '';
+      const requestedKey = config?.apiKey || '';
+      const effectiveNewKey = newUrl.trim() ? (requestedKey.trim() || prevKey) : '';
+      const requestedMaxTokens = Number(config?.maxTokens);
+      const effectiveNewMaxTokens = Number.isFinite(requestedMaxTokens) && requestedMaxTokens > 0
+        ? Math.floor(requestedMaxTokens)
+        : undefined;
+      const changed = prevKey !== effectiveNewKey
+        || prevUrl !== newUrl
+        || (prevMaxTokens || undefined) !== effectiveNewMaxTokens;
+      cm.setNinerouterConfig(requestedKey, newUrl, config?.maxTokens);
+
+      // The discovered catalogue belongs to ONE instance: which models a
+      // 9Router serves is a function of which upstream accounts its owner has
+      // connected, so a cache carried across a repoint lists models that
+      // instance has never heard of.
+      if (!newUrl.trim() || prevUrl !== newUrl) {
+        cm.setNinerouterModels([]);
+      }
+
+      // Push the EFFECTIVE stored key — a blank apiKey on re-save means "keep
+      // the stored one" (the field is masked), so read back what was persisted.
+      const llmHelper = appState.processingHelper.getLLMHelper();
+      llmHelper.setNinerouterConfig(cm.getNinerouterApiKey() || '', newUrl, config?.maxTokens);
+
+      appState.getIntelligenceManager().resetEngine();
+      appState.getIntelligenceManager().initializeLLMs();
+
+      if (changed) {
+        try { require('./services/HindsightManager').HindsightManager.getInstance().notifyHindsightOfKeyChange('9Router'); } catch { /* optional */ }
+        await refreshRuntimeDefaultIfUnavailable();
+        broadcastCredentialsChanged();
+      }
+
+      return { success: true };
+    } catch (error: any) {
+      console.error('Error saving 9Router config:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Discover models from the configured 9Router instance.
+  //
+  // /v1/models answers WITHOUT a key on a stock instance (REQUIRE_API_KEY
+  // defaults to false), so discovery can succeed on a configuration that cannot
+  // actually answer a question. That is precisely why it is not the connection
+  // test — see test-ninerouter-connection below.
+  const discoverNinerouterModels = async (timeoutMs: number): Promise<string[]> => {
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const cm = CredentialsManager.getInstance();
+    // Nothing configured -> never probe localhost:20128 speculatively.
+    const configuredURL = (cm.getNinerouterBaseURL() || '').trim();
+    if (!configuredURL) return [];
+    const root = configuredURL.replace(/\/+$/, '');
+    const url = /\/v1$/.test(root) ? `${root}/models` : `${root}/v1/models`;
+    const apiKey = cm.getNinerouterApiKey();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+    const resp = await fetch(url, { method: 'GET', headers, signal: AbortSignal.timeout(timeoutMs) });
+    if (!resp.ok) return [];
+    const data: any = await resp.json();
+    const models: string[] = (data?.data || []).map((m: any) => m?.id).filter(Boolean);
+    if (models.length > 0) cm.setNinerouterModels(models);
+    return models;
+  };
+
+  safeHandle('get-available-ninerouter-models', async () => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cached = CredentialsManager.getInstance().getNinerouterModels();
+      if (cached.length > 0) return cached;
+      // Cold start: pay the fetch once rather than showing an empty list until
+      // the user finds the refresh control.
+      return await discoverNinerouterModels(5000);
+    } catch {
+      return [];
+    }
+  });
+
+  safeHandle('refresh-ninerouter-models', async () => {
+    try {
+      const models = await discoverNinerouterModels(8000);
+      broadcastCredentialsChanged();
+      return models;
+    } catch (error) {
+      console.error('[IPC] refresh-ninerouter-models failed:', error);
+      return [];
+    }
+  });
+
+  // Test Connection for the 9Router card.
+  //
+  // Deliberately NOT the `GET /v1/models` shape every other gateway uses: on a
+  // real 9Router every GET answers without a key while every POST requires one,
+  // so a GET-based test reports success for a config that cannot answer a
+  // question. probeNinerouter POSTs an unroutable model id instead — auth is
+  // checked before model validation, so a 401 means the key is wrong and
+  // anything else means it was accepted, at zero upstream cost.
+  safeHandle('test-ninerouter-connection', async (_, config?: { apiKey?: string; baseURL?: string }) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cm = CredentialsManager.getInstance();
+      const { probeNinerouter } = require('./llm/ninerouterProbe');
+      // Prefer what the user currently has typed in the card, so Test
+      // Connection answers for the config in front of them rather than the last
+      // saved one.
+      const baseURL = (config?.baseURL ?? cm.getNinerouterBaseURL() ?? '').trim();
+      const apiKey = (config?.apiKey || '').trim() || (cm.getNinerouterApiKey() || '');
+      return await probeNinerouter(baseURL, apiKey, { timeoutMs: 8000 });
+    } catch (error: any) {
+      return { ok: false, reason: 'unreachable', error: error?.message || 'Connection test failed' };
+    }
+  });
+
   safeHandle('get-disabled-providers', async () => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
@@ -10854,10 +10990,14 @@ export function initializeIpcHandlers(appState: AppState): void {
         // a wrong-but-invisible protocol is the failure this setting exists to stop.
         fluxionProtocol: creds.fluxionProtocol === 'anthropic' ? 'anthropic' : 'openai',
         hasLitellmBaseURL: hasKey(creds.litellmBaseURL),
+        hasNinerouterBaseURL: hasKey(creds.ninerouterBaseURL),
+        hasNinerouterKey: hasKey(creds.ninerouterApiKey),
         // The base URL is config, not a secret — returned in full so Settings can
         // prefill it (unlike API keys, which are only reported as booleans).
         litellmBaseURL: creds.litellmBaseURL || null,
         litellmMaxTokens: creds.litellmMaxTokens || null,
+        ninerouterBaseURL: creds.ninerouterBaseURL || null,
+        ninerouterMaxTokens: creds.ninerouterMaxTokens || null,
         hasNativelyKey: hasKey(creds.nativelyApiKey),
         googleServiceAccountPath: creds.googleServiceAccountPath || null,
         sttProvider: creds.sttProvider || 'none',
@@ -10907,6 +11047,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         fluxionPreferredModel: creds.fluxionPreferredModel || undefined,
         // Stored prefixed (`litellm/<model>`) — see StoredCredentials.litellmPreferredModel.
         litellmPreferredModel: creds.litellmPreferredModel || undefined,
+        ninerouterPreferredModel: creds.ninerouterPreferredModel || undefined,
         disabledProviders: creds.disabledProviders || [],
         cloudEnabledModels: creds.cloudEnabledModels || {},
       };
@@ -10925,6 +11066,10 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasLitellmBaseURL: false,
         litellmBaseURL: null,
         litellmMaxTokens: null,
+        hasNinerouterBaseURL: false,
+        hasNinerouterKey: false,
+        ninerouterBaseURL: null,
+        ninerouterMaxTokens: null,
         hasNativelyKey: false,
         googleServiceAccountPath: null,
         sttProvider: 'none',
@@ -11022,7 +11167,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle(
     'set-provider-preferred-model',
-    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'litellm', modelId: string) => {
+    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'litellm' | 'ninerouter', modelId: string) => {
       try {
         const { CredentialsManager } = require('./services/CredentialsManager');
         CredentialsManager.getInstance().setPreferredModel(provider, modelId);

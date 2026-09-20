@@ -96,7 +96,7 @@ export interface CurlProvider {
  * and setter build the key by concatenation, so adding a name here without the
  * field would silently read and write `undefined`.
  */
-export type PreferredModelProvider = 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'litellm';
+export type PreferredModelProvider = 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'litellm' | 'ninerouter';
 
 export interface StoredCredentials {
     geminiApiKey?: string;
@@ -109,6 +109,17 @@ export interface StoredCredentials {
     litellmBaseURL?: string;
     /** Manual output ceiling for LiteLLM-proxied models. Unset → Auto (per-model via /model/info). */
     litellmMaxTokens?: number;
+    /**
+     * 9Router — a self-hosted fallback proxy. The BASE URL is the presence
+     * gate everywhere, not the key: 9Router's REQUIRE_API_KEY defaults to
+     * false, so a stock local install is legitimately keyless. The key is
+     * still required by its POST routes on any instance that enables auth,
+     * which is why both fields exist and only one gates.
+     */
+    ninerouterApiKey?: string;
+    ninerouterBaseURL?: string;
+    /** Manual output ceiling for 9Router-routed models. Unset → Auto (per-model via /v1/models). */
+    ninerouterMaxTokens?: number;
     googleServiceAccountPath?: string;
     customProviders?: CustomProvider[];
     curlProviders?: CurlProvider[];
@@ -198,6 +209,17 @@ export interface StoredCredentials {
      */
     litellmPreferredModel?: string;
     /**
+     * The 9Router model the user promoted to this provider's default, stored
+     * PREFIXED (`ninerouter/<model>`) for the reason the LiteLLM field above
+     * gives: it must be the same id the picker, the allow-list and
+     * modelAvailable() all compare against.
+     *
+     * Cleared whenever the instance is removed or repointed — a default naming
+     * a model on the old host is worse than none, and 9Router instances differ
+     * by which upstream accounts their owner has connected.
+     */
+    ninerouterPreferredModel?: string;
+    /**
      * Provider ids the user switched off in Settings → AI Providers. A disabled
      * provider keeps its stored credential but contributes no models to the
      * picker and is never chosen as a routing fallback.
@@ -228,6 +250,13 @@ export interface StoredCredentials {
      * discovery is an explicit user action (`refresh-litellm-models`).
      */
     litellmModels?: string[];
+    /**
+     * Last-known model list discovered from the configured 9Router instance,
+     * cached so the picker renders without a network round-trip. Stored
+     * UNPREFIXED (9Router's own ids, `gemini/gemini-3.6-flash`), matching
+     * litellmModels — the `ninerouter/` prefix is added at render time.
+     */
+    ninerouterModels?: string[];
     /**
      * Per-provider model catalog, as last discovered from that provider's API.
      * Persisted because the allow-list below references these ids: without it the
@@ -936,6 +965,18 @@ export class CredentialsManager {
         return this.credentials.litellmMaxTokens;
     }
 
+    public getNinerouterApiKey(): string | undefined {
+        return this.credentials.ninerouterApiKey;
+    }
+
+    public getNinerouterBaseURL(): string | undefined {
+        return this.credentials.ninerouterBaseURL;
+    }
+
+    public getNinerouterMaxTokens(): number | undefined {
+        return this.credentials.ninerouterMaxTokens;
+    }
+
     public getGoogleServiceAccountPath(): string | undefined {
         return this.credentials.googleServiceAccountPath;
     }
@@ -1251,6 +1292,16 @@ export class CredentialsManager {
         console.log(`[CredentialsManager] LiteLLM model cache updated (${models.length} model(s))`);
     }
 
+    public getNinerouterModels(): string[] {
+        return this.credentials.ninerouterModels || [];
+    }
+    public setNinerouterModels(models: string[]): void {
+        if (this.refuseWriteWhileDegraded('set ninerouter models')) return;
+        this.credentials.ninerouterModels = models;
+        this.saveCredentials();
+        console.log(`[CredentialsManager] 9Router model cache updated (${models.length} model(s))`);
+    }
+
     public getAllCredentials(): StoredCredentials {
         return { ...this.credentials };
     }
@@ -1386,6 +1437,45 @@ export class CredentialsManager {
      * maxTokens is the optional user-set output ceiling (0/undefined → default).
      * Passing an empty baseURL clears everything, disabling the provider.
      */
+    /**
+     * Persist the 9Router connection.
+     *
+     * Mirrors setLitellmConfig, including the two behaviours that are easy to
+     * miss: an empty base URL clears EVERYTHING (that is Remove), and a blank
+     * key on a re-save keeps the stored one, because the Settings field is
+     * masked and left empty when the user is only changing max-tokens.
+     */
+    public setNinerouterConfig(apiKey: string, baseURL: string, maxTokens?: number): void {
+        if (this.refuseWriteWhileDegraded('set ninerouter config')) return;
+        const trimmedURL = (baseURL || '').trim();
+        const trimmedKey = (apiKey || '').trim();
+        const previousURL = (this.credentials.ninerouterBaseURL || '').trim();
+        if (!trimmedURL) {
+            this.credentials.ninerouterApiKey = undefined;
+            this.credentials.ninerouterBaseURL = undefined;
+            this.credentials.ninerouterMaxTokens = undefined;
+            this.credentials.ninerouterPreferredModel = undefined;
+            this.credentials.ninerouterModels = undefined;
+            this.saveCredentials();
+            console.log('[CredentialsManager] 9Router config cleared');
+            return;
+        }
+        // Repointing at a different instance invalidates the default AND the
+        // discovered catalogue: which models a 9Router serves is a function of
+        // which upstream accounts its owner has connected, so two instances
+        // rarely agree. A same-URL re-save keeps both.
+        if (previousURL && previousURL !== trimmedURL) {
+            this.credentials.ninerouterPreferredModel = undefined;
+            this.credentials.ninerouterModels = undefined;
+        }
+        this.credentials.ninerouterApiKey = trimmedKey || this.credentials.ninerouterApiKey || undefined;
+        this.credentials.ninerouterBaseURL = trimmedURL;
+        const mt = Number(maxTokens);
+        this.credentials.ninerouterMaxTokens = Number.isFinite(mt) && mt > 0 ? Math.floor(mt) : undefined;
+        this.saveCredentials();
+        console.log('[CredentialsManager] 9Router config updated');
+    }
+
     public setLitellmConfig(apiKey: string, baseURL: string, maxTokens?: number): void {
         if (this.refuseWriteWhileDegraded('set litellm config')) return;
         const trimmedURL = (baseURL || '').trim();

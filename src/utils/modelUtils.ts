@@ -219,7 +219,13 @@ export const prettifyModelId = (id: string): string => {
 // Fluxion is deliberately ABSENT: 36 models, and its /v1/models is scoped to
 // the key's group, so the auto-fetch cannot flood routing the way OpenRouter's
 // 444 would. Adding it here would also need the mirror in modelAvailable().
-export const isOptInModelProvider = (provider: string): boolean => provider === 'litellm' || provider === 'openrouter';
+// 9Router is opt-in for the plainest version of the reason: it exists to
+// aggregate 40+ upstreams, and a stock local instance already answers
+// /v1/models with 47 models across 6 aliases from one user's connected
+// accounts. "Empty = all" would put a catalogue nobody chose into the
+// picker. Adding a member here REQUIRES the mirror in modelAvailable()
+// (ipcHandlers.ts); a drift-guard test pins the two together.
+export const isOptInModelProvider = (provider: string): boolean => provider === 'litellm' || provider === 'openrouter' || provider === 'ninerouter';
 
 /**
  * Does `modelId` survive `provider`'s allow-list?
@@ -265,5 +271,26 @@ export const litellmModelLabel = (id: string): string => {
     const segments = id.replace(/^litellm\//, '').split('/').filter(Boolean);
     // Degenerate ids ("litellm/", "///") keep the input rather than becoming
     // an empty label — a blank row is worse than an ugly one.
+    return segments.length ? segments[segments.length - 1] : id;
+};
+
+/**
+ * The display label for any gateway-routed model id.
+ *
+ * Identical rule to litellmModelLabel — drop Natively's routing prefix, drop
+ * the gateway's own upstream segment, show the last one — but it strips ANY
+ * known routing prefix rather than the literal `litellm/`.
+ *
+ * That difference is small and real. litellmModelLabel returns the right
+ * answer for `ninerouter/gemini/gemini-3.6-flash` only because it takes the
+ * last segment and `ninerouter/` happens to be a segment worth dropping. A
+ * single-segment id breaks the coincidence: `ninerouter/vip` — 9Router's
+ * combos are single-segment — would label as "vip" correctly, but a bare
+ * `ninerouter` would label as "ninerouter". Relying on the accident also
+ * leaves a function whose NAME tells the next reader it does not apply.
+ */
+export const gatewayModelLabel = (id: string): string => {
+    if (!id) return '';
+    const segments = id.replace(/^(?:litellm|ninerouter|openrouter|nvidia_nim|fluxion)\//, '').split('/').filter(Boolean);
     return segments.length ? segments[segments.length - 1] : id;
 };
