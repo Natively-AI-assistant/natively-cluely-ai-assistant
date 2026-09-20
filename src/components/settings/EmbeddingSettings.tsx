@@ -450,12 +450,14 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
         return () => { off?.(); };
     }, [refresh]);
 
-    const installLocalModel = useCallback(async (id: string) => {
-        // Guard: model needs licence acknowledgement
-        const m = localModels.find(x => x.id === id);
-        if (m?.license?.requiresAcknowledgement && !m.acknowledged) {
-            setLicenseDialogModel({ model: m, pendingAction: 'install' });
-            return;
+    const installLocalModel = useCallback(async (id: string, skipLicenseGuard = false) => {
+        // Guard: model needs licence acknowledgement (skipped when called right after acceptance)
+        if (!skipLicenseGuard) {
+            const m = localModels.find(x => x.id === id);
+            if (m?.license?.requiresAcknowledgement && !m.acknowledged) {
+                setLicenseDialogModel({ model: m, pendingAction: 'install' });
+                return;
+            }
         }
         setBusyLocalModelId(id);
         setLocalModelError(null);
@@ -477,12 +479,14 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
         }
     }, [localModels, loadLocalEmbeddingModels, t]);
 
-    const useLocalModel = useCallback(async (id: string | null) => {
-        // Guard: model needs licence acknowledgement
-        const m = localModels.find(x => x.id === id);
-        if (m?.license?.requiresAcknowledgement && !m.acknowledged) {
-            setLicenseDialogModel({ model: m, pendingAction: 'use' });
-            return;
+    const useLocalModel = useCallback(async (id: string | null, skipLicenseGuard = false) => {
+        // Guard: model needs licence acknowledgement (skipped when called right after acceptance)
+        if (!skipLicenseGuard) {
+            const m = localModels.find(x => x.id === id);
+            if (m?.license?.requiresAcknowledgement && !m.acknowledged) {
+                setLicenseDialogModel({ model: m, pendingAction: 'use' });
+                return;
+            }
         }
         setBusyLocalModelId(id ?? 'minilm-l6-v2');
         setLocalModelError(null);
@@ -1366,14 +1370,19 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                                                     onClick={async () => {
                                                         const res = await window.electronAPI.acknowledgeLocalEmbeddingCatalogModel?.(m.id);
                                                         if (res?.success) {
-                                                            await loadLocalEmbeddingModels();
-                                                            // Resume the intended action automatically.
-                                                            const pending = licenseDialogModel?.pendingAction;
+                                                            // Clear dialog state FIRST so the resumed callback doesn't re-open it.
+                                                            const pendingAction = licenseDialogModel?.pendingAction;
                                                             setLicenseDialogModel(null);
-                                                            if (pending === 'use' && m.state === 'installed') {
-                                                                void useLocalModel(m.id);
+                                                            // Reload models in the background (updates UI badge) but do NOT
+                                                            // await it before resuming — the resumed callback uses skipLicenseGuard
+                                                            // so it no longer needs the refreshed localModels to pass the guard.
+                                                            void loadLocalEmbeddingModels();
+                                                            // Resume the intended action with skipLicenseGuard=true to bypass the
+                                                            // stale-closure guard (localModels still has acknowledged=false here).
+                                                            if (pendingAction === 'use' && m.state === 'installed') {
+                                                                void useLocalModel(m.id, true);
                                                             } else {
-                                                                void installLocalModel(m.id);
+                                                                void installLocalModel(m.id, true);
                                                             }
                                                         }
                                                     }}
