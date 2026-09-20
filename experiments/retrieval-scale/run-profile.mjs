@@ -92,7 +92,7 @@ for (const size of SIZES) {
     if (DEBUG_Q) { say(`\nQ ${q.id}: ${q.question}  claims=${r.decision.claimRequirements.map((c) => c.claimType).join(',')} fallback=${r.trace.fallbackUsed}`); for (const e of r.evidence) say(`  ${e.finalScore.toFixed(3)} ${e.sourceType.padEnd(16)} ${carries(e.content, q) ? 'NEEDLE' : '      '} | ${e.content.replace(/\s+/g, ' ').slice(0, 130)}`); }
     const rej = r.trace.retrievalAttempts.flatMap((a) => a.rejections ?? []).map((x) => x.reason);
     rows.push({ id: q.id, kind: q.kind, size, variant: q.variant, type: q.type, retrieved: r.decision.retrievalPlan.shouldRetrieve === true, planned: r.decision.retrievalPlan.sourceTypes, claims: r.decision.claimRequirements.map((c) => c.claimType),
-      retr: null, evid: r.evidence.some((e) => carries(e.content, q)), pack: packed.evidenceBlock.split('</evidence>').some((b) => carries(b, q)), evidCount: r.evidence.length, packCount: packed.includedEvidenceIds.length, fallback: r.trace.fallbackUsed, rejections: [...new Set(rej)] });
+      retr: null, evid: r.evidence.some((e) => carries(e.content, q)), pack: packed.evidenceBlock.split('</evidence>').some((b) => carries(b, q)), evidCount: r.evidence.length, packCount: packed.includedEvidenceIds.length, fallback: r.trace.fallbackUsed, answerability: r.trace.answerability, unsupported: r.trace.claimPlan.filter((c) => c.support === 'UNSUPPORTED').map((c) => c.claimType), rejections: [...new Set(rej)] });
   }
 }
 fs.writeFileSync(OUT, JSON.stringify(rows, null, 1));

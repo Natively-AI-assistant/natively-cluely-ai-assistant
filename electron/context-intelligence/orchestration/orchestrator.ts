@@ -276,7 +276,16 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
       ? (cls.requiredSourceTypes.length
         ? cls.requiredSourceTypes
         : policy.allowedSourceTypes.filter((s) =>
-          s === 'REFERENCE_FILE' || s === 'PROJECT_FILE' || s === 'CODING_SAMPLE' || s === 'MEETING_TRANSCRIPT'))
+          s === 'REFERENCE_FILE' || s === 'PROJECT_FILE' || s === 'CODING_SAMPLE' || s === 'MEETING_TRANSCRIPT'
+          // …unless the résumé and job description are the ONLY documents this
+          // turn has (2026-09-20). "Will they help me move countries and pay for
+          // it?" names no claim, so it planned reference-file pools that were
+          // EMPTY and went out with zero evidence — measured at every size, with
+          // the relocation paragraph sitting in the job description. The
+          // issue-5 concern (a coding question retrieving résumé chunks) does
+          // not arise: a coding turn does not retrieve at all, and this branch
+          // is reached only by a turn that decided to.
+          || (req.profileOnlyDocuments === true && (s === 'RESUME' || s === 'JOB_DESCRIPTION'))))
       : [],
     // A bare fragment with no referent ("explain", "why?", "more") retrieves
     // NOTHING on its own text, so the composer had no material to apply it to

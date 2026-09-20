@@ -432,6 +432,16 @@ const MOTIVATION_RE = /\b(why|reason|motivat\w*|what (led|made)|decided? to|chos
 // The presence-check shape of a skill question — "do I HAVE it", not "tell me
 // about it". Used to widen a personal skill claim into a résumé-vs-JD
 // comparison in modes that carry a JD.
+/**
+ * PROSPECTIVE phrasing about a job the user does not have yet (2026-09-20).
+ * Grammar, not vocabulary: a résumé records the past, so "would I", "I would be
+ * joining", "will they", "comes with the offer" and "the hiring manager" cannot
+ * be answered from it — they are about the role being applied for. Deliberately
+ * excludes a bare "the role" / "the team", which a question about a PAST job
+ * uses just as naturally ("what was the role you played…").
+ */
+const PROSPECTIVE_JOB_RE = /\b(would (i|we|my)\b|(i|we)(d| would| will) (be|have|get|need|report|work|join)\b|will (i|we|they|the (company|team|employer))\b|would be my\b|my (manager|boss|team|role|title) would\b|hiring (manager|team|committee)\b|(with|in|of) the offer\b|the offer (include|come|has|have)\w*\b|(this|the) (role|position|job|opening) (require|offer|pay|report|involve|include|come)\w*\b)/;
+
 const SKILL_PRESENCE_RE = /\b(do (i|you) (have|know)|have (i|you) (used|worked)|am i|are you (familiar|experienced|proficient)|(do|does) (i|you) (not )?(list|lack|miss)|missing|lack\w*)\b/;
 const EDUCATION_RE = /\b(degrees?|graduat\w*|universit\w*|college|studied|majors?|majored|alma mater|c?gpa)\b/;
 const EMPLOYMENT_RE = /\b(work(ed)? at|employer|company you|role at|position at|job title|tenure|manage[srd]?|managing|led|leads?|reports?|team of|headcount|salary expectation\w*|compensation expectation\w*)\b/;
@@ -1371,6 +1381,13 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
       .some((s) => input.policy.allowedSourceTypes.includes(s));
     if (docish) { types.add('DOCUMENT_FACT'); noteWholeQ('DOCUMENT_FACT'); }
   }
+  // NOTE (2026-09-20): a question that ALREADY carries an employment claim
+  // ("Who would be my manager?") is deliberately NOT given a job claim here by
+  // grammar. The owner's decision for that class is "let the corpus decide" —
+  // the orchestrator plans the job description for it only when the question's
+  // terms are absent from the résumé (ProfileDocumentReachability pins both
+  // directions). A grammar rule here was written, broke those tests, and was
+  // removed.
   const hasPrivateClaim2 = [...claims].some((c) => (CLAIM_AUTHORITY[c]?.authoritative ?? []).length > 0);
   if (!hasPrivateClaim2 && !techTask && !conceptOnly
       && (namesEntity || primaryClaimsIt || definiteValueLookup)) {
@@ -1385,7 +1402,23 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
       CANDIDATE_FILE: 'USER_PROJECT',
       MEETING_TRANSCRIPT: 'MEETING_STATEMENT',
     };
-    const inferred = primary ? claimForSource[primary] : undefined;
+    // THE PRIMARY SOURCE IS A GUESS; THE QUESTION OFTEN SAYS OTHERWISE (2026-09-20).
+    // In a job-seeking mode the primary source is the résumé, so every factual
+    // question no rule recognised was inferred to be about the user's own
+    // project — including "who is the hiring manager", "How large is the group
+    // I would be joining?" and "How much ownership of the company comes with
+    // the offer?". Measured at every document size: the job description WAS
+    // planned, but the project intent boosted résumé project sections into the
+    // slots and the turn came back PARTIAL with the wrong document in front of
+    // the model. What says the question is about the TARGET JOB instead is its
+    // grammar: a résumé records what happened, it cannot answer what "would"
+    // happen or what comes "with the offer". (A corpus-anchor signal was tried
+    // here too and removed: an anchored question already carries DOCUMENT_FACT
+    // by the time this block runs, so the branch could never be reached.)
+    const jobSide = input.policy.allowedSourceTypes.includes('JOB_DESCRIPTION')
+      && (primary === 'RESUME' || primary === 'PROFILE_FACT' || primary === 'CANDIDATE_FILE')
+      && PROSPECTIVE_JOB_RE.test(q);
+    const inferred = jobSide ? 'JOB_REQUIRED_SKILL' : primary ? claimForSource[primary] : undefined;
     if (inferred) {
       claims.add(inferred);
       types.add(inferred === 'DOCUMENT_FACT' ? 'DOCUMENT_FACT'
