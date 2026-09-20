@@ -36,7 +36,7 @@ import { detectExplicitCodingContract, type ExplicitCodingContract } from './cod
 /** Matches the Modes editor's textarea `maxLength` (premium/src/ModesSettings.tsx). */
 export const USER_INSTRUCTIONS_MAX_CHARS = 8_000;
 
-export type UserLengthUnit = 'words' | 'sentences' | 'lines' | 'paragraphs' | 'bullets';
+export type UserLengthUnit = 'words' | 'sentences' | 'lines' | 'paragraphs' | 'bullets' | 'seconds';
 export type UserLengthBound = 'exact' | 'about' | 'max' | 'min';
 
 export interface UserLengthTarget {
@@ -149,8 +149,10 @@ const LANGUAGE_DECLARATION_HINT_RE = /\b(?:language|lang)\s*(?:is|:|=|-)\s*\S|\b
 // "Explain like I am a beginner" / "as if I were five" is a simile about the
 // ANSWER's level, not a statement about the user.
 const SIMILE_RE = /\b(?:like|as\s+if|as\s+though)\s+I(?:\s+am|['’]m|\s+were|\s+was)\b[^,.;]*/gi;
+// "If I am stuck give a hint first" is a CONDITION on the answer, not a fact about the user.
+const SELF_CONDITION_RE = /\b(?:if|when|whenever|in\s+case|once)\s+I(?:\s+am|['’]m|\s+get|\s+seem|\s+look|\s+sound|\s+ask|\s+say)\b[^,.;]*?(?=\s+(?:give|tell|show|explain|answer|keep|use|be|then)\b|[,.;]|$)/gi;
 export const isFirstPersonFact = (sentence: string): boolean => {
-  const s = asText(sentence).replace(SIMILE_RE, ' ');
+  const s = asText(sentence).replace(SIMILE_RE, ' ').replace(SELF_CONDITION_RE, ' ');
   return FIRST_PERSON_FACT_RE.test(s) && !LANGUAGE_DECLARATION_HINT_RE.test(s);
 };
 
@@ -168,8 +170,8 @@ const DEONTIC_RE = /\b(?:should|shall|must|always|never|only|regardless|please|p
 const DESIRE_RE = /^(?:i|we)\s+(?:want|need|prefer|expect|would\s+like|'d\s+like|’d\s+like|like)\b/i;
 // Step words and a "Label:" prefix are peeled before the opener test, so "Then
 // give the code in Java." and "Coding format: restate ..." read as imperatives.
-const LEAD_IN_RE = /^(?:(?:first\s+of\s+all|first(?:ly)?|second(?:ly)?|third(?:ly)?|then|next|after\s+that|finally|lastly|also|and)\b[\s,]*|[A-Za-z][\w /-]{0,40}:\s*)+/i;
-const IMPERATIVE_OPEN_RE = /^(?:answer|ans|respond|reply|use|write|code|solve|keep|prefer|avoid|give|explain|speak|output|format|show|provide|start|begin|end|list|state|restate|name|walk|skip|omit|add|put|limit|structure|organi[sz]e|break|summari[sz]e|be|talk|sound|act|behave|translate|tag|stick|focus|make|ensure|return|print|do|don'?t|dont|never|always|no|follow|think|include|mention|highlight|call\s+out|note|cover|describe|conclude|finish|open|close|generate|produce|present|elaborate|expand|pick|choose|select|trace|test|check|handle|consider|optimi[sz]e|compare|discuss|analy[sz]e|identify|clarify|ask|assume|declare|define|implement|run|treat|imagine|pretend|teach|guide|help|max|min|you\s+(?:must|should|are|will))\b/i;
+const LEAD_IN_RE = /^(?:(?:first\s+of\s+all|first(?:ly)?|second(?:ly)?|third(?:ly)?|then|next|after\s+that|finally|lastly|also|and|so|hence|therefore|please|pls|just)\b[\s,]*|[A-Za-z][\w /-]{0,40}:\s*)+/i;
+const IMPERATIVE_OPEN_RE = /^(?:answer|ans|respond|reply|use|write|code|solve|keep|prefer|avoid|give|explain|speak|output|format|show|provide|start|begin|end|list|state|restate|name|walk|skip|omit|add|put|limit|structure|organi[sz]e|break|summari[sz]e|be|talk|sound|act|behave|translate|tag|stick|focus|make|ensure|return|print|do|don'?t|dont|never|always|no|follow|think|include|mention|highlight|call\s+out|note|cover|describe|conclude|finish|open|close|generate|produce|present|elaborate|expand|pick|choose|select|trace|test|check|handle|consider|optimi[sz]e|compare|discuss|analy[sz]e|identify|clarify|ask|assume|declare|define|implement|run|treat|imagine|pretend|teach|guide|help|go|dig|dive|lead|max|min|you\s+(?:must|should|are|will))\b/i;
 
 /** An imperative opener or a wish — the strong shapes, as opposed to a sentence that merely contains "only"/"every". */
 export const isImperativeOrWish = (text: string): boolean => {
@@ -177,13 +179,16 @@ export const isImperativeOrWish = (text: string): boolean => {
   return Boolean(t) && (DESIRE_RE.test(t) || IMPERATIVE_OPEN_RE.test(t) || IMPERATIVE_OPEN_RE.test(t.replace(LEAD_IN_RE, '')));
 };
 
+// Hinglish puts the verb LAST: "Java mein code likho", "100 shabd mein jawab do".
+const HINGLISH_VERB_END_RE = /\b(?:likho|likhna|likhiye|dena|dijiye|do|batao|batana|bataiye|karo|karna|kijiye|rakho|rakhna|samjhao|samjhana|bolo|bolna)\s*[.!]?$/i;
+
 /** Deontic, imperative, or a wish: the SHAPE of an instruction (says nothing about its subject). */
 export const isDirectiveShaped = (text: string): boolean => {
   const t = asText(text).trim();
   if (!t) return false;
   // Both forms: "Follow this format:" IS its own label, so peeling the lead-in
   // first leaves nothing to test.
-  return DEONTIC_RE.test(t) || DESIRE_RE.test(t) || IMPERATIVE_OPEN_RE.test(t) || IMPERATIVE_OPEN_RE.test(t.replace(LEAD_IN_RE, ''));
+  return DEONTIC_RE.test(t) || DESIRE_RE.test(t) || IMPERATIVE_OPEN_RE.test(t) || IMPERATIVE_OPEN_RE.test(t.replace(LEAD_IN_RE, '')) || HINGLISH_VERB_END_RE.test(t);
 };
 
 // A bare phrase with no verb — "100 words max", "java 8 only" — is how people
@@ -221,7 +226,7 @@ const parseCount = (raw: string): number => {
   if (/^\d/.test(t)) return Number(t.replace(/[,+]/g, ''));
   return NUMBER_WORDS[t === 'a single' ? 'single' : t] ?? 0;
 };
-const UNIT_CORE = String.raw`words?|sentences?|lines?|paragraphs?|paras?|bullet\s+points?|bullets?|points?`;
+const UNIT_CORE = String.raw`words?|sentences?|lines?|paragraphs?|paras?|bullet\s+points?|bullets?|points?|seconds?|secs?|minutes?|mins?|shabd(?:on|o|a)?|vaa?kya(?:on)?`;
 // `(?<![\d.])`: "1.5 lines" is not "5 lines".
 const NUM_SRC = String.raw`(?<![\d.])(?:\d{1,3}(?:,\d{3})+|\d{1,4})\+?(?![\d.]*\d)|\b(?:${NUMBER_WORD_SRC})\b`;
 // Counting is deliberately looser than resolving (no "of" guard): "3 bullets of 15
@@ -257,6 +262,9 @@ const normalizeUnit = (raw: string): UserLengthUnit => {
   if (u.startsWith('sentence')) return 'sentences';
   if (u.startsWith('line')) return 'lines';
   if (u.startsWith('para')) return 'paragraphs';
+  if (u.startsWith('sec') || u.startsWith('min')) return 'seconds';
+  if (u.startsWith('shabd')) return 'words';
+  if (/^vaa?kya/.test(u)) return 'sentences';
   return 'bullets';
 };
 
@@ -279,6 +287,60 @@ const boundFor = (before: string, suffix: string | undefined, rawNumber: string)
   return 'about';
 };
 
+// People type "100 wrods" and "3 sentances". A token right after a number is
+// read as a unit when it is ONE plausible slip away from one: a transposition,
+// a vowel slip, or (in a long word) one dropped letter. Consonant substitutions
+// are NOT slips — "3 works", "9 lives", "4 links" are real words and stay so.
+const CANONICAL_UNITS = ['words', 'word', 'sentences', 'sentence', 'lines', 'paragraphs', 'paragraph', 'bullets', 'points', 'seconds', 'minutes'];
+// Real words one slip from a unit, found by sweeping /usr/share/dict/words (+ plurals):
+// "2 liens", "4 pints", "3 ballets", "2 minuets", "1 ward" must never become a length.
+const NOT_A_TYPO = new Set('alines ballets billets laines lanes lenes liens linas lineas linos lins linus lones lunes minuets paints pints pointes ponts sentience sentiences sentencer sentencers ward wards wird wirds wonts'.split(' '));
+const VOWELS = 'aeiou';
+const isOneSlipFrom = (w: string, unit: string): boolean => {
+  if (w === unit) return false;
+  if (w.length === unit.length) {
+    const diff = [...w].map((ch, i) => (ch === unit[i] ? -1 : i)).filter(i => i >= 0);
+    if (diff.length === 1) return VOWELS.includes(w[diff[0]]) && VOWELS.includes(unit[diff[0]]);
+    return diff.length === 2 && diff[1] === diff[0] + 1 && w[diff[0]] === unit[diff[1]] && w[diff[1]] === unit[diff[0]];
+  }
+  const [shorter, longer] = w.length < unit.length ? [w, unit] : [unit, w];
+  if (longer.length - shorter.length !== 1) return false;
+  for (let i = 0; i < longer.length; i++) {
+    if (longer.slice(0, i) + longer.slice(i + 1) !== shorter) continue;
+    return VOWELS.includes(longer[i]) || longer[i] === longer[i - 1] || unit.length >= 8;
+  }
+  return false;
+};
+const TYPO_SLOT_RE = new RegExp(String.raw`((?:${NUM_SRC})[\s-]+)([a-z]{4,11})\b`, 'gi');
+const normalizeLengthPhrasing = (clause: string): string =>
+  clause
+    .replace(/\bhalf\s+a\s+minute\b/gi, '30 seconds')
+    .replace(/\ba\s+couple\s+of\s+minutes\b/gi, '2 minutes')
+    .replace(/\b(?:a|one)\s+minute\b/gi, '1 minute')
+    .replace(TYPO_SLOT_RE, (whole, lead: string, token: string) => {
+      const t = token.toLowerCase();
+      if (NOT_A_TYPO.has(t) || new RegExp(String.raw`^(?:${UNIT_CORE})$`, 'i').test(t)) return whole;
+      const unit = CANONICAL_UNITS.find(u => isOneSlipFrom(t, u));
+      if (!unit || !(ABOUT_THE_ANSWER_RE.test(clause) || /^(?:max|min|under|about|around|in|keep|limit|write)\b/i.test(clause.trim()) || isShortBare(clause, 4))) return whole;
+      return `${lead}${unit}`;
+    });
+
+// A TIME is the answer's length only when the clause is about the answer. "Wait 5
+// seconds before answering", "The interview lasts 45 minutes", "Meeting ends in 15
+// mins so be quick" rendered binding LENGTH lines of 13, 6750 and 2250 words.
+const TIME_EXPR_RE = new RegExp(String.raw`(?:${NUM_SRC})[\s-]*(?:seconds?|secs?|minutes?|mins?)\b`, 'i');
+const ABOUT_THE_ANSWER_RE = /\b(?:answers?|ans|responses?|repl(?:y|ies)|speak(?:ing)?|talk(?:ing)?|say\s+it|each\s+answer|keep\s+(?:it|them|answers?|responses?|everything|things))\b/i;
+const TIME_NOT_LENGTH_RE = /\b(?:wait|before|after|every|timeout|ends?\s+in|lasts?|spend|timebox|solve|think|interview|meeting|call|(?:respond|reply)\s+within|to\s+respond|latency|delay|refresh|rule|deadline|left|just|give\s+me)\b/i;
+// "points" is a unit only in answer context: "Score 9 points in the quiz" is not one.
+const POINTS_EXPR_RE = new RegExp(String.raw`(?:${NUM_SRC})[\s-]*points?\b`, 'i');
+const isShortBare = (c: string, n: number): boolean => c.trim().split(/\s+/).length <= n;
+/** A clause whose "length" is really something else: excluded entirely, so it cannot make the user's real length ambiguous. */
+const isNotAnAnswerLength = (c: string): boolean => {
+  if (TIME_EXPR_RE.test(c)) return TIME_NOT_LENGTH_RE.test(c) || !(ABOUT_THE_ANSWER_RE.test(c) || isShortBare(c, 4));
+  if (POINTS_EXPR_RE.test(c)) return !(ABOUT_THE_ANSWER_RE.test(c) || /^(?:give|use|max|in|top)\b/i.test(c.replace(LEAD_IN_RE, '')) || isShortBare(c, 3));
+  return false;
+};
+
 interface LengthScan { target: UserLengthTarget | null; mentioned: boolean }
 
 const scanLength = (lines: InstructionLine[]): LengthScan => {
@@ -288,9 +350,11 @@ const scanLength = (lines: InstructionLine[]): LengthScan => {
   for (const l of lines) {
     if (l.isListItem) continue;
     for (const s of l.sentences) {
-      for (const c of splitInstructionClauses(s)) {
+      for (const rawClause of splitInstructionClauses(s)) {
+        const c = normalizeLengthPhrasing(rawClause);
         if (isFirstPersonFact(c) || PART_SCOPED_RE.test(c) || !acceptsInstructionClause(c)) continue;
         if (SEQUENCER_RE.test(c) && !WHOLE_ANSWER_RE.test(c.replace(LEAD_IN_RE, ''))) continue;
+        if (isNotAnAnswerLength(c)) continue;
         if ((c.match(LENGTH_EXPR_RE) || []).length > 0) candidates.push({ clause: c, sentence: s });
       }
     }
@@ -318,7 +382,8 @@ const scanLength = (lines: InstructionLine[]): LengthScan => {
   const unit = normalizeUnit(m[2]);
   // "Code should not exceed 30 lines" limits the CODE, not the answer.
   if (unit === 'lines' && /\b(?:code|function|method|solution|program)\b/i.test(c)) return { target: null, mentioned: false };
-  const count = parseCount(m[1]);
+  // Minutes are carried as seconds.
+  const count = parseCount(m[1]) * (/^min/i.test(m[2]) ? 60 : 1);
   const bound = boundFor(c.slice(0, m.index), m[3], m[1]);
   if (!count || count <= 0 || !bound) return { target: null, mentioned };
   return { target: { unit, count, bound }, mentioned };
@@ -389,7 +454,13 @@ const bindingRe = (src: string) => new RegExp(
   + String.raw`|\b(?:language|lang)\s*(?:is|:|=|-)\s*${wrapLang(src)}`,
   'i',
 );
-const LANGUAGE_BINDINGS = LANGUAGES.map(([name, src, ambiguous]) => ({ name, re: bindingRe(src), ambiguous, prepositioned: new RegExp(String.raw`\b(?:in|use|using)\s+${name.replace(/[.*+?^${}()|[\]\\#]/g, '\\$&')}(?![A-Za-z0-9_+#])`) }));
+// Hinglish postposition: "Java mein code likho", "python me answer do". Only "mein/me"
+// ("main"/"mai" are English / first-person), and only in a clause that is visibly about
+// writing code or answering — "Java me kaam karta hu" (I work in Java) is a fact.
+const hinglishBindingRe = (src: string) => new RegExp(String.raw`${wrapLang(src)}\s+(?:mein|me)\b`, 'i');
+const HINGLISH_NEGATOR_RE = /\b(?:mat|nahi|nahin|na|kabhi)\b/i;
+const HINGLISH_CODE_CUE_RE = /\b(?:code|answer|jawab|solution|likh\w*)\b/i;
+const LANGUAGE_BINDINGS = LANGUAGES.map(([name, src, ambiguous]) => ({ name, re: bindingRe(src), hinglish: hinglishBindingRe(src), ambiguous, prepositioned: new RegExp(String.raw`\b(?:in|use|using)\s+${name.replace(/[.*+?^${}()|[\]\\#]/g, '\\$&')}(?![A-Za-z0-9_+#])`) }));
 const CODE_CONTEXT_RE = /\b(?:code|coding|program(?:s|ming)?|solutions?|algorithms?|dsa|leetcode|language|lang|snippets?|function)\b/i;
 // "Go" and "C" are ordinary words: bound case-sensitively after a preposition, or
 // lower-case "go" only when nothing but a terminator / "only" / a code noun follows.
@@ -426,12 +497,16 @@ const detectProgrammingLanguages = (sentences: string[]): { found: string[]; con
       // imperative is not at the front.
       const instructs = acceptsInstructionClause(c) || (!hasFactSignature(c) && /\b(?:use|using|write|answer|respond|reply|code)\b/i.test(c));
       if (isFirstPersonFact(c) || !instructs || (besideFact && !isDirectiveShaped(c))) continue;
+      // "Java mein mat likho" negates AFTER the language, so the before-the-negator
+      // rule below cannot see it: a Hinglish negator voids the whole clause.
+      if (HINGLISH_NEGATOR_RE.test(c) && /\b(?:mein|me|likh\w*|karo|batao|chahiye|sirf)\b/i.test(c)) continue;
       // Emphasis and quoting are not part of the name: use **Java**, use "Java".
       const positive = (((c.split(EMPHATIC_SPLIT_RE)[0] || '').split(EXCLUSION_SPLIT_RE)[0] || '').split(NEGATOR_SPLIT_RE)[0] || '').replace(/["'`*_]+/g, '');
       if (!positive.trim()) continue;
       const codeContext = CODE_CONTEXT_RE.test(c);
       for (const b of LANGUAGE_BINDINGS) {
-        if (!b.re.test(positive)) continue;
+        const viaHinglish = !b.re.test(positive) && b.hinglish.test(positive) && HINGLISH_CODE_CUE_RE.test(c) && (HINGLISH_VERB_END_RE.test(c) || isDirectiveShaped(c));
+        if (!b.re.test(positive) && !viaHinglish) continue;
         // An ambiguous name ("swift answers", "dart between") binds only with code
         // context or as "in/use/using <Name>" — a capital alone is just a sentence start.
         if (b.ambiguous && !codeContext && !b.prepositioned.test(positive)) continue;
@@ -531,7 +606,6 @@ const GROUNDING_OVERRIDE_RE = new RegExp(String.raw`\b(?:ignore|disregard|bypass
 const ASSUMED_EXPERIENCE_RE = /\b(?:assume|pretend|act\s+as\s+if|act\s+like|imagine|suppose|say|claim|state|tell\s+(?:them|him|her|the\s+\w+))\b[^.\n]{0,30}\b(?:that\s+)?(?:I|we|my|our)\b(?!\s+am\s+(?:a\s+)?(?:beginner|five|child|kid|student|novice|layman)\b)/i;
 // "Make up metrics", "invent facts", "fabricate a story", "you may lie".
 const INVENT_RE = /\b(?:make\s+up|invent|fabricate|lie\s+about|you\s+(?:may|can|should)\s+(?:lie|guess|invent|fabricate|make\s+up))\b(?![^.\n]{0,40}\b(?:example|analogy|analogies|sample\s+input|test\s+case)s?\b)/i;
-const NEGATED_LEAD_RE = /^\s*(?:never|do\s+not|don'?t|dont|avoid)\b/i;
 
 // ── self-claimed EXPERIENCE is not an instruction (Evin's decision, 2026-09-21) ──
 //
@@ -543,22 +617,62 @@ const NEGATED_LEAD_RE = /^\s*(?:never|do\s+not|don'?t|dont|avoid)\b/i;
 // cited and version-checked. So a first-person claim of tenure, employer,
 // credential or role is removed here, clause by clause. What shapes HOW to answer
 // stays: "I am not a native speaker", "I'm nervous", "I prefer short answers".
-const FIRST_PERSON_RE = /\b(?:i|we|my)\b|\bi['’](?:m|ve|d)\b/i;
+const NEGATED_LEAD_RE = /^\s*(?:never|do\s+not|don'?t|dont|avoid)\b/i;
+// A first-person SUBJECT. A bare "my" is not one: "answer from my resume" claims nothing.
+const FIRST_PERSON_RE = /\b(?:i|we)\b|\bi['’]?(?:m|ve|d)\b|\bmyself\b|\bmaine\b|\bmera\b|\bmy\s+(?:previous|last|current|former|\d+)/i;
 const EXPERIENCE_SIGNAL_RE = new RegExp([
-  String.raw`\b\d+\+?\s*(?:years?|yrs?|months?)\b`,
+  String.raw`\b\d+\+?\s*(?:years?|yrs?|months?|saal)\b`,
   String.raw`\bexperience\b`,
-  String.raw`\b(?:worked|working|work|employed|interned|joined|left)\s+(?:at|for|with|in|on)\b`,
-  String.raw`\b(?:led|managed|built|shipped|founded|designed|architected|scaled|launched|owned|headed)\b`,
+  // "worked AT/FOR/IN/ON"; "with" only before a name — "I have worked with you before" is not a claim.
+  String.raw`\b(?:worked|working|work|employed|interned|joined|left)\s+(?:at|for|in|on)\b`,
+  // An accomplishment verb needs an OBJECT: "I led a team", not "I led you wrong" / "I led with the wrong answer".
+  String.raw`\b(?:led|managed|built|shipped|founded|designed|architected|scaled|launched|owned|headed)\s+(?:an?|the|our|my|\d+|teams?|projects?|products?|systems?)\b`,
   String.raw`\b(?:ph\.?d|masters?|m\.?tech|b\.?tech|mba|degree|diploma|certifi\w+|patents?)\b`,
   String.raw`\b(?:previous|last|current|former)\s+(?:employer|company|role|job|title|team)\b`,
-  String.raw`\b(?:am|was|['’]m|work(?:ed)?\s+as)\s+(?:an?\s+|the\s+)?(?:[\w-]+\s+){0,3}(?:engineer|developer|manager|architect|lead|director|consultant|analyst|scientist|founder|cto|ceo|vp)\b`,
+  String.raw`\b(?:am|was|['’]?m|work(?:ed)?\s+as)\s+(?:an?\s+|the\s+)?(?:[\w-]+\s+){0,3}(?:engineer|developer|manager|architect|lead|director|consultant|analyst|scientist|founder|cto|ceo|vp)\b`,
 ].join('|'), 'i');
-// Case-SENSITIVE on purpose: "at Google", "from MIT" — not "at length", "from scratch".
-const NAMED_PLACE_RE = /\b(?:at|from|with)\s+[A-Z][A-Za-z0-9&.-]+/;
+// Case-SENSITIVE on purpose: "at Google", "@ Stripe", "Google me" — not "at length", "from scratch".
+const NAMED_PLACE_RE = /(?:\b(?:at|from|with|in|for)\s+|@\s*)[A-Z][A-Za-z0-9&.-]+|\b[A-Z][A-Za-z0-9&.-]+\s+(?:me|mein)\b|\b(?:worked|working|work|led|managed|built|shipped|scaled)\s+[A-Z][A-Za-z0-9&.-]+/;
+const TENURE_RE = /\b\d+\+?\s*(?:years?|yrs?|months?|saal)\b/i;
+// The résumé forms people actually type have NO subject at all: "10 years at Google.",
+// "Currently SDE-2 at Amazon", "Ex-Googler here.", "Background: 8 yrs backend @ Stripe",
+// and the third / second person ("The candidate has ...", "You are a Staff Engineer at Meta
+// with 12 years ..."). A tenure next to a named place, or a résumé lead-in next to either.
+// Free-form career fragments with no subject at all ("Fifteen years in fintech, that's
+// me.", "B.Tech IIT Bombay 2019", "She led ML at Netflix."). Matched ONLY on a sentence
+// that is not itself an instruction, and only on PERSON-career signals — a sales or
+// call-centre prompt is full of product facts ("The warranty is 2 years", "We are ISO
+// certified", "in business since 2015") that are nobody's career and must survive.
+const CAREER_TENURE_RE = /\b(?:\d+\+?|a|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty)\s*(?:years?|yrs?|saal)\s+(?:in|at|of\s+experience|experience)\b|\b\d+\+?\s*yrs?\b|\bdecades?\s+(?:at|in|of)\b|\bYOE\b/i;
+const CAREER_CREDENTIAL_RE = /\b(?:ph\.?d|m\.?tech|b\.?tech|mba|iit|nit|iim|bits\s+pilani)\b|\bholder\s+of\b|\bpatents?\b|\bcertified\s+[A-Z]\w+\s+(?:administrator|developer|architect|engineer|professional|associate)\b|\bpresident['’]?s\s+club\b/i;
+const CAREER_VERB_RE = /\b(?:won|led|built|managed|spent|shipped|scaled|joined|worked|working|graduated|studied|leading|heading|interned)\b/i;
+const CAREER_ROLE_RE = /\b(?:engineer|developer|manager|architect|sde-?\d?|lead|director|consultant|analyst|scientist|founder|intern)\b/i;
+const CLAIM_LEAD_IN_RE = /^(?:as\s+(?:an?|the|someone)|having|being)\b/i;
+const COMPANY_SUBJECT_RE = /^(?:we|our|the\s+(?:company|product|plan|warranty|customer|client|office|team|support|delivery))\b/i;
+const RESUME_LEAD_RE = /^(?:currently|presently|former(?:ly)?|background\s*:|myself|im\b|worked|led|built|managed|shipped|founded)\b/i;
+const EX_EMPLOYER_RE = /\b[Ee]x-[A-Z]\w+/;
 
 const isExperienceClaim = (clause: string): boolean => {
-  const t = asText(clause).replace(SIMILE_RE, ' ');
-  if (!FIRST_PERSON_RE.test(t) || DESIRE_RE.test(t.trim()) || LANGUAGE_DECLARATION_HINT_RE.test(t)) return false;
+  const t = asText(clause).replace(SIMILE_RE, ' ').trim();
+  // A PROHIBITION is the user's own safeguard: "Never claim I have experience I don't
+  // have", "Do not say I worked at Google". Removing it would delete the safeguard.
+  if (!t || NEGATED_LEAD_RE.test(t) || DESIRE_RE.test(t) || LANGUAGE_DECLARATION_HINT_RE.test(t)) return false;
+  if (EX_EMPLOYER_RE.test(t)) return true;
+  if (TENURE_RE.test(t) && NAMED_PLACE_RE.test(t)) return true;
+  if (RESUME_LEAD_RE.test(t) && (NAMED_PLACE_RE.test(t) || TENURE_RE.test(t))) return true;
+  // "Having led payments at Stripe, ..." / "As a Staff Engineer at Meta, ..."
+  if (CLAIM_LEAD_IN_RE.test(t) && (NAMED_PLACE_RE.test(t) || CAREER_ROLE_RE.test(t))) return true;
+  if (!isDirectiveShaped(t) && !COMPANY_SUBJECT_RE.test(t)) {
+    if (CAREER_TENURE_RE.test(t) || CAREER_CREDENTIAL_RE.test(t)) return true;
+    if (NAMED_PLACE_RE.test(t) && (CAREER_VERB_RE.test(t) || CAREER_ROLE_RE.test(t))) return true;
+    // "Senior engineer, Google, 10 years." — a bare tenure beside a role.
+    if (/\b\d+\+?\s*(?:years?|yrs?)\b/i.test(t) && CAREER_ROLE_RE.test(t)) return true;
+  }
+  if (!FIRST_PERSON_RE.test(t)) return false;
+  // "We ..." is the COMPANY speaking: "We are ISO certified", "We offer a certification
+  // course" are product facts. Only a career verb at a named place is a claim ("We
+  // shipped Spanner at Google").
+  if (COMPANY_SUBJECT_RE.test(t)) return NAMED_PLACE_RE.test(t) && CAREER_VERB_RE.test(t);
   return EXPERIENCE_SIGNAL_RE.test(t) || (NAMED_PLACE_RE.test(t) && isFirstPersonFact(t));
 };
 
@@ -729,9 +843,23 @@ export const USER_INSTRUCTION_AUTHORITY_NOTE = [
 
 const plural = (n: number, unit: UserLengthUnit): string => (n === 1 ? unit.replace(/s$/, '') : unit);
 
+// ~150 words a minute: a natural speaking pace, and the figure the app's own
+// spoken-length bands are built on.
+const WORDS_PER_SECOND = 2.5;
+
 const renderLengthLine = (t: UserLengthTarget): string => {
+  if (t.unit === 'seconds') {
+    const bound = t.bound === 'max' ? 'at most ' : t.bound === 'min' ? 'at least ' : t.bound === 'exact' ? 'exactly ' : 'about ';
+    const span = t.min !== undefined ? `between ${t.min} and ${t.count}` : `${bound}${t.count}`;
+    const wordsFor = (sec: number) => Math.round(sec * WORDS_PER_SECOND);
+    const wordSpan = t.min !== undefined ? `between ${wordsFor(t.min)} and ${wordsFor(t.count)}` : `${bound}${wordsFor(t.count)}`;
+    // Models count WORDS far better than seconds (live: "under 20 seconds" produced
+    // 51-82 words, while word caps land within a few words). So the time is stated,
+    // and the word figure is what the model is told to count against.
+    return `- LENGTH is set by the user: ${span} ${plural(t.count, 'seconds')} of speech — that is ${wordSpan} words at a natural speaking pace. Count against the WORD figure: it is the limit. This replaces every other length target, word count, or "hard ceiling" anywhere in this prompt — ignore them.`;
+  }
   const u = plural(t.count, t.unit);
-  const tol = t.unit === 'words' ? Math.max(3, Math.round(t.count * 0.1)) : 0;
+  const tol = t.unit === 'words' && t.count > 20 ? Math.max(3, Math.round(t.count * 0.1)) : 0;
   const target = (() => {
     if (t.min !== undefined) return `between ${t.min} and ${t.count} ${u}`;
     switch (t.bound) {
