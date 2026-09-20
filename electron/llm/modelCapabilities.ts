@@ -66,7 +66,13 @@ const KNOWN_OLLAMA_NATIVE_CTX: Array<[RegExp, number]> = [
 // result — `claude-opus-5` — is already exactly the id the predicates below
 // know. Do NOT "fix" this to match openrouter's two-segment handling: that
 // would eat the model name itself.
-const ROUTING_PREFIX_RE = /^(?:litellm|nvidia_nim|openrouter|fluxion)\//i;
+// 9Router is OpenRouter's shape, not Fluxion's: its catalogue is namespaced by
+// upstream (`ninerouter/openai/gpt-5`, `ninerouter/gemini/gemini-3.6-flash`),
+// so both segments come off and the predicates below see `gpt-5`. Leaving it
+// out of this list is silent: every lookup misses, the id falls to the unknown
+// branch, and 30 of the 47 models a stock instance serves — all vision-capable
+// by their own catalogue — come back supportsImages:false.
+const ROUTING_PREFIX_RE = /^(?:litellm|nvidia_nim|openrouter|fluxion|ninerouter)\//i;
 export function stripProviderRoutingPrefix(id: string): string {
   if (!ROUTING_PREFIX_RE.test(id)) return id;
   const withoutProvider = id.replace(ROUTING_PREFIX_RE, '');

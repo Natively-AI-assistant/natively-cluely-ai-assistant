@@ -199,6 +199,17 @@ const LITELLM_MAX_TOKENS_MIN = 256
 const LITELLM_MAX_TOKENS_MAX = 1048576 // 1M — Gemini-class ceilings exist behind proxies
 // /model/info budgets are cached this long; the proxy's model list rarely churns.
 const LITELLM_MODEL_INFO_TTL_MS = 5 * 60_000
+// 9Router answers budgets AND context windows on /v1/models itself, so
+// unlike LiteLLM there is no second /model/info round-trip: these are only
+// the clamp and the fallback for a model its catalogue does not describe.
+// The default deliberately mirrors 9Router's own DEFAULT_CAPABILITIES
+// (open-sse/providers/capabilities.js, maxOutput 64000), so an undescribed
+// model is treated the way 9Router itself would treat it rather than the way
+// a different proxy would.
+const NINEROUTER_DEFAULT_MAX_OUTPUT_TOKENS = 64000
+const NINEROUTER_MAX_TOKENS_MIN = 256
+const NINEROUTER_MAX_TOKENS_MAX = 1048576
+const NINEROUTER_MODELS_TTL_MS = 5 * 60_000
 const MAX_OUTPUT_TOKENS = 65536
 const CLAUDE_MAX_OUTPUT_TOKENS = 64000
 
@@ -456,6 +467,11 @@ export class LLMHelper {
   // Same pattern as DeepSeek: OpenAI SDK + custom baseURL, separate client so
   // credentials/scope/telemetry stay provider-specific.
   private _litellmClient: OpenAI | null = null
+  // 9Router is a self-hosted fallback proxy, OpenAI-compatible on /v1. Same
+  // shape as LiteLLM — OpenAI SDK against a user-supplied baseURL — and a
+  // separate client for the same reason: credentials, outbound scopes and
+  // telemetry stay provider-specific.
+  private _ninerouterClient: OpenAI | null = null
 
   private get client(): GoogleGenAI | null { return this.isProviderDisabled('gemini') ? null : this._client }
   private set client(v: GoogleGenAI | null) { this._client = v }
@@ -481,6 +497,12 @@ export class LLMHelper {
   private set fluxionAnthropicClient(v: Anthropic | null) { this._fluxionAnthropicClient = v }
   private get litellmClient(): OpenAI | null { return this.isProviderDisabled('litellm') ? null : this._litellmClient }
   private set litellmClient(v: OpenAI | null) { this._litellmClient = v }
+  // This getter IS the disabled-provider guard for 9Router, for the reason the
+  // Fluxion pair above spells out: PROVIDER_LABEL_FAMILY carries no entry for
+  // any gateway, so assertOutboundScopes' backstop never fires here and
+  // returning null is what actually stops a switched-off 9Router being called.
+  private get ninerouterClient(): OpenAI | null { return this.isProviderDisabled('ninerouter') ? null : this._ninerouterClient }
+  private set ninerouterClient(v: OpenAI | null) { this._ninerouterClient = v }
 
   /**
    * The user's switched-off providers, read LIVE on every question.
@@ -535,6 +557,17 @@ export class LLMHelper {
   private litellmModelBudgets: Map<string, number> = new Map()
   private litellmModelBudgetsFetchedAt: number = 0
   private litellmModelBudgetsFetch: Promise<void> | null = null
+  private ninerouterApiKey: string | null = null
+  // 9Router's own default port. Users who expose it through a Cloudflare
+  // tunnel paste that host instead — it is a user endpoint either way.
+  private ninerouterBaseURL: string = "http://localhost:20128/v1"
+  // Manual output-ceiling override (Settings → 9Router dropdown).
+  // null = Auto: resolve per-model from the catalogue.
+  private ninerouterMaxTokens: number | null = null
+  private ninerouterModelBudgets: Map<string, number> = new Map()
+  private ninerouterModelInputCaps: Map<string, number> = new Map()
+  private ninerouterModelsFetchedAt: number = 0
+  private ninerouterModelsFetch: Promise<void> | null = null
   private useOllama: boolean = false
   private ollamaModel: string = ""
   private ollamaUrl: string = "http://127.0.0.1:11434"
@@ -653,7 +686,7 @@ export class LLMHelper {
       const c: any = this.activeCurlProvider;
       return `curl:${c.id}:${c.curlCommand ? String(c.curlCommand).length : ''}`;
     }
-    if (this.isLiteLLMModel(this.currentModelId) || this.isNvidiaNimModel(this.currentModelId) || this.isOpenRouterModel(this.currentModelId) || this.isFluxionModel(this.currentModelId)) {
+    if (this.isLiteLLMModel(this.currentModelId) || this.isNvidiaNimModel(this.currentModelId) || this.isOpenRouterModel(this.currentModelId) || this.isFluxionModel(this.currentModelId) || this.isNinerouterModel(this.currentModelId)) {
       return `model:${this.currentModelId}`;
     }
     return null;
@@ -1584,6 +1617,128 @@ export class LLMHelper {
     return Math.min(LITELLM_MAX_TOKENS_MAX, Math.max(LITELLM_MAX_TOKENS_MIN, budget));
   }
 
+  /**
+   * Point the app at a 9Router instance.
+   *
+   * The BASE URL is the presence gate, not the key — 9Router's own
+   * REQUIRE_API_KEY defaults to false, so a stock local install is legitimately
+   * keyless and the OpenAI SDK's non-empty-apiKey requirement is satisfied with
+   * a dummy. A remote or hardened instance DOES require the real key, and its
+   * /v1 POST routes 401 without one even though every GET answers openly.
+   */
+  public setNinerouterConfig(apiKey: string, baseURL: string, maxTokens?: number) {
+    const trimmedURL = (baseURL || '').trim();
+    if (!trimmedURL) {
+      this.ninerouterApiKey = null;
+      this.ninerouterClient = null;
+      this.ninerouterBaseURL = "http://localhost:20128/v1";
+      this.ninerouterMaxTokens = null;
+      this.ninerouterModelBudgets.clear();
+      this.ninerouterModelInputCaps.clear();
+      this.ninerouterModelsFetchedAt = 0;
+      console.log("[LLMHelper] 9Router config cleared.");
+      return;
+    }
+    this.ninerouterApiKey = (apiKey || '').trim() || null;
+    this.ninerouterBaseURL = trimmedURL;
+    const n = Number(maxTokens);
+    this.ninerouterMaxTokens = (Number.isFinite(n) && n > 0)
+      ? Math.min(NINEROUTER_MAX_TOKENS_MAX, Math.max(NINEROUTER_MAX_TOKENS_MIN, Math.floor(n)))
+      : null; // Auto
+    // Repointed → the cached budgets describe a different instance's catalogue.
+    this.ninerouterModelBudgets.clear();
+    this.ninerouterModelInputCaps.clear();
+    this.ninerouterModelsFetchedAt = 0;
+    this.ninerouterClient = new OpenAI({ apiKey: this.ninerouterApiKey || "dummy", baseURL: trimmedURL });
+    console.log(`[LLMHelper] 9Router client initialized with base URL: ${trimmedURL}, max_tokens: ${this.ninerouterMaxTokens ?? 'auto'}`);
+  }
+
+  /**
+   * Refresh the per-model budget cache from 9Router's /v1/models.
+   *
+   * ONE fetch, where LiteLLM needs two: 9Router returns per-model capabilities
+   * and token limits on the model list itself, as `context_length` /
+   * `max_completion_tokens` at the top level and `capabilities.contextWindow` /
+   * `capabilities.maxOutput` nested. Both are read, top level first, because
+   * 9Router emits the snake_case pair precisely so that clients which do not
+   * recurse into nested objects stop guessing the window from the model name.
+   *
+   * Failures are silent — Auto then falls back to the default budget and never
+   * blocks a question. Concurrent callers share one in-flight fetch.
+   */
+  private async refreshNinerouterModelCatalogue(): Promise<void> {
+    if (Date.now() - this.ninerouterModelsFetchedAt < NINEROUTER_MODELS_TTL_MS) return;
+    if (this.ninerouterModelsFetch) return this.ninerouterModelsFetch;
+
+    // The instance this fetch belongs to. setNinerouterConfig can repoint the
+    // app mid-flight; without this tag the OLD instance's reply lands in the
+    // freshly-cleared cache and stamps fetchedAt, pinning another host's
+    // ceilings for the whole TTL.
+    const issuedForBaseURL = this.ninerouterBaseURL;
+    this.ninerouterModelsFetch = (async () => {
+      try {
+        // The configured value already ends in /v1 (that is the base URL
+        // 9Router's dashboard hands out), but accept a bare root too.
+        const root = this.ninerouterBaseURL.replace(/\/+$/, '');
+        const url = /\/v1$/.test(root) ? `${root}/models` : `${root}/v1/models`;
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        // Sent when present even though /v1/models answers without it: a
+        // hardened instance may well require it, and it costs nothing here.
+        if (this.ninerouterApiKey) headers['Authorization'] = `Bearer ${this.ninerouterApiKey}`;
+        const resp = await fetch(url, { method: 'GET', headers, signal: AbortSignal.timeout(5000) });
+        if (!resp.ok) return;
+        const data: any = await resp.json();
+        const fresh = new Map<string, number>();
+        const freshInput = new Map<string, number>();
+        for (const entry of (data?.data || [])) {
+          const name = entry?.id;
+          if (!name) continue;
+          const budget = Number(entry?.max_completion_tokens ?? entry?.capabilities?.maxOutput);
+          if (Number.isFinite(budget) && budget > 0) fresh.set(name, Math.floor(budget));
+          const inputCap = Number(entry?.context_length ?? entry?.capabilities?.contextWindow);
+          if (Number.isFinite(inputCap) && inputCap > 0) freshInput.set(name, Math.floor(inputCap));
+        }
+        if (this.ninerouterBaseURL !== issuedForBaseURL) {
+          console.log('[LLMHelper] 9Router /v1/models reply discarded — the instance was repointed while it was in flight.');
+          return;
+        }
+        this.ninerouterModelBudgets = fresh;
+        this.ninerouterModelInputCaps = freshInput;
+        console.log(`[LLMHelper] 9Router /v1/models: cached budgets for ${fresh.size} model(s) `
+          + `(${freshInput.size} with a context window)`);
+      } catch {
+        // Instance down, unreachable or mid-restart — Auto falls back to the
+        // default budget and the user can always set a manual value.
+      } finally {
+        // Stamp on failure too (negative cache), or an unreachable instance adds
+        // up to 5s to EVERY question. Never stamp for an instance we are no
+        // longer pointed at, or the repoint's cache reset is silently undone.
+        if (this.ninerouterBaseURL === issuedForBaseURL) {
+          this.ninerouterModelsFetchedAt = Date.now();
+        }
+        this.ninerouterModelsFetch = null;
+      }
+    })();
+    return this.ninerouterModelsFetch;
+  }
+
+  /**
+   * Effective max_tokens for a 9Router-routed model. Manual override wins;
+   * otherwise the catalogue's budget for this model; otherwise the default.
+   */
+  private async resolveNinerouterMaxTokens(ninerouterModel: string): Promise<number> {
+    if (this.ninerouterMaxTokens !== null) return this.ninerouterMaxTokens; // manual override
+    await this.refreshNinerouterModelCatalogue();
+    const budget = this.ninerouterModelBudgets.get(ninerouterModel) ?? NINEROUTER_DEFAULT_MAX_OUTPUT_TOKENS;
+    return Math.min(NINEROUTER_MAX_TOKENS_MAX, Math.max(NINEROUTER_MAX_TOKENS_MIN, budget));
+  }
+
+  /** The wire id: one segment off, never two. `ninerouter/openai/gpt-5` is
+   *  `openai/gpt-5` to 9Router, whose catalogue is namespaced by upstream. */
+  private ninerouterWireModel(modelId: string): string {
+    return (modelId || '').replace(/^ninerouter\//, '');
+  }
+
   public setNativelyKey(key: string | null): void {
     this.nativelyKey = key || null;
     console.log(`[LLMHelper] Natively key ${key ? 'set' : 'cleared'}`);
@@ -1806,6 +1961,13 @@ export class LLMHelper {
     // and the direct-assist chain at once, so none of them depends on branch
     // order staying correct.
     if (this.isFluxionModel(modelId)) return false;
+    // Third gateway, same line of defence, and the one that needs it most
+    // literally: 9Router's catalogue IS vendor-namespaced, so
+    // `ninerouter/openai/gpt-5` satisfies BOTH the startsWith("gpt-") test
+    // (no) and the includes("openai") catch-all (yes) below. Without this the
+    // request goes to api.openai.com on the user's own key and answers
+    // perfectly, which is what makes it so hard to see.
+    if (this.isNinerouterModel(modelId)) return false;
     return modelId.startsWith("gpt-") || modelId.startsWith("o1-") || modelId.startsWith("o3-") || modelId.includes("openai");
   }
 
@@ -1824,6 +1986,27 @@ export class LLMHelper {
 
   private isLiteLLMModel(modelId: string): boolean {
     return !!modelId && modelId.startsWith("litellm/");
+  }
+
+  /**
+   * MUST be tested before isOpenAiModel/isGroqModel/isGeminiModel everywhere it
+   * is used — and, because that is easy to get wrong once and never notice,
+   * isOpenAiModel excludes it directly rather than relying on branch order.
+   *
+   * 9Router ids are vendor-namespaced (`ninerouter/openai/gpt-5`,
+   * `ninerouter/gemini/gemini-3.6-flash`, `ninerouter/cc/claude-opus-5`), so the
+   * vendor segment inside the id is a live match for that vendor's own
+   * predicate. Classified late, a 9Router turn is answered by — and billed to —
+   * the user's real OpenAI/Gemini key, and neither the request nor the answer
+   * looks wrong anywhere in the trace.
+   *
+   * The internal id is `ninerouter`, never `9router`: the latter is not a legal
+   * JavaScript identifier, and CredentialsManager builds its preferred-model key
+   * by interpolation (`${provider}PreferredModel`). "9Router" is the display
+   * name everywhere a user can see one.
+   */
+  private isNinerouterModel(modelId: string): boolean {
+    return !!modelId && modelId.startsWith('ninerouter/');
   }
 
   private isNvidiaNimModel(modelId: string): boolean { return !!modelId && modelId.startsWith('nvidia_nim/'); }
@@ -5015,6 +5198,46 @@ let isMultimodal = !!(imagePaths?.length);
       this.withRetry(() => this.litellmClient!.chat.completions.create(request)),
       60000,
       `LiteLLM (${litellmModel})`
+    );
+
+    return stripLeadingReasoningBlock(response.choices[0]?.message?.content || "");
+  }
+
+  /**
+   * Non-streaming 9Router call. 9Router decides which upstream serves this, so
+   * images are forwarded when present and the chosen upstream decides whether
+   * it can read them.
+   */
+  private async generateWithNinerouter(userMessage: string, systemPrompt?: string, imagePaths?: string[]): Promise<string> {
+    if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
+    if (!this.ninerouterClient) throw new Error("9Router client not initialized");
+    this.assertOutboundScopes('ninerouter', userMessage, imagePaths);
+
+    await this.rateLimiters.ninerouter.acquire();
+
+    const ninerouterModel = this.ninerouterWireModel(this.currentModelId);
+    const messages: any[] = [];
+    if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
+    if (imagePaths?.length) {
+      const content: any[] = [{ type: "text", text: userMessage }, ...await this.buildOpenAiImageParts(imagePaths)];
+      messages.push({ role: "user", content });
+    } else {
+      messages.push({ role: "user", content: userMessage });
+    }
+
+    const maxTokens = await this.resolveNinerouterMaxTokens(ninerouterModel);
+    const request = {
+      model: ninerouterModel,
+      messages,
+      max_tokens: maxTokens,
+    };
+    require('./llm/providerPayloadCapture').captureProviderPayload({
+      provider: 'ninerouter', classification: 'sdk_request_object_before_serialization', payload: request,
+    });
+    const response = await this.withTimeout(
+      this.withRetry(() => this.ninerouterClient!.chat.completions.create(request)),
+      60000,
+      `9Router (${ninerouterModel})`
     );
 
     return stripLeadingReasoningBlock(response.choices[0]?.message?.content || "");
@@ -8733,6 +8956,25 @@ let isMultimodal = !!(imagePaths?.length);
       return;
     }
 
+    // 9Router (self-hosted OpenAI-compatible fallback proxy). It picks its
+    // upstream AFTER accepting the request, so images are forwarded through and
+    // the chosen upstream decides whether it can read them — same contract as
+    // the LiteLLM rung above.
+    if (this.isNinerouterModel(this.currentModelId) && this.ninerouterClient) {
+      const ninerouterSystem = this.injectLanguageInstruction(systemPromptOverride || OPENAI_SYSTEM_PROMPT);
+      // Failover for the reason the Fluxion rung gives, squared: 9Router is
+      // ITSELF a fallback ladder, so a stall here can be a cold upstream two
+      // hops away rather than anything wrong with the request.
+      yield* this.streamSelectedProviderWithFailover({
+        id: 'ninerouter',
+        name: `9Router (${this.ninerouterWireModel(this.currentModelId)})`,
+        open: (sig) => this.streamWithNinerouter(userContent, ninerouterSystem, (isMultimodal && imagePaths) ? imagePaths : undefined, sig),
+        userContent, finalSystemPrompt: ninerouterSystem, thinkingBudget, abortSignal,
+        hasImages: Boolean(isMultimodal && imagePaths?.length),
+      });
+      return;
+    }
+
     // Groq (Text + Multimodal)
     //
     // NOT routed through streamSelectedProviderWithFailover, unlike the other
@@ -9838,6 +10080,47 @@ let isMultimodal = !!(imagePaths?.length);
     }
   }
 
+  private async * streamWithNinerouter(userMessage: string, systemPrompt?: string, imagePaths?: string[], abortSignal?: AbortSignal, modelId?: string): AsyncGenerator<string, void, unknown> {
+    if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
+    if (!this.ninerouterClient) throw new Error("9Router client not initialized");
+    this.assertOutboundScopes('ninerouter', userMessage, imagePaths);
+
+    await this.rateLimiters.ninerouter.acquire();
+
+    const ninerouterModel = this.ninerouterWireModel(modelId || this.currentModelId);
+    const messages: any[] = [];
+    if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
+    if (imagePaths?.length) {
+      const content: any[] = [{ type: "text", text: userMessage }, ...await this.buildOpenAiImageParts(imagePaths)];
+      messages.push({ role: "user", content });
+    } else {
+      messages.push({ role: "user", content: userMessage });
+    }
+
+    const maxTokens = await this.resolveNinerouterMaxTokens(ninerouterModel);
+    if (abortSignal?.aborted) return;
+    const request = {
+      model: ninerouterModel,
+      messages,
+      stream: true as const,
+      max_tokens: maxTokens,
+    };
+    require('./llm/providerPayloadCapture').captureProviderPayload({
+      provider: 'ninerouter', classification: 'sdk_request_object_before_serialization', payload: request,
+    });
+    const stream = await this.ninerouterClient.chat.completions.create(request, { signal: abortSignal });
+
+    try {
+      for await (const chunk of stream) {
+        if (abortSignal?.aborted) return;
+        const content = chunk.choices[0]?.delta?.content;
+        if (content) yield content;
+      }
+    } finally {
+      if (abortSignal?.aborted && typeof (stream as any).abort === 'function') (stream as any).abort();
+    }
+  }
+
   private async * streamWithNvidiaNim(userMessage: string, systemPrompt?: string, imagePaths?: string[], abortSignal?: AbortSignal, modelId?: string): AsyncGenerator<string, void, unknown> {
     if (this.isLocalOnlyMode) throw new Error('Cloud providers disabled in local-only mode');
     if (!this.nvidiaNimClient) throw new Error('NVIDIA NIM client not initialized');
@@ -10923,7 +11206,11 @@ let isMultimodal = !!(imagePaths?.length);
     // at its budget comment: an OpenRouter model can be QUEUEING behind the
     // upstream it fronts, so it gets the user-supplied-endpoint budget rather
     // than a first-party provider's tighter one.
-    return this.isLiteLLMModel(this.currentModelId) || this.isNvidiaNimModel(this.currentModelId) || this.isOpenRouterModel(this.currentModelId) || this.isFluxionModel(this.currentModelId);
+    // 9Router belongs here most literally of all: the address is the user's own
+    // machine or their tunnel, and its whole purpose is to fail over between
+    // upstreams AFTER accepting the request, so its first token can be waiting
+    // on a cold provider two hops away.
+    return this.isLiteLLMModel(this.currentModelId) || this.isNvidiaNimModel(this.currentModelId) || this.isOpenRouterModel(this.currentModelId) || this.isFluxionModel(this.currentModelId) || this.isNinerouterModel(this.currentModelId);
   }
 
   /**
