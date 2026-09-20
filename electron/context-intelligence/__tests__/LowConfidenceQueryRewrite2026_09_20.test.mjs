@@ -94,12 +94,19 @@ describe('calls that lost the race do not pile up', () => {
 
 describe('merging the rewritten pass', () => {
   const ev = (id, score, content = `content ${id}`) => ({ evidenceId: id, sourceId: 's', content, finalScore: score });
-  test('rank-matched interleave: a low-scored new hit is lifted to the first pass\'s score at the same rank', () => {
+  test('rank-matched interleave: a low-scored new hit is lifted to just BELOW the first pass at the same rank', () => {
     const merged = mergeRewrittenEvidence([ev('a', 0.9), ev('b', 0.8), ev('c', 0.7)], [ev('x', 0.2), ev('y', 0.1)]);
     const score = Object.fromEntries(merged.map((e) => [e.evidenceId, e.finalScore]));
-    assert.ok(score.x > 0.9 && score.x < 0.91, `x=${score.x}`);
-    assert.ok(score.y > 0.8 && score.y < 0.81, `y=${score.y}`);
-    assert.deepEqual([...merged].sort((p, q) => q.finalScore - p.finalScore).map((e) => e.evidenceId), ['x', 'a', 'y', 'b', 'c']);
+    assert.ok(score.x < 0.9 && score.x > 0.89, `x=${score.x}`);
+    assert.ok(score.y < 0.8 && score.y > 0.79, `y=${score.y}`);
+    assert.deepEqual([...merged].sort((p, q) => q.finalScore - p.finalScore).map((e) => e.evidenceId), ['a', 'x', 'b', 'y', 'c']);
+  });
+  // Live A/B: three lifted items evicted first-pass ranks 4-6 from a six-item cap, and rank 4 held the answer.
+  test('maxNew bounds what may enter: with a cap of six and two new items, first-pass ranks 1-4 always survive', () => {
+    const first = [0.9, 0.8, 0.7, 0.6, 0.5, 0.4].map((s, i) => ev(`f${i + 1}`, s));
+    const second = [0.3, 0.25, 0.2, 0.15].map((s, i) => ev(`r${i + 1}`, s));
+    const kept = mergeRewrittenEvidence(first, second, { maxNew: 2 }).sort((p, q) => q.finalScore - p.finalScore).slice(0, 6).map((e) => e.evidenceId);
+    assert.deepEqual(kept, ['f1', 'r1', 'f2', 'r2', 'f3', 'f4']);
   });
   test('the same passage from both passes is ONE item with the better score; inputs are not mutated', () => {
     const first = [ev('a', 0.4, 'Reports to  the Director.')]; const second = [ev('a2', 0.7, 'reports to the director.')];

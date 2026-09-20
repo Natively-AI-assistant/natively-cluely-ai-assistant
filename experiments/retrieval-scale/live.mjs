@@ -47,6 +47,15 @@ const MIX = arg('mix', 'default');
 // --local-api PORT: point the app at a LOCALLY RUN natively-api under NATIVELY_LOCAL_TEST_AUTH
 // (no production database, no billing). The token is read from <work>/local-test-token, never printed.
 const LOCAL_API_PORT = arg('local-api', '');
+// --dev: a DEV SESSION, as `npm start` runs it — vite dev server on :5180 + Electron with
+// NODE_ENV=development — but on the isolated profile copy (never the real userData) and without the
+// `npm run build` step, which deletes dist-electron. The owner asked for the rewrite to be tried in the
+// actual dev app before deciding how it ships.
+// --real-ext pdf|docx --real-dir <dir>: upload the REAL file through the production parser
+// (__e2e__:upload-reference-file-from-path) instead of pasting text.
+// --surface wta: ask through the real What-To-Answer pipeline (__e2e__:ask — the interviewer's line is
+// injected as a transcript segment, exactly as STT would), i.e. the LIVE-MEETING surface.
+const DEV = has('dev'); const REAL_EXT = arg('real-ext', ''); const REAL_DIR = arg('real-dir', ''); const SURFACE = arg('surface', 'chat');
 // --profile: PROFILE INTELLIGENCE path — real résumé + JD ingest (structuring LLM, chunk, embed), a
 // looking-for-work mode with NO files attached, then graded questions about both documents.
 const PROFILE = has('profile');
@@ -93,7 +102,12 @@ if (STACK === 'local') {
   st.reranker = { ...(st.reranker ?? {}), provider: 'local', fallbackToLocal: false };
   fs.writeFileSync(sp, JSON.stringify(st, null, 2));
 }
-execFileSync('sqlite3', [`file:${path.join(REAL_UD, 'natively.db')}?mode=ro`, `.backup '${path.join(UD, 'natively.db')}'`]);
+// A WAL database that was closed cleanly has no -wal/-shm, and a READ-ONLY connection cannot create
+// the -shm it needs: `mode=ro` then fails with "unable to open database file" (it only ever worked
+// because the app happened to be open). With no -wal there is no writer and the file is consistent —
+// copy it. With one, take the read-only online backup as before. Either way the source is only read.
+if (fs.existsSync(path.join(REAL_UD, 'natively.db-wal'))) execFileSync('sqlite3', [`file:${path.join(REAL_UD, 'natively.db')}?mode=ro`, `.backup '${path.join(UD, 'natively.db')}'`]);
+else fs.copyFileSync(path.join(REAL_UD, 'natively.db'), path.join(UD, 'natively.db'));
 say(`isolated profile at ${UD} (db ${Math.round(fs.statSync(path.join(UD, 'natively.db')).size / 1e6)} MB, read-only backup)`);
 
 // ── debug-log protection ─────────────────────────────────────────────────────
@@ -127,30 +141,45 @@ const localApiUp = async () => {
 };
 if (!(await localApiUp())) { console.error(`--local-api ${LOCAL_API_PORT}: nothing healthy is listening there. Start it first (see the private recipe) — refusing to spend turns.`); process.exit(2); }
 
+let vite = null;
+if (DEV) {
+  const up = async () => { try { return (await fetch('http://127.0.0.1:5180/', { signal: AbortSignal.timeout(1500) })).ok; } catch { return false; } };
+  if (await up()) { console.error('--dev: something is already serving :5180 (your own dev session?). Refusing to share it.'); process.exit(2); }
+  vite = spawn(path.join(ROOT, 'node_modules/.bin/vite'), ['--host', '127.0.0.1', '--port', '5180', '--strictPort'], { cwd: ROOT, stdio: ['ignore', fs.openSync(path.join(WORK, 'vite.log'), 'w'), fs.openSync(path.join(WORK, 'vite.err.log'), 'w')] });
+  for (let i = 0; i < 60 && !(await up()); i++) await sleep(1000);
+  if (!(await up())) { console.error('--dev: vite did not come up on :5180 (see vite.err.log)'); try { vite.kill('SIGKILL'); } catch {} process.exit(2); }
+  say('dev session: vite is serving the renderer on :5180');
+}
+
 // ── spawn ────────────────────────────────────────────────────────────────────
 const child = spawn(path.join(ROOT, 'node_modules/.bin/electron'), [ROOT, `--user-data-dir=${UD}`, `--remote-debugging-port=${PORT}`], {
   cwd: ROOT, stdio: ['ignore', fs.openSync(path.join(WORK, 'app.stdout.log'), 'w'), fs.openSync(path.join(WORK, 'app.stderr.log'), 'w')],
-  env: { ...process.env, NODE_ENV: 'production', NATIVELY_E2E: '1', NATIVELY_E2E_REFERENCE_ROOT: '/', NATIVELY_KEEP_PREVIOUS_LOG: '1', NATIVELY_H4_STAGE_TRACE: '1', ...(LOCAL_API_PORT ? { NATIVELY_API_URL: `http://127.0.0.1:${LOCAL_API_PORT}`, NATIVELY_E2E_LOCAL_TEST_TOKEN: fs.readFileSync(path.join(WORK, 'local-test-token'), 'utf8').trim() } : {}), ...EXTRA_ENV },
+  env: { ...process.env, NODE_ENV: DEV ? 'development' : 'production', NATIVELY_E2E: '1', NATIVELY_E2E_REFERENCE_ROOT: '/', NATIVELY_KEEP_PREVIOUS_LOG: '1', NATIVELY_H4_STAGE_TRACE: '1', ...(LOCAL_API_PORT ? { NATIVELY_API_URL: `http://127.0.0.1:${LOCAL_API_PORT}`, NATIVELY_E2E_LOCAL_TEST_TOKEN: fs.readFileSync(path.join(WORK, 'local-test-token'), 'utf8').trim() } : {}), ...EXTRA_ENV },
 });
 let cleaned = false;
-const cleanup = () => { if (cleaned) return; cleaned = true; try { child.kill('SIGTERM'); } catch {} setTimeout(() => { try { child.kill('SIGKILL'); } catch {} }, 4000).unref(); };
+const cleanup = () => { if (cleaned) return; cleaned = true; try { vite?.kill('SIGKILL'); } catch {} try { child.kill('SIGTERM'); } catch {} setTimeout(() => { try { child.kill('SIGKILL'); } catch {} }, 4000).unref(); };
 process.on('SIGINT', () => { cleanup(); setTimeout(() => { restoreLog(); process.exit(130); }, 4500); });
 say(`spawned app pid ${child.pid}, CDP :${PORT}`);
 
 // ── raw CDP ──────────────────────────────────────────────────────────────────
 async function pageTarget() {
-  for (let i = 0; i < 90; i++) {
+  // A dev session compiles the renderer on first request (one component alone is over 500 kB), so its
+  // pages take far longer to become scriptable than a production file:// load.
+  const limit = DEV ? 300 : 90; let seen = [];
+  for (let i = 0; i < limit; i++) {
     try {
       const list = await (await fetch(`http://127.0.0.1:${PORT}/json`)).json();
       const pages = list.filter((t) => t.type === 'page' && t.webSocketDebuggerUrl);
+      seen = [];
       for (const t of pages) {
-        const ok = await evalOn(t.webSocketDebuggerUrl, 'typeof window.electronAPI?.e2eInvoke === "function"').catch(() => false);
-        if (ok === true) return t.webSocketDebuggerUrl;
+        const probe = await evalOn(t.webSocketDebuggerUrl, '(typeof window.electronAPI) + "/" + (typeof window.electronAPI?.e2eInvoke) + "/" + document.readyState', 8000).catch((e) => `eval failed: ${e.message}`);
+        seen.push(`${String(t.url).slice(0, 70)} → ${probe}`);
+        if (String(probe).startsWith('object/function')) return t.webSocketDebuggerUrl;
       }
     } catch { /* not up yet */ }
     await sleep(1000);
   }
-  throw new Error('no page exposing electronAPI.e2eInvoke within 90s (see app.stderr.log)');
+  throw new Error(`no page exposing electronAPI.e2eInvoke within ${limit}s. Pages seen: ${seen.join(' | ') || 'none'} (see app.stderr.log)`);
 }
 function evalOn(wsUrl, expression, timeoutMs = 120000) {
   return new Promise((resolve, reject) => {
@@ -273,8 +302,11 @@ try {
     const created = await invoke('modes:create', { name: `RS ${KIND} ${size}${PLAIN ? ' plain' : ''} ${Date.now() % 100000}`, templateType: 'general' });
     if (!created?.success) throw new Error(`modes:create failed: ${JSON.stringify(created)}`);
     const modeId = created.mode.id;
-    const added = await invoke('__e2e__:add-reference-file', { modeId, fileName: `${KIND}_${size}.${PLAIN ? 'txt' : 'md'}`, content });
-    if (!added?.success) throw new Error(`add-reference-file failed: ${JSON.stringify(added)}`);
+    const added = REAL_EXT
+      ? await invoke('__e2e__:upload-reference-file-from-path', { modeId, filePath: path.join(REAL_DIR, `${KIND}_${size}.${REAL_EXT}`) })
+      : await invoke('__e2e__:add-reference-file', { modeId, fileName: `${KIND}_${size}.${PLAIN ? 'txt' : 'md'}`, content });
+    if (!added?.success) throw new Error(`reference file upload failed: ${JSON.stringify(added)}`);
+    if (REAL_EXT) say(`[${size}] uploaded the REAL ${REAL_EXT.toUpperCase()} through the production parser`);
     await invoke('modes:set-active', modeId);
     await invoke('__e2e__:prewarm-mode', modeId).catch(() => null);
     let status = null;
@@ -290,7 +322,12 @@ try {
     for (const q of pick(size)) {
       await invoke('__e2e__:reset-session').catch(() => null);
       const t0 = Date.now();
-      const r = await invoke('__e2e__:manual-ask', { question: q.question, timeoutMs: 60000 }).catch((e) => ({ success: false, error: e.message }));
+      // The engine ignores a what-to-answer trigger that arrives within 3 s of the previous one
+      // (IntelligenceEngine.triggerCooldown). Asking back-to-back had 4 of 14 turns DISCARDED before the
+      // pipeline ran — no engine log line, no model call — and the driver reported them as errors.
+      if (SURFACE === 'wta') await sleep(3600);
+      const r = await invoke(SURFACE === 'wta' ? '__e2e__:ask' : '__e2e__:manual-ask', { question: q.question, timeoutMs: 60000 }).catch((e) => ({ success: false, error: e.message }));
+      if (r?.discarded) say(`   (trigger discarded by the engine: ${r.reason ?? 'no reason given'})`);
       const answer = (r?.answer ?? r?.streamedTokens ?? '').trim();
       const model = await invoke('__e2e__:last-provider-model').catch(() => null);
       // `child` is the node launcher shim; the app's main process is its child. (The first

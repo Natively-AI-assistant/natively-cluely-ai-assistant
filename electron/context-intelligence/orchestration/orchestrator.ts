@@ -1147,7 +1147,7 @@ export async function orchestrate(
         // items to answerability on a turn whose cap is 6, so support was computed
         // over evidence the packer then dropped. Same order the packer uses.
         const before = new Set(evidence.map((e) => e.evidenceId));
-        const merged = mergeRewrittenEvidence(evidence, r2.evidence)
+        const merged = mergeRewrittenEvidence(evidence, r2.evidence, { maxNew: answerabilityBefore === 'NONE' ? 3 : 2 })
           .sort((a, b) => b.finalScore - a.finalScore || a.evidenceId.localeCompare(b.evidenceId))
           .slice(0, Math.max(1, decision.retrievalPlan.maximumAcceptedEvidence));
         added = merged.filter((e) => !before.has(e.evidenceId)).length;

@@ -172,6 +172,40 @@ job-description evidence as support for a question about the user's own past ("H
 call?" → FULL). A blunt exclusion was written and reverted within the hour — it made job-description
 questions unanswerable. Not re-run live: nothing in this section has been exercised in the running app.
 
+## Bounded final round (2026-09-21): spoken questions, the JD rule, and the rewrite tried in a real dev session
+
+**Spoken-style questions.** Nine of fifteen misses on the first held-out set were never ROUTED to
+retrieval, all spoken-style: the corpus probe charged each word the documents never contain at the
+weight of their rarest word, so "milliseconds" (the file says `timeout_ms`) or "drained" ("Drain") sank
+a question that named its section exactly. Fix: STT contractions, fillers and number words are function
+words; the digit form of a spoken number is kept; two distinctive co-occurring terms anchor a question
+when unseen words are not the majority. First held-out set, of 120: 105 → 112 (vectors), 98 → 105
+(lexical); general-knowledge negatives anchored: unchanged. Because that set was then no longer held
+out, a **second blind set** (96 questions at 30k, half spoken-style) was commissioned and run once:
+markdown 87/96 vectors (spoken 90%), 77/96 lexical; real PDF 84/96 and 74/96. Paraphrases without
+embeddings remain the weak cell (38–46%).
+
+**Owner decision — the job description is not evidence about the user.** It may be retrieved, never
+counted as support, on a turn whose own grammar claims something about the user. Exempt: claims the
+classifier merely guessed, and prospective questions ("Who would be my manager?").
+
+**The query rewrite, in a real dev session** (`live.mjs --dev`: vite + Electron in development mode, as
+`npm start` runs them, on an isolated profile copy), on the LIVE-MEETING surface (`--surface wta`), with
+a real PDF uploaded through the production parser (`--real-ext pdf`). 48 billed turns.
+
+| stack · file | rewrite | result | rewrite fired | real time per answer |
+|---|---|---|---|---|
+| natively · 15k PDF | on | **14/14** | 0 of 14 | 3.0–3.7 s |
+| bundled embedder · 70k PDF, paraphrase-heavy | on | 10/12 (1 wrong, 1 false refusal) | 7 of 12, each 0.9–1.4 s | ~5.1 s |
+| bundled embedder · same 12 questions | **off** | 9/12 (1 wrong, 2 false refusals) | — | ~4.4 s |
+
+On → off: fixed two ("hammer the API", the webhook shutdown date), broke one — its three new items
+evicted the first-pass chunk holding "99.97%" from the six-item cap. The merge now lets the first pass
+win ties and admits at most two new items when the first pass had found something; that change is
+unit-tested and has NOT been re-run live. With hosted embeddings the rewrite never fired.
+Driver lessons: the engine discards a what-to-answer trigger within 3 s of the previous one (4 of 14
+turns vanished until asks were spaced); a cleanly closed WAL database cannot be opened `mode=ro`.
+
 ## Sentence-case headings were invisible in extracted text (2026-09-20)
 
 Chunker v3's plain-text heading detection accepted Title Case and ALL CAPS only. 7 of a job

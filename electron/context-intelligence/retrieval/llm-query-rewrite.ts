@@ -152,14 +152,21 @@ export function createQueryRewriter(
  * same rule the profile port uses for its two arms and for the same reason: the
  * passes were scored against different query texts, so their scores are not
  * comparable, and the packer keeps the top `maximumAcceptedEvidence` by score.
- * The rewritten pass's rank-r NEW item is lifted to at least the first pass's
- * rank-r score (first on a tie). An item both passes found keeps its better
+ * The rewritten pass's rank-r NEW item is lifted to just BELOW the first pass's
+ * rank-r score (the first pass wins the tie). An item both passes found keeps its better
  * score and is not duplicated.
  */
 export function mergeRewrittenEvidence<T extends { evidenceId: string; sourceId: string; content: string; finalScore: number }>(
   first: readonly T[],
   second: readonly T[],
+  opts: { maxNew?: number } = {},
 ): T[] {
+  // LIVE A/B (2026-09-21, what-to-answer surface, bundled embedder, real 70k PDF): the rewrite fixed
+  // two answers and BROKE one — its three new items, each lifted just ABOVE the first pass's item at
+  // the same rank, evicted first-pass ranks 4-6 from a six-item cap, and rank 4 was the chunk holding
+  // the answer ("99.97%"). So: the first pass wins the tie at each rank, and the caller bounds how many
+  // new items may enter (two when the first pass had found SOMETHING, three when it had found nothing).
+  const maxNew = Math.max(0, opts.maxNew ?? Number.POSITIVE_INFINITY);
   const key = (e: T) => `${e.sourceId}|${e.content.replace(/\s+/g, ' ').trim().toLowerCase().slice(0, 160)}`;
   const byKey = new Map<string, T>();
   const out: T[] = [];
@@ -173,7 +180,8 @@ export function mergeRewrittenEvidence<T extends { evidenceId: string; sourceId:
       if (e.finalScore > twin.finalScore) { const i = out.indexOf(twin); out[i] = { ...twin, finalScore: e.finalScore }; byKey.set(k, out[i]); }
       continue;
     }
-    const lifted = Math.max(e.finalScore, Math.min(1, (firstDesc[rank] ?? 0) + 1e-6));
+    if (rank >= maxNew) continue;
+    const lifted = Math.max(e.finalScore, Math.max(0, (firstDesc[rank] ?? 0) - 1e-6));
     rank += 1;
     const row = { ...e, finalScore: lifted };
     byKey.set(k, row);
