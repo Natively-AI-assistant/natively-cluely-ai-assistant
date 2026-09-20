@@ -1061,6 +1061,11 @@ export class LLMHelper {
   private static readonly PROVIDER_LABEL_FAMILY: Readonly<Record<string, string>> = {
     gemini: 'gemini', groq: 'groq', natively: 'natively', openai: 'openai',
     claude: 'claude', deepseek: 'deepseek', litellm: 'litellm', codex: 'codex-cli',
+    // Present so the last-boundary disabled check actually runs: the lookup is
+    // `if (family && ...)`, so an absent entry removes the guard silently
+    // rather than failing. The client getter is the primary guard; this is the
+    // backstop for any path that reaches the provider without passing it.
+    ninerouter: 'ninerouter',
     antigravity: 'antigravity', custom_curl: 'custom', custom_provider: 'custom',
   };
 
