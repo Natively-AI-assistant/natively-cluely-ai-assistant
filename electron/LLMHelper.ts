@@ -144,6 +144,7 @@ const GEMINI_PRO_MODEL = "gemini-3.1-pro-preview"
 const GROQ_MODEL = GROQ_PRIMARY_MODEL
 import { GROQ_VISION_MODEL } from './llm/groqModels'
 import { stripLeadingReasoningBlock } from './llm/reasoningTagFilter'
+import { describeNinerouterFailure, NINEROUTER_EMPTY_ANSWER } from './llm/ninerouterErrors'
 // Groq rejects a request carrying more than 5 images. Every other vision
 // provider here takes as many as we send, so the cap lives on the Groq path.
 const GROQ_VISION_MAX_IMAGES = 5
@@ -5401,13 +5402,29 @@ let isMultimodal = !!(imagePaths?.length);
     require('./llm/providerPayloadCapture').captureProviderPayload({
       provider: 'ninerouter', classification: 'sdk_request_object_before_serialization', payload: request,
     });
-    const response = await this.withTimeout(
-      this.withRetry(() => this.ninerouterClient!.chat.completions.create(request)),
-      60000,
-      `9Router (${ninerouterModel})`
-    );
+    let response: any;
+    try {
+      response = await this.withTimeout(
+        this.withRetry(() => this.ninerouterClient!.chat.completions.create(request)),
+        60000,
+        `9Router (${ninerouterModel})`
+      );
+    } catch (e: any) {
+      throw Object.assign(new Error(describeNinerouterFailure(e, ninerouterModel)), {
+        status: e?.status, provider: 'ninerouter', cause: e,
+      });
+    }
 
-    return stripLeadingReasoningBlock(response.choices[0]?.message?.content || "");
+    const answer = stripLeadingReasoningBlock(response.choices?.[0]?.message?.content || "");
+    if (!answer.trim()) {
+      // Same silent case as the streaming path. Note the strip runs FIRST: a
+      // reply that was nothing but a <think> block is empty once filtered, and
+      // is just as useless to the caller as no reply at all.
+      throw Object.assign(new Error(describeNinerouterFailure(new Error(NINEROUTER_EMPTY_ANSWER), ninerouterModel)), {
+        provider: 'ninerouter',
+      });
+    }
+    return answer;
   }
 
   private async generateWithNvidiaNim(userMessage: string, systemPrompt?: string, imagePaths?: string[]): Promise<string> {
@@ -10295,16 +10312,48 @@ let isMultimodal = !!(imagePaths?.length);
     require('./llm/providerPayloadCapture').captureProviderPayload({
       provider: 'ninerouter', classification: 'sdk_request_object_before_serialization', payload: request,
     });
-    const stream = await this.ninerouterClient.chat.completions.create(request, { signal: abortSignal });
+    // An IIFE rather than a pre-declared `let`: annotating the stream's type
+    // would need `typeof this.…`, which is not legal in a type position, and
+    // widening it to `any` loses the `stream: true` overload's iterability.
+    const stream = await (async () => {
+      try {
+        return await this.ninerouterClient!.chat.completions.create(request, { signal: abortSignal });
+      } catch (e: any) {
+        // Rewrite before it leaves the adapter. 9Router relays its upstream's
+        // status, so the raw text is a nested JSON blob naming a provider the
+        // user has never heard of — and the right REMEDY differs per status in
+        // ways that CONFLICT (429 means retry, 410 means never retry, 401 means
+        // open a dashboard). See ninerouterErrors.ts for the measured spread.
+        throw Object.assign(new Error(describeNinerouterFailure(e, ninerouterModel)), {
+          status: e?.status, provider: 'ninerouter', cause: e,
+        });
+      }
+    })();
 
+    let emitted = false;
     try {
       for await (const chunk of stream) {
         if (abortSignal?.aborted) return;
         const content = chunk.choices[0]?.delta?.content;
-        if (content) yield content;
+        if (content) { emitted = true; yield content; }
       }
+    } catch (e: any) {
+      if (abortSignal?.aborted) return;
+      throw Object.assign(new Error(describeNinerouterFailure(e, ninerouterModel)), {
+        status: e?.status, provider: 'ninerouter', cause: e,
+      });
     } finally {
       if (abortSignal?.aborted && typeof (stream as any).abort === 'function') (stream as any).abort();
+    }
+
+    // HTTP 200, a well-formed stream, and no content at all — measured on
+    // MiniMax-M3 and gemma-4-31b-it, which stream reasoning only. Nothing
+    // rejects, so without this the turn ends with an empty answer bubble and no
+    // indication that anything failed.
+    if (!emitted && !abortSignal?.aborted) {
+      throw Object.assign(new Error(describeNinerouterFailure(new Error(NINEROUTER_EMPTY_ANSWER), ninerouterModel)), {
+        provider: 'ninerouter',
+      });
     }
   }
 
