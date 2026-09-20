@@ -183,7 +183,9 @@ export function wordsOf(text: string, options: WordsOfOptions = {}): string[] {
     return withHyphens;
   }
   const present = new Set(withHyphens);
-  const extra = numeralTokens(lower).filter((t) => t.length > 2 && !present.has(t));
+  // "pod seven" → "7": the digit form of a SPOKEN number is an identifier too, and it was
+  // dropped by the length cut even on the path that keeps "13" and "v2" typed as digits.
+  const extra = numeralTokens(lower).filter((t) => (shortNumerics ? keepToken(t) : t.length > 2) && !present.has(t));
   return extra.length ? withHyphens.concat(extra) : withHyphens;
 }
 
@@ -335,13 +337,29 @@ const PROBE_FUNCTION_WORDS = new Set(('what whats which who whom whose when wher
   + 'are was were been being have has had having the and for with from into onto about that this these those '
   + 'there their they them then than can could should would will shall may might must not but you your yours '
   + 'our ours his her its any some all each every tell give show say said says please just like also get got '
-  + 'set out off over under again more most very much many').split(' '));
+  + 'set out off over under again more most very much many '
+  // SPEECH-TO-TEXT (2026-09-21). Nine of fifteen misses on a HELD-OUT question set
+  // were never routed to retrieval at all, every one spoken-style: "whats the
+  // timeout on ledgerline store two in milliseconds", "isthmus pod seven whats the
+  // nice to have stuff they want". A word the corpus has never seen counts AGAINST
+  // the question at full weight — right for "TCP" and "UDP", wrong for a
+  // contraction that lost its apostrophe, a filler, or a number SPOKEN as a word
+  // (the document says "store-2"; wordsOf already adds the digit form, which still
+  // counts as content).
+  + 'whats whos hows wheres whens thats theres heres ive im id ill youre youve youd theyre theyve weve were hes shes its lets '
+  + 'dont doesnt didnt isnt arent wasnt werent cant couldnt wouldnt shouldnt wont havent hasnt hadnt '
+  + 'uh um er hmm okay ok so like yeah yep right well actually basically kinda sorta gonna wanna gotta '
+  + 'thing things stuff bit lot kind sort there here now then just really '
+  + 'zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen '
+  + 'twenty thirty forty fifty sixty seventy eighty ninety hundred thousand oh').split(' ').filter(Boolean));
 
 /** Is this a question word / auxiliary / pronoun that no document chunk can meaningfully 'contain'? */
 export function isProbeFunctionWord(word: string): boolean { return PROBE_FUNCTION_WORDS.has(word); }
 
 export const PROBE_MIN_ANCHORS = 2;
 export const PROBE_MIN_COVERAGE = 0.6;
+/** idf above which a term is DISTINCTIVE: it appears in under about a fifth of the chunks (ln 5 ≈ 1.6). */
+export const PROBE_DISTINCTIVE_IDF = 1.5;
 
 export function corpusAnchorsQuestion(question: string, stats: LexicalStats): boolean {
   return anchoringChunkIndexes(question, stats, 1).length > 0;
@@ -372,13 +390,28 @@ export function anchoringChunkIndexes(question: string, stats: LexicalStats, lim
     if (v >= ANCHOR_MIN_IDF) anchors.set(w, v);
   }
   if (anchors.size < PROBE_MIN_ANCHORS || total <= 0) return [];
+  // SECOND ROUTE (2026-09-21, held-out questions). Coverage charges every word the
+  // corpus has never seen at the weight of its rarest word — right for "TCP vs
+  // UDP", but one inflection or synonym sinks a question that otherwise names the
+  // section exactly: "whats the timeout on ledgerline store two in milliseconds"
+  // (the file says timeout_ms) covered 0.39; "regional failover after ive drained
+  // the write queue whats the next step" (the file says "Drain", "steps") failed
+  // with FOUR rare terms sitting together in one chunk. Nine of fifteen held-out
+  // misses were never routed for this reason. Two DISTINCTIVE terms (each in under
+  // ~a fifth of the chunks) co-occurring in one chunk anchor the question too, as
+  // long as unseen words are not the majority of what was asked.
+  let unseen = 0;
+  for (const w of words) if (!stats.idf.has(w)) unseen++;
+  const distinctive = [...anchors].filter(([, v]) => v >= PROBE_DISTINCTIVE_IDF).map(([w]) => w);
+  const coOccurrenceAllowed = distinctive.length >= PROBE_MIN_ANCHORS && unseen * 2 < words.size;
   const out: number[] = [];
   for (let i = 0; i < stats.sets.length && out.length < limit; i++) {
     const set = stats.sets[i];
     let hit = 0;
     let count = 0;
     for (const [w, v] of anchors) if (set.has(w)) { hit += v; count++; }
-    if (count >= PROBE_MIN_ANCHORS && hit / total >= PROBE_MIN_COVERAGE) out.push(i);
+    if (count >= PROBE_MIN_ANCHORS && hit / total >= PROBE_MIN_COVERAGE) { out.push(i); continue; }
+    if (coOccurrenceAllowed && distinctive.filter((w) => set.has(w)).length >= PROBE_MIN_ANCHORS) out.push(i);
   }
   return out;
 }
