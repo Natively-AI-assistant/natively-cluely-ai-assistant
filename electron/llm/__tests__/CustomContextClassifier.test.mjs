@@ -85,24 +85,33 @@ describe('selectCustomContextForAnswer — sensitive gating by answer type', () 
     assert.ok(sel.included.some(c => /concise/i.test(c.text)));
     assert.ok(sel.included.some(c => /payments/i.test(c.text)));
   });
-  test('coding answer sees NO custom context at all (forbidden layer)', () => {
-    const sel = selectCustomContextForAnswer(classified, 'coding_question_answer');
-    assert.equal(sel.included.length, 0);
-    assert.equal(sel.sensitiveIncluded, false);
-  });
-  test('dsa answer sees NO custom context at all', () => {
-    const sel = selectCustomContextForAnswer(classified, 'dsa_question_answer');
-    assert.equal(sel.included.length, 0);
-  });
-  test('identity answer sees NO custom context (self-contained)', () => {
-    const sel = selectCustomContextForAnswer(classified, 'identity_answer');
-    assert.equal(sel.included.length, 0);
-  });
+  // These three asserted `included.length === 0` — Phase 3's "a coding answer
+  // sees nothing". RC-2 (2026-08-21) already superseded that for output-format
+  // directives; they stayed green only because the old directive regex was too
+  // narrow to recognise "Be concise." as one. 2026-09-20: the forbidden layer's
+  // real invariant is asserted instead — no FACT and no SENSITIVE chunk ever
+  // reaches a self-contained answer — while the user's own presentation
+  // directive does, because ignoring it is the bug users reported.
+  for (const t of ['coding_question_answer', 'dsa_question_answer', 'identity_answer']) {
+    test(`${t}: facts and salary never pass; the user's directive does`, () => {
+      const sel = selectCustomContextForAnswer(classified, t);
+      assert.equal(sel.sensitiveIncluded, false);
+      assert.ok(!sel.included.some(c => /payments/i.test(c.text)), 'a fact about the user must not reach a self-contained answer');
+      assert.ok(!sel.included.some(c => /CTC|LPA/.test(c.text)), 'salary must not reach a self-contained answer');
+      assert.deepEqual(sel.included.map(c => c.text), ['Be concise.']);
+      assert.ok(sel.excluded.some(e => e.category === 'sensitive'), 'records the sensitive exclusion');
+      assert.ok(sel.excluded.some(e => e.category === 'searchable'), 'records the fact exclusion');
+    });
+  }
 });
 
 describe('buildScopedCustomContext — end-to-end rendering', () => {
-  test('coding answer renders empty scoped context', () => {
+  test('coding answer renders the directive only — never the salary line', () => {
     const { text } = buildScopedCustomContext('Be concise.\n\nSalary is 30 LPA.', 'coding_question_answer');
+    assert.equal(text, 'Be concise.');
+  });
+  test('coding answer renders EMPTY when the blob holds only facts and salary', () => {
+    const { text } = buildScopedCustomContext('I built a payments platform.\n\nSalary is 30 LPA.', 'coding_question_answer');
     assert.equal(text, '');
   });
   test('behavioral answer keeps pinned+searchable, drops sensitive', () => {

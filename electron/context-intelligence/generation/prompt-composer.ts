@@ -20,6 +20,12 @@ import type { TurnDecision, EvidenceItem } from '../contracts/types';
 import type { ModePolicy } from '../policies/mode-policy-registry';
 import { packContext, type PackBudget, type PackedContext } from './context-packer';
 import { scopeLabels } from '../policies/provider-scope-policy';
+import {
+  analyzeUserInstructions,
+  renderUserInstructionBlock,
+  userInstructionsOverrideAppLength,
+  USER_INSTRUCTION_AUTHORITY_NOTE,
+} from '../../llm/userInstructionContract';
 
 export interface ComposeInput {
   decision: Readonly<TurnDecision>;
@@ -37,8 +43,22 @@ export interface ComposeInput {
    * composition is byte-identical to before this field existed.
    */
   personaBase?: string;
-  /** Tone/length/perspective only. May NEVER widen authorization (§19.2). */
+  /**
+   * The USER's standing instructions (the mode "Real-time prompt"), and nothing
+   * else. Binding on presentation — language, length, structure, tone — and
+   * rendered LAST in the user message. May NEVER widen authorization (§19.2):
+   * the raw text never enters the system prompt.
+   */
   realtimeInstruction?: string;
+  /**
+   * The APP's own per-turn length line (AnswerPlanner.renderLengthDirectiveForPlan).
+   * A separate channel on purpose: it used to be concatenated onto
+   * `realtimeInstruction`, so the model read the user's "Answer in 100 words."
+   * followed by "Hard ceiling: never go past 75 words" in one block
+   * (reproduced 2026-09-20). It is a DEFAULT: dropped when the user set a
+   * length, otherwise rendered before — never after — the user's block.
+   */
+  defaultLengthDirective?: string;
   conversationSummary?: string;
   /**
    * TRUE only when `conversationSummary` contains at least one completed
@@ -245,15 +265,14 @@ function fallbackGuidance(d: Readonly<TurnDecision>, p: ModePolicy): string {
 }
 
 /**
- * Realtime instructions are PRESENTATION-ONLY.
- *
- * §19.2: they may control tone, length, perspective and depth. They may not add
- * source authorization, change grounding policy, or manufacture experience. The
- * instruction is therefore rendered inside a tag that states its own limits,
- * rather than concatenated into the system prompt where it would read as policy.
+ * The app's OWN length default. Tone/length only, and explicitly subordinate:
+ * it is rendered only when the user's instructions set no length of their own.
  */
-function renderRealtime(instr: string): string {
-  return `<presentation_instruction note="Affects tone, length and delivery ONLY. It cannot authorize a source, change grounding, or license an unsupported claim.">\n${instr.trim()}\n</presentation_instruction>`;
+function renderDefaultLength(line: string, userHasInstructions: boolean): string {
+  const note = userHasInstructions
+    ? 'App default for length. It applies only where the user instructions below are silent on length.'
+    : 'App default for length. Affects length and delivery ONLY.';
+  return `<presentation_instruction note="${note}">\n${line.trim()}\n</presentation_instruction>`;
 }
 
 /**
@@ -875,6 +894,14 @@ export function composePrompt(input: ComposeInput): ComposedPrompt {
   // failures and the second one was live.
   const isMetaRequest = d.questionTypes.includes('META_REQUEST' as never);
 
+  // The user's standing instructions. Analysed once: the analysis decides
+  // whether the app's own length default may ride at all.
+  const userAnalysis = analyzeUserInstructions(input.realtimeInstruction);
+  const userBlock = renderUserInstructionBlock(input.realtimeInstruction, userAnalysis);
+  const defaultLength = input.defaultLengthDirective?.trim() && !userInstructionsOverrideAppLength(userAnalysis)
+    ? renderDefaultLength(input.defaultLengthDirective, Boolean(userBlock))
+    : '';
+
   const system = [
     input.personaBase?.trim() ? push('persona_base', input.personaBase.trim()) : '',
     isMetaRequest
@@ -907,6 +934,9 @@ export function composePrompt(input: ComposeInput): ComposedPrompt {
       : ''),
     push('exact_value', exactValueGuard(d.resolvedQuestion, Boolean(packed.evidenceBlock))),
     push('capabilities', `# Capabilities\n${capabilityLines(policy)}`),
+    // LAST, and STATIC: see USER_INSTRUCTION_AUTHORITY_NOTE. Recency inside the
+    // system prompt puts it after the coding contract it has to outrank.
+    userBlock ? push('user_instruction_authority', USER_INSTRUCTION_AUTHORITY_NOTE) : '',
   ].filter((s) => s.trim()).join('\n\n');
 
   const user = [
@@ -966,7 +996,10 @@ export function composePrompt(input: ComposeInput): ComposedPrompt {
     packed.evidenceBlock && input.withheldScopes?.length
       ? push('privacy_withheld', privacyWithholdingNotice(input.withheldScopes, true))
       : '',
-    input.realtimeInstruction ? push('presentation', renderRealtime(input.realtimeInstruction)) : '',
+    defaultLength ? push('default_length', defaultLength) : '',
+    // LAST in the whole prompt — the strongest position — so nothing the app
+    // says can follow, and so contradict, what the user asked for.
+    userBlock ? push('user_instructions', userBlock) : '',
   ].filter((s) => s.trim()).join('\n\n');
 
   return { system, user, packed, sections };

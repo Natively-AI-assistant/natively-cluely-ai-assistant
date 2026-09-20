@@ -7,6 +7,7 @@ import type { ModeRetrievedContext as HybridContext } from './modes/ModeHybridRe
 import type { AnswerType } from '../llm/AnswerPlanner';
 import type { ActiveModeInfo } from '../llm/modeProfiles';
 import { classifyCustomContext, selectCustomContextForAnswer } from '../llm/customContextClassifier';
+import { registerUserInstructionProvider, USER_INSTRUCTIONS_MAX_CHARS } from '../llm/userInstructionContract';
 import { diagLog } from '../llm/documentGroundedPrompt';
 import { planBuiltinAdoption, BUILTIN_MODE_LABELS } from './builtinModes';
 import {
@@ -405,6 +406,15 @@ export class ModesManager {
     public static getInstance(): ModesManager {
         if (!ModesManager.instance) {
             ModesManager.instance = new ModesManager();
+            // The coding-format resolver asks the OWNER for the mode's
+            // instruction text instead of ten call sites each threading it
+            // (userInstructionContract.ts). Registered here — the single
+            // construction point — so it exists before any turn can run. The
+            // text is the coding-scoped view: what a coding turn is actually
+            // given is what may define that turn's format.
+            const instance = ModesManager.instance;
+            registerUserInstructionProvider((pinnedModeId) =>
+                instance.getScopedInstructionText('dsa_question_answer', pinnedModeId));
             // Establish the app defaults ONCE, here rather than at a startup
             // hook: the database opens lazily, and every entry point that can
             // read a mode goes through this accessor. Doing it anywhere else
@@ -1468,7 +1478,12 @@ export class ModesManager {
     // Roughly 300 tokens — enough for real mode instructions, small enough that
     // a pasted document can't crowd out the transcript. Anything longer remains
     // fully available to RETRIEVAL (reference-file path), so nothing is lost.
-    private static readonly PINNED_INSTRUCTIONS_MAX_CHARS = 1_200;
+    // Was 1_200 while the Modes editor's textarea accepts 8,000
+    // (premium/src/ModesSettings.tsx maxLength): everything past 1,200 chars was
+    // cut off with " …[truncated]" and never seen by the model — so the MORE
+    // carefully a user wrote their prompt, the less of it applied. One shared
+    // constant now, equal to what the editor lets them type.
+    private static readonly PINNED_INSTRUCTIONS_MAX_CHARS = USER_INSTRUCTIONS_MAX_CHARS;
 
     /**
      * PI v3 (W2): the active mode's user-authored "Real-time prompt"
@@ -1487,22 +1502,37 @@ export class ModesManager {
     public getActiveModePinnedInstructions(answerType?: AnswerType, pinnedModeId?: string): string {
         const mode = this.resolveMode(pinnedModeId);
         if (!mode) return '';
+        const text = this.getScopedInstructionText(answerType, pinnedModeId);
+        if (!text) return '';
+        // isCustom is a pure function of (templateType, name) on the resolved
+        // mode — derive it directly so a pinned mode reports correctly even when
+        // it differs from the (possibly switched) live active mode.
+        const custom = isCustomMode(mode);
+        return custom ? `Mode: ${mode.name}\n${text}` : text;
+    }
+
+    /**
+     * The mode's instruction text exactly as an answer of `answerType` receives
+     * it — sensitivity/fact-scoped and capped — WITHOUT the "Mode: <name>"
+     * label getActiveModePinnedInstructions adds for custom modes. The label is
+     * presentation; this is the text itself, so it is also what the
+     * coding-format resolver analyses (a mode NAMED "Interview Format" must not
+     * read as the user defining a format).
+     */
+    public getScopedInstructionText(answerType?: AnswerType, pinnedModeId?: string): string {
+        const mode = this.resolveMode(pinnedModeId);
+        if (!mode) return '';
         const raw = (mode.customContext || '').trim();
         if (!raw) return '';
         const grounding = this.getActiveModeDocumentGroundingInfo(pinnedModeId);
         const scoped = (answerType && !grounding.documentGroundedCustomModeActive)
             ? selectCustomContextForAnswer(classifyCustomContext(raw), answerType).included.map(c => c.text).join('\n')
             : raw;
-        if (!scoped.trim()) return '';
         let text = scoped.trim();
         if (text.length > ModesManager.PINNED_INSTRUCTIONS_MAX_CHARS) {
             text = text.slice(0, ModesManager.PINNED_INSTRUCTIONS_MAX_CHARS) + ' …[truncated]';
         }
-        // isCustom is a pure function of (templateType, name) on the resolved
-        // mode — derive it directly so a pinned mode reports correctly even when
-        // it differs from the (possibly switched) live active mode.
-        const custom = isCustomMode(mode);
-        return custom ? `Mode: ${mode.name}\n${text}` : text;
+        return text;
     }
 
     /**
