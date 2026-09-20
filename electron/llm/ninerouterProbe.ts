@@ -156,10 +156,34 @@ export async function probeNinerouter(
     };
   }
 
-  // Anything else means the request got PAST authentication AND reached the
-  // chat endpoint, which is what this probe set out to establish. A 400
-  // ("Invalid model format") is the expected signal, since the model id is
-  // deliberately unroutable; a 2xx from some future build is equally proof the
-  // credential was accepted.
+  if (resp.status >= 500) {
+    // The instance answered but is not healthy. Calling that "the key works" is
+    // the same false green as the 404 case — a 502 from a dead tunnel or a 500
+    // from a broken install would otherwise render as success.
+    return {
+      ok: false,
+      reason: 'unreachable',
+      status: resp.status,
+      error: `9Router returned ${resp.status}. The instance is reachable but not healthy — check its logs, then try again.`,
+    };
+  }
+
+  // Anything else got PAST authentication AND reached the chat endpoint. A 400
+  // ("Invalid model format") is the expected signal, since the probe model id is
+  // deliberately unroutable.
+  //
+  // The content-type check is the discriminator the 404 branch already uses,
+  // for the same reason: it proves 9ROUTER answered rather than some other
+  // server at that address. Without it a `405 Method Not Allowed` from an
+  // unrelated host renders as "the key works".
+  const contentType2 = resp.headers?.get?.('content-type') || '';
+  if (!contentType2.includes('json')) {
+    return {
+      ok: false,
+      reason: 'unreachable',
+      status: resp.status,
+      error: `Something answered at ${trimmedURL}, but not 9Router (${resp.status}, ${contentType2 || 'no content type'}). Check the URL.`,
+    };
+  }
   return { ok: true, status: resp.status };
 }

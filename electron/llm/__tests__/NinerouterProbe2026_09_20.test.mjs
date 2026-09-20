@@ -156,6 +156,27 @@ describe('the probe reports what actually happened', () => {
       'the user pasted the wrong URL — say that, do not blame their key or their server');
   });
 
+  test('a 5xx is an unhealthy instance, NOT a working key', async () => {
+    // Everything that was not 401/404 used to read as success, so a 502 from a
+    // dead tunnel or a 500 from a broken install rendered as "the key works".
+    for (const status of [500, 502, 503]) {
+      const { fn } = stubFetch({ status, body: { error: { message: 'upstream boom' } } });
+      const r = await probeNinerouter('http://localhost:20128/v1', 'sk-real', { fetchImpl: fn });
+      assert.equal(r.ok, false, `${status} must not be reported as working`);
+      assert.equal(r.reason, 'unreachable');
+    }
+  });
+
+  test('a NON-9Router server answering at that address is caught', async () => {
+    // Same discriminator the 404 branch uses: a JSON error object is 9Router
+    // speaking. An unrelated host replying 405 text/html is not.
+    const { fn } = stubFetch({ status: 405, contentType: 'text/html', body: '<html>Method Not Allowed</html>' });
+    const r = await probeNinerouter('http://localhost:8080/v1', 'sk-real', { fetchImpl: fn });
+    assert.equal(r.ok, false);
+    assert.equal(r.reason, 'unreachable');
+    assert.match(r.error, /not 9Router|Check the URL/i);
+  });
+
   test('a refused connection is an unreachable instance, not a bad key', async () => {
     const { fn } = stubFetch(Object.assign(new Error('fetch failed'), { cause: { code: 'ECONNREFUSED' } }));
     const r = await probeNinerouter('http://localhost:20128/v1', 'sk-real', { fetchImpl: fn });

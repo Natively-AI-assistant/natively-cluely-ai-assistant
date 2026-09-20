@@ -1724,7 +1724,12 @@ export class LLMHelper {
         const freshVision = new Set<string>();
         for (const entry of (data?.data || [])) {
           const name = entry?.id;
-          if (!name) continue;
+          // typeof, not truthiness. A numeric id (42) is truthy, becomes a
+          // NUMBER key in these string-keyed Maps/Sets, and every later lookup
+          // misses silently — the model reads as "no budget" and "not
+          // vision-capable" while occupying a cache slot.
+          // listNinerouterEmbeddingModels already gets this right.
+          if (typeof name !== 'string' || !name) continue;
           // Per-model vision, which no other gateway here can answer. 30 of
           // the 47 models a stock instance serves report true and 17 report
           // false, so this is the difference between routing a screenshot to
@@ -1766,8 +1771,18 @@ export class LLMHelper {
    * otherwise the catalogue's budget for this model; otherwise the default.
    */
   private async resolveNinerouterMaxTokens(ninerouterModel: string): Promise<number> {
-    if (this.ninerouterMaxTokens !== null) return this.ninerouterMaxTokens; // manual override
+    // The refresh runs BEFORE the manual-override return, and that ordering is
+    // load-bearing. This is the catalogue's only caller, so returning early
+    // meant that choosing a fixed Max Output Tokens in Settings left it
+    // permanently unfetched: `ninerouterVisionModels` stayed empty, its
+    // "empty means unknown" fallback then answered true for every model, and the
+    // per-model vision gate -- the one thing this provider does that LiteLLM
+    // cannot -- was silently dead. `ninerouterModelInputCaps` starved with it,
+    // so fitContextForCurrentModel never trimmed either.
+    //
+    // It is TTL-guarded, negative-cached and ~45ms, so running it here is free.
     await this.refreshNinerouterModelCatalogue();
+    if (this.ninerouterMaxTokens !== null) return this.ninerouterMaxTokens; // manual override
     const budget = this.ninerouterModelBudgets.get(ninerouterModel) ?? NINEROUTER_DEFAULT_MAX_OUTPUT_TOKENS;
     return Math.min(NINEROUTER_MAX_TOKENS_MAX, Math.max(NINEROUTER_MAX_TOKENS_MIN, budget));
   }
@@ -9124,15 +9139,24 @@ let isMultimodal = !!(imagePaths?.length);
     // the LiteLLM rung above.
     if (this.isNinerouterModel(this.currentModelId) && this.ninerouterClient) {
       const ninerouterSystem = this.injectLanguageInstruction(systemPromptOverride || OPENAI_SYSTEM_PROMPT);
+      // Images go only to a model the catalogue says can read them. This is the
+      // PRIMARY chat path, and it was the one of four dispatch sites that
+      // forwarded them ungated while the non-streaming cascade and the vision
+      // chain both gated. The asymmetry mattered because 9Router returns HTTP
+      // 200 for an image sent to a text-only model: nothing errors, the upstream
+      // simply answers without having seen it. Forwarding was therefore not the
+      // permissive choice, it was the silent one.
+      const ninerouterSendsImages = Boolean(isMultimodal && imagePaths?.length)
+        && this.ninerouterModelSupportsVision(this.currentModelId);
       // Failover for the reason the Fluxion rung gives, squared: 9Router is
       // ITSELF a fallback ladder, so a stall here can be a cold upstream two
       // hops away rather than anything wrong with the request.
       yield* this.streamSelectedProviderWithFailover({
         id: 'ninerouter',
         name: `9Router (${this.ninerouterWireModel(this.currentModelId)})`,
-        open: (sig) => this.streamWithNinerouter(userContent, ninerouterSystem, (isMultimodal && imagePaths) ? imagePaths : undefined, sig),
+        open: (sig) => this.streamWithNinerouter(userContent, ninerouterSystem, ninerouterSendsImages ? imagePaths : undefined, sig),
         userContent, finalSystemPrompt: ninerouterSystem, thinkingBudget, abortSignal,
-        hasImages: Boolean(isMultimodal && imagePaths?.length),
+        hasImages: ninerouterSendsImages,
       });
       return;
     }
@@ -12174,12 +12198,20 @@ let isMultimodal = !!(imagePaths?.length);
       ? this.getAntigravityModelId(model)
       : provider === 'litellm'
       ? model.replace(/^litellm\//, '')
-      : provider === 'ninerouter'
-      // ONE segment here, not two. getModelCapabilities strips the routing
-      // prefix and the vendor segment itself (ROUTING_PREFIX_RE names
-      // ninerouter), so handing it `openai/gpt-5` lets it finish the job.
-      // Pre-stripping both would leave a bare name the strip cannot undo.
-      ? model.replace(/^ninerouter\//, '')
+      // 'ninerouter' falls through on purpose, for the same reason 'openrouter'
+      // does below — and an earlier version of this had it exactly backwards.
+      // Pre-stripping `ninerouter/` is what makes ROUTING_PREFIX_RE STOP
+      // matching, so the vendor segment survives and the id resolves as
+      // something else entirely:
+      //
+      //   ninerouter/qwen/qwen3-8b   whole -> qwen3-8b      -> 128k ctx (cloud)
+      //                           stripped -> qwen/qwen3-8b ->   8k ctx (local-small)
+      //
+      // requestBuilder sizes the prompt against the WHOLE id, so the two
+      // disagreed by 16x and this function then threw CONTEXT_TOO_LARGE on a
+      // prompt just declared legal. It also set isGatewayRouted=false, which
+      // disables the guard in modelCapabilities added because
+      // `litellm/qwen/qwen2.5-vl-72b` was being claimed by Groq's tables.
       : provider === 'nvidia_nim'
         ? model.replace(/^nvidia_nim\//, '')
         // 'openrouter' falls through on purpose: getModelCapabilities strips two

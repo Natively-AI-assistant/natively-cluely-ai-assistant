@@ -9968,19 +9968,21 @@ export function initializeIpcHandlers(appState: AppState): void {
     const resp = await fetch(url, { method: 'GET', headers, signal: AbortSignal.timeout(timeoutMs) });
     if (!resp.ok) return [];
     const data: any = await resp.json();
-    const models: string[] = (data?.data || []).map((m: any) => m?.id).filter(Boolean);
+    // typeof, not Boolean: a numeric id is truthy, would be persisted, and
+    // then string-concatenated into `ninerouter/42` by the pickers.
+    const models: string[] = (data?.data || []).map((m: any) => m?.id).filter((id: any) => typeof id === 'string' && id);
     // Per-model vision, captured in the SAME call rather than guessed later.
     // VisionProviderRegistry reads this back to decide whether a screenshot
     // should be routed here at all — 17 of the 47 models a stock instance
     // serves are text-only.
     const visionModels: string[] = (data?.data || [])
-      .filter((m: any) => m?.id && m?.capabilities?.vision === true)
+      .filter((m: any) => typeof m?.id === 'string' && m.id && m?.capabilities?.vision === true)
       .map((m: any) => m.id);
     // Per-model reasoning capability, so the settings dropdown can adapt its
     // options to the selected model with no extra round-trip.
     const meta: Record<string, { reasoning?: boolean; thinkingCanDisable?: boolean; thinkingFormat?: string }> = {};
     for (const m of (data?.data || [])) {
-      if (!m?.id || !m?.capabilities) continue;
+      if (typeof m?.id !== 'string' || !m.id || !m?.capabilities) continue;
       // Field names deliberately MATCH the catalogue's own, so the renderer can
       // hand this straight to ninerouterThinkingOptions with no translation —
       // a rename in between is a silent fall-back to generic levels.
