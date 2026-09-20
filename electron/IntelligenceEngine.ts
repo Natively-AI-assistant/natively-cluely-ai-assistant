@@ -3563,7 +3563,7 @@ export class IntelligenceEngine extends EventEmitter {
                     const _v3 = await buildV3Prompt({
                         surface: 'what-to-answer',
                         // Low-confidence query rewrite: the user's fast model, 1.5 s hard cap.
-                        queryRewriter: require('./context-intelligence/retrieval/llm-query-rewrite').createQueryRewriter((p: string) => this.llmHelper.generateQueryRewrite(p), { owner: this.llmHelper }),
+                        queryRewriter: require('./context-intelligence/retrieval/rewriter-binding').bindQueryRewriter(this.llmHelper),
                         screenText: _screenDescription,
                         // The chat-history rollback must reach THIS surface too.
                         // ipcHandlers was the only call site passing it, so the
@@ -6668,7 +6668,7 @@ export class IntelligenceEngine extends EventEmitter {
             const _v3 = await buildV3Prompt({
                 surface: pinned?.surface ?? 'assist',
                 // Low-confidence query rewrite: the user's fast model, 1.5 s hard cap.
-                queryRewriter: require('./context-intelligence/retrieval/llm-query-rewrite').createQueryRewriter((p: string) => this.llmHelper.generateQueryRewrite(p), { owner: this.llmHelper }),
+                queryRewriter: require('./context-intelligence/retrieval/rewriter-binding').bindQueryRewriter(this.llmHelper),
                 // See the what-to-answer call site: the rollback must reach
                 // every surface, not just typed chat.
                 multiTurnHistory: isIntelligenceFlagEnabled('chatHistoryMultiTurn'),
@@ -7159,7 +7159,7 @@ export class IntelligenceEngine extends EventEmitter {
                     return await buildV3Prompt({
                         surface: 'manual-chat',
                         // Low-confidence query rewrite: the user's fast model, 1.5 s hard cap.
-                        queryRewriter: require('./context-intelligence/retrieval/llm-query-rewrite').createQueryRewriter((p: string) => this.llmHelper.generateQueryRewrite(p), { owner: this.llmHelper }),
+                        queryRewriter: require('./context-intelligence/retrieval/rewriter-binding').bindQueryRewriter(this.llmHelper),
                         // See the what-to-answer call site.
                         multiTurnHistory: isIntelligenceFlagEnabled('chatHistoryMultiTurn'),
                         // Shares 'manual-chat' with the IPC surface; the tag keeps

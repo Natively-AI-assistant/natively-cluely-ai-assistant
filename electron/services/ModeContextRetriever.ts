@@ -1788,6 +1788,11 @@ export class ModeContextRetriever {
     }
 
     /** See ModeHybridRetriever.pruneFileIndexesByPrefix. */
+    /** See ModeHybridRetriever.usesHostedEmbeddings. */
+    usesHostedEmbeddings(): boolean {
+        try { return this.ensureHybridRetriever()?.usesHostedEmbeddings() === true; } catch { return false; }
+    }
+
     pruneReferenceFileIndexesByPrefix(prefix: string, keepId: string): number {
         return this.ensureHybridRetriever()?.pruneFileIndexesByPrefix(prefix, keepId) ?? 0;
     }

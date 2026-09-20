@@ -1652,7 +1652,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             const composed = await buildV3Prompt({
               surface: 'manual-chat',
               pathTag: 'ipc',
-              queryRewriter: require('./context-intelligence/retrieval/llm-query-rewrite').createQueryRewriter((p: string) => llmHelper.generateQueryRewrite(p), { owner: llmHelper }),
+              queryRewriter: require('./context-intelligence/retrieval/rewriter-binding').bindQueryRewriter(llmHelper),
               question: v3Question,
               // PR #429 Bug 002: omitted entirely, so it defaulted to false even
               // when the user attached screenshots — the V3 classifier then never

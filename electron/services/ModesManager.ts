@@ -1178,6 +1178,11 @@ export class ModesManager {
     // retriever degrades to lexical for any file that isn't 'ready' yet.
 
     /** Index one reference file (idempotent — re-embeds only on content/space change). */
+    /** See ModeHybridRetriever.usesHostedEmbeddings. */
+    public usesHostedEmbeddings(): boolean {
+        return this.modeContextRetriever.usesHostedEmbeddings();
+    }
+
     /** See ModeHybridRetriever.pruneFileIndexesByPrefix (profile documents' pseudo-files). */
     public pruneReferenceFileIndexesByPrefix(prefix: string, keepId: string): number {
         return this.modeContextRetriever.pruneReferenceFileIndexesByPrefix(prefix, keepId);

@@ -1192,6 +1192,20 @@ export class ModeHybridRetriever {
     }
 
     /**
+     * Is a HOSTED embedding provider answering right now? False for the bundled
+     * local model, for no embedder at all, and while a hosted provider is demoted
+     * to the local fallback. Used to scope the low-confidence query rewrite to the
+     * users it was measured to help (owner decision, 2026-09-21).
+     */
+    public usesHostedEmbeddings(): boolean {
+        try {
+            if (!this.isEmbeddingAvailable()) return false;
+            const provider = this.embeddingPipeline.getActiveProviderName?.();
+            return typeof provider === 'string' && provider !== '' && provider !== 'local';
+        } catch { return false; }
+    }
+
+    /**
      * Hotfix 2026-07-09: in keyless installs the active embedding provider can be
      * the local MiniLM ONNX fallback. Running that query embedding on every typed
      * manual chat turn stacks native ONNX arena pressure with STT/intent/LLM
