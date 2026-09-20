@@ -18,6 +18,7 @@
 
 import { isCodingAnswerType, type AnswerType } from './AnswerPlanner';
 import { detectExplicitCodingContract, type ExplicitCodingContract } from './codingFollowup';
+import { getRegisteredUserInstructions, resolveCodingFormatFromInstructions } from './userInstructionContract';
 
 /**
  * Which coding contract the turn wants.
@@ -305,7 +306,39 @@ export function resolveCodingPromptSignals(input: {
    * Defaults false, so no surface changes behaviour without opting in.
    */
   codingTurnPromoted?: boolean;
+  /**
+   * The user's STANDING instructions (the mode "Real-time prompt"). A format
+   * they define there — "respond in exactly this format ...", "no headings",
+   * "only the code" — is a coding format exactly like one stated in the
+   * question, and until 2026-09-20 it was never consulted: the prompt attached
+   * the six-section contract and the repair layer rewrote an obedient
+   * custom-format answer into it (user report, reproduced).
+   *
+   * `undefined` asks the registered provider (ModesManager); a string is used
+   * as given; `null` means "none" and keeps a unit test pure.
+   */
+  userInstructions?: string | null;
+  /** The mode id the caller snapshotted at turn start, forwarded to the provider. */
+  pinnedModeId?: string;
 }): CodingPromptSignals {
+  // Resolved lazily and at most once: only a coding turn ever needs it.
+  let instructionFormatResolved = false;
+  let instructionFormat: ExplicitCodingContract = null;
+  const formatFromInstructions = (): ExplicitCodingContract => {
+    if (!instructionFormatResolved) {
+      instructionFormatResolved = true;
+      try {
+        const text = input.userInstructions === undefined
+          ? getRegisteredUserInstructions(input.pinnedModeId)
+          : input.userInstructions;
+        instructionFormat = resolveCodingFormatFromInstructions(text);
+      } catch {
+        instructionFormat = null;
+      }
+    }
+    return instructionFormat;
+  };
+
   let codingTask = false;
   try {
     codingTask = !!(input.answerType && isCodingAnswerType(input.answerType as AnswerType));
@@ -346,6 +379,8 @@ export function resolveCodingPromptSignals(input: {
       return {
         codingTask: true,
         codingTaskKind: isBuildTask(input.question) ? 'impl' : 'dsa',
+        // A deictic ask carries no format of its own; the mode's still applies.
+        codingFormat: formatFromInstructions() ?? undefined,
         suppliedTemplate: true,
       };
     }
@@ -365,6 +400,9 @@ export function resolveCodingPromptSignals(input: {
     codingFormat = null;
     suppliedTemplate = false;
   }
+  // What the user says THIS turn outranks their standing config ("just the
+  // code" beats a mode-level format); the mode's format fills the gap.
+  if (!codingFormat) codingFormat = formatFromInstructions();
 
   return {
     codingTask: true,

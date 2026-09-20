@@ -32,6 +32,14 @@ export type ExplicitCodingContract =
   | 'complexity_only'
   | 'dry_run_only'
   | 'explain_only'
+  // The user's STANDING instructions (the mode "Real-time prompt") define or
+  // reject an answer structure. Never produced by detectExplicitCodingContract
+  // (which reads one question) — resolved from the mode's instructions by
+  // userInstructionContract.resolveCodingFormatFromInstructions. Like every
+  // other member it replaces the section shape in the prompt AND stands the
+  // repair layer down, so an answer that obeyed the user's format is never
+  // rewritten into the six DSA headings (reproduced 2026-09-20).
+  | 'custom_format'
   | null;
 
 const lc = (s?: string) => (s || '').toLowerCase().trim();
@@ -294,6 +302,8 @@ export function codingFormatDirective(explicitContract: Exclude<ExplicitCodingCo
 Reference the SAME problem/solution from the prior turn. Do NOT restate the problem, re-output the code, or add other sections.`;
       case 'dry_run_only':
         return `The user asked ONLY for a DRY RUN / trace of the solution already in the conversation, on the input they gave. Output ONLY the step-by-step trace (state at each step → final output). Do NOT re-output the code, the approach, or the complexity unless it falls out of the trace.`;
+      case 'custom_format':
+        return `The user's standing instructions for this mode define the answer FORMAT for coding turns. Follow THEIR structure exactly — their sections, their order, their headings, their language. Do NOT add the default sections ("## Approach", "## Technique / Data Structure / Algorithm Used", "## Dry Run", "## Complexity", "## Interviewer Follow-up Points") unless their format asks for them. Still put every piece of code in a fenced block tagged with the language you actually wrote.`;
       case 'explain_only':
         return `The user asked for an EXPLANATION with NO CODE. Output a clear, speakable explanation in prose (and short bullets if helpful). Do NOT output any code block. No "## Code" section.`;
     }
@@ -303,5 +313,5 @@ Reference the SAME problem/solution from the prior turn. Do NOT restate the prob
 
 /** Verification (the hidden test block) only makes sense when NEW code is produced. */
 export function explicitContractProducesCode(explicitContract: ExplicitCodingContract): boolean {
-  return explicitContract === null || explicitContract === 'code_only';
+  return explicitContract === null || explicitContract === 'code_only' || explicitContract === 'custom_format';
 }

@@ -27,6 +27,7 @@ import {
 } from '../policies/provider-scope-policy';
 import type { AnswerSurface, EvidenceScope } from '../contracts/types';
 import type { ProviderDataScope } from '../../llm/ProviderRouter';
+import { describeUserInstructionDelivery } from '../../llm/userInstructionContract';
 
 /**
  * Credential-scrub a [V3] trace payload before stringifying. Keeps every
@@ -122,8 +123,10 @@ export interface BridgeInput {
    * finalizes a decision-only record immediately.
    */
   deferDebugCompletion?: boolean;
-  /** Tone/length only — cannot widen authorization (§19.2). */
+  /** The USER's standing instructions only — binding on presentation, cannot widen authorization (§19.2). */
   realtimeInstruction?: string;
+  /** The APP's per-turn length default — see ComposeInput.defaultLengthDirective. Never concatenate it onto realtimeInstruction. */
+  defaultLengthDirective?: string;
   conversationSummary?: string;
   /**
    * Multi-turn chat history (Settings > Intelligence > Memory > "Chat history").
@@ -555,6 +558,7 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
       evidence: scopeFilter.evidence,
       withheldScopes: [...withheldScopes],
       realtimeInstruction: input.realtimeInstruction,
+      defaultLengthDirective: input.defaultLengthDirective,
       conversationSummary: convoSummary,
       conversationHasContent: convoHasContent && Boolean(convoSummary),
       // Only TRUE when a screen line actually survived into the rendered
@@ -589,6 +593,32 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
     // safe (over-declaring, never under-), but answering "did screen content go
     // out this turn?" is the line's only job, so a wrong `true` defeats it.
     if (historyCarriesScreenText && convoSummary) packedDataScopes.add('screenshots');
+
+    // ── Per-turn user-instruction line ──────────────────────────────────────
+    // "Is there a way to inspect the final prompt + resolved format on a failing
+    // turn?" (user report, 2026-09-20). There was not: six separate causes of
+    // "the Real-time prompt is ignored" were each found by probing built code by
+    // hand. `delivery` is counts/enums only. The prompts ride under `*Prompt`
+    // keys and are passed as an OBJECT (not pre-stringified like [V3] below) on
+    // purpose: redactForLog gates content by KEY NAME, hiding them at
+    // 'standard' and keeping them verbatim at 'full' (Settings > General >
+    // Advanced > debug log level).
+    try {
+      console.log('[UserInstructions]', {
+        requestId: input.requestId ?? null,
+        surface: input.surface,
+        mode: modeId,
+        modeUniqueId: input.modeUniqueId ?? null,
+        codingTask: input.codingTask ?? null,
+        delivery: describeUserInstructionDelivery({
+          instructions: input.realtimeInstruction,
+          defaultLengthDirective: input.defaultLengthDirective,
+        }),
+        sections: composed.sections,
+        systemPrompt: composed.system,
+        userPrompt: composed.user,
+      });
+    } catch { /* diagnostics must never break a turn */ }
 
     // ── Per-turn source line ────────────────────────────────────────────────
     // The one thing production could not answer about itself. A cross-mode

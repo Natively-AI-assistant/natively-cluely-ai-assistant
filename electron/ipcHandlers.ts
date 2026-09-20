@@ -1685,6 +1685,20 @@ export function initializeIpcHandlers(appState: AppState): void {
                   }).answerType);
                 } catch { return undefined; } // fall back to the bridge's own check
               })(),
+              // The mode's Real-time prompt, on V3's own channel (2026-09-20).
+              // This call passed NO instruction channel at all: typed chat
+              // relied on LLMHelper's mode-injection block, which is skipped
+              // for v2/universal prompts and for every coding turn. Same
+              // per-answer-type scoping as the live overlay path; the composer
+              // renders it LAST in the user message and keeps the raw text out
+              // of the system prompt (§19.2). No defaultLengthDirective: typed
+              // chat never carried the spoken-length target on this path.
+              realtimeInstruction: (() => {
+                try {
+                  const _plan = planAnswer({ question: v3Question, source: 'manual_input', speakerPerspective: 'user', activeMode: modeInfo ?? undefined });
+                  return ModesManager.getInstance().getActiveModePinnedInstructions?.(_plan.answerType, modeInfo?.id ?? undefined) || undefined;
+                } catch { return undefined; }
+              })(),
               modeTemplateType: rawMode,
               modeUniqueId: modeInfo?.id ?? null,
               modeName: (modeInfo as any)?.name ?? null,
@@ -3325,6 +3339,21 @@ export function initializeIpcHandlers(appState: AppState): void {
           //      path (formatAnswerPlanForPrompt with the full CODING_TEMPLATE) — byte
           //      unchanged from before this fix.
           const planIsCodingType = isCodingAnswerType(answerPlan.answerType);
+          // A format the user wrote in the MODE's Real-time prompt is a coding
+          // format exactly like one typed in the message (2026-09-20). Until now
+          // only `detectExplicitCodingContract(message)` fed this variable, so a
+          // mode-level "respond in exactly this format ..." got the six-section
+          // contract here, AND the repair below rewrote an obedient answer into
+          // it. Resolved HERE — not at the declaration — because this variable
+          // also gates the prompt contract with no coding check of its own; the
+          // mode's format may only ever bind a genuine coding turn. What the
+          // user typed this turn still wins.
+          if (!explicitCodingContract && (planIsCodingType || codingFollowupResolved)) {
+            try {
+              const { getRegisteredUserInstructions, resolveCodingFormatFromInstructions } = require('./llm/userInstructionContract') as typeof import('./llm/userInstructionContract');
+              explicitCodingContract = resolveCodingFormatFromInstructions(getRegisteredUserInstructions(manualActiveMode?.id ?? undefined));
+            } catch { /* the mode's format is best-effort; the default contract stands */ }
+          }
           if (explicitCodingContract) {
             const includeVerification = explicitContractProducesCode(explicitCodingContract) && isCodeVerificationEnabled();
             const codingContract = buildCodingContractPrompt(explicitCodingContract, {

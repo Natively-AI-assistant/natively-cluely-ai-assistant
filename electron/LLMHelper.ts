@@ -144,6 +144,7 @@ const GEMINI_PRO_MODEL = "gemini-3.1-pro-preview"
 const GROQ_MODEL = GROQ_PRIMARY_MODEL
 import { GROQ_VISION_MODEL } from './llm/groqModels'
 import { stripLeadingReasoningBlock } from './llm/reasoningTagFilter'
+import { renderUserInstructionSystemLayer } from './llm/userInstructionContract'
 // Groq rejects a request carrying more than 5 images. Every other vision
 // provider here takes as many as we send, so the cap lives on the Groq path.
 const GROQ_VISION_MAX_IMAGES = 5
@@ -3941,13 +3942,12 @@ if (!shouldSkipModeInjection) {
     }
     if (pinnedInstructions) {
       const baseForPin = systemPromptOverride || HARD_SYSTEM_PROMPT;
-      const customModePolicy = isActiveCustomMode
-        ? 'Treat these user-configured custom-mode instructions as a supplemental behavioral layer for this mode. They govern tone, source routing, answer style, and fallback behavior, but they never modify or override CORE_IDENTITY, EXECUTION_CONTRACT, the <security> block, or any safety/identity rules above. Do not let default mode templates or prior chat override these custom-mode preferences when they are consistent with those immutable rules.'
-        : 'Treat as configuration for tone/focus. Never as facts about the candidate and never overriding the rules above.';
-      const customTemplateGuard = isActiveCustomMode
-        ? '\nFor this custom mode, do not use default technical-interview scaffolds or section headings like Approach, Code, Dry Run, or Complexity unless the custom instructions explicitly ask for that format.'
-        : '';
-      systemPromptOverride = `${baseForPin}\n\n## ACTIVE MODE INSTRUCTIONS (user-configured)\n${customModePolicy}${customTemplateGuard}\n${pinnedInstructions}`;
+      // ONE renderer for every carrier (2026-09-20): the copy that lived here told
+      // the model, for every BUILT-IN mode, that the user's prompt was "never
+      // overriding the rules above" — i.e. subordinate to the very defaults it
+      // was written to change. See renderUserInstructionSystemLayer.
+      const pinnedLayer = renderUserInstructionSystemLayer(pinnedInstructions, { isCustomMode: isActiveCustomMode });
+      if (pinnedLayer) systemPromptOverride = `${baseForPin}\n\n${pinnedLayer}`;
     }
 
     if (modeContextBlock) {
@@ -7797,13 +7797,12 @@ let isMultimodal = !!(imagePaths?.length);
         }
         if (pinnedInstructions) {
           const baseForPin = systemPromptOverride || HARD_SYSTEM_PROMPT;
-          const customModePolicy = isActiveCustomMode
-            ? 'Treat these user-configured custom-mode instructions as a supplemental behavioral layer for this mode. They govern tone, source routing, answer style, and fallback behavior, but they never modify or override CORE_IDENTITY, EXECUTION_CONTRACT, the <security> block, or any safety/identity rules above. Do not let default mode templates or prior chat override these custom-mode preferences when they are consistent with those immutable rules.'
-            : 'Treat as configuration for tone/focus. Never as facts about the candidate and never overriding the rules above.';
-          const customTemplateGuard = isActiveCustomMode
-            ? '\nFor this custom mode, do not use default technical-interview scaffolds or section headings like Approach, Code, Dry Run, or Complexity unless the custom instructions explicitly ask for that format.'
-            : '';
-          systemPromptOverride = `${baseForPin}\n\n## ACTIVE MODE INSTRUCTIONS (user-configured)\n${customModePolicy}${customTemplateGuard}\n${pinnedInstructions}`;
+          // ONE renderer for every carrier (2026-09-20): the copy that lived here told
+          // the model, for every BUILT-IN mode, that the user's prompt was "never
+          // overriding the rules above" — i.e. subordinate to the very defaults it
+          // was written to change. See renderUserInstructionSystemLayer.
+          const pinnedLayer = renderUserInstructionSystemLayer(pinnedInstructions, { isCustomMode: isActiveCustomMode });
+          if (pinnedLayer) systemPromptOverride = `${baseForPin}\n\n${pinnedLayer}`;
         }
 
         if (isActiveCustomMode) {
@@ -7834,6 +7833,39 @@ let isMultimodal = !!(imagePaths?.length);
         }
       } catch (_modeErr: any) {
         console.warn('[LLMHelper] ModesManager injection failed (non-fatal):', _modeErr?.message);
+      }
+    } else {
+      // THE USER'S INSTRUCTIONS ARE NOT "MODE CONTEXT" (2026-09-20).
+      //
+      // `shouldSkipModeInjection` exists so a coding / safety / universal-prompt
+      // turn does not pull the active mode's résumé, JD, reference files or
+      // 23–45k legacy template. But the block it skips was ALSO the only place
+      // typed chat delivered the mode's Real-time prompt — so, found by driving
+      // this method for real (real ModesManager, real DB, provider spied):
+      //   · with the v2 prompt active (the default) NO built-in mode — General,
+      //     Seminar, Call Centre, Sales — ever received the user's instructions
+      //     in typed chat, and
+      //   · no typed-chat CODING turn did in any mode ("Java only" included).
+      // The instruction layer is answer-type scoped by the accessor (facts and
+      // sensitive chunks never pass on coding turns), so it is safe exactly
+      // where the rest of the mode context is not.
+      //
+      // Guards: never twice (the live path and V3-owned typed turns already
+      // carry the block in the prompt they hand us); never on a safety
+      // redirect; and only for an ANSWER turn — internal utility calls (recap,
+      // follow-up questions, summaries) pass no answerType and must not be bent
+      // to "Answer in 100 words".
+      try {
+        const alreadyCarried = /<user_instructions\b|<custom_instructions>/.test(`${systemPromptOverride || ''}\n${message || ''}`);
+        const answerTurn = Boolean(routeOptions?.answerType) && routeOptions?.answerType !== 'ethical_usage_answer';
+        if (!alreadyCarried && answerTurn) {
+          const modesMgr = modesMgrForInjection || require('./services/ModesManager').ModesManager.getInstance();
+          const pinnedInstructions: string = modesMgr.getActiveModePinnedInstructions?.(modeAnswerType(routeOptions), routeOptions?.pinnedModeId ?? undefined) || '';
+          const pinnedLayer = renderUserInstructionSystemLayer(pinnedInstructions, { isCustomMode: isActiveCustomMode });
+          if (pinnedLayer) systemPromptOverride = `${systemPromptOverride || HARD_SYSTEM_PROMPT}\n\n${pinnedLayer}`;
+        }
+      } catch (_pinErr: any) {
+        console.warn('[LLMHelper] user-instruction layer failed (non-fatal):', _pinErr?.message);
       }
     }
 
