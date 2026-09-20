@@ -62,6 +62,13 @@ export const AI_PROVIDER_BRANDS: Record<string, { mono: string; brand: string }>
     nvidia_nim: { mono: 'NV', brand: '#76B900' },
     codex:    { mono: 'CX', brand: '#10A37F' },
     litellm:  { mono: 'LL', brand: '#8B5CF6' },
+    // Stays a MONOGRAM on purpose, and it is faithful rather than a
+    // compromise: 9Router's own favicon (public/favicon.svg in decolua/9router)
+    // is literally a white "9" on a rounded orange tile, with no wordmark or
+    // glyph to vendor. The hex is that file's gradient start stop (#f97815 ->
+    // #c2590a); the start is the lighter of the two and so the one that stays
+    // legible as a tile wash on the dark theme.
+    ninerouter: { mono: '9R', brand: '#F97815' },
     ollama:   { mono: 'OL', brand: '#9CA3AF' },
     // Marks are vendored, so `mono` is only a safety net. The brand hexes drive
     // the tile wash and are the published brand colours from lobehub's -color
