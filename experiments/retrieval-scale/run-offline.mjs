@@ -110,11 +110,14 @@ function makePipeline() {
 
 // --- run ----------------------------------------------------------------------
 const Database = require('better-sqlite3');
-const questions = JSON.parse(fs.readFileSync(path.join(HERE, 'out/questions.json'), 'utf8'));
+// --questions <file>: a HELD-OUT set written by someone who never saw the retriever (same schema).
+const questions = JSON.parse(fs.readFileSync(arg('questions', path.join(HERE, 'out/questions.json')), 'utf8'));
 // The packer XML-escapes evidence; undo that before matching or every needle
 // containing a quote or ampersand reads as dropped.
 const unesc = (s) => s.replace(/&quot;/g, '"').replace(/&apos;|&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
-const norm = (s) => unesc(s).toLowerCase().replace(/\s+/g, ' ').trim();
+// Markdown marks and bullets are stripped on BOTH sides: a real PDF/DOCX extraction has no "- ", no
+// "**", and DOCX bullets arrive as "\t•\t" — the needle is the fact, not its markup.
+const norm = (s) => unesc(s).toLowerCase().replace(/[•▪*`#]/g, ' ').replace(/(^|\n)\s*-\s+/g, ' ').replace(/\s+/g, ' ').trim();
 // A chunk carries the needle when it contains EVERY `must` string (the fact
 // line, plus the owning entity for sibling facts whose line alone is ambiguous).
 const carries = (text, q) => { const t = norm(text); return q.must.every((m) => t.includes(norm(m).slice(0, 90))); };
@@ -133,6 +136,13 @@ if (OVERRIDE) say(`OVERRIDE cap=${OVERRIDE.cap} cands=${OVERRIDE.cands} tokens=$
 const EVIDENCE_TOKENS = OVERRIDE ? OVERRIDE.tokens : policy.contextBudget.evidenceTokens;
 // --plain: what a PDF/DOCX extraction yields — no heading marks, no bold, no fences.
 const PLAIN = (md) => (has('plain') ? md.replace(/^#+\s*/gm, '').replace(/\*\*/g, '').replace(/^```$/gm, '') : md);
+// --text-dir <dir> --text-ext pdf|docx: use text the app's REAL extractor produced from a real PDF/DOCX
+// (<dir>/<kind>_<size>.<ext>.txt). "--plain" is a regex simulation and resembles neither: a real PDF has
+// no blank lines and hard-wrapped lines, a real DOCX has a blank line after EVERY paragraph.
+const TEXT_DIR = arg('text-dir', ''); const TEXT_EXT = arg('text-ext', 'pdf');
+const contentOf = (kind, size) => (TEXT_DIR
+  ? fs.readFileSync(path.join(TEXT_DIR, `${kind}_${size}.${TEXT_EXT}.txt`), 'utf8')
+  : PLAIN(fs.readFileSync(path.join(HERE, 'out', `${kind}_${size}.md`), 'utf8')));
 const rows = [];
 // General-knowledge questions that must NOT be pulled into retrieval by corpus
 // arbitration, though the fixtures mention Kafka, Kubernetes, Redis, p99 … often.
@@ -150,7 +160,7 @@ for (const size of SIZES) {
     const pipeline = makePipeline();
     const hr = new ModeHybridRetriever(db, { searchSimilar: async () => [], hasEmbeddings: () => false }, pipeline);
     if (RERANK) hr.__setRerankerForTests({ rerank });
-    const files = group.map((kind) => ({ id: `f-${kind}-${size}`, modeId: 'm1', fileName: `${kind}_${size}.md`, content: PLAIN(fs.readFileSync(path.join(HERE, 'out', `${kind}_${size}.md`), 'utf8')), createdAt: new Date().toISOString() }));
+    const files = group.map((kind) => ({ id: `f-${kind}-${size}`, modeId: 'm1', fileName: `${kind}_${size}.md`, content: contentOf(kind, size), createdAt: new Date().toISOString() }));
     const t0 = Date.now();
     if (STACK !== 'lexical') for (const f of files) await hr.indexFile(f);
     const chunkCount = db.prepare('SELECT COUNT(*) n, SUM(embedding IS NOT NULL) e FROM mode_reference_chunks').get();

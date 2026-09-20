@@ -60,17 +60,23 @@ async function makeRawRetriever(docs) {
 } // premium/electron/knowledge/DocumentReader.ts
 
 const unesc = (s) => s.replace(/&quot;/g, '"').replace(/&apos;|&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
-const norm = (s) => unesc(s).toLowerCase().replace(/\s+/g, ' ').trim();
+// Markdown marks and bullets are stripped on BOTH sides: a real PDF/DOCX extraction has no "- ", no
+// "**", and DOCX bullets arrive as "\t•\t" — the needle is the fact, not its markup.
+const norm = (s) => unesc(s).toLowerCase().replace(/[•▪*`#]/g, ' ').replace(/(^|\n)\s*-\s+/g, ' ').replace(/\s+/g, ' ').trim();
 const carries = (text, q) => { const t = norm(text); return q.must.every((m) => t.includes(norm(m).slice(0, 90))); };
 
 const policy = resolveModePolicy(MODE);
-const questions = JSON.parse(fs.readFileSync(path.join(HERE, 'out/questions.json'), 'utf8')).filter((q) => q.kind !== 'reference' && q.must?.length);
+// --questions <file>: a HELD-OUT set written by someone who never saw the retriever (same schema).
+const questions = JSON.parse(fs.readFileSync(arg('questions', path.join(HERE, 'out/questions.json')), 'utf8')).filter((q) => q.kind !== 'reference' && q.must?.length);
 const rows = [];
 for (const size of SIZES) {
   const docs = ['resume', 'jd'].map((kind) => {
     // --plain: what a PDF extraction yields — no markdown heading marks, no bold.
     const md = fs.readFileSync(path.join(HERE, 'out', `${kind}_${size}.md`), 'utf8');
-    const rawText = argv.includes('--plain') ? md.replace(/^#+\s*/gm, '').replace(/\*\*/g, '').replace(/^```$/gm, '') : md;
+    // --text-dir <dir> --text-ext pdf|docx: the app's REAL extraction of a real PDF/DOCX (see run-offline.mjs).
+    const textDir = arg('text-dir', ''); const textExt = arg('text-ext', 'pdf');
+    const rawText = textDir ? fs.readFileSync(path.join(textDir, `${kind}_${size}.${textExt}.txt`), 'utf8')
+      : argv.includes('--plain') ? md.replace(/^#+\s*/gm, '').replace(/\*\*/g, '').replace(/^```$/gm, '') : md;
     // --structured live: what the REAL structuring LLM produced for the 15k fixtures (exported from a
     // live run's isolated profile into out/live_structured_15k.json). The heuristic extractor yields far
     // fewer competing sections than the LLM does, and the first ship gate for the semantic arm was
