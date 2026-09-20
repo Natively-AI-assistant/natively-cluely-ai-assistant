@@ -80,7 +80,7 @@ the hosted API was unavailable that day, and is not needed for any of this.
 4. Profile path: a document lookup on a profile-only turn looks in the résumé/JD
    (`profileOnlyDocuments`, set by the engine bridge); raw text is chunked with headings.
 5. Multi-file turns (≥2 mode files): floor of 8 evidence items / 2400 tokens.
-6. Chunker v3 (**re-indexes every file once**): plain-text heading detection; CRLF/CR normalised at
+6. Chunker v4 (**re-indexes every file once**; v3 was never released): plain-text heading detection, Title Case and — by structure — sentence case; CRLF/CR normalised at
    every chunking entry point (a Windows-authored markdown file had no headings at all).
 7. Every embedding provider logs *why* its availability probe failed (key-shaped tokens masked).
 8. The embedding and rerank clients send the local-test header (same `NATIVELY_E2E` gate as chat,
@@ -119,6 +119,30 @@ Tests added: `RetrievalScaleLexical`, `CorpusArbitration`, `ProfileDocumentReach
 `E2eLocalTestHeader`, `SpokenIdentifierCanon`, `IngestBatchEmbedding`, `StaleIndexVectorsIgnored`,
 `LocalEmbedderVectorsOutsideMeeting` (all `2026_09_19`). Full run: 10,961 pass / 0 fail / 56 skipped / 1 todo (the todo pins a known limit: anchors are a bag
 of words, so "pod 10" and "10 engineers … pod 15" tie).
+
+## Sentence-case headings were invisible in extracted text (2026-09-20)
+
+Chunker v3's plain-text heading detection accepted Title Case and ALL CAPS only. 7 of a job
+description's 80 headings and 2 of a résumé's 87 were never detected — "Minimum qualifications",
+"Location and working pattern", "Reporting line", "Interview process", "Career milestones", "Outside
+work" — all sentence case, all sections holding a fact people ask about, each glued to the tail of the
+1,000-character entry before it. The vector stack then missed "How many years of experience does the
+role require?", a purely lexical question, at every size. v4 decides by structure instead of case: the
+line passes every other title test, starts with a capital, and a real body follows (a bullet, a table,
+or prose). After: every heading of the résumé and JD fixtures recovered at 5k and 70k, no false ones.
+
+| plain text (as a PDF extracts), of 162, 5k/15k/30k/70k | before | after |
+|---|---|---|
+| mode path · vectors | 152 / 151 / 150 / 151 | **159 / 159 / 157 / 158** (markdown: 159 / 159 / 159 / 160) |
+| mode path · lexical | 147 / 146 / 146 / 146 | 149 / 149 / 148 / 148 |
+| profile path · + semantic arm (% of 108) | 94 / 94 / 94 / 94 | 95 / 95 / 95 / 94 |
+| profile path · real structured data, 15k · + semantic arm | 91 | 94 |
+| profile path · BM25 only | 90 / 90 / 90 / 90 | 90 / 89 / 89 / 89 |
+
+The last row is the cost: "Can I work from home and how often must I come in?" shares no word with
+"Hybrid: two days per week in the Rotterdam office…". It used to be found only because that line was
+buried in a large chunk full of common words; in its own section BM25 has nothing to match. The
+vector stack finds it. Chunker version 3 → 4 (v3 never shipped; users still re-index once).
 
 ## Better structuring made retrieval worse (2026-09-20)
 

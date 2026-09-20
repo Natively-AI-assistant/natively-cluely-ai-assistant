@@ -62,7 +62,7 @@ describe('markdown is untouched', () => {
     const chunks = semanticChunks(md);
     assert.ok(!chunks.some((c) => /\[context: [^\]]*Standalone Title Case Line/.test(c)), chunks.join('\n---\n'));
   });
-  test('the chunker version moved, so stored indexes are rebuilt once', () => assert.equal(CHUNKER_VERSION, 3));
+  test('the chunker version moved, so stored indexes are rebuilt once', () => assert.equal(CHUNKER_VERSION, 4));
 });
 
 describe('Windows line endings (CRLF) chunk exactly like LF', () => {

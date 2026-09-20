@@ -99,7 +99,11 @@ export const DEFAULT_CHUNK_OPTIONS: Required<SemanticChunkOptions> = {
 // 3 (2026-09-19): plain-text heading detection — extracted PDFs/DOCX now chunk
 // on their headings. Markdown output is unchanged, but the version is part of
 // the index hash, so every file re-indexes once (owner-approved).
-export const CHUNKER_VERSION = 3;
+// 4 (2026-09-20): sentence-case plain-text headings. v3 never shipped, so users
+// still re-index ONCE (v2 → v4); the bump is for machines that ran a v3 build,
+// where unchanged version + changed chunking would pair old vectors with new
+// chunks — the stale-index defect the version exists to prevent.
+export const CHUNKER_VERSION = 4;
 
 // ── Line endings ────────────────────────────────────────────────────────────
 //
@@ -251,6 +255,50 @@ function looksLikePlainHeading(line: string, allowLabelled = false): boolean {
   return capitalised / significant.length >= 0.6;
 }
 
+/**
+ * SENTENCE-CASE headings (2026-09-20): "Minimum qualifications", "Reporting
+ * line", "Location and working pattern", "Outside work". The Title-Case ratio
+ * above rejects every one of them (1 capital in 2–4 words), and they are how
+ * most documents written this decade title their sections. Measured on the
+ * fixtures as a PDF extracts them: 7 of a job description's 80 headings and 2
+ * of a résumé's 87 were lost — and they were the sections that held the
+ * requirements, the reporting line, the working pattern and the volunteer
+ * work, each glued to the tail of whatever 1,000-character entry preceded it.
+ * The vector stack then missed "How many years of experience does the role
+ * require?", a purely lexical question, at every document size.
+ *
+ * Case cannot carry the decision here, so STRUCTURE does: the line passes every
+ * other test in looksLikePlainHeading, starts with a capital, and — the part
+ * Title Case never needed — is followed by a real BODY: a bullet, or prose
+ * (terminal punctuation, a sentence break, or too long to be a title). A run
+ * of short unpunctuated lines separated by blanks (a résumé's achievement
+ * lines, an address block) therefore heads nothing.
+ */
+function looksLikeSentenceCaseHeading(line: string): boolean {
+  const t = line.trim();
+  if (!/^[A-Z][a-z]/.test(t)) return false;
+  const words = t.replace(/:$/, '').split(/\s+/);
+  return words.length >= 2 && words.length <= 6;
+}
+
+function looksLikeBody(line: string | undefined): boolean {
+  if (line === undefined) return false;
+  const t = line.trim();
+  if (!t) return false;
+  return BULLET_RE.test(line) || TABLE_ROW_RE.test(line) || /[.;?!:]$/.test(t) || /[.?!]\s/.test(t) || t.length > 80;
+}
+
+/** A sentence-case title at `i`: passes the shared shape tests with case relaxed, and a body follows. */
+function sentenceCaseCandidate(lines: string[], i: number): boolean {
+  if (!looksLikeSentenceCaseHeading(lines[i])) return false;
+  // Every non-case test of looksLikePlainHeading, by asking it about the line in Title Case.
+  const titled = lines[i].replace(/\b([a-z])/g, (m) => m.toUpperCase());
+  if (!looksLikePlainHeading(titled)) return false;
+  let j = i + 1;
+  while (j < lines.length && (lines[j].trim() === '' || PAGE_MARKER_RE.test(lines[j]))) j++;
+  return looksLikeBody(lines[j]);
+}
+
 function plainTextHeadings(lines: string[]): Map<number, Heading> {
   const out = new Map<number, Heading>();
   if (lines.some((l) => ATX_RE.test(l))) return out;
@@ -264,6 +312,7 @@ function plainTextHeadings(lines: string[]): Map<number, Heading> {
     if (HEADING_RE.test(lines[i])) continue;                       // numbered sections keep their own rule
     if (looksLikePlainHeading(lines[i])) found.push({ i, text: lines[i].trim().replace(/:$/, '') });
     else if (looksLikePlainHeading(lines[i], true)) labelled.push({ i, text: lines[i].trim() });
+    else if (sentenceCaseCandidate(lines, i)) found.push({ i, text: lines[i].trim().replace(/:$/, '') });
   }
   // LABELLED ENTRY TITLES: "Team profile: Growth Platform", "Service: atlas-
   // api-3". One such line is indistinguishable from a field; a label that
