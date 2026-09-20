@@ -22,7 +22,7 @@ import { resolveModePolicy, generalKnowledgeAllowed, type ModePolicy } from '../
 import { resolveAnswerPolicy, type AnswerPolicy } from '../policies/answer-policy';
 import { CLAIM_AUTHORITY, claimAuthority } from '../policies/source-authority-policy';
 import { isRetrievalFixEnabled } from '../contracts/retrieval-flags';
-import { classifyTurn, isBareFollowUp, stripSttFillers } from '../question/turn-classifier';
+import { classifyTurn, isBareFollowUp, stripSttFillers, isProspectiveJobQuestion } from '../question/turn-classifier';
 import type { AnswerTrace, RetrievalAttemptTrace } from '../observability/answer-trace';
 import { mergeRewrittenEvidence, type QueryRewriter, type QueryRewriteOutcome } from '../retrieval/llm-query-rewrite';
 
@@ -334,6 +334,7 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
 
     questionTypes: cls.questionTypes,
     claimRequirements: buildClaimRequirements(policy, cls.claimTypes, cls.claimClauses),
+    inferredClaimTypes: cls.inferredClaimTypes ?? [],
 
     scope: req.scope,
     authorizedSources: [],            // populated by source authorization at retrieval time
@@ -636,6 +637,37 @@ export function propertyQualifierTerms(clause: string): string[] {
  * wrongly. Similarity was maximal, correctness was zero. So answerability is
  * decided by whether required claims have authoritative evidence — not by score.
  */
+/**
+ * THE EMPLOYER'S DOCUMENT IS NOT EVIDENCE ABOUT THE USER (owner decision, 2026-09-21).
+ *
+ * "Have I ever been on call?" — the résumé says nothing; the corpus rule for
+ * employment questions (also an owner decision) plans the job description, whose
+ * line "hiring-manager CALL" shares the question's head noun; DOCUMENT_FACT is an
+ * ALTERNATIVE route to the same subject, so the turn read FULL on six
+ * job-description chunks. The JD may still be RETRIEVED and shown — the model can
+ * say what the role involves — but it can never SATISFY a claim on a turn whose
+ * own grammar makes a claim about the user. The turn then reads PARTIAL/NONE and
+ * the answer says the résumé does not cover it.
+ *
+ * Only for claims the question MAKES ("have I", "my boss", "did you"). The
+ * classifier also GUESSES a USER_PROJECT claim for any unrecognised factual
+ * question in a job-seeking mode — "How many engineers are in pod 3?" — and
+ * applying this rule to a guess made job-description questions unanswerable (the
+ * first attempt at this, reverted within the hour).
+ */
+export function jobDescriptionCannotSupport(
+  decision: Readonly<TurnDecision>,
+  evidence: { sourceType?: string },
+  claimType: string,
+): boolean {
+  if (evidence.sourceType !== 'JOB_DESCRIPTION' || claimType !== 'DOCUMENT_FACT') return false;
+  // "Who would be my manager?" carries an employment claim by grammar, but it is
+  // about the role being applied for — the job description IS its source.
+  if (isProspectiveJobQuestion(decision.resolvedQuestion)) return false;
+  const guessed = new Set<string>((decision.inferredClaimTypes ?? []).map(String));
+  return decision.claimRequirements.some((c) => String(c.claimType).startsWith('USER_') && !guessed.has(String(c.claimType)));
+}
+
 export function evaluateAnswerability(
   decision: Readonly<TurnDecision>,
   evidence: EvidenceItem[],
@@ -731,7 +763,7 @@ export function evaluateAnswerability(
     // suffix is a bucket label, and letting it into salientTerms would hand
     // every user-side group a free "user" term to match on.
     const ok = reqs.some((req) => evidence.some(
-      (e) => evidenceSupportsClaim(e, req.claimType, req.subject ?? decision.resolvedQuestion),
+      (e) => !jobDescriptionCannotSupport(decision, e, req.claimType) && evidenceSupportsClaim(e, req.claimType, req.subject ?? decision.resolvedQuestion),
     ));
     if (ok) { supported++; continue; }
     // Topically-related-but-property-missing evidence (deep-test D6): the right
@@ -1200,7 +1232,7 @@ export async function orchestrate(
       // Same support definition answerability uses (deep-test D6): the trace
       // used to carry a SECOND, authority-only notion here, so one object could
       // say DIRECT_EVIDENCE and NONE about the same claim.
-      support: evidence.some((e) => evidenceSupportsClaim(e, c.claimType, c.subject ?? decision.resolvedQuestion))
+      support: evidence.some((e) => !jobDescriptionCannotSupport(decision, e, c.claimType) && evidenceSupportsClaim(e, c.claimType, c.subject ?? decision.resolvedQuestion))
         ? 'DIRECT_EVIDENCE'
         : c.authority === 'PRIVATE_SOURCE_REQUIRED' ? 'UNSUPPORTED' : 'GENERAL_KNOWLEDGE',
       evidenceIds: evidence.filter((e) => e.acceptedFor.includes(c.claimType)).map((e) => e.evidenceId),

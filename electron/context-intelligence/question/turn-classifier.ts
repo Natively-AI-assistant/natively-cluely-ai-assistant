@@ -86,6 +86,8 @@ export interface Classification {
    *  a Kubernetes claim in "tell me about your WebRTC project and your
    *  Kubernetes experience". */
   claimClauses: Partial<Record<ClaimType, string>>;
+  /** Claims guessed from the mode's primary source rather than made by the question's grammar. */
+  inferredClaimTypes?: ClaimType[];
   path: RetrievalPath;
   shouldRetrieve: boolean;
   requiredSourceTypes: SourceType[];
@@ -448,6 +450,9 @@ const MOTIVATION_RE = /\b(why|reason|motivat\w*|what (led|made)|decided? to|chos
 // joining / reporting to", and "this role requires / offers / pays".
 const PROSPECTIVE_JOB_RE = /\b(would be my (manager|boss|team|lead|title|role)\b|my (manager|boss|team|role|title) would\b|(i|we)(d| would| will) be (joining|reporting|working (with|under|for))\b|hiring (manager|team|committee)\b|(with|in|of) the offer\b|the offer (include|come|has|have)\w*\b|(this|the) (role|position|job|opening) (require|offer|pay|report|involve|include|come)\w*\b)/;
 
+/** Is this question about the job being applied for ("Who would be my manager?") rather than the user's past? */
+export function isProspectiveJobQuestion(question: string): boolean { return PROSPECTIVE_JOB_RE.test(String(question).toLowerCase()); }
+
 const SKILL_PRESENCE_RE = /\b(do (i|you) (have|know)|have (i|you) (used|worked)|am i|are you (familiar|experienced|proficient)|(do|does) (i|you) (not )?(list|lack|miss)|missing|lack\w*)\b/;
 const EDUCATION_RE = /\b(degrees?|graduat\w*|universit\w*|college|studied|majors?|majored|alma mater|c?gpa)\b/;
 const EMPLOYMENT_RE = /\b(work(ed)? at|employer|company you|role at|position at|job title|tenure|manage[srd]?|managing|led|leads?|reports?|team of|headcount|salary expectation\w*|compensation expectation\w*)\b/;
@@ -805,9 +810,11 @@ export const isResponseRequest = (raw: string): boolean => RESPONSE_REQUEST_RE.t
 const splitClauses = (q: string): string[] =>
   q.split(/\band\b|\balso\b|[;.]/).map((c) => c.trim()).filter(Boolean);
 
-function detectTypes(q: string, input: ClassificationInput): { types: QuestionType[]; claims: ClaimType[]; clauses: Partial<Record<ClaimType, string>>; exhaustive: boolean } {
+function detectTypes(q: string, input: ClassificationInput): { types: QuestionType[]; claims: ClaimType[]; clauses: Partial<Record<ClaimType, string>>; exhaustive: boolean; inferred: ClaimType[] } {
   const types = new Set<QuestionType>();
   const claims = new Set<ClaimType>();
+  /** Claims GUESSED from the mode's primary source (see the inference block), not made by the question's grammar. */
+  const inferredClaims = new Set<ClaimType>();
   const clauses: Partial<Record<ClaimType, string>> = {};
   const noteClaim = (c: ClaimType, clause: string) => { claims.add(c); if (!clauses[c]) clauses[c] = clause; };
 
@@ -1427,6 +1434,7 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
     const inferred = jobSide ? 'JOB_REQUIRED_SKILL' : primary ? claimForSource[primary] : undefined;
     if (inferred) {
       claims.add(inferred);
+      inferredClaims.add(inferred);
       types.add(inferred === 'DOCUMENT_FACT' ? 'DOCUMENT_FACT'
         : inferred === 'MEETING_STATEMENT' ? 'MEETING_FACT'
           : inferred === 'JOB_REQUIRED_SKILL' ? 'JOB_REQUIREMENT' : 'PERSONAL_PROJECT');
@@ -1528,7 +1536,7 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
   // and needs no retrieval. Returning early keeps prompt-shaped document text
   // out of the candidate pool entirely.
   if (META_REQUEST_RE.test(input.resolvedQuestion)) {
-    return { types: ['META_REQUEST'], claims: [], clauses: {}, exhaustive: false };
+    return { types: ['META_REQUEST'], claims: [], clauses: {}, exhaustive: false, inferred: [] };
   }
 
   // LAST-RESORT general-knowledge claim (2026-08-02). Every claim branch above
@@ -1565,7 +1573,7 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
   if (hasPrivate && hasGeneral) types.add('MIXED');
 
   if (types.size === 0) types.add('AMBIGUOUS');
-  return { types: [...types], claims: [...claims], clauses, exhaustive };
+  return { types: [...types], claims: [...claims], clauses, exhaustive, inferred: [...inferredClaims] };
 }
 
 /** Capitalised tokens that are ordinary technical vocabulary, not references to
@@ -1803,7 +1811,7 @@ export function mentionsAttachedFile(question: string, fileNames: readonly strin
 
 export function classifyTurn(input: ClassificationInput): Classification {
   const q = norm(input.resolvedQuestion);
-  const { types, claims, clauses, exhaustive } = detectTypes(q, input);
+  const { types, claims, clauses, exhaustive, inferred: inferredClaims } = detectTypes(q, input);
 
   // Required sources = union of what the detected claims need, INTERSECTED with
   // what the mode authorizes. A mode never has sources forced into it.
@@ -1912,5 +1920,5 @@ export function classifyTurn(input: ClassificationInput): Classification {
     reason = 'mode disables retrieval';
   }
 
-  return { questionTypes: types, claimTypes: claims, claimClauses: clauses, path, shouldRetrieve, requiredSourceTypes, exhaustive, unsupportedInMode, reason };
+  return { questionTypes: types, claimTypes: claims, claimClauses: clauses, inferredClaimTypes: inferredClaims, path, shouldRetrieve, requiredSourceTypes, exhaustive, unsupportedInMode, reason };
 }

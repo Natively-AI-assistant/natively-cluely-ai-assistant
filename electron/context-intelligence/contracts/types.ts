@@ -298,6 +298,11 @@ export interface TurnDecision {
 
   questionTypes: QuestionType[];
   claimRequirements: ClaimRequirement[];
+  /** Claim types the classifier INFERRED from the mode's primary source because
+   *  no rule recognised the question ("How many engineers are in pod 3?" →
+   *  USER_PROJECT in a job-seeking mode) — a guess about ownership, as opposed to
+   *  a claim the question's own grammar makes ("Have I ever…", "my boss"). */
+  inferredClaimTypes?: ClaimType[];
 
   scope: EvidenceScope;
   authorizedSources: AuthorizedSource[];
