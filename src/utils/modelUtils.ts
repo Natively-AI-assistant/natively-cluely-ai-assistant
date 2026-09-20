@@ -335,8 +335,8 @@ const NINEROUTER_FORMAT_LEVELS: Readonly<Record<string, readonly string[]>> = {
 const NINEROUTER_BASE_LEVELS: readonly string[] = ['none', 'low', 'medium', 'high'];
 
 const NINEROUTER_LEVEL_LABELS: Readonly<Record<string, string>> = {
-    none: 'Off — fastest',
-    minimal: 'Minimal — fastest',
+    none: 'Off',
+    minimal: 'Minimal',
     thinking: 'Thinking on',
     low: 'Low',
     medium: 'Medium',
@@ -369,9 +369,22 @@ export const ninerouterThinkingOptions = (
     const format = caps?.thinkingFormat || '';
     let levels = NINEROUTER_FORMAT_LEVELS[format] || NINEROUTER_BASE_LEVELS;
     if (caps?.thinkingCanDisable === false) levels = levels.filter(l => l !== 'none');
+    // The FLOOR of the format is the default — 'none' for most, 'minimal' for
+    // gemini-level, which has no off. It leads the list and says so, because a
+    // dropdown whose default is not its first entry reads as broken.
+    //
+    // Auto sits at the end rather than the top: it is a deliberate opt-out for
+    // "let the model decide", not the recommended setting. That ordering is the
+    // product choice, not a claim that Auto is bad — on Gemini it was the
+    // fastest setting measured.
     return [
-        { id: 'auto', name: 'Auto (model decides)' },
-        ...levels.map(id => ({ id, name: NINEROUTER_LEVEL_LABELS[id] || id })),
+        ...levels.map((id, i) => ({
+            id,
+            name: i === 0
+                ? `${NINEROUTER_LEVEL_LABELS[id] || id} — fastest (default)`
+                : (NINEROUTER_LEVEL_LABELS[id] || id),
+        })),
+        { id: 'auto', name: 'Auto (let the model decide)' },
     ];
 };
 

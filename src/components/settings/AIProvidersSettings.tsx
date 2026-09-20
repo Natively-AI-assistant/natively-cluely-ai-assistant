@@ -5014,16 +5014,20 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                 <div className="space-y-1">
                                     <span className="block aip-label">{t('Thinking')}</span>
                                     <ModelSelect
-                                        value={ninerouterThinking}
+                                        /* An empty stored value IS the default, so the row
+                                           shown is the first option rather than a blank —
+                                           a control whose default renders as nothing reads
+                                           as unset, and users then set it redundantly. */
+                                        value={ninerouterThinking || opts[0].id}
                                         options={opts}
                                         onChange={setNinerouterThinking}
-                                        placeholder={t('Auto (provider default)')}
+                                        placeholder={opts[0].name}
                                     />
                                     <p className="text-[10px] aip-muted">
                                         {selected
                                             ? t('Applies to the model you set as default here.')
                                             : t('Set a default model above to match these options to it.')}{' '}
-                                        {t('Auto leaves the model to decide, which is usually fine. Lower levels answer faster; higher levels reason more.')}
+                                        {t('Natively defaults to the fastest setting. Raise it when an answer needs more reasoning, or pick Auto to let the model choose.')}
                                     </p>
                                 </div>
                             );

@@ -218,6 +218,8 @@ const NINEROUTER_MODELS_TTL_MS = 5 * 60_000
 // in src/utils/modelUtils.ts — electron/ never imports from src/, so the
 // list is restated, and a test pins the two together. A level the picker
 // offers and this validator drops would be a silent no-op.
+/** Sent when the user has expressed no preference. See ninerouterThinkingParam. */
+const NINEROUTER_DEFAULT_THINKING = 'none'
 const NINEROUTER_THINKING_LEVELS: readonly string[] = [
   'none', 'minimal', 'thinking', 'low', 'medium', 'high', 'xhigh', 'max',
 ]
@@ -1829,7 +1831,18 @@ export class LLMHelper {
    */
   private ninerouterThinkingParam(): { reasoning_effort?: ReasoningEffortValue } {
     const level = (this.ninerouterThinking || '').trim();
-    if (!level || level === 'auto') return {};
+    // DEFAULT IS NO THINKING. 9Router's own default reasons hard, and on a
+    // free/cheap-tier aggregator that is the difference between a ~1s answer and
+    // a multi-second one. 'auto' is the explicit opt-out for users who would
+    // rather the model decide — and it is a real choice, not a worse one: Gemini
+    // varies its own effort per prompt and was the fastest setting measured.
+    //
+    // 'none' is sent as canonical INTENT, not as a literal. applyFormat()
+    // translates it per backend — disabling where the format supports it, and
+    // clamping to the model's floor where it does not (gemini-level has no off,
+    // so it lands on minimal). That is why one value is safe across formats.
+    if (!level) return { reasoning_effort: NINEROUTER_DEFAULT_THINKING };
+    if (level === 'auto') return {};
     // Cast is confined to THIS line on purpose. The OpenAI SDK types
     // reasoning_effort as its own union which does not include 'none' — but
     // 9Router honours 'none' and it is the fastest setting there is (3963ms ->
@@ -1838,7 +1851,9 @@ export class LLMHelper {
     // streaming overload, which is how the first attempt at this broke.
     return NINEROUTER_THINKING_LEVELS.includes(level)
       ? { reasoning_effort: level as ReasoningEffortValue }
-      : {};
+      // A stale level from an older build falls back to the default rather than
+      // to silence, so it keeps the fast path instead of quietly becoming Auto.
+      : { reasoning_effort: NINEROUTER_DEFAULT_THINKING };
   }
 
   /** The wire id: one segment off, never two. `ninerouter/openai/gpt-5` is

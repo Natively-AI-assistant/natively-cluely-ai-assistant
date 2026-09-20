@@ -77,10 +77,27 @@ describe('the wire carries the chosen level', () => {
       'auto must not pin a level — that is what makes it auto');
   });
 
-  test('an unset preference behaves as auto', async () => {
+  test('UNSET defaults to no thinking — the fast path, not the provider default', async () => {
+    // A deliberate product choice. 9Router's own default reasons hard, and on a
+    // free/cheap-tier aggregator that is the difference between a ~1s answer and
+    // a multi-second one. Users who want the model to decide pick Auto.
     const { h, sent } = makeHelper(undefined);
     await drain(h);
-    assert.ok(!('reasoning_effort' in sent[0]));
+    assert.equal(sent[0].reasoning_effort, 'none',
+      'an unconfigured 9Router must be fast by default');
+  });
+
+  test("'' (never chosen) is also the default, not a silent auto", async () => {
+    const { h, sent } = makeHelper('');
+    await drain(h);
+    assert.equal(sent[0].reasoning_effort, 'none');
+  });
+
+  test("'auto' remains the explicit opt-out and still sends nothing", async () => {
+    const { h, sent } = makeHelper('auto');
+    await drain(h);
+    assert.ok(!('reasoning_effort' in sent[0]),
+      'Auto must stay reachable — some models (Gemini) vary effort well on their own');
   });
 
   test('each level is sent verbatim as reasoning_effort', async () => {
@@ -91,12 +108,13 @@ describe('the wire carries the chosen level', () => {
     }
   });
 
-  test('a junk value is dropped rather than sent', async () => {
-    // Stored settings outlive code. An unrecognised level must not become a
-    // 400 on every question.
+  test('a junk value falls back to the default rather than reaching the wire', async () => {
+    // Stored settings outlive code. An unrecognised level must not become a 400
+    // on every question — and now that the default is a real level rather than
+    // silence, falling back to it keeps the fast path.
     const { h, sent } = makeHelper('ludicrous');
     await drain(h);
-    assert.ok(!('reasoning_effort' in sent[0]));
+    assert.equal(sent[0].reasoning_effort, 'none');
   });
 });
 
@@ -124,30 +142,30 @@ describe("the options mirror 9Router's own per-format vocabulary", () => {
   test('gemini-level has no "none" — it starts at minimal', () => {
     assert.deepEqual(
       ids({ reasoning: true, thinkingFormat: 'gemini-level', thinkingCanDisable: false }),
-      ['auto', 'minimal', 'low', 'medium', 'high'],
+      ['minimal', 'low', 'medium', 'high', 'auto'],
     );
   });
 
   test('minimax and zai are BINARY, not a four-point scale', () => {
     // Offering low/medium/high here invents levels the backend does not have.
     assert.deepEqual(ids({ reasoning: true, thinkingFormat: 'minimax', thinkingCanDisable: true }),
-      ['auto', 'none', 'thinking']);
+      ['none', 'thinking', 'auto']);
     assert.deepEqual(ids({ reasoning: true, thinkingFormat: 'zai', thinkingCanDisable: true }),
-      ['auto', 'none', 'thinking']);
+      ['none', 'thinking', 'auto']);
   });
 
   test('deepseek collapses the middle — none, high, max only', () => {
     assert.deepEqual(ids({ reasoning: true, thinkingFormat: 'deepseek', thinkingCanDisable: true }),
-      ['auto', 'none', 'high', 'max']);
+      ['none', 'high', 'max', 'auto']);
   });
 
   test('openai reaches xhigh and claude reaches max', () => {
     assert.deepEqual(ids({ reasoning: true, thinkingFormat: 'openai', thinkingCanDisable: true }),
-      ['auto', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh']);
+      ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'auto']);
     assert.deepEqual(ids({ reasoning: true, thinkingFormat: 'claude-budget', thinkingCanDisable: true }),
-      ['auto', 'none', 'low', 'medium', 'high', 'xhigh', 'max']);
+      ['none', 'low', 'medium', 'high', 'xhigh', 'max', 'auto']);
     assert.deepEqual(ids({ reasoning: true, thinkingFormat: 'claude-adaptive', thinkingCanDisable: true }),
-      ['auto', 'none', 'low', 'medium', 'high', 'max']);
+      ['none', 'low', 'medium', 'high', 'max', 'auto']);
   });
 
   test("canDisable:false removes 'none', exactly as getThinkingLevels does", () => {
@@ -159,13 +177,17 @@ describe("the options mirror 9Router's own per-format vocabulary", () => {
     // L.base in their table. Withholding a control 9Router would have honoured
     // is worse than offering one it may clamp.
     assert.deepEqual(ids({ reasoning: true, thinkingFormat: 'something-new', thinkingCanDisable: true }),
-      ['auto', 'none', 'low', 'medium', 'high']);
-    assert.deepEqual(ids(undefined), ['auto', 'none', 'low', 'medium', 'high']);
+      ['none', 'low', 'medium', 'high', 'auto']);
+    assert.deepEqual(ids(undefined), ['none', 'low', 'medium', 'high', 'auto']);
   });
 
-  test('auto is always first', () => {
+  test('the format FLOOR leads and auto sits last', () => {
+    // The default has to be the first entry — a dropdown whose default is not
+    // its first row reads as broken. Auto is the opt-out, so it goes to the end.
     for (const fmt of ['openai', 'gemini-level', 'minimax', 'deepseek', 'claude-budget']) {
-      assert.equal(ids({ reasoning: true, thinkingFormat: fmt })[0], 'auto');
+      const o = ids({ reasoning: true, thinkingFormat: fmt });
+      assert.notEqual(o[0], 'auto', `${fmt}: auto must not lead`);
+      assert.equal(o[o.length - 1], 'auto', `${fmt}: auto must be reachable at the end`);
     }
   });
 
@@ -201,5 +223,24 @@ describe('the persisted shape feeds the picker directly', () => {
     const ui = fs.readFileSync(path.join(root, 'src/components/settings/AIProvidersSettings.tsx'), 'utf8');
     assert.match(ui, /ninerouterThinkingOptions\(selected \? ninerouterModelMeta\[selected\] : undefined\)/,
       'the picker must read the persisted entry as-is');
+  });
+});
+
+describe('the picker and the wire agree on the default', () => {
+  test('the fastest level is marked as the default in the options', () => {
+    // Whatever the format's floor is — 'none' for most, 'minimal' for
+    // gemini-level, which has no off.
+    const gem = ninerouterThinkingOptions({ reasoning: true, thinkingFormat: 'gemini-level', thinkingCanDisable: false });
+    assert.equal(gem[0].id, 'minimal', 'the floor follows the format');
+    assert.match(gem[0].name, /default/i, 'and is labelled as the default');
+
+    const mm = ninerouterThinkingOptions({ reasoning: true, thinkingFormat: 'minimax', thinkingCanDisable: true });
+    assert.equal(mm[0].id, 'none');
+    assert.match(mm[0].name, /default/i);
+  });
+
+  test('Auto is still offered, just not first', () => {
+    const o = ninerouterThinkingOptions({ reasoning: true, thinkingFormat: 'openai', thinkingCanDisable: true });
+    assert.ok(o.some(x => x.id === 'auto'), 'the opt-out must remain reachable');
   });
 });
