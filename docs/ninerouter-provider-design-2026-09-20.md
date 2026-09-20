@@ -231,15 +231,52 @@ way: adding auto-launch later would pull the whole cross-platform contract in.
 Default base URL `http://localhost:20128/v1` is a literal string, not a
 filesystem path.
 
+## What the live drive proved (2026-09-20)
+
+The app was launched from this worktree by plain spawn + CDP against a running
+9Router. **Not** Playwright's `_electron`: a Playwright-launched Electron writes
+safeStorage credentials a normal launch cannot decrypt, and saving a credential
+is the thing this had to prove. An isolated `--user-data-dir` keeps safeStorage
+working. Driver: `scratchpad/drive.mjs`.
+
+8/8, twice (before and after the fixes below):
+
+1. the preload bridge exposes all four 9Router channels;
+2. Test Connection round-trips through IPC to the real instance — `401 auth`;
+3. a wrong base URL is reported unreachable, not "works";
+4. `setNinerouterConfig` persists through safeStorage;
+5. `refreshNinerouterModels` returns the live 47-model catalogue;
+6. `getStoredCredentials` reports 9Router configured;
+7. the opt-in allow-list stores the prefixed id;
+8. a ticked model becomes the active model.
+
+### Three defects the drive and the probe-against-reality found
+
+- **The probe reported a wrong base URL as working.** Every non-401 counted as
+  success, so pasting the dashboard URL answered "the key works" about an
+  address that can never serve a completion. A 404 now means the path is wrong.
+- **The overlay chip would have rendered the raw routed id.**
+  `ninerouter/minimax/MiniMax-M3` in a 140px truncating control, because the
+  chip's gateway branch was missing and `getCurrentModelDisplayName()` returns
+  `currentModelId` verbatim for a gateway.
+- **`ninerouterModelInputCaps` was stored and never read.** The catalogue's
+  per-model context window was being discarded, so a small model behind the
+  proxy would receive a cloud-sized prompt. A stored-but-unread field is the
+  shape of a guard that looks present and does nothing.
+
 ## Risks
 
-- **No live dispatch verification.** Verification was deferred pending an API
-  key. `/v1/models`, the capability payload and the discovery path are
-  verifiable unauthenticated and will be. Streaming SSE, the dispatch cascade
-  and the probe's `400` body are not, and are marked
-  `Requires live verification` until a key is available.
+- **Still unverified: the answer itself.** Every POST route needs a key, so
+  streaming SSE parsing (`chunk.choices[0]?.delta?.content` from the OpenAI SDK
+  against a Next.js SSE implementation) and the dispatch cascade end-to-end
+  remain `Requires live verification`. Wire format is where assumptions die —
+  see `nvidia-riva-grpc-wire-traps` and the Fluxion protocol detection.
+  Everything up to the request being sent is now proven live.
 - **Fallback attribution is unresolved.** 9Router fails over internally, so the
   model that serves a request may not be the one requested. Whether the
   response's `model` field reports requested or served is unknown without a
   key. It decides what `answer-trace.ts` records. Until then, record the
   requested id and treat the response's `model` as advisory.
+- **The probe's `400` branch is inferred, not observed.** A keyless instance
+  401s before validation, so the "key accepted" signal has never been seen. The
+  401 and 404 branches are live-verified.
