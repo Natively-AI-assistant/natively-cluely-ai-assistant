@@ -2,7 +2,7 @@
 
 Date: 2026-09-20
 Branch: `feat/ninerouter-provider`
-Status: approved in chat; Phase 1 in progress
+Status: all four phases shipped and live-verified (2026-09-21)
 
 ## What 9Router is
 
@@ -233,7 +233,7 @@ unauthenticated, 2 probed at 3072d, a real vector at
 `ninerouter@localhost:20128:gemini/gemini-embedding-001:3072`, and the panel
 reporting the provider available, flagged cloud, endpoint shown.
 
-### Phase 4 — Direct Assist, overlay picker, contract tests
+### Phase 4 — Direct Assist, overlay picker — DONE (2026-09-21)
 
 `DIRECT_ASSIST_PROVIDERS`, the classify/configured/vision-support/capability-
 strip/dispatch arms, and `ModelSelectorWindow.tsx:212-222`.
@@ -358,6 +358,9 @@ tier answered, never as the identity of the selected model.
   answered for the normal path; what the response looks like when 9Router
   exhausts a tier and falls through to another provider mid-request is still
   unseen, and would need a deliberately exhausted upstream to produce.
-- **Phase 4 is not built**: Direct Assist and the overlay model picker.
-  `DIRECT_ASSIST_PROVIDERS` has no exhaustiveness test, so a missing
-  dispatch arm there fails silently — the Fluxion failure exactly.
+- **A 9Router internal failover has not been observed.** What the response
+  looks like when it exhausts a tier and falls through mid-request is unseen,
+  and would need a deliberately exhausted upstream to produce.
+- **`DIRECT_ASSIST_PROVIDERS` still has no exhaustiveness test.** 9Router is
+  covered by an executing test, but the next provider added will have the same
+  silent-failure surface. A generic guard over the tuple would close it.
