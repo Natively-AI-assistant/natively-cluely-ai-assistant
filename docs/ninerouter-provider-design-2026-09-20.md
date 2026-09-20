@@ -200,12 +200,38 @@ Live-verified: a real PNG through `streamWithNinerouter` to
 `gemini/gemini-3.6-flash` returned "Red" in 7.9s
 (`scripts/verify-ninerouter-vision.mjs`).
 
-### Phase 3 — Embeddings
+### Phase 3 — Embeddings — DONE (2026-09-21)
 
-LiteLLM has **no** first-class embedding provider — it rides the generic custom
-embedding URL (`EmbeddingProviderResolver.ts:60-68`). 9Router gets a real one,
-because `/v1/models/embedding` gives a discoverable model list the generic path
-cannot offer. Also `embeddingStatus.ts:105` `THIRD_PARTY_GENERATION`.
+A first-class provider, which LiteLLM never got — it rides the generic custom
+embedding URL. 9Router earns one because `/v1/models/embedding` is a
+discoverable, typed catalogue.
+
+Three things the live instance decided, none of which were guessable:
+
+**The space key carries the HOST.** OpenRouter's does not, and says why: it is
+a single service, so a model id means one thing. 9Router is the self-hosted
+case its parenthetical points at.
+
+**A 401 has two meanings.** 9Router relays the upstream's status verbatim, so
+`gemini/text-embedding-004` answers 401 ("the bound service account is deleted
+or disabled") while `gemini-embedding-001` embeds fine at 3072d on the same
+key. Classifying the relayed one as `permanentAuthFailure` would make
+`isAvailable()` rethrow, tell the resolver the credential is dead, and demote —
+and a demotion changes the active space and strands the corpus. One vendor's
+dead account must not re-index everything.
+
+**Listed ≠ usable.** Of the 6 models a stock instance lists, only 2 embed. The
+width probe is the arbiter, and nothing is configurable until it has produced a
+vector.
+
+It is unconditionally **cloud** in `embeddingStatus` and the catalogue, not
+host-gated like `custom`: a loopback LM Studio really runs the model locally,
+while 9Router's binary is local and its inference never is.
+
+Live-verified end to end: 6 models discovered through both URL forms
+unauthenticated, 2 probed at 3072d, a real vector at
+`ninerouter@localhost:20128:gemini/gemini-embedding-001:3072`, and the panel
+reporting the provider available, flagged cloud, endpoint shown.
 
 ### Phase 4 — Direct Assist, overlay picker, contract tests
 
@@ -332,5 +358,6 @@ tier answered, never as the identity of the selected model.
   answered for the normal path; what the response looks like when 9Router
   exhausts a tier and falls through to another provider mid-request is still
   unseen, and would need a deliberately exhausted upstream to produce.
-- **Phases 3-4 are not built**: embeddings, Direct Assist and the overlay
-  model picker.
+- **Phase 4 is not built**: Direct Assist and the overlay model picker.
+  `DIRECT_ASSIST_PROVIDERS` has no exhaustiveness test, so a missing
+  dispatch arm there fails silently — the Fluxion failure exactly.
