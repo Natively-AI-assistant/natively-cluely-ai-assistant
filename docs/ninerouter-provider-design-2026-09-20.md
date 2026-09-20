@@ -266,17 +266,53 @@ working. Driver: `scratchpad/drive.mjs`.
 
 ## Risks
 
-- **Still unverified: the answer itself.** Every POST route needs a key, so
-  streaming SSE parsing (`chunk.choices[0]?.delta?.content` from the OpenAI SDK
-  against a Next.js SSE implementation) and the dispatch cascade end-to-end
-  remain `Requires live verification`. Wire format is where assumptions die —
-  see `nvidia-riva-grpc-wire-traps` and the Fluxion protocol detection.
-  Everything up to the request being sent is now proven live.
-- **Fallback attribution is unresolved.** 9Router fails over internally, so the
-  model that serves a request may not be the one requested. Whether the
-  response's `model` field reports requested or served is unknown without a
-  key. It decides what `answer-trace.ts` records. Until then, record the
-  requested id and treat the response's `model` as advisory.
-- **The probe's `400` branch is inferred, not observed.** A keyless instance
-  401s before validation, so the "key accepted" signal has never been seen. The
-  401 and 404 branches are live-verified.
+## Closed with a real key (2026-09-20)
+
+`requireLogin` is false on a local instance and `GET /api/keys` returns the
+dashboard's keys, so the last gaps were closed without anyone pasting anything.
+4/4:
+
+- **`streamWithNinerouter` returns a real streamed answer** — SSE parsed to
+  `"ok"` in ~1.1s through the actual dispatch code, not a stub. This was the
+  single most important unverified assertion.
+- **The budget path is real** — 47 budgets and 47 context windows cached from
+  one `/v1/models` call, `max_tokens` resolved to 65536.
+- **The probe's success branch works**, and a wrong key still reports `auth`.
+
+### It also caught a bug in the 404 rule above
+
+The earlier fix — "any 404 means the base URL is wrong" — was **wrong in the
+other direction**, and only a valid key could show it. Measured:
+
+```
+valid key + unroutable model -> 404 application/json
+    {"error":{"message":"No active credentials for provider: openai",
+              "code":"model_not_found"}}
+any key    + wrong path      -> 404 text/html   (the Next.js 404 page)
+```
+
+9Router's README documents **400** for an unknown model; the running server
+returns **404**. So that rule rejected a perfectly working instance. The status
+cannot separate the two cases — the RESPONDER can. A JSON error object is
+9Router speaking, and it only speaks after the credential passes; an HTML page
+means nothing routed the request at all.
+
+### Attribution: answered
+
+Requested `gemini/gemini-3.5-flash-lite`, response `model` came back
+`gemini-3.5-flash-lite` — the **upstream's own id, with 9Router's alias prefix
+stripped**. The response reports what SERVED the request, not what was asked
+for, so the two never match and a mismatch means nothing on its own.
+
+`answer-trace.ts` should therefore record the **requested** id. Treat the
+response's `model` as the upstream's self-report, useful for diagnosing which
+tier answered, never as the identity of the selected model.
+
+## Risks
+
+- **A 9Router internal failover has not been observed.** Attribution is
+  answered for the normal path; what the response looks like when 9Router
+  exhausts a tier and falls through to another provider mid-request is still
+  unseen, and would need a deliberately exhausted upstream to produce.
+- **Phases 2-4 are not built**: vision, embeddings, Direct Assist and the
+  overlay model picker.

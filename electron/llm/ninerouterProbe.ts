@@ -131,17 +131,23 @@ export async function probeNinerouter(
   }
 
   if (resp.status === 404) {
-    // The route is not there, so the base URL is wrong — found by running this
-    // probe against a live instance, where pasting the dashboard URL instead of
-    // the API base reported success:
+    // A 404 is ambiguous here, and getting this wrong in BOTH directions is
+    // easy. Measured against a live instance:
     //
-    //   POST .../dashboard/v1/chat/completions -> 404
-    //   POST .../v1/chat/completions           -> 401 (keyless, correct path)
+    //   valid key + unroutable model -> 404 application/json
+    //       {"error":{"message":"No active credentials for provider: openai",
+    //                 "code":"model_not_found"}}
+    //   any key    + wrong path      -> 404 text/html  (the Next.js 404 page)
     //
-    // Auth is evaluated before routing on a real instance, so reaching a 404 at
-    // all means the request never got as far as the chat endpoint. Reporting
-    // that as "the key works" is the same false green this probe exists to
-    // prevent, one layer further in.
+    // 9Router's README documents 400 for an unknown model; the running server
+    // returns 404. So the status cannot separate a working instance from a
+    // mistyped URL — but the RESPONDER can. A JSON error object is 9Router
+    // speaking, and it only speaks after the credential has passed. An HTML
+    // page means nothing routed the request at all.
+    const contentType = resp.headers?.get?.('content-type') || '';
+    if (contentType.includes('json')) {
+      return { ok: true, status: 404 };
+    }
     return {
       ok: false,
       reason: 'unreachable',

@@ -42,11 +42,16 @@ function stubFetch(reply) {
   const fn = async (url, init) => {
     calls.push({ url: String(url), method: init?.method, headers: init?.headers || {}, body: init?.body });
     if (reply instanceof Error) throw reply;
+    const ctype = reply.contentType ?? 'application/json';
     return {
       ok: reply.status >= 200 && reply.status < 300,
       status: reply.status,
-      json: async () => reply.body ?? {},
-      text: async () => JSON.stringify(reply.body ?? {}),
+      headers: { get: (h) => (h.toLowerCase() === 'content-type' ? ctype : null) },
+      json: async () => {
+        if (!ctype.includes('json')) throw new SyntaxError('Unexpected token < in JSON');
+        return reply.body ?? {};
+      },
+      text: async () => (ctype.includes('json') ? JSON.stringify(reply.body ?? {}) : String(reply.body ?? '')),
     };
   };
   return { fn, calls };
@@ -102,6 +107,29 @@ describe('the probe reports what actually happened', () => {
     assert.equal(r.ok, true);
   });
 
+  test('404 with a JSON error body means 9Router ANSWERED — the key works', async () => {
+    // Measured, after the first version of this rule got it wrong. With a REAL
+    // key, 9Router answers an unroutable model id with 404, not the 400 its
+    // README documents:
+    //
+    //   valid key + unknown model -> 404 application/json
+    //       {"error":{"message":"No active credentials for provider: openai",
+    //                 "code":"model_not_found"}}
+    //   valid key + wrong path    -> 404 text/html  (the Next.js 404 page)
+    //
+    // So the status alone cannot tell a good config from a bad URL, and a rule
+    // that reads every 404 as "wrong URL" rejects a perfectly working instance.
+    // The discriminator is WHO ANSWERED: a JSON error object is 9Router
+    // speaking, which it only does after the credential passed.
+    const { fn } = stubFetch({
+      status: 404,
+      contentType: 'application/json',
+      body: { error: { message: 'No active credentials for provider: openai', code: 'model_not_found' } },
+    });
+    const r = await probeNinerouter('http://localhost:20128/v1', 'sk-real', { fetchImpl: fn });
+    assert.equal(r.ok, true, 'a 9Router JSON error proves the request got past auth and reached routing');
+  });
+
   test('404 is a WRONG BASE URL, not a working instance', async () => {
     // Found by running the probe against the live instance: pasting the
     // dashboard URL instead of the API base returned ok:true, so the card said
@@ -116,7 +144,11 @@ describe('the probe reports what actually happened', () => {
     // A 404 means the ROUTE is absent. Auth is checked before routing on a real
     // instance (a keyless POST to the right path 401s), so reaching a 404 at all
     // says the path is wrong.
-    const { fn } = stubFetch({ status: 404, body: {} });
+    const { fn } = stubFetch({
+      status: 404,
+      contentType: 'text/html; charset=utf-8',
+      body: '<!DOCTYPE html><html lang="en"><head><meta charSet="utf-8"/>',
+    });
     const r = await probeNinerouter('http://localhost:20128/dashboard', '', { fetchImpl: fn });
     assert.equal(r.ok, false);
     assert.equal(r.reason, 'unreachable');
