@@ -9978,10 +9978,20 @@ export function initializeIpcHandlers(appState: AppState): void {
       .map((m: any) => m.id);
     // Per-model reasoning capability, so the settings dropdown can adapt its
     // options to the selected model with no extra round-trip.
-    const meta: Record<string, { reasoning?: boolean; canDisable?: boolean }> = {};
+    const meta: Record<string, { reasoning?: boolean; thinkingCanDisable?: boolean; thinkingFormat?: string }> = {};
     for (const m of (data?.data || [])) {
       if (!m?.id || !m?.capabilities) continue;
-      meta[m.id] = { reasoning: m.capabilities.reasoning === true, canDisable: m.capabilities.thinkingCanDisable !== false };
+      // Field names deliberately MATCH the catalogue's own, so the renderer can
+      // hand this straight to ninerouterThinkingOptions with no translation —
+      // a rename in between is a silent fall-back to generic levels.
+      meta[m.id] = {
+        reasoning: m.capabilities.reasoning === true,
+        thinkingCanDisable: m.capabilities.thinkingCanDisable !== false,
+        // The format decides WHICH levels exist — minimax is binary, deepseek
+        // has no middle, gemini-level has no off. Without it the picker falls
+        // back to a generic scale and offers levels the backend lacks.
+        thinkingFormat: typeof m.capabilities.thinkingFormat === 'string' ? m.capabilities.thinkingFormat : undefined,
+      };
     }
     if (models.length > 0) {
       cm.setNinerouterModels(models);

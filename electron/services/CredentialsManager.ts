@@ -132,7 +132,7 @@ export interface StoredCredentials {
      * settings dropdown adapts its options to the SELECTED model with no
      * network round-trip. Keyed by the instance's own wire id.
      */
-    ninerouterModelMeta?: Record<string, { reasoning?: boolean; canDisable?: boolean }>;
+    ninerouterModelMeta?: Record<string, { reasoning?: boolean; thinkingCanDisable?: boolean; thinkingFormat?: string }>;
     googleServiceAccountPath?: string;
     customProviders?: CustomProvider[];
     curlProviders?: CurlProvider[];
@@ -1005,10 +1005,10 @@ export class CredentialsManager {
         return this.credentials.ninerouterThinking;
     }
 
-    public getNinerouterModelMeta(): Record<string, { reasoning?: boolean; canDisable?: boolean }> {
+    public getNinerouterModelMeta(): Record<string, { reasoning?: boolean; thinkingCanDisable?: boolean; thinkingFormat?: string }> {
         return this.credentials.ninerouterModelMeta || {};
     }
-    public setNinerouterModelMeta(meta: Record<string, { reasoning?: boolean; canDisable?: boolean }>): void {
+    public setNinerouterModelMeta(meta: Record<string, { reasoning?: boolean; thinkingCanDisable?: boolean; thinkingFormat?: string }>): void {
         if (this.refuseWriteWhileDegraded('set ninerouter model meta')) return;
         this.credentials.ninerouterModelMeta = meta;
         this.saveCredentials();

@@ -1,30 +1,22 @@
 /**
  * Per-model thinking control for 9Router.
  *
- * WHY THIS EXISTS — measured, not assumed. On the reference instance 45 of 47
- * models report `reasoning: true`, and 9Router's DEFAULT is effectively high
- * effort. Sending an explicit level is the single biggest latency lever there
- * is:
+ * WHY THIS EXISTS — 45 of the 47 models a stock instance serves are reasoning
+ * models, and `reasoning_effort` is genuinely HONOURED: latency moves
+ * monotonically across the scale, reproduced on two models and two measurement
+ * methods. That rules out the accepted-and-ignored failure shape OpenRouter's
+ * `output_dimension` has here.
  *
- *   gemini/gemini-3.5-flash-lite   baseline 3963ms -> effort:none  721ms
- *   minimax/MiniMax-M3             baseline 2581ms -> effort:none  857ms
- *
- * and it is monotonic across none/low/medium/high, so it is genuinely honoured
- * rather than accepted-and-ignored (the failure shape OpenRouter's
- * `output_dimension` has here).
- *
- * THE TRAP: `reasoning_effort:'none'` WORKS on gemini-3.5-flash-lite even
- * though its catalogue entry says `thinkingCanDisable: false` — 3963ms to
- * 721ms, measured. 9Router clamps to the model's minimum instead of refusing.
- * So that flag must NOT gate whether the option is offered; it only changes
- * what the option is honestly CALLED, because "Off" would overpromise on a
- * model that can only be turned down.
+ * How much it buys is model- and prompt-dependent, and 'auto' is a reasonable
+ * default rather than something to escape — on Gemini, which varies its own
+ * effort per prompt, auto was the fastest setting measured.
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
+import fs from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -40,7 +32,7 @@ require.cache[electronPath] = {
   },
 };
 const { LLMHelper } = require(path.join(root, 'dist-electron/electron/LLMHelper.js'));
-const { ninerouterThinkingOptions } =
+const { ninerouterThinkingOptions, NINEROUTER_THINKING_LEVELS } =
   await import(pathToFileURL(path.join(root, 'src/utils/modelUtils.ts')).href);
 
 const MODEL = 'ninerouter/minimax/MiniMax-M3';
@@ -108,40 +100,106 @@ describe('the wire carries the chosen level', () => {
   });
 });
 
-describe('the options adapt to the model', () => {
+describe("the options mirror 9Router's own per-format vocabulary", () => {
+  // 9Router does NOT pass reasoning_effort through. extractThinking() reads it
+  // as client INTENT, applyFormat() deletes it, and rewrites that intent into
+  // the backend's native shape — thinking:{budget_tokens} for claude-budget,
+  // setGeminiThinking({thinkingLevel}) for gemini-level, a clamp for deepseek.
+  //
+  // So a canonical vocabulary does exist, which is why one control can drive
+  // every backend. But the valid levels differ per thinkingFormat, and an
+  // earlier version of this file invented a flat none/low/medium/high for all
+  // of them. That offered levels several formats do not have (minimax and zai
+  // are BINARY) while hiding levels others do (claude's max, openai's xhigh).
+  //
+  // These expectations are FORMAT_LEVELS from
+  // open-sse/providers/thinkingLevels.js, plus its rule that
+  // `thinkingCanDisable === false` filters 'none' out.
+  const ids = (caps) => ninerouterThinkingOptions(caps).map(o => o.id);
+
   test('a non-reasoning model gets NO control', () => {
-    // gemini/gemma-4-31b-it reports reasoning:false. Offering a thinking level
-    // for it would be a control that does nothing.
     assert.deepEqual(ninerouterThinkingOptions({ reasoning: false }), []);
   });
 
-  test('a reasoning model that CAN disable offers a true Off', () => {
-    const opts = ninerouterThinkingOptions({ reasoning: true, thinkingCanDisable: true });
-    assert.deepEqual(opts.map(o => o.id), ['auto', 'none', 'low', 'medium', 'high']);
-    assert.match(opts.find(o => o.id === 'none').name, /off/i);
+  test('gemini-level has no "none" — it starts at minimal', () => {
+    assert.deepEqual(
+      ids({ reasoning: true, thinkingFormat: 'gemini-level', thinkingCanDisable: false }),
+      ['auto', 'minimal', 'low', 'medium', 'high'],
+    );
   });
 
-  test('a model that CANNOT disable still offers the level — named honestly', () => {
-    // The measured trap. gemini-3.5-flash-lite reports thinkingCanDisable:false
-    // and `reasoning_effort:'none'` still takes it from 3963ms to 721ms, because
-    // 9Router clamps to the model's minimum. Hiding the option would hide the
-    // biggest single win; calling it "Off" would promise something the model
-    // cannot do.
-    const opts = ninerouterThinkingOptions({ reasoning: true, thinkingCanDisable: false });
-    assert.ok(opts.some(o => o.id === 'none'), 'the fastest setting must still be offered');
-    assert.match(opts.find(o => o.id === 'none').name, /minimal/i);
-    assert.doesNotMatch(opts.find(o => o.id === 'none').name, /off/i);
+  test('minimax and zai are BINARY, not a four-point scale', () => {
+    // Offering low/medium/high here invents levels the backend does not have.
+    assert.deepEqual(ids({ reasoning: true, thinkingFormat: 'minimax', thinkingCanDisable: true }),
+      ['auto', 'none', 'thinking']);
+    assert.deepEqual(ids({ reasoning: true, thinkingFormat: 'zai', thinkingCanDisable: true }),
+      ['auto', 'none', 'thinking']);
   });
 
-  test('unknown capabilities fall back to the full set', () => {
-    // A model the catalogue has not described — offer everything and let the
-    // server decide, rather than silently withholding the control.
-    const opts = ninerouterThinkingOptions(undefined);
-    assert.deepEqual(opts.map(o => o.id), ['auto', 'none', 'low', 'medium', 'high']);
+  test('deepseek collapses the middle — none, high, max only', () => {
+    assert.deepEqual(ids({ reasoning: true, thinkingFormat: 'deepseek', thinkingCanDisable: true }),
+      ['auto', 'none', 'high', 'max']);
   });
 
-  test('auto is always first and is the default', () => {
-    const opts = ninerouterThinkingOptions({ reasoning: true, thinkingCanDisable: true });
-    assert.equal(opts[0].id, 'auto');
+  test('openai reaches xhigh and claude reaches max', () => {
+    assert.deepEqual(ids({ reasoning: true, thinkingFormat: 'openai', thinkingCanDisable: true }),
+      ['auto', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh']);
+    assert.deepEqual(ids({ reasoning: true, thinkingFormat: 'claude-budget', thinkingCanDisable: true }),
+      ['auto', 'none', 'low', 'medium', 'high', 'xhigh', 'max']);
+    assert.deepEqual(ids({ reasoning: true, thinkingFormat: 'claude-adaptive', thinkingCanDisable: true }),
+      ['auto', 'none', 'low', 'medium', 'high', 'max']);
+  });
+
+  test("canDisable:false removes 'none', exactly as getThinkingLevels does", () => {
+    assert.ok(!ids({ reasoning: true, thinkingFormat: 'qwen', thinkingCanDisable: false }).includes('none'));
+    assert.ok(ids({ reasoning: true, thinkingFormat: 'qwen', thinkingCanDisable: true }).includes('none'));
+  });
+
+  test('an unknown format falls back to their base set, not to nothing', () => {
+    // L.base in their table. Withholding a control 9Router would have honoured
+    // is worse than offering one it may clamp.
+    assert.deepEqual(ids({ reasoning: true, thinkingFormat: 'something-new', thinkingCanDisable: true }),
+      ['auto', 'none', 'low', 'medium', 'high']);
+    assert.deepEqual(ids(undefined), ['auto', 'none', 'low', 'medium', 'high']);
+  });
+
+  test('auto is always first', () => {
+    for (const fmt of ['openai', 'gemini-level', 'minimax', 'deepseek', 'claude-budget']) {
+      assert.equal(ids({ reasoning: true, thinkingFormat: fmt })[0], 'auto');
+    }
+  });
+
+  test('every offered level is one the wire validator accepts', () => {
+    // The two lists live in different files (electron/ never imports src/), so
+    // a level the picker offers and the validator drops is a silent no-op.
+    for (const fmt of ['openai', 'claude-adaptive', 'claude-budget', 'gemini-level',
+                       'gemini-budget', 'zai', 'qwen', 'kimi', 'deepseek', 'minimax',
+                       'hunyuan', 'step']) {
+      for (const id of ids({ reasoning: true, thinkingFormat: fmt, thinkingCanDisable: true })) {
+        if (id === 'auto') continue;
+        assert.ok(NINEROUTER_THINKING_LEVELS.includes(id),
+          `${fmt} offers "${id}" but the wire validator would drop it`);
+      }
+    }
+  });
+});
+
+describe('the persisted shape feeds the picker directly', () => {
+  test('discovery writes the SAME field names the option builder reads', () => {
+    // The near-miss worth pinning: discovery briefly wrote {canDisable, format}
+    // while ninerouterThinkingOptions reads {thinkingCanDisable, thinkingFormat}.
+    // Nothing would have thrown — every model would simply have fallen back to
+    // the generic level set, silently offering minimax a low/medium/high scale
+    // it does not have.
+    const ipc = fs.readFileSync(path.join(root, 'electron/ipcHandlers.ts'), 'utf8');
+    const at = ipc.indexOf('meta[m.id] = {');
+    const block = ipc.slice(at, at + 700);
+    assert.match(block, /thinkingCanDisable:/, 'must persist thinkingCanDisable, not canDisable');
+    assert.match(block, /thinkingFormat:/, 'must persist thinkingFormat, not format');
+
+    // And the renderer must hand it over untranslated.
+    const ui = fs.readFileSync(path.join(root, 'src/components/settings/AIProvidersSettings.tsx'), 'utf8');
+    assert.match(ui, /ninerouterThinkingOptions\(selected \? ninerouterModelMeta\[selected\] : undefined\)/,
+      'the picker must read the persisted entry as-is');
   });
 });

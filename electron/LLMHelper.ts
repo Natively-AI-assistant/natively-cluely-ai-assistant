@@ -213,7 +213,14 @@ const NINEROUTER_MODELS_TTL_MS = 5 * 60_000
 // Mirrors NINEROUTER_THINKING_LEVELS in src/utils/modelUtils.ts. electron/
 // never imports from src/, so the list is restated; the settings dropdown
 // and this validator have to agree or a picked level is silently dropped.
-const NINEROUTER_THINKING_LEVELS: readonly string[] = ['none', 'low', 'medium', 'high']
+// The UNION of 9Router's per-format level sets (FORMAT_LEVELS in
+// open-sse/providers/thinkingLevels.js). Mirrors NINEROUTER_THINKING_LEVELS
+// in src/utils/modelUtils.ts — electron/ never imports from src/, so the
+// list is restated, and a test pins the two together. A level the picker
+// offers and this validator drops would be a silent no-op.
+const NINEROUTER_THINKING_LEVELS: readonly string[] = [
+  'none', 'minimal', 'thinking', 'low', 'medium', 'high', 'xhigh', 'max',
+]
 /** The SDK's own reasoning_effort type, widened to admit 9Router's 'none'. */
 type ReasoningEffortValue = NonNullable<OpenAI.ChatCompletionCreateParams['reasoning_effort']> | 'none'
 const MAX_OUTPUT_TOKENS = 65536

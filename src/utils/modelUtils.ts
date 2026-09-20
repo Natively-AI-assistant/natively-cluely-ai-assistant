@@ -294,57 +294,95 @@ export const litellmModelLabel = (id: string): string => {
 export interface NinerouterThinkingCaps {
     reasoning?: boolean;
     thinkingCanDisable?: boolean;
+    /** 9Router's own enum: openai | claude-adaptive | claude-budget | gemini-level | … */
+    thinkingFormat?: string | null;
 }
+
+/**
+ * 9Router's per-format level vocabulary, mirrored from FORMAT_LEVELS in
+ * `open-sse/providers/thinkingLevels.js`.
+ *
+ * WHY A TABLE AND NOT ONE LIST — this is the thing an earlier version of this
+ * file got wrong. 9Router does not pass `reasoning_effort` through to the
+ * upstream: `extractThinking()` reads it as client INTENT, `applyFormat()`
+ * deletes it, and rewrites that intent into whatever the backend speaks —
+ * `thinking: {budget_tokens}` for claude-budget, `setGeminiThinking({
+ * thinkingLevel })` for gemini-level, a clamp to high|max for deepseek.
+ *
+ * That translation is exactly why ONE control can drive every backend. But the
+ * legal levels differ per format, so a flat none/low/medium/high both invents
+ * levels that do not exist (minimax and zai are BINARY — none or thinking) and
+ * hides ones that do (claude's `max`, openai's `xhigh`).
+ */
+const NINEROUTER_FORMAT_LEVELS: Readonly<Record<string, readonly string[]>> = {
+    openai: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'],
+    'claude-adaptive': ['none', 'low', 'medium', 'high', 'max'],
+    'claude-budget': ['none', 'low', 'medium', 'high', 'xhigh', 'max'],
+    // No 'none' upstream either: gemini-3's thinkingLevel starts at minimal.
+    'gemini-level': ['minimal', 'low', 'medium', 'high'],
+    'gemini-budget': ['none', 'low', 'medium', 'high'],
+    zai: ['none', 'thinking'],
+    qwen: ['none', 'low', 'medium', 'high'],
+    kimi: ['none', 'low', 'medium', 'high', 'max'],
+    deepseek: ['none', 'high', 'max'],
+    minimax: ['none', 'thinking'],
+    hunyuan: ['none', 'low', 'medium', 'high'],
+    step: ['none', 'low', 'medium', 'high'],
+    commandcode: ['none', 'low', 'medium', 'high', 'xhigh', 'max'],
+};
+
+/** Their `L.base` — the fallback for a format this table has not seen. */
+const NINEROUTER_BASE_LEVELS: readonly string[] = ['none', 'low', 'medium', 'high'];
+
+const NINEROUTER_LEVEL_LABELS: Readonly<Record<string, string>> = {
+    none: 'Off — fastest',
+    minimal: 'Minimal — fastest',
+    thinking: 'Thinking on',
+    low: 'Low',
+    medium: 'Medium',
+    high: 'High',
+    xhigh: 'Very high',
+    max: 'Maximum — slowest',
+};
 
 /**
  * The thinking levels worth offering for ONE 9Router model.
  *
- * `reasoning_effort` is HONOURED, not accepted-and-ignored: latency moves
- * monotonically across none < low < medium < high, reproduced on two models
- * and two measurement methods. That is the property worth relying on.
+ * `reasoning: false` -> no control at all; gemini/gemma-4-31b-it is the only
+ * such chat model on a stock instance and a picker for it would do nothing.
  *
- * The MAGNITUDE is model- and prompt-dependent, and an earlier version of this
- * comment overstated it. Measured on one instance:
+ * `thinkingCanDisable === false` -> 'none' is filtered out, which is precisely
+ * what their own `getThinkingLevels()` does. Note this leaves gemini-level
+ * starting at 'minimal', which is both their vocabulary and the honest label:
+ * that model can be turned DOWN but not off.
  *
- *   minimax/MiniMax-M3, non-streaming total:  default 2581ms -> 'none'  857ms
- *   gemini-3.5-flash-lite, streaming TTFT:    'high' 1425ms -> 'none'  877ms
- *
- * but on that same Gemini model AUTO was the fastest of all (~800ms), because
- * Gemini already varies its own effort per prompt. So 'auto' is not a slow
- * setting to be escaped — it is a reasonable default, and these levels are for
- * when the user wants to pin the trade-off themselves.
- *
- * TWO RULES, both from measurement rather than from the docs:
- *
- * 1. `reasoning: false` -> NO control. gemini/gemma-4-31b-it is the only such
- *    chat model on a stock instance; a level picker for it would do nothing.
- *
- * 2. `thinkingCanDisable: false` does NOT remove the fastest option. It was
- *    tempting to gate on it — and wrong: gemini-3.5-flash-lite reports false
- *    and still goes 3963ms -> 721ms, because 9Router clamps to the model's
- *    minimum rather than refusing. Hiding it would hide the biggest win. The
- *    flag only changes the LABEL, because calling it "Off" would promise
- *    something that model cannot actually do.
- *
- * Unknown capabilities fall back to the full set: offering a control the server
- * may ignore is better than withholding one it would have honoured.
+ * `reasoning_effort` is genuinely honoured rather than accepted-and-ignored —
+ * latency moves monotonically across the scale, reproduced on two models. How
+ * much it buys is model- and prompt-dependent, and 'auto' is a reasonable
+ * default rather than something to escape: on Gemini, which varies its own
+ * effort per prompt, auto was the fastest setting measured.
  */
 export const ninerouterThinkingOptions = (
     caps?: NinerouterThinkingCaps | null,
 ): { id: string; name: string }[] => {
     if (caps && caps.reasoning === false) return [];
-    const canDisable = caps?.thinkingCanDisable !== false;
+    const format = caps?.thinkingFormat || '';
+    let levels = NINEROUTER_FORMAT_LEVELS[format] || NINEROUTER_BASE_LEVELS;
+    if (caps?.thinkingCanDisable === false) levels = levels.filter(l => l !== 'none');
     return [
-        { id: 'auto', name: 'Auto (provider default)' },
-        { id: 'none', name: canDisable ? 'Off — fastest' : 'Minimal — fastest' },
-        { id: 'low', name: 'Low' },
-        { id: 'medium', name: 'Medium' },
-        { id: 'high', name: 'High — slowest' },
+        { id: 'auto', name: 'Auto (model decides)' },
+        ...levels.map(id => ({ id, name: NINEROUTER_LEVEL_LABELS[id] || id })),
     ];
 };
 
-/** Levels the wire accepts. `auto` means "send nothing". */
-export const NINEROUTER_THINKING_LEVELS = ['none', 'low', 'medium', 'high'] as const;
+/**
+ * Every level any format can yield. The wire validator checks against this, so
+ * it must be the UNION of the table above — a level the picker offers and the
+ * validator drops is a silent no-op. A test pins the two together.
+ */
+export const NINEROUTER_THINKING_LEVELS = [
+    'none', 'minimal', 'thinking', 'low', 'medium', 'high', 'xhigh', 'max',
+] as const;
 
 export const gatewayModelLabel = (id: string): string => {
     if (!id) return '';

@@ -2406,7 +2406,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     const [ninerouterThinking, setNinerouterThinking] = useState('');
     // Per-model reasoning capability from the catalogue, so the thinking
     // dropdown offers what THIS model can actually do.
-    const [ninerouterModelMeta, setNinerouterModelMeta] = useState<Record<string, { reasoning?: boolean; canDisable?: boolean }>>({});
+    const [ninerouterModelMeta, setNinerouterModelMeta] = useState<Record<string, { reasoning?: boolean; thinkingCanDisable?: boolean; thinkingFormat?: string }>>({});
     // Provider visibility filters. `disabledProviders` hides a provider's models
     // without touching its stored credential; `cloudEnabledModels[prov]` narrows
     // which of that provider's models reach the picker (empty = all).
