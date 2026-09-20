@@ -2721,6 +2721,25 @@ export class LLMHelper {
     return this.litellmModelInputCaps.get(modelId.replace('litellm/', '')) ?? null;
   }
 
+  /**
+   * The same ceiling for a 9Router-routed model, read from the catalogue cache
+   * that refreshNinerouterModelCatalogue fills from `/v1/models`.
+   *
+   * 9Router reports `context_length` per model and its own DEFAULT_CAPABILITIES
+   * floor is 200k, but its catalogue is full of genuinely small models -- a
+   * stock instance lists Gemma and GLM variants well under that. Without this
+   * the id resolves to the full cloud tier and fitContextForCurrentModel returns
+   * early for anything at or above 100k, so a small model behind the proxy gets
+   * a cloud-sized prompt and either 400s or is truncated upstream where nothing
+   * here can see it.
+   *
+   * Absent means "no extra cap", never "cap at zero".
+   */
+  private ninerouterInputCapFor(modelId: string): number | null {
+    if (!modelId?.startsWith('ninerouter/')) return null;
+    return this.ninerouterModelInputCaps.get(modelId.replace('ninerouter/', '')) ?? null;
+  }
+
   public fitContextForCurrentModel(text: string, reservedOutputTokens?: number): string {
     if (!text) return text;
     const modelId = this.useOllama ? this.ollamaModel : this.currentModelId;
@@ -2735,6 +2754,7 @@ export class LLMHelper {
     const maxContextTokens = Math.min(
       caps.maxContextTokens,
       this.litellmInputCapFor(modelId) ?? Number.POSITIVE_INFINITY,
+      this.ninerouterInputCapFor(modelId) ?? Number.POSITIVE_INFINITY,
     );
     if (maxContextTokens >= 100_000) return text;
     const reserved = reservedOutputTokens ?? 2000;
