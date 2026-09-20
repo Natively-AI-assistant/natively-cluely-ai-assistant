@@ -86,6 +86,43 @@ const MONEY_AMOUNT_RE =
 
 const isSensitive = (chunk: string): boolean => SENSITIVE_RE.test(chunk) || MONEY_AMOUNT_RE.test(chunk);
 
+// ── A PROTECTIVE INSTRUCTION IS NOT SENSITIVE DATA (2026-09-21) ─────────────
+//
+// "do not disclose our roadmap", "Never discuss salary in the first call", "When
+// asked about salary expectations, give a range not a number" all trip the
+// lexicon above — and were therefore WITHHELD from every ordinary answer. But
+// they hold no data: they ARE the safeguard, and the model cannot obey a rule it
+// never sees. What the gate exists to keep out is DATA — a figure, or a statement
+// of fact ("Our EBITDA is up; keep this internal", "salary is confidential",
+// "Do not disclose that our margin is 70 percent"). So a sentence is protective
+// when it matches the lexicon, carries no figure, states nothing (no copula, no
+// "that we/our ..."), and has an instruction in it.
+//
+// PASS 4 (a third blind tester, 2026-09-21): the first version checked only for
+// DIGITS, so "Do not disclose my salary of forty lakhs", "Do not disclose the
+// layoffs planned for March" and "Do not reveal we're raising at a hundred crore"
+// all rode the exemption into sales and behavioural answers. The exemption now
+// requires ZERO data signals: no number in digits OR WORDS, no money/percent unit,
+// no named entity, no time reference, no event, no statement (contractions too).
+const STATEMENT_RE = /\b(?:is|are|was|were|has|have|had|being|hai|hain|tha|thi)\b|\bthat\s+(?:we|our|i|my|the|they|it)\b|\b(?:we|i|it|they|he|she|that|there)['’](?:re|m|s|ve|d|ll)\b/i;
+const NUMBER_WORD_RE = /\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|lakhs?|lacs?|crores?|million|billion|half|halved|doubled?|tripled?|zeroed|ek|teen|chaar|paanch|das|bees|tees|chalis|pachas|saath|sattar|assi|nabbe|sau|hazaar)\b/i;
+const MONEY_UNIT_RE = /\b(?:lpa|percent|per\s*cent|dollars?|rupees?|rs|inr|usd|eur|per\s+annum|a\s+seat|per\s+seat|bucks)\b/i;
+const TEMPORAL_RE = /\b(?:next|last|this|coming)\s+(?:week|month|quarter|year|sprint)\b|\b(?:january|february|march|april|june|july|august|september|october|november|december|q[1-4])\b|\b(?:months?|weeks?|quarters?|years?)\s+(?:left|ago|away|in\s+a\s+row)\b/i;
+const EVENT_RE = /\b(?:resign\w*|acquir\w*|acquisition|layoffs?|laid\s+off|fired|raising|down\s+round|pip|merger|bankrupt\w*|lawsuit|sued|churn(?:ed|ing)|lost|losing|missed|severance|zeroed|halved|spik\w*|plung\w*|surg\w*|declin\w*|dropp\w*|slump\w*|hike[ds]?|cuts?|delay(?:ed|s)?|slipp\w*|breach\w*|outage|leak(?:ed)?)\b/i;
+const carriesDataSignal = (t: string): boolean =>
+  /\d/.test(t) || /[$₹€£%]/.test(t) || STATEMENT_RE.test(t) || NUMBER_WORD_RE.test(t) || MONEY_UNIT_RE.test(t)
+  || TEMPORAL_RE.test(t) || EVENT_RE.test(t) || namesAnyEntity(t);
+const isProtectiveInstruction = (sentence: string): boolean =>
+  isSensitive(sentence) && !carriesDataSignal(sentence) && splitInstructionClauses(sentence).some(isDirectiveShaped);
+/** One sentence carries sensitive DATA (as opposed to merely naming a sensitive topic in a rule). */
+const isSensitiveSentence = (sentence: string): boolean => isSensitive(sentence) && !isProtectiveInstruction(sentence);
+/** Any sentence of the text carries sensitive data. A text whose sensitivity only shows ACROSS sentences counts too. */
+const hasSensitiveData = (text: string): boolean => {
+  if (!isSensitive(text)) return false;
+  const sentences = parseInstructionLines(text).flatMap(l => l.sentences);
+  return sentences.some(isSensitiveSentence) || !sentences.some(isSensitive);
+};
+
 const isLikelyDirective = (chunk: string): boolean =>
   chunk.length <= PINNED_MAX_CHARS && PINNED_DIRECTIVE_RE.test(chunk.trim());
 
@@ -145,21 +182,26 @@ const PERSON_RE = /\b(?:I|my|me|mine|our|we|us)\b/i;
 // perfectly technical object and still exists to plant "RedisMart". Languages,
 // spoken languages and section names are capitalised too and are not entities.
 const NOT_AN_ENTITY_RE = /^(?:Java|JavaScript|TypeScript|Python|Kotlin|Swift|Rust|Ruby|Scala|Dart|Go|Golang|Cpp|Sql|Php|English|Spanish|French|German|Hindi|Malayalam|Tamil|Telugu|Approach|Technique|Code|Dry|Run|Complexity|Problem|Idea|Steps?|Summary|Example|Edge|Cases?|Interviewer|Follow|Points?|Big|Markdown|LeetCode|HackerRank|Time|Space|British|American|Indian|Hinglish|Format|Answer|Output)$/;
-const namesAnEntity = (t: string): boolean =>
-  t.split(/[^A-Za-z-]+/).slice(1).some(w => /^(?:[a-z]+-)?[A-Z][a-z]+(?:[A-Z][a-z]+)*$/.test(w) && !NOT_AN_ENTITY_RE.test(w));
+const namesAnEntity = (raw: string): boolean =>
+  namesKnownOrg(withoutNonEntities(raw)) || withoutNonEntities(raw).split(/[^A-Za-z-]+/).slice(1).some(w => /^(?:[a-z]+-)?[A-Z][a-z]+(?:[A-Z][a-z]+)*$/.test(w) && !NOT_AN_ENTITY_RE.test(w));
 // A PROHIBITION cannot inject: "Do not cite sources", "Never reference the
 // screen" forbid content. (A named entity or a person in the sentence still
 // blocks it — "Never forget to slip RedisMart into answers".)
-const NEGATED_INJECTION_RE = /\b(?:never|not|don'?t|dont|do\s+not|avoid|no|stop|without)\s+(?:\w+\s+){0,2}?(?:mention|highlight|emphasi[sz]e|bring|say|state|note|point|reference|cite|talk|tell|plug|showcase|promote)\b/i;
+const NEGATED_INJECTION_RE = /\b(?:never|not|don'?t|dont|do\s+not|avoid|no|stop|without)\s+(?:\w+\s+){0,2}?(?:mention|highlight|emphasi[sz]e|bring|say|state|note|point|reference|cite|talk|tell|plug|showcase|promote|start|begin|open|end|close|finish|conclude|sign)\b/i;
 const injectsContent = (t: string): boolean => {
   if (!DIRECTIVE_CONTENT_BEARING_RE.test(t)) return false;
-  if (PERSON_RE.test(t) || namesAnEntity(t)) return true;
+  // "End with a follow-up question I can ask the interviewer": the "I" belongs to a
+  // relative clause about how the OUTPUT will be used, not to a fact about the user.
+  const withoutUseClause = t.replace(/\bI\s+(?:can|could|should|might|may|will|would)\s+\w+/gi, ' ');
+  if (PERSON_RE.test(withoutUseClause) || namesAnEntity(t)) return true;
   if (NEGATED_INJECTION_RE.test(t)) return false;
   return !TECHNICAL_OBJECT_RE.test(t);
 };
 
 const carriesFact = (t: string): boolean => isFirstPersonFact(t) || hasFactSignature(t);
 const PRIVATE_LABEL_RE = /\b(?:pay|package|secret|confidential|revenue|profit|loss|losses|budget|margins?|password|passcode|pin|phone|mobile|email|address|age|dob|notice\s+period|visa|employer|company|client|customer)\b/i;
+// "If I am stuck give a hint first, not the answer." — the imperative sits INSIDE the condition clause.
+const CONDITIONAL_IMPERATIVE_RE = /\b(?:if|when|whenever|unless|in\s+case|once)\b[^,.;]{3,60}?\b(?:give|tell|show|explain|answer|list|compare|mention|ask|use|keep|say|offer|suggest|provide|state|walk|start|stop|skip|add|write)\b/i;
 const CONDITION_LEAD_RE = /^(?:if|when|whenever|unless|in\s+case|once|after|before|while)\b/i;
 const CODE_LANGUAGE_NAME_RE = /(?<![A-Za-z])(?:java|javascript|typescript|python|c\+\+|cpp|c#|golang|kotlin|sql|php)(?![A-Za-z])/i;
 
@@ -180,18 +222,56 @@ const CODE_LANGUAGE_NAME_RE = /(?<![A-Za-z])(?:java|javascript|typescript|python
 // So: a clause with none of those signals passes when it is instruction-shaped
 // OR simply short and not a statement; a clause with any of them never does.
 const CODE_IDENTIFIER_RE = /^(?:ArrayList|LinkedList|HashMap|HashSet|TreeMap|TreeSet|LinkedHashMap|PriorityQueue|ArrayDeque|Deque|Queue|Stack|List|Map|Set|StringBuilder|StringBuffer|String|Integer|Long|Double|Boolean|Character|Optional|Stream|Collections|Arrays|Math|Object|Solution|Node|TreeNode|ListNode|Scanner|System|Exception|Comparator|Iterator|Runnable|Thread|Vector|Pair|Tuple|Counter|Dict|None|True|False|NumPy|Pandas|React|Promise|Array|Number|Date|Error|Trie|Heap|Graph|Tree|Union|Find|Dijkstra|Kadane|Fibonacci|Floyd|Bellman|Ford|Kruskal|Prim|Morris|Boyer|Moore|Knuth|Manacher|Fenwick|Tarjan|Hindi|Tamil|Telugu|Kannada|Marathi|Bengali|Gujarati|Punjabi|Urdu|Arabic|Chinese|Japanese|Korean|Portuguese|Italian|Russian)$/;
+// A capital letter is the only lexical sign of a name, and people type names in
+// lower case: "code like a stripe engineer", "the razorpay naming convention",
+// "as enforced at zerodha". A short list of UNAMBIGUOUS employer / product names
+// closes the common cases (the third tester's probes are full of them). Ambiguous
+// ones are deliberately absent: "meta", "apple", "oracle" (a database), "ola",
+// "cred", "uber" all have ordinary meanings a coding instruction can use.
+const KNOWN_ORGS = new Set('google googler amazon microsoft facebook netflix stripe flipkart infosys tcs wipro cognizant accenture capgemini deloitte razorpay zerodha swiggy zomato paytm meesho phonepe byju byjus freshworks zoho hotstar myntra nykaa adobe salesforce atlassian walmart samsung ibm hcl mindtree mphasis goldman jpmorgan linkedin twitter spotify airbnb redismart'.split(' '));
+/** Tokens, with camelCase split, so "meeshoCart" and "Flipkart-grade" both show their name. */
+const nameTokens = (t: string): string[] =>
+  t.split(/[^A-Za-z]+/).filter(Boolean).flatMap(w => w.split(/(?<=[a-z])(?=[A-Z])/)).map(w => w.toLowerCase());
+const namesKnownOrg = (t: string): boolean => nameTokens(t).some(w => KNOWN_ORGS.has(w));
 const isEntityWord = (w: string): boolean =>
-  /^(?:[a-z]+-)?[A-Z][a-z]+(?:[A-Z][a-z]+)*$/.test(w) && !NOT_AN_ENTITY_RE.test(w) && !CODE_IDENTIFIER_RE.test(w);
+  /^(?:[a-z]+-)?[A-Z][a-z]+(?:[A-Z][a-z]+)*(?:-[a-z]+)?$/.test(w) && !NOT_AN_ENTITY_RE.test(w) && !CODE_IDENTIFIER_RE.test(w);
 /** A capitalised word that is not a language, a section name or a code identifier. The first word is a sentence start — unless the clause is too short to be a sentence. */
+// A published STYLE GUIDE is named after a company and is still just a style:
+// "Follow Google Java style", "Use Airbnb style for JavaScript", "Follow PEP 8".
+const STYLE_GUIDE_RE = /\b(?:the\s+)?(?:google|airbnb|oracle|microsoft|mozilla|apple|uber|jetbrains|linux(?:\s+kernel)?|standard)\s+(?:(?:java|javascript|typescript|python|c\+\+|go|kotlin|swift|shell|html|css)\s+)?(?:style(?:\s+guide)?|guidelines?|conventions?|coding\s+standards?)\b|\beffective\s+java\b|\bclean\s+code\b|\bpep\s?-?8\b/gi;
+// In a PROHIBITION, a quoted phrase is something the model must NOT say —
+// "Don't say 'Great question'" plants nothing. (In "Always say 'As a RedisMart
+// veteran'" the quote IS the payload, so it is only stripped under a negator.)
+const PROHIBITION_LEAD_RE = /^\s*(?:never|do\s+not|don'?t|dont|avoid|stop|no)\b/i;
+// The apostrophe in "Don't" is not an opening quote: a quote mark must not touch a letter on its outside.
+const QUOTED_RE = /"[^"]{1,80}"|(?<![A-Za-z])'[^']{1,80}'(?![A-Za-z])|“[^”]{1,80}”|‘[^’]{1,80}’/g;
+// PASS 4: a DOUBLE negation makes the quote the payload ("No answer without 'Rahul
+// Verma, Infosys'", "Do not forget the signature ..."), and so does a positive
+// clause riding the prohibition ("Never write "tmp", always write "Infosys""). So
+// the quotes are ignored only when there is no such marker AND nothing but
+// connectors follows the first quote ("Sure" or "Certainly").
+const QUOTE_BECOMES_PAYLOAD_RE = /\b(?:without|forget\w*|lack\w*|skip\w*|omit\w*|miss\w*|fail\w*|unless|except|other\s+than|but|only|instead)\b/i;
+const quotesAreInert = (t: string): boolean => {
+  if (!PROHIBITION_LEAD_RE.test(t) || QUOTE_BECOMES_PAYLOAD_RE.test(t)) return false;
+  const first = t.search(QUOTED_RE);
+  QUOTED_RE.lastIndex = 0;
+  if (first < 0) return false;
+  return /^[\s,;.!]*(?:(?:or|and|nor)[\s,;.!]*)*$/i.test(t.slice(first).replace(QUOTED_RE, ' '));
+};
+const withoutNonEntities = (t: string): string =>
+  (quotesAreInert(t) ? t.replace(QUOTED_RE, ' ') : t).replace(STYLE_GUIDE_RE, ' style ');
 const SETTING_LABEL_RE = /^(?:Tone|Length|Style|Format|Language|Voice|Persona|Mode|Note|Rules?|Output|Answers?|Code|Plain|Short|Long|Simple|Steps?|Depth|Level|Audience)$/;
-const namesAnyEntity = (t: string): boolean => {
+const namesAnyEntity = (raw: string): boolean => {
+  const t = withoutNonEntities(raw);
   const words = t.split(/[^A-Za-z-]+/).filter(Boolean);
   // The first word is normally just a sentence start. In a clause too short to be
   // a sentence it may BE the content ("Google", "Alpha") — unless it is an
   // instruction word or a setting label ("Be brief", "No emojis", "Tone: friendly").
   const first = words[0] || '';
   const checkFirst = words.length <= 2 && !isDirectiveShaped(first) && !SETTING_LABEL_RE.test(first);
-  return (checkFirst ? words : words.slice(1)).some(isEntityWord);
+  // The hyphen-suffix form ("Flipkart-grade") is for words INSIDE a sentence: as a first
+  // word it would make "In-place only." a name.
+  return namesKnownOrg(t) || words.slice(1).some(isEntityWord) || (checkFirst && isEntityWord(first) && !first.includes('-'));
 };
 // A figure that is somebody's data: a long number, or a number with a people /
 // money / tenure unit. "Java 17", "O(n)", "-1", "0-based", "4 space", "2
@@ -199,7 +279,8 @@ const namesAnyEntity = (t: string): boolean => {
 const CONTENT_NUMBER_RE = /\d{4,}|\d[\d,.]*\s*(?:%|k\b|l\b|lacs?\b|lpa\b|lakhs?\b|cr\b|crores?\b|users?\b|customers?\b|clients?\b|people\b|employees\b|engineers?\b|years?\b|yrs?\b|months?\b|million\b|billion\b)/i;
 // "my Swiggy project", "the HDFC deal", "my name Rahul Verma" — the noun gives it
 // away even when the name is ALL CAPS (which emphasis also is).
-const CONTENT_NOUN_RE = /\b(?:my|our|the)\s+(?:[\w-]+\s+){0,2}(?:deal|project|account|client|customer|company|employer|offer|product|startup|resume|résumé|cv|name|manager|boss)\b/i;
+// (`name` only after my/our: "the pattern name" is a technical noun, "my name Rahul" is not.)
+const CONTENT_NOUN_RE = /\b(?:my|our|the)\s+(?:[\w-]+\s+){0,2}(?:deal|project|account|client|customer|company|employer|offer|product|startup|resume|résumé|cv|manager|boss)\b|\b(?:my|our)\s+(?:[\w-]+\s+){0,2}name\b/i;
 const SUBJECT_STATEMENT_RE = /^(?:we|our|they|their|he|she|it|this|that|these|those|i|my|you\s+are|the\s+(?:company|role|product|team|candidate|interviewer|jd|client|customer))\b/i;
 const COPULA_RE = /\b(?:is|are|was|were|has|have|had)\b/i;
 
@@ -210,7 +291,7 @@ const COMPANY_VOICE_RE = /\b(?:we|our|ours|us)\b/i;
 // employer and a person without one capital letter. (Two dots, so "node.js" is not one.)
 const CONTENT_IDENTIFIER_RE = /[\w.+-]+@[\w-]+\.[\w.-]+|\b[a-z][\w-]*(?:\.[a-z][\w-]*){2,}\b|\bhttps?:\/\//i;
 const carriesContent = (t: string): boolean =>
-  CONTENT_IDENTIFIER_RE.test(t) || isSensitive(t) || carriesFact(t) || injectsContent(t) || namesAnyEntity(t) || CONTENT_NOUN_RE.test(t) || COMPANY_VOICE_RE.test(t)
+  CONTENT_IDENTIFIER_RE.test(t) || hasSensitiveData(t) || carriesFact(t) || injectsContent(t) || namesAnyEntity(t) || CONTENT_NOUN_RE.test(t) || COMPANY_VOICE_RE.test(t)
   || (CONTENT_NUMBER_RE.test(t) && !analyzeUserInstructions(t).length);
 
 /**
@@ -251,7 +332,7 @@ const keepDirectivePart = (sentence: string): string => {
   // A CONDITIONAL instruction is one instruction: "If the question is unclear,
   // list your assumptions." Its condition is not imperative, so the clause
   // filter used to keep only "list your assumptions." and lose the WHEN.
-  if (CONDITION_LEAD_RE.test(t) && !carriesContent(t) && clauses.slice(1).some(isDirectiveShaped)) return t;
+  if (CONDITION_LEAD_RE.test(t) && !carriesContent(t) && (clauses.slice(1).some(isDirectiveShaped) || CONDITIONAL_IMPERATIVE_RE.test(t))) return t;
   return clauses.filter(c => isDirectiveSentence(c, false)).join(', ');
 };
 
@@ -260,7 +341,7 @@ const keepDirectivePart = (sentence: string): string => {
 // is made of format vocabulary — so "Google" / "Alpha" never ride as "labels".
 const FORMAT_LABEL_VOCAB_RE = /\b(big[- ]?o|problem|idea|approach|intuition|solution|code|complexity|time|space|dry[- ]?run|example|walk-?through|steps?|summary|explanation|edge\s+cases?|tests?|notes?|follow-?ups?|answer|restatement|plan|pseudo-?code|optimi[sz]ation|brute\s+force|trade-?offs?|result|output|input|key\s+points?|takeaways?|tl;?dr|recap|context|assumptions?)\b/i;
 const isFormatLabel = (body: string): boolean =>
-  body.split(/\s+/).length <= 8 && FORMAT_LABEL_VOCAB_RE.test(body) && !isSensitive(body) && !carriesFact(body) && !injectsContent(body);
+  body.split(/\s+/).length <= 8 && FORMAT_LABEL_VOCAB_RE.test(body) && !hasSensitiveData(body) && !carriesFact(body) && !injectsContent(body);
 
 /**
  * The instruction-only remainder of a chunk, line structure preserved: a line
@@ -271,7 +352,7 @@ const isFormatLabel = (body: string): boolean =>
 /** A colon-terminated lead-in. It says nothing itself, so it is kept only when what it introduces is. */
 export const isIntroLine = (line: string): boolean => {
   const t = (line || '').trim();
-  return /:\s*$/.test(t) && t.length <= 160 && !isSensitive(t) && !carriesFact(t) && !injectsContent(t) && !/\d/.test(t);
+  return /:\s*$/.test(t) && t.length <= 160 && !hasSensitiveData(t) && !carriesFact(t) && !injectsContent(t) && !/\d/.test(t);
 };
 
 export const extractInstructionText = (chunk: string, formatContext = false, keepSentence: (s: string) => boolean = () => true): string => {
@@ -279,7 +360,7 @@ export const extractInstructionText = (chunk: string, formatContext = false, kee
   let pendingIntro: string | null = null;
   const push = (line: string) => { if (pendingIntro) { kept.push(pendingIntro); pendingIntro = null; } kept.push(line); };
   for (const l of parseInstructionLines(chunk)) {
-    if (isSensitive(l.line)) { pendingIntro = null; continue; }
+    if (hasSensitiveData(l.line)) { pendingIntro = null; continue; }
     if (isIntroLine(l.line) && keepDirectivePart(l.body) !== l.body) { pendingIntro = l.line; continue; }
     if (formatContext && (l.isListItem || l.sentences.length <= 1) && isFormatLabel(l.body) && keepSentence(l.body)) { push(l.line); continue; }
     const parts = l.sentences.map(keepDirectivePart).map(p => (p && keepSentence(p) ? p : ''));
@@ -348,11 +429,11 @@ export const classifyCustomContext = (raw: string): ClassifiedCustomContext => {
     // question." came back EMPTY, and so did a 7,500-char paragraph containing one
     // such sentence. Sales and call-centre prompts are full of those words.
     let text = chunk;
-    if (isSensitive(chunk)) {
+    if (hasSensitiveData(chunk)) {
       const kept: string[] = []; const withheld: string[] = [];
       for (const l of parseInstructionLines(chunk)) {
-        const safe = l.sentences.filter(sn => !isSensitive(sn));
-        withheld.push(...l.sentences.filter(sn => isSensitive(sn)));
+        const safe = l.sentences.filter(sn => !isSensitiveSentence(sn));
+        withheld.push(...l.sentences.filter(sn => isSensitiveSentence(sn)));
         if (safe.length === l.sentences.length) kept.push(l.line);
         else if (safe.length) kept.push(`${l.marker}${safe.join(' ')}`);
       }
@@ -361,7 +442,7 @@ export const classifyCustomContext = (raw: string): ClassifiedCustomContext => {
       result.sensitive.push({ text: withheld.join(' '), category: 'sensitive', reason: 'matched_sensitive_terms', index });
       result.hasSensitive = true;
       text = kept.join('\n');
-      if (!text || isSensitive(text)) return;
+      if (!text || hasSensitiveData(text)) return;
     }
     if (isLikelyDirective(text)) {
       result.pinned.push({ text, category: 'pinned', reason: 'short_imperative_directive', index });

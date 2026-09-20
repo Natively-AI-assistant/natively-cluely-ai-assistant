@@ -1379,7 +1379,12 @@ export class LocalWhisperSTT extends EventEmitter {
                         }
                     }
 
-                    this.emit('error', new Error(
+                    // TERMINAL, all three: nothing restarts a LocalWhisperSTT, and each
+                    // message tells the user what to do. Emitted as a bare Error this was
+                    // filed by main under "retryable" and the overlay read "STT
+                    // reconnecting" for the rest of the meeting (reproduced 2026-09-21 with
+                    // a profile whose selected model was missing, then purged).
+                    this.emit('error', markLocalSttUnavailable(new Error(
                         isOnnxSymbolError
                             ? 'Local Whisper is not supported on macOS 12 (Monterey) or earlier. Please upgrade to macOS 13 Ventura or later, or use a cloud STT provider.'
                             // The old copy said "model not found" for this case, which was
@@ -1389,7 +1394,7 @@ export class LocalWhisperSTT extends EventEmitter {
                             : purged
                                 ? 'The local model files were incomplete and have been removed. Please reinstall the model in Settings → Audio.'
                                 : 'Local Whisper model not found. Please download a model in Settings → Audio.'
-                    ));
+                    )));
                 }
             }
         };

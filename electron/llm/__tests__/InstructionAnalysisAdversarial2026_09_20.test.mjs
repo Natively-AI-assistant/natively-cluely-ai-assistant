@@ -28,7 +28,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const cjs = createRequire(import.meta.url);
 const dist = (p) => path.resolve(__dirname, '../../../dist-electron/electron/llm/', p);
-const { analyzeUserInstructions, renderUserInstructionBlock, resolveCodingFormatFromInstructions, userInstructionsOverrideAppLength } = cjs(dist('userInstructionContract.js'));
+const { analyzeUserInstructions, renderUserInstructionBlock, resolveCodingFormatFromInstructions, userInstructionsOverrideAppLength, removeGroundingOverrides } = cjs(dist('userInstructionContract.js'));
 const { buildScopedCustomContext } = cjs(dist('customContextClassifier.js'));
 
 const FORBIDDEN = ['coding_question_answer', 'dsa_question_answer', 'system_design_answer', 'debugging_question_answer', 'technical_concept_answer'];
@@ -342,23 +342,18 @@ describe('PASS 2 · one sensitive sentence no longer deletes the paragraph (ever
       assert.match(text, /Be brief\./, t); assert.match(text, /End with a question\./, t); assert.doesNotMatch(text, /30 LPA/, t);
     }
   });
-  // NOT changed, on purpose: the second tester also flagged that PROTECTIVE lines
-  // ("Never discuss salary in the first call", "Do not reveal confidential
-  // information") are withheld although they hold no figure. CustomContextClassifier's
-  // pinned MUST_BE_SENSITIVE list says the opposite for exactly that shape ('do not
-  // disclose our roadmap', "Please don't reveal our COGS to the prospect"), so this is
-  // an existing PRODUCT DECISION, not a defect. What WAS a defect is the blast radius:
-  test('a protective sentence is withheld ALONE — its neighbours are delivered', () => {
-    for (const t of ORDINARY) {
-      const text = gate('Be brief. Never discuss salary expectations before they bring it up. End with a question.', t);
-      assert.equal(text, 'Be brief. End with a question.', t);
-    }
+  // (Pass 2 kept PROTECTIVE lines — "Never discuss salary in the first call" —
+  // withheld, because a pinned list said so. Pass 3 below supersedes that: they
+  // hold no data and are now delivered. What this block guards is the BLAST
+  // RADIUS of a sentence that really does carry data.)
+  test('a sentence carrying DATA is withheld ALONE — its neighbours are delivered', () => {
+    for (const t of ORDINARY) assert.equal(gate('Be brief. Our floor price is $40 per seat. End with a question.', t), 'Be brief. End with a question.', t);
   });
   test('…including inside a long paragraph (a 7,500-char paragraph used to come back EMPTY)', () => {
-    const long = `${'Keep the tone warm and helpful. '.repeat(230)}Never quote our floor price. Always end with a question.`;
+    const long = `${'Keep the tone warm and helpful. '.repeat(230)}Our floor price is $40 per seat. Always end with a question.`;
     const text = gate(long, 'sales_answer');
     assert.ok(text.length > 7000, `only ${text.length} chars survived`);
-    assert.match(text, /Always end with a question\./); assert.doesNotMatch(text, /floor price/);
+    assert.match(text, /Always end with a question\./); assert.doesNotMatch(text, /floor price|\$40/);
   });
   test('a figure is still sensitive wherever it sits, and only negotiation sees it', () => {
     for (const raw of ['Always mention my salary expectation of 30 LPA when asked.', 'Our floor price is $40/seat, keep this internal.', 'salary is confidential', 'Our rebate ceiling is 15%']) {
@@ -402,5 +397,196 @@ describe('PASS 2 · the coding gate keys on CONTENT, not on a list of instructio
     for (const raw of ['Use snake_case for variables.', 'No recursion.', 'Add comments on every line.', 'No imports.', 'Always mention time and space complexity.', 'Use Java.']) assert.equal(gate(raw, 'identity_answer'), '', raw);
     assert.equal(gate('No emojis.', 'identity_answer'), 'No emojis.');
   });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PASS 3 (2026-09-21) — the limits the first two passes left open, by decision.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('PASS 3 · a PROTECTIVE instruction is delivered — the model cannot obey a rule it never sees', () => {
+  // Previously withheld as "sensitive" on every ordinary turn, because the words
+  // salary / confidential / disclose appear in it. But "do not disclose our
+  // roadmap" holds no data: it IS the safeguard, and withholding it removes the
+  // safeguard. What stays withheld is DATA — a figure, or a statement of fact
+  // ("Our EBITDA is up; keep this internal", "salary is confidential").
+  const ORDINARY = ['general_meeting_answer', 'sales_answer', 'behavioral_interview_answer'];
+  for (const raw of [
+    'do not disclose our roadmap', "Please don't reveal our COGS to the prospect", 'Never discuss salary in the first call.',
+    'Do not reveal confidential information.', 'Treat everything as confidential and stay professional.',
+    'When asked about salary expectations, give a range not a number.', 'Never quote pricing before the demo.',
+    'Be brief. Never discuss salary expectations before they bring it up. End with a question.',
+  ]) test(`delivered: "${raw.slice(0, 60)}"`, () => { for (const t of ORDINARY) assert.equal(gate(raw, t), raw, t); });
+
+  for (const raw of [
+    'Our EBITDA is up; keep this internal', 'salary is confidential', 'MY SALARY IS CONFIDENTIAL', 'My current pay is 30 lakhs',
+    'Our floor price is $50/seat', 'Never go below $40 per seat, keep this internal.', 'Do not disclose that our margin is 70 percent',
+    'Always mention my salary expectation of 30 LPA when asked.', 'Our rebate ceiling is 15%', 'Do not reveal that we are being acquired by Globex',
+  ]) test(`still withheld (it carries DATA): "${raw.slice(0, 56)}"`, () => { for (const t of ORDINARY) assert.equal(gate(raw, t), '', t); });
+
+  test('negotiation still sees everything', () => assert.match(gate('My current pay is 30 lakhs', 'negotiation_answer'), /30 lakhs/));
+});
+
+describe('PASS 3 · phrasings that were delivered verbatim but not RESOLVED', () => {
+  for (const [raw, unit, count, bound] of [
+    ['ans in 100 wrods', 'words', 100, 'about'], ['answer in 50 wrds', 'words', 50, 'about'], ['keep it under 3 sentances', 'sentences', 3, 'max'],
+    ['max 4 pionts', 'bullets', 4, 'max'], ['answer in 2 paragrahs', 'paragraphs', 2, 'about'],
+    ['Keep answers under 30 seconds.', 'seconds', 30, 'max'], ['answer in 20 sec', 'seconds', 20, 'about'], ['1 minute max', 'seconds', 60, 'max'],
+    ['Keep it under a minute', 'seconds', 60, 'max'], ['speak for about 45 seconds', 'seconds', 45, 'about'],
+    ['100 shabd mein answer do', 'words', 100, 'about'], ['jawab 50 shabdon me do', 'words', 50, 'about'], ['2 line me batao', 'lines', 2, 'about'],
+    ['3 vakya mein jawab do', 'sentences', 3, 'about'],
+  ]) test(`length: "${raw}" -> ${bound} ${count} ${unit}`, () => {
+    const l = analyzeUserInstructions(raw).length;
+    assert.ok(l, 'unresolved'); assert.equal(l.unit, unit); assert.equal(l.count, count); assert.equal(l.bound, bound);
+  });
+
+  test('a time length is rendered as speaking time WITH a word estimate', () => {
+    const block = renderUserInstructionBlock('Keep answers under 30 seconds.');
+    assert.match(block, /LENGTH is set by the user: at most 30 seconds/);
+    assert.match(block, /\b75 words\b/);
+  });
+
+  test('typo tolerance does not turn real words into units', () => {
+    for (const raw of ['Cite 3 works at most.', 'Compare 2 worlds.', 'I saved 9 lives.', 'Follow these 4 links.']) assert.equal(analyzeUserInstructions(raw).length, null, raw);
+  });
+
+  for (const [raw, lang] of [
+    ['Java mein code likho', 'Java'], ['code java me likho', 'Java'], ['python me answer do', 'Python'], ['hamesha c++ mein code likhna', 'C++'],
+  ]) test(`language: "${raw}" -> ${lang}`, () => assert.equal(analyzeUserInstructions(raw).programmingLanguage, lang));
+  test('"Hindi me samjhao, code English me." binds no PROGRAMMING language', () => assert.equal(analyzeUserInstructions('Hindi me samjhao, code English me.').bindsProgrammingLanguage, false));
+});
+
+describe('PASS 3 · coding-turn instructions the content gate still dropped', () => {
+  for (const raw of [
+    'Follow Google Java style.', 'Follow the Google Java style guide.', 'Use Airbnb style for JavaScript.', 'Follow PEP 8.', 'Apply Clean Code naming.',
+    'End with a follow-up question I can ask the interviewer.', "Don't say 'Great question'.", 'Never start with "Sure" or "Certainly".',
+  ]) test(`delivered on a coding turn: "${raw}"`, () => assert.equal(gate(raw), raw));
+
+  test('…and the exemptions do not reopen the leaks', () => {
+    for (const raw of ['Follow the Infosys style of answering.', 'End with a line I can use about my Stripe years.', "Always say 'As a RedisMart veteran'.", 'Use my Swiggy project as the example.', 'Follow Google interview tips from my mentor Rahul.']) {
+      assert.doesNotMatch(gate(raw), /Infosys|Stripe|RedisMart|Swiggy|Rahul/, `${raw} -> ${JSON.stringify(gate(raw))}`);
+    }
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PASS 4 (2026-09-21) — a THIRD blind tester, aimed at Pass 3's new EXEMPTIONS.
+// Every exemption had reopened a leak. The rule that survives: an exemption is
+// granted only when the sentence carries ZERO data signals — a number in digits
+// OR WORDS, a money/percent unit, a named entity, a time reference, an event, or
+// a statement — and a quoted phrase is ignored only when nothing else in the
+// sentence could make it the payload.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('PASS 4 · "protective" is only a bare topic rule — any data signal keeps it withheld', () => {
+  const ORDINARY = ['general_meeting_answer', 'sales_answer', 'behavioral_interview_answer'];
+  for (const raw of [
+    'Do not disclose my salary of forty lakhs.', 'Never reveal the forty dollar floor price.', 'Never reveal CTC: forty LPA, expecting sixty.',
+    "Don't share runway - eight months left.", 'Do not disclose the layoffs planned for March.', 'Keep this internal: losing the Acme account next quarter.',
+    'Never reveal quota missed three quarters in a row.', 'Keep private my severance from Infosys after the layoff.', 'Confidential: CEO resigning next month, do not mention.',
+    "Do not reveal we're raising at a hundred crore valuation.", "Never disclose I'm on a PIP and my bonus got zeroed.", "Never share it's a down round with valuation halved.",
+    'The floor price, forty dollars a seat, must never be disclosed.', 'Our margin being seventy percent should not be revealed.',
+    'salary tees lakh hai kisi ko mat batana', 'margin sattar percent, client ko mat batana',
+  ]) test(`withheld: "${raw.slice(0, 62)}"`, () => { for (const t of [...ORDINARY, 'dsa_question_answer', 'identity_answer']) assert.equal(gate(raw, t), '', `${t}: ${JSON.stringify(gate(raw, t))}`); });
+
+  test('a mixed paragraph loses ONLY the data sentence', () => {
+    assert.equal(gate('Be concise. Never share my current CTC, forty two lakhs per annum. Use bullets.', 'sales_answer'), 'Be concise. Use bullets.');
+  });
+  test('CONTROL: the bare topic rules Pass 3 exists for are still delivered', () => {
+    for (const raw of ['do not disclose our roadmap', 'Never discuss salary in the first call.', 'Do not reveal confidential information.', 'When asked about salary expectations, give a range not a number.']) {
+      for (const t of ORDINARY) assert.equal(gate(raw, t), raw, `${t}: ${raw}`);
+    }
+  });
+});
+
+describe('PASS 4 · a quoted phrase is ignored ONLY when nothing can make it the payload', () => {
+  for (const raw of [
+    "No answer without 'Rahul Verma, Infosys'.", 'Do not forget the signature "Rahul Verma, Staff Engineer, Google".', 'Never start without "At Flipkart".',
+    "Don't end without 'Regards, Rahul Verma'.", 'No response may lack "RedisMart scaled to sixteen thousand users".',
+    'Avoid "I think"; prefer "At Amazon I learned".', 'Never write "tmp", always write "Infosys".', "Don't say 'x' say 'Google'.", 'No "basically"; yes "as Amazon SDE-2".',
+    'Don\'t write code without the comment "Author: Rahul Verma".', 'No system design without "Hotstar" as the reference architecture.',
+  ]) test(`no entity delivered: ${JSON.stringify(raw.slice(0, 56))}`, () => {
+    for (const t of [...FORBIDDEN, 'identity_answer']) assert.doesNotMatch(gate(raw, t), /Rahul|Infosys|Google|Flipkart|RedisMart|Amazon|Hotstar/, `${t}: ${JSON.stringify(gate(raw, t))}`);
+  });
+  test('lower-case and hyphenated names are names too', () => {
+    for (const raw of ['Code like a stripe engineer.', 'Use the razorpay naming convention.', 'Follow PEP 8 as enforced at zerodha.', 'Follow google java style the way infosys does.',
+      'Write code like an ex-google staff engineer.', 'Stop forgetting "Flipkart-grade" in the summary.', "Don't use 'x' as a name, use 'meeshoCart' instead.",
+      'Never use an example other than "Zomato order tracking".', 'Follow google style. google paid well.']) {
+      assert.doesNotMatch(gate(raw), /stripe|razorpay|zerodha|infosys|ex-google|Flipkart|meesho|Zomato|paid well/i, `${raw} -> ${JSON.stringify(gate(raw))}`);
+    }
+  });
+  test('…and a published style guide named after a company is still just a style', () => {
+    for (const raw of ['Follow Google Java style.', 'Follow google java style.', 'Use Airbnb style for JavaScript.', 'Follow the Microsoft conventions.']) assert.equal(gate(raw), raw, raw);
+  });
+  test('CONTROL: a plain quoted prohibition still arrives', () => {
+    for (const raw of ["Don't say 'Great question'.", 'Never start with "Sure" or "Certainly".']) assert.equal(gate(raw), raw);
+  });
+});
+
+describe('PASS 4 · a TIME is the answer\'s length only when it is about the answer', () => {
+  for (const raw of [
+    'Wait 5 seconds before answering.', 'Respond within 3 seconds.', "Don't take more than 5 seconds to respond.", 'Refresh every 30 seconds.', 'Timeout 30 seconds.',
+    'Meeting ends in 15 mins so be quick.', 'Solve the problem in 20 minutes.', 'The interview lasts 45 minutes.', 'Timebox system design to 35 minutes.',
+    'Spend 5 minutes on requirements.', 'Give me a minute to think before suggesting.', 'Just a minute.', 'Use the 5 second rule.',
+  ]) test(`no LENGTH line: "${raw}"`, () => { assert.equal(analyzeUserInstructions(raw).length, null); assert.doesNotMatch(renderUserInstructionBlock(raw), /LENGTH is set/); });
+
+  test('…and such a sentence does not make the user\'s REAL length ambiguous', () => {
+    assert.deepEqual(analyzeUserInstructions('Answer in 100 words. Wait 5 seconds before answering.').length, { unit: 'words', count: 100, bound: 'about' });
+    assert.deepEqual(analyzeUserInstructions('Keep answers under 80 words. The interview lasts 45 minutes.').length, { unit: 'words', count: 80, bound: 'max' });
+  });
+  test('a tiny count never renders a negative range', () => {
+    for (const raw of ['Answer in 1 word.', 'Answer in 2 words.', 'Answer in 5 words.']) assert.doesNotMatch(renderUserInstructionBlock(raw), /-\d+–|within 0–/, renderUserInstructionBlock(raw).match(/LENGTH[^\n]*/)?.[0]);
+  });
+});
+
+describe('PASS 4 · typo tolerance yields to the dictionary', () => {
+  for (const raw of ['Explain the 2 liens on the property clearly.', 'Order 4 pints for the team.', 'Fill 12 billets this quarter.', 'Discuss 3 ballets this season.', 'Play 2 minuets for the guests.', 'Assume 1 ward per nurse.', 'Score 9 points in the quiz.']) {
+    test(`no LENGTH line: "${raw}"`, () => assert.equal(analyzeUserInstructions(raw).length, null));
+  }
+});
+
+describe('PASS 4 · Hinglish: a negation or a fact never binds a language', () => {
+  for (const raw of ['Java mein mat likho.', 'Java me code mat do.', 'code Java me nahi chahiye.', 'Kotlin mai 3 saal kaam kiya.', 'Java me kaam karta hu.', 'mujhe Java me dikkat hai.', 'Interviewer Java me puchega.', 'Python main problem hai mujhe.', 'Python me too.', 'Give Java me.', 'Python main function should be short.']) {
+    test(`binds nothing: "${raw}"`, () => { assert.equal(analyzeUserInstructions(raw).bindsProgrammingLanguage, false); assert.doesNotMatch(renderUserInstructionBlock(raw), /Write ALL code in/); });
+  }
+  test('"Java me kabhi mat likho, sirf Python." binds Python; "Java mein nahi, Python mein likho." binds Python', () => {
+    assert.equal(analyzeUserInstructions('Java mein nahi, Python mein likho.').programmingLanguage, 'Python');
+    assert.notEqual(analyzeUserInstructions('Java me kabhi mat likho, sirf Python.').programmingLanguage, 'Java');
+  });
+});
+
+describe('PASS 4 · self-claimed experience: the résumé forms people actually type, and the safeguards they write', () => {
+  for (const raw of [
+    'Ex-Googler here.', 'Background: 8 yrs backend @ Stripe', 'Currently SDE-2 at Amazon', '10 years at Google.', 'Worked at Google for 10 years.', 'Led a team of 40 at Flipkart.',
+    'Im a principal engineer at Microsoft', 'Myself Rahul, working in Infosys from 6 years.', 'maine Google me 10 saal kaam kiya hai', 'The candidate has 10 years at Google.',
+    'You are a Staff Engineer at Meta with 12 years of experience.',
+  // (each on its OWN line: these forms are typed without a closing full stop)
+  ]) test(`removed: "${raw}"`, () => { const r = removeGroundingOverrides(`${raw}\nAnswer in 50 words.`); assert.doesNotMatch(r.text, /Google|Stripe|Amazon|Flipkart|Microsoft|Infosys|Meta/, r.text); assert.match(r.text, /Answer in 50 words\./); });
+
+  for (const raw of [
+    "Never claim I have experience I don't have.", 'Do not say I worked at Google.', "Don't invent experience; only use my resume.", 'I led you wrong earlier: use Python not Java.',
+    'I led with the wrong answer last time, so double check.', 'I have worked with you before, same style.', 'Years of experience questions should be answered from my resume.',
+    'Explain like an engineer with 10 years of experience would.', 'I work best with short answers.', 'I manage my time badly so keep answers short.', 'We should lead with the customer problem.',
+  ]) test(`kept: "${raw}"`, () => { const r = removeGroundingOverrides(raw); assert.equal(r.text, raw); assert.equal(r.removed, 0); });
+});
+
+describe('PASS 4 · subject-less career fragments are claims; product facts are NOT', () => {
+  for (const raw of [
+    "Fifteen years in fintech, that's me.", 'B.Tech IIT Bombay 2019', 'Senior engineer, Google, 10 years.', 'Spent a decade at Google leading Search infra.',
+    'My experience: 10 yrs, Google + Stripe.', '12 YOE, mostly at Uber.', 'working in TCS since 2015', 'She led ML at Netflix.', 'Rahul has a decade of experience at Wipro.',
+    "Won the President's Club at Salesforce twice.", 'Holder of 5 patents in distributed systems.', 'Certified Kubernetes Administrator since 2020.',
+  ]) test(`removed: "${raw}"`, () => { const r = removeGroundingOverrides(`${raw}\nAnswer in 50 words.`); assert.equal(r.text, 'Answer in 50 words.', r.text); });
+
+  test('a claim used as a lead-in is cut, the instruction it leads into is kept', () => {
+    assert.equal(removeGroundingOverrides('Having led payments at Stripe, I want crisp answers.').text, 'I want crisp answers.');
+    assert.equal(removeGroundingOverrides('As a Staff Engineer at Meta, answer with authority.').text, 'answer with authority.');
+  });
+
+  // The Real-time prompt of a sales / call-centre mode legitimately carries PRODUCT
+  // facts. They are not anybody's career and must survive on the instruction channel.
+  for (const raw of [
+    'The warranty is 2 years.', 'Refunds are processed within 30 days.', 'Our product is a CRM for clinics.', 'We offer a certification course in data science.',
+    'We are ISO certified.', 'The plan includes 5 years of support.', 'You are a call centre agent for Airtel.', 'The customer is always a small business owner.',
+    'Our office is at Koramangala.', 'Support hours are 9 to 6, Monday to Friday.', 'We have been in business since 2015.', 'Delivery takes 3 to 5 working days.',
+  ]) test(`kept: "${raw}"`, () => { const r = removeGroundingOverrides(raw); assert.equal(r.text, raw); assert.equal(r.removed, 0); });
 });
 

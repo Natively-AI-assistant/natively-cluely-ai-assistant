@@ -902,6 +902,10 @@ export function composePrompt(input: ComposeInput): ComposedPrompt {
     ? renderDefaultLength(input.defaultLengthDirective, Boolean(userBlock))
     : '';
 
+  const nothingAttachedFastTurn = d.retrievalPlan.path === 'FAST'
+    && input.attachedSourceCount === 0 && (input.profileSourceCount ?? 0) === 0
+    && policy.capabilityPolicy.externalSuggestionDisclosure === 'ALWAYS';
+
   const system = [
     input.personaBase?.trim() ? push('persona_base', input.personaBase.trim()) : '',
     isMetaRequest
@@ -914,7 +918,21 @@ export function composePrompt(input: ComposeInput): ComposedPrompt {
     push('permanent_rules', `# Rules\n- ${PERMANENT_RULES}`),
     push('source_authority', authorityRules(d) ? `# Source authority\n${authorityRules(d)}` : ''),
     push('mode', `# Mode\n${policy.name} — ${policy.purpose}`),
-    push('grounding', `# Grounding\n${fallbackGuidance(d, policy)}`),
+    // A disclosure-strict mode (Seminar) with NOTHING attached, on a turn that
+    // never retrieves. The grounding line below presupposes a document ("label it
+    // as general knowledge, not as document content"), and the permanent rules
+    // teach "say the rest of that file was not retrieved" — so with no file in
+    // existence the model invented one and apologised for it. Seen in the running
+    // app, 2026-09-21: "The material you uploaded doesn't define gradient descent
+    // ... the rest of that file wasn't retrieved for this turn", zero files
+    // attached. The tailored "no document is attached here" notice is a
+    // retrieval-MISS notice and FAST turns never retrieve, so nothing said it.
+    // Only when the count is KNOWN to be zero: an unknown count changes nothing.
+    nothingAttachedFastTurn
+      ? push('no_attached_material', '# Sources\nNo file, slide deck or document is attached to this mode right now, and this '
+        + 'question does not need one. Answer it directly from general knowledge. Do not mention or refer to slides, a deck, '
+        + 'a paper, uploaded material, or "the rest of a file" — none exists — and do not apologise for not citing one.')
+      : push('grounding', `# Grounding\n${fallbackGuidance(d, policy)}`),
     push('follow_up', followUpGuidance(d, input.fallbackUsed, hasPriorConversation(d, input.conversationSummary), Boolean(packed.evidenceBlock))),
     push('absence_contract', absenceContract(evidence, input.withheldScopes)),
     push('precedence_contract', precedenceContract(evidence)),

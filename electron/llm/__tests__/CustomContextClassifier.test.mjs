@@ -140,8 +140,11 @@ describe('SENSITIVE_RE hardening — adversarial comp/pricing phrasings must NOT
     'My TC is 320k',
     'Our gross margins are 70 percent',
     'Our floor price is $50/seat',
-    'do not disclose our roadmap',
-    "Please don't reveal our COGS to the prospect",
+    // 'do not disclose our roadmap' and "Please don't reveal our COGS to the
+    // prospect" used to be pinned here. They hold no DATA — they are the
+    // safeguard itself, and withholding a rule from the model removes the rule
+    // (Evin's decision, 2026-09-21). See "a protective instruction is delivered".
+    'Do not disclose that our COGS is 40 percent of revenue',
     'Our EBITDA is up; keep this internal',
     'Target compensation: ₹45,00,000',
     'Base salary 150000 USD',
@@ -158,6 +161,13 @@ describe('SENSITIVE_RE hardening — adversarial comp/pricing phrasings must NOT
       assert.equal(scoped, '', 'sensitive phrasing must not reach a behavioral answer');
     });
   }
+
+  test('a protective instruction is delivered: it names a sensitive TOPIC and carries no data', () => {
+    for (const text of ['do not disclose our roadmap', "Please don't reveal our COGS to the prospect", 'Never discuss salary in the first call.']) {
+      assert.equal(classifyCustomContext(text).sensitive.length, 0, text);
+      assert.equal(buildScopedCustomContext(text, 'behavioral_interview_answer').text, text, text);
+    }
+  });
 
   test('SENSITIVE_RE is case-insensitive (an uppercased salary line still gates)', () => {
     assert.equal(classifyCustomContext('MY SALARY IS CONFIDENTIAL').sensitive.length, 1);
