@@ -4,6 +4,7 @@
 // On provider exhaustion, automatically falls back to LocalEmbeddingProvider (on-device).
 
 import Database from 'better-sqlite3';
+import { describeProbeError } from './providers/probeError';
 import { VectorStore } from './VectorStore';
 
 import { EmbeddingProviderResolver, AppAPIConfig } from './EmbeddingProviderResolver';
@@ -24,6 +25,9 @@ const EMBED_TIMEOUT_MS = 30_000;
 // lexical fallback never fired because the call eventually succeeded. Ingest
 // keeps the 30s budget; a query gets 3s and then lexical retrieval answers.
 const QUERY_EMBED_TIMEOUT_MS = 3_000;
+/** How long an identical query's vector is reused (see queryEmbedMemo). */
+const QUERY_EMBED_MEMO_TTL_MS = 5_000;
+const QUERY_EMBED_MEMO_MAX = 64;
 
 // ── T13 / RC12: query-path hysteresis (2026-08-28) ──────────────────────────
 //
@@ -936,7 +940,50 @@ export class EmbeddingPipeline {
      * Get embedding for a search query (may use different prefix for asymmetric models).
      * Routes through embedWithTimeout() so a frozen API cannot stall the query path.
      */
+    /**
+     * QUERY-EMBEDDING MEMO (2026-09-20). One turn can ask for the SAME query
+     * vector more than once: the mode port and the profile port are separate by
+     * design and each embeds the question, and the legacy port's targeted retry
+     * embeds it again. Keyed by (active space, text), a few seconds, and it holds
+     * the PROMISE so two concurrent callers share one request. A rejection is
+     * never kept — the failure-streak accounting below must see every real
+     * failure, and a retry must be able to succeed.
+     */
+    // Created on first use, not as a field initialiser: a pipeline built with
+    // Object.create(prototype) — every hysteresis test does — has no fields, and
+    // an optimisation must not be able to throw on the query path.
+    private queryEmbedMemo?: Map<string, { at: number; promise: Promise<number[]> }>;
+
     async getEmbeddingForQuery(
+        text: string,
+        opts?: { retryBudgetMs?: number },
+    ): Promise<number[]> {
+        const space = this.provider?.space ?? this.provider?.name ?? 'none';
+        // The retry BUDGET is part of the key (review finding, reproduced): a
+        // promise carries its starter's budget. A live caller with a 1.2 s budget
+        // that joined an unbudgeted caller's request waited 4.6 s for it, and an
+        // unbudgeted caller that joined a budgeted one inherited a rejection its
+        // own retries would have survived. Callers share a request only when they
+        // asked for the same thing.
+        const key = `${space}\u0000${opts?.retryBudgetMs ?? 'unbudgeted'}\u0000${text}`;
+        const now = Date.now();
+        const memo = (this.queryEmbedMemo ??= new Map());
+        // Swept on every call and hard-capped: expired 2048-d vectors used to stay
+        // until 33 entries existed, and 5,000 distinct queries inside the TTL
+        // left 5,000 entries.
+        for (const [k, v] of memo) if (now - v.at >= QUERY_EMBED_MEMO_TTL_MS) memo.delete(k);
+        while (memo.size >= QUERY_EMBED_MEMO_MAX) memo.delete(memo.keys().next().value as string);
+        const hit = memo.get(key);
+        // A copy per caller: the array used to be shared, so one caller
+        // normalising in place would have corrupted the other's vector.
+        if (hit) return hit.promise.then((v: number[]) => v.slice());
+        const promise = this.getEmbeddingForQueryUncached(text, opts);
+        memo.set(key, { at: now, promise });
+        promise.catch(() => { if (memo.get(key)?.promise === promise) memo.delete(key); });
+        return promise.then((v: number[]) => v.slice());
+    }
+
+    private async getEmbeddingForQueryUncached(
         text: string,
         opts?: {
             /**
@@ -1113,8 +1160,15 @@ export class EmbeddingPipeline {
         }
         try {
             await primary.embedQuery('probe');
-        } catch {
-            return false;                          // still down; try again later
+        } catch (error: any) {
+            // Still down; try again later — but SAY SO, and why. This was a bare
+            // `catch { return false }`: measured 2026-09-19, a session sat on
+            // the bundled model for four minutes, the re-probe announced at
+            // boot ("first in 5s") failed every time, and the log held not one
+            // line about it. One line per failed re-probe (at most one a minute).
+            const status = error?.status ? `HTTP ${error.status} · ` : '';
+            console.warn(`[EmbeddingPipeline] ${primary.name} re-probe failed (${status}${describeProbeError(error)}); still on the fallback, retrying in ${PRIMARY_REPROBE_INTERVAL_MS / 1000}s.`);
+            return false;
         }
         console.log(
             `[EmbeddingPipeline] ${primary.name} recovered — demoting the fallback and `

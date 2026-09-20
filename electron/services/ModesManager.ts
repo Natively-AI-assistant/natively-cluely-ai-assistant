@@ -1178,6 +1178,16 @@ export class ModesManager {
     // retriever degrades to lexical for any file that isn't 'ready' yet.
 
     /** Index one reference file (idempotent — re-embeds only on content/space change). */
+    /** See ModeHybridRetriever.usesHostedEmbeddings. */
+    public usesHostedEmbeddings(): boolean {
+        return this.modeContextRetriever.usesHostedEmbeddings();
+    }
+
+    /** See ModeHybridRetriever.pruneFileIndexesByPrefix (profile documents' pseudo-files). */
+    public pruneReferenceFileIndexesByPrefix(prefix: string, keepId: string): number {
+        return this.modeContextRetriever.pruneReferenceFileIndexesByPrefix(prefix, keepId);
+    }
+
     public async indexReferenceFile(file: ModeReferenceFile): Promise<void> {
         await this.modeContextRetriever.indexReferenceFile(file);
     }
@@ -1239,7 +1249,9 @@ export class ModesManager {
         const files = this.getReferenceFiles(modeId);
         for (const file of files) {
             const { status } = this.modeContextRetriever.getReferenceFileIndexStatus(file.id);
-            if (status !== 'ready') {
+            // `status` cannot see the content; the hash check can (chunker bump →
+            // lazy per-mode re-index, see referenceFileNeedsReindex).
+            if (status !== 'ready' || this.modeContextRetriever.referenceFileNeedsReindex(file)) {
                 await this.modeContextRetriever.indexReferenceFile(file).catch(() => { /* logged inside */ });
             }
         }
@@ -1631,6 +1643,12 @@ export class ModesManager {
      * mode's files are genuinely indexed and ready, which is exactly the bug
      * this passthrough exists to prevent a future caller from reintroducing.
      */
+    /** Corpus arbitration pass-through — see ModeHybridRetriever.probeAnchors. */
+    public probeReferenceAnchors(_mode: Mode, files: ModeReferenceFile[], question: string): boolean {
+        if (!question?.trim() || !files?.length) return false;
+        return this.modeContextRetriever.probeReferenceAnchors(files, question);
+    }
+
     public async retrieveHybridRaw(mode: Mode, files: ModeReferenceFile[], options: RetrieveOptions): Promise<HybridContext> {
         // Fail-closed on an empty query — same choke-point rule as the
         // buildRetrievedActiveModeContextBlock* twins; see retrievalQueryPolicy.ts.

@@ -3562,6 +3562,8 @@ export class IntelligenceEngine extends EventEmitter {
                     if (!_ctx) return undefined;
                     const _v3 = await buildV3Prompt({
                         surface: 'what-to-answer',
+                        // Low-confidence query rewrite: the user's fast model, 1.5 s hard cap.
+                        queryRewriter: require('./context-intelligence/retrieval/rewriter-binding').bindQueryRewriter(this.llmHelper),
                         screenText: _screenDescription,
                         // The chat-history rollback must reach THIS surface too.
                         // ipcHandlers was the only call site passing it, so the
@@ -6484,6 +6486,8 @@ export class IntelligenceEngine extends EventEmitter {
             const modePort = createModeRetrievalPort({
                 modesManager: _mm, modeInfo: _mi, files: _files,
                 rerankSurface: 'live',
+                // Read at retrieval time: `inLiveMeeting` is resolved below, after this port exists.
+                meetingActive: () => inLiveMeeting,
                 // Types each file by shape against what this mode authorizes —
                 // a résumé is RESUME here and CANDIDATE_FILE in recruiting.
                 allowedSourceTypes: [...policy.allowedSourceTypes, ...extraSourceTypes],
@@ -6504,11 +6508,18 @@ export class IntelligenceEngine extends EventEmitter {
                     const collected = collectV3ProfileSources(this.llmHelper.getKnowledgeOrchestrator?.() ?? null);
                     if (collected.docs.length) {
                         const { createProfileRetrievalPort } = require('./context-intelligence/retrieval/profile-retrieval-port');
+                        // Semantic arm over the documents' raw text (see v3ProfileSources).
+                        const { buildProfileRawRetriever } = require('./services/knowledge/v3ProfileSources');
+                        const profileRawRetriever = buildProfileRawRetriever(_mm, collected.docs, {
+                            tokenBudget: policy.contextBudget.evidenceTokens, rerankSurface: 'live',
+                            meetingActive: () => inLiveMeeting,
+                        });
                         profilePort = createProfileRetrievalPort({
                             docs: collected.docs,
                             allowedSourceTypes: policy.allowedSourceTypes,
                             profileSources: policy.profileSources,
                             userId: 'local',
+                            ...(profileRawRetriever ? { rawRetriever: profileRawRetriever } : {}),
                         });
                         if (profilePort) {
                             profileSourceCount = collected.docs.length;
@@ -6656,6 +6667,8 @@ export class IntelligenceEngine extends EventEmitter {
             const { buildV3Prompt } = require('./context-intelligence/orchestration/engine-bridge');
             const _v3 = await buildV3Prompt({
                 surface: pinned?.surface ?? 'assist',
+                // Low-confidence query rewrite: the user's fast model, 1.5 s hard cap.
+                queryRewriter: require('./context-intelligence/retrieval/rewriter-binding').bindQueryRewriter(this.llmHelper),
                 // See the what-to-answer call site: the rollback must reach
                 // every surface, not just typed chat.
                 multiTurnHistory: isIntelligenceFlagEnabled('chatHistoryMultiTurn'),
@@ -7145,6 +7158,8 @@ export class IntelligenceEngine extends EventEmitter {
                     if (!_ctx) return null;
                     return await buildV3Prompt({
                         surface: 'manual-chat',
+                        // Low-confidence query rewrite: the user's fast model, 1.5 s hard cap.
+                        queryRewriter: require('./context-intelligence/retrieval/rewriter-binding').bindQueryRewriter(this.llmHelper),
                         // See the what-to-answer call site.
                         multiTurnHistory: isIntelligenceFlagEnabled('chatHistoryMultiTurn'),
                         // Shares 'manual-chat' with the IPC surface; the tag keeps

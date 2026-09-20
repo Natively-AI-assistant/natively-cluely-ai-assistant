@@ -143,6 +143,15 @@ export function createMeetingRetrievalPort(input: MeetingPortInput): RetrievalPo
  */
 export function combineRetrievalPorts(ports: RetrievalPort[]): RetrievalPort {
   return {
+    probeAnchorSources(question: string) {
+      const out = new Set<import('../contracts/types').SourceType>();
+      for (const p of ports) { try { for (const s of p.probeAnchorSources?.(question) ?? []) out.add(s); } catch { /* skip */ } }
+      return [...out];
+    },
+    // Corpus arbitration: anchored when ANY port's documents hold the terms.
+    probeAnchors(question: string): boolean {
+      return ports.some((p) => { try { return p.probeAnchors?.(question) === true; } catch { return false; } });
+    },
     async retrieve(args) {
       const results = await Promise.all(ports.map(async (p) => {
         try {

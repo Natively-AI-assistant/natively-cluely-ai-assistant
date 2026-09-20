@@ -53,6 +53,19 @@ export interface ClassificationInput {
    * formula lookup. Names only, never content.
    */
   attachedFileNames?: readonly string[];
+  /** Corpus arbitration verdict (orchestrator → RetrievalPort.probeAnchors):
+   *  a chunk of the attached material holds this question's distinctive terms. */
+  corpusAnchored?: boolean;
+  /** Source types whose own chunks hold this question's distinctive terms
+   *  (orchestrator → RetrievalPort.probeAnchorSources). */
+  anchoredSourceTypes?: readonly SourceType[];
+  /** The turn's ONLY documents are Profile Intelligence ones (résumé / job
+   *  description): no file is attached to the mode. A POSITIVE signal, computed
+   *  by the engine bridge from the two source counts. It is deliberately not
+   *  inferred from a missing `attachedFileNames` — callers may omit that field
+   *  while files ARE attached, and the first cut that inferred it broke the
+   *  narrowing for exactly that case (ModeAttachmentAdmission2026_09_07). */
+  profileOnlyDocuments?: boolean;
   /**
    * The turn is happening inside a live meeting with transcript evidence
    * available (issue #552). True when resolveMeetingEvidence() actually built
@@ -73,6 +86,8 @@ export interface Classification {
    *  a Kubernetes claim in "tell me about your WebRTC project and your
    *  Kubernetes experience". */
   claimClauses: Partial<Record<ClaimType, string>>;
+  /** Claims guessed from the mode's primary source rather than made by the question's grammar. */
+  inferredClaimTypes?: ClaimType[];
   path: RetrievalPath;
   shouldRetrieve: boolean;
   requiredSourceTypes: SourceType[];
@@ -200,8 +215,34 @@ export const canonicalizeSttSpellings = (s: string): string => {
   // don't have a P3 in my notes"). Only identifier-shaped heads (a digit in
   // them) lose the apostrophe; ordinary nouns and contractions are untouched.
   out = out.replace(/\b([a-z]*\d[a-z0-9-]*)'s\b(?=\s+\w)/gi, '$1');
-  out = out.replace(SPOKEN_ID_RE, (m: string, head: string, gap: string, run: string) => {
-    if (PLAIN_ENGLISH_BEFORE.test(head)) return m;
+  out = out.replace(SPOKEN_ID_RE, (m: string, head: string, gap: string, run: string, offset: number, whole: string) => {
+    const countWords = (t: string) => t.trim().split(/[\s-]+/).filter((w) => w && w.toLowerCase() !== 'and').length;
+    // "X and seventy one Y" is two quantities joined by a conjunction, not an
+    // identifier after X (measured 2026-09-19: "forty four people and seventy
+    // one tickets" → "forty four people 71 tickets" — the "and" was eaten).
+    if (/^and\b/i.test(run.trim())) return m;
+    // A NUMBER WORD IS NEVER THE HEAD. The head needs two letters, so in "i n c
+    // forty four seventy one" the spelled-out "c" cannot be one and "forty"
+    // became it: "i n c forty 471" — a corrupted identifier, worse than an
+    // unconverted one. The head is part of the number: convert the whole run
+    // when it is long enough to be an identifier rather than a quantity.
+    if (new RegExp(`^(?:${NUMBER_WORD_RE.source.replace(/^\\b\(\?:|\)\\b$/g, '')})$`, 'i').test(head)) {
+      const whole_run = `${head} ${run}`;
+      const d = countWords(whole_run) >= 3 ? spokenDigitsToNumber(whole_run.trim()) : null;
+      return d ? `${d}${run.slice(run.trimEnd().length)}` : m;
+    }
+    if (PLAIN_ENGLISH_BEFORE.test(head)) {
+      // "the forty-four seventy-one OUTAGE": the noun that makes it an
+      // identifier comes AFTER the number, so the head rule cannot see it and
+      // the turn searched for words the incident log never contains (measured
+      // live 2026-09-19 — the one miss on the full natively stack, 19/20).
+      // Only a clean run of three or more number words, and only before a noun
+      // that names a record; "the two options" and "the twenty percent" stay.
+      const after = whole.slice(offset + m.length);
+      const d = countWords(run) >= 3 && /^\s*(?:outage|incident|ticket|issue|case|bug|alert|postmortem|post-mortem|release|build|invoice|order|pr|pull request)\b/i.test(after)
+        ? spokenDigitsToNumber(run.trim()) : null;
+      return d ? `${head} ${d}${run.slice(run.trimEnd().length)}` : m;
+    }
     if (!NUMBER_WORD_RE.test(run)) return m;
     const digits = spokenDigitsToNumber(run.trim());
     // A lone single digit word after an ordinary lowercase word ("mode two",
@@ -393,6 +434,25 @@ const MOTIVATION_RE = /\b(why|reason|motivat\w*|what (led|made)|decided? to|chos
 // The presence-check shape of a skill question — "do I HAVE it", not "tell me
 // about it". Used to widen a personal skill claim into a résumé-vs-JD
 // comparison in modes that carry a JD.
+/**
+ * PROSPECTIVE phrasing about a job the user does not have yet (2026-09-20).
+ * Grammar, not vocabulary: a résumé records the past, so "would I", "I would be
+ * joining", "will they", "comes with the offer" and "the hiring manager" cannot
+ * be answered from it — they are about the role being applied for. Deliberately
+ * excludes a bare "the role" / "the team", which a question about a PAST job
+ * uses just as naturally ("what was the role you played…").
+ */
+// Narrowed after review: the first version also matched a bare "would I / I would /
+// will they", which sent "How would I explain the Tallgrass outbox migration?" and
+// "Would we have hit the rate limit at Oakhaven?" — questions about the user's OWN
+// past — to the job description (PARTIAL instead of FULL). What remains names the
+// job itself: my manager/team WOULD, the hiring manager, the offer, "I would be
+// joining / reporting to", and "this role requires / offers / pays".
+const PROSPECTIVE_JOB_RE = /\b(would be my (manager|boss|team|lead|title|role)\b|my (manager|boss|team|role|title) would\b|(i|we)(d| would| will) be (joining|reporting|working (with|under|for))\b|hiring (manager|team|committee)\b|(with|in|of) the offer\b|the offer (include|come|has|have)\w*\b|(this|the) (role|position|job|opening) (require|offer|pay|report|involve|include|come)\w*\b)/;
+
+/** Is this question about the job being applied for ("Who would be my manager?") rather than the user's past? */
+export function isProspectiveJobQuestion(question: string): boolean { return PROSPECTIVE_JOB_RE.test(String(question).toLowerCase()); }
+
 const SKILL_PRESENCE_RE = /\b(do (i|you) (have|know)|have (i|you) (used|worked)|am i|are you (familiar|experienced|proficient)|(do|does) (i|you) (not )?(list|lack|miss)|missing|lack\w*)\b/;
 const EDUCATION_RE = /\b(degrees?|graduat\w*|universit\w*|college|studied|majors?|majored|alma mater|c?gpa)\b/;
 const EMPLOYMENT_RE = /\b(work(ed)? at|employer|company you|role at|position at|job title|tenure|manage[srd]?|managing|led|leads?|reports?|team of|headcount|salary expectation\w*|compensation expectation\w*)\b/;
@@ -750,9 +810,11 @@ export const isResponseRequest = (raw: string): boolean => RESPONSE_REQUEST_RE.t
 const splitClauses = (q: string): string[] =>
   q.split(/\band\b|\balso\b|[;.]/).map((c) => c.trim()).filter(Boolean);
 
-function detectTypes(q: string, input: ClassificationInput): { types: QuestionType[]; claims: ClaimType[]; clauses: Partial<Record<ClaimType, string>>; exhaustive: boolean } {
+function detectTypes(q: string, input: ClassificationInput): { types: QuestionType[]; claims: ClaimType[]; clauses: Partial<Record<ClaimType, string>>; exhaustive: boolean; inferred: ClaimType[] } {
   const types = new Set<QuestionType>();
   const claims = new Set<ClaimType>();
+  /** Claims GUESSED from the mode's primary source (see the inference block), not made by the question's grammar. */
+  const inferredClaims = new Set<ClaimType>();
   const clauses: Partial<Record<ClaimType, string>> = {};
   const noteClaim = (c: ClaimType, clause: string) => { claims.add(c); if (!clauses[c]) clauses[c] = clause; };
 
@@ -1250,6 +1312,15 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
       && (mentionsAttachedFile(q, input.attachedFileNames) || DOC_DEIXIS_RE.test(q) || namesTitledTask(q))) {
     types.add('DOCUMENT_FACT'); noteWholeQ('DOCUMENT_FACT');
   }
+  // ── Corpus arbitration (2026-09-19) ───────────────────────────────────────
+  // Every rule around this one guesses, from grammar, whether the question is
+  // about the attached material. This one is told: the orchestrator asked the
+  // retrieval port, and a chunk of the material holds the question's
+  // distinctive terms together. Retrieval is cheap and the evidence gate keeps
+  // the last word; skipping it here is unrecoverable.
+  if (modeHoldsDocuments && (input.corpusAnchored === true || (input.anchoredSourceTypes?.length ?? 0) > 0) && !isBareFollowUp(q)) {
+    types.add('DOCUMENT_FACT'); noteWholeQ('DOCUMENT_FACT');
+  }
   // A REMINDER is a lookup in the material, whatever words it contains
   // (2026-09-08, measured): "Remind me, failures 1 error, what was it?" went
   // GENERAL_TECHNICAL because "error" is tech self-talk, retrieval never ran,
@@ -1323,6 +1394,13 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
       .some((s) => input.policy.allowedSourceTypes.includes(s));
     if (docish) { types.add('DOCUMENT_FACT'); noteWholeQ('DOCUMENT_FACT'); }
   }
+  // NOTE (2026-09-20): a question that ALREADY carries an employment claim
+  // ("Who would be my manager?") is deliberately NOT given a job claim here by
+  // grammar. The owner's decision for that class is "let the corpus decide" —
+  // the orchestrator plans the job description for it only when the question's
+  // terms are absent from the résumé (ProfileDocumentReachability pins both
+  // directions). A grammar rule here was written, broke those tests, and was
+  // removed.
   const hasPrivateClaim2 = [...claims].some((c) => (CLAIM_AUTHORITY[c]?.authoritative ?? []).length > 0);
   if (!hasPrivateClaim2 && !techTask && !conceptOnly
       && (namesEntity || primaryClaimsIt || definiteValueLookup)) {
@@ -1337,9 +1415,26 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
       CANDIDATE_FILE: 'USER_PROJECT',
       MEETING_TRANSCRIPT: 'MEETING_STATEMENT',
     };
-    const inferred = primary ? claimForSource[primary] : undefined;
+    // THE PRIMARY SOURCE IS A GUESS; THE QUESTION OFTEN SAYS OTHERWISE (2026-09-20).
+    // In a job-seeking mode the primary source is the résumé, so every factual
+    // question no rule recognised was inferred to be about the user's own
+    // project — including "who is the hiring manager", "How large is the group
+    // I would be joining?" and "How much ownership of the company comes with
+    // the offer?". Measured at every document size: the job description WAS
+    // planned, but the project intent boosted résumé project sections into the
+    // slots and the turn came back PARTIAL with the wrong document in front of
+    // the model. What says the question is about the TARGET JOB instead is its
+    // grammar: a résumé records what happened, it cannot answer what "would"
+    // happen or what comes "with the offer". (A corpus-anchor signal was tried
+    // here too and removed: an anchored question already carries DOCUMENT_FACT
+    // by the time this block runs, so the branch could never be reached.)
+    const jobSide = input.policy.allowedSourceTypes.includes('JOB_DESCRIPTION')
+      && (primary === 'RESUME' || primary === 'PROFILE_FACT' || primary === 'CANDIDATE_FILE')
+      && PROSPECTIVE_JOB_RE.test(q);
+    const inferred = jobSide ? 'JOB_REQUIRED_SKILL' : primary ? claimForSource[primary] : undefined;
     if (inferred) {
       claims.add(inferred);
+      inferredClaims.add(inferred);
       types.add(inferred === 'DOCUMENT_FACT' ? 'DOCUMENT_FACT'
         : inferred === 'MEETING_STATEMENT' ? 'MEETING_FACT'
           : inferred === 'JOB_REQUIRED_SKILL' ? 'JOB_REQUIREMENT' : 'PERSONAL_PROJECT');
@@ -1441,7 +1536,7 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
   // and needs no retrieval. Returning early keeps prompt-shaped document text
   // out of the candidate pool entirely.
   if (META_REQUEST_RE.test(input.resolvedQuestion)) {
-    return { types: ['META_REQUEST'], claims: [], clauses: {}, exhaustive: false };
+    return { types: ['META_REQUEST'], claims: [], clauses: {}, exhaustive: false, inferred: [] };
   }
 
   // LAST-RESORT general-knowledge claim (2026-08-02). Every claim branch above
@@ -1478,7 +1573,7 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
   if (hasPrivate && hasGeneral) types.add('MIXED');
 
   if (types.size === 0) types.add('AMBIGUOUS');
-  return { types: [...types], claims: [...claims], clauses, exhaustive };
+  return { types: [...types], claims: [...claims], clauses, exhaustive, inferred: [...inferredClaims] };
 }
 
 /** Capitalised tokens that are ordinary technical vocabulary, not references to
@@ -1594,11 +1689,38 @@ const NON_RETRIEVABLE: readonly SourceType[] = ['CONVERSATION_STATE'];
 // is widened unconditionally, and does not need this gate: it runs against
 // chunks that were actually retrieved, and a retrieved chunk is proof a document
 // exists.
-const claimToSource = (claim: ClaimType, hasDocuments: boolean): SourceType[] => {
+const claimToSource = (claim: ClaimType, hasDocuments: boolean, anchored: readonly SourceType[] = [], profileOnlyDocuments = false): SourceType[] => {
   const authoritative = (hasDocuments ? claimAuthority(claim) : CLAIM_AUTHORITY[claim]).authoritative;
   if (!authoritative.length) return [];
   // DOCUMENT_FACT narrows rather than derives — see the override note below.
-  if (claim === 'DOCUMENT_FACT') return DOCUMENT_FACT_RETRIEVAL_SOURCES;
+  // The narrowing keeps identity pools (résumé, job description) OUT of a
+  // document lookup because fanning every lookup across them buried the asked-
+  // for fact. It also made the job description unreachable for any question
+  // that did not say "role"/"position"/"interview" (measured 2026-09-19: 37 of
+  // 45). An identity pool re-enters for ONE turn only when corpus arbitration
+  // found the question's own terms in it — and only if DOCUMENT_FACT's
+  // authority already covers that source.
+  if (claim === 'DOCUMENT_FACT') {
+    // PROFILE-ONLY TURN: documents exist (a résumé / job description in Profile
+    // Intelligence) but NO file is attached to the mode. The narrowing protects
+    // reference-file lookups from being flooded by identity pools; with no
+    // reference file there is nothing to protect, and a plan of
+    // REFERENCE_FILE alone searches nothing. The identity pools ARE the
+    // documents, so a document lookup looks in them (the mode allowlist still
+    // applies downstream).
+    const identityPools = authoritative.filter((src) => !DOCUMENT_FACT_RETRIEVAL_SOURCES.includes(src) && !NON_RETRIEVABLE.includes(src));
+    // NOTE (2026-09-20): excluding the JOB DESCRIPTION here whenever the turn also
+    // carries a USER_* claim was tried (a review found "Have I ever been on call?"
+    // reported FULL on job-description evidence) and reverted the same day: the
+    // classifier gives "How many engineers are in pod 3?" a default USER_PROJECT
+    // claim, so the exclusion made job-description questions unanswerable —
+    // ProfileVectorArm and ProfileDocumentReachability caught it. The reviewed
+    // case reaches the JD through the orchestrator's corpus rule for employment
+    // questions (an owner decision), not through this widening. Left open.
+    if (profileOnlyDocuments) return [...DOCUMENT_FACT_RETRIEVAL_SOURCES, ...identityPools];
+    const widened = anchored.filter((src) => authoritative.includes(src) && !DOCUMENT_FACT_RETRIEVAL_SOURCES.includes(src));
+    return widened.length ? [...DOCUMENT_FACT_RETRIEVAL_SOURCES, ...widened] : DOCUMENT_FACT_RETRIEVAL_SOURCES;
+  }
   return authoritative.filter((s) => !NON_RETRIEVABLE.includes(s));
 };
 // RETRIEVAL narrowing (deep-run 2, issue 5): a résumé/JD may still EVIDENCE a
@@ -1689,7 +1811,7 @@ export function mentionsAttachedFile(question: string, fileNames: readonly strin
 
 export function classifyTurn(input: ClassificationInput): Classification {
   const q = norm(input.resolvedQuestion);
-  const { types, claims, clauses, exhaustive } = detectTypes(q, input);
+  const { types, claims, clauses, exhaustive, inferred: inferredClaims } = detectTypes(q, input);
 
   // Required sources = union of what the detected claims need, INTERSECTED with
   // what the mode authorizes. A mode never has sources forced into it.
@@ -1702,7 +1824,7 @@ export function classifyTurn(input: ClassificationInput): Classification {
   const wanted = new Set<SourceType>();
   const unreachable = new Set<SourceType>();
   for (const c of claims) {
-    const srcs = claimToSource(c, input.hasAttachedDocuments === true);
+    const srcs = claimToSource(c, input.hasAttachedDocuments === true, input.anchoredSourceTypes ?? [], input.profileOnlyDocuments === true);
     if (!srcs.length) continue;
     const allowedSrcs = srcs.filter((s) => input.policy.allowedSourceTypes.includes(s));
     if (allowedSrcs.length) for (const s of allowedSrcs) wanted.add(s);
@@ -1776,7 +1898,17 @@ export function classifyTurn(input: ClassificationInput): Classification {
     path = 'GROUNDED'; shouldRetrieve = false;
     reason = `question requires ${unsupportedInMode.join(',')}, which mode "${input.policy.id}" does not authorize`;
   } else if (types.includes('AMBIGUOUS') || followUp) {
-    path = 'GROUNDED'; shouldRetrieve = requiredSourceTypes.length > 0 || followUp;
+    // "Retrieve conservatively" retrieved NOTHING for an ambiguous question
+    // that named no source — the comment and the code disagreed. Measured
+    // 2026-09-19 with a job description attached: "Will they help me move
+    // countries and pay for it?" is AMBIGUOUS with no claim, so it went out
+    // with zero evidence while "okay" and "hmm right" (short-fragment rule)
+    // both retrieved. With documents attached and a document pool authorized,
+    // the material is the conservative place to look; the unclaimed plan
+    // consults document pools only and the evidence gate keeps the last word.
+    const ambiguousOverDocuments = input.hasAttachedDocuments === true
+      && DOCUMENT_FACT_RETRIEVAL_SOURCES.some((src) => input.policy.allowedSourceTypes.includes(src));
+    path = 'GROUNDED'; shouldRetrieve = requiredSourceTypes.length > 0 || followUp || ambiguousOverDocuments;
     reason = followUp ? 'follow-up may reference grounded content by pronoun' : 'ambiguous question — retrieve conservatively';
   } else {
     path = 'GROUNDED'; shouldRetrieve = true;
@@ -1788,5 +1920,5 @@ export function classifyTurn(input: ClassificationInput): Classification {
     reason = 'mode disables retrieval';
   }
 
-  return { questionTypes: types, claimTypes: claims, claimClauses: clauses, path, shouldRetrieve, requiredSourceTypes, exhaustive, unsupportedInMode, reason };
+  return { questionTypes: types, claimTypes: claims, claimClauses: clauses, inferredClaimTypes: inferredClaims, path, shouldRetrieve, requiredSourceTypes, exhaustive, unsupportedInMode, reason };
 }
