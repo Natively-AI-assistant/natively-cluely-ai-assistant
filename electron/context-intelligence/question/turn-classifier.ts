@@ -440,7 +440,13 @@ const MOTIVATION_RE = /\b(why|reason|motivat\w*|what (led|made)|decided? to|chos
  * excludes a bare "the role" / "the team", which a question about a PAST job
  * uses just as naturally ("what was the role you played…").
  */
-const PROSPECTIVE_JOB_RE = /\b(would (i|we|my)\b|(i|we)(d| would| will) (be|have|get|need|report|work|join)\b|will (i|we|they|the (company|team|employer))\b|would be my\b|my (manager|boss|team|role|title) would\b|hiring (manager|team|committee)\b|(with|in|of) the offer\b|the offer (include|come|has|have)\w*\b|(this|the) (role|position|job|opening) (require|offer|pay|report|involve|include|come)\w*\b)/;
+// Narrowed after review: the first version also matched a bare "would I / I would /
+// will they", which sent "How would I explain the Tallgrass outbox migration?" and
+// "Would we have hit the rate limit at Oakhaven?" — questions about the user's OWN
+// past — to the job description (PARTIAL instead of FULL). What remains names the
+// job itself: my manager/team WOULD, the hiring manager, the offer, "I would be
+// joining / reporting to", and "this role requires / offers / pays".
+const PROSPECTIVE_JOB_RE = /\b(would be my (manager|boss|team|lead|title|role)\b|my (manager|boss|team|role|title) would\b|(i|we)(d| would| will) be (joining|reporting|working (with|under|for))\b|hiring (manager|team|committee)\b|(with|in|of) the offer\b|the offer (include|come|has|have)\w*\b|(this|the) (role|position|job|opening) (require|offer|pay|report|involve|include|come)\w*\b)/;
 
 const SKILL_PRESENCE_RE = /\b(do (i|you) (have|know)|have (i|you) (used|worked)|am i|are you (familiar|experienced|proficient)|(do|does) (i|you) (not )?(list|lack|miss)|missing|lack\w*)\b/;
 const EDUCATION_RE = /\b(degrees?|graduat\w*|universit\w*|college|studied|majors?|majored|alma mater|c?gpa)\b/;
@@ -1695,6 +1701,14 @@ const claimToSource = (claim: ClaimType, hasDocuments: boolean, anchored: readon
     // documents, so a document lookup looks in them (the mode allowlist still
     // applies downstream).
     const identityPools = authoritative.filter((src) => !DOCUMENT_FACT_RETRIEVAL_SOURCES.includes(src) && !NON_RETRIEVABLE.includes(src));
+    // NOTE (2026-09-20): excluding the JOB DESCRIPTION here whenever the turn also
+    // carries a USER_* claim was tried (a review found "Have I ever been on call?"
+    // reported FULL on job-description evidence) and reverted the same day: the
+    // classifier gives "How many engineers are in pod 3?" a default USER_PROJECT
+    // claim, so the exclusion made job-description questions unanswerable —
+    // ProfileVectorArm and ProfileDocumentReachability caught it. The reviewed
+    // case reaches the JD through the orchestrator's corpus rule for employment
+    // questions (an owner decision), not through this widening. Left open.
     if (profileOnlyDocuments) return [...DOCUMENT_FACT_RETRIEVAL_SOURCES, ...identityPools];
     const widened = anchored.filter((src) => authoritative.includes(src) && !DOCUMENT_FACT_RETRIEVAL_SOURCES.includes(src));
     return widened.length ? [...DOCUMENT_FACT_RETRIEVAL_SOURCES, ...widened] : DOCUMENT_FACT_RETRIEVAL_SOURCES;

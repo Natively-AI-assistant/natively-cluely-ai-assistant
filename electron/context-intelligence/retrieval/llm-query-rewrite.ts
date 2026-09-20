@@ -32,15 +32,16 @@ export type QueryRewriter = (question: string) => Promise<QueryRewriteOutcome>;
 
 export interface QueryRewriteOutcome {
   query: string | null;
-  /** Why there is no query, for the trace. */
-  reason: 'OK' | 'TIMEOUT' | 'ERROR' | 'EMPTY' | 'UNCHANGED';
+  /** Why there is no query, for the trace. BUSY = an earlier rewrite call is still running. */
+  reason: 'OK' | 'TIMEOUT' | 'ERROR' | 'EMPTY' | 'UNCHANGED' | 'BUSY';
   durationMs: number;
 }
 
 export function buildRewritePrompt(question: string): string {
   // The question is DATA. It is fenced and the instruction says so, because a
   // transcript line can contain anything an interviewer says out loud.
-  const q = question.replace(/\s+/g, ' ').trim().slice(0, MAX_QUESTION_CHARS);
+  // Angle brackets are removed: "</question>" inside the text closed the fence (review finding).
+  const q = question.replace(/[<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, MAX_QUESTION_CHARS);
   return [
     'You turn a spoken question into a search query for the documents that may answer it:',
     'a résumé, a job description, or uploaded reference files.',
@@ -57,11 +58,15 @@ export function buildRewritePrompt(question: string): string {
   ].join('\n');
 }
 
-const words = (s: string): string[] => s.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(Boolean);
+// \p{M} is kept: without it Devanagari/Tamil words lost their vowel signs and fell apart
+// ("प्रबंधक" → 0 usable words), so every Hindi rewrite was rejected as UNCHANGED (review finding).
+const words = (s: string): string[] => s.toLowerCase().replace(/[^\p{L}\p{M}\p{N}\s]/gu, ' ').split(/\s+/).filter(Boolean);
+/** A Latin word needs 3 letters to be vocabulary; a CJK word is often 2 characters, sometimes 1. */
+const isVocabulary = (w: string): boolean => (/^[\p{Script=Latin}\p{N}]+$/u.test(w) ? w.length > 2 : w.length > 0);
 
 /**
- * Model output → a usable query, or null. Accepts the JSON asked for, JSON in a
- * code fence, or a bare line (small models drift). Rejects anything that adds
+ * Model output → a usable query, or null. Accepts the JSON asked for (any key
+ * case, a string or an array of strings), bare or in a code fence. Rejects anything that adds
  * no vocabulary to the question — re-running retrieval on the same words would
  * spend the latency for the same result.
  */
@@ -70,18 +75,26 @@ export function parseRewrite(raw: string, question: string): { query: string | n
   if (!text) return { query: null, reason: 'EMPTY' };
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if (fenced) text = fenced[1].trim();
+  // JSON or nothing (review finding, reproduced): a bare line used to be accepted,
+  // so "Sure! Here is the search query…", a refusal, an error string or truncated
+  // JSON all became the ranking query — and one displaced the correct chunk from
+  // the prompt. Only the Gemini rung forces JSON output; the prompt asks every
+  // model for it, and a model that did not comply did not do the task.
   const brace = text.match(/\{[\s\S]*\}/);
-  if (brace) {
-    try {
-      const parsed = JSON.parse(brace[0]) as { query?: unknown };
-      text = typeof parsed?.query === 'string' ? parsed.query : '';
-    } catch { text = text.replace(/[{}"]/g, ' ').replace(/^\s*query\s*:/i, ' '); }
-  }
-  text = text.replace(/[\r\n\t]+/g, ' ').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!brace) return { query: null, reason: 'EMPTY' };
+  let value: unknown;
+  try {
+    const parsed = JSON.parse(brace[0]) as Record<string, unknown>;
+    const key = Object.keys(parsed ?? {}).find((k) => k.toLowerCase() === 'query');
+    value = key ? parsed[key] : undefined;
+  } catch { return { query: null, reason: 'EMPTY' }; }
+  if (Array.isArray(value)) value = value.filter((v) => typeof v === 'string').join(', ');
+  if (typeof value !== 'string') return { query: null, reason: 'EMPTY' };
+  text = value.replace(/[\r\n\t]+/g, ' ').replace(/<[^>]*>/g, ' ').replace(/[<>]/g, ' ').replace(/\s+/g, ' ').trim();
   if (!text) return { query: null, reason: 'EMPTY' };
   const kept = text.split(' ').slice(0, MAX_REWRITE_WORDS).join(' ');
   const asked = new Set(words(question));
-  const added = words(kept).filter((w) => w.length > 2 && !asked.has(w));
+  const added = words(kept).filter((w) => isVocabulary(w) && !asked.has(w));
   if (added.length === 0) return { query: null, reason: 'UNCHANGED' };
   return { query: kept, reason: 'OK' };
 }
@@ -92,19 +105,35 @@ export function parseRewrite(raw: string, question: string): { query: string | n
  * ladder takes no signal); on timeout it is left to finish and its result is
  * discarded — bounded by the providers' own timeouts.
  */
+/**
+ * Calls that lost the race are still RUNNING (they cannot be aborted from
+ * here). Reproduced in review: ten slow turns left ten model calls in flight.
+ * A rewriter is created per turn, so the guard is keyed by the call's OWNER
+ * (the LLM helper instance) and lives outside any one rewriter: while an
+ * earlier rewrite call has not settled, a new turn does not start another.
+ */
+const inFlight = new WeakMap<object, number>();
+export const MAX_REWRITES_IN_FLIGHT = 1;
+
 export function createQueryRewriter(
   call: RewriteModelCall,
-  opts: { timeoutMs?: number; now?: () => number } = {},
+  opts: { timeoutMs?: number; now?: () => number; owner?: object } = {},
 ): QueryRewriter {
   const timeoutMs = opts.timeoutMs ?? QUERY_REWRITE_TIMEOUT_MS;
   const now = opts.now ?? Date.now;
+  const owner = opts.owner ?? call;
   return async (question: string): Promise<QueryRewriteOutcome> => {
     const t0 = now();
+    if ((inFlight.get(owner) ?? 0) >= MAX_REWRITES_IN_FLIGHT) return { query: null, reason: 'BUSY', durationMs: 0 };
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       const timedOut = Symbol('timeout');
+      inFlight.set(owner, (inFlight.get(owner) ?? 0) + 1);
+      const settled = () => inFlight.set(owner, Math.max(0, (inFlight.get(owner) ?? 1) - 1));
+      const running = Promise.resolve().then(() => call(buildRewritePrompt(question)));
+      running.then(settled, settled);                       // released when the CALL settles, not when the race does
       const raced = await Promise.race([
-        Promise.resolve().then(() => call(buildRewritePrompt(question))),
+        running,
         new Promise<typeof timedOut>((resolve) => { timer = setTimeout(() => resolve(timedOut), timeoutMs); }),
       ]);
       if (raced === timedOut) return { query: null, reason: 'TIMEOUT', durationMs: now() - t0 };

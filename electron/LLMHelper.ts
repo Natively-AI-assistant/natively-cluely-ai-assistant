@@ -4355,6 +4355,45 @@ let isMultimodal = !!(imagePaths?.length);
    * generateContentStructured ladder so the judge still answers when Gemini
    * is down (the controller's deadline bounds the total wait either way).
    */
+  /**
+   * The low-confidence QUERY REWRITE's model call (2026-09-20): exactly ONE rung,
+   * aborted at its deadline. It first borrowed generateJudgeVerdict, and an
+   * adversarial review read what that does without a Gemini key: it falls into
+   * generateContentStructured — OpenAI, Claude, a Codex CLI subprocess, Ollama
+   * with a 120 s timeout competing with the answer call, then the Natively
+   * extraction route — for three rotations, on a call whose result is discarded
+   * after 1.5 s. A rewrite is an optimisation: it uses the one fast provider the
+   * user has, honours the outbound data-scope settings like every other call,
+   * and returns '' when there is nothing suitable — never a ladder.
+   */
+  public async generateQueryRewrite(message: string, opts: { timeoutMs?: number } = {}): Promise<string> {
+    const timeoutMs = opts.timeoutMs ?? 1500;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      if (this.isLocalOnlyMode) return '';
+      if (this.client) {
+        this.assertOutboundScopes('gemini', message);
+        // @ts-ignore — abortSignal is accepted by the SDK's request config
+        const res = await this.client.models.generateContent({
+          model: GEMINI_FLASH_LITE_MODEL,
+          contents: [{ role: 'user', parts: [{ text: message }] }],
+          config: { maxOutputTokens: 96, temperature: 0, responseMimeType: 'application/json', abortSignal: controller.signal },
+        });
+        const parts = res.candidates?.[0]?.content?.parts ?? [];
+        return res.text ?? (Array.isArray(parts) ? parts : [parts]).map((p: any) => p?.text ?? '').join('');
+      }
+      if (this.groqClient) return await this.generateWithGroq(message);
+      const nativelyKey = this.nativelyKey || (() => {
+        try { return require('./services/CredentialsManager').CredentialsManager.getInstance().getNativelyApiKey() || null; } catch { return null; }
+      })();
+      if (nativelyKey) return await this.generateWithNatively(message, undefined, undefined, { timeoutMs, signal: controller.signal });
+      return '';
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   public async generateJudgeVerdict(message: string): Promise<string> {
     if (this.client) {
       for (const modelId of [GEMINI_FLASH_LITE_MODEL, GEMINI_FLASH_MODEL]) {

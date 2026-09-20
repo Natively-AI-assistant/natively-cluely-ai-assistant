@@ -867,6 +867,9 @@ export async function orchestrate(
   // of a number nobody measured — splitting it means instrumenting decide().
   const tClassify = clock();
   let decision = decide(effectiveReq);
+  // What the CLASSIFIER claimed, before corpus arbitration adds to it (used by the
+  // rewrite trigger on live surfaces).
+  const classifierClaims = new Set(decision.claimRequirements.map((c) => String(c.claimType)));
 
   // ── Corpus arbitration ────────────────────────────────────────────────────
   // The classifier decides from grammar whether a question is about the
@@ -1061,14 +1064,40 @@ export async function orchestrate(
   //     turns): on the lexical stack every non-NONE miss sits below 0.3 and
   //     there is not one miss above it (0 of 529); on the vector stack almost
   //     no turn is below 0.3 at all, so this costs a vector user nothing.
-  const topScore = evidence.reduce((m, e) => Math.max(m, e.finalScore ?? 0), 0);
-  const weakEvidence = evidence.length > 0 && answerability !== 'FULL' && topScore < LOW_CONFIDENCE_TOP_SCORE;
+  //
+  // WHO may trigger it — narrowed after an adversarial review ran 18 ordinary live
+  // interview turns through the first version and the rewrite fired on 8 of them
+  // ("Can I assume the input is sorted?", "How do I handle conflict with a
+  // coworker?"), adding up to 1.5 s and a second retrieval to turns it cannot help:
+  //   · the turn must be a document LOOKUP — a DOCUMENT_FACT or JOB_* claim — not
+  //     merely carry some private claim; a behavioural question about the user has
+  //     one too, and no document vocabulary to be rewritten into;
+  //   · never a coding or system-design turn;
+  //   · "weak evidence" is judged on DOCUMENT evidence only. The transcript port
+  //     normalises its best score to 1.0 and the screen port always scores 1, so
+  //     one unrelated transcript line used to hide a weak document result — in
+  //     exactly the live meetings the trigger was written for.
+  const DOCUMENT_SOURCES: ReadonlySet<string> = new Set(['RESUME', 'JOB_DESCRIPTION', 'PROFILE_FACT', 'REFERENCE_FILE', 'PROJECT_FILE', 'CODING_SAMPLE', 'CANDIDATE_FILE']);
+  const documentEvidence = evidence.filter((e) => DOCUMENT_SOURCES.has(e.sourceType));
+  const topScore = documentEvidence.reduce((m, e) => Math.max(m, e.finalScore ?? 0), 0);
+  const weakEvidence = documentEvidence.length > 0 && answerability !== 'FULL' && topScore < LOW_CONFIDENCE_TOP_SCORE;
+  const documentLookup = decision.claimRequirements.some((c) => c.authority === 'PRIVATE_SOURCE_REQUIRED'
+    && (c.claimType === 'DOCUMENT_FACT' || String(c.claimType).startsWith('JOB_')));
+  const codingTurn = decision.questionTypes.some((t) => t === 'CODING_TASK' || t === 'SYSTEM_DESIGN');
+  // On a LIVE surface the question is an interviewer's utterance and +1.5 s is
+  // felt. There the lookup must be one the classifier itself recognised: a claim
+  // added by corpus arbitration alone also covers "Can I assume the input is
+  // sorted?" (first person → employment → document lookup), which the classifier
+  // does not know is a coding clarification. Typed chat keeps the wider trigger —
+  // it is where "Who would be my manager?" is asked, and the user is waiting anyway.
+  const liveSurface = req.surface === 'what-to-answer' || req.surface === 'meeting-overlay';
+  const classifierLookup = [...classifierClaims].some((c) => c === 'DOCUMENT_FACT' || c.startsWith('JOB_'));
   const answerabilityBefore = answerability;
   let queryRewrite: AnswerTrace['queryRewrite'];
   if (req.queryRewriter && retrieval
       && decision.retrievalPlan.shouldRetrieve
       && (answerability === 'NONE' || weakEvidence)
-      && decision.claimRequirements.some((c) => c.authority === 'PRIVATE_SOURCE_REQUIRED')
+      && documentLookup && !codingTurn && (!liveSurface || classifierLookup)
       && isRetrievalFixEnabled('lowConfidenceQueryRewrite')) {
     let outcome: QueryRewriteOutcome;
     try { outcome = await req.queryRewriter(decision.resolvedQuestion); }
@@ -1082,8 +1111,14 @@ export async function orchestrate(
           retrievalPlan: { ...decision.retrievalPlan, queries: [outcome.query] },
         } as never);
         const r2 = await retrieval.retrieve({ decision: rewritten });
-        const merged = mergeRewrittenEvidence(evidence, r2.evidence);
-        added = merged.length - evidence.length;
+        // CAPPED before it is judged (review finding): the merge used to hand 12
+        // items to answerability on a turn whose cap is 6, so support was computed
+        // over evidence the packer then dropped. Same order the packer uses.
+        const before = new Set(evidence.map((e) => e.evidenceId));
+        const merged = mergeRewrittenEvidence(evidence, r2.evidence)
+          .sort((a, b) => b.finalScore - a.finalScore || a.evidenceId.localeCompare(b.evidenceId))
+          .slice(0, Math.max(1, decision.retrievalPlan.maximumAcceptedEvidence));
+        added = merged.filter((e) => !before.has(e.evidenceId)).length;
         evidence = merged;
         attempts = [...attempts, ...r2.attempts.map((a) => ({ ...a, strategy: `llm_query_rewrite:${a.strategy}` }))];
         answerability = evaluateAnswerability(decision, evidence);
@@ -1094,6 +1129,9 @@ export async function orchestrate(
       reason: outcome.reason, durationMs: outcome.durationMs, queryChars: outcome.query?.length ?? 0,
       addedEvidence: added, answerabilityBefore, answerabilityAfter: answerability,
     };
+    // One content-free line per firing. Four live runs could not say whether the
+    // rewrite had timed out, errored or worked — the trace field is not logged.
+    console.log(`[V3] query rewrite: ${outcome.reason} in ${outcome.durationMs} ms, +${added} evidence, answerability ${answerabilityBefore} -> ${answerability}`);
   }
 
   // A question whose required source the MODE forbids is not answerable from
