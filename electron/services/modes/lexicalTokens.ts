@@ -340,8 +340,19 @@ export function corpusAnchorsQuestion(question: string, stats: LexicalStats): bo
 }
 
 /** Indexes (into the texts the stats were built from) of the chunks that anchor the question. */
+/**
+ * The question's CONTENT words — what anchors may be drawn from. Function words
+ * must go first: "how" is absent from most résumés, so by document frequency it
+ * is the most "distinctive" word of "How many engineers did you work with on
+ * Project Cinder-115?" (idf 4.77, the same as "cinder-115" itself), and a chunk
+ * can never contain it.
+ */
+export function questionContentWords(question: string): Set<string> {
+  return new Set(wordsOf(question, { shortNumerics: true }).filter((w) => !PROBE_FUNCTION_WORDS.has(w)));
+}
+
 export function anchoringChunkIndexes(question: string, stats: LexicalStats, limit = Number.POSITIVE_INFINITY): number[] {
-  const words = new Set(wordsOf(question, { shortNumerics: true }).filter((w) => !PROBE_FUNCTION_WORDS.has(w)));
+  const words = questionContentWords(question);
   if (words.size < PROBE_MIN_ANCHORS) return [];
   const unseenWeight = Math.log(1 + (stats.n + 0.5) / 0.5);
   const anchors = new Map<string, number>();

@@ -38,7 +38,7 @@ import { createLegacyRetrievalPort } from './legacy-retrieval-port';
 import type { LegacyChunk } from './legacy-adapter';
 import { Bm25Index, DEFAULT_BM25 } from './bm25';
 // Pure tokenizer/statistics module — no Electron, no DB — so the rule above holds.
-import { buildLexicalStats, anchoringChunkIndexes } from '../../services/modes/lexicalTokens';
+import { buildLexicalStats, anchoringChunkIndexes, anchorTerms, anchorCoverage, questionContentWords, PROBE_MIN_COVERAGE, PROBE_MIN_ANCHORS } from '../../services/modes/lexicalTokens';
 import { semanticChunks } from '../../services/modes/semanticChunker';
 
 /**
@@ -499,6 +499,10 @@ const INTENT_RULES: IntentRule[] = [
 ];
 
 /** A raw chunk in a fired intent's vocabulary earns this share of the rule's largest boost… */
+/** Same weight the mode path uses (ModeHybridRetriever.ANCHOR_BOOST). */
+const PROFILE_ANCHOR_BOOST = Number(process.env.NATIVELY_RETRIEVAL_ANCHOR_BOOST) || 0.25;
+/** The boost applies only when at most this share of the chunks earns it. */
+const PROFILE_ANCHOR_MAX_SHARE = 0.1;
 const RAW_INTENT_BOOST_SHARE = 0.7;
 /** …unless more than this share of the raw chunks match it (then the class does not discriminate). */
 const RAW_INTENT_MAX_SHARE = 0.25;
@@ -657,6 +661,53 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
       // fired rule's class now earns a share of that boost. Only when the class
       // is DISCRIMINATIVE over the raw text: "experience|work|role|company"
       // matches most of a résumé and would lift everything equally.
+      // ANCHOR BOOST (2026-09-20) — the mode path has had it since 09-19; this
+      // port did not. An intent boost ranks a section by its TYPE, blind to
+      // whether it holds what the question NAMES. Measured with the structuring
+      // LLM's real output for a 15k-token résumé: "How many engineers did you
+      // work with on Project Cinder-115?" fired the project intent, and all six
+      // evidence slots went to structured sections about FOUR OTHER projects
+      // (0.72–0.98) while the raw chunk that says "Cinder-115 … worked with 7
+      // engineers" was cut at the cap. Lexical questions reached the prompt 50%
+      // of the time, sibling facts 58% — with structured data absent it was
+      // 100%, so the better the structuring, the worse the retrieval.
+      //
+      // Same rule as ModeHybridRetriever.lexicalScores: ANCHOR_BOOST × (idf-
+      // weighted coverage of the question's distinctive terms)². Squared, so a
+      // chunk holding one anchor of three gets a ninth of it and a chunk holding
+      // all of them gets all of it.
+      if (probeStats === undefined) probeStats = buildLexicalStats(chunks.map((c) => `${c.section} ${c.text}`));
+      // At least TWO anchors, as the corpus probe requires. With one, every chunk
+      // that happens to hold that word has coverage 1.0: "Who does this role
+      // report to?" has the single anchor "report", the answer says "reports to"
+      // (no stemming — it does not even match), and six team blurbs mentioning a
+      // "report" took all six slots at +0.25. One shared word is what BM25
+      // already scores; NAMING something takes two.
+      const anchorCandidates = probeStats ? anchorTerms(questionContentWords(query), probeStats) : null;
+      // …and the anchored set must be SMALL. "role" and "report" both clear the
+      // anchor bar on a résumé + JD (each in just under half the chunks), and 35
+      // of 167 chunks then cover ≥ 60% of them — a boost that a fifth of the
+      // corpus earns ranks nothing, it only overrides BM25's own ordering, which
+      // had the "Reporting line" section first. Same idea as
+      // RAW_INTENT_MAX_SHARE: a signal must be discriminative to be a signal.
+      const anchoredCount = anchorCandidates && probeStats && anchorCandidates.size >= PROBE_MIN_ANCHORS
+        ? probeStats.sets.reduce((n, set) => n + (anchorCoverage(anchorCandidates, set) >= PROBE_MIN_COVERAGE ? 1 : 0), 0)
+        : 0;
+      const anchors = anchorCandidates && anchoredCount > 0
+        && anchoredCount <= Math.max(3, chunks.length * PROFILE_ANCHOR_MAX_SHARE) ? anchorCandidates : null;
+      const anchorBoost = (i: number): number => {
+        if (!anchors || !probeStats || i < 0) return 0;
+        const cov = anchorCoverage(anchors, probeStats.sets[i]);
+        // GATED at the corpus probe's coverage bar. Ungated, a chunk sharing one
+        // minor anchor ("experience" in "Do I have Kubernetes experience?") got
+        // +0.004 — nothing, except that policy-admitted inventories sit at a
+        // FIXED 0.600, and that nudge lifted a résumé bullet from 0.605 past the
+        // skills inventory that proves the absence: answerability FULL → PARTIAL
+        // (ProfileSourceRouting2026_07_31 caught it). A chunk "holds what the
+        // question names" when it holds most of it, or the boost is noise that
+        // reshuffles near-ties.
+        return cov >= PROBE_MIN_COVERAGE ? PROFILE_ANCHOR_BOOST * cov * cov : 0;
+      };
       const firedRules = INTENT_RULES.filter((rule) => rule.re.test(query));
       const rawIdx = chunks.map((c, i) => (c.boostKey === 'raw_document' ? i : -1)).filter((i) => i >= 0);
       const rawIntentBoost = new Map<number, number>();
@@ -721,7 +772,7 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
           // when an intent rule targeting the chunk's own boostKey fired.
           const score = c.policyOnly
             ? (boost > 0 ? 0.6 : 0)
-            : (lexical > 0 ? Math.min(1, lexical * 0.85 + boost) : boostOnly);
+            : (lexical > 0 ? Math.min(1, lexical * 0.85 + boost + anchorBoost(i)) : boostOnly);
           return { c, score };
         });
 

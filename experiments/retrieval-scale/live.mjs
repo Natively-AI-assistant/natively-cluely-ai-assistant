@@ -118,6 +118,15 @@ const restoreLog = () => {
   } catch (e) { say(`!! could not restore the debug log: ${e.message} — your copy is at ${logBackup}`); }
 };
 
+// A run that names a local API must not start — or finish — without one. 2026-09-20: the local server
+// had exited an hour earlier (its database watchdog), the app quietly fell back to the bundled embedder
+// and the profile's own chat provider, and 24 billed turns were about to be reported as "natively".
+const localApiUp = async () => {
+  if (!LOCAL_API_PORT) return true;
+  try { return (await fetch(`http://127.0.0.1:${LOCAL_API_PORT}/health`, { signal: AbortSignal.timeout(4000) })).ok; } catch { return false; }
+};
+if (!(await localApiUp())) { console.error(`--local-api ${LOCAL_API_PORT}: nothing healthy is listening there. Start it first (see the private recipe) — refusing to spend turns.`); process.exit(2); }
+
 // ── spawn ────────────────────────────────────────────────────────────────────
 const child = spawn(path.join(ROOT, 'node_modules/.bin/electron'), [ROOT, `--user-data-dir=${UD}`, `--remote-debugging-port=${PORT}`], {
   cwd: ROOT, stdio: ['ignore', fs.openSync(path.join(WORK, 'app.stdout.log'), 'w'), fs.openSync(path.join(WORK, 'app.stderr.log'), 'w')],
@@ -304,6 +313,7 @@ try {
 
 const tally = {};
 for (const r of STRUCTURING ? [] : rows) { const k = PROFILE ? `${r.size} ${r.kind}` : `${r.size}`; (tally[k] ??= {}); tally[k][r.verdict] = (tally[k][r.verdict] ?? 0) + 1; }
+if (LOCAL_API_PORT && !(await localApiUp())) say(`!! the local API on :${LOCAL_API_PORT} is DOWN at the end of the run — some or all of these turns did NOT use it; read the app log before trusting the label.`);
 say(`\nlive tier  label=${LABEL} kind=${KIND}${PLAIN ? ' (plain text)' : ''}  turns=${rows.length}`);
 for (const [k, v] of Object.entries(tally)) say(`  ${k.padEnd(5)} ${JSON.stringify(v)}`);
 say(`-> ${path.relative(ROOT, OUT)}   (app logs: ${WORK})`);

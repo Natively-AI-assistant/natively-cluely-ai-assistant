@@ -71,16 +71,25 @@ for (const size of SIZES) {
     // --plain: what a PDF extraction yields — no markdown heading marks, no bold.
     const md = fs.readFileSync(path.join(HERE, 'out', `${kind}_${size}.md`), 'utf8');
     const rawText = argv.includes('--plain') ? md.replace(/^#+\s*/gm, '').replace(/\*\*/g, '').replace(/^```$/gm, '') : md;
-    const structured = STRUCTURED === 'none' ? null : (kind === 'resume' ? heuristicResumeExtract(rawText) : heuristicJDExtract(rawText));
+    // --structured live: what the REAL structuring LLM produced for the 15k fixtures (exported from a
+    // live run's isolated profile into out/live_structured_15k.json). The heuristic extractor yields far
+    // fewer competing sections than the LLM does, and the first ship gate for the semantic arm was
+    // measured without them — a live regression on a lexical question got through it.
+    const structured = STRUCTURED === 'none' ? null
+      : STRUCTURED === 'live' ? JSON.parse(fs.readFileSync(path.join(HERE, 'out/live_structured_15k.json'), 'utf8'))[kind === 'resume' ? 'resume' : 'job_description']
+      : (kind === 'resume' ? heuristicResumeExtract(rawText) : heuristicJDExtract(rawText));
     return { kind, sourceId: `p-${kind}`, versionId: 'v1', fileName: `${kind}_${size}.md`, structured, rawText, chars: rawText.length };
   });
   for (const d of docs) if (d.chars > MAX_PROFILE_DOCUMENT_CHARS) say(`NOTE [${size}] ${d.fileName}: ${d.chars} chars > ${MAX_PROFILE_DOCUMENT_CHARS} — the real upload REJECTS this file (DocumentReader); retrieval below is hypothetical`);
   const rawRetriever = VECTORS ? await makeRawRetriever(docs) : null;
   const port = createProfileRetrievalPort({ docs, allowedSourceTypes: policy.allowedSourceTypes, profileSources: policy.profileSources, userId: 'local', ...(rawRetriever ? { rawRetriever } : {}) });
   if (!port) { say(`[${size}] no profile port (mode ${MODE} has no profileSources?)`); continue; }
-  for (const q of questions.filter((x) => x.size === size)) {
+  // --debug-q "<id or text>": print the evidence chosen for one question, then carry on.
+  const DEBUG_Q = arg('debug-q', null);
+  for (const q of questions.filter((x) => x.size === size && (!DEBUG_Q || x.id === DEBUG_Q || x.question === DEBUG_Q))) {
     const r = await orchestrate({ requestId: q.id, requestSequence: 1, surface: 'manual_chat', modeId: MODE, scope: { userId: 'local' }, sessionId: `s-${q.id}`, manualQuestion: q.question, hasAttachedDocuments: true, attachedFileNames: [], profileOnlyDocuments: true /* what engine-bridge sets: 0 mode files, 2 profile docs */ }, port);
     const packed = packContext(r.decision, r.evidence, { evidenceTokens: policy.contextBudget.evidenceTokens * (r.decision.retrievalPlan.exhaustive ? 3 : 1), conversationTokens: policy.contextBudget.conversationTokens, transcriptTokens: policy.contextBudget.transcriptTokens });
+    if (DEBUG_Q) { say(`\nQ ${q.id}: ${q.question}  claims=${r.decision.claimRequirements.map((c) => c.claimType).join(',')} fallback=${r.trace.fallbackUsed}`); for (const e of r.evidence) say(`  ${e.finalScore.toFixed(3)} ${e.sourceType.padEnd(16)} ${carries(e.content, q) ? 'NEEDLE' : '      '} | ${e.content.replace(/\s+/g, ' ').slice(0, 130)}`); }
     const rej = r.trace.retrievalAttempts.flatMap((a) => a.rejections ?? []).map((x) => x.reason);
     rows.push({ id: q.id, kind: q.kind, size, variant: q.variant, type: q.type, retrieved: r.decision.retrievalPlan.shouldRetrieve === true, planned: r.decision.retrievalPlan.sourceTypes, claims: r.decision.claimRequirements.map((c) => c.claimType),
       retr: null, evid: r.evidence.some((e) => carries(e.content, q)), pack: packed.evidenceBlock.split('</evidence>').some((b) => carries(b, q)), evidCount: r.evidence.length, packCount: packed.includedEvidenceIds.length, fallback: r.trace.fallbackUsed, rejections: [...new Set(rej)] });

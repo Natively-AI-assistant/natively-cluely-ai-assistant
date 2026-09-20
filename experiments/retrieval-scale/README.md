@@ -12,7 +12,7 @@ Nothing here is imported by the app.
 |---|---|---|
 | `gen-fixtures.mjs` | Seeded fake résumé, job description and engineering handbook at four sizes → `out/`. 10 planted facts per document (lexical / paraphrase / STT phrasings), 12 **sibling** facts (questions about the filler itself — the only kind that gets harder with size), absent-fact questions. 672 questions. | node |
 | `run-offline.mjs` | MODE path: real `ModeHybridRetriever` → V3 orchestrator + mode port → packer. `--stack lexical\|local\|vector`, `--scenario single\|trio`, `--plain` (as a PDF extracts), `--rerank`, `--fullrank`, `--cap/--tokens`. | `npm run build:electron`; run with `ELECTRON_RUN_AS_NODE=1 ./node_modules/.bin/electron` (better-sqlite3 is Electron-ABI) |
-| `run-profile.mjs` | PROFILE path: real `createProfileRetrievalPort` → orchestrator → packer, résumé + JD as profile documents. `--plain`, `--mode`, `--vectors` (binds the semantic arm to a real `ModeHybridRetriever` + MiniLM). | node; `--vectors` as `run-offline` |
+| `run-profile.mjs` | PROFILE path: real `createProfileRetrievalPort` → orchestrator → packer, résumé + JD as profile documents. `--plain`, `--mode`, `--structured none\|heuristic\|live`, `--debug-q <id>`, `--vectors` (binds the semantic arm to a real `ModeHybridRetriever` + MiniLM). | node; `--vectors` as `run-offline` |
 | `gen-resume.mjs` | Realistic résumés (2k / 5k / 15k / 30k tokens) with ground truth, for measuring how complete LLM structuring is. Used by `live.mjs --structuring`. | node |
 | `analyze.mjs` | Stage breakdown of a result file: NOT_ROUTED / RETRIEVER_MISS / EVIDENCE_DROP / PACK_DROP. `--list`. | node |
 | `debug-query.mjs` | Full ranking for one query, with the needle's scores. | as `run-offline` |
@@ -106,6 +106,31 @@ Tests added: `RetrievalScaleLexical`, `CorpusArbitration`, `ProfileDocumentReach
 `E2eLocalTestHeader`, `SpokenIdentifierCanon`, `IngestBatchEmbedding`, `StaleIndexVectorsIgnored`,
 `LocalEmbedderVectorsOutsideMeeting` (all `2026_09_19`). Full run: 10,961 pass / 0 fail / 56 skipped / 1 todo (the todo pins a known limit: anchors are a bag
 of words, so "pod 10" and "10 engineers … pod 15" tie).
+
+## Better structuring made retrieval worse (2026-09-20)
+
+Every profile number above was measured with `--structured none` or the heuristic extractor. With what
+the structuring LLM **really** produced for the 15k fixtures (`--structured live`, exported from a live
+run's isolated profile), BM25-only résumé retrieval was **69%** — lexical 50%, sibling facts 58% — where
+it is 100% with no structured data at all. "How many engineers did you work with on Project
+Cinder-115?" fires the project intent, and all six evidence slots go to structured sections about four
+*other* projects while the raw chunk that names Cinder-115 is cut. An intent boost ranks a section by
+its type, blind to whether it holds what the question names.
+
+The profile port now has the anchor boost the mode path got on 09-19, with three conditions that each
+came from a measured regression, not from design: coverage ≥ 60% of the anchor weight (an ungated
++0.004 nudge pushed a bullet past the skills inventory that is admitted at a fixed 0.600, and "Do I have
+Kubernetes experience?" went FULL → PARTIAL); anchors drawn from content words only ("how" was the top
+anchor — it is rarer in a résumé than the project's name); at least two anchors, earned by at most 10%
+of the chunks ("role" + "report" matched a fifth of the corpus and buried the reporting line).
+
+| 15k, plain text, real structured data | BM25 only | + semantic arm |
+|---|---|---|
+| before | 77% (lex 75, sibling 79) | 90% |
+| after | 86% (lex 100, sibling 100) | 91% |
+
+All 32 cells of the none/heuristic gate are at or above their no-boost value except one (heuristic,
+BM25-only, markdown, 5k: 90 → 89, one paraphrase that had held the sixth slot by accident).
 
 ## Structuring completeness on realistic résumés (live, 2026-09-20)
 
