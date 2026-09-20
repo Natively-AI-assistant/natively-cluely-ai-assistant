@@ -49,7 +49,20 @@ Live (real app, real LLM, plain-text documents; 150 billed turns in total — th
 | local MiniLM, 70k, rule OFF | paraphrase-heavy | 17/20, 3 false refusals |
 | **natively**, PROFILE path: real résumé + JD ingest at 15k each | 12 résumé + 12 JD | **20/24** — the 4 misses are paraphrases, answered WRONG (an invented salary, "I wasn't at Oakhaven"), not refused |
 
-Natively leg: 60/60 queries hybrid, 60/60 reranked, 0 rerank timeouts, p50 2.0 s / p95 3.0 s.
+After the semantic arm, the query rewrite, the anchor boost and the ingest breaker (2026-09-20, same
+15k résumé + JD, same 24 questions, 72 more billed turns — 222 in total):
+
+| stack | result |
+|---|---|
+| **natively** (voyage-4 2048d + rerank-2.5-lite) via the local API | **24/24** correct. Both "promoted to Staff Engineer" questions, the salary, equity and years-of-experience paraphrases that were wrong or refused before all answer from the document. Answer latency p50 1.8 s / p95 3.7 s. The rewrite pass ran on 4 retrieval attempts. |
+| own chat provider + **bundled MiniLM** embedder (no natively service — see note) | 22/24. Fixed the same four paraphrases; the "promoted to Staff Engineer" pair was WRONG (the line did not reach the prompt). That run predates the anchor boost, and the pair passes offline with it; not re-run live. |
+
+Note: the MiniLM row was not planned. The local API had exited (its database watchdog) and nothing in
+the driver noticed; `live.mjs` now refuses to start a `--local-api` run without a healthy server. The
+grader also scored "seven engineers" WRONG against a gold "7" in both runs — fixed; the numbers above
+are after reading those answers.
+
+Natively leg (09-19): 60/60 queries hybrid, 60/60 reranked, 0 rerank timeouts, p50 2.0 s / p95 3.0 s.
 It ran against a **locally started natively-api** under `NATIVELY_LOCAL_TEST_AUTH` (see below) —
 the hosted API was unavailable that day, and is not needed for any of this.
 

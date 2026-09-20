@@ -175,7 +175,11 @@ const REFUSAL_RE = /could(?: not|n't) (?:be )?(?:find|found|retrieved|located)|(
 function grade(q, answer) {
   if (!answer) return 'EMPTY';
   if (q.variant === 'absent') return REFUSAL_RE.test(answer) ? 'ABSENT_OK' : 'ABSENT_ANSWERED';
-  const hit = q.gold.every((g) => new RegExp(g, 'i').test(answer));
+  // A spoken-style answer writes small numbers as words ("seven engineers"); the gold facts are digits.
+  // Two runs were mis-scored WRONG on a correct answer before this.
+  const NUM = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty'];
+  const digits = answer.replace(new RegExp(`\\b(${NUM.join('|')})\\b`, 'gi'), (w) => String(NUM.indexOf(w.toLowerCase())));
+  const hit = q.gold.every((g) => new RegExp(g, 'i').test(answer) || new RegExp(g, 'i').test(digits));
   if (hit) return 'OK';
   return REFUSAL_RE.test(answer) ? 'FALSE_REFUSAL' : 'WRONG';
 }
