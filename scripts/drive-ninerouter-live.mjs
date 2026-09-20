@@ -146,6 +146,16 @@ const check = (name, pass, detail = '') => {
   check('a ticked 9Router model becomes the active model',
     JSON.parse(setDefault).modelId === `ninerouter/${pick}`, setDefault);
 
+  // ── 8. PHASE 3: the embeddings panel sees 9Router ───────────────────────
+  const cat = await evaluate(`window.electronAPI.getEmbeddingCatalog().then(r => JSON.stringify(
+    (r.providers||[]).map(p => ({ id: p.id, cloud: p.cloud, available: p.available, n: (p.models||[]).length, endpoint: p.endpoint }))))`);
+  const provs = JSON.parse(cat);
+  const nr = provs.find(p => p.id === 'ninerouter');
+  check('the embedding catalogue offers 9Router',
+    !!nr && nr.n > 0, JSON.stringify(nr));
+  check('9Router is flagged CLOUD in the panel, despite the localhost endpoint',
+    nr?.cloud === true, `cloud=${nr?.cloud} endpoint=${nr?.endpoint}`);
+
   fs.writeFileSync(path.join(SHOTS, 'app.log'), appLog.join(''));
   log('--- app log tail ---');
   log(appLog.join('').split('\n').filter(l => /9Router|ninerouter/i.test(l)).slice(-12).join('\n'));

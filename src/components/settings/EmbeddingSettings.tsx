@@ -22,7 +22,7 @@ interface CatalogModel {
 }
 
 interface CatalogProvider {
-    id: 'natively' | 'ollama' | 'custom' | 'openrouter' | 'voyage' | 'openai' | 'gemini' | 'local';
+    id: 'natively' | 'ollama' | 'custom' | 'openrouter' | 'ninerouter' | 'voyage' | 'openai' | 'gemini' | 'local';
     name: string;
     cloud: boolean;
     managed?: boolean;
@@ -587,7 +587,11 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
         };
     }, [active, providers]);
 
-    const CARD_ORDER = ['gemini', 'openai', 'voyage', 'openrouter', 'ollama', 'custom'] as const;
+    // This FILTERS as well as orders — `CARD_ORDER.map(...).filter(...)` below —
+    // so a provider the catalogue returns but this list omits is silently
+    // invisible in the panel. 9Router sits beside OpenRouter as the other
+    // gateway.
+    const CARD_ORDER = ['gemini', 'openai', 'voyage', 'openrouter', 'ninerouter', 'ollama', 'custom'] as const;
     const cardProviders = useMemo(
         () => CARD_ORDER
             .map(id => providers.find(p => p.id === id))
@@ -611,6 +615,14 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                 ? t('Ollama is running but no embedding models are pulled. Pull one, for example nomic-embed-text or qwen3-embedding.')
                 : t('Start Ollama to use local embedding models.');
         }
+        // 9Router's base URL and key are configured once on the AI Providers tab,
+        // not here — so an empty card must send the user there rather than look
+        // broken. Without this the card renders blank with no explanation.
+        if (p.id === 'ninerouter') {
+            return p.available
+                ? t('Your 9Router instance is reachable but lists no embedding models.')
+                : t('Add your 9Router instance under AI Providers → Local & Gateways to use its embedding models.');
+        }
         return null;
     };
 
@@ -632,7 +644,11 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
         // because the control states it authoritatively right beside them.
         // (Voyage's domain models — code-4, finance-2, law-2 — are fixed at 1024;
         // the control renders disabled for those rather than disappearing.)
-        const hasWidthPicker = p.id === 'gemini' || p.id === 'openai' || p.id === 'voyage' || p.id === 'openrouter';
+        // 9Router joins them because it forwards `dimensions` upstream and its
+        // gemini-embedding-* models honour it. Models with no documented widths
+        // fall to `fixedWidth` below and render the control disabled, which is
+        // the same treatment ada-002 already gets.
+        const hasWidthPicker = p.id === 'gemini' || p.id === 'openai' || p.id === 'voyage' || p.id === 'openrouter' || p.id === 'ninerouter';
         const enabled = isActiveProvider && active.model ? [active.model] : [];
         const isCloudWithKey = (p.id === 'gemini' || p.id === 'openai' || p.id === 'openrouter' || p.id === 'voyage');
         const hasStored = isCloudWithKey ? !!storedKeys[p.id] : p.id === 'custom' ? !!endpointDraft.trim() : p.available;
