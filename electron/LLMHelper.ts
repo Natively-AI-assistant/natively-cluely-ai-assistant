@@ -6834,11 +6834,15 @@ let isMultimodal = !!(imagePaths?.length);
       }
     }
     // Ollama: use the resolved vision-capable model (which may differ from the
-    // primary text model). Synchronously trust the cached resolution; kick off
-    // a refresh for next time if we haven't probed yet.
-    const ollamaVisionModel = this.useOllama ? this.ollamaVisionModel : null;
+    // primary text model). If not yet resolved, await the probe so the very first
+    // screenshot request finds any installed vision model instead of dead-ending.
+    let ollamaVisionModel = this.useOllama ? this.ollamaVisionModel : null;
     if (this.useOllama && !ollamaVisionModel) {
-      this.refreshOllamaVisionModel().catch(() => { }); // populate for the next request
+      try {
+        ollamaVisionModel = await this.refreshOllamaVisionModel();
+      } catch (err: any) {
+        console.warn('[LLMHelper] Failed to probe Ollama vision model:', err?.message || err);
+      }
     }
     if (ollamaVisionModel) {
       local.push({ id: 'ollama', name: `Ollama (${ollamaVisionModel})`, isLocal: true, priority: 101,

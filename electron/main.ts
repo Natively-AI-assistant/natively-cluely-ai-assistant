@@ -9300,7 +9300,11 @@ if (process.env.THINKING_MATRIX === '1') {
     // synchronously — so a renderer crash cannot corrupt it. We only close the
     // DB on TERMINAL paths (quit / non-crash / give-up).
     const reason = details?.reason;
-    const isCrash = reason === 'crashed' || reason === 'abnormal-exit';
+    const isCrash =
+      reason === 'crashed' ||
+      reason === 'abnormal-exit' ||
+      reason === 'oom' ||
+      reason === 'integrity-failure';
 
     // Never fight an intentional teardown, and don't reload a clean/intentional
     // exit or an intentional kill.
@@ -9323,10 +9327,10 @@ if (process.env.THINKING_MATRIX === '1') {
     // Only auto-reload real user-facing windows. Transient/hidden helpers
     // (cropper = screenshot overlay; model-selector = hidden preload with a
     // known forceRestartOllama side-effect) should NOT be blindly reloaded —
-    // they get recreated on next open. Reload launcher / settings / overlay.
+    // they get recreated on next open. Reload launcher / settings / overlay / aux floating chrome.
     const isRecoverableWindow =
       urlNow === '' /* URL unavailable — assume the main launcher */ ||
-      /[?&]window=(launcher|settings|overlay)\b/.test(urlNow) ||
+      /[?&]window=(launcher|settings|overlay|overlay-pill|overlay-toggle)\b/.test(urlNow) ||
       !/[?&]window=/.test(urlNow) /* no window tag → the default launcher */;
     if (!isRecoverableWindow) {
       logToFile(`[main] render-process-gone: not auto-reloading transient window (${urlNow})`);
