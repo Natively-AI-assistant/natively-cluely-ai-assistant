@@ -1817,6 +1817,15 @@ const CODEX_MODEL_REASONING_EFFORTS = ['none', 'low', 'medium', 'high', 'xhigh']
 // model so a user can't pick e.g. xhigh for gpt-5.3-codex (which the codex
 // CLI binary rejects with a 400).
 const CODEX_MODEL_REASONING_SETS: ReadonlyArray<readonly [string, readonly string[]]> = [
+    // gpt-6 line
+    ['gpt-6-astra',      ['low', 'medium', 'high', 'xhigh']],
+    ['gpt-6',            ['low', 'medium', 'high', 'xhigh']],
+    // gpt-5.6 line
+    ['gpt-5.6-sol',      ['low', 'medium', 'high', 'xhigh']],
+    ['gpt-5.6-terra',    ['low', 'medium', 'high', 'xhigh']],
+    ['gpt-5.6-luna',     ['low', 'medium', 'high', 'xhigh']],
+    ['gpt-5.6',          ['low', 'medium', 'high', 'xhigh']],
+    // Original gpt-5 line — minimal accepted (not exposed); low/medium/high.
     ['gpt-5-2025-08-07', ['low', 'medium', 'high']],
     ['gpt-5-mini',       ['low', 'medium', 'high']],
     ['gpt-5-nano',       ['low', 'medium', 'high']],
@@ -1827,8 +1836,6 @@ const CODEX_MODEL_REASONING_SETS: ReadonlyArray<readonly [string, readonly strin
     ['gpt-5.5',          ['none', 'low', 'medium', 'high', 'xhigh']],
     ['gpt-5.5-codex',    ['low', 'medium', 'high', 'xhigh']],
     ['gpt-5.4-codex',    ['low', 'medium', 'high', 'xhigh']],
-    ['gpt-5.3-codex-spark', ['low', 'medium', 'high']],
-    ['gpt-5.3-codex',    ['low', 'medium', 'high']],
     ['gpt-5.2-codex',    ['low', 'medium', 'high', 'xhigh']],
     ['gpt-5.1-codex',    ['low', 'medium', 'high']],
     ['gpt-5-codex',      ['low', 'medium', 'high']],
@@ -4476,13 +4483,46 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 {/* Model + settings — only shown once signed in */}
                 {codexOauthStatus.signedIn && (
                         <>
-                            {codexModelsFromCli && (
-                                <p className="text-xs aip-muted">
-                                    {t('Model list from your Codex CLI')}
-                                    {codexModelCatalog?.fetchedAt && !Number.isNaN(Date.parse(codexModelCatalog.fetchedAt))
-                                        ? ` · ${t('updated')} ${new Date(codexModelCatalog.fetchedAt).toLocaleDateString()}`
-                                        : ''}
-                                </p>
+                            {codexModelsFromCli ? (
+                                <div className="flex items-center justify-between">
+                                    <p className="text-xs aip-muted">
+                                        {t('Model list from your Codex CLI')}
+                                        {codexModelCatalog?.fetchedAt && !Number.isNaN(Date.parse(codexModelCatalog.fetchedAt))
+                                            ? ` · ${t('updated')} ${new Date(codexModelCatalog.fetchedAt).toLocaleDateString()}`
+                                            : ''}
+                                    </p>
+                                    <button
+                                        type="button"
+                                        onClick={async () => {
+                                            const cliCatalog = await window.electronAPI?.getCodexCliModels?.().catch(() => null);
+                                            if (cliCatalog) setCodexModelCatalog(cliCatalog);
+                                        }}
+                                        className="text-xs flex items-center gap-1.5 text-accent-primary hover:underline"
+                                    >
+                                        <RefreshCw size={12} />
+                                        {t('Refresh Models')}
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="flex items-center justify-between p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                                    <div className="flex items-center gap-2">
+                                        <AlertCircle size={14} className="text-amber-400 shrink-0" />
+                                        <p className="text-xs text-amber-200/90 leading-snug">
+                                            {t('Codex CLI catalogue is unavailable. Using verified default presets (GPT-6 Astra, GPT-5.6 Sol/Terra/Luna, ChatGPT 5.5).')}
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={async () => {
+                                            const cliCatalog = await window.electronAPI?.getCodexCliModels?.().catch(() => null);
+                                            if (cliCatalog) setCodexModelCatalog(cliCatalog);
+                                        }}
+                                        className="text-xs shrink-0 px-2.5 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 flex items-center gap-1 transition-colors"
+                                    >
+                                        <RefreshCw size={12} />
+                                        {t('Refresh')}
+                                    </button>
+                                </div>
                             )}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 <CodexCliModelField

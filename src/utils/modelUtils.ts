@@ -159,9 +159,11 @@ export const CODEX_CLI_MODEL = {
  * electron/services/CodexModelCatalog.ts); a test keeps the two apart.
  */
 export const CODEX_CLI_MODEL_PRESETS = [
-    { id: 'gpt-5.5', name: 'ChatGPT 5.5' },
+    { id: 'gpt-6-astra', name: 'GPT-6 Astra' },
+    { id: 'gpt-5.6-sol', name: 'GPT-5.6 Sol' },
     { id: 'gpt-5.6-terra', name: 'GPT-5.6 Terra' },
     { id: 'gpt-5.6-luna', name: 'GPT-5.6 Luna' },
+    { id: 'gpt-5.5', name: 'ChatGPT 5.5' },
 ];
 
 /** Result of the `codex-cli:models` IPC — CodexModelCatalog in the main process. */

@@ -160,6 +160,14 @@ export const CODEX_MODEL_REASONING_EFFORTS: readonly CodexModelReasoningEffort[]
 // reasoning.effort field — the same per-family constraints apply, so
 // keeping it as the single source of truth avoids drift.
 const CODEX_MODEL_REASONING_SETS: ReadonlyArray<readonly [string, readonly CodexModelReasoningEffort[]]> = [
+  // gpt-6 line
+  ['gpt-6-astra',      ['low', 'medium', 'high', 'xhigh']],
+  ['gpt-6',            ['low', 'medium', 'high', 'xhigh']],
+  // gpt-5.6 line
+  ['gpt-5.6-sol',      ['low', 'medium', 'high', 'xhigh']],
+  ['gpt-5.6-terra',    ['low', 'medium', 'high', 'xhigh']],
+  ['gpt-5.6-luna',     ['low', 'medium', 'high', 'xhigh']],
+  ['gpt-5.6',          ['low', 'medium', 'high', 'xhigh']],
   // Original gpt-5 line — minimal accepted (not exposed); low/medium/high.
   ['gpt-5-2025-08-07', ['low', 'medium', 'high']],
   ['gpt-5-mini',       ['low', 'medium', 'high']],
@@ -174,8 +182,6 @@ const CODEX_MODEL_REASONING_SETS: ReadonlyArray<readonly [string, readonly Codex
   // codex variants — `none` not supported; `xhigh` only on 5.2-codex+.
   ['gpt-5.5-codex',    ['low', 'medium', 'high', 'xhigh']],
   ['gpt-5.4-codex',    ['low', 'medium', 'high', 'xhigh']],
-  ['gpt-5.3-codex-spark', ['low', 'medium', 'high']],
-  ['gpt-5.3-codex',    ['low', 'medium', 'high']],
   ['gpt-5.2-codex',    ['low', 'medium', 'high', 'xhigh']],
   ['gpt-5.1-codex',    ['low', 'medium', 'high']],
   ['gpt-5-codex',      ['low', 'medium', 'high']],
