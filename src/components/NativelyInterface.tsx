@@ -5506,10 +5506,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // from registerStreamingNode's mount-time call (and from
       // ensureRevealTicker on a fresh msgId) — i.e. on the very first paint
       // of the streaming node, before any token has arrived. At that moment
-      // the node's only children are the React-rendered blinking-dot
+      // the node's only children are the React-rendered thinking-label
       // indicator (see the `!msg.text` branch in renderMessageText); wiping
       // to '' here destroyed it before the browser ever got a frame to
-      // paint it, so the "thinking" dot never visibly appeared. There is no
+      // paint it, so the "Thinking..." label never visibly appeared. There is no
       // stale content to clear: this div is freshly mounted per message
       // (key="streaming" forces a full unmount on the PREVIOUS row when it
       // finalizes), so leaving existing children alone is always correct.
@@ -8698,9 +8698,9 @@ Provide only the answer, nothing else.`;
         // (a plain setMessages), never paintRevealedNow — nothing imperative
         // writes to the ref node in this mode anymore. Reusing that branch
         // would render blank the moment msg.text becomes non-empty (its
-        // isThinking flips false, killing the dots, with no React child to
+        // isThinking flips false, killing the label, with no React child to
         // fill the gap). Render straight off msg.text/React state instead —
-        // dots while still empty, paced text + cursor once content has
+        // the label while still empty, paced text + cursor once content has
         // arrived — the SAME shape (raw text + sibling cursor span, not
         // ReactMarkdown) as the "handoff gap" block further below. Raw text
         // is deliberate, not a shortcut: ReactMarkdown wraps text in a
@@ -8719,7 +8719,7 @@ Provide only the answer, nothing else.`;
         // React RECONCILE instead of unmount when this branch takes over
         // from the imperative one — i.e. diff this branch's real React
         // children against the imperative div's last-known-to-React
-        // children (typically the dots, since msg.text/React state never
+        // children (typically the label, since msg.text/React state never
         // changes during imperative-mode streaming). But the imperative
         // div's ACTUAL dom contents were long since overwritten out-of-band
         // by paintRevealedNow's `node.innerHTML = ...` (math-aware rendered output)
@@ -8742,9 +8742,7 @@ Provide only the answer, nothing else.`;
             >
               {isThinking ? (
                 <div className="flex items-center min-h-[24px] py-0.5">
-                  <div
-                    className={`natively-thinking-dot w-2 h-2 ${isLightTheme ? 'bg-slate-400' : 'bg-white'} rounded-full`}
-                  />
+                  <span className="natively-thinking-label text-[13px]">{t('Thinking...')}</span>
                 </div>
               ) : (
                 msg.text
@@ -8773,38 +8771,39 @@ Provide only the answer, nothing else.`;
               className="w-full ai-response-card my-2.5 min-h-[24px] transition-opacity duration-200 markdown-content whitespace-pre-wrap text-[14px] leading-relaxed natively-streaming-answer"
             >
               {/*
-               * Blinking-dot indicator INSIDE the streaming bubble. Renders
+               * Shimmering "Thinking..." label INSIDE the streaming bubble. Renders
                * while no tokens have arrived yet (text === ''). When the first
                * token lands, queueToken's mid-stream path does
                *   streamingNodeRef.current.textContent = streamingTextRef.current
                * which REPLACES these React-rendered children with a text node,
                * and the subsequent RAF replaces that with math-aware rendered HTML.
                *
-               * React's fiber still thinks the children are these dots — but
+               * React's fiber still thinks the child is this label — but
                * because we never re-trigger the streaming branch with
                * different JSX while text is flowing, no reconciliation kicks
                * in and the imperative DOM persists. Once the row finalizes,
-               * key="streaming" causes a full unmount, so the dots-vs-text
+               * key="streaming" causes a full unmount, so the label-vs-text
                * discrepancy never causes a reconciliation conflict.
                *
                * The outer div's className must stay constant across isThinking
                * — it is never re-rendered by React while tokens stream in (the
                * imperative writes above bypass reconciliation), so any
                * isThinking-conditional class here would freeze at whichever
-               * value was present on first paint. The dot's own layout
-               * (flex/items-center) lives on the inner wrapper below instead,
+               * value was present on first paint. That is also why the label
+               * takes its colours from the --overlay-text-* tokens in CSS
+               * rather than from the `isLightTheme` prop: the class string
+               * here stays constant, so there is nothing to freeze. Its
+               * layout (flex/items-center) lives on the inner wrapper below,
                * which unmounts cleanly once real text arrives.
                *
-               * Placing the dot INSIDE the bubble (instead of as a separate
+               * Placing the label INSIDE the bubble (instead of as a separate
                * pill below the message list) gives the classic messaging
-               * "typing indicator" UX — the dot appears where the answer
+               * "typing indicator" UX — the word appears where the answer
                * will, then smoothly hands off to the answer text.
                */}
               {!msg.text && (
                 <div className="flex items-center min-h-[24px] py-0.5">
-                  <div
-                    className={`natively-thinking-dot w-2 h-2 ${isLightTheme ? 'bg-slate-400' : 'bg-white'} rounded-full`}
-                  />
+                  <span className="natively-thinking-label text-[13px]">{t('Thinking...')}</span>
                 </div>
               )}
             </div>
@@ -9169,7 +9168,11 @@ Provide only the answer, nothing else.`;
         </div>
       );
     },
-    [isLightTheme, mdComponents, appearance],
+    // `t` is useCallback(..., [lang]) in i18n.tsx — its identity is stable
+    // across renders and changes only on a language switch, so listing it
+    // keeps the thinking label translatable without costing MessageRow its
+    // React.memo bailout (which compares this callback by identity).
+    [isLightTheme, mdComponents, appearance, t],
   );
 
   // We use a ref to hold the latest handlers to avoid re-binding the event listener on every render
@@ -10716,13 +10719,13 @@ Provide only the answer, nothing else.`;
                   )}
 
                   {/*
-                   * Blinking-dot "AI is thinking" indicator (no card chrome —
+                   * Shimmering "Thinking..." indicator (no card chrome —
                    * see `.ai-response-card` neutralization in index.css).
                    * Gated on `!hasStreamingPlaceholder` so it never co-exists
                    * with a streaming system row, which already renders its own
-                   * identical single-dot indicator inside `renderMessageText`
+                   * identical label inside `renderMessageText`
                    * (the `isThinking` branch there). Without this gate the
-                   * user would see TWO dot indicators during the wait — one
+                   * user would see the word TWICE during the wait — one
                    * per surface — even though neither has a visible bubble to
                    * "double up" with anymore.
                    *
@@ -10736,9 +10739,7 @@ Provide only the answer, nothing else.`;
                       (m) => m.role === 'system' && m.isStreaming,
                     ) && (
                     <div className="flex justify-start my-2.5 min-h-[24px] items-center">
-                      <div
-                        className={`natively-thinking-dot w-2 h-2 ${isLightTheme ? 'bg-slate-400' : 'bg-white'} rounded-full`}
-                      />
+                      <span className="natively-thinking-label text-[13px]">{t('Thinking...')}</span>
                     </div>
                   )}
                   <div ref={messagesEndRef} />
