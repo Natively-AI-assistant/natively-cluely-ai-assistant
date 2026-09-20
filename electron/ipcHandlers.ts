@@ -9910,6 +9910,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       // instance has never heard of.
       if (!newUrl.trim() || prevUrl !== newUrl) {
         cm.setNinerouterModels([]);
+        cm.setNinerouterVisionModels([]);
       }
 
       // Push the EFFECTIVE stored key — a blank apiKey on re-save means "keep
@@ -9954,7 +9955,17 @@ export function initializeIpcHandlers(appState: AppState): void {
     if (!resp.ok) return [];
     const data: any = await resp.json();
     const models: string[] = (data?.data || []).map((m: any) => m?.id).filter(Boolean);
-    if (models.length > 0) cm.setNinerouterModels(models);
+    // Per-model vision, captured in the SAME call rather than guessed later.
+    // VisionProviderRegistry reads this back to decide whether a screenshot
+    // should be routed here at all — 17 of the 47 models a stock instance
+    // serves are text-only.
+    const visionModels: string[] = (data?.data || [])
+      .filter((m: any) => m?.id && m?.capabilities?.vision === true)
+      .map((m: any) => m.id);
+    if (models.length > 0) {
+      cm.setNinerouterModels(models);
+      cm.setNinerouterVisionModels(visionModels);
+    }
     return models;
   };
 

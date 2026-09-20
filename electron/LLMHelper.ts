@@ -566,6 +566,9 @@ export class LLMHelper {
   private ninerouterMaxTokens: number | null = null
   private ninerouterModelBudgets: Map<string, number> = new Map()
   private ninerouterModelInputCaps: Map<string, number> = new Map()
+  /** Wire ids whose catalogue entry reports `capabilities.vision`. EMPTY
+   *  means UNKNOWN (never "none") — see ninerouterModelSupportsVision. */
+  private ninerouterVisionModels: Set<string> = new Set()
   private ninerouterModelsFetchedAt: number = 0
   private ninerouterModelsFetch: Promise<void> | null = null
   private useOllama: boolean = false
@@ -1640,6 +1643,7 @@ export class LLMHelper {
       this.ninerouterMaxTokens = null;
       this.ninerouterModelBudgets.clear();
       this.ninerouterModelInputCaps.clear();
+      this.ninerouterVisionModels.clear();
       this.ninerouterModelsFetchedAt = 0;
       console.log("[LLMHelper] 9Router config cleared.");
       return;
@@ -1653,6 +1657,7 @@ export class LLMHelper {
     // Repointed → the cached budgets describe a different instance's catalogue.
     this.ninerouterModelBudgets.clear();
     this.ninerouterModelInputCaps.clear();
+    this.ninerouterVisionModels.clear();
     this.ninerouterModelsFetchedAt = 0;
     this.ninerouterClient = new OpenAI({ apiKey: this.ninerouterApiKey || "dummy", baseURL: trimmedURL });
     console.log(`[LLMHelper] 9Router client initialized with base URL: ${trimmedURL}, max_tokens: ${this.ninerouterMaxTokens ?? 'auto'}`);
@@ -1695,9 +1700,16 @@ export class LLMHelper {
         const data: any = await resp.json();
         const fresh = new Map<string, number>();
         const freshInput = new Map<string, number>();
+        const freshVision = new Set<string>();
         for (const entry of (data?.data || [])) {
           const name = entry?.id;
           if (!name) continue;
+          // Per-model vision, which no other gateway here can answer. 30 of
+          // the 47 models a stock instance serves report true and 17 report
+          // false, so this is the difference between routing a screenshot to
+          // a model that can read it and burning an attempt on one that
+          // cannot.
+          if (entry?.capabilities?.vision === true) freshVision.add(name);
           const budget = Number(entry?.max_completion_tokens ?? entry?.capabilities?.maxOutput);
           if (Number.isFinite(budget) && budget > 0) fresh.set(name, Math.floor(budget));
           const inputCap = Number(entry?.context_length ?? entry?.capabilities?.contextWindow);
@@ -1709,6 +1721,7 @@ export class LLMHelper {
         }
         this.ninerouterModelBudgets = fresh;
         this.ninerouterModelInputCaps = freshInput;
+        this.ninerouterVisionModels = freshVision;
         console.log(`[LLMHelper] 9Router /v1/models: cached budgets for ${fresh.size} model(s) `
           + `(${freshInput.size} with a context window)`);
       } catch {
@@ -1736,6 +1749,47 @@ export class LLMHelper {
     await this.refreshNinerouterModelCatalogue();
     const budget = this.ninerouterModelBudgets.get(ninerouterModel) ?? NINEROUTER_DEFAULT_MAX_OUTPUT_TOKENS;
     return Math.min(NINEROUTER_MAX_TOKENS_MAX, Math.max(NINEROUTER_MAX_TOKENS_MIN, budget));
+  }
+
+  /**
+   * Can this 9Router model read an image?
+   *
+   * The one place this integration deliberately does NOT copy LiteLLM.
+   * LiteLLM's vision builder seats every proxied model as vision-capable and
+   * says why: the proxy fronts arbitrary upstreams and "gating on a guess
+   * is what produced 'no vision provider configured' for users who had one".
+   * That reasoning is sound for LiteLLM, whose /model/info says nothing about
+   * modalities. 9Router's /v1/models DOES — `capabilities.vision`, per model,
+   * 30 true and 17 false on a stock instance.
+   *
+   * So: a model the catalogue calls text-only is refused. And the cost of NOT
+   * refusing it is worse than a wasted attempt — measured against the live
+   * instance, sending an image to a text-only model returns HTTP 200. 9Router
+   * does not reject it; the upstream simply answers without having seen it. So
+   * the alternative to this gate is not an error the chain can fail over from,
+   * it is a confident answer that silently ignored the user's screenshot.
+   *
+   * But an EMPTY set means the catalogue has not been fetched — cold cache,
+   * cleared cache, or the instance down at discovery time — and that is
+   * UNKNOWN, never "no". Failing closed there would reproduce LiteLLM's bug
+   * exactly.
+   */
+  private ninerouterModelSupportsVision(modelId: string): boolean {
+    if (!this.isNinerouterModel(modelId)) return false;
+    if (this.ninerouterVisionModels.size === 0) return true; // unknown, not "no"
+    return this.ninerouterVisionModels.has(this.ninerouterWireModel(modelId));
+  }
+
+  /**
+   * The wire ids this instance's catalogue reports as vision-capable.
+   *
+   * Exposed because VisionProviderRegistry runs in the main process without a
+   * handle on this cache and must answer the same question synchronously — so
+   * the IPC discovery path persists this list and the registry reads it back.
+   * Empty means the catalogue has not been fetched, which is UNKNOWN.
+   */
+  public getNinerouterVisionModels(): string[] {
+    return [...this.ninerouterVisionModels];
   }
 
   /** The wire id: one segment off, never two. `ninerouter/openai/gpt-5` is
@@ -1817,7 +1871,7 @@ export class LLMHelper {
   // these named entry points so the surface stays auditable.
 
   public async runVisionRequest(
-    providerId: 'natively' | 'openai' | 'claude' | 'gemini_flash_lite' | 'gemini_flash' | 'gemini_pro' | 'groq_scout' | 'custom' | 'litellm' | 'nvidia_nim' | 'openrouter' | 'fluxion',
+    providerId: 'natively' | 'openai' | 'claude' | 'gemini_flash_lite' | 'gemini_flash' | 'gemini_pro' | 'groq_scout' | 'custom' | 'litellm' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'ninerouter',
     userPrompt: string,
     systemPrompt: string,
     imagePath: string,
@@ -1854,6 +1908,8 @@ export class LLMHelper {
         return this.generateWithOpenRouter(userPrompt, systemPrompt, [imagePath]);
       case 'fluxion':
         return this.generateWithFluxion(userPrompt, systemPrompt, [imagePath]);
+      case 'ninerouter':
+        return this.generateWithNinerouter(userPrompt, systemPrompt, [imagePath]);
       case 'gemini_flash_lite':
       case 'gemini_flash':
       case 'gemini_pro': {
@@ -4374,6 +4430,12 @@ let isMultimodal = !!(imagePaths?.length);
       }
       if (this.isNvidiaNimModel(this.currentModelId) && this.nvidiaNimClient) {
         return await this.generateWithNvidiaNim(cloudUserContent, openaiSystemPrompt, cloudIsMultimodal ? cloudImagePaths : undefined);
+      }
+      if (this.isNinerouterModel(this.currentModelId) && this.ninerouterClient) {
+        // Images forwarded only when the catalogue agrees this model reads
+        // them; otherwise the turn still runs, as text, rather than failing.
+        const sendImages = cloudIsMultimodal && this.ninerouterModelSupportsVision(this.currentModelId);
+        return await this.generateWithNinerouter(cloudUserContent, openaiSystemPrompt, sendImages ? cloudImagePaths : undefined);
       }
       // Before the Groq/OpenAI branches below — see isOpenRouterModel.
       if (this.isOpenRouterModel(this.currentModelId) && this.openrouterClient) {
@@ -6962,6 +7024,15 @@ let isMultimodal = !!(imagePaths?.length);
         cloud.push({ id: 'nvidia_nim', name: `NVIDIA NIM (${this.currentModelId.replace('nvidia_nim/', '')})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
           open: (sig) => this.streamWithNvidiaNim(userContent, systemPrompt, imagePaths, sig) });
       }
+      // Same selection rule as the gateways around it, plus one gate none of
+      // them can apply: the catalogue says per model whether it reads images.
+      // A text-only 9Router model is not seated at all, so the screenshot
+      // goes to something that can actually see it instead of burning an
+      // attempt and a health mark first.
+      if (this.isNinerouterModel(this.currentModelId) && this.ninerouterClient && this.ninerouterModelSupportsVision(this.currentModelId)) {
+        cloud.push({ id: 'ninerouter', name: `9Router (${this.ninerouterWireModel(this.currentModelId)})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
+          open: (sig) => this.streamWithNinerouter(userContent, systemPrompt, imagePaths, sig) });
+      }
       // Same rule as the two gateways above: only recruited when it is the model
       // the user actually picked. OpenRouter fronts hundreds of upstreams and we
       // cannot know whether someone else's turn should be routed through it.
@@ -7051,6 +7122,7 @@ let isMultimodal = !!(imagePaths?.length);
       if (this.isLiteLLMModel(this.currentModelId)) { const l = cloud.find(p => p.id === 'litellm'); if (l) front.push(l); }
       if (this.isNvidiaNimModel(this.currentModelId)) { const n = cloud.find(p => p.id === 'nvidia_nim'); if (n) front.push(n); }
       if (this.isOpenRouterModel(this.currentModelId)) { const o = cloud.find(p => p.id === 'openrouter'); if (o) front.push(o); }
+      if (this.isNinerouterModel(this.currentModelId)) { const n9 = cloud.find(p => p.id === 'ninerouter'); if (n9) front.push(n9); }
       // Fluxion belongs here for a sharper version of the same reason. Its rung
       // IS seated in `cloud`, but at the end of the priority order, and
       // orderVisionByHealth sorts unmeasured providers by ascending priority —

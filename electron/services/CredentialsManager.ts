@@ -258,6 +258,17 @@ export interface StoredCredentials {
      */
     ninerouterModels?: string[];
     /**
+     * The subset of `ninerouterModels` whose catalogue entry reports
+     * `capabilities.vision`. Persisted because VisionProviderRegistry has to
+     * answer "can this model read an image?" synchronously, with no handle on
+     * LLMHelper's in-memory cache.
+     *
+     * ABSENT OR EMPTY MEANS UNKNOWN, never "none". A cold cache must not read
+     * as "this instance has no vision models" — gating on absent data is what
+     * told LiteLLM users with a working vision model that they had none.
+     */
+    ninerouterVisionModels?: string[];
+    /**
      * Per-provider model catalog, as last discovered from that provider's API.
      * Persisted because the allow-list below references these ids: without it the
      * catalog dies on a settings-tab switch and the stored allow-list would point
@@ -1295,6 +1306,14 @@ export class CredentialsManager {
     public getNinerouterModels(): string[] {
         return this.credentials.ninerouterModels || [];
     }
+    public getNinerouterVisionModels(): string[] {
+        return this.credentials.ninerouterVisionModels || [];
+    }
+    public setNinerouterVisionModels(models: string[]): void {
+        if (this.refuseWriteWhileDegraded('set ninerouter vision models')) return;
+        this.credentials.ninerouterVisionModels = models;
+        this.saveCredentials();
+    }
     public setNinerouterModels(models: string[]): void {
         if (this.refuseWriteWhileDegraded('set ninerouter models')) return;
         this.credentials.ninerouterModels = models;
@@ -1456,6 +1475,7 @@ export class CredentialsManager {
             this.credentials.ninerouterMaxTokens = undefined;
             this.credentials.ninerouterPreferredModel = undefined;
             this.credentials.ninerouterModels = undefined;
+            this.credentials.ninerouterVisionModels = undefined;
             this.saveCredentials();
             console.log('[CredentialsManager] 9Router config cleared');
             return;
@@ -1467,6 +1487,7 @@ export class CredentialsManager {
         if (previousURL && previousURL !== trimmedURL) {
             this.credentials.ninerouterPreferredModel = undefined;
             this.credentials.ninerouterModels = undefined;
+            this.credentials.ninerouterVisionModels = undefined;
         }
         this.credentials.ninerouterApiKey = trimmedKey || this.credentials.ninerouterApiKey || undefined;
         this.credentials.ninerouterBaseURL = trimmedURL;
