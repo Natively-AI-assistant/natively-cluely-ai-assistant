@@ -29,6 +29,13 @@ describe('describeProbeError', () => {
   });
   test('a non-Error and an over-long message are handled', () => {
     assert.equal(describeProbeError('boom'), 'boom');
+    // Credential shapes the first mask missed (review finding) — none may survive.
+    for (const secret of ['Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghijklmnop', 'jina_0123456789abcdefABCDEF', 'hf_abcdefghijklmnopqrstuv', 'nvapi-ABCDEFGH12345678', 'x_api_key_sk-abcdef123456789', '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08']) {
+      const out = describeProbeError(Object.assign(new Error(`401 invalid key ${secret} for request`), { code: secret }));
+      assert.ok(!out.includes(secret.replace(/^Bearer /, '').slice(-12)), `leaked: ${out}`);
+    }
+    // Node's fetch hides the reason on `cause`; without it DNS and refused connections look the same.
+    assert.match(describeProbeError(Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNREFUSED' } })), /ECONNREFUSED/);
     assert.ok(describeProbeError(new Error('x'.repeat(5000))).length <= 220);
   });
 });

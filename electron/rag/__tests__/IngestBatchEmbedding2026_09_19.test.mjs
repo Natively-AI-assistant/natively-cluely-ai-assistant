@@ -50,17 +50,35 @@ describe('chunkAndEmbedDocument', () => {
     const nodes = await chunkAndEmbedDocument(RESUME, DocType.RESUME, async () => { c.single++; return vec(); });
     assert.equal(c.single, nodes.length);
   });
-  test('a failing batch call falls back to per-text for THAT batch and loses no node', async () => {
+  // Review finding (2026-09-20), reproduced against the real pipeline: the per-text embedder has no
+  // failure hysteresis — it promotes the bundled model on its FIRST error — so handing a failed batch to
+  // it produced one document with 10 vectors in the hosted space and 21 in the local one, and demoted
+  // the session: the defect batching exists to remove. The first version of this test stubbed a
+  // per-text function that always succeeded, so it could never see that.
+  test('a batch that fails ONCE is retried as a batch — the per-text path is never used', async () => {
     const c = counters();
     const nodes = await chunkAndEmbedDocument(RESUME, DocType.RESUME,
       async () => { c.single++; return vec(); },
       async (texts) => { c.batch++; if (c.batch === 2) throw new Error('429 Too Many Requests'); return texts.map(vec); });
-    assert.equal(c.single, 10, 'exactly the failed batch was embedded one by one');
-    assert.ok(nodes.every((n) => Array.isArray(n.embedding)));
+    assert.equal(c.single, 0, 'the promoting per-text path must not run when a batch embedder is wired');
+    assert.ok(nodes.every((n) => Array.isArray(n.embedding)), 'the retry embedded the batch');
   });
-  test('a batch reply of the wrong length is refused, never zipped onto the wrong nodes', async () => {
-    assert.equal(await embedTextsBatched(['a', 'b', 'c'], async () => [vec(), vec()]), null);
+  test('a batch that fails TWICE leaves its nodes unembedded rather than in another space', async () => {
+    const c = counters(); let first = true;
+    const nodes = await chunkAndEmbedDocument(RESUME, DocType.RESUME,
+      async () => { c.single++; return vec(); },
+      async (texts) => { c.batch++; if (first || c.batch === 2) { first = false; throw new Error('503'); } return texts.map(vec); });
+    assert.equal(c.single, 0);
+    assert.ok(nodes.some((n) => n.embedding === undefined) && nodes.some((n) => Array.isArray(n.embedding)), 'one batch unembedded, the rest embedded');
+    assert.ok(nodes.length > 0 && nodes.every((n) => typeof n.text_content === 'string'), 'no node is lost');
+  });
+  test('no batch embedder wired (an older main process) → null, and the caller embeds per text as before', async () => {
     assert.equal(await embedTextsBatched(['a'], undefined), null);
+  });
+  test('a reply of the wrong length, or with a broken vector, is never zipped onto the nodes', async () => {
+    assert.deepEqual(await embedTextsBatched(['a', 'b', 'c'], async () => [vec(), vec()]), [undefined, undefined, undefined]);
+    const out = await embedTextsBatched(['a', 'b', 'c'], async () => [vec(), [NaN, 1], vec().slice(0, 3)]);
+    assert.ok(Array.isArray(out[0])); assert.equal(out[1], undefined, 'NaN'); assert.equal(out[2], undefined, 'wrong dimension');
   });
 });
 

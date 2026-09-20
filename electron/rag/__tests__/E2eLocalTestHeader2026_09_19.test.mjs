@@ -25,6 +25,8 @@ describe('gate', () => {
     process.env.NATIVELY_E2E = '1'; process.env.NATIVELY_E2E_LOCAL_TEST_TOKEN = 'tok-12345678'; process.env.NATIVELY_API_URL = 'http://127.0.0.1:8791';
     assert.deepEqual(e2eLocalTestHeaderFor('http://127.0.0.1:8791/v1'), { 'x-natively-local-test': 'tok-12345678' });
     for (const u of ['https://openrouter.ai/api/v1', 'https://api.jina.ai/v1', 'https://api.voyageai.com/v1', 'https://api.natively.software/v1']) assert.deepEqual(e2eLocalTestHeaderFor(u), {}, u);
+    // ORIGIN equality, not a prefix (review finding): each of these STARTS WITH the base URL.
+    for (const u of ['http://127.0.0.1:8791.evil.com/v1', 'http://127.0.0.1:87910/v1', 'http://127.0.0.1:8791@evil.com/v1', 'not a url']) assert.deepEqual(e2eLocalTestHeaderFor(u), {}, u);
   });
 });
 

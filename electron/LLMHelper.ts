@@ -2907,7 +2907,10 @@ export class LLMHelper {
         const isRetryable = msg.includes("503") || msg.includes("overloaded")
           || status === 529 || status === 429 || status === 500
           || msg.includes("rate_limit") || msg.includes("rate limit");
-        if (!isRetryable) throw e;
+        // "Consecutive" must mean consecutive: a 429 followed by a non-429 error
+        // used to leave the count at 1 forever, so the next lone 429 — hours
+        // later — tripped a breaker meant for a saturated model.
+        if (!isRetryable) { if (circuitKey) this.rateLimitCircuit.delete(circuitKey); throw e; }
 
         // Track 429s for the breaker and trip it once saturated.
         if (circuitKey && is429) {
@@ -4434,6 +4437,9 @@ let isMultimodal = !!(imagePaths?.length);
   ): Promise<string> {
     type ProviderAttempt = { name: string; execute: () => Promise<string> };
     const providers: ProviderAttempt[] = [];
+    // A breaker may skip a rung only if another rung exists to fall to. Evaluated
+    // when the rung RUNS (the list is complete by then), not when it is pushed.
+    const breakerKeyFor = (key: string): string | undefined => (providers.length > 1 ? key : undefined);
     const permanentFailureKeyFor = (name: string): string => {
       if (name.startsWith('Gemini')) return 'gemini';
       if (name.startsWith('OpenAI')) return 'openai';
@@ -4457,14 +4463,19 @@ let isMultimodal = !!(imagePaths?.length);
       // two consecutive 429s open the breaker and the ladder skips this rung
       // for the cooldown. Scoped to the structured ladder: chat's handling of
       // the same client is unchanged.
-      providers.push({ name: `OpenAI (${OPENAI_MODEL})`, execute: () => this.generateWithOpenai(message, undefined, undefined, undefined, 'structured:openai') });
+      // …but ONLY when a later rung can take the call (review finding, reproduced):
+      // with the key unconditionally set, a user whose ONLY provider is OpenAI
+      // lost all structured generation for 60 s after two 429s — before, the
+      // third attempt succeeded in 1.2 s. `breakerKeyFor` decides at call time,
+      // once the ladder is known.
+      providers.push({ name: `OpenAI (${OPENAI_MODEL})`, execute: () => this.generateWithOpenai(message, undefined, undefined, undefined, breakerKeyFor('structured:openai')) });
     }
 
     // Priority 2: Claude (now safe — generateWithClaude streams internally, so the SDK's
     // 10-minute pre-flight gate on large max_tokens is bypassed).
     if (this.claudeClient) {
       // Same breaker as the OpenAI rung above, for the same reason.
-      providers.push({ name: `Claude (${CLAUDE_MODEL})`, execute: () => this.generateWithClaude(message, undefined, undefined, undefined, 'structured:claude') });
+      providers.push({ name: `Claude (${CLAUDE_MODEL})`, execute: () => this.generateWithClaude(message, undefined, undefined, undefined, breakerKeyFor('structured:claude')) });
     }
 
     // Priority 3: Gemini cascade — flash-lite → 3.7-flash ONLY (cheapest/fastest

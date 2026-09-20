@@ -23,5 +23,14 @@ export function e2eLocalTestHeader(): Record<string, string> {
 
 /** The header, but only for a request that is going to the natively API. */
 export function e2eLocalTestHeaderFor(url: string): Record<string, string> {
-  return String(url).startsWith(nativelyApiBase()) ? e2eLocalTestHeader() : {};
+  // ORIGIN equality, not a string prefix (review finding): a prefix match sent
+  // the header to http://127.0.0.1:8791.evil.com, to …:87910, and to
+  // http://127.0.0.1:8791@evil.com — whose real host is evil.com. Not reachable
+  // today (every base URL is static or the same env var), which is no reason to
+  // leave a credential's destination to string luck.
+  try {
+    return new URL(String(url)).origin === new URL(nativelyApiBase()).origin ? e2eLocalTestHeader() : {};
+  } catch {
+    return {};
+  }
 }

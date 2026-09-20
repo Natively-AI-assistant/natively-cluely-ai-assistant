@@ -55,6 +55,21 @@ describe('structured ladder: a rate-limited own-key rung is skipped, not re-trie
     assert.equal(h.rateLimitCircuit.size, 0);
   });
 
+  // Review finding, reproduced: with the key set unconditionally, a user whose ONLY provider is OpenAI
+  // lost all structured generation for 60 s after two 429s — before the breaker, the third attempt
+  // answered in 1.2 s. A breaker may skip a rung only when there is another rung to fall to.
+  test('a user with ONLY an OpenAI key keeps the old retry behaviour — no breaker, the third attempt answers', async () => {
+    const h = bareHelper(); let creates = 0;
+    h.openaiClient = { chat: { completions: { create: async () => { creates++; if (creates <= 2) throw err429(); return { choices: [{ message: { content: '{"ok":true}' } }] }; } } } };
+    h.isOpenAiModel = () => false;
+    assert.equal(await h.generateContentStructured('extract'), '{"ok":true}');
+    assert.equal(creates, 3); assert.equal(h.rateLimitCircuit.size, 0, 'no breaker entry for a sole rung');
+  });
+  test('"consecutive" means consecutive: a non-429 error resets the count', async () => {
+    const h = bareHelper(); const seq = [err429(), Object.assign(new Error('400 bad request'), { status: 400 })]; let i = 0;
+    await assert.rejects(() => LLMHelper.prototype.withRetry.call(h, async () => { throw seq[Math.min(i++, 1)]; }, 3, 'k'));
+    assert.equal(h.rateLimitCircuit.has('k'), false, 'a stale count of 1 used to make the NEXT lone 429 trip the breaker');
+  });
   test('a success closes the breaker again', async () => {
     const h = bareHelper(); let mode = 'down';
     h.openaiClient = { chat: { completions: { create: async () => { if (mode === 'down') throw err429(); return { choices: [{ message: { content: '{"from":"openai"}' } }] }; } } } };

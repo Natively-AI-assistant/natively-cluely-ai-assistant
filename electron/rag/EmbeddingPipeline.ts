@@ -4,6 +4,7 @@
 // On provider exhaustion, automatically falls back to LocalEmbeddingProvider (on-device).
 
 import Database from 'better-sqlite3';
+import { describeProbeError } from './providers/probeError';
 import { VectorStore } from './VectorStore';
 
 import { EmbeddingProviderResolver, AppAPIConfig } from './EmbeddingProviderResolver';
@@ -26,6 +27,7 @@ const EMBED_TIMEOUT_MS = 30_000;
 const QUERY_EMBED_TIMEOUT_MS = 3_000;
 /** How long an identical query's vector is reused (see queryEmbedMemo). */
 const QUERY_EMBED_MEMO_TTL_MS = 5_000;
+const QUERY_EMBED_MEMO_MAX = 64;
 
 // ── T13 / RC12: query-path hysteresis (2026-08-28) ──────────────────────────
 //
@@ -957,18 +959,28 @@ export class EmbeddingPipeline {
         opts?: { retryBudgetMs?: number },
     ): Promise<number[]> {
         const space = this.provider?.space ?? this.provider?.name ?? 'none';
-        const key = `${space}\u0000${text}`;
+        // The retry BUDGET is part of the key (review finding, reproduced): a
+        // promise carries its starter's budget. A live caller with a 1.2 s budget
+        // that joined an unbudgeted caller's request waited 4.6 s for it, and an
+        // unbudgeted caller that joined a budgeted one inherited a rejection its
+        // own retries would have survived. Callers share a request only when they
+        // asked for the same thing.
+        const key = `${space}\u0000${opts?.retryBudgetMs ?? 'unbudgeted'}\u0000${text}`;
         const now = Date.now();
         const memo = (this.queryEmbedMemo ??= new Map());
+        // Swept on every call and hard-capped: expired 2048-d vectors used to stay
+        // until 33 entries existed, and 5,000 distinct queries inside the TTL
+        // left 5,000 entries.
+        for (const [k, v] of memo) if (now - v.at >= QUERY_EMBED_MEMO_TTL_MS) memo.delete(k);
+        while (memo.size >= QUERY_EMBED_MEMO_MAX) memo.delete(memo.keys().next().value as string);
         const hit = memo.get(key);
-        if (hit && now - hit.at < QUERY_EMBED_MEMO_TTL_MS) return hit.promise;
-        if (memo.size > 32) {
-            for (const [k, v] of memo) if (now - v.at >= QUERY_EMBED_MEMO_TTL_MS) memo.delete(k);
-        }
+        // A copy per caller: the array used to be shared, so one caller
+        // normalising in place would have corrupted the other's vector.
+        if (hit) return hit.promise.then((v: number[]) => v.slice());
         const promise = this.getEmbeddingForQueryUncached(text, opts);
         memo.set(key, { at: now, promise });
         promise.catch(() => { if (memo.get(key)?.promise === promise) memo.delete(key); });
-        return promise;
+        return promise.then((v: number[]) => v.slice());
     }
 
     private async getEmbeddingForQueryUncached(
@@ -1155,7 +1167,7 @@ export class EmbeddingPipeline {
             // boot ("first in 5s") failed every time, and the log held not one
             // line about it. One line per failed re-probe (at most one a minute).
             const status = error?.status ? `HTTP ${error.status} · ` : '';
-            console.warn(`[EmbeddingPipeline] ${primary.name} re-probe failed (${status}${String(error?.message ?? error).slice(0, 200)}); still on the fallback, retrying in ${PRIMARY_REPROBE_INTERVAL_MS / 1000}s.`);
+            console.warn(`[EmbeddingPipeline] ${primary.name} re-probe failed (${status}${describeProbeError(error)}); still on the fallback, retrying in ${PRIMARY_REPROBE_INTERVAL_MS / 1000}s.`);
             return false;
         }
         console.log(
