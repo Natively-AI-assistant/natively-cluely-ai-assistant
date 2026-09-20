@@ -120,6 +120,19 @@ export interface StoredCredentials {
     ninerouterBaseURL?: string;
     /** Manual output ceiling for 9Router-routed models. Unset → Auto (per-model via /v1/models). */
     ninerouterMaxTokens?: number;
+    /**
+     * Thinking level sent as `reasoning_effort`. 'auto' or unset sends nothing
+     * and leaves the upstream's own choice. The level is honoured and monotonic
+     * (none < low < medium < high), but the size of the win is model- and
+     * prompt-dependent — on Gemini, 'auto' was itself the fastest measured.
+     */
+    ninerouterThinking?: string;
+    /**
+     * Per-model reasoning capability as the catalogue reported it, so the
+     * settings dropdown adapts its options to the SELECTED model with no
+     * network round-trip. Keyed by the instance's own wire id.
+     */
+    ninerouterModelMeta?: Record<string, { reasoning?: boolean; canDisable?: boolean }>;
     googleServiceAccountPath?: string;
     customProviders?: CustomProvider[];
     curlProviders?: CurlProvider[];
@@ -988,6 +1001,19 @@ export class CredentialsManager {
         return this.credentials.ninerouterMaxTokens;
     }
 
+    public getNinerouterThinking(): string | undefined {
+        return this.credentials.ninerouterThinking;
+    }
+
+    public getNinerouterModelMeta(): Record<string, { reasoning?: boolean; canDisable?: boolean }> {
+        return this.credentials.ninerouterModelMeta || {};
+    }
+    public setNinerouterModelMeta(meta: Record<string, { reasoning?: boolean; canDisable?: boolean }>): void {
+        if (this.refuseWriteWhileDegraded('set ninerouter model meta')) return;
+        this.credentials.ninerouterModelMeta = meta;
+        this.saveCredentials();
+    }
+
     public getGoogleServiceAccountPath(): string | undefined {
         return this.credentials.googleServiceAccountPath;
     }
@@ -1464,7 +1490,7 @@ export class CredentialsManager {
      * key on a re-save keeps the stored one, because the Settings field is
      * masked and left empty when the user is only changing max-tokens.
      */
-    public setNinerouterConfig(apiKey: string, baseURL: string, maxTokens?: number): void {
+    public setNinerouterConfig(apiKey: string, baseURL: string, maxTokens?: number, thinking?: string): void {
         if (this.refuseWriteWhileDegraded('set ninerouter config')) return;
         const trimmedURL = (baseURL || '').trim();
         const trimmedKey = (apiKey || '').trim();
@@ -1476,6 +1502,8 @@ export class CredentialsManager {
             this.credentials.ninerouterPreferredModel = undefined;
             this.credentials.ninerouterModels = undefined;
             this.credentials.ninerouterVisionModels = undefined;
+            this.credentials.ninerouterThinking = undefined;
+            this.credentials.ninerouterModelMeta = undefined;
             this.saveCredentials();
             console.log('[CredentialsManager] 9Router config cleared');
             return;
@@ -1488,11 +1516,13 @@ export class CredentialsManager {
             this.credentials.ninerouterPreferredModel = undefined;
             this.credentials.ninerouterModels = undefined;
             this.credentials.ninerouterVisionModels = undefined;
+            this.credentials.ninerouterModelMeta = undefined;
         }
         this.credentials.ninerouterApiKey = trimmedKey || this.credentials.ninerouterApiKey || undefined;
         this.credentials.ninerouterBaseURL = trimmedURL;
         const mt = Number(maxTokens);
         this.credentials.ninerouterMaxTokens = Number.isFinite(mt) && mt > 0 ? Math.floor(mt) : undefined;
+        this.credentials.ninerouterThinking = (thinking || '').trim() || undefined;
         this.saveCredentials();
         console.log('[CredentialsManager] 9Router config updated');
     }

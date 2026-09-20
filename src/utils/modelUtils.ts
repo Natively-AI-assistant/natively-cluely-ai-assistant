@@ -289,6 +289,63 @@ export const litellmModelLabel = (id: string): string => {
  * `ninerouter` would label as "ninerouter". Relying on the accident also
  * leaves a function whose NAME tells the next reader it does not apply.
  */
+
+/** What 9Router's catalogue says about one model's reasoning behaviour. */
+export interface NinerouterThinkingCaps {
+    reasoning?: boolean;
+    thinkingCanDisable?: boolean;
+}
+
+/**
+ * The thinking levels worth offering for ONE 9Router model.
+ *
+ * `reasoning_effort` is HONOURED, not accepted-and-ignored: latency moves
+ * monotonically across none < low < medium < high, reproduced on two models
+ * and two measurement methods. That is the property worth relying on.
+ *
+ * The MAGNITUDE is model- and prompt-dependent, and an earlier version of this
+ * comment overstated it. Measured on one instance:
+ *
+ *   minimax/MiniMax-M3, non-streaming total:  default 2581ms -> 'none'  857ms
+ *   gemini-3.5-flash-lite, streaming TTFT:    'high' 1425ms -> 'none'  877ms
+ *
+ * but on that same Gemini model AUTO was the fastest of all (~800ms), because
+ * Gemini already varies its own effort per prompt. So 'auto' is not a slow
+ * setting to be escaped — it is a reasonable default, and these levels are for
+ * when the user wants to pin the trade-off themselves.
+ *
+ * TWO RULES, both from measurement rather than from the docs:
+ *
+ * 1. `reasoning: false` -> NO control. gemini/gemma-4-31b-it is the only such
+ *    chat model on a stock instance; a level picker for it would do nothing.
+ *
+ * 2. `thinkingCanDisable: false` does NOT remove the fastest option. It was
+ *    tempting to gate on it — and wrong: gemini-3.5-flash-lite reports false
+ *    and still goes 3963ms -> 721ms, because 9Router clamps to the model's
+ *    minimum rather than refusing. Hiding it would hide the biggest win. The
+ *    flag only changes the LABEL, because calling it "Off" would promise
+ *    something that model cannot actually do.
+ *
+ * Unknown capabilities fall back to the full set: offering a control the server
+ * may ignore is better than withholding one it would have honoured.
+ */
+export const ninerouterThinkingOptions = (
+    caps?: NinerouterThinkingCaps | null,
+): { id: string; name: string }[] => {
+    if (caps && caps.reasoning === false) return [];
+    const canDisable = caps?.thinkingCanDisable !== false;
+    return [
+        { id: 'auto', name: 'Auto (provider default)' },
+        { id: 'none', name: canDisable ? 'Off — fastest' : 'Minimal — fastest' },
+        { id: 'low', name: 'Low' },
+        { id: 'medium', name: 'Medium' },
+        { id: 'high', name: 'High — slowest' },
+    ];
+};
+
+/** Levels the wire accepts. `auto` means "send nothing". */
+export const NINEROUTER_THINKING_LEVELS = ['none', 'low', 'medium', 'high'] as const;
+
 export const gatewayModelLabel = (id: string): string => {
     if (!id) return '';
     const segments = id.replace(/^(?:litellm|ninerouter|openrouter|nvidia_nim|fluxion)\//, '').split('/').filter(Boolean);

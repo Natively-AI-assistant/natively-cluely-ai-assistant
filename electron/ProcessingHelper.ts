@@ -126,7 +126,7 @@ export class ProcessingHelper {
     const ninerouterBaseURL = credManager.getNinerouterBaseURL();
     if (ninerouterBaseURL) {
       console.log("[ProcessingHelper] Loading stored 9Router config from CredentialsManager");
-      this.llmHelper.setNinerouterConfig(credManager.getNinerouterApiKey() || '', ninerouterBaseURL, credManager.getNinerouterMaxTokens());
+      this.llmHelper.setNinerouterConfig(credManager.getNinerouterApiKey() || '', ninerouterBaseURL, credManager.getNinerouterMaxTokens(), credManager.getNinerouterThinking() || null);
     }
 
     const nativelyKey = credManager.getNativelyApiKey();

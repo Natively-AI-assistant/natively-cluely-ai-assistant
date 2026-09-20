@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useT } from '../../i18n';
 import { Plus, Trash2, Edit2, AlertCircle, Save, ChevronDown, Check, RefreshCw, ExternalLink, Loader2, LogOut, Cloud, Server, Eye, Info, MessageSquare, Image, FileText, User, Boxes, ClipboardList, Laptop } from 'lucide-react';
-import { CODEX_CLI_MODEL, codexCliSelectorId, codexModelOptions, type CodexModelCatalogResult, isModelAllowed, isOptInModelProvider, litellmModelLabel, gatewayModelLabel, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
+import { CODEX_CLI_MODEL, codexCliSelectorId, codexModelOptions, type CodexModelCatalogResult, isModelAllowed, isOptInModelProvider, litellmModelLabel, gatewayModelLabel, ninerouterThinkingOptions, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
 import { validateCurl } from '../../lib/curl-validator';
 import { ProviderCard } from './ProviderCard';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -2403,6 +2403,10 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     // answer. On 9Router those are genuinely different outcomes — /v1/models
     // responds without a key while /v1/chat/completions does not.
     const [ninerouterTest, setNinerouterTest] = useState<{ testing: boolean; ok?: boolean; message?: string }>({ testing: false });
+    const [ninerouterThinking, setNinerouterThinking] = useState('');
+    // Per-model reasoning capability from the catalogue, so the thinking
+    // dropdown offers what THIS model can actually do.
+    const [ninerouterModelMeta, setNinerouterModelMeta] = useState<Record<string, { reasoning?: boolean; canDisable?: boolean }>>({});
     // Provider visibility filters. `disabledProviders` hides a provider's models
     // without touching its stored credential; `cloudEnabledModels[prov]` narrows
     // which of that provider's models reach the picker (empty = all).
@@ -2702,6 +2706,8 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     setLitellmMaxTokens(creds.litellmMaxTokens ? String(creds.litellmMaxTokens) : '');
                     setNinerouterBaseURL((creds as any).ninerouterBaseURL || '');
                     setNinerouterMaxTokens((creds as any).ninerouterMaxTokens ? String((creds as any).ninerouterMaxTokens) : '');
+                    setNinerouterThinking((creds as any).ninerouterThinking || '');
+                    setNinerouterModelMeta((creds as any).ninerouterModelMeta || {});
                     // Load preferred models
                     const pm: Record<string, string> = {};
                     if (creds.geminiPreferredModel) pm.gemini = creds.geminiPreferredModel;
@@ -3675,6 +3681,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 apiKey: ninerouterApiKey.trim(),
                 baseURL: url,
                 maxTokens: Number.isFinite(parsedMax) && parsedMax > 0 ? parsedMax : undefined,
+                thinking: ninerouterThinking || undefined,
             });
             if (result && result.success) {
                 setSavedStatus(prev => ({ ...prev, ninerouter: true }));
@@ -3739,6 +3746,8 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 setNinerouterBaseURL('');
                 setNinerouterApiKey('');
                 setNinerouterMaxTokens('');
+                setNinerouterThinking('');
+                setNinerouterModelMeta({});
                 setNinerouterModels([]);
                 setNinerouterTest({ testing: false });
                 // Main already dropped ninerouterPreferredModel with the rest of the
@@ -4979,6 +4988,46 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                 {t("Auto reads each model's real output budget from")} <span className="aip-code-inline">/v1/models</span> {t('(falls back to 64,000 if unavailable). Pick a fixed value to override.')}
                             </p>
                         </div>
+
+                        {/* Thinking level.
+                            45 of the 47 models a stock instance serves are reasoning
+                            models, and reasoning_effort is honoured monotonically
+                            (measured: none < low < medium < high). How much it buys
+                            depends on the model and the prompt — on Gemini, Auto was
+                            itself the fastest, because it varies effort per prompt.
+
+                            The OPTIONS come from the selected model's own catalogue
+                            entry, so a non-reasoning model shows no control at all and a
+                            model that can only be turned DOWN says "Minimal" rather than
+                            promising "Off". */}
+                        {(() => {
+                            const selected = (preferredModels['ninerouter'] || '').replace(/^ninerouter\//, '');
+                            const opts = ninerouterThinkingOptions(selected ? ninerouterModelMeta[selected] : undefined);
+                            if (opts.length === 0) {
+                                return (
+                                    <p className="text-[10px] aip-muted">
+                                        {t('This model does not use reasoning, so there is no thinking level to set.')}
+                                    </p>
+                                );
+                            }
+                            return (
+                                <div className="space-y-1">
+                                    <span className="block aip-label">{t('Thinking')}</span>
+                                    <ModelSelect
+                                        value={ninerouterThinking}
+                                        options={opts}
+                                        onChange={setNinerouterThinking}
+                                        placeholder={t('Auto (provider default)')}
+                                    />
+                                    <p className="text-[10px] aip-muted">
+                                        {selected
+                                            ? t('Applies to the model you set as default here.')
+                                            : t('Set a default model above to match these options to it.')}{' '}
+                                        {t('Auto leaves the model to decide, which is usually fine. Lower levels answer faster; higher levels reason more.')}
+                                    </p>
+                                </div>
+                            );
+                        })()}
 
                         {ninerouterTest.message && (
                             <p className={`text-[10px] ${ninerouterTest.ok ? 'aip-ok-fg' : 'aip-danger-fg'}`} role="status">

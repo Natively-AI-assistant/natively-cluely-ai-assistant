@@ -1612,7 +1612,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setLitellmConfig: (config: { apiKey: string; baseURL: string; maxTokens?: number }) => ipcRenderer.invoke('set-litellm-config', config),
   getAvailableLiteLLMModels: () => ipcRenderer.invoke('get-available-litellm-models'),
   refreshLiteLLMModels: () => ipcRenderer.invoke('refresh-litellm-models'),
-  setNinerouterConfig: (config: { apiKey: string; baseURL: string; maxTokens?: number }) => ipcRenderer.invoke('set-ninerouter-config', config),
+  setNinerouterConfig: (config: { apiKey: string; baseURL: string; maxTokens?: number; thinking?: string }) => ipcRenderer.invoke('set-ninerouter-config', config),
   getAvailableNinerouterModels: () => ipcRenderer.invoke('get-available-ninerouter-models'),
   refreshNinerouterModels: () => ipcRenderer.invoke('refresh-ninerouter-models'),
   testNinerouterConnection: (config?: { apiKey?: string; baseURL?: string }) => ipcRenderer.invoke('test-ninerouter-connection', config),

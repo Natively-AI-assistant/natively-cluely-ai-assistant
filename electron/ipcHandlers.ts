@@ -9897,7 +9897,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
 
-  safeHandle('set-ninerouter-config', async (_, config: { apiKey: string; baseURL: string; maxTokens?: number }) => {
+  safeHandle('set-ninerouter-config', async (_, config: { apiKey: string; baseURL: string; maxTokens?: number; thinking?: string }) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
@@ -9916,7 +9916,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const changed = prevKey !== effectiveNewKey
         || prevUrl !== newUrl
         || (prevMaxTokens || undefined) !== effectiveNewMaxTokens;
-      cm.setNinerouterConfig(requestedKey, newUrl, config?.maxTokens);
+      cm.setNinerouterConfig(requestedKey, newUrl, config?.maxTokens, config?.thinking);
 
       // The discovered catalogue belongs to ONE instance: which models a
       // 9Router serves is a function of which upstream accounts its owner has
@@ -9930,7 +9930,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Push the EFFECTIVE stored key — a blank apiKey on re-save means "keep
       // the stored one" (the field is masked), so read back what was persisted.
       const llmHelper = appState.processingHelper.getLLMHelper();
-      llmHelper.setNinerouterConfig(cm.getNinerouterApiKey() || '', newUrl, config?.maxTokens);
+      llmHelper.setNinerouterConfig(cm.getNinerouterApiKey() || '', newUrl, config?.maxTokens, cm.getNinerouterThinking() || null);
 
       appState.getIntelligenceManager().resetEngine();
       appState.getIntelligenceManager().initializeLLMs();
@@ -9976,9 +9976,17 @@ export function initializeIpcHandlers(appState: AppState): void {
     const visionModels: string[] = (data?.data || [])
       .filter((m: any) => m?.id && m?.capabilities?.vision === true)
       .map((m: any) => m.id);
+    // Per-model reasoning capability, so the settings dropdown can adapt its
+    // options to the selected model with no extra round-trip.
+    const meta: Record<string, { reasoning?: boolean; canDisable?: boolean }> = {};
+    for (const m of (data?.data || [])) {
+      if (!m?.id || !m?.capabilities) continue;
+      meta[m.id] = { reasoning: m.capabilities.reasoning === true, canDisable: m.capabilities.thinkingCanDisable !== false };
+    }
     if (models.length > 0) {
       cm.setNinerouterModels(models);
       cm.setNinerouterVisionModels(visionModels);
+      cm.setNinerouterModelMeta(meta);
     }
     return models;
   };
@@ -11034,6 +11042,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         litellmMaxTokens: creds.litellmMaxTokens || null,
         ninerouterBaseURL: creds.ninerouterBaseURL || null,
         ninerouterMaxTokens: creds.ninerouterMaxTokens || null,
+        ninerouterThinking: creds.ninerouterThinking || null,
+        ninerouterModelMeta: creds.ninerouterModelMeta || {},
         hasNativelyKey: hasKey(creds.nativelyApiKey),
         googleServiceAccountPath: creds.googleServiceAccountPath || null,
         sttProvider: creds.sttProvider || 'none',
@@ -11106,6 +11116,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasNinerouterKey: false,
         ninerouterBaseURL: null,
         ninerouterMaxTokens: null,
+        ninerouterThinking: null,
+        ninerouterModelMeta: {},
         hasNativelyKey: false,
         googleServiceAccountPath: null,
         sttProvider: 'none',

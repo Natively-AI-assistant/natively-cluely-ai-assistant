@@ -210,6 +210,12 @@ const NINEROUTER_DEFAULT_MAX_OUTPUT_TOKENS = 64000
 const NINEROUTER_MAX_TOKENS_MIN = 256
 const NINEROUTER_MAX_TOKENS_MAX = 1048576
 const NINEROUTER_MODELS_TTL_MS = 5 * 60_000
+// Mirrors NINEROUTER_THINKING_LEVELS in src/utils/modelUtils.ts. electron/
+// never imports from src/, so the list is restated; the settings dropdown
+// and this validator have to agree or a picked level is silently dropped.
+const NINEROUTER_THINKING_LEVELS: readonly string[] = ['none', 'low', 'medium', 'high']
+/** The SDK's own reasoning_effort type, widened to admit 9Router's 'none'. */
+type ReasoningEffortValue = NonNullable<OpenAI.ChatCompletionCreateParams['reasoning_effort']> | 'none'
 const MAX_OUTPUT_TOKENS = 65536
 const CLAUDE_MAX_OUTPUT_TOKENS = 64000
 
@@ -569,6 +575,10 @@ export class LLMHelper {
   /** Wire ids whose catalogue entry reports `capabilities.vision`. EMPTY
    *  means UNKNOWN (never "none") — see ninerouterModelSupportsVision. */
   private ninerouterVisionModels: Set<string> = new Set()
+  /** Thinking level for 9Router-routed models, sent as `reasoning_effort`.
+   *  'auto' (or unset) sends nothing and leaves the upstream's own choice,
+   *  which for some models (Gemini) adapts per prompt and is already fast. */
+  private ninerouterThinking: string | null = null
   private ninerouterModelsFetchedAt: number = 0
   private ninerouterModelsFetch: Promise<void> | null = null
   private useOllama: boolean = false
@@ -1634,13 +1644,14 @@ export class LLMHelper {
    * a dummy. A remote or hardened instance DOES require the real key, and its
    * /v1 POST routes 401 without one even though every GET answers openly.
    */
-  public setNinerouterConfig(apiKey: string, baseURL: string, maxTokens?: number) {
+  public setNinerouterConfig(apiKey: string, baseURL: string, maxTokens?: number, thinking?: string | null) {
     const trimmedURL = (baseURL || '').trim();
     if (!trimmedURL) {
       this.ninerouterApiKey = null;
       this.ninerouterClient = null;
       this.ninerouterBaseURL = "http://localhost:20128/v1";
       this.ninerouterMaxTokens = null;
+      this.ninerouterThinking = null;
       this.ninerouterModelBudgets.clear();
       this.ninerouterModelInputCaps.clear();
       this.ninerouterVisionModels.clear();
@@ -1654,6 +1665,7 @@ export class LLMHelper {
     this.ninerouterMaxTokens = (Number.isFinite(n) && n > 0)
       ? Math.min(NINEROUTER_MAX_TOKENS_MAX, Math.max(NINEROUTER_MAX_TOKENS_MIN, Math.floor(n)))
       : null; // Auto
+    this.ninerouterThinking = (thinking || '').trim() || null;
     // Repointed → the cached budgets describe a different instance's catalogue.
     this.ninerouterModelBudgets.clear();
     this.ninerouterModelInputCaps.clear();
@@ -1790,6 +1802,36 @@ export class LLMHelper {
    */
   public getNinerouterVisionModels(): string[] {
     return [...this.ninerouterVisionModels];
+  }
+
+  /**
+   * The thinking parameter for a 9Router request, or nothing.
+   *
+   * `reasoning_effort` is the control 9Router honours across formats —
+   * verified live, and monotonic (none < low < medium < high) rather than
+   * accepted-and-ignored, which is the OpenRouter `output_dimension` failure
+   * this repo has been bitten by before.
+   *
+   * Sending nothing is deliberate for 'auto': the upstream's own default is
+   * not uniformly slow (Gemini varies effort per prompt and was the fastest
+   * setting measured), so pinning a level is a user choice rather than a fix.
+   *
+   * An unrecognised stored value sends NOTHING rather than reaching the
+   * wire: settings outlive code, and a stale level must not turn every
+   * question into a 400.
+   */
+  private ninerouterThinkingParam(): { reasoning_effort?: ReasoningEffortValue } {
+    const level = (this.ninerouterThinking || '').trim();
+    if (!level || level === 'auto') return {};
+    // Cast is confined to THIS line on purpose. The OpenAI SDK types
+    // reasoning_effort as its own union which does not include 'none' — but
+    // 9Router honours 'none' and it is the fastest setting there is (3963ms ->
+    // 721ms on gemini-3.5-flash-lite, measured). Casting the whole request
+    // instead would destroy the `stream: true` literal that picks the
+    // streaming overload, which is how the first attempt at this broke.
+    return NINEROUTER_THINKING_LEVELS.includes(level)
+      ? { reasoning_effort: level as ReasoningEffortValue }
+      : {};
   }
 
   /** The wire id: one segment off, never two. `ninerouter/openai/gpt-5` is
@@ -5317,6 +5359,7 @@ let isMultimodal = !!(imagePaths?.length);
       model: ninerouterModel,
       messages,
       max_tokens: maxTokens,
+      ...this.ninerouterThinkingParam(),
     };
     require('./llm/providerPayloadCapture').captureProviderPayload({
       provider: 'ninerouter', classification: 'sdk_request_object_before_serialization', payload: request,
@@ -10201,6 +10244,7 @@ let isMultimodal = !!(imagePaths?.length);
       messages,
       stream: true as const,
       max_tokens: maxTokens,
+      ...this.ninerouterThinkingParam(),
     };
     require('./llm/providerPayloadCapture').captureProviderPayload({
       provider: 'ninerouter', classification: 'sdk_request_object_before_serialization', payload: request,
