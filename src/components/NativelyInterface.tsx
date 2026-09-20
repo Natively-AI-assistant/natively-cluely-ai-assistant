@@ -8366,11 +8366,22 @@ Instructions:
 2. Provide a direct, helpful answer.
 3. Be concise.`;
           } else {
-            const ragResult = await window.electronAPI.ragQueryLive?.(question);
-            if (ragResult?.success) {
-              return;
+            const hasPriorChat = messages.some((m) => m.role === 'user' || m.role === 'assistant');
+            const isFollowUpAsk = hasPriorChat && (
+              question.split(/\s+/).filter(Boolean).length <= 12 &&
+              /\b(it|this|that|these|those|above|previous|prior|earlier|again|more detail|elaborate|expand|why|how so|what about|and\s+then|you said|as mentioned)\b/i.test(question)
+            );
+
+            // JIT RAG pre-flight: skip for conversational follow-ups so conversationContextForSubmit
+            // is preserved and carries prior messages to the model (Issue #552).
+            if (!isFollowUpAsk) {
+              const ragResult = await window.electronAPI.ragQueryLive?.(question);
+              if (ragResult?.success) {
+                return;
+              }
             }
 
+            const conversationContextForSubmit = buildConversationContextFromMessages(messages);
             prompt = `You are a real-time interview assistant. The user just repeated or paraphrased a question from their interviewer.
 Instructions:
 1. Extract the core question being asked
@@ -8379,7 +8390,7 @@ Instructions:
 4. Do NOT include phrases like "The question is..." - just give the answer directly
 5. Format for speaking out loud, not for reading
 
-Provide only the answer, nothing else.`;
+${conversationContextForSubmit ? `Prior conversation context:\n${conversationContextForSubmit}\n\n` : ''}Provide only the answer, nothing else.`;
           }
 
           // R-17: claim the desktop surface BEFORE the round-trip. The stream's
