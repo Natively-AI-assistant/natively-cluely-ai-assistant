@@ -11695,6 +11695,11 @@ let isMultimodal = !!(imagePaths?.length);
       // gemini-* and deepseek-v* are all live Fluxion catalogue entries.
       else if (this.isFluxionModel(selected)) provider = 'fluxion';
       else if (this.isLiteLLMModel(selected)) provider = 'litellm';
+      // Same rule, same reason as Fluxion above: 9Router's ids carry a real
+      // vendor segment (`ninerouter/openai/gpt-5`,
+      // `ninerouter/gemini/gemini-3.6-flash`), so every predicate below would
+      // claim one if this did not come first.
+      else if (this.isNinerouterModel(selected)) provider = 'ninerouter';
       else if (this.isGroqModel(selected)) provider = 'groq';
       else if (this.isOpenAiModel(selected)) provider = 'openai';
       else if (this.isClaudeModel(selected)) provider = 'claude';
@@ -11837,6 +11842,7 @@ let isMultimodal = !!(imagePaths?.length);
       case 'openrouter': return !!this.openrouterClient;
       case 'fluxion': return this.hasFluxionCredential();
       case 'litellm': return !!this.litellmClient;
+      case 'ninerouter': return !!this.ninerouterClient;
       case 'ollama': return this.useOllama;
       case 'antigravity': return !!this.antigravityFallbackModel();
       default: return false;
@@ -11910,6 +11916,15 @@ let isMultimodal = !!(imagePaths?.length);
       case 'nvidia_nim':
       case 'openrouter':
       case 'fluxion':
+      // 9Router belongs with them rather than with its own vision seat's
+      // per-model gate, and the difference is deliberate. The vision CHAIN
+      // chooses whether to recruit 9Router for a screenshot turn at all, so
+      // refusing a text-only model there costs nothing — another rung answers.
+      // Direct Assist has no other rung: the user picked this model for this
+      // question. Dropping the image here would answer it blind and say
+      // nothing, which is worse than forwarding it and surfacing the
+      // upstream's own error.
+      case 'ninerouter':
         // These adapters are image-forwarding gateways whose catalogues can
         // contain newly-added upstream vision models that are unknown to the
         // app's static capability table. Preserve the image and exact model;
@@ -12093,6 +12108,12 @@ let isMultimodal = !!(imagePaths?.length);
       ? this.getAntigravityModelId(model)
       : provider === 'litellm'
       ? model.replace(/^litellm\//, '')
+      : provider === 'ninerouter'
+      // ONE segment here, not two. getModelCapabilities strips the routing
+      // prefix and the vendor segment itself (ROUTING_PREFIX_RE names
+      // ninerouter), so handing it `openai/gpt-5` lets it finish the job.
+      // Pre-stripping both would leave a bare name the strip cannot undo.
+      ? model.replace(/^ninerouter\//, '')
       : provider === 'nvidia_nim'
         ? model.replace(/^nvidia_nim\//, '')
         // 'openrouter' falls through on purpose: getModelCapabilities strips two
@@ -12167,6 +12188,11 @@ let isMultimodal = !!(imagePaths?.length);
         return;
       case 'litellm':
         yield* this.streamWithLiteLLM(directUserPrompt, request.systemPrompt, imagePaths, abortSignal, model);
+        return;
+      case 'ninerouter':
+        // `model` is still prefixed; streamWithNinerouter strips the one
+        // `ninerouter/` segment to get the instance's own wire id.
+        yield* this.streamWithNinerouter(directUserPrompt, request.systemPrompt, imagePaths, abortSignal, model);
         return;
       case 'ollama':
         yield* this.streamWithOllama(directUserPrompt, undefined, request.systemPrompt, imagePaths, abortSignal, model, true);

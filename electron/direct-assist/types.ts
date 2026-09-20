@@ -15,6 +15,7 @@ export const DIRECT_ASSIST_PROVIDERS = [
   'openrouter',
   'fluxion',
   'litellm',
+  'ninerouter',
   'ollama',
   'codex-cli',
   'antigravity',
