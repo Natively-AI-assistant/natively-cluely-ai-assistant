@@ -210,13 +210,67 @@ export function formatTranscriptForLLM(turns: TranscriptTurn[]): string {
 }
 
 /**
- * Full pipeline: clean, sparsify, format
+ * Deduplicate near-duplicate turns caused by duplex acoustic echo
+ * (e.g. speaker output bleeding into microphone within a few seconds).
+ */
+export function deduplicateEchoedSegments(turns: TranscriptTurn[], echoWindowMs: number = 4000): TranscriptTurn[] {
+    if (!Array.isArray(turns) || turns.length <= 1) return turns || [];
+    const result: TranscriptTurn[] = [];
+
+    for (let i = 0; i < turns.length; i++) {
+        const current = turns[i];
+        const currentText = current.text.trim().toLowerCase();
+        if (!currentText) continue;
+
+        let isEcho = false;
+        // Compare with recently accepted turns within echoWindowMs
+        for (let j = result.length - 1; j >= 0; j--) {
+            const prev = result[j];
+            if (Math.abs(current.timestamp - prev.timestamp) > echoWindowMs) break;
+
+            const prevText = prev.text.trim().toLowerCase();
+            if (currentText === prevText) {
+                // If identical, the later user turn is an acoustic bleed from interviewer
+                if (current.role === 'user' && prev.role === 'interviewer') {
+                    isEcho = true;
+                    break;
+                }
+                // If same role and identical within echo window, drop duplicate
+                if (current.role === prev.role) {
+                    isEcho = true;
+                    break;
+                }
+            }
+
+            // If different roles and one contains the other (partial speech bleed)
+            if (current.role !== prev.role && (currentText.includes(prevText) || prevText.includes(currentText))) {
+                if (Math.min(currentText.length, prevText.length) >= 12) {
+                    if (current.role === 'user' && prev.role === 'interviewer') {
+                        isEcho = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!isEcho) {
+            result.push(current);
+        }
+    }
+
+    return result;
+}
+
+/**
+ * Full pipeline: clean, deduplicate echo, sparsify, format
  */
 export function prepareTranscriptForWhatToAnswer(
     turns: TranscriptTurn[],
     maxTurns: number = 12
 ): string {
     const cleaned = cleanTranscript(turns);
-    const sparsified = sparsifyTranscript(cleaned, maxTurns);
+    const deduplicated = deduplicateEchoedSegments(cleaned);
+    const sparsified = sparsifyTranscript(deduplicated, maxTurns);
     return formatTranscriptForLLM(sparsified);
 }
+

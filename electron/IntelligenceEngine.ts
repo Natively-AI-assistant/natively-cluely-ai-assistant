@@ -11,7 +11,7 @@ import {
     FollowUpQuestionsLLM, WhatToAnswerLLM,
     prepareTranscriptForWhatToAnswer, buildTemporalContext,
     AssistantResponse as LLMAssistantResponse, classifyIntent, hasQuestionSignal, planNextAssistantAction, PlannerDecision,
-    extractLatestQuestion, toCandidateFraming, planAnswer, validateAnswerStructure, isCompleteShortAnswer, detectExplicitCodingContract, detectAndExtractScaffoldMisfire, hasUnrecoveredScaffoldContamination, isScaffoldRegenerationEligible, isCodingAnswerType, isJdFactualLookupNotNegotiationAdvice, resolveFollowUp, resolveFollowUpOrClarify,
+    extractLatestQuestion, toCandidateFraming, planAnswer, validateAnswerStructure, isCompleteShortAnswer, detectExplicitCodingContract, isCodingContinuation, detectAndExtractScaffoldMisfire, hasUnrecoveredScaffoldContamination, isScaffoldRegenerationEligible, isCodingAnswerType, isJdFactualLookupNotNegotiationAdvice, resolveFollowUp, resolveFollowUpOrClarify,
     isLiveSessionMemoryEnabled, resolveLiveFollowup, toMemoryMode, toSurface, effectiveMemoryMode,
     resolveLiveSessionMemoryConfig, piTelemetry, ageBucket,
     buildContextRoute, summarizeContextRoute, shouldThrottleTrigger,
@@ -1913,6 +1913,18 @@ export class IntelligenceEngine extends EventEmitter {
 
             const lastInterviewerTurn = this.session.getLastInterviewerTurn();
             const extractedQuestion = extractLatestQuestion(transcriptTurns);
+
+            // Active coding problem retention across turns >180s (Issue #539):
+            // If the question is a coding follow-up or continuation, but the original coding problem
+            // was asked earlier (>180s ago) and evicted from the short transcript buffer, ensure
+            // the problem statement is spliced into preparedTranscript so the model has full context.
+            const activeCoding = this.session.getDetectedCodingQuestion();
+            if (activeCoding?.question && (extractedQuestion.isFollowUp || isCodingContinuation(extractedQuestion.latestQuestion || question || ''))) {
+                const codingQText = activeCoding.question.trim();
+                if (codingQText && !preparedTranscript.toLowerCase().includes(codingQText.toLowerCase().slice(0, 30))) {
+                    preparedTranscript = `[INTERVIEWER]: ${codingQText}\n\n${preparedTranscript}`;
+                }
+            }
             // SPEAKER-MISATTRIBUTION FALLBACK (2026-09-07, always answer). Real
             // diarization labels the other party as "user" often enough that a
             // manual press can arrive with a transcript and NO interviewer turn.
@@ -2042,8 +2054,18 @@ export class IntelligenceEngine extends EventEmitter {
                     // text differs from the fragment we just extracted (so a
                     // follow-up never "riffs on itself").
                     const latestQ = extractedQuestion.latestQuestion.trim().toLowerCase();
-                    const priorInterviewer = [...transcriptTurns].reverse()
+                    let priorInterviewer = [...transcriptTurns].reverse()
                         .find((t) => t.role === 'interviewer' && t.text.trim().toLowerCase() !== latestQ);
+
+                    // Issue #539: If priorInterviewer was evicted (>180s) but we have an active coding problem,
+                    // use it as the prior question context for follow-up resolution.
+                    if (!priorInterviewer && activeCoding?.question && (extractedQuestion.isFollowUp || isCodingContinuation(extractedQuestion.latestQuestion))) {
+                        priorInterviewer = {
+                            role: 'interviewer',
+                            text: activeCoding.question,
+                            timestamp: activeCoding.timestamp ?? (Date.now() - 60000)
+                        };
+                    }
 
                     // LIVE SESSION MEMORY (release 2026-06-07c, flag-gated): when
                     // enabled, resolve the follow-up against the FULL session memory

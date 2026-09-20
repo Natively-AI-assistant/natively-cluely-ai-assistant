@@ -423,8 +423,30 @@ export function extractLatestQuestion(
     // anchored at ^, so a raw "Um, what is your name?" would lose its lead
     // signal and drop from 0.95 to 0.4 confidence. Cleaning exists to make the
     // heuristics robust — it is a FILTER, not a transformation of the output.
-    const scoringText = chosen.text.trim();
-    const latestQuestion = rawTextAt(chosenIdx) || scoringText;
+    // Collect all contiguous interviewer turns leading up to chosenIdx
+    // (joins multi-part questions / constraints split across pauses: Issue #539)
+    let startIdx = chosenIdx;
+    while (startIdx > 0 && cleaned[startIdx - 1].role === 'interviewer') {
+        const prevText = cleaned[startIdx - 1].text.trim();
+        const prevRaw = rawTextAt(startIdx - 1) || prevText;
+        if (!GREETING_ONLY.test(prevText) && !GREETING_ONLY.test(prevRaw)) {
+            startIdx--;
+        } else {
+            break;
+        }
+    }
+
+    const contiguousCleanedParts: string[] = [];
+    const contiguousRawParts: string[] = [];
+    for (let idx = startIdx; idx <= chosenIdx; idx++) {
+        const cText = cleaned[idx].text.trim();
+        const rText = rawTextAt(idx) || cText;
+        if (cText) contiguousCleanedParts.push(cText);
+        if (rText) contiguousRawParts.push(rText);
+    }
+
+    const scoringText = contiguousCleanedParts.join(' ');
+    const latestQuestion = contiguousRawParts.join(' ') || scoringText;
     const hasMark = QUESTION_MARK.test(scoringText) || QUESTION_MARK.test(latestQuestion);
     const hasLead = INTERROGATIVE_LEAD.test(scoringText);
     // F9: on providers that never guarantee punctuation, the absence of '?'

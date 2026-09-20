@@ -124,7 +124,13 @@ const CONTINUATION_STRONG_RE =
 // These only count as a coding continuation when paired with an explicit back-reference
 // to the prior solution — never on word-count alone (code-review MEDIUM 2026-06-15).
 const CONTINUATION_LOOSE_RE =
-  /\b(optimi[sz]e|optimal|improve|make\s+it|refactor|rewrite|convert|faster|more\s+efficient|walk\s+through)\b/i;
+  /\b(optimi[sz]e|optimal|improve|make\s+it|refactor|rewrite|convert|faster|more\s+efficient|walk\s+through|implement|code|write|program|solve|fix|encrypt|decrypt|parse)\b/i;
+
+const LANGUAGE_SPEC_RE =
+  /\b(?:in|using|with)\s+(?:python|javascript|typescript|js|ts|cpp|c\+\+|java|rust|go|golang|ruby|swift|kotlin|c#|csharp|php|sql)\b/i;
+
+const DIRECT_ACTION_RE =
+  /^(?:implement|write|code|solve|fix|encrypt|decrypt|parse)\s+(?:this|it|that|the\s+solution|the\s+whole\s+text)\b/i;
 
 /**
  * Is `question` a coding CONTINUATION — a short follow-up that only makes sense
@@ -163,6 +169,10 @@ const BARE_CODE_TOKENS = new Set([
   'show', 'give', 'send', 'see', 'can', 'i', 'you', 'please', 'pls', 'plz',
   'and', 'now', 'with', 'also', 'just', 'only', 'full', 'complete', 'whole',
   'for', 'of', 'in',
+  // Programming languages and language identifiers (Issue #539)
+  'python', 'py', 'javascript', 'js', 'typescript', 'ts',
+  'cpp', 'c', 'java', 'rust', 'golang', 'go', 'ruby',
+  'swift', 'kotlin', 'csharp', 'cs', 'php', 'sql',
 ]);
 const CODE_NOUNS = new Set(['code', 'codes', 'coding', 'answer', 'answers', 'answe', 'ans', 'solution', 'soln', 'sol']);
 
@@ -180,7 +190,7 @@ export function isBareCodeRequest(question: string): boolean {
     .replace(/[^a-z\s]/g, ' ')
     .split(/\s+/)
     .filter(Boolean);
-  if (tokens.length === 0 || tokens.length > 5) return false;
+  if (tokens.length === 0 || tokens.length > 8) return false;
   if (!tokens.some((t) => CODE_NOUNS.has(t))) return false;
   return tokens.every((t) => BARE_CODE_TOKENS.has(t));
 }
@@ -191,7 +201,9 @@ export function isCodingContinuation(question: string): boolean {
   // A bare code request is ALWAYS a continuation — it has no subject of its own.
   if (isBareCodeRequest(q)) return true;
   if (detectExplicitCodingContract(q)) return true; // code_only/complexity/dry-run/explain are all continuations-or-constraints
+  if (DIRECT_ACTION_RE.test(q)) return true;
   const words = q.split(/\s+/).filter(Boolean).length;
+  if (LANGUAGE_SPEC_RE.test(q) && (words <= 9 || BACKREF_RE.test(q))) return true;
   // STRONG coding signal: a SHORT message is a follow-up on its own; a LONG one needs a
   // back-reference ("Optimize the merge step of a 200-line service…" is NOT a follow-up).
   if (CONTINUATION_STRONG_RE.test(q)) return words <= 9 || BACKREF_RE.test(q);

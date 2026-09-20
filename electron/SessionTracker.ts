@@ -260,8 +260,8 @@ export class SessionTracker {
         }
     }
 
-    getDetectedCodingQuestion(): { question: string | null; source: 'screenshot' | 'transcript' | null } {
-        return { question: this.detectedCodingQuestion, source: this.codingQuestionSource };
+    getDetectedCodingQuestion(): { question: string | null; source: 'screenshot' | 'transcript' | null; timestamp?: number | null } {
+        return { question: this.detectedCodingQuestion, source: this.codingQuestionSource, timestamp: this.codingQuestionSetAt };
     }
 
     clearCodingQuestion(): void {
@@ -295,14 +295,14 @@ export class SessionTracker {
      * on casual conversation ("can you implement X?" → yes, "sounds good!" → no).
      */
     private looksLikeCodingQuestion(text: string): boolean {
-        if (text.length < 50) return false;
+        if (text.length < 25) return false;
         const patterns = [
             /\b(implement|write|code|solve|design|build|create)\b/i,
             /\b(given\s+(an?|the)\s+(array|string|list|tree|graph|matrix|number|integer|node|linked list|stack|queue|heap))\b/i,
             /\b(return|find\s+(all|the|a|any)|count|check\s+if|determine|calculate|maximize|minimize|sort)\b/i,
             /\b(function|method|algorithm|data structure|class)\b/i,
             /\b(O\(n\)|time complexity|space complexity|optimal|efficient|brute force)\b/i,
-            /\b(two sum|three sum|binary search|dynamic programming|BFS|DFS|palindrome|anagram|substring|subarray|rotation)\b/i,
+            /\b(two sum|three sum|binary search|dynamic programming|BFS|DFS|palindrome|anagram|substring|subarray|rotation|lru cache|linked list|tree|graph|python|cpp|java|typescript|javascript)\b/i,
         ];
         const matchCount = patterns.filter(p => p.test(text)).length;
         return matchCount >= 2;
