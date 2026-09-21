@@ -71,7 +71,7 @@ export class CalendarManager extends EventEmitter {
         // open a Google page that says "OAuth client not found", the user
         // never hits the callback, and the loopback server below leaks.
         if (GOOGLE_CLIENT_ID === "YOUR_CLIENT_ID_HERE") {
-            throw new Error('Google Calendar integration requires a configured GOOGLE_CLIENT_ID. Please set GOOGLE_CLIENT_ID in your environment or configuration.');
+            throw new Error('GOOGLE_CLIENT_ID is not configured. Set it in .env and restart the app.');
         }
 
         return new Promise((resolve, reject) => {

@@ -48,13 +48,13 @@ const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className
                 onConnect?.();
                 // Track calendar connection (analytics imported statically above)
                 analytics.trackCalendarConnected();
-            } else if (res.error) {
+            } else {
                 console.error('[ConnectCalendarButton] Connection error:', res.error);
-                setError(res.error);
+                setError(res.error || 'unknown');
             }
         } catch (err: any) {
             console.error('[ConnectCalendarButton] Connection exception:', err);
-            setError(err?.message || 'Failed to connect calendar');
+            setError(err?.message || 'unknown');
         } finally {
             setLoading(false);
         }
@@ -224,11 +224,15 @@ const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className
                 </span>
             </button>
             {error && (
+                // A short, translatable line; the raw main-process error (which
+                // can carry OAuth detail) stays in the console and the tooltip.
                 <span
                     className="text-[11px] text-red-300 bg-red-950/60 border border-red-500/30 rounded-lg px-2.5 py-1 max-w-[280px] leading-tight text-center"
-                    title={error}
+                    title={error === 'unknown' ? undefined : error}
                 >
-                    {error}
+                    {error.includes('GOOGLE_CLIENT_ID')
+                        ? t('Calendar sign-in is not set up in this build.')
+                        : t("Couldn't connect your calendar. Please try again.")}
                 </span>
             )}
         </div>
