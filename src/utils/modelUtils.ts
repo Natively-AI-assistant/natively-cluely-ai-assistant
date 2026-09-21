@@ -147,38 +147,31 @@ export const CODEX_CLI_MODEL = {
     desc: 'ChatGPT sign-in',
 };
 
-/**
- * Built-in Codex models, used when the user has no Codex CLI catalogue to read
- * (see codexModelOptions) — which is most users, since Natively does not need
- * the CLI. Also the name source for surfaces that only have a selector id
- * (getCodexCliModelDisplayName).
- *
- * Each one answered a live request with a ChatGPT sign-in on 2026-09-11. The
- * previous gpt-5.4 / gpt-5.3-codex / gpt-5.3-codex-spark presets are rejected
- * for a ChatGPT account (CHATGPT_UNSUPPORTED_CODEX_MODELS in
- * electron/services/CodexModelCatalog.ts); a test keeps the two apart.
- */
-export const CODEX_CLI_MODEL_PRESETS = [
-    { id: 'gpt-5.5', name: 'ChatGPT 5.5' },
-    { id: 'gpt-5.6-terra', name: 'GPT-5.6 Terra' },
-    { id: 'gpt-5.6-luna', name: 'GPT-5.6 Luna' },
-];
-
-/** Result of the `codex-cli:models` IPC — CodexModelCatalog in the main process. */
-export interface CodexModelCatalogResult {
-    source: 'codex-cli' | 'unavailable';
-    models: { id: string; name: string }[];
-    fetchedAt?: string;
-    clientVersion?: string;
+export interface CodexCatalogOption {
+    id: string;
+    name: string;
+    description?: string;
 }
 
-/**
- * The Codex models to offer: the installed Codex CLI's own catalogue when one
- * was found, otherwise the built-in presets. `undefined`/`null` covers an older
- * preload without the IPC.
- */
-export const codexModelOptions = (catalog: CodexModelCatalogResult | null | undefined): { id: string; name: string }[] =>
-    catalog?.source === 'codex-cli' && catalog.models.length > 0 ? catalog.models : CODEX_CLI_MODEL_PRESETS;
+export interface CodexCatalogModel {
+    id: string;
+    name: string;
+    reasoningLevels: CodexCatalogOption[];
+    defaultReasoningLevel?: string;
+    serviceTiers: CodexCatalogOption[];
+}
+
+/** Cached or freshly fetched Codex catalogue returned by the main process. */
+export interface CodexModelCatalogResult {
+    source: 'provider-live' | 'memory-cache' | 'unavailable';
+    models: CodexCatalogModel[];
+    fetchedAt?: string;
+    clientVersion?: string;
+    refreshError?: 'not-signed-in' | 'network' | 'auth' | 'rate-limited' | 'provider' | 'invalid-response';
+}
+
+export const codexModelOptions = (catalog: CodexModelCatalogResult | null | undefined): CodexCatalogModel[] =>
+    catalog?.models || [];
 
 export const codexCliSelectorId = (modelId: string): string => `codex-cli:${modelId}`;
 
@@ -187,8 +180,7 @@ export const getCodexCliModelDisplayName = (id: string): string | null => {
     if (!id.startsWith('codex-cli:')) return null;
 
     const modelId = id.slice('codex-cli:'.length);
-    const preset = CODEX_CLI_MODEL_PRESETS.find(model => model.id === modelId);
-    return preset?.name || prettifyModelId(modelId);
+    return prettifyModelId(modelId);
 };
 
 export const prettifyModelId = (id: string): string => {

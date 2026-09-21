@@ -52,12 +52,10 @@ export interface AppSettings {
     codexCliFastModel?: string;
     codexCliTimeoutMs?: number;
     codexCliSandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access';
-    codexCliServiceTier?: 'default' | 'fast' | 'flex';
-    // Valid values mirror CodexCliService.resolveCodexReasoningEffort — the union
-    // is permissive (the per-model VALID set is enforced at runtime so e.g.
-    // xhigh on gpt-5.3-codex is silently downgraded). 'none' means "don't pass
-    // -c model_reasoning_effort at all" — distinct from omitting the setting.
-    codexCliModelReasoningEffort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh';
+    codexCliServiceTier?: string;
+    // Provider-defined values are validated against the selected model's cached
+    // catalogue metadata before a request is sent.
+    codexCliModelReasoningEffort?: string;
     // Hindsight long-term memory server (optional, user-provisioned sidecar — Cloud OR
     // local). baseUrl empty by default → feature off. Env (HINDSIGHT_BASE_URL) overrides
     // these for dev. apiKey only for Hindsight Cloud. autoStart/serverCommand reserved for

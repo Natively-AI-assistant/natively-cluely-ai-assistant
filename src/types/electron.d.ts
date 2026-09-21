@@ -331,6 +331,7 @@ export interface ElectronAPI {
   // STT Config Events (fired when STT provider/key changes during a meeting)
   onSttConfigChanged: (callback: (data: { configured: boolean; provider: string }) => void) => () => void
   onCredentialsChanged: (callback: () => void) => () => void
+  onCodexModelsChanged: (callback: () => void) => () => void
   // Hindsight: app-managed companion server needs restart to pick up new AI-provider key.
   onHindsightRestartNeeded: (callback: (data: { provider: string }) => void) => () => void
   // Hindsight: lifecycle state broadcasts from the main process. Persistent top-of-overlay
@@ -731,7 +732,8 @@ export interface ElectronAPI {
   codexCliLogout: (config?: any) => Promise<{ success: boolean; action: string; output?: string; error?: string; resolvedPath?: string; config?: any }>;
   codexCliLogin: (config?: any) => Promise<{ success: boolean; action: string; output?: string; error?: string; resolvedPath?: string; config?: any }>;
   codexCliDoctor: (config?: any) => Promise<{ success: boolean; action: string; output?: string; error?: string; resolvedPath?: string; config?: any }>;
-  getCodexCliModels: () => Promise<{ source: 'codex-cli' | 'unavailable'; models: { id: string; name: string }[]; fetchedAt?: string; clientVersion?: string }>;
+  getCodexCliModels: () => Promise<import('../utils/modelUtils').CodexModelCatalogResult>;
+  refreshCodexModels: () => Promise<import('../utils/modelUtils').CodexModelCatalogResult>;
   // ChatGPT OAuth (PKCE) — replaces the old `codex login` CLI subprocess.
   codexLoginStatus: () => Promise<{ success: boolean; signedIn: boolean; source?: 'natively' | 'codex-cli' | null; cliLogin?: 'ok' | 'expired' | 'missing' | 'api-key' | 'invalid'; email?: string; expiresAt?: number; error?: string }>;
   antigravityStatus: () => Promise<{ signedIn: boolean; inProgress: boolean; expiresAt?: number; projectId?: string; error?: string }>;
