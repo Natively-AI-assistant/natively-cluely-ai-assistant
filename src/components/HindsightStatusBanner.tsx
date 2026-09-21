@@ -79,18 +79,18 @@ export const HindsightStatusBanner: React.FC<{ variant?: 'top-strip' | 'floating
   // Spawning: neutral (working) — smaller, less alarming. Failures: amber, with action.
   const isFailing = status.state === 'spawn-failed' || status.state === 'unreachable' || status.state === 'auth-failed';
 
-  // Floating card (launcher window only). Translucent liquid-glass surface — one
-  // notch more glass than the opaque onboarding toaster family (TrialPromoToaster,
-  // PermissionsToaster) but not as far as the `backdrop-blur-[40px] saturate-[180%]`
-  // top-right pills in Launcher.tsx:516-520 (those are smaller popovers, not
-  // anchored toasters). Anchored on Launcher.tsx:1269 — bottom-right pill,
-  // translucency ratio, inner top-highlight ring + wide soft drop shadow.
-  //   - Surface: rgba(26,26,30,0.55) + backdropFilter blur(28px) saturate(180%)
+  // Floating card (launcher window only). Near-opaque surface with no backdrop
+  // blur — it was rgba(26,26,30,0.55) + blur(28px) saturate(180%), and the blur
+  // was what kept the white copy legible over the launcher at 55%. With the blur
+  // gone the alpha had to rise, or content behind reads sharply through the text.
+  // Anchored on Launcher.tsx:1269 — bottom-right pill, inner top-highlight ring +
+  // wide soft drop shadow.
+  //   - Surface: rgba(26,26,30,0.94), no backdropFilter
   //   - Inner top highlight: inset 0 1px 0 rgba(255,255,255,0.18) — the "glass" cue
   //   - 1px hairline border rgba(255,255,255,0.08) with brighter top edge
   //   - 24px border-radius, softened layered shadow (translucent surfaces don't
   //     need as much lift as opaque ones)
-  //   - Spring entrance with blur-filter: stiffness 290, damping 25, mass 0.82
+  //   - Spring entrance (opacity/scale/y, no blur): stiffness 290, damping 25, mass 0.82
   //   - Fine SVG fractalNoise grain overlay — works on translucent surfaces too
   //     (mixBlendMode: overlay blends against whatever's behind)
   //   - Position: fixed bottom-7 right-7 z-9999 width: 360px
@@ -104,17 +104,15 @@ export const HindsightStatusBanner: React.FC<{ variant?: 'top-strip' | 'floating
             key="hindsight-floating-card"
             role="status"
             aria-live="polite"
-            initial={{ opacity: 0, scale: 0.93, y: 22, filter: 'blur(10px)' }}
-            animate={{ opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }}
-            exit={{ opacity: 0, scale: 0.95, y: 14, filter: 'blur(4px)' }}
+            initial={{ opacity: 0, scale: 0.93, y: 22 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 14 }}
             transition={{ type: 'spring', stiffness: 290, damping: 25, mass: 0.82 }}
             style={{
               position: 'fixed', bottom: 28, right: 28, zIndex: 9999,
               width: 360,
               borderRadius: 24,
-              background: 'rgba(26, 26, 30, 0.55)',
-              backdropFilter: 'blur(28px) saturate(180%)',
-              WebkitBackdropFilter: 'blur(28px) saturate(180%)',
+              background: 'rgba(26, 26, 30, 0.94)',
               boxShadow: isFailing
                 ? '0 24px 80px -16px rgba(0,0,0,0.55), 0 0 80px rgba(245,158,11,0.14), inset 0 1px 0 rgba(255,255,255,0.18)'
                 : '0 24px 80px -16px rgba(0,0,0,0.55), 0 0 80px rgba(255,255,255,0.02), inset 0 1px 0 rgba(255,255,255,0.18)',
