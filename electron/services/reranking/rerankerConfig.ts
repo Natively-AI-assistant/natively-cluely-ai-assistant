@@ -115,29 +115,47 @@ export interface EligibilityInputs {
 export function isLoopbackOrPrivateHost(urlString: string): boolean {
   let parsed: URL;
   try { parsed = new URL(urlString); } catch { return false; }
-  const h = parsed.hostname;
+  // WHATWG URL keeps IPv6 hosts bracketed.
+  const host = parsed.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  if (host === 'localhost') return true;
 
-  // IPv6 loopback
-  if (h === '::1' || h === '[::1]') return true;
-  // IPv6 link-local (fe80::/10) or Unique Local (fc00::/7)
-  if (/^\[?fe[89ab][0-9a-f]:/i.test(h) || /^\[?f[cd][0-9a-f]{2}:/i.test(h)) return true;
-
-  // Loopback / localhost
-  if (h === 'localhost' || h === '127.0.0.1') return true;
-  // Full 127.0.0.0/8
-  if (/^127\./.test(h)) return true;
-
-  // RFC-1918 private ranges
-  if (/^10\./.test(h)) return true;
-  if (/^192\.168\./.test(h)) return true;
-  // 172.16.0.0/12
-  const m172 = h.match(/^172\.(\d+)\./);
-  if (m172 && Number(m172[1]) >= 16 && Number(m172[1]) <= 31) return true;
-
-  // Link-local 169.254.0.0/16
-  if (/^169\.254\./.test(h)) return true;
-
+  // Only IP LITERALS are classified. A DNS name that merely starts with a
+  // private octet (10.proxy.example.com, 127.0.0.1.nip.io) resolves wherever
+  // its owner points it, so it is public for this purpose.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { isIP } = require('net') as typeof import('net');
+  const family = isIP(host);
+  if (family === 4) {
+    const [a, b] = host.split('.').map(Number);
+    return a === 127                                  // loopback 127/8
+      || a === 10                                     // RFC-1918
+      || (a === 192 && b === 168)                     // RFC-1918
+      || (a === 172 && b >= 16 && b <= 31)            // RFC-1918 172.16/12
+      || (a === 169 && b === 254);                    // link-local
+  }
+  if (family === 6) {
+    return host === '::1'                             // loopback
+      || /^fe[89ab][0-9a-f]?:/.test(host)             // link-local fe80::/10
+      || /^f[cd][0-9a-f]{0,2}:/.test(host);           // unique local fc00::/7
+  }
   return false;
+}
+
+/**
+ * The privacy verdict for a custom rerank endpoint, shared by retrieval
+ * (evaluateHostedEligibility) and Settings' Test button so the two cannot
+ * drift: a loopback / private-network endpoint is allowed in every mode, any
+ * other endpoint obeys the same rules as a hosted provider.
+ */
+export function customRerankPrivacyBlock(input: {
+  customEndpoint?: string;
+  localOnly: boolean;
+  referenceFilesScopeAllowed: boolean;
+}): 'local-only-mode' | 'reference-files-scope-denied' | null {
+  if (input.customEndpoint && isLoopbackOrPrivateHost(input.customEndpoint)) return null;
+  if (input.localOnly) return 'local-only-mode';
+  if (!input.referenceFilesScopeAllowed) return 'reference-files-scope-denied';
+  return null;
 }
 
 /**
@@ -157,16 +175,8 @@ export function evaluateHostedEligibility(input: EligibilityInputs): HostedEligi
     // safe in all modes — data never leaves the machine. Public HTTPS custom
     // endpoints (e.g. a Jina-compatible proxy hosted externally) are subject to
     // the same privacy rules as other cloud providers.
-    const isPrivate = input.customEndpoint
-      ? isLoopbackOrPrivateHost(input.customEndpoint)
-      : false;
-
-    if (!isPrivate) {
-      if (input.localOnly) return { eligible: false, reason: 'local-only-mode' };
-      if (!input.referenceFilesScopeAllowed) return { eligible: false, reason: 'reference-files-scope-denied' };
-    }
-
-    return { eligible: true };
+    const blocked = customRerankPrivacyBlock(input);
+    return blocked ? { eligible: false, reason: blocked } : { eligible: true };
   }
   if (input.provider !== 'natively' && input.provider !== 'openrouter' && input.provider !== 'jina') {
     return { eligible: false, reason: 'provider-not-selected' };

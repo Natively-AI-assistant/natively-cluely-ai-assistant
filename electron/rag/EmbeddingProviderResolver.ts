@@ -639,7 +639,14 @@ export class EmbeddingProviderResolver {
     } else {
       console.log('[EmbeddingProviderResolver] No cloud/Ollama provider available; using bundled local embedding model lazily');
     }
-    const local = new LocalEmbeddingProvider();
+    // The curated-catalog pick applies only when the user chose 'local'. Any
+    // other fallthrough (auto, or a pin with no candidate) stays on the bundled
+    // model rather than silently loading a multi-GB catalog model.
+    const local = new LocalEmbeddingProvider(
+      chosenProvider === 'local' && measured.localEmbeddingModelId
+        ? { modelId: measured.localEmbeddingModelId }
+        : undefined,
+    );
     console.log(`[EmbeddingProviderResolver] Selected provider: ${local.name} (${local.dimensions}d, lazy load)`);
     return { provider: local, demotedPinned };
   }

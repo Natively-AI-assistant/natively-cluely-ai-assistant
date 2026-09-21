@@ -24,7 +24,7 @@ import { Worker } from 'worker_threads';
 import { app } from 'electron';
 import { IEmbeddingProvider } from './IEmbeddingProvider';
 import { embeddingSpaceKey } from '../embeddingSpace';
-import { acquireOnnxSlot, hasEnoughMemoryForOnnxSession, getMinFreeGBForOnnxSession } from '../../utils/onnxThreadConfig';
+import { acquireOnnxSlot, acquireOnnxSlotWithin, hasEnoughMemoryForOnnxSession, getMinFreeGBForOnnxSession } from '../../utils/onnxThreadConfig';
 import {
     clearLoadSentinel as clearOnnxLoadSentinel,
     consumePoisonedOnnxLoad,
@@ -63,7 +63,13 @@ export interface LocalEmbeddingOptions {
   dimensions?: number;
   runtime?: 'onnx' | 'gguf';
   modelPath?: string;
-  skipSlotGate?: boolean;
+  /**
+   * Bound the wait for an ONNX session slot (ms). For short-lived probe/test
+   * instances that run beside the live provider: they must still count
+   * against the session cap, but a busy gate should fail them fast rather
+   * than hang the Settings action.
+   */
+  slotWaitMs?: number;
 }
 
 export class LocalEmbeddingProvider implements IEmbeddingProvider {
@@ -74,7 +80,7 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
   readonly runtime: 'onnx' | 'gguf';
   readonly catalogId: string;
   readonly pooling: 'mean' | 'cls' | 'last';
-  private readonly skipSlotGate: boolean;
+  private readonly slotWaitMs: number | undefined;
 
   private worker: Worker | null = null;
   private requestId = 0;
@@ -87,13 +93,11 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
   private modelPath: string;
 
   constructor(opts?: LocalEmbeddingOptions) {
-    let modelId = opts?.modelId;
-    if (!modelId) {
-      try {
-        const { SettingsManager } = require('../../services/SettingsManager');
-        modelId = SettingsManager.getInstance().get('localEmbeddingModelId');
-      } catch { /* ignored */ }
-    }
+    // No settings fallback here: an argument-less instance is the bundled
+    // MiniLM. The pipeline's offline fallback is constructed that way, and it
+    // must not inherit the user's catalog pick (a multi-GB model in a
+    // different embedding space). The resolver passes the pick explicitly.
+    const modelId = opts?.modelId;
     const catalogEntry = modelId ? findEmbeddingCatalogModel(modelId) : null;
     if (catalogEntry) {
       this.catalogId = catalogEntry.id;
@@ -112,7 +116,7 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
       this.modelPath = opts?.modelPath || LocalEmbeddingProvider.resolveModelPath();
     }
 
-    this.skipSlotGate = !!opts?.skipSlotGate;
+    this.slotWaitMs = opts?.slotWaitMs;
     this.space = embeddingSpaceKey({ name: this.name, model: this.model, dimensions: this.dimensions });
   }
 
@@ -497,7 +501,9 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
     // reranker / router load queued forever with no log. Assigning the promise
     // first makes the guard hold for every concurrent caller.
     this.loadingPromise = (async () => {
-      const releaseSlot = this.skipSlotGate ? null : await acquireOnnxSlot('normal');
+      const releaseSlot = this.slotWaitMs !== undefined
+        ? await acquireOnnxSlotWithin('normal', 1, this.slotWaitMs, 'local-embedding probe')
+        : await acquireOnnxSlot('normal');
       try {
         await this.postToWorker(
           {
@@ -514,7 +520,7 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
         this.loaded = true;
         this.slotRelease = releaseSlot;
       } catch (e) {
-        if (releaseSlot) releaseSlot();
+        releaseSlot();
         throw e;
       }
     })();

@@ -13,6 +13,7 @@
 
 import type { AppAPIConfig } from './EmbeddingProviderResolver';
 import { TRIAL_SENTINEL_KEY } from '../config/constants';
+import { findEmbeddingCatalogModel } from './embeddingModelCatalog';
 
 /**
  * The credential reads buildEmbeddingConfig needs. Injectable because esbuild
@@ -250,10 +251,13 @@ export function buildEmbeddingConfig(overrides: Partial<EmbeddingConfigSources> 
   // the user asked for a 768-d nomic index and silently got the 384-d
   // lightweight model this whole panel exists to steer them away from.
   const BUNDLED_LOCAL_MODEL = 'Xenova/all-MiniLM-L6-v2';
+  // A curated-catalog id (embedding:use-local-model saves it as `model`) is
+  // served by LocalEmbeddingProvider itself, not by Ollama.
   const localIsOllamaBacked = chosen?.mode === 'manual'
     && chosen?.provider === 'local'
     && !!chosen?.model
-    && chosen.model !== BUNDLED_LOCAL_MODEL;
+    && chosen.model !== BUNDLED_LOCAL_MODEL
+    && !findEmbeddingCatalogModel(chosen.model);
   const effectiveProvider = localIsOllamaBacked ? 'ollama' : chosen?.provider;
   const localViaOllama = localIsOllamaBacked
     ? { ollamaEmbeddingModel: chosen!.model, ollamaEmbeddingDims: chosen!.dimensions }

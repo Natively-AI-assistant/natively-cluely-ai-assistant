@@ -11,6 +11,7 @@ import * as fs from 'fs';
 import { parentPort } from 'worker_threads';
 import { getBoundedOnnxSessionOptions } from '../../utils/onnxThreadConfig';
 import { classifyWorkerFailure } from '../../utils/workerStatus';
+import { finalizeGgufVector } from './ggufEmbeddingVector';
 
 if (!parentPort) throw new Error('localEmbeddingWorker must be run as a Worker thread');
 
@@ -66,8 +67,29 @@ async function disposeAll(): Promise<void> {
     try { await ggufModel.dispose(); } catch { /* ignore */ }
     ggufModel = null;
   }
-  pipe = null;
+  if (pipe) {
+    // Dropping the reference does not free the native ONNX session.
+    try { await pipe.dispose?.(); } catch { /* ignore */ }
+    pipe = null;
+  }
   loadingPromise = null;
+}
+
+const GGUF_CONTEXT_SIZE = 2048;
+
+/**
+ * llama.cpp throws "Input is longer than the context size" for any input past
+ * the context window, which failed the WHOLE batch. Embed the leading
+ * window instead — the same truncation transformers.js applies on the ONNX
+ * path at the model's max length.
+ */
+async function ggufEmbedOne(text: string): Promise<ArrayLike<number>> {
+  const tokens = ggufModel.tokenize(text);
+  const input = tokens.length > GGUF_CONTEXT_SIZE - 8
+    ? tokens.slice(0, GGUF_CONTEXT_SIZE - 8)
+    : text;
+  const embedding = await ggufContext.getEmbeddingFor(input);
+  return embedding.vector;
 }
 
 async function ensureLoaded(msg: any): Promise<void> {
@@ -96,7 +118,7 @@ async function ensureLoaded(msg: any): Promise<void> {
       llama = await getLlama({ build: 'never', logLevel: 'error' });
       ggufModel = await llama.loadModel({ modelPath: msg.modelPath });
       ggufContext = await ggufModel.createEmbeddingContext({
-        contextSize: 2048,
+        contextSize: GGUF_CONTEXT_SIZE,
       });
       console.log(`[LocalEmbeddingWorker] GGUF embedding model loaded successfully (${currentDimensions}d).`);
       parentPort!.postMessage({
@@ -181,16 +203,7 @@ parentPort.on('message', async (msg: any) => {
       if (runtime === 'gguf') {
         const vectors: number[][] = [];
         for (const text of texts) {
-          const embedding = await ggufContext.getEmbeddingFor(text);
-          let vec = Array.from(embedding.vector) as number[];
-          if (currentDimensions && vec.length > currentDimensions) {
-            vec = vec.slice(0, currentDimensions);
-            const norm = Math.hypot(...vec);
-            if (norm > 0) {
-              vec = vec.map((v) => v / norm);
-            }
-          }
-          vectors.push(vec);
+          vectors.push(finalizeGgufVector(await ggufEmbedOne(text), currentDimensions));
         }
         parentPort!.postMessage({ type: 'result', requestId: msg.requestId, vectors });
         return;

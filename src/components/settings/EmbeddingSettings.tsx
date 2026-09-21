@@ -491,13 +491,12 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
         setBusyLocalModelId(id ?? 'minilm-l6-v2');
         setLocalModelError(null);
         try {
-            const callPromise = window.electronAPI.useLocalEmbeddingModel
-                ? window.electronAPI.useLocalEmbeddingModel(id)
-                : Promise.reject(new Error(t('API unavailable')));
-            const timeoutPromise = new Promise<never>((_, reject) => {
-                setTimeout(() => reject(new Error(t('Switching embedding model timed out after 15 seconds.'))), 15000);
-            });
-            const res = await Promise.race([callPromise, timeoutPromise]);
+            // No renderer-side deadline: the main process bounds the switch
+            // itself (slot wait + 20s validation probe) and, once the probe
+            // passes, COMMITS the new model and starts the re-index. A shorter
+            // renderer timeout reported "failed" for a switch that then happened.
+            if (!window.electronAPI.useLocalEmbeddingModel) throw new Error(t('API unavailable'));
+            const res = await window.electronAPI.useLocalEmbeddingModel(id);
             if (res && !res.success) {
                 if (res.error === 'license_not_acknowledged') {
                     const candidate = localModels.find(x => x.id === id);
@@ -541,10 +540,11 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
             const callPromise = window.electronAPI.testLocalEmbeddingModel
                 ? window.electronAPI.testLocalEmbeddingModel(id)
                 : Promise.reject(new Error('API unavailable'));
+            let timer: ReturnType<typeof setTimeout> | undefined;
             const timeoutPromise = new Promise<never>((_, reject) => {
-                setTimeout(() => reject(new Error(t('Inference test timed out after 25 seconds.'))), 25000);
+                timer = setTimeout(() => reject(new Error(t('Inference test timed out after 25 seconds.'))), 25000);
             });
-            const res = await Promise.race([callPromise, timeoutPromise]);
+            const res = await Promise.race([callPromise, timeoutPromise]).finally(() => clearTimeout(timer));
             if (res && res.success) {
                 setLocalModelTestResults(prev => ({
                     ...prev,

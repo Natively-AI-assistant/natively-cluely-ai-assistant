@@ -21,7 +21,7 @@ export interface LocalEmbeddingModel {
   name: string;
   runtime: EmbeddingRuntime;
   repo: string;
-  /** Commit pinned at catalogue time. Downloader prefers live branch if matching. */
+  /** Commit pinned at catalogue time (40-hex). The downloader fetches exactly this revision. */
   revision: string;
   dimensions: number;
   supportedDimensions?: number[];
@@ -57,17 +57,17 @@ export const EMBEDDING_MODEL_CATALOG: LocalEmbeddingModel[] = [
     runtime: 'onnx',
     repo: 'Xenova/all-MiniLM-L6-v2',
     modelId: 'Xenova/all-MiniLM-L6-v2',
-    revision: 'main',
+    revision: '751bff37182d3f1213fa05d7196b954e230abad9',
     dimensions: 384,
     supportedDimensions: [384],
     contextLength: 256,
     files: [
       { repoPath: 'config.json', bytes: 650, sha256: null },
-      { repoPath: 'tokenizer.json', bytes: 711549, sha256: null },
-      { repoPath: 'tokenizer_config.json', bytes: 399, sha256: null },
-      { repoPath: 'onnx/model_quantized.onnx', bytes: 23028881, sha256: null },
+      { repoPath: 'tokenizer.json', bytes: 711661, sha256: null },
+      { repoPath: 'tokenizer_config.json', bytes: 366, sha256: null },
+      { repoPath: 'onnx/model_quantized.onnx', bytes: 22972370, sha256: 'afdb6f1a0e45b715d0bb9b11772f032c399babd23bfc31fed1c170afc848bdb1' },
     ],
-    bytes: 23741479,
+    bytes: 23685047,
     license: {
       spdx: 'Apache-2.0',
       url: 'https://huggingface.co/Xenova/all-MiniLM-L6-v2',
@@ -88,17 +88,17 @@ export const EMBEDDING_MODEL_CATALOG: LocalEmbeddingModel[] = [
     runtime: 'onnx',
     repo: 'Xenova/bge-small-en-v1.5',
     modelId: 'Xenova/bge-small-en-v1.5',
-    revision: 'main',
+    revision: 'ea104dacec62c0de699686887e3f920caeb4f3e3',
     dimensions: 384,
     supportedDimensions: [384],
     contextLength: 512,
     files: [
-      { repoPath: 'config.json', bytes: 1343, sha256: null },
-      { repoPath: 'tokenizer.json', bytes: 711463, sha256: null },
+      { repoPath: 'config.json', bytes: 683, sha256: null },
+      { repoPath: 'tokenizer.json', bytes: 711396, sha256: null },
       { repoPath: 'tokenizer_config.json', bytes: 366, sha256: null },
-      { repoPath: 'onnx/model_quantized.onnx', bytes: 33411244, sha256: null },
+      { repoPath: 'onnx/model_quantized.onnx', bytes: 34014426, sha256: '6c9c6101a956d62dfb5e7190c538226c0c5bb9cb27b651234b6df063ee7dbfe4' },
     ],
-    bytes: 34124416,
+    bytes: 34726871,
     license: {
       spdx: 'MIT',
       url: 'https://huggingface.co/Xenova/bge-small-en-v1.5',
@@ -118,13 +118,13 @@ export const EMBEDDING_MODEL_CATALOG: LocalEmbeddingModel[] = [
     name: 'Qwen3 Embedding 0.6B',
     runtime: 'gguf',
     repo: 'mradermacher/Qwen3-Embedding-0.6B-GGUF',
-    revision: 'main',
+    revision: '8c605f43dcb0b43cf6e4afc7203888d912a67ace',
     dimensions: 1024,
     supportedDimensions: [512, 1024],
     contextLength: 8192,
     ggufFile: 'Qwen3-Embedding-0.6B.Q4_K_M.gguf',
     files: [
-      { repoPath: 'Qwen3-Embedding-0.6B.Q4_K_M.gguf', bytes: 396475040, sha256: null },
+      { repoPath: 'Qwen3-Embedding-0.6B.Q4_K_M.gguf', bytes: 396475040, sha256: '793cb15c8e0da4fe29f32ae0b3d604a92a9b1ecf5048cbfd65107faa38108b83' },
     ],
     bytes: 396475040,
     license: {
@@ -146,13 +146,13 @@ export const EMBEDDING_MODEL_CATALOG: LocalEmbeddingModel[] = [
     name: 'Qwen3 Embedding 4B',
     runtime: 'gguf',
     repo: 'Qwen/Qwen3-Embedding-4B-GGUF',
-    revision: 'main',
+    revision: 'f4602530db1d980e16da9d7d3a70294cf5c190be',
     dimensions: 2560,
     supportedDimensions: [1024, 2560],
     contextLength: 8192,
     ggufFile: 'Qwen3-Embedding-4B-Q4_K_M.gguf',
     files: [
-      { repoPath: 'Qwen3-Embedding-4B-Q4_K_M.gguf', bytes: 2496703776, sha256: null },
+      { repoPath: 'Qwen3-Embedding-4B-Q4_K_M.gguf', bytes: 2496703776, sha256: '2b0cf8f17b4c723c27303015383c27ec4bf2d8314bb677d05e920dd70bb0f16b' },
     ],
     bytes: 2496703776,
     license: {
@@ -173,13 +173,13 @@ export const EMBEDDING_MODEL_CATALOG: LocalEmbeddingModel[] = [
     name: 'Jina Embeddings v4',
     runtime: 'gguf',
     repo: 'jinaai/jina-embeddings-v4-text-retrieval-GGUF',
-    revision: 'main',
+    revision: '6c6ba828f6ad0faee901b4bce25d96faade908d1',
     dimensions: 1024,
     supportedDimensions: [1024],
     contextLength: 8192,
     ggufFile: 'jina-embeddings-v4-text-retrieval-Q4_K_M.gguf',
     files: [
-      { repoPath: 'jina-embeddings-v4-text-retrieval-Q4_K_M.gguf', bytes: 1929900032, sha256: null },
+      { repoPath: 'jina-embeddings-v4-text-retrieval-Q4_K_M.gguf', bytes: 1929900032, sha256: '4e24d1b6631fe21139b360001da86b519d40e1881a2c06f1183dda8aa0ba7fc1' },
     ],
     bytes: 1929900032,
     license: {
@@ -188,7 +188,7 @@ export const EMBEDDING_MODEL_CATALOG: LocalEmbeddingModel[] = [
       commercialUseRestricted: true,
       requiresAcknowledgement: true,
     },
-    params: '580M · Q4_K_M',
+    params: '3.8B · Q4_K_M',
     note: '8192-token context window with multi-document retrieval focus (1.92 GB). Advanced dense semantic embeddings.',
     supported: true,
     pooling: 'mean',
@@ -200,13 +200,13 @@ export const EMBEDDING_MODEL_CATALOG: LocalEmbeddingModel[] = [
     name: 'Jina Embeddings v5 Text Small',
     runtime: 'gguf',
     repo: 'jinaai/jina-embeddings-v5-text-small-retrieval-GGUF',
-    revision: 'main',
+    revision: '78b0ebcb4c870fdfef409e578b65288b49a4fa90',
     dimensions: 1024,
     supportedDimensions: [1024],
     contextLength: 8192,
     ggufFile: 'v5-small-retrieval-Q4_K_M.gguf',
     files: [
-      { repoPath: 'v5-small-retrieval-Q4_K_M.gguf', bytes: 396705152, sha256: null },
+      { repoPath: 'v5-small-retrieval-Q4_K_M.gguf', bytes: 396705152, sha256: '9440cf89f3e8a7a31a42e11b87e106dd5b344af4e0e3b6b21a96136cc8686e21' },
     ],
     bytes: 396705152,
     license: {
@@ -227,13 +227,13 @@ export const EMBEDDING_MODEL_CATALOG: LocalEmbeddingModel[] = [
     name: 'Jina Code Embeddings 0.5B',
     runtime: 'gguf',
     repo: 'jinaai/jina-code-embeddings-0.5b-GGUF',
-    revision: 'main',
+    revision: '941797c2653f7f0425a06a860d5035f77a685731',
     dimensions: 768,
     supportedDimensions: [768],
     contextLength: 8192,
     ggufFile: 'jina-code-embeddings-0.5b-IQ4_NL.gguf',
     files: [
-      { repoPath: 'jina-code-embeddings-0.5b-IQ4_NL.gguf', bytes: 352668224, sha256: null },
+      { repoPath: 'jina-code-embeddings-0.5b-IQ4_NL.gguf', bytes: 352668224, sha256: '9c300fc3fa595f56b9f7cbc7af776d36781f724ab23c26f226752bd5d4eeedc1' },
     ],
     bytes: 352668224,
     license: {
@@ -254,13 +254,13 @@ export const EMBEDDING_MODEL_CATALOG: LocalEmbeddingModel[] = [
     name: 'Jina Code Embeddings 1.5B',
     runtime: 'gguf',
     repo: 'jinaai/jina-code-embeddings-1.5b-GGUF',
-    revision: 'main',
+    revision: '2330b9417fd033091c2765c9b46ec97448cb91e6',
     dimensions: 1536,
     supportedDimensions: [1536],
     contextLength: 8192,
     ggufFile: 'jina-code-embeddings-1.5b-IQ4_NL.gguf',
     files: [
-      { repoPath: 'jina-code-embeddings-1.5b-IQ4_NL.gguf', bytes: 936328384, sha256: null },
+      { repoPath: 'jina-code-embeddings-1.5b-IQ4_NL.gguf', bytes: 936328384, sha256: '9fc43144462d5136d69e7e50584e974f490e918b6bb4556f8588187c65643460' },
     ],
     bytes: 936328384,
     license: {

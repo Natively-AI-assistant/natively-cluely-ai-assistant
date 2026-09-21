@@ -8814,15 +8814,22 @@ export function initializeIpcHandlers(appState: AppState): void {
     const descriptor = provider === 'custom' ? null : hostedRerankProvider(provider);
     const model = (choice?.model || readHostedModel(stored) || '').trim();
 
-    // The privacy gate applies to cloud hosted providers only. Local custom
-    // endpoints run on-device / local network and are permitted under local-only mode.
-    if (provider !== 'custom') {
-      if (isLocalOnlyMode()) {
-        return { success: false, error: 'local-only-mode', message: describeIneligibility('local-only-mode') };
-      }
-      if (!referenceFilesScopeAllowed()) {
-        return { success: false, error: 'reference-files-scope-denied', message: describeIneligibility('reference-files-scope-denied') };
-      }
+    // The privacy gate applies to the test too. A "Test connection" button that
+    // ignores it would be the one request a local-only user never consented to.
+    // A custom endpoint is exempt only when it is loopback / private-network —
+    // the same verdict retrieval uses (customRerankPrivacyBlock).
+    {
+      const { customRerankPrivacyBlock } = require('./services/reranking/rerankerConfig');
+      const blocked = provider === 'custom'
+        ? customRerankPrivacyBlock({
+            customEndpoint: settings.get('customRerankerEndpoint') || undefined,
+            localOnly: isLocalOnlyMode(),
+            referenceFilesScopeAllowed: referenceFilesScopeAllowed(),
+          })
+        : isLocalOnlyMode() ? 'local-only-mode'
+        : !referenceFilesScopeAllowed() ? 'reference-files-scope-denied'
+        : null;
+      if (blocked) return { success: false, error: blocked, message: describeIneligibility(blocked) };
     }
 
     const baseUrl = provider === 'custom'
@@ -9088,6 +9095,8 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   // ── Local Embedding Models (Bundled & Downloadable) ──────────────────────
   const localEmbeddingDownloads = new Map<string, AbortController>();
+  /** How long a probe/test model waits for an ONNX session slot before failing fast. */
+  const LOCAL_EMBEDDING_PROBE_SLOT_WAIT_MS = 5_000;
 
   safeHandle('embedding:list-local-models', async () => {
     const { listEmbeddingCatalogStatus } = require('./services/embeddings/localEmbeddingModelInstaller');
@@ -9239,14 +9248,17 @@ export function initializeIpcHandlers(appState: AppState): void {
     // otherwise leave the user with a broken embedding provider and no way to
     // recover other than a manual settings reset.
     //
-    // `skipSlotGate: true` prevents competing with the live provider's slot —
-    // the probe runs on a throw-away instance that is disposed immediately after.
+    // The probe is a second model session beside the live provider, so it
+    // takes an ONNX slot like any other — the session cap is what keeps
+    // concurrent native sessions from exhausting memory. The wait is bounded
+    // so a busy gate fails the switch fast instead of hanging Settings.
     let probeProvider: any = null;
+    let probeTimer: ReturnType<typeof setTimeout> | undefined;
     try {
-      probeProvider = new LocalEmbeddingProvider({ modelId: targetId, skipSlotGate: true });
+      probeProvider = new LocalEmbeddingProvider({ modelId: targetId, slotWaitMs: LOCAL_EMBEDDING_PROBE_SLOT_WAIT_MS });
       const probeVec = await Promise.race([
         probeProvider.embed('embedding model validation probe'),
-        new Promise<never>((_, rej) => setTimeout(() => rej(new Error('Validation probe timed out after 20s')), 20_000)),
+        new Promise<never>((_, rej) => { probeTimer = setTimeout(() => rej(new Error('Validation probe timed out after 20s')), 20_000); }),
       ]);
       if (!Array.isArray(probeVec) || probeVec.length === 0) {
         throw new Error('Model loaded but did not produce a valid embedding vector.');
@@ -9256,12 +9268,21 @@ export function initializeIpcHandlers(appState: AppState): void {
         throw new Error(`Expected ${model.dimensions}-d vector but got ${probeVec.length}-d. The model file may be corrupt or a different variant.`);
       }
     } catch (probeErr: any) {
+      const detail = String(probeErr?.message || probeErr);
+      if (/ONNX session slot/i.test(detail)) {
+        return {
+          success: false,
+          error: 'busy',
+          message: `Couldn't check ${model.name} right now: other local models (transcription or reranking) are using every model slot. Try again in a moment.`,
+        };
+      }
       return {
         success: false,
         error: 'validation_failed',
-        message: `${model.name} failed the runtime check: ${String(probeErr?.message || probeErr)}. The model may be corrupt — try re-downloading it.`,
+        message: `${model.name} failed the runtime check: ${detail}. The model may be corrupt — try re-downloading it.`,
       };
     } finally {
+      if (probeTimer) clearTimeout(probeTimer);
       if (probeProvider) {
         try { await probeProvider.dispose('validation probe complete'); } catch { /* best effort */ }
       }
@@ -9361,9 +9382,10 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
 
     let provider: any = null;
+    let testTimer: ReturnType<typeof setTimeout> | undefined;
 
     try {
-      provider = new LocalEmbeddingProvider({ modelId: id, skipSlotGate: true });
+      provider = new LocalEmbeddingProvider({ modelId: id, slotWaitMs: LOCAL_EMBEDDING_PROBE_SLOT_WAIT_MS });
       const testText = 'Semantic search vector latency benchmark';
 
       const testPromise = (async () => {
@@ -9374,7 +9396,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       })();
 
       const timeoutPromise = new Promise<{ vector: any; latencyMs: number }>((_, reject) => {
-        setTimeout(() => reject(new Error('Inference test timed out after 25s')), 25000);
+        testTimer = setTimeout(() => reject(new Error('Inference test timed out after 25s')), 25000);
       });
 
       const { vector, latencyMs } = await Promise.race([testPromise, timeoutPromise]);
@@ -9406,6 +9428,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         message: String(e?.message || e),
       };
     } finally {
+      if (testTimer) clearTimeout(testTimer);
       if (provider) {
         try {
           await provider.dispose('test completed');
