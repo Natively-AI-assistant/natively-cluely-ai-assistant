@@ -329,12 +329,11 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
     const [configured, setConfigured] = useState<{ mode?: 'auto' | 'manual'; provider?: string; model?: string }>({ mode: 'auto' });
     const [acknowledged, setAcknowledged] = useState(false);
 
+    const [reindexing, setReindexing] = useState(false);
     const [pending, setPending] = useState<string | null>(null);
     const [testingActive, setTestingActive] = useState(false);
     const [activeTestResult, setActiveTestResult] = useState<TestResult | null>(null);
     const [note, setNote] = useState<string | null>(null);
-    const [reindexing, setReindexing] = useState(false);
-    const [reindexProgress, setReindexProgress] = useState<{ done: number; total: number } | null>(null);
 
     // Per-provider API Key states
     const [keyState, setKeyState] = useState<Record<string, string>>({ gemini: '', openai: '', custom: '' });
@@ -430,26 +429,6 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
 
     useEffect(() => { void refresh(); }, [refresh]);
 
-    useEffect(() => {
-        const off = window.electronAPI.onReindexProgress?.((phase, data) => {
-            if (phase === 'started') {
-                setReindexing(true);
-                const total = Math.max(1, data.total || data.count || 1);
-                setReindexProgress({ done: 0, total });
-            } else if (phase === 'progress') {
-                setReindexing(true);
-                const done = data.done ?? 0;
-                const total = Math.max(done, data.total ?? data.count ?? 1);
-                setReindexProgress({ done, total });
-            } else if (phase === 'complete') {
-                setReindexing(false);
-                setReindexProgress(null);
-                void refresh();
-            }
-        });
-        return () => { off?.(); };
-    }, [refresh]);
-
     const installLocalModel = useCallback(async (id: string, skipLicenseGuard = false) => {
         // Guard: model needs licence acknowledgement (skipped when called right after acceptance)
         if (!skipLicenseGuard) {
@@ -505,13 +484,7 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                     setLocalModelError(res.message || res.error || t('Could not activate this embedding model.'));
                 }
             }
-            if (res?.reindexRequired && (res.incompatibleCount ?? 0) > 0) {
-                setReindexing(true);
-                setReindexProgress({ done: 0, total: res.incompatibleCount! });
-            } else {
-                setReindexing(false);
-                setReindexProgress(null);
-            }
+            setReindexing(!!res?.success && !!res.reindexRequired);
             await Promise.all([loadLocalEmbeddingModels(), refresh()]);
         } catch (e: any) {
             setLocalModelError(e?.message || t('Could not activate this embedding model.'));
@@ -588,13 +561,7 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                 await refresh();
                 return;
             }
-            if (r?.reindexRequired && (r.incompatibleCount ?? 0) > 0) {
-                setReindexing(true);
-                setReindexProgress({ done: 0, total: r.incompatibleCount! });
-            } else {
-                setReindexing(false);
-                setReindexProgress(null);
-            }
+            if (r.reindexRequired) setReindexing(true);
             await refresh();
         } catch (e: any) {
             setNote(e?.message || t('Could not apply that embedding model.'));
@@ -1640,60 +1607,11 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                     </div>
                 )}
 
-                {reindexing && (() => {
-                    const done = reindexProgress?.done ?? 0;
-                    const total = Math.max(1, reindexProgress?.total ?? 1);
-                    const percent = Math.min(100, Math.max(0, Math.round((done / total) * 100)));
-                    const isIndeterminate = !reindexProgress || reindexProgress.total === 0;
-
-                    return (
-                        <div className="space-y-2 pt-3 border-t border-white/5 mt-3">
-                            <div className="flex items-center justify-between gap-2">
-                                <span className="flex items-center gap-2 text-xs font-medium text-white/90">
-                                    <Loader2 size={13} className="animate-spin text-[var(--aip-accent)] shrink-0" />
-                                    <span>{t('Upgrading project vectors to new embedding space')}</span>
-                                </span>
-                                <div className="flex items-center gap-2 shrink-0">
-                                    <span className="text-xs font-bold tabular-nums text-[var(--aip-accent)]">
-                                        {isIndeterminate ? '0%' : `${percent}%`}
-                                    </span>
-                                    {!isIndeterminate && (
-                                        <span className="text-[10.5px] aip-muted tabular-nums">
-                                            ({done} / {total})
-                                        </span>
-                                    )}
-                                </div>
-                            </div>
-
-                            <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden relative">
-                                <div
-                                    className="h-full bg-[var(--aip-accent)] transition-all duration-300 rounded-full"
-                                    style={{
-                                        width: isIndeterminate ? '5%' : `${percent}%`,
-                                    }}
-                                />
-                            </div>
-
-                            <div className="flex items-center justify-between text-[10.5px] aip-muted">
-                                <span>
-                                    {isIndeterminate
-                                        ? t('Scanning database and preparing vector queue…')
-                                        : t('Re-embedding past transcripts · fast on-device inference')}
-                                </span>
-                                <button
-                                    type="button"
-                                    className="hover:text-white underline transition-colors cursor-pointer text-[10.5px]"
-                                    onClick={() => {
-                                        setReindexing(false);
-                                        setReindexProgress(null);
-                                    }}
-                                >
-                                    {t('Dismiss')}
-                                </button>
-                            </div>
-                        </div>
-                    );
-                })()}
+                {reindexing && (
+                    <p className="aip-meta aip-provider-note pt-2">
+                        {t('Re-indexing your project — embeddings from a different model cannot be compared with the new one.')}
+                    </p>
+                )}
 
                 {(activeTestResult?.message || note) && (
                     <p className="aip-meta aip-danger-fg aip-provider-note pt-2">{activeTestResult?.message || note}</p>
