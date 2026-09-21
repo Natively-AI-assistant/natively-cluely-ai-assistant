@@ -19,6 +19,7 @@ import { FatalMainProcessCoordinator } from "./utils/fatalMainProcess"
 import { installResilientDnsLookup } from "./utils/resilientDnsLookup"
 import { MeetingLifecycleQueue, type MeetingLifecycleState } from "./audio/meetingLifecycleQueue"
 import { autoUpdater } from "electron-updater"
+import { summarizeUpdateDownload } from "./update/updateDownloadSummary"
 
 import {
   classifyServiceAccountFile,
@@ -1374,6 +1375,8 @@ export class AppState {
   private updateAvailable: boolean = false
   private updateDownloadState: 'idle' | 'available' | 'downloading' | 'downloaded' = 'idle'
   private updateDownloadPromise: Promise<unknown> | null = null
+  // Last `total` from download-progress; smaller than the file when the download was differential.
+  private lastUpdateProgressTotal: number | null = null
   private downloadedUpdateInfo: any = null
   private disguiseMode: 'terminal' | 'settings' | 'activity' | 'none' = 'none'
 
@@ -2865,11 +2868,17 @@ export class AppState {
       log_message = log_message + " - Downloaded " + progressObj.percent + "%"
       log_message = log_message + " (" + progressObj.transferred + "/" + progressObj.total + ")"
       console.log("[AutoUpdater] " + log_message)
+      this.lastUpdateProgressTotal = progressObj.total
       this.broadcast("download-progress", progressObj)
     })
 
     autoUpdater.on("update-downloaded", (info) => {
       console.log("[AutoUpdater] Update downloaded:", info.version)
+      let downloadedFileBytes: number | null = null
+      try {
+        downloadedFileBytes = fs.statSync(info.downloadedFile).size
+      } catch { /* summary reports the size as unknown */ }
+      console.log(`[AutoUpdater] ${summarizeUpdateDownload(this.lastUpdateProgressTotal, downloadedFileBytes).message}`)
       this.updateDownloadState = 'downloaded'
       this.updateDownloadPromise = null
       // info.filePath is the public path of the staged update zip from Squirrel.Mac.
@@ -3155,6 +3164,7 @@ export class AppState {
 
     console.log('[AutoUpdater] Starting download...')
     this.updateDownloadState = 'downloading'
+    this.lastUpdateProgressTotal = null
     try {
       // Errors during download are surfaced via autoUpdater.on("error") which
       // already broadcasts "update-error". Do not broadcast here to avoid duplicates.
