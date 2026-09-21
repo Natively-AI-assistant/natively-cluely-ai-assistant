@@ -1596,10 +1596,14 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                         <span className="aip-meta inline-flex items-center gap-1.5">
                             <HardDrive size={12} strokeWidth={1.75} /> {t('On-device')}
                         </span>
-                        <AipBadge
-                            tone={status.builtIn.available ? 'ok' : status.builtIn.cached ? 'info' : 'neutral'}
-                            label={status.builtIn.available ? t('Ready') : status.builtIn.cached ? t('Downloaded') : t('Local')}
-                        />
+                        {/* No "Downloaded" state (owner request): a cached-but-unloaded
+                            model shows no badge; Ready once loaded, Local when absent. */}
+                        {(status.builtIn.available || !status.builtIn.cached) && (
+                            <AipBadge
+                                tone={status.builtIn.available ? 'ok' : 'neutral'}
+                                label={status.builtIn.available ? t('Ready') : t('Local')}
+                            />
+                        )}
                     </div>
                 </div>
 
