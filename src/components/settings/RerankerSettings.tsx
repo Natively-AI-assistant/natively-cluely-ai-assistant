@@ -1388,182 +1388,6 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
        Reranker sub-tab. */
     const panel = (
         <>
-            {/* Provider Card 1: Unified Local Reranker & Model Library Card */}
-            <div className="aip-card aip-provider space-y-3">
-                <div className="aip-provider-head">
-                    <PlatformMark />
-                    <h4 className="aip-card-title truncate min-w-0">{t('Local Reranker')}</h4>
-                    <div className="ml-auto flex items-center gap-2 shrink-0">
-                        <span className="aip-meta inline-flex items-center gap-1.5">
-                            <HardDrive size={12} strokeWidth={1.75} /> {t('On-device')}
-                        </span>
-                        <AipBadge
-                            tone={status.builtIn.available ? 'ok' : status.builtIn.cached ? 'info' : 'neutral'}
-                            label={status.builtIn.available ? t('Ready') : status.builtIn.cached ? t('Downloaded') : t('Local')}
-                        />
-                    </div>
-                </div>
-
-                <div className="flex items-center justify-between gap-3 flex-wrap text-[10px] aip-muted px-1">
-                    <p className="min-w-0 flex-1">
-                        {t('Runs on this device with zero data sent externally. Built-in BGE model shipped with Natively, or download open models directly from Hugging Face.')}
-                    </p>
-                    <span className="shrink-0 font-medium tabular-nums text-white/70">
-                        {installedCount}/{totalCount} {t('installed')}
-                        {installedBytes > 0 && <> · {humanBytes(installedBytes)}</>}
-                    </span>
-                </div>
-
-                <div className="flex items-center justify-between gap-3 flex-wrap pt-1">
-                    {recommendedModelName ? (
-                        <p className="text-[11px] px-1" style={{ color: 'var(--aip-tertiary)' }}>
-                            {t('Best for this')} {isMac ? 'Mac' : 'PC'}: <span className="font-medium" style={{ color: 'var(--aip-secondary)' }}>{recommendedModelName}</span>
-                        </p>
-                    ) : <div />}
-
-                    {/* Filter Tabs */}
-                    <div className="flex items-center gap-1 bg-white/5 p-0.5 rounded-md text-[11px]">
-                        <button
-                            type="button"
-                            className="px-2 py-0.5 rounded text-white transition-colors"
-                            style={{
-                                background: filterTab === 'all' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
-                                fontWeight: filterTab === 'all' ? 600 : 400,
-                            }}
-                            onClick={() => setFilterTab('all')}
-                        >
-                            {t('All')} ({totalCount})
-                        </button>
-                        <button
-                            type="button"
-                            className="px-2 py-0.5 rounded text-white transition-colors"
-                            style={{
-                                background: filterTab === 'installed' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
-                                fontWeight: filterTab === 'installed' ? 600 : 400,
-                            }}
-                            onClick={() => setFilterTab('installed')}
-                        >
-                            {t('Installed')} ({installedCount})
-                        </button>
-                        <button
-                            type="button"
-                            className="px-2 py-0.5 rounded text-white transition-colors"
-                            style={{
-                                background: filterTab === 'recommended' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
-                                fontWeight: filterTab === 'recommended' ? 600 : 400,
-                            }}
-                            onClick={() => setFilterTab('recommended')}
-                        >
-                            {t('Recommended')}
-                        </button>
-                    </div>
-                </div>
-
-                {/* Instant Search Bar */}
-                <div className="aip-field">
-                    <Search size={13} strokeWidth={1.75} className="aip-field-icon" aria-hidden="true" />
-                    <input
-                        type="text"
-                        className="aip-input"
-                        value={modelQuery}
-                        placeholder={t('Filter models by name, size, or format…')}
-                        onChange={(e) => setModelQuery(e.target.value)}
-                    />
-                    {modelQuery && (
-                        <button
-                            type="button"
-                            className="aip-btn text-[10px] shrink-0"
-                            data-size="sm"
-                            data-variant="ghost"
-                            onClick={() => setModelQuery('')}
-                        >
-                            <X size={12} strokeWidth={1.75} aria-hidden="true" />
-                        </button>
-                    )}
-                </div>
-
-                {/* Scrollable Model Library Container */}
-                <div className="aip-well aip-scroll-y p-2.5 space-y-3.5" style={{ maxHeight: 380 }}>
-                    {/* Section 1: Bundled Models */}
-                    {(filterTab === 'all' || filterTab === 'installed') && !modelQuery && (
-                        <section className="space-y-1.5">
-                            <header className="flex items-baseline justify-between gap-3 px-1">
-                                <h5 className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--aip-secondary)' }}>
-                                    {t('Bundled with Natively')}
-                                </h5>
-                                <span className="text-[10px] tabular-nums" style={{ color: 'var(--aip-tertiary)' }}>1/1</span>
-                            </header>
-
-                            <div className="aip-card flex items-center justify-between gap-3 p-2.5" data-active={builtInSelected ? 'true' : undefined}>
-                                <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                                    <span
-                                        aria-hidden="true"
-                                        className="w-1.5 h-1.5 rounded-full shrink-0"
-                                        style={{ background: builtInSelected ? 'var(--aip-accent)' : 'var(--aip-tertiary)' }}
-                                    />
-                                    <span className="text-xs font-semibold text-white truncate">{status.builtIn.name}</span>
-                                    <AipBadge tone="neutral" label={t('Included')} />
-                                    {builtInSelected && <AipBadge tone="ok" label={t('In use')} />}
-                                </div>
-                                <div className="shrink-0">
-                                    {!builtInSelected && (
-                                        <button
-                                            type="button"
-                                            className="aip-btn"
-                                            data-size="sm"
-                                            disabled={busyCatalogId !== null}
-                                            onClick={() => void useCatalogModel(null)}
-                                        >
-                                            <span>{t('Use')}</span>
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                        </section>
-                    )}
-
-                    {/* Section 2: ONNX Models */}
-                    {filteredOnnxModels.length > 0 && (
-                        <section className="space-y-1.5">
-                            <header className="flex items-baseline justify-between gap-3 px-1">
-                                <h5 className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--aip-secondary)' }}>
-                                    {t('Hugging Face ONNX Models')}
-                                </h5>
-                                <span className="text-[10px] tabular-nums" style={{ color: 'var(--aip-tertiary)' }}>
-                                    {filteredOnnxModels.filter(m => m.state === 'installed').length}/{filteredOnnxModels.length}
-                                </span>
-                            </header>
-                            <div className="space-y-1.5">
-                                {filteredOnnxModels.map(renderCatalogModelRow)}
-                            </div>
-                        </section>
-                    )}
-
-                    {/* Section 3: GGUF Extension Models */}
-                    {filteredGgufModels.length > 0 && (
-                        <section className="space-y-1.5">
-                            <header className="flex items-baseline justify-between gap-3 px-1">
-                                <h5 className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--aip-secondary)' }}>
-                                    {t('Extension Rerankers (GGUF)')}
-                                </h5>
-                                <span className="text-[10px] tabular-nums" style={{ color: 'var(--aip-tertiary)' }}>
-                                    {filteredGgufModels.filter(m => m.state === 'installed').length}/{filteredGgufModels.length}
-                                </span>
-                            </header>
-                            <div className="space-y-1.5">
-                                {filteredGgufModels.map(renderCatalogModelRow)}
-                            </div>
-                        </section>
-                    )}
-
-                    {filteredCatalogModels.length === 0 && (
-                        <p className="text-[10px] aip-muted text-center py-4">
-                            {t('No models match your current filter query.')}
-                        </p>
-                    )}
-                </div>
-            </div>
-
             {/* Provider Card 2: Custom Local Endpoint */}
             <div className="aip-card aip-provider space-y-3">
                 <div className="aip-provider-head">
@@ -1920,6 +1744,182 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                     </div>
                 );
             })}
+            {/* Local Reranker & Model Library — below the hosted cards. */}
+            <div className="aip-card aip-provider space-y-3">
+                <div className="aip-provider-head">
+                    <PlatformMark />
+                    <h4 className="aip-card-title truncate min-w-0">{t('Local Reranker')}</h4>
+                    <div className="ml-auto flex items-center gap-2 shrink-0">
+                        <span className="aip-meta inline-flex items-center gap-1.5">
+                            <HardDrive size={12} strokeWidth={1.75} /> {t('On-device')}
+                        </span>
+                        <AipBadge
+                            tone={status.builtIn.available ? 'ok' : status.builtIn.cached ? 'info' : 'neutral'}
+                            label={status.builtIn.available ? t('Ready') : status.builtIn.cached ? t('Downloaded') : t('Local')}
+                        />
+                    </div>
+                </div>
+
+                <div className="flex items-center justify-between gap-3 flex-wrap text-[10px] aip-muted px-1">
+                    <p className="min-w-0 flex-1">
+                        {t('Runs on this device with zero data sent externally. Built-in BGE model shipped with Natively, or download open models directly from Hugging Face.')}
+                    </p>
+                    <span className="shrink-0 font-medium tabular-nums text-white/70">
+                        {installedCount}/{totalCount} {t('installed')}
+                        {installedBytes > 0 && <> · {humanBytes(installedBytes)}</>}
+                    </span>
+                </div>
+
+                <div className="flex items-center justify-between gap-3 flex-wrap pt-1">
+                    {recommendedModelName ? (
+                        <p className="text-[11px] px-1" style={{ color: 'var(--aip-tertiary)' }}>
+                            {t('Best for this')} {isMac ? 'Mac' : 'PC'}: <span className="font-medium" style={{ color: 'var(--aip-secondary)' }}>{recommendedModelName}</span>
+                        </p>
+                    ) : <div />}
+
+                    {/* Filter Tabs */}
+                    <div className="flex items-center gap-1 bg-white/5 p-0.5 rounded-md text-[11px]">
+                        <button
+                            type="button"
+                            className="px-2 py-0.5 rounded text-white transition-colors"
+                            style={{
+                                background: filterTab === 'all' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+                                fontWeight: filterTab === 'all' ? 600 : 400,
+                            }}
+                            onClick={() => setFilterTab('all')}
+                        >
+                            {t('All')} ({totalCount})
+                        </button>
+                        <button
+                            type="button"
+                            className="px-2 py-0.5 rounded text-white transition-colors"
+                            style={{
+                                background: filterTab === 'installed' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+                                fontWeight: filterTab === 'installed' ? 600 : 400,
+                            }}
+                            onClick={() => setFilterTab('installed')}
+                        >
+                            {t('Installed')} ({installedCount})
+                        </button>
+                        <button
+                            type="button"
+                            className="px-2 py-0.5 rounded text-white transition-colors"
+                            style={{
+                                background: filterTab === 'recommended' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+                                fontWeight: filterTab === 'recommended' ? 600 : 400,
+                            }}
+                            onClick={() => setFilterTab('recommended')}
+                        >
+                            {t('Recommended')}
+                        </button>
+                    </div>
+                </div>
+
+                {/* Instant Search Bar */}
+                <div className="aip-field">
+                    <Search size={13} strokeWidth={1.75} className="aip-field-icon" aria-hidden="true" />
+                    <input
+                        type="text"
+                        className="aip-input"
+                        value={modelQuery}
+                        placeholder={t('Filter models by name, size, or format…')}
+                        onChange={(e) => setModelQuery(e.target.value)}
+                    />
+                    {modelQuery && (
+                        <button
+                            type="button"
+                            className="aip-btn text-[10px] shrink-0"
+                            data-size="sm"
+                            data-variant="ghost"
+                            onClick={() => setModelQuery('')}
+                        >
+                            <X size={12} strokeWidth={1.75} aria-hidden="true" />
+                        </button>
+                    )}
+                </div>
+
+                {/* Scrollable Model Library Container */}
+                <div className="aip-well aip-scroll-y p-2.5 space-y-3.5" style={{ maxHeight: 380 }}>
+                    {/* Section 1: Bundled Models */}
+                    {(filterTab === 'all' || filterTab === 'installed') && !modelQuery && (
+                        <section className="space-y-1.5">
+                            <header className="flex items-baseline justify-between gap-3 px-1">
+                                <h5 className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--aip-secondary)' }}>
+                                    {t('Bundled with Natively')}
+                                </h5>
+                                <span className="text-[10px] tabular-nums" style={{ color: 'var(--aip-tertiary)' }}>1/1</span>
+                            </header>
+
+                            <div className="aip-card flex items-center justify-between gap-3 p-2.5" data-active={builtInSelected ? 'true' : undefined}>
+                                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                    <span
+                                        aria-hidden="true"
+                                        className="w-1.5 h-1.5 rounded-full shrink-0"
+                                        style={{ background: builtInSelected ? 'var(--aip-accent)' : 'var(--aip-tertiary)' }}
+                                    />
+                                    <span className="text-xs font-semibold text-white truncate">{status.builtIn.name}</span>
+                                    <AipBadge tone="neutral" label={t('Included')} />
+                                    {builtInSelected && <AipBadge tone="ok" label={t('In use')} />}
+                                </div>
+                                <div className="shrink-0">
+                                    {!builtInSelected && (
+                                        <button
+                                            type="button"
+                                            className="aip-btn"
+                                            data-size="sm"
+                                            disabled={busyCatalogId !== null}
+                                            onClick={() => void useCatalogModel(null)}
+                                        >
+                                            <span>{t('Use')}</span>
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        </section>
+                    )}
+
+                    {/* Section 2: ONNX Models */}
+                    {filteredOnnxModels.length > 0 && (
+                        <section className="space-y-1.5">
+                            <header className="flex items-baseline justify-between gap-3 px-1">
+                                <h5 className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--aip-secondary)' }}>
+                                    {t('Hugging Face ONNX Models')}
+                                </h5>
+                                <span className="text-[10px] tabular-nums" style={{ color: 'var(--aip-tertiary)' }}>
+                                    {filteredOnnxModels.filter(m => m.state === 'installed').length}/{filteredOnnxModels.length}
+                                </span>
+                            </header>
+                            <div className="space-y-1.5">
+                                {filteredOnnxModels.map(renderCatalogModelRow)}
+                            </div>
+                        </section>
+                    )}
+
+                    {/* Section 3: GGUF Extension Models */}
+                    {filteredGgufModels.length > 0 && (
+                        <section className="space-y-1.5">
+                            <header className="flex items-baseline justify-between gap-3 px-1">
+                                <h5 className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--aip-secondary)' }}>
+                                    {t('Extension Rerankers (GGUF)')}
+                                </h5>
+                                <span className="text-[10px] tabular-nums" style={{ color: 'var(--aip-tertiary)' }}>
+                                    {filteredGgufModels.filter(m => m.state === 'installed').length}/{filteredGgufModels.length}
+                                </span>
+                            </header>
+                            <div className="space-y-1.5">
+                                {filteredGgufModels.map(renderCatalogModelRow)}
+                            </div>
+                        </section>
+                    )}
+
+                    {filteredCatalogModels.length === 0 && (
+                        <p className="text-[10px] aip-muted text-center py-4">
+                            {t('No models match your current filter query.')}
+                        </p>
+                    )}
+                </div>
+            </div>
+
             {/* Provider Card 4: Community Extensions — High-End Minimalist Design */}
             <div className="aip-card aip-provider space-y-3">
                 <div className="aip-provider-head">
