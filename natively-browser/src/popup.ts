@@ -166,7 +166,7 @@ captureBtn.addEventListener('click', async () => {
     setMsg(`Requesting access to ${hostOf(origin)}…`, '');
     const grant = await requestOriginPermission(chrome.permissions, origin);
     if (grant.granted) {
-      await send({ type: 'clear-grant-nudge' });
+      void send({ type: 'clear-grant-nudge' }).catch(() => {});
       setMsg('Permission granted — capturing…', '');
       report = await send<CaptureReport>({ type: 'capture' });
     }
@@ -190,7 +190,7 @@ allSitesBtn.addEventListener('click', async () => {
   const r = await requestAllSitesPermission(chrome.permissions);
   allSitesBtn.disabled = false;
   if (r.granted) {
-    await send({ type: 'clear-grant-nudge' });
+    void send({ type: 'clear-grant-nudge' }).catch(() => {});
     setMsg(r.alreadyHad ? 'Already allowed on all sites.' : 'Allowed on all sites — the hotkey now works everywhere.', 'ok');
     await refreshAllSites();
   } else {
