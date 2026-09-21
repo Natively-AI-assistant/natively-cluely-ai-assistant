@@ -8831,6 +8831,21 @@ if (process.env.THINKING_MATRIX === '1') {
     windowCount: BrowserWindow.getAllWindows().length,
   });
 
+  // A saved Natively key whose plan includes Pro, with no Pro licence on this
+  // device, used to stay that way forever (activation ran once, at key save, and a
+  // 5xx ended it). Reconcile shortly after launch — late enough to stay off the
+  // startup path, and the reconciler makes no request at all unless a real key is
+  // stored and Pro is inactive. See services/ProEntitlementReconciler.ts.
+  const proReconcileTimer = setTimeout(() => {
+    try {
+      const { getProEntitlementReconciler } = require('./services/proEntitlementWiring');
+      void getProEntitlementReconciler().run('startup');
+    } catch (e: any) {
+      console.warn('[Main] Pro entitlement reconcile could not start:', e?.message);
+    }
+  }, 8000);
+  proReconcileTimer.unref?.();
+
   // Opt-in: NATIVELY_LOG_GPU_STATUS=1 logs Chromium's GPU feature status once
   // at boot (whether gpu_compositing/rasterization are 'enabled' vs.
   // 'software'/'disabled') — useful when diagnosing a renderer that freezes

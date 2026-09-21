@@ -10151,6 +10151,10 @@ export function initializeIpcHandlers(appState: AppState): void {
     // reason instead of the unconditional { success: true } it used to return
     // even for a key that authenticates nowhere.
     let keyRejection: { error?: string } | null = null;
+    // Set when the key is fine and its plan includes Pro, but Pro could not be
+    // confirmed right now. The save still succeeds; the UI is told so it can say
+    // "still activating Pro" instead of silently showing a plan with no Pro.
+    let proPending: { error?: string } | null = null;
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
@@ -10268,6 +10272,17 @@ export function initializeIpcHandlers(appState: AppState): void {
             keyRejection = { error: result.error };
           } else {
             console.log('[IPC] set-natively-api-key: Pro not activated —', result.error);
+            // This used to be the end of it: the key was saved, the UI said so, and
+            // a transient verify failure left Pro off for good. Hand it to the
+            // reconciler, which decides from the plan whether there is anything to
+            // retry (a standard plan ends there) and keeps trying with backoff.
+            try {
+              const { getProEntitlementReconciler } = require('./services/proEntitlementWiring');
+              const outcome = await getProEntitlementReconciler().run('key-saved');
+              if (outcome === 'retrying') proPending = { error: result.error };
+            } catch (e: any) {
+              console.warn('[IPC] set-natively-api-key: Pro reconcile unavailable:', e?.message);
+            }
           }
         } catch (e: any) {
           // LicenseManager not available in this build — non-fatal
@@ -10278,6 +10293,10 @@ export function initializeIpcHandlers(appState: AppState): void {
         }
       } else {
         // API key was cleared — deactivate any natively_api Pro license so premium is revoked.
+        // …and cancel any pending Pro retry: it would be retrying a key that is gone.
+        try {
+          require('./services/proEntitlementWiring').getProEntitlementReconciler().stop();
+        } catch { /* wiring unavailable — nothing was pending */ }
         try {
           const { LicenseManager } = require('../premium/electron/services/LicenseManager');
           const lm = LicenseManager.getInstance();
@@ -10305,7 +10324,9 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       return keyRejection
         ? { success: false, error: keyRejection.error }
-        : { success: true };
+        : proPending
+          ? { success: true, proPending: true, proError: proPending.error }
+          : { success: true };
     } catch (error: any) {
       console.error('Error saving Natively API key:', error);
       return { success: false, error: error.message };
@@ -10383,6 +10404,16 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       // Cache the successful response
       _usageCache.set(key, { data: result, ts: Date.now() });
+
+      // The plan is now known. If it includes Pro and Pro is off on this device,
+      // fix that here — this is the moment the user is looking at "Ultra" with no
+      // Pro features. Fire-and-forget; passes the plan so no second request is made.
+      if (typeof data?.plan === 'string') {
+        try {
+          const { getProEntitlementReconciler } = require('./services/proEntitlementWiring');
+          void getProEntitlementReconciler().run('usage-ok', { plan: data.plan });
+        } catch { /* wiring unavailable in this build */ }
+      }
       return result;
     } catch (error: any) {
       // On transient DNS/network failure, serve stale cache rather than showing an error.
