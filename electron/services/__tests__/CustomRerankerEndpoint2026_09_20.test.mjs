@@ -98,9 +98,9 @@ test('RerankerSettings.tsx renders Custom Endpoint card and On-device / Cloud ba
   assert.match(src, /Custom reranker endpoint URL/, 'Must include input for custom reranker endpoint');
   assert.match(src, /Custom reranker API key \(optional\)/, 'Must include input for optional custom API key');
 
-  // On-device and Cloud badges
+  // On-device tag on local cards; hosted cards carry no Cloud tag (removed 2026-09-22 by owner request).
   assert.ok(src.includes("<HardDrive size={12} strokeWidth={1.75} /> {t('On-device')}"), 'Must render On-device badge with HardDrive icon');
-  assert.ok(src.includes("<Cloud size={12} strokeWidth={1.75} /> {t('Cloud')}"), 'Must render Cloud badge with Cloud icon');
+  assert.ok(!src.includes("{t('Cloud')}"), 'Hosted reranker cards must not render a Cloud tag');
 });
 
 test('normalizeCustomBaseUrl normalizes localhost and ports without scheme', () => {

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { AlertCircle, Check, ChevronDown, Cloud, Download, ExternalLink, Filter, FolderOpen, HardDrive, KeyRound, Loader2, Monitor, Puzzle, RefreshCw, Search, Server, ShieldAlert, Trash2, X } from 'lucide-react';
+import { AlertCircle, Check, ChevronDown, Download, ExternalLink, Filter, FolderOpen, HardDrive, KeyRound, Loader2, Monitor, Puzzle, RefreshCw, Search, Server, ShieldAlert, Trash2, X } from 'lucide-react';
 import { useT } from '../../i18n';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { AIP_ACTIVE_SELECT_CONTAINER, AIP_CSS, AipBadge, AipModelList, AipProviderMark, AipSelect, AipSwitch, type AipSelectOption, type AipTone } from './AIProvidersSettings';
@@ -1764,9 +1764,6 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                             <AipProviderMark provider={p.id} name={p.name} />
                             <h4 className="aip-card-title truncate min-w-0">{t(p.name)}</h4>
                             <div className="ml-auto flex items-center gap-2 shrink-0">
-                                <span className="aip-meta inline-flex items-center gap-1.5">
-                                    <Cloud size={12} strokeWidth={1.75} /> {t('Cloud')}
-                                </span>
                                 <AipBadge tone={hasKey ? 'ok' : 'warn'} label={hasKey ? t('Key set') : t('No key')} />
 
                                 {byok && (

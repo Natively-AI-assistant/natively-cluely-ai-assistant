@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, Check, ChevronDown, Cloud, Download, ExternalLink, FolderOpen, HardDrive, KeyRound, Loader2, Monitor, Search, Server, Trash2, X, Zap } from 'lucide-react';
+import { AlertCircle, Check, ChevronDown, Download, ExternalLink, FolderOpen, HardDrive, KeyRound, Loader2, Monitor, Search, Server, Trash2, X, Zap } from 'lucide-react';
 import { useT } from '../../i18n';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { AIP_ACTIVE_SELECT_CONTAINER, AIP_CSS, AipBadge, AipModelList, AipProviderMark, type AipTone } from './AIProvidersSettings';
@@ -912,11 +912,11 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                     {badge && <AipBadge tone={badge.tone} label={badge.label} />}
 
                     <div className="ml-auto flex items-center gap-2 shrink-0">
-                        <span className="aip-meta inline-flex items-center gap-1.5">
-                            {p.cloud
-                                ? <><Cloud size={12} strokeWidth={1.75} /> {t('Cloud')}</>
-                                : <><HardDrive size={12} strokeWidth={1.75} /> {t('On-device')}</>}
-                        </span>
+                        {!p.cloud && (
+                            <span className="aip-meta inline-flex items-center gap-1.5">
+                                <HardDrive size={12} strokeWidth={1.75} /> {t('On-device')}
+                            </span>
+                        )}
 
                         {keyUrl && (
                             <button
