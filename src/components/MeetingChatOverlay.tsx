@@ -571,14 +571,8 @@ ${contextString}`;
                     className="absolute inset-0 z-40 flex flex-col justify-end"
                     onClick={handleBackdropClick}
                 >
-                    {/* Backdrop with blur */}
-                    <motion.div
-                        initial={{ backdropFilter: 'blur(0px)' }}
-                        animate={{ backdropFilter: 'blur(8px)' }}
-                        exit={{ backdropFilter: 'blur(0px)' }}
-                        transition={{ duration: 0.16 }}
-                        className="absolute inset-0 bg-black/40"
-                    />
+                    {/* Backdrop — dims only; the parent's opacity fade brings it in */}
+                    <div className="absolute inset-0 bg-black/40" />
 
                     {/* Chat Window - extends to bottom, leaves room for input */}
                     <motion.div

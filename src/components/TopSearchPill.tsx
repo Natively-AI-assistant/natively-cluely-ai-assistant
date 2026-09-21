@@ -250,7 +250,7 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
 
     return (
         <>
-            {/* Backdrop blur overlay */}
+            {/* Backdrop overlay */}
             {createPortal(
                 <AnimatePresence>
                     {isExpanded && (
@@ -260,7 +260,7 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                             exit={{ opacity: 0 }}
                             transition={{ duration: 0.15 }}
                             style={{ top: backdropTop }}
-                            className="fixed inset-0 bg-black/30 backdrop-blur-[8px] z-[90]"
+                            className="fixed inset-0 bg-black/30 z-[90]"
                             onClick={close}
                         />
                     )}
