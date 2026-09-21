@@ -1577,8 +1577,14 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
         </div>
     ) : (
         <div className="aip-cq space-y-4">
-            {renderLocalEmbeddingLibraryCard()}
-            {cardProviders.map(renderProvider)}
+            {/* Local Embeddings sits after OpenRouter, before Ollama and Custom endpoint. */}
+            {cardProviders.map(p => (
+                <React.Fragment key={p.id}>
+                    {renderProvider(p)}
+                    {p.id === 'openrouter' && renderLocalEmbeddingLibraryCard()}
+                </React.Fragment>
+            ))}
+            {!cardProviders.some(p => p.id === 'openrouter') && renderLocalEmbeddingLibraryCard()}
         </div>
     );
 
