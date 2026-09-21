@@ -1388,163 +1388,6 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
        Reranker sub-tab. */
     const panel = (
         <>
-            {/* Provider Card 2: Custom Local Endpoint */}
-            <div className="aip-card aip-provider space-y-3">
-                <div className="aip-provider-head">
-                    <CustomEndpointMark />
-                    <h4 className="aip-card-title truncate min-w-0">{t('Custom Endpoint')}</h4>
-                    <AipBadge
-                        tone={status.customEndpoint ? 'ok' : 'neutral'}
-                        label={status.customEndpoint ? (status.customModel ? t('Configured') : t('Connected')) : t('Not configured')}
-                    />
-                    <div className="ml-auto flex items-center gap-2 shrink-0">
-                        <span className="aip-meta inline-flex items-center gap-1.5">
-                            <HardDrive size={12} strokeWidth={1.75} /> {t('On-device')}
-                        </span>
-                    </div>
-                </div>
-
-                <div className="text-[10px] aip-muted px-1">
-                    <p>
-                        {t('Connect any local or self-hosted reranker service (e.g. Text Embeddings Inference / TEI, LM Studio, Infinity, or a local proxy) using the Cohere/OpenAI-compatible /rerank endpoint.')}
-                    </p>
-                </div>
-
-                {/* Server URL Input */}
-                <div className="aip-provider-row flex-col sm:flex-row gap-2">
-                    <div className="aip-provider-field flex-1">
-                        <div className="aip-field">
-                            <Server size={13} strokeWidth={1.75} className="aip-field-icon" aria-hidden="true" />
-                            <input
-                                type="text"
-                                value={customEndpointDraft}
-                                onChange={(e) => {
-                                    setCustomEndpointDraft(e.target.value);
-                                    setCustomSaved(false);
-                                }}
-                                onKeyDown={(e) => { if (e.key === 'Enter') void saveCustomEndpoint(); }}
-                                autoComplete="off"
-                                spellCheck={false}
-                                aria-label={t('Custom reranker endpoint URL')}
-                                placeholder="http://localhost:8080"
-                                className="aip-input"
-                            />
-                            <button
-                                type="button"
-                                onClick={() => { void saveCustomEndpoint(); }}
-                                disabled={customSaving}
-                                className="aip-field-seg"
-                                data-tone={customSaved ? 'ok' : undefined}
-                            >
-                                {customSaving
-                                    ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Saving...')}</>
-                                    : customSaved
-                                        ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Saved')}</>
-                                        : t('Save')}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Optional API Key Input */}
-                <div className="aip-provider-row">
-                    <div className="aip-provider-field">
-                        <div className="aip-field">
-                            <KeyRound size={13} strokeWidth={1.75} className="aip-field-icon" aria-hidden="true" />
-                            <input
-                                type="password"
-                                value={customApiKeyDraft}
-                                onChange={(e) => {
-                                    setCustomApiKeyDraft(e.target.value);
-                                    setCustomSaved(false);
-                                }}
-                                onKeyDown={(e) => { if (e.key === 'Enter') void saveCustomEndpoint(); }}
-                                autoComplete="off"
-                                spellCheck={false}
-                                aria-label={t('Custom reranker API key (optional)')}
-                                placeholder={status.hasCustomKey ? '••••••••••••••••' : t('API key (optional for local servers)')}
-                                className="aip-input"
-                            />
-                            <button
-                                type="button"
-                                onClick={() => { void saveCustomEndpoint(); }}
-                                disabled={customSaving}
-                                className="aip-btn-seg aip-field-seg"
-                                data-tone={customSaved ? 'ok' : undefined}
-                            >
-                                {customSaving
-                                    ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Saving...')}</>
-                                    : customSaved
-                                        ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Saved')}</>
-                                        : t('Save')}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Action row: Test Connection & Models List */}
-                {(status.customEndpoint || customEndpointDraft.trim()) && (
-                    <div className="aip-provider-row">
-                        <button
-                            type="button"
-                            onClick={() => void runTest({
-                                provider: 'custom',
-                                endpoint: customEndpointDraft.trim() || status.customEndpoint || undefined,
-                                apiKey: customApiKeyDraft.trim() || undefined,
-                                model: status.customModel || customModels[0]?.id || undefined,
-                            })}
-                            disabled={testing}
-                            className="aip-btn shrink-0"
-                            data-tone={testResult?.success ? 'ok' : testResult ? 'danger' : undefined}
-                            title={t('Test Connection')}
-                        >
-                            {testing
-                                ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Testing...')}</>
-                                : testResult?.success
-                                    ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Passed')}</>
-                                    : testResult
-                                        ? <><AlertCircle size={12} strokeWidth={1.75} /> {t('Error')}</>
-                                        : <>{t('Test Connection')}</>}
-                        </button>
-
-                        {customModels.length > 0 && (
-                            <AipModelList
-                                models={customModels.map(m => ({
-                                    id: m.id,
-                                    label: m.label,
-                                }))}
-                                optIn
-                                enabled={status.provider === 'custom' && status.customModel ? [status.customModel] : []}
-                                defaultId={status.provider === 'custom' ? (status.customModel ?? undefined) : undefined}
-                                onToggle={(id) => { void setConfig({ provider: 'custom', customModel: id }); }}
-                                onSetDefault={(id) => { void setConfig({ provider: 'custom', customModel: id }); }}
-                                onReset={() => { }}
-                                refreshing={customRefreshing}
-                                onRefresh={() => { void loadCustomModels(true); }}
-                            />
-                        )}
-                    </div>
-                )}
-
-                {customNote && (
-                    <p className="aip-meta aip-provider-note" style={{ color: 'var(--aip-tertiary)' }}>
-                        {customNote}
-                    </p>
-                )}
-
-                {testResult && !testResult.success && (
-                    <p className="aip-meta aip-danger-fg aip-provider-note">
-                        {testResult.message || t('Connection test failed. Verify the server is running and accepts /rerank requests.')}
-                    </p>
-                )}
-
-                {!status.customEndpoint && (
-                    <p className="aip-meta aip-provider-note">
-                        {t('Runs on your local machine or local network without sending data externally. Example: Text Embeddings Inference (TEI) with --model-id BAAI/bge-reranker-large on port 8080.')}
-                    </p>
-                )}
-            </div>
-
             {/* Provider Card 3+: hosted rerankers, one card per provider.
                 OpenRouter discovers its catalogue live; Jina publishes a fixed
                 enum. Jina was added for jina-reranker-v3.5 when that model could
@@ -1918,6 +1761,163 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                         </p>
                     )}
                 </div>
+            </div>
+
+            {/* Provider Card 2: Custom Local Endpoint */}
+            <div className="aip-card aip-provider space-y-3">
+                <div className="aip-provider-head">
+                    <CustomEndpointMark />
+                    <h4 className="aip-card-title truncate min-w-0">{t('Custom Endpoint')}</h4>
+                    <AipBadge
+                        tone={status.customEndpoint ? 'ok' : 'neutral'}
+                        label={status.customEndpoint ? (status.customModel ? t('Configured') : t('Connected')) : t('Not configured')}
+                    />
+                    <div className="ml-auto flex items-center gap-2 shrink-0">
+                        <span className="aip-meta inline-flex items-center gap-1.5">
+                            <HardDrive size={12} strokeWidth={1.75} /> {t('On-device')}
+                        </span>
+                    </div>
+                </div>
+
+                <div className="text-[10px] aip-muted px-1">
+                    <p>
+                        {t('Connect any local or self-hosted reranker service (e.g. Text Embeddings Inference / TEI, LM Studio, Infinity, or a local proxy) using the Cohere/OpenAI-compatible /rerank endpoint.')}
+                    </p>
+                </div>
+
+                {/* Server URL Input */}
+                <div className="aip-provider-row flex-col sm:flex-row gap-2">
+                    <div className="aip-provider-field flex-1">
+                        <div className="aip-field">
+                            <Server size={13} strokeWidth={1.75} className="aip-field-icon" aria-hidden="true" />
+                            <input
+                                type="text"
+                                value={customEndpointDraft}
+                                onChange={(e) => {
+                                    setCustomEndpointDraft(e.target.value);
+                                    setCustomSaved(false);
+                                }}
+                                onKeyDown={(e) => { if (e.key === 'Enter') void saveCustomEndpoint(); }}
+                                autoComplete="off"
+                                spellCheck={false}
+                                aria-label={t('Custom reranker endpoint URL')}
+                                placeholder="http://localhost:8080"
+                                className="aip-input"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => { void saveCustomEndpoint(); }}
+                                disabled={customSaving}
+                                className="aip-field-seg"
+                                data-tone={customSaved ? 'ok' : undefined}
+                            >
+                                {customSaving
+                                    ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Saving...')}</>
+                                    : customSaved
+                                        ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Saved')}</>
+                                        : t('Save')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Optional API Key Input */}
+                <div className="aip-provider-row">
+                    <div className="aip-provider-field">
+                        <div className="aip-field">
+                            <KeyRound size={13} strokeWidth={1.75} className="aip-field-icon" aria-hidden="true" />
+                            <input
+                                type="password"
+                                value={customApiKeyDraft}
+                                onChange={(e) => {
+                                    setCustomApiKeyDraft(e.target.value);
+                                    setCustomSaved(false);
+                                }}
+                                onKeyDown={(e) => { if (e.key === 'Enter') void saveCustomEndpoint(); }}
+                                autoComplete="off"
+                                spellCheck={false}
+                                aria-label={t('Custom reranker API key (optional)')}
+                                placeholder={status.hasCustomKey ? '••••••••••••••••' : t('API key (optional for local servers)')}
+                                className="aip-input"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => { void saveCustomEndpoint(); }}
+                                disabled={customSaving}
+                                className="aip-btn-seg aip-field-seg"
+                                data-tone={customSaved ? 'ok' : undefined}
+                            >
+                                {customSaving
+                                    ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Saving...')}</>
+                                    : customSaved
+                                        ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Saved')}</>
+                                        : t('Save')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Action row: Test Connection & Models List */}
+                {(status.customEndpoint || customEndpointDraft.trim()) && (
+                    <div className="aip-provider-row">
+                        <button
+                            type="button"
+                            onClick={() => void runTest({
+                                provider: 'custom',
+                                endpoint: customEndpointDraft.trim() || status.customEndpoint || undefined,
+                                apiKey: customApiKeyDraft.trim() || undefined,
+                                model: status.customModel || customModels[0]?.id || undefined,
+                            })}
+                            disabled={testing}
+                            className="aip-btn shrink-0"
+                            data-tone={testResult?.success ? 'ok' : testResult ? 'danger' : undefined}
+                            title={t('Test Connection')}
+                        >
+                            {testing
+                                ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Testing...')}</>
+                                : testResult?.success
+                                    ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Passed')}</>
+                                    : testResult
+                                        ? <><AlertCircle size={12} strokeWidth={1.75} /> {t('Error')}</>
+                                        : <>{t('Test Connection')}</>}
+                        </button>
+
+                        {customModels.length > 0 && (
+                            <AipModelList
+                                models={customModels.map(m => ({
+                                    id: m.id,
+                                    label: m.label,
+                                }))}
+                                optIn
+                                enabled={status.provider === 'custom' && status.customModel ? [status.customModel] : []}
+                                defaultId={status.provider === 'custom' ? (status.customModel ?? undefined) : undefined}
+                                onToggle={(id) => { void setConfig({ provider: 'custom', customModel: id }); }}
+                                onSetDefault={(id) => { void setConfig({ provider: 'custom', customModel: id }); }}
+                                onReset={() => { }}
+                                refreshing={customRefreshing}
+                                onRefresh={() => { void loadCustomModels(true); }}
+                            />
+                        )}
+                    </div>
+                )}
+
+                {customNote && (
+                    <p className="aip-meta aip-provider-note" style={{ color: 'var(--aip-tertiary)' }}>
+                        {customNote}
+                    </p>
+                )}
+
+                {testResult && !testResult.success && (
+                    <p className="aip-meta aip-danger-fg aip-provider-note">
+                        {testResult.message || t('Connection test failed. Verify the server is running and accepts /rerank requests.')}
+                    </p>
+                )}
+
+                {!status.customEndpoint && (
+                    <p className="aip-meta aip-provider-note">
+                        {t('Runs on your local machine or local network without sending data externally. Example: Text Embeddings Inference (TEI) with --model-id BAAI/bge-reranker-large on port 8080.')}
+                    </p>
+                )}
             </div>
 
             {/* Provider Card 4: Community Extensions — High-End Minimalist Design */}
