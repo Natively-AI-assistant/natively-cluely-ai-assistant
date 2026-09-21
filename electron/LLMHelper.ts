@@ -7259,12 +7259,19 @@ let isMultimodal = !!(imagePaths?.length);
       }
     }
     // Ollama: use the resolved vision-capable model (which may differ from the
-    // primary text model). If not yet resolved, wait for the probe — bounded — so
-    // the very first screenshot finds an installed vision model instead of
-    // dead-ending (#571). The bound matters: this runs before ANY provider is
-    // seated, cloud included, and an unbounded probe against a hung daemon cost
-    // 5s on every screenshot.
-    const ollamaVisionModel = await this.resolveOllamaVisionModelForChain();
+    // primary text model). If not yet resolved, await the probe so the very first
+    // screenshot request finds any installed vision model instead of dead-ending.
+    // The wait is bounded (resolveOllamaVisionModelForChain): it runs before ANY
+    // provider is seated, cloud included, and an unbounded probe against a hung
+    // daemon cost 5s on every screenshot.
+    let ollamaVisionModel = this.useOllama ? this.ollamaVisionModel : null;
+    if (this.useOllama && !ollamaVisionModel) {
+      try {
+        ollamaVisionModel = await this.resolveOllamaVisionModelForChain();
+      } catch (err: any) {
+        console.warn('[LLMHelper] Failed to probe Ollama vision model:', err?.message || err);
+      }
+    }
     if (ollamaVisionModel) {
       local.push({ id: 'ollama', name: `Ollama (${ollamaVisionModel})`, isLocal: true, priority: 101,
         open: (sig) => this.streamWithOllama(message, context, systemPrompt, imagePaths, sig, ollamaVisionModel) });
