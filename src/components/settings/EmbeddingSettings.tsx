@@ -1200,8 +1200,208 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
         );
     };
 
+    const renderLocalEmbeddingRow = (m: LocalCatalogEmbeddingModel) => {
+        const installed = m.state === 'installed';
+        const busy = busyLocalModelId === m.id;
+        const prog = localModelProgress[m.id];
+        const locked = busyLocalModelId !== null || testingLocalModelId !== null;
+        const needsLicence = !!m.license?.requiresAcknowledgement && !m.acknowledged;
+        const test = localModelTestResults[m.id];
+        const isSelected = active.provider === 'local' && (
+            (activeLocalModel ? m.id === activeLocalModel.id : false) ||
+            m.selected ||
+            (m.id === 'minilm-l6-v2' && (!selectedLocalModel || selectedLocalModel.id === 'minilm-l6-v2'))
+        );
+
+        const acceptLicence = async () => {
+            const res = await window.electronAPI.acknowledgeLocalEmbeddingCatalogModel?.(m.id);
+            if (!res?.success) return;
+            // Clear dialog state FIRST so the resumed callback doesn't re-open it,
+            // then resume with skipLicenseGuard: localModels is still stale here.
+            const pendingAction = licenseDialogModel?.pendingAction;
+            setLicenseDialogModel(null);
+            void loadLocalEmbeddingModels();
+            if (pendingAction === 'use' && m.state === 'installed') void useLocalModel(m.id, true);
+            else void installLocalModel(m.id, true);
+        };
+
+        return (
+            <div
+                key={m.id}
+                className="aip-card p-3 space-y-1.5 transition-colors hover:bg-white/[0.03]"
+                data-active={isSelected ? 'true' : undefined}
+            >
+                <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap sm:flex-nowrap">
+                        <span
+                            aria-hidden="true"
+                            className={`w-1.5 h-1.5 rounded-full shrink-0 ${isSelected ? 'bg-[var(--aip-accent)]' : installed ? 'bg-[var(--aip-tertiary)]' : 'border border-[var(--aip-border-strong)]'}`}
+                        />
+                        <span className="text-xs font-semibold text-white truncate">{m.name}</span>
+                        {m.bundled && <AipBadge tone="neutral" label={t('Included')} />}
+                        {m.recommended && <AipBadge tone="info" label={t('Recommended')} />}
+                        {isSelected && <AipBadge tone="ok" label={t('In use')} />}
+                        {installed && !isSelected && !m.bundled && <AipBadge tone="neutral" label={t('Downloaded')} />}
+                    </div>
+
+                    <div className="shrink-0 flex items-center gap-1.5">
+                        {needsLicence ? (
+                            <button
+                                type="button"
+                                className="aip-btn"
+                                data-size="sm"
+                                disabled={busyLocalModelId !== null}
+                                onClick={() => void acceptLicence()}
+                                title={t('Accept the licence terms to enable download and activation')}
+                            >
+                                <Check size={12} strokeWidth={1.75} aria-hidden="true" />
+                                <span>{t('Accept licence')}</span>
+                            </button>
+                        ) : (
+                            <>
+                                {!installed && (busy ? (
+                                    <button
+                                        type="button"
+                                        className="aip-btn"
+                                        data-size="sm"
+                                        onClick={() => void window.electronAPI.cancelLocalEmbeddingModel?.(m.id)}
+                                    >
+                                        <X size={12} strokeWidth={1.75} aria-hidden="true" />
+                                        <span>{t('Cancel')}</span>
+                                    </button>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        className="aip-btn"
+                                        data-size="sm"
+                                        disabled={locked}
+                                        onClick={() => void installLocalModel(m.id)}
+                                    >
+                                        <Download size={12} strokeWidth={1.75} aria-hidden="true" />
+                                        <span>{t('Download')}</span>
+                                    </button>
+                                ))}
+                                {installed && !isSelected && (
+                                    <button
+                                        type="button"
+                                        className="aip-btn"
+                                        data-size="sm"
+                                        disabled={locked}
+                                        onClick={() => void useLocalModel(m.id)}
+                                    >
+                                        {busy ? <Loader2 size={12} className="animate-spin" aria-hidden="true" /> : null}
+                                        <span>{t('Use')}</span>
+                                    </button>
+                                )}
+                                {installed && (
+                                    <button
+                                        type="button"
+                                        className="aip-btn"
+                                        data-size="sm"
+                                        data-variant="ghost"
+                                        disabled={locked}
+                                        onClick={() => void testLocalModel(m.id)}
+                                        title={t('Measure how long one embedding takes on this device')}
+                                    >
+                                        {testingLocalModelId === m.id
+                                            ? <Loader2 size={12} className="animate-spin" aria-hidden="true" />
+                                            : <Zap size={12} strokeWidth={1.75} aria-hidden="true" />}
+                                        <span>{testingLocalModelId === m.id ? t('Testing…') : t('Test')}</span>
+                                    </button>
+                                )}
+                                {installed && !isSelected && !m.bundled && (
+                                    <button
+                                        type="button"
+                                        className="aip-btn"
+                                        data-size="sm"
+                                        data-variant="danger-ghost"
+                                        disabled={locked}
+                                        onClick={() => void removeLocalModel(m.id)}
+                                        title={t('Remove model')}
+                                    >
+                                        <Trash2 size={12} strokeWidth={1.75} aria-hidden="true" />
+                                    </button>
+                                )}
+                            </>
+                        )}
+                    </div>
+                </div>
+
+                <div className="text-[10.5px] aip-muted pl-3.5 flex items-center gap-2 flex-wrap">
+                    <span>
+                        {[`${m.dimensions}d`, m.params, humanBytes(m.bytes), m.license.spdx, m.license.commercialUseRestricted ? t('non-commercial') : null]
+                            .filter(Boolean).join(' · ')}
+                    </span>
+                    {test?.latencyMs !== undefined && (
+                        <span className="text-[var(--aip-secondary)]">{`${test.latencyMs} ms · ${test.accelerator}`}</span>
+                    )}
+                    {test?.error && <span className="aip-danger-fg">{test.error}</span>}
+                </div>
+
+                {m.note && (
+                    <p className="text-[10px] aip-muted leading-relaxed pl-3.5 text-white/60">{m.note}</p>
+                )}
+
+                {needsLicence && (
+                    <div className="aip-inline-warn flex items-start gap-2 ml-3.5 mt-1" role="note">
+                        <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
+                        <span className="min-w-0">
+                            {t('Licence requires acceptance before downloading.')}
+                            {m.license.url && (
+                                <>
+                                    {' '}
+                                    <a
+                                        href={m.license.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="underline hover:opacity-80 inline-flex items-center gap-0.5"
+                                        aria-label={`${t('View')} ${m.license.spdx} ${t('licence')}`}
+                                    >
+                                        {m.license.spdx} <ExternalLink size={9} strokeWidth={1.75} aria-hidden="true" />
+                                    </a>
+                                </>
+                            )}
+                        </span>
+                    </div>
+                )}
+
+                {busy && prog && (
+                    <div className="space-y-1 pl-3.5 pt-1">
+                        <div className="h-1 w-full bg-white/10 rounded-full overflow-hidden">
+                            <div className="h-full bg-[var(--aip-accent)] transition-all duration-150" style={{ width: `${Math.round(prog.fraction * 100)}%` }} />
+                        </div>
+                        <div className="text-[10px] aip-muted flex justify-between">
+                            <span>{`${Math.round(prog.fraction * 100)}% · ${prog.file}`}</span>
+                            <span>{`${humanBytes(Math.round(prog.fraction * m.bytes))} / ${humanBytes(m.bytes)}`}</span>
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    const renderLocalEmbeddingSection = (title: string, models: LocalCatalogEmbeddingModel[]) => (
+        models.length > 0 && (
+            <section className="space-y-1.5">
+                <header className="flex items-baseline justify-between gap-3 px-1">
+                    <h5 className="text-[10px] font-bold uppercase tracking-wider text-[var(--aip-secondary)]">
+                        {title}
+                    </h5>
+                    <span className="text-[10px] tabular-nums text-[var(--aip-tertiary)]">
+                        {models.filter(m => m.state === 'installed').length}/{models.length}
+                    </span>
+                </header>
+                <div className="space-y-1.5">{models.map(renderLocalEmbeddingRow)}</div>
+            </section>
+        )
+    );
+
     const renderLocalEmbeddingLibraryCard = () => {
         const isLocalActive = active.provider === 'local';
+        const filterTabStyle = (tab: typeof localFilterTab) => ({
+            background: localFilterTab === tab ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+            fontWeight: localFilterTab === tab ? 600 : 400,
+        });
 
         return (
             <div className="aip-card aip-provider space-y-3">
@@ -1212,77 +1412,59 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                         <span className="aip-meta inline-flex items-center gap-1.5">
                             <HardDrive size={12} strokeWidth={1.75} /> {t('On-device')}
                         </span>
-                        <AipBadge
-                            tone={isLocalActive ? 'ok' : 'neutral'}
-                            label={isLocalActive ? t('Active') : t('Ready')}
-                        />
+                        <AipBadge tone={isLocalActive ? 'ok' : 'neutral'} label={isLocalActive ? t('Active') : t('Ready')} />
                     </div>
                 </div>
 
                 <div className="flex items-center justify-between gap-3 flex-wrap text-[10px] aip-muted px-1">
                     <p className="min-w-0 flex-1">
-                        {t('Runs directly on this device (Apple Silicon Metal GPU on Mac, CPU/GPU on Windows). Zero external data sent, zero API keys required.')}
+                        {t('Runs on this device with zero data sent externally. Built-in MiniLM model shipped with Natively, or download open models directly from Hugging Face.')}
                     </p>
-                    <div className="flex items-center gap-2">
-                        <span className="shrink-0 font-medium tabular-nums text-white/70">
+                    <span className="shrink-0 inline-flex items-center gap-2">
+                        <span className="font-medium tabular-nums text-white/70">
                             {installedLocalCount}/{totalLocalCount} {t('installed')}
                             {installedLocalBytes > 0 && <> · {humanBytes(installedLocalBytes)}</>}
                         </span>
                         <button
                             type="button"
-                            className="aip-btn inline-flex items-center gap-1 text-[10px] py-0.5 px-2"
+                            className="aip-btn"
                             data-size="sm"
                             data-variant="ghost"
                             onClick={() => void window.electronAPI.revealLocalEmbeddingModelsFolder?.()}
                             title={t('Open local models folder in file manager')}
                         >
-                            <FolderOpen size={11} strokeWidth={1.75} />
-                            <span>{t('Folder')}</span>
+                            <FolderOpen size={12} strokeWidth={1.75} aria-hidden="true" />
                         </button>
-                    </div>
+                    </span>
                 </div>
 
                 <div className="flex items-center justify-between gap-3 flex-wrap pt-1">
                     {recommendedLocalModel ? (
-                        <p className="text-[11px] px-1 aip-muted">
-                            {t('Best for this')} {isMac ? 'Mac' : 'PC'}: <span className="font-medium text-white/90">{recommendedLocalModel.name}</span>
+                        <p className="text-[11px] px-1 text-[var(--aip-tertiary)]">
+                            {t('Best for this')} {isMac ? 'Mac' : 'PC'}: <span className="font-medium text-[var(--aip-secondary)]">{recommendedLocalModel.name}</span>
                         </p>
                     ) : <div />}
 
-                    {/* Filter Tabs */}
                     <div className="flex items-center gap-1 bg-white/5 p-0.5 rounded-md text-[11px]">
-                        <button
-                            type="button"
-                            className={`px-2 py-0.5 rounded text-white transition-colors ${localFilterTab === 'all' ? 'bg-white/10 font-semibold' : 'bg-transparent font-normal'}`}
-                            onClick={() => setLocalFilterTab('all')}
-                        >
+                        <button type="button" className="px-2 py-0.5 rounded text-white transition-colors" style={filterTabStyle('all')} onClick={() => setLocalFilterTab('all')}>
                             {t('All')} ({totalLocalCount})
                         </button>
-                        <button
-                            type="button"
-                            className={`px-2 py-0.5 rounded text-white transition-colors ${localFilterTab === 'installed' ? 'bg-white/10 font-semibold' : 'bg-transparent font-normal'}`}
-                            onClick={() => setLocalFilterTab('installed')}
-                        >
+                        <button type="button" className="px-2 py-0.5 rounded text-white transition-colors" style={filterTabStyle('installed')} onClick={() => setLocalFilterTab('installed')}>
                             {t('Installed')} ({installedLocalCount})
                         </button>
-                        <button
-                            type="button"
-                            className={`px-2 py-0.5 rounded text-white transition-colors ${localFilterTab === 'recommended' ? 'bg-white/10 font-semibold' : 'bg-transparent font-normal'}`}
-                            onClick={() => setLocalFilterTab('recommended')}
-                        >
+                        <button type="button" className="px-2 py-0.5 rounded text-white transition-colors" style={filterTabStyle('recommended')} onClick={() => setLocalFilterTab('recommended')}>
                             {t('Recommended')}
                         </button>
                     </div>
                 </div>
 
-                {/* Instant Search Bar */}
                 <div className="aip-field">
                     <Search size={13} strokeWidth={1.75} className="aip-field-icon" aria-hidden="true" />
                     <input
                         type="text"
                         className="aip-input"
                         value={localModelQuery}
-                        placeholder={t('Filter local embedding models by name, size, or format…')}
+                        placeholder={t('Filter models by name, size, or format…')}
                         onChange={(e) => setLocalModelQuery(e.target.value)}
                     />
                     {localModelQuery && (
@@ -1305,241 +1487,12 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                     </div>
                 )}
 
-                {/* Scrollable Model Library Container */}
-                <div className="aip-well aip-scroll-y p-2.5 space-y-2.5" style={{ maxHeight: 420 }}>
-                    {filteredLocalModels.length === 0 ? (
-                        <p className="text-xs aip-muted text-center py-4">{t('No local models match your filter.')}</p>
-                    ) : (
-                        filteredLocalModels.map((m) => {
-                            const installed = m.state === 'installed';
-                            const busy = busyLocalModelId === m.id;
-                            const prog = localModelProgress[m.id];
-                            const isSelected = active.provider === 'local' && (
-                                (activeLocalModel ? m.id === activeLocalModel.id : false) ||
-                                m.selected ||
-                                (m.id === 'minilm-l6-v2' && (!selectedLocalModel || selectedLocalModel.id === 'minilm-l6-v2'))
-                            );
-
-                            return (
-                                <div
-                                    key={m.id}
-                                    className={`aip-card p-2.5 space-y-1.5 transition-colors ${isSelected ? 'border-[var(--aip-accent)] bg-white/[0.04]' : ''}`}
-                                    data-active={isSelected ? 'true' : undefined}
-                                >
-                                    <div className="flex items-center justify-between gap-2.5 min-w-0">
-                                        <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden">
-                                            <span
-                                                aria-hidden="true"
-                                                className={`w-2 h-2 rounded-full shrink-0 ${isSelected ? 'bg-[var(--aip-accent)]' : installed ? 'bg-[var(--aip-tertiary)]' : 'border border-[var(--aip-border-strong)]'}`}
-                                            />
-                                            <span className="text-xs font-semibold text-white truncate min-w-0 shrink">{m.name}</span>
-                                            {m.bundled && <AipBadge tone="neutral" label={t('Bundled')} />}
-                                            {m.recommended && <AipBadge tone="info" label={t('Recommended')} />}
-                                            {isSelected && <AipBadge tone="ok" label={t('In use')} />}
-                                            {installed && !isSelected && !m.bundled && (
-                                                <AipBadge tone="neutral" label={t('Downloaded')} />
-                                            )}
-                                        </div>
-
-                                        <div className="shrink-0 flex items-center gap-1.5 flex-nowrap">
-                                            {/* Licence gate: show Accept button instead of Download/Use when acknowledgement is needed */}
-                                            {m.license?.requiresAcknowledgement && !m.acknowledged ? (
-                                                <button
-                                                    type="button"
-                                                    className="aip-btn"
-                                                    data-size="sm"
-                                                    data-variant="accent"
-                                                    disabled={busyLocalModelId !== null}
-                                                    onClick={async () => {
-                                                        const res = await window.electronAPI.acknowledgeLocalEmbeddingCatalogModel?.(m.id);
-                                                        if (res?.success) {
-                                                            // Clear dialog state FIRST so the resumed callback doesn't re-open it.
-                                                            const pendingAction = licenseDialogModel?.pendingAction;
-                                                            setLicenseDialogModel(null);
-                                                            // Reload models in the background (updates UI badge) but do NOT
-                                                            // await it before resuming — the resumed callback uses skipLicenseGuard
-                                                            // so it no longer needs the refreshed localModels to pass the guard.
-                                                            void loadLocalEmbeddingModels();
-                                                            // Resume the intended action with skipLicenseGuard=true to bypass the
-                                                            // stale-closure guard (localModels still has acknowledged=false here).
-                                                            if (pendingAction === 'use' && m.state === 'installed') {
-                                                                void useLocalModel(m.id, true);
-                                                            } else {
-                                                                void installLocalModel(m.id, true);
-                                                            }
-                                                        }
-                                                    }}
-                                                    title={t('Accept the licence terms to enable download and activation')}
-                                                >
-                                                    <Check size={12} strokeWidth={1.75} aria-hidden="true" />
-                                                    <span>{t('Accept licence')}</span>
-                                                </button>
-                                            ) : (
-                                                <>
-                                                    {!installed && (
-                                                        busy ? (
-                                                            <button
-                                                                type="button"
-                                                                className="aip-btn"
-                                                                data-size="sm"
-                                                                onClick={() => void window.electronAPI.cancelLocalEmbeddingModel?.(m.id)}
-                                                            >
-                                                                <X size={12} strokeWidth={1.75} aria-hidden="true" />
-                                                                <span>{t('Cancel')}</span>
-                                                            </button>
-                                                        ) : (
-                                                            <button
-                                                                type="button"
-                                                                className="aip-btn"
-                                                                data-size="sm"
-                                                                disabled={busyLocalModelId !== null || testingLocalModelId !== null}
-                                                                onClick={() => void installLocalModel(m.id)}
-                                                            >
-                                                                <Download size={12} strokeWidth={1.75} aria-hidden="true" />
-                                                                <span>{t('Download')}</span>
-                                                            </button>
-                                                        )
-                                                    )}
-
-                                                    {installed && !isSelected && (
-                                                        <button
-                                                            type="button"
-                                                            className="aip-btn"
-                                                            data-size="sm"
-                                                            data-variant="accent"
-                                                            disabled={busyLocalModelId !== null || testingLocalModelId !== null}
-                                                            onClick={() => void useLocalModel(m.id)}
-                                                        >
-                                                            {busy ? <Loader2 size={12} className="animate-spin" aria-hidden="true" /> : null}
-                                                            <span>{t('Use')}</span>
-                                                        </button>
-                                                    )}
-
-                                                    {isSelected && (
-                                                        <button
-                                                            type="button"
-                                                            className="aip-btn"
-                                                            data-size="sm"
-                                                            disabled={busyLocalModelId !== null || testingLocalModelId !== null}
-                                                            onClick={() => void testLocalModel(m.id)}
-                                                            title={t('Benchmark model latency and check hardware acceleration')}
-                                                        >
-                                                            {testingLocalModelId === m.id ? (
-                                                                <Loader2 size={12} className="animate-spin" aria-hidden="true" />
-                                                            ) : (
-                                                                <Zap size={12} strokeWidth={1.75} aria-hidden="true" />
-                                                            )}
-                                                            <span>{testingLocalModelId === m.id ? t('Testing…') : t('Test')}</span>
-                                                        </button>
-                                                    )}
-
-                                                    {installed && !isSelected && (
-                                                        <button
-                                                            type="button"
-                                                            className="aip-btn"
-                                                            data-size="sm"
-                                                            data-variant="ghost"
-                                                            disabled={busyLocalModelId !== null || testingLocalModelId !== null}
-                                                            onClick={() => void testLocalModel(m.id)}
-                                                            title={t('Benchmark model latency (Metal GPU / CPU)')}
-                                                        >
-                                                            {testingLocalModelId === m.id ? (
-                                                                <Loader2 size={12} className="animate-spin" aria-hidden="true" />
-                                                            ) : (
-                                                                <Zap size={12} strokeWidth={1.75} aria-hidden="true" />
-                                                            )}
-                                                            <span className="hidden sm:inline">{testingLocalModelId === m.id ? t('Testing…') : t('Test')}</span>
-                                                        </button>
-                                                    )}
-
-                                                    {installed && !isSelected && !m.bundled && (
-                                                        <button
-                                                            type="button"
-                                                            className="aip-btn"
-                                                            data-size="sm"
-                                                            data-variant="danger-ghost"
-                                                            disabled={busyLocalModelId !== null || testingLocalModelId !== null}
-                                                            onClick={() => void removeLocalModel(m.id)}
-                                                            title={t('Remove model')}
-                                                        >
-                                                            <Trash2 size={12} strokeWidth={1.75} aria-hidden="true" />
-                                                        </button>
-                                                    )}
-                                                </>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {/* Inline licence notice — shown only when the model requires acknowledgement and hasn't been accepted yet */}
-                                    {m.license?.requiresAcknowledgement && !m.acknowledged && (
-                                        <div className="aip-inline-warn flex items-center gap-2 text-[10.5px]" role="note">
-                                            <AlertCircle size={11} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />
-                                            <span className="flex-1 min-w-0">
-                                                {t('Licence requires acceptance before downloading.')}
-                                                {m.license.url && (
-                                                    <> {' '}
-                                                        <a
-                                                            href={m.license.url}
-                                                            target="_blank"
-                                                            rel="noopener noreferrer"
-                                                            className="underline hover:opacity-80 inline-flex items-center gap-0.5"
-                                                            aria-label={`${t('View')} ${m.license.spdx} ${t('licence')}`}
-                                                        >
-                                                            {m.license.spdx} <ExternalLink size={9} strokeWidth={1.75} aria-hidden="true" />
-                                                        </a>
-                                                    </>
-                                                )}
-                                            </span>
-                                        </div>
-                                    )}
-
-                                    <div className="text-[10.5px] aip-muted pl-4 flex items-center gap-2 flex-wrap pt-0.5">
-                                        <AipBadge tone="neutral" label={`${m.dimensions}d`} />
-                                        {m.contextLength && (
-                                            <AipBadge
-                                                tone="neutral"
-                                                label={`${m.contextLength >= 1000 ? Math.round(m.contextLength / 1024) + 'k' : m.contextLength} ctx`}
-                                            />
-                                        )}
-                                        <AipBadge tone="neutral" label={m.runtime.toUpperCase()} />
-                                        <span className="opacity-75">
-                                            {[m.params, humanBytes(m.bytes), m.license.spdx, m.license.commercialUseRestricted ? t('non-commercial') : null]
-                                                .filter(Boolean).join(' · ')}
-                                        </span>
-                                        {localModelTestResults[m.id]?.latencyMs !== undefined && (
-                                            <AipBadge
-                                                tone="ok"
-                                                label={`⚡ ${localModelTestResults[m.id].latencyMs}ms · ${localModelTestResults[m.id].accelerator}`}
-                                            />
-                                        )}
-                                        {localModelTestResults[m.id]?.error && (
-                                            <span className="aip-danger-fg">{localModelTestResults[m.id].error}</span>
-                                        )}
-                                    </div>
-
-                                    {m.note && (
-                                        <p className="text-[10px] aip-muted leading-relaxed pl-4 text-white/60">
-                                            {m.note}
-                                        </p>
-                                    )}
-
-                                    {busy && prog && (
-                                        <div className="space-y-1 pl-4 pt-1">
-                                            <div className="h-1 w-full bg-white/10 rounded-full overflow-hidden">
-                                                <div
-                                                    className="h-full bg-[var(--aip-accent)] transition-all duration-150"
-                                                    style={{ width: `${Math.round(prog.fraction * 100)}%` }}
-                                                />
-                                            </div>
-                                            <div className="text-[10px] aip-muted flex justify-between">
-                                                <span>{`${Math.round(prog.fraction * 100)}% · ${prog.file}`}</span>
-                                                <span>{`${humanBytes(Math.round(prog.fraction * m.bytes))} / ${humanBytes(m.bytes)}`}</span>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })
+                <div className="aip-well aip-scroll-y p-2.5 space-y-3.5" style={{ maxHeight: 380 }}>
+                    {renderLocalEmbeddingSection(t('Bundled with Natively'), filteredLocalModels.filter(m => m.bundled))}
+                    {renderLocalEmbeddingSection(t('Hugging Face ONNX Models'), filteredLocalModels.filter(m => !m.bundled && m.runtime === 'onnx'))}
+                    {renderLocalEmbeddingSection(t('Hugging Face GGUF Models'), filteredLocalModels.filter(m => !m.bundled && m.runtime === 'gguf'))}
+                    {filteredLocalModels.length === 0 && (
+                        <p className="text-[10px] aip-muted text-center py-4">{t('No models match your current filter query.')}</p>
                     )}
                 </div>
             </div>

@@ -9405,14 +9405,12 @@ export function initializeIpcHandlers(appState: AppState): void {
         throw new Error('the model loaded but did not produce a vector output');
       }
 
-      let accelerator = 'CPU';
-      if (model.runtime === 'gguf') {
-        accelerator = (process.platform === 'darwin' && process.arch === 'arm64')
-          ? 'Apple Silicon Metal GPU'
-          : 'Vulkan / AVX2';
-      } else {
-        accelerator = 'ONNX Runtime (WASM / CPU)';
-      }
+      // Only what is known without asking the runtime: ONNX runs on CPU here,
+      // and llama.cpp uses Metal on Apple Silicon. Elsewhere llama.cpp picks
+      // its own backend (Vulkan, CUDA or CPU), so it is not guessed.
+      const accelerator = model.runtime === 'gguf'
+        ? ((process.platform === 'darwin' && process.arch === 'arm64') ? 'Metal GPU' : 'llama.cpp')
+        : 'CPU';
 
       return {
         success: true,
