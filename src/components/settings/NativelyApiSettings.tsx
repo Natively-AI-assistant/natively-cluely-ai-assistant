@@ -676,6 +676,15 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
   const [isLoading, setIsLoading] = useState(!(initialIsSaved || cachedKeyKnown));
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The key saved and its plan includes Pro, but Pro could not be confirmed yet
+  // (server unwell). The main process keeps retrying; this just says so, instead
+  // of showing a plan card with no Pro and no explanation (support, 2026-09-22).
+  const [proNotice, setProNotice] = useState<string | null>(null);
+  // The retry succeeded in the background — the notice has done its job.
+  useEffect(() => {
+    const off = window.electronAPI?.onLicenseStatusChanged?.((d) => { if (d?.isPremium) setProNotice(null); });
+    return () => { off?.(); };
+  }, []);
   const [justSaved, setJustSaved] = useState(false);
   // Distinct from justSaved: a Dodo/Gumroad license key activates Pro but
   // writes nothing to CredentialsManager — isSaved/fetchUsage must never
@@ -1009,6 +1018,11 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
     try {
       const r = await window.electronAPI.setNativelyApiKey(trimmed);
       if (r.success) {
+        setProNotice(
+          r.proPending
+            ? 'Key saved. We couldn’t confirm Natively Pro just now — the app will keep trying and turn it on automatically.'
+            : null,
+        );
         setApiKey('•'.repeat(24));
         setIsSaved(true);
         setJustSaved(true);
@@ -1601,6 +1615,14 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
               <div className="flex items-center gap-2 text-[12px] text-[var(--text-danger)]">
                 <AlertCircle size={13} className="shrink-0" />
                 {error}
+              </div>
+            )}
+
+            {/* Not an error: the key is saved, Pro is still being activated. */}
+            {!error && proNotice && (
+              <div className="flex items-start gap-2 text-[12px] text-[var(--text-secondary)]" role="status">
+                <AlertCircle size={13} className="shrink-0 mt-[2px]" />
+                {proNotice}
               </div>
             )}
 

@@ -184,7 +184,7 @@ interface ElectronAPI {
   getDisabledProviders: () => Promise<string[]>;
   setDisabledProviders: (providers: string[]) => Promise<{ success: boolean; error?: string }>;
   setCloudEnabledModels: (provider: string, models: string[]) => Promise<{ success: boolean; error?: string }>;
-  setNativelyApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
+  setNativelyApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string; proPending?: boolean; proError?: string }>;
   // ── In-app review / testimonial prompt ─────────────────────────────────
   reviewGetPromptState: () => Promise<{
     ok: boolean;
