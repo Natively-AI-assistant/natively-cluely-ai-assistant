@@ -1240,7 +1240,6 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                         <span className="text-xs font-semibold text-white truncate">{m.name}</span>
                         {m.bundled && <AipBadge tone="neutral" label={t('Included')} />}
                         {isSelected && <AipBadge tone="ok" label={t('In use')} />}
-                        {installed && !isSelected && !m.bundled && <AipBadge tone="neutral" label={t('Downloaded')} />}
                     </div>
 
                     <div className="shrink-0 flex items-center gap-1.5">
