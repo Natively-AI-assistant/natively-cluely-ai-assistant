@@ -803,6 +803,7 @@ export class RAGManager {
         const count = this.vectorStore.getIncompatibleSpaceCount(activeSpace);
         if (count === 0) {
             console.log('[RAGManager] No incompatible meetings to re-index.');
+            this._emitReindex('embedding:reindex-complete', { total: 0, space: activeSpace, partial: false });
             return;
         }
 

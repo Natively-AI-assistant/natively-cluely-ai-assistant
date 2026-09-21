@@ -76,6 +76,7 @@ export interface EmbeddingProviderDescription {
   configured: boolean;
   provider: string | null;
   model: string | null;
+  catalogId?: string | null;
   dimensions: number | null;
   space: string | null;
   /** Where embedding actually happens — drives the local-only claim in the UI. */
@@ -89,15 +90,16 @@ export interface EmbeddingProviderDescription {
  * fell through, which is exactly the case the user most needs to see.
  */
 export function describeEmbeddingProvider(
-  provider: Pick<IEmbeddingProvider, 'name' | 'model' | 'dimensions' | 'space'> | null | undefined,
+  provider: (Pick<IEmbeddingProvider, 'name' | 'model' | 'dimensions' | 'space'> & { catalogId?: string }) | null | undefined,
 ): EmbeddingProviderDescription {
   if (!provider) {
-    return { configured: false, provider: null, model: null, dimensions: null, space: null, location: 'unknown', lightweight: false };
+    return { configured: false, provider: null, model: null, catalogId: null, dimensions: null, space: null, location: 'unknown', lightweight: false };
   }
   return {
     configured: true,
     provider: provider.name,
     model: provider.model,
+    catalogId: provider.catalogId ?? null,
     dimensions: provider.dimensions,
     space: provider.space,
     // Ollama counts as on-device: "local-only" means no external call, and an

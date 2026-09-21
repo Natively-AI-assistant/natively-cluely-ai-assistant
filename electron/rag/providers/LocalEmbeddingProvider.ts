@@ -50,11 +50,31 @@ let startupPoisoned = false;
  */
 const DISPOSE_DRAIN_MAX_MS = 120_000;
 
+import {
+  findEmbeddingCatalogModel,
+  type LocalEmbeddingModel,
+} from '../embeddingModelCatalog';
+import {
+  resolveEmbeddingModelPath,
+} from '../../services/embeddings/localEmbeddingModelInstaller';
+
+export interface LocalEmbeddingOptions {
+  modelId?: string;
+  dimensions?: number;
+  runtime?: 'onnx' | 'gguf';
+  modelPath?: string;
+  skipSlotGate?: boolean;
+}
+
 export class LocalEmbeddingProvider implements IEmbeddingProvider {
   readonly name = 'local';
-  readonly dimensions = 384; // all-MiniLM-L6-v2
-  readonly model = 'Xenova/all-MiniLM-L6-v2';
+  readonly dimensions: number;
+  readonly model: string;
   readonly space: string;
+  readonly runtime: 'onnx' | 'gguf';
+  readonly catalogId: string;
+  readonly pooling: 'mean' | 'cls' | 'last';
+  private readonly skipSlotGate: boolean;
 
   private worker: Worker | null = null;
   private requestId = 0;
@@ -66,14 +86,34 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
   private nonRecoverableLoadError: Error | null = null;
   private modelPath: string;
 
-  constructor() {
+  constructor(opts?: LocalEmbeddingOptions) {
+    let modelId = opts?.modelId;
+    if (!modelId) {
+      try {
+        const { SettingsManager } = require('../../services/SettingsManager');
+        modelId = SettingsManager.getInstance().get('localEmbeddingModelId');
+      } catch { /* ignored */ }
+    }
+    const catalogEntry = modelId ? findEmbeddingCatalogModel(modelId) : null;
+    if (catalogEntry) {
+      this.catalogId = catalogEntry.id;
+      this.model = catalogEntry.repo;
+      this.dimensions = opts?.dimensions || catalogEntry.dimensions;
+      this.runtime = opts?.runtime || catalogEntry.runtime;
+      this.pooling = catalogEntry.pooling || 'mean';
+      const resolved = resolveEmbeddingModelPath(catalogEntry);
+      this.modelPath = opts?.modelPath || resolved || LocalEmbeddingProvider.resolveModelPath();
+    } else {
+      this.catalogId = 'minilm-l6-v2';
+      this.model = 'Xenova/all-MiniLM-L6-v2';
+      this.dimensions = opts?.dimensions || 384;
+      this.runtime = opts?.runtime || 'onnx';
+      this.pooling = 'mean';
+      this.modelPath = opts?.modelPath || LocalEmbeddingProvider.resolveModelPath();
+    }
+
+    this.skipSlotGate = !!opts?.skipSlotGate;
     this.space = embeddingSpaceKey({ name: this.name, model: this.model, dimensions: this.dimensions });
-    // Point to the bundled model inside the app's resources.
-    // In dev: use app.getAppPath() so the path is independent of how esbuild
-    // bundles this file (bundle: true inlines the provider into main.js, which
-    // makes __dirname-relative paths fragile).
-    // In prod: app.isPackaged = true → use process.resourcesPath (electron-builder extraResources).
-    this.modelPath = LocalEmbeddingProvider.resolveModelPath();
   }
 
   // Resolve to the first candidate that actually holds the model, so the local
@@ -84,14 +124,19 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
   private static resolveModelPath(): string {
     const candidates: string[] = [];
     if (process.env.NATIVELY_LOCAL_MODELS_PATH) candidates.push(process.env.NATIVELY_LOCAL_MODELS_PATH);
-    if (app.isPackaged) candidates.push(path.join(process.resourcesPath, 'models'));
+    try {
+      if (app?.isPackaged && process.resourcesPath) {
+        candidates.push(path.join(process.resourcesPath, 'models'));
+      }
+    } catch { /* app not ready or running in test */ }
     let appPath = '';
-    try { appPath = app.getAppPath(); } catch { /* not ready */ }
+    try { appPath = app?.getAppPath?.() || ''; } catch { /* not ready */ }
     if (appPath) {
       candidates.push(path.join(appPath, 'resources', 'models'));
       candidates.push(path.join(appPath, '..', 'resources', 'models'));
       candidates.push(path.join(appPath, '..', '..', 'resources', 'models'));
     }
+    candidates.push(path.join(process.cwd(), 'resources', 'models'));
     for (const c of candidates) {
       try { if (fs.existsSync(path.join(c, 'Xenova', 'all-MiniLM-L6-v2', 'tokenizer.json'))) return c; } catch { /* keep trying */ }
     }
@@ -222,6 +267,14 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
     this.worker = null;          // new work resolves against the new config
     this.loadingPromise = null;
 
+    // slotRelease is NOT called here. The slot must be held until the worker
+    // actually finishes draining — releasing it early would let a replacement
+    // provider claim the slot before this worker's ONNX session is torn down,
+    // defeating the memory-pressure guard. slotRelease is called from inside
+    // terminateWhenDrained() once the thread exits.
+    const pendingSlotRelease = this.slotRelease;
+    this.slotRelease = null;
+
     // An intentional teardown is not a crash. terminate() exits the thread with
     // code 1 and the exit handler only clears the sentinel on code 0, so
     // without this every embedding config change left a "died hard" record —
@@ -232,6 +285,9 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
     try { clearOnnxLoadSentinel('embeddings', this.model); } catch { /* best effort */ }
 
     if (!worker) {
+      if (pendingSlotRelease) {
+        try { pendingSlotRelease(); } catch { /* best effort */ }
+      }
       this.rejectAllPending(new Error(reason));
       return;
     }
@@ -239,6 +295,9 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
     // Nothing owed — terminate now.
     if (this.pendingRequests.size === 0) {
       try { await worker.terminate(); } catch { /* already gone */ }
+      if (pendingSlotRelease) {
+        try { pendingSlotRelease(); } catch { /* best effort */ }
+      }
       return;
     }
 
@@ -257,7 +316,7 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
     // Detached, not awaited, because initializeEmbeddings() is awaited by the
     // set-config IPC — blocking the drain there would freeze Settings for as
     // long as a reference-file batch takes.
-    void this.terminateWhenDrained(worker);
+    void this.terminateWhenDrained(worker, pendingSlotRelease);
   }
 
   /**
@@ -267,13 +326,20 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
    * generously, since this runs in the background and every pending request
    * already carries its own per-call timeout, so the map empties on its own
    * even if the worker never answers.
+   *
+   * The slot is released AFTER the worker exits so no replacement can claim
+   * the same ONNX slot before this worker's session is torn down.
    */
-  private async terminateWhenDrained(worker: Worker): Promise<void> {
+  private async terminateWhenDrained(worker: Worker, slotRelease?: (() => void) | null): Promise<void> {
     const deadline = Date.now() + DISPOSE_DRAIN_MAX_MS;
     while (this.pendingRequests.size > 0 && Date.now() < deadline) {
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
     try { await worker.terminate(); } catch { /* already gone */ }
+    // Release the slot only after the worker has exited — preserving memory safety.
+    if (slotRelease) {
+      try { slotRelease(); } catch { /* best effort */ }
+    }
   }
 
   private rejectAllPending(err: Error): void {
@@ -431,13 +497,24 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
     // reranker / router load queued forever with no log. Assigning the promise
     // first makes the guard hold for every concurrent caller.
     this.loadingPromise = (async () => {
-      const releaseSlot = await acquireOnnxSlot('normal');
+      const releaseSlot = this.skipSlotGate ? null : await acquireOnnxSlot('normal');
       try {
-        await this.postToWorker({ type: 'init', modelPath: this.modelPath }, WORKER_INIT_TIMEOUT_MS);
+        await this.postToWorker(
+          {
+            type: 'init',
+            modelId: this.catalogId,
+            hfModelId: this.model,
+            modelPath: this.modelPath,
+            runtime: this.runtime,
+            dimensions: this.dimensions,
+            pooling: this.pooling,
+          },
+          WORKER_INIT_TIMEOUT_MS,
+        );
         this.loaded = true;
         this.slotRelease = releaseSlot;
       } catch (e) {
-        releaseSlot();
+        if (releaseSlot) releaseSlot();
         throw e;
       }
     })();
@@ -460,13 +537,22 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
   }
 
   async embedQuery(text: string): Promise<number[]> {
-    return this.embed(text); // all-MiniLM-L6-v2 is symmetric
+    return this.embed(text); // symmetric
   }
 
   async embedBatch(texts: string[]): Promise<number[][]> {
     await this.ensureLoaded();
     const result = await this.postToWorker<{ vectors: number[][] }>(
-      { type: 'embed', texts, modelPath: this.modelPath },
+      {
+        type: 'embed',
+        texts,
+        modelId: this.catalogId,
+        hfModelId: this.model,
+        modelPath: this.modelPath,
+        runtime: this.runtime,
+        dimensions: this.dimensions,
+        pooling: this.pooling,
+      },
       WORKER_EMBED_TIMEOUT_MS,
     );
     return result.vectors;

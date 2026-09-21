@@ -547,6 +547,10 @@ interface ElectronAPI {
   setEmbeddingCustomEndpoint: (input: { url?: string; apiKey?: string }) => Promise<{
     success: boolean; endpoint?: string | null; models?: Array<{ id: string; capabilityKnown: boolean }>; reachable?: boolean; error?: string; message?: string
   }>;
+  setRerankerCustomEndpoint: (input: { url?: string; apiKey?: string }) => Promise<{
+    success: boolean; endpoint?: string | null; models?: Array<{ id: string; label: string }>; reachable?: boolean; error?: string; message?: string
+  }>;
+  getCustomRerankerModels: () => Promise<Array<{ id: string; label: string }>>;
   acknowledgeLightweightEmbeddings: (acknowledged: boolean) => Promise<{ success: boolean }>;
   getIntelligenceFlags: () => Promise<Array<{ key: string; enabled: boolean; setting: string; env: string; default: boolean }>>;
   setIntelligenceFlag: (key: string, value: boolean | null) => Promise<{ success: boolean; enabled?: boolean; error?: string }>;
@@ -2021,15 +2025,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Was 'local' | 'openrouter' — already missing 'jina' before this change.
     // The object is forwarded opaquely so the omission never failed at runtime,
     // which is exactly why it went unnoticed; kept in step with the handler now.
-    provider?: 'local' | 'natively' | 'openrouter' | 'jina';
+    provider?: 'local' | 'natively' | 'openrouter' | 'jina' | 'custom';
     openrouterModel?: string;
     jinaModel?: string;
     nativelyModel?: string;
+    customModel?: string;
     candidateCount?: number;
     fallbackToLocal?: boolean;
   }) => ipcRenderer.invoke('reranker:set-config', next),
   setRerankerOpenRouterKey: (key: string) => ipcRenderer.invoke('reranker:set-openrouter-key', key),
   setRerankerHostedKey: (provider: string, key: string) => ipcRenderer.invoke('reranker:set-hosted-key', provider, key),
+  setRerankerCustomEndpoint: (input: { url?: string; apiKey?: string }) => ipcRenderer.invoke('reranker:set-custom-endpoint', input),
+  getCustomRerankerModels: () => ipcRenderer.invoke('reranker:get-custom-models'),
   getRerankerHostedProviders: () => ipcRenderer.invoke('reranker:hosted-providers'),
   testReranker: (choice?: { model?: string }) => ipcRenderer.invoke('reranker:test', choice),
 
@@ -2043,6 +2050,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const subscription = (_e: any, payload: any) => callback(payload);
     ipcRenderer.on('reranker:model-progress', subscription);
     return () => { ipcRenderer.removeListener('reranker:model-progress', subscription); };
+  },
+
+  // Direct embedding model install: curated local models for embeddings
+  listLocalEmbeddingModels: () => ipcRenderer.invoke('embedding:list-local-models'),
+  installLocalEmbeddingModel: (id: string) => ipcRenderer.invoke('embedding:install-local-model', id),
+  cancelLocalEmbeddingModel: (id: string) => ipcRenderer.invoke('embedding:cancel-local-model', id),
+  removeLocalEmbeddingModel: (id: string) => ipcRenderer.invoke('embedding:remove-local-model', id),
+  useLocalEmbeddingModel: (id: string | null) => ipcRenderer.invoke('embedding:use-local-model', id),
+  testLocalEmbeddingModel: (id: string) => ipcRenderer.invoke('embedding:test-local-model', id),
+  revealLocalEmbeddingModelsFolder: () => ipcRenderer.invoke('embedding:reveal-folder'),
+  acknowledgeLocalEmbeddingCatalogModel: (id: string) => ipcRenderer.invoke('embedding:acknowledge-catalog-license', id),
+  onLocalEmbeddingModelProgress: (callback: (p: { id: string; fraction: number; currentFile: string }) => void) => {
+    const subscription = (_e: any, payload: any) => callback(payload);
+    ipcRenderer.on('embedding:model-progress', subscription);
+    return () => { ipcRenderer.removeListener('embedding:model-progress', subscription); };
   },
 
   // Extensions. Reranker extensions surface inside Settings > Reranker.

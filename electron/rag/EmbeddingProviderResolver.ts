@@ -116,6 +116,8 @@ export interface AppAPIConfig {
    * silently keep it alive and make the UI lie about provider availability.
    */
   explicitKeyManagement?: boolean;
+  /** Selected local embedding model id from curated catalog (e.g. 'qwen3-embedding-0.6b-q4'). */
+  localEmbeddingModelId?: string;
 }
 
 /** What a startup probe learned. 'transient' is "not right now" — a timeout,

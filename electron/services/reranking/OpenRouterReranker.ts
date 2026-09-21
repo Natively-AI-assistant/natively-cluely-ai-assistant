@@ -91,6 +91,8 @@ export interface OpenRouterRerankerOptions {
   baseUrl?: string;
   /** Which hosted provider this is, for telemetry and error text. */
   providerId?: string;
+  /** Whether requests can proceed without an API key (e.g. for user-hosted custom endpoints). */
+  allowAnonymousApiKey?: boolean;
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
   now?: () => number;
@@ -203,7 +205,8 @@ export class OpenRouterReranker implements RerankSeamPort {
       throw new OpenRouterRerankError(kind, describeFailure(kind, model), httpStatus);
     };
 
-    if (!apiKey) fail('no-api-key');
+    const isAnonymousAllowed = this.options.allowAnonymousApiKey || this.options.providerId === 'custom';
+    if (!apiKey && !isAnonymousAllowed) fail('no-api-key');
     if (!model) fail('no-model');
     if (passages.length === 0) fail('malformed-response');
 
@@ -219,7 +222,7 @@ export class OpenRouterReranker implements RerankSeamPort {
           headers: {
             'Content-Type': 'application/json',
             // The key goes in a header and nowhere else. Never a URL, never a log.
-            Authorization: `Bearer ${apiKey}`,
+            ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
             // OpenRouter attributes traffic with these. Other providers ignore
             // them, so they are harmless to send unconditionally.
             'HTTP-Referer': 'https://natively.software',

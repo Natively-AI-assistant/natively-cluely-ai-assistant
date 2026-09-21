@@ -72,6 +72,7 @@ export interface EmbeddingConfigSources {
   nativelyApiUrl?: string;
   providerDataScopes?: AppAPIConfig['providerDataScopes'];
   explicitKeyManagement?: boolean;
+  localEmbeddingModelId?: string;
 }
 
 /** Trim, and treat a blank string as absent so a cleared key really removes its provider. */
@@ -117,6 +118,7 @@ export function embeddingConfigFrom(sources: EmbeddingConfigSources): AppAPIConf
     geminiEmbeddingDims: sources.geminiEmbeddingDims,
     providerDataScopes: sources.providerDataScopes,
     explicitKeyManagement: sources.explicitKeyManagement,
+    localEmbeddingModelId: clean(sources.localEmbeddingModelId),
   };
 }
 
@@ -279,10 +281,25 @@ export function buildEmbeddingConfig(overrides: Partial<EmbeddingConfigSources> 
     ? { customEmbeddingUrl: customEndpoint, customEmbeddingModel: chosen.model, customEmbeddingDims: chosen.dimensions }
     : { customEmbeddingUrl: customEndpoint };
 
+  const localModelId = (() => {
+    try {
+      return (
+        settings?.get('localEmbeddingModelId') ||
+        (chosen?.provider === 'local' ? (chosen.localModelId || chosen.model) : undefined)
+      );
+    } catch {
+      return undefined;
+    }
+  })();
+
   // The choice itself, not just its model/dims hints. Every provider is covered
   // here — including natively and local, which have no hints to carry and were
   // therefore dropped entirely before.
-  const choice = { embeddingMode: chosen?.mode, embeddingProvider: effectiveProvider };
+  const choice = {
+    embeddingMode: chosen?.mode,
+    embeddingProvider: effectiveProvider,
+    localEmbeddingModelId: localModelId,
+  };
 
   return resolveEmbeddingCredentials({ providerDataScopes, ...choice, ...ollamaFromSettings, ...cloudFromSettings, ...openrouterFromSettings, ...ninerouterFromSettings, ...voyageFromSettings, ...localViaOllama, ...customFromSettings, ...overrides }, cm);
 }
@@ -339,6 +356,7 @@ export function embeddingConfigChanged(prev: AppAPIConfig, next: AppAPIConfig): 
     // re-resolution, and the switch would silently do nothing.
     norm(prev.embeddingMode) !== norm(next.embeddingMode) ||
     norm(prev.embeddingProvider) !== norm(next.embeddingProvider) ||
+    norm(prev.localEmbeddingModelId) !== norm(next.localEmbeddingModelId) ||
     norm(prev.openaiEmbeddingModel) !== norm(next.openaiEmbeddingModel) ||
     (prev.openaiEmbeddingDims || 0) !== (next.openaiEmbeddingDims || 0) ||
     normScopes(prev.providerDataScopes) !== normScopes(next.providerDataScopes) ||

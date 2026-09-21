@@ -490,7 +490,7 @@ export interface ElectronAPI {
     ok: boolean; provider?: string; model?: string; dimensions?: number; space?: string; latencyMs?: number; error?: string; status?: number; message?: string
   }>
   setEmbeddingConfig: (next: { mode?: string; provider?: string; model?: string; dimensions?: number }) => Promise<{
-    success: boolean; previousSpace?: string; activeSpace?: string; reindexRequired?: boolean; error?: string; message?: string
+    success: boolean; previousSpace?: string; activeSpace?: string; reindexRequired?: boolean; incompatibleCount?: number; error?: string; message?: string
   }>
   fetchEmbeddingModels: (providerId: string) => Promise<{
     success: boolean; models?: Array<{ id: string; label: string; dimensions: number; dimensionsVerified: boolean; supportedDimensions?: number[] }>; count?: number; error?: string
@@ -506,9 +506,13 @@ export interface ElectronAPI {
   // Embedding retrieval finds the candidate set; reranking decides the order of
   // those candidates. Configured independently of the embedding provider.
   getRerankerStatus: () => Promise<{
-    provider: 'local' | 'openrouter' | 'jina'
+    provider: 'local' | 'natively' | 'openrouter' | 'jina' | 'custom'
     openrouterModel: string | null
     jinaModel: string | null
+    nativelyModel?: string | null
+    customModel?: string | null
+    customEndpoint?: string | null
+    hasCustomKey?: boolean
     /** The model id for whichever hosted provider is selected. */
     hostedModel: string | null
     candidateCount: number | null
@@ -526,7 +530,7 @@ export interface ElectronAPI {
     /** The catalogue model in use, when one is selected AND fully installed. */
     selectedLocal: { id: string; name: string } | null
     /** What would actually run right now, resolved the way retrieval resolves it. */
-    effective: { kind: 'local' | 'extension' | 'openrouter' | 'jina'; id: string | null }
+    effective: { kind: 'local' | 'extension' | 'natively' | 'openrouter' | 'jina' | 'custom'; id: string | null }
     lastTest: { at: string; model: string; latencyMs: number; ok: boolean; failure?: string } | null
   }>
   getRerankerCatalog: (opts?: { refresh?: boolean }) => Promise<{
@@ -542,15 +546,25 @@ export interface ElectronAPI {
     error?: string
   }>
   setRerankerConfig: (next: {
-    provider?: 'local' | 'natively' | 'openrouter' | 'jina'
+    provider?: 'local' | 'natively' | 'openrouter' | 'jina' | 'custom'
     openrouterModel?: string
     jinaModel?: string
     nativelyModel?: string
+    customModel?: string
     candidateCount?: number
     fallbackToLocal?: boolean
   }) => Promise<{ success: boolean; reranker?: unknown; error?: string }>
   setRerankerOpenRouterKey: (key: string) => Promise<{ success: boolean; error?: string; message?: string }>
   setRerankerHostedKey: (provider: string, key: string) => Promise<{ success: boolean; error?: string; message?: string }>
+  setRerankerCustomEndpoint: (input: { url?: string; apiKey?: string }) => Promise<{
+    success: boolean
+    endpoint?: string | null
+    models?: Array<{ id: string; label: string }>
+    reachable?: boolean
+    error?: string
+    message?: string
+  }>
+  getCustomRerankerModels: () => Promise<Array<{ id: string; label: string }>>
   getRerankerHostedProviders: () => Promise<{
     providers: Array<{
       id: 'openrouter' | 'jina'
@@ -594,6 +608,46 @@ export interface ElectronAPI {
     success: boolean; activeId?: string | null; topIndex?: number; error?: string; message?: string
   }>
   onLocalRerankerModelProgress: (callback: (p: { id: string; fraction: number; currentFile: string }) => void) => () => void
+
+  listLocalEmbeddingModels: () => Promise<{
+    models: Array<{
+      id: string; name: string; runtime: 'onnx' | 'gguf'; repo: string
+      params: string; note: string; bytes: number; dimensions: number
+      supportedDimensions?: number[]
+      contextLength?: number
+      recommended: boolean; bundled?: boolean
+      license: { spdx: string; url: string; commercialUseRestricted: boolean; requiresAcknowledgement: boolean }
+      /** true when requiresAcknowledgement is false, or the user has already accepted. */
+      acknowledged: boolean
+      state: 'not-installed' | 'partial' | 'installed'
+      bytesOnDisk: number
+      selected: boolean
+      supported: boolean
+      unsupportedReason: string | null
+      activatable: boolean
+    }>
+    selectedId: string | null
+    builtInSelected: boolean
+  }>
+  installLocalEmbeddingModel: (id: string) => Promise<{
+    success: boolean; error?: string; message?: string; digests?: Record<string, string>
+    /** Present when error === 'license_not_acknowledged'. */
+    requiresAcknowledgement?: boolean; licenseUrl?: string; spdx?: string
+  }>
+  cancelLocalEmbeddingModel: (id: string) => Promise<{ success: boolean; error?: string }>
+  removeLocalEmbeddingModel: (id: string) => Promise<{ success: boolean; error?: string; message?: string }>
+  useLocalEmbeddingModel: (id: string | null) => Promise<{
+    success: boolean; activeId?: string | null; dimensions?: number; reindexRequired?: boolean; incompatibleCount?: number; error?: string; message?: string
+    /** Present when error === 'license_not_acknowledged'. */
+    requiresAcknowledgement?: boolean; licenseUrl?: string; spdx?: string
+  }>
+  testLocalEmbeddingModel: (id: string) => Promise<{
+    success: boolean; latencyMs?: number; dimensions?: number; runtime?: 'onnx' | 'gguf'; accelerator?: string; error?: string; message?: string
+  }>
+  revealLocalEmbeddingModelsFolder: () => Promise<{ success: boolean }>
+  /** Persist the user's acceptance of a catalog model's licence terms. Must be called before install/use on models where requiresAcknowledgement is true. */
+  acknowledgeLocalEmbeddingCatalogModel: (id: string) => Promise<{ success: boolean; error?: string; message?: string }>
+  onLocalEmbeddingModelProgress: (callback: (p: { id: string; fraction: number; currentFile: string }) => void) => () => void
 
   listExtensions: () => Promise<{
     available: boolean

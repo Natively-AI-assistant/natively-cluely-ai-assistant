@@ -145,6 +145,8 @@ export interface StoredCredentials {
      * LiteLLM/proxy deployment does.
      */
     customEmbeddingApiKey?: string;
+    /** Optional bearer token for user-hosted custom reranker endpoint. */
+    customRerankerApiKey?: string;
     /**
      * ONE OpenRouter key, THREE consumers: chat/vision generation, embeddings and
      * reranking. Deliberately not split — it is the same vendor and the same
@@ -1261,6 +1263,17 @@ export class CredentialsManager {
     public setCustomEmbeddingApiKey(key: string): boolean {
         if (this.refuseWriteWhileDegraded('set custom embedding api key')) return false;
         this.credentials.customEmbeddingApiKey = key.trim() || undefined;
+        this.saveCredentials();
+        return true;
+    }
+
+    public getCustomRerankerApiKey(): string | undefined {
+        return this.credentials.customRerankerApiKey;
+    }
+
+    public setCustomRerankerApiKey(key: string): boolean {
+        if (this.refuseWriteWhileDegraded('set custom reranker api key')) return false;
+        this.credentials.customRerankerApiKey = key.trim() || undefined;
         this.saveCredentials();
         return true;
     }

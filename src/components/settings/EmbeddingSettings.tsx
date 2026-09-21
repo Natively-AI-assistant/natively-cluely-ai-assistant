@@ -1,11 +1,42 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, Check, ChevronDown, Cloud, ExternalLink, HardDrive, KeyRound, Loader2, Monitor, Server, Trash2 } from 'lucide-react';
+import { AlertCircle, Check, ChevronDown, Cloud, Download, ExternalLink, FolderOpen, HardDrive, KeyRound, Loader2, Monitor, Search, Server, Trash2, X, Zap } from 'lucide-react';
 import { useT } from '../../i18n';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { AIP_ACTIVE_SELECT_CONTAINER, AIP_CSS, AipBadge, AipModelList, AipProviderMark, type AipTone } from './AIProvidersSettings';
 import { isMac, isWindows } from '../../utils/platformUtils';
 
 // Embeddings — configured INDEPENDENTLY of the generation model.
+
+function humanBytes(bytes: number): string {
+    if (!Number.isFinite(bytes) || bytes <= 0) return '—';
+    if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
+    if (bytes >= 1e6) return `${Math.round(bytes / 1e6)} MB`;
+    return `${Math.round(bytes / 1e3)} KB`;
+}
+
+export interface LocalCatalogEmbeddingModel {
+    id: string;
+    name: string;
+    runtime: 'onnx' | 'gguf';
+    repo: string;
+    params: string;
+    note: string;
+    bytes: number;
+    dimensions: number;
+    supportedDimensions?: number[];
+    contextLength?: number;
+    recommended: boolean;
+    bundled?: boolean;
+    license: { spdx: string; url: string; commercialUseRestricted: boolean; requiresAcknowledgement: boolean };
+    /** true when requiresAcknowledgement is false, or the user has already acknowledged this model's terms. */
+    acknowledged: boolean;
+    state: 'not-installed' | 'partial' | 'installed';
+    bytesOnDisk: number;
+    selected: boolean;
+    supported: boolean;
+    unsupportedReason: string | null;
+    activatable: boolean;
+}
 
 interface CatalogModel {
     id: string;
@@ -57,6 +88,7 @@ interface ActiveDescription {
     configured: boolean;
     provider?: string | null;
     model?: string | null;
+    catalogId?: string | null;
     dimensions?: number | null;
     space?: string | null;
     location?: 'on-device' | 'cloud' | 'unknown';
@@ -151,6 +183,7 @@ interface EmbeddingSelectOption { id: string; name: string; triggerName?: string
  */
 interface EmbeddingModelSelectProps {
     value: string;
+    displayLabel?: string;
     options: EmbeddingSelectOption[];
     onChange: (value: string) => void;
     placeholder?: string;
@@ -170,6 +203,7 @@ interface EmbeddingModelSelectProps {
 
 const EmbeddingModelSelect: React.FC<EmbeddingModelSelectProps> = ({
     value,
+    displayLabel,
     options,
     onChange,
     placeholder,
@@ -194,9 +228,10 @@ const EmbeddingModelSelect: React.FC<EmbeddingModelSelectProps> = ({
     }, []);
 
     const selectedOption = options.find(o => o.id === value);
-    const resolvedLabel = selectedOption
-        ? (selectedOption.triggerName || selectedOption.name)
-        : (placeholder || t('Select model'));
+    const resolvedLabel = displayLabel
+        || (selectedOption ? (selectedOption.triggerName || selectedOption.name) : null)
+        || (value && value.includes('::') ? bareModelName(value.split('::').slice(1).join('::')) : null)
+        || (placeholder || t('Select model'));
 
     return (
         <div className={containerClassName} ref={containerRef}>
@@ -299,6 +334,7 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
     const [activeTestResult, setActiveTestResult] = useState<TestResult | null>(null);
     const [note, setNote] = useState<string | null>(null);
     const [reindexing, setReindexing] = useState(false);
+    const [reindexProgress, setReindexProgress] = useState<{ done: number; total: number } | null>(null);
 
     // Per-provider API Key states
     const [keyState, setKeyState] = useState<Record<string, string>>({ gemini: '', openai: '', custom: '' });
@@ -314,6 +350,43 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
     const [endpointSaving, setEndpointSaving] = useState(false);
     const [endpointSaved, setEndpointSaved] = useState(false);
     const [endpointNote, setEndpointNote] = useState<string | null>(null);
+
+    // Local Embedding Models (Bundled & Downloadable)
+    const [localModels, setLocalModels] = useState<LocalCatalogEmbeddingModel[]>([]);
+    const [localModelProgress, setLocalModelProgress] = useState<Record<string, { fraction: number; file: string }>>({});
+    const [busyLocalModelId, setBusyLocalModelId] = useState<string | null>(null);
+    const [testingLocalModelId, setTestingLocalModelId] = useState<string | null>(null);
+    const [localModelTestResults, setLocalModelTestResults] = useState<Record<string, { latencyMs?: number; accelerator?: string; error?: string }>>({});
+    const [localModelError, setLocalModelError] = useState<string | null>(null);
+    const [localFilterTab, setLocalFilterTab] = useState<'all' | 'installed' | 'recommended'>('all');
+    const [localModelQuery, setLocalModelQuery] = useState('');
+    /**
+     * When non-null, the inline license dialog is shown for this model.
+     * The user must accept before install/use proceeds.
+     *
+     * The `pendingAction` field records what the user wanted to do so we can
+     * resume it after acceptance — avoiding an extra button press.
+     */
+    const [licenseDialogModel, setLicenseDialogModel] = useState<{
+        model: LocalCatalogEmbeddingModel;
+        pendingAction: 'install' | 'use';
+    } | null>(null);
+
+    const loadLocalEmbeddingModels = useCallback(async () => {
+        try {
+            const res = await window.electronAPI.listLocalEmbeddingModels?.();
+            if (res) {
+                setLocalModels((res.models ?? []) as LocalCatalogEmbeddingModel[]);
+            }
+        } catch { /* best-effort */ }
+    }, []);
+
+    useEffect(() => {
+        const off = window.electronAPI.onLocalEmbeddingModelProgress?.(({ id, fraction, currentFile }) => {
+            setLocalModelProgress(prev => ({ ...prev, [id]: { fraction, file: currentFile } }));
+        });
+        return () => { off?.(); };
+    }, []);
 
     const refresh = useCallback(async () => {
         try {
@@ -349,10 +422,149 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
             setHasCatalog((c as any)?.hasCatalog ?? {});
             setEndpointDraft(prev => (prev ? prev : (list.find(p => p.id === 'custom')?.endpoint ?? '')));
         } catch { setProviders([]); }
+        try {
+            await loadLocalEmbeddingModels();
+        } catch { /* best-effort */ }
         finally { setLoaded(true); }
-    }, []);
+    }, [loadLocalEmbeddingModels]);
 
     useEffect(() => { void refresh(); }, [refresh]);
+
+    useEffect(() => {
+        const off = window.electronAPI.onReindexProgress?.((phase, data) => {
+            if (phase === 'started') {
+                setReindexing(true);
+                const total = Math.max(1, data.total || data.count || 1);
+                setReindexProgress({ done: 0, total });
+            } else if (phase === 'progress') {
+                setReindexing(true);
+                const done = data.done ?? 0;
+                const total = Math.max(done, data.total ?? data.count ?? 1);
+                setReindexProgress({ done, total });
+            } else if (phase === 'complete') {
+                setReindexing(false);
+                setReindexProgress(null);
+                void refresh();
+            }
+        });
+        return () => { off?.(); };
+    }, [refresh]);
+
+    const installLocalModel = useCallback(async (id: string, skipLicenseGuard = false) => {
+        // Guard: model needs licence acknowledgement (skipped when called right after acceptance)
+        if (!skipLicenseGuard) {
+            const m = localModels.find(x => x.id === id);
+            if (m?.license?.requiresAcknowledgement && !m.acknowledged) {
+                setLicenseDialogModel({ model: m, pendingAction: 'install' });
+                return;
+            }
+        }
+        setBusyLocalModelId(id);
+        setLocalModelError(null);
+        try {
+            const res = await window.electronAPI.installLocalEmbeddingModel?.(id);
+            if (res && !res.success) {
+                if (res.error === 'license_not_acknowledged') {
+                    // Backend also guards — sync frontend state and open dialog.
+                    const candidate = localModels.find(x => x.id === id);
+                    if (candidate) setLicenseDialogModel({ model: candidate, pendingAction: 'install' });
+                } else {
+                    setLocalModelError(res.message || res.error || t('Download failed.'));
+                }
+            }
+            await loadLocalEmbeddingModels();
+        } finally {
+            setBusyLocalModelId(null);
+            setLocalModelProgress(prev => { const next = { ...prev }; delete next[id]; return next; });
+        }
+    }, [localModels, loadLocalEmbeddingModels, t]);
+
+    const useLocalModel = useCallback(async (id: string | null, skipLicenseGuard = false) => {
+        // Guard: model needs licence acknowledgement (skipped when called right after acceptance)
+        if (!skipLicenseGuard) {
+            const m = localModels.find(x => x.id === id);
+            if (m?.license?.requiresAcknowledgement && !m.acknowledged) {
+                setLicenseDialogModel({ model: m, pendingAction: 'use' });
+                return;
+            }
+        }
+        setBusyLocalModelId(id ?? 'minilm-l6-v2');
+        setLocalModelError(null);
+        try {
+            const callPromise = window.electronAPI.useLocalEmbeddingModel
+                ? window.electronAPI.useLocalEmbeddingModel(id)
+                : Promise.reject(new Error(t('API unavailable')));
+            const timeoutPromise = new Promise<never>((_, reject) => {
+                setTimeout(() => reject(new Error(t('Switching embedding model timed out after 15 seconds.'))), 15000);
+            });
+            const res = await Promise.race([callPromise, timeoutPromise]);
+            if (res && !res.success) {
+                if (res.error === 'license_not_acknowledged') {
+                    const candidate = localModels.find(x => x.id === id);
+                    if (candidate) setLicenseDialogModel({ model: candidate, pendingAction: 'use' });
+                } else {
+                    setLocalModelError(res.message || res.error || t('Could not activate this embedding model.'));
+                }
+            }
+            if (res?.reindexRequired && (res.incompatibleCount ?? 0) > 0) {
+                setReindexing(true);
+                setReindexProgress({ done: 0, total: res.incompatibleCount! });
+            } else {
+                setReindexing(false);
+                setReindexProgress(null);
+            }
+            await Promise.all([loadLocalEmbeddingModels(), refresh()]);
+        } catch (e: any) {
+            setLocalModelError(e?.message || t('Could not activate this embedding model.'));
+        } finally {
+            setBusyLocalModelId(null);
+        }
+    }, [localModels, loadLocalEmbeddingModels, refresh, t]);
+
+    const removeLocalModel = useCallback(async (id: string) => {
+        setBusyLocalModelId(id);
+        setLocalModelError(null);
+        try {
+            const res = await window.electronAPI.removeLocalEmbeddingModel?.(id);
+            if (res && !res.success) {
+                setLocalModelError(res.message || res.error || t('Could not remove this model.'));
+            }
+            await loadLocalEmbeddingModels();
+        } finally {
+            setBusyLocalModelId(null);
+        }
+    }, [loadLocalEmbeddingModels, t]);
+
+    const testLocalModel = useCallback(async (id: string) => {
+        setTestingLocalModelId(id);
+        try {
+            const callPromise = window.electronAPI.testLocalEmbeddingModel
+                ? window.electronAPI.testLocalEmbeddingModel(id)
+                : Promise.reject(new Error('API unavailable'));
+            const timeoutPromise = new Promise<never>((_, reject) => {
+                setTimeout(() => reject(new Error(t('Inference test timed out after 25 seconds.'))), 25000);
+            });
+            const res = await Promise.race([callPromise, timeoutPromise]);
+            if (res && res.success) {
+                setLocalModelTestResults(prev => ({
+                    ...prev,
+                    [id]: { latencyMs: res.latencyMs, accelerator: res.accelerator },
+                }));
+            } else {
+                setLocalModelTestResults(prev => ({
+                    ...prev,
+                    [id]: { error: res?.message || res?.error || t('Test failed.') },
+                }));
+            }
+        } catch (e: any) {
+            setLocalModelTestResults(prev => ({
+                ...prev,
+                [id]: { error: String(e?.message || e) },
+            }));
+        } finally {
+            setTestingLocalModelId(null);
+        }
+    }, [t]);
 
     const select = useCallback(async (providerId: string, modelId: string, dimensions?: number) => {
         setPending(`${providerId}:${modelId}:${dimensions ?? ''}`);
@@ -376,7 +588,13 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                 await refresh();
                 return;
             }
-            if (r.reindexRequired) setReindexing(true);
+            if (r?.reindexRequired && (r.incompatibleCount ?? 0) > 0) {
+                setReindexing(true);
+                setReindexProgress({ done: 0, total: r.incompatibleCount! });
+            } else {
+                setReindexing(false);
+                setReindexProgress(null);
+            }
             await refresh();
         } catch (e: any) {
             setNote(e?.message || t('Could not apply that embedding model.'));
@@ -512,6 +730,48 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
         } finally { setEndpointSaving(false); }
     }, [endpointDraft, customApiKeyDraft, refresh, t]);
 
+    const installedLocalCount = useMemo(() => {
+        return localModels.filter(m => m.state === 'installed').length;
+    }, [localModels]);
+
+    const totalLocalCount = useMemo(() => localModels.length, [localModels]);
+
+    const installedLocalBytes = useMemo(() => {
+        return localModels.filter(m => m.state === 'installed').reduce((acc, m) => acc + (m.bytesOnDisk || m.bytes), 0);
+    }, [localModels]);
+
+    const recommendedLocalModel = useMemo(() => {
+        return localModels.find(m => m.recommended && m.supported);
+    }, [localModels]);
+
+    const selectedLocalModel = useMemo(() => {
+        return localModels.find(m => m.selected);
+    }, [localModels]);
+
+    const activeLocalModel = useMemo(() => {
+        if (active.provider !== 'local') return null;
+        const key = active.catalogId || active.model;
+        if (!key) return localModels.find(m => m.id === 'minilm-l6-v2') ?? null;
+        return localModels.find(m => m.id === key || m.repo === key)
+            ?? (key === 'Xenova/all-MiniLM-L6-v2' ? localModels.find(m => m.id === 'minilm-l6-v2') : null)
+            ?? null;
+    }, [active, localModels]);
+
+    const filteredLocalModels = useMemo(() => {
+        return localModels.filter(m => {
+            if (localFilterTab === 'installed' && m.state !== 'installed') return false;
+            if (localFilterTab === 'recommended' && !m.recommended) return false;
+            if (localModelQuery.trim()) {
+                const q = localModelQuery.toLowerCase().trim();
+                const matchesName = m.name.toLowerCase().includes(q);
+                const matchesParams = m.params.toLowerCase().includes(q);
+                const matchesNote = m.note?.toLowerCase().includes(q) ?? false;
+                return matchesName || matchesParams || matchesNote;
+            }
+            return true;
+        });
+    }, [localModels, localFilterTab, localModelQuery]);
+
     const activeOptions: EmbeddingSelectOption[] = useMemo(() => {
         const fromCatalogue = providers
             .flatMap(p => {
@@ -559,22 +819,41 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
     // does not carry (a non-recommended pick, or a catalogue that has not loaded
     // yet). It follows the trigger's rule, not the menu's: bare model name.
     const activeDisplayLabel = useMemo(() => {
+        if (active.provider === 'local') {
+            if (activeLocalModel) return activeLocalModel.name;
+            if (active.catalogId) {
+                const found = localModels.find(m => m.id === active.catalogId);
+                if (found) return found.name;
+            }
+            if (active.model) return bareModelName(active.model);
+            return 'MiniLM L6 v2';
+        }
         if (!active.model) return t('Select embedding model');
         const matched = activeOptions.find(o => o.id === activeOptionId);
         if (matched) return matched.triggerName || matched.name;
         return bareModelName(active.model);
-    }, [active, activeOptionId, activeOptions, t]);
+    }, [active, activeOptionId, activeOptions, activeLocalModel, localModels, t]);
 
     const activeModelDetails = useMemo(() => {
         if (!active.configured) return null;
 
         const providerId = active.provider || 'local';
-        const modelId = active.model || 'Xenova/all-MiniLM-L6-v2';
+        const modelId = active.model || active.catalogId || 'Xenova/all-MiniLM-L6-v2';
+
+        if (providerId === 'local') {
+            const modelName = activeLocalModel?.name || (active.catalogId ? localModels.find(m => m.id === active.catalogId)?.name : null) || bareModelName(modelId);
+            const dims = active.dimensions || activeLocalModel?.dimensions || 384;
+            return {
+                dims,
+                providerName: t('On-device'),
+                modelLabel: modelName,
+            };
+        }
 
         const prov = providers.find(p => p.id === providerId);
         const mod = prov?.models.find(m => m.id === modelId);
 
-        const dims = active.dimensions || mod?.dimensions || (providerId === 'gemini' ? 3072 : providerId === 'openai' ? 1536 : providerId === 'local' ? 384 : 768);
+        const dims = active.dimensions || mod?.dimensions || (providerId === 'gemini' ? 3072 : providerId === 'openai' ? 1536 : 768);
 
         /* No location segment. "Cloud" / "On-device" was a third clause on a
            line that is already dimensions + a re-index warning, and the
@@ -583,9 +862,9 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
         return {
             dims,
             providerName: prov?.name || providerId,
-            modelLabel: mod?.label || modelId,
+            modelLabel: mod?.label || bareModelName(modelId),
         };
-    }, [active, providers]);
+    }, [active, providers, activeLocalModel, localModels, t]);
 
     // This FILTERS as well as orders — `CARD_ORDER.map(...).filter(...)` below —
     // so a provider the catalogue returns but this list omits is silently
@@ -954,6 +1233,352 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
         );
     };
 
+    const renderLocalEmbeddingLibraryCard = () => {
+        const isLocalActive = active.provider === 'local';
+
+        return (
+            <div className="aip-card aip-provider space-y-3">
+                <div className="aip-provider-head">
+                    <PlatformMark />
+                    <h4 className="aip-card-title truncate min-w-0">{t('Local Embeddings')}</h4>
+                    <div className="ml-auto flex items-center gap-2 shrink-0">
+                        <span className="aip-meta inline-flex items-center gap-1.5">
+                            <HardDrive size={12} strokeWidth={1.75} /> {t('On-device')}
+                        </span>
+                        <AipBadge
+                            tone={isLocalActive ? 'ok' : 'neutral'}
+                            label={isLocalActive ? t('Active') : t('Ready')}
+                        />
+                    </div>
+                </div>
+
+                <div className="flex items-center justify-between gap-3 flex-wrap text-[10px] aip-muted px-1">
+                    <p className="min-w-0 flex-1">
+                        {t('Runs directly on this device (Apple Silicon Metal GPU on Mac, CPU/GPU on Windows). Zero external data sent, zero API keys required.')}
+                    </p>
+                    <div className="flex items-center gap-2">
+                        <span className="shrink-0 font-medium tabular-nums text-white/70">
+                            {installedLocalCount}/{totalLocalCount} {t('installed')}
+                            {installedLocalBytes > 0 && <> · {humanBytes(installedLocalBytes)}</>}
+                        </span>
+                        <button
+                            type="button"
+                            className="aip-btn inline-flex items-center gap-1 text-[10px] py-0.5 px-2"
+                            data-size="sm"
+                            data-variant="ghost"
+                            onClick={() => void window.electronAPI.revealLocalEmbeddingModelsFolder?.()}
+                            title={t('Open local models folder in file manager')}
+                        >
+                            <FolderOpen size={11} strokeWidth={1.75} />
+                            <span>{t('Folder')}</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div className="flex items-center justify-between gap-3 flex-wrap pt-1">
+                    {recommendedLocalModel ? (
+                        <p className="text-[11px] px-1 aip-muted">
+                            {t('Best for this')} {isMac ? 'Mac' : 'PC'}: <span className="font-medium text-white/90">{recommendedLocalModel.name}</span>
+                        </p>
+                    ) : <div />}
+
+                    {/* Filter Tabs */}
+                    <div className="flex items-center gap-1 bg-white/5 p-0.5 rounded-md text-[11px]">
+                        <button
+                            type="button"
+                            className={`px-2 py-0.5 rounded text-white transition-colors ${localFilterTab === 'all' ? 'bg-white/10 font-semibold' : 'bg-transparent font-normal'}`}
+                            onClick={() => setLocalFilterTab('all')}
+                        >
+                            {t('All')} ({totalLocalCount})
+                        </button>
+                        <button
+                            type="button"
+                            className={`px-2 py-0.5 rounded text-white transition-colors ${localFilterTab === 'installed' ? 'bg-white/10 font-semibold' : 'bg-transparent font-normal'}`}
+                            onClick={() => setLocalFilterTab('installed')}
+                        >
+                            {t('Installed')} ({installedLocalCount})
+                        </button>
+                        <button
+                            type="button"
+                            className={`px-2 py-0.5 rounded text-white transition-colors ${localFilterTab === 'recommended' ? 'bg-white/10 font-semibold' : 'bg-transparent font-normal'}`}
+                            onClick={() => setLocalFilterTab('recommended')}
+                        >
+                            {t('Recommended')}
+                        </button>
+                    </div>
+                </div>
+
+                {/* Instant Search Bar */}
+                <div className="aip-field">
+                    <Search size={13} strokeWidth={1.75} className="aip-field-icon" aria-hidden="true" />
+                    <input
+                        type="text"
+                        className="aip-input"
+                        value={localModelQuery}
+                        placeholder={t('Filter local embedding models by name, size, or format…')}
+                        onChange={(e) => setLocalModelQuery(e.target.value)}
+                    />
+                    {localModelQuery && (
+                        <button
+                            type="button"
+                            className="aip-btn text-[10px] shrink-0"
+                            data-size="sm"
+                            data-variant="ghost"
+                            onClick={() => setLocalModelQuery('')}
+                        >
+                            <X size={12} strokeWidth={1.75} aria-hidden="true" />
+                        </button>
+                    )}
+                </div>
+
+                {localModelError && (
+                    <div className="aip-inline-warn flex items-start gap-2" role="status">
+                        <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
+                        <span className="min-w-0">{localModelError}</span>
+                    </div>
+                )}
+
+                {/* Scrollable Model Library Container */}
+                <div className="aip-well aip-scroll-y p-2.5 space-y-2.5" style={{ maxHeight: 420 }}>
+                    {filteredLocalModels.length === 0 ? (
+                        <p className="text-xs aip-muted text-center py-4">{t('No local models match your filter.')}</p>
+                    ) : (
+                        filteredLocalModels.map((m) => {
+                            const installed = m.state === 'installed';
+                            const busy = busyLocalModelId === m.id;
+                            const prog = localModelProgress[m.id];
+                            const isSelected = active.provider === 'local' && (
+                                (activeLocalModel ? m.id === activeLocalModel.id : false) ||
+                                m.selected ||
+                                (m.id === 'minilm-l6-v2' && (!selectedLocalModel || selectedLocalModel.id === 'minilm-l6-v2'))
+                            );
+
+                            return (
+                                <div
+                                    key={m.id}
+                                    className={`aip-card p-2.5 space-y-1.5 transition-colors ${isSelected ? 'border-[var(--aip-accent)] bg-white/[0.04]' : ''}`}
+                                    data-active={isSelected ? 'true' : undefined}
+                                >
+                                    <div className="flex items-center justify-between gap-2.5 min-w-0">
+                                        <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden">
+                                            <span
+                                                aria-hidden="true"
+                                                className={`w-2 h-2 rounded-full shrink-0 ${isSelected ? 'bg-[var(--aip-accent)]' : installed ? 'bg-[var(--aip-tertiary)]' : 'border border-[var(--aip-border-strong)]'}`}
+                                            />
+                                            <span className="text-xs font-semibold text-white truncate min-w-0 shrink">{m.name}</span>
+                                            {m.bundled && <AipBadge tone="neutral" label={t('Bundled')} />}
+                                            {m.recommended && <AipBadge tone="info" label={t('Recommended')} />}
+                                            {isSelected && <AipBadge tone="ok" label={t('In use')} />}
+                                            {installed && !isSelected && !m.bundled && (
+                                                <AipBadge tone="neutral" label={t('Downloaded')} />
+                                            )}
+                                        </div>
+
+                                        <div className="shrink-0 flex items-center gap-1.5 flex-nowrap">
+                                            {/* Licence gate: show Accept button instead of Download/Use when acknowledgement is needed */}
+                                            {m.license?.requiresAcknowledgement && !m.acknowledged ? (
+                                                <button
+                                                    type="button"
+                                                    className="aip-btn"
+                                                    data-size="sm"
+                                                    data-variant="accent"
+                                                    disabled={busyLocalModelId !== null}
+                                                    onClick={async () => {
+                                                        const res = await window.electronAPI.acknowledgeLocalEmbeddingCatalogModel?.(m.id);
+                                                        if (res?.success) {
+                                                            // Clear dialog state FIRST so the resumed callback doesn't re-open it.
+                                                            const pendingAction = licenseDialogModel?.pendingAction;
+                                                            setLicenseDialogModel(null);
+                                                            // Reload models in the background (updates UI badge) but do NOT
+                                                            // await it before resuming — the resumed callback uses skipLicenseGuard
+                                                            // so it no longer needs the refreshed localModels to pass the guard.
+                                                            void loadLocalEmbeddingModels();
+                                                            // Resume the intended action with skipLicenseGuard=true to bypass the
+                                                            // stale-closure guard (localModels still has acknowledged=false here).
+                                                            if (pendingAction === 'use' && m.state === 'installed') {
+                                                                void useLocalModel(m.id, true);
+                                                            } else {
+                                                                void installLocalModel(m.id, true);
+                                                            }
+                                                        }
+                                                    }}
+                                                    title={t('Accept the licence terms to enable download and activation')}
+                                                >
+                                                    <Check size={12} strokeWidth={1.75} aria-hidden="true" />
+                                                    <span>{t('Accept licence')}</span>
+                                                </button>
+                                            ) : (
+                                                <>
+                                                    {!installed && (
+                                                        busy ? (
+                                                            <button
+                                                                type="button"
+                                                                className="aip-btn"
+                                                                data-size="sm"
+                                                                onClick={() => void window.electronAPI.cancelLocalEmbeddingModel?.(m.id)}
+                                                            >
+                                                                <X size={12} strokeWidth={1.75} aria-hidden="true" />
+                                                                <span>{t('Cancel')}</span>
+                                                            </button>
+                                                        ) : (
+                                                            <button
+                                                                type="button"
+                                                                className="aip-btn"
+                                                                data-size="sm"
+                                                                disabled={busyLocalModelId !== null || testingLocalModelId !== null}
+                                                                onClick={() => void installLocalModel(m.id)}
+                                                            >
+                                                                <Download size={12} strokeWidth={1.75} aria-hidden="true" />
+                                                                <span>{t('Download')}</span>
+                                                            </button>
+                                                        )
+                                                    )}
+
+                                                    {installed && !isSelected && (
+                                                        <button
+                                                            type="button"
+                                                            className="aip-btn"
+                                                            data-size="sm"
+                                                            data-variant="accent"
+                                                            disabled={busyLocalModelId !== null || testingLocalModelId !== null}
+                                                            onClick={() => void useLocalModel(m.id)}
+                                                        >
+                                                            {busy ? <Loader2 size={12} className="animate-spin" aria-hidden="true" /> : null}
+                                                            <span>{t('Use')}</span>
+                                                        </button>
+                                                    )}
+
+                                                    {isSelected && (
+                                                        <button
+                                                            type="button"
+                                                            className="aip-btn"
+                                                            data-size="sm"
+                                                            disabled={busyLocalModelId !== null || testingLocalModelId !== null}
+                                                            onClick={() => void testLocalModel(m.id)}
+                                                            title={t('Benchmark model latency and check hardware acceleration')}
+                                                        >
+                                                            {testingLocalModelId === m.id ? (
+                                                                <Loader2 size={12} className="animate-spin" aria-hidden="true" />
+                                                            ) : (
+                                                                <Zap size={12} strokeWidth={1.75} aria-hidden="true" />
+                                                            )}
+                                                            <span>{testingLocalModelId === m.id ? t('Testing…') : t('Test')}</span>
+                                                        </button>
+                                                    )}
+
+                                                    {installed && !isSelected && (
+                                                        <button
+                                                            type="button"
+                                                            className="aip-btn"
+                                                            data-size="sm"
+                                                            data-variant="ghost"
+                                                            disabled={busyLocalModelId !== null || testingLocalModelId !== null}
+                                                            onClick={() => void testLocalModel(m.id)}
+                                                            title={t('Benchmark model latency (Metal GPU / CPU)')}
+                                                        >
+                                                            {testingLocalModelId === m.id ? (
+                                                                <Loader2 size={12} className="animate-spin" aria-hidden="true" />
+                                                            ) : (
+                                                                <Zap size={12} strokeWidth={1.75} aria-hidden="true" />
+                                                            )}
+                                                            <span className="hidden sm:inline">{testingLocalModelId === m.id ? t('Testing…') : t('Test')}</span>
+                                                        </button>
+                                                    )}
+
+                                                    {installed && !isSelected && !m.bundled && (
+                                                        <button
+                                                            type="button"
+                                                            className="aip-btn"
+                                                            data-size="sm"
+                                                            data-variant="danger-ghost"
+                                                            disabled={busyLocalModelId !== null || testingLocalModelId !== null}
+                                                            onClick={() => void removeLocalModel(m.id)}
+                                                            title={t('Remove model')}
+                                                        >
+                                                            <Trash2 size={12} strokeWidth={1.75} aria-hidden="true" />
+                                                        </button>
+                                                    )}
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Inline licence notice — shown only when the model requires acknowledgement and hasn't been accepted yet */}
+                                    {m.license?.requiresAcknowledgement && !m.acknowledged && (
+                                        <div className="aip-inline-warn flex items-center gap-2 text-[10.5px]" role="note">
+                                            <AlertCircle size={11} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />
+                                            <span className="flex-1 min-w-0">
+                                                {t('Licence requires acceptance before downloading.')}
+                                                {m.license.url && (
+                                                    <> {' '}
+                                                        <a
+                                                            href={m.license.url}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="underline hover:opacity-80 inline-flex items-center gap-0.5"
+                                                            aria-label={`${t('View')} ${m.license.spdx} ${t('licence')}`}
+                                                        >
+                                                            {m.license.spdx} <ExternalLink size={9} strokeWidth={1.75} aria-hidden="true" />
+                                                        </a>
+                                                    </>
+                                                )}
+                                            </span>
+                                        </div>
+                                    )}
+
+                                    <div className="text-[10.5px] aip-muted pl-4 flex items-center gap-2 flex-wrap pt-0.5">
+                                        <AipBadge tone="neutral" label={`${m.dimensions}d`} />
+                                        {m.contextLength && (
+                                            <AipBadge
+                                                tone="neutral"
+                                                label={`${m.contextLength >= 1000 ? Math.round(m.contextLength / 1024) + 'k' : m.contextLength} ctx`}
+                                            />
+                                        )}
+                                        <AipBadge tone="neutral" label={m.runtime.toUpperCase()} />
+                                        <span className="opacity-75">
+                                            {[m.params, humanBytes(m.bytes), m.license.spdx, m.license.commercialUseRestricted ? t('non-commercial') : null]
+                                                .filter(Boolean).join(' · ')}
+                                        </span>
+                                        {localModelTestResults[m.id]?.latencyMs !== undefined && (
+                                            <AipBadge
+                                                tone="ok"
+                                                label={`⚡ ${localModelTestResults[m.id].latencyMs}ms · ${localModelTestResults[m.id].accelerator}`}
+                                            />
+                                        )}
+                                        {localModelTestResults[m.id]?.error && (
+                                            <span className="aip-danger-fg">{localModelTestResults[m.id].error}</span>
+                                        )}
+                                    </div>
+
+                                    {m.note && (
+                                        <p className="text-[10px] aip-muted leading-relaxed pl-4 text-white/60">
+                                            {m.note}
+                                        </p>
+                                    )}
+
+                                    {busy && prog && (
+                                        <div className="space-y-1 pl-4 pt-1">
+                                            <div className="h-1 w-full bg-white/10 rounded-full overflow-hidden">
+                                                <div
+                                                    className="h-full bg-[var(--aip-accent)] transition-all duration-150"
+                                                    style={{ width: `${Math.round(prog.fraction * 100)}%` }}
+                                                />
+                                            </div>
+                                            <div className="text-[10px] aip-muted flex justify-between">
+                                                <span>{`${Math.round(prog.fraction * 100)}% · ${prog.file}`}</span>
+                                                <span>{`${humanBytes(Math.round(prog.fraction * m.bytes))} / ${humanBytes(m.bytes)}`}</span>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })
+                    )}
+                </div>
+            </div>
+        );
+    };
+
     /* The Active Embedding Model card: the decision this panel exists to make.
        On the combined Retrieval page it sits above the Embedding/Reranker
        switcher, so it stays readable no matter which sub-tab is open. */
@@ -963,10 +1588,6 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
             <div className="aip-card p-5">
                 <div className="flex items-center justify-between gap-4 flex-wrap sm:flex-nowrap">
                     <div className="min-w-0 flex-1">
-                        {/* No "Lightweight" badge. AI Providers' own rule is that a
-                            badge carries only what NO other control already says —
-                            and the notice below states it in words, with the reason
-                            and a way to dismiss it. The badge was an echo. */}
                         <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">
                             {t('Active Embedding Model')}
                         </label>
@@ -982,25 +1603,24 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                     <div className="shrink-0">
                         <EmbeddingModelSelect
                             value={activeOptionId}
+                            displayLabel={activeDisplayLabel}
                             options={activeOptions}
                             placeholder={activeDisplayLabel}
                             disabled={!!pending || activeOptions.length === 0}
                             onChange={(id) => {
                                 const [providerId, ...rest] = id.split('::');
-                                void select(providerId, rest.join('::'));
+                                const modelId = rest.join('::');
+                                if (providerId === 'local' && modelId) {
+                                    void useLocalModel(modelId);
+                                } else {
+                                    void select(providerId, modelId);
+                                }
                             }}
                         />
                     </div>
                 </div>
 
                 {active.lightweight && !acknowledged && (
-                    /* mt-3, not pt-3. `.aip-inline-warn` sets `padding: 8px 10px`
-                       as a SHORTHAND, and AIP_CSS is injected into the body —
-                       later in document order than Tailwind's sheet — so at equal
-                       specificity the shorthand wins and a `pt-*` on this element
-                       emits nothing. The strip was sitting flush against the
-                       "384 dimensions · …" line with no separation at all
-                       (measured: 0px). Margin is unset by the class, so it lands. */
                     <div className="aip-inline-warn flex items-start gap-2 mt-3" role="status">
                         <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
                         <span className="min-w-0">
@@ -1020,11 +1640,60 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                     </div>
                 )}
 
-                {reindexing && (
-                    <p className="aip-meta aip-provider-note pt-2">
-                        {t('Re-indexing your project — embeddings from a different model cannot be compared with the new one.')}
-                    </p>
-                )}
+                {reindexing && (() => {
+                    const done = reindexProgress?.done ?? 0;
+                    const total = Math.max(1, reindexProgress?.total ?? 1);
+                    const percent = Math.min(100, Math.max(0, Math.round((done / total) * 100)));
+                    const isIndeterminate = !reindexProgress || reindexProgress.total === 0;
+
+                    return (
+                        <div className="space-y-2 pt-3 border-t border-white/5 mt-3">
+                            <div className="flex items-center justify-between gap-2">
+                                <span className="flex items-center gap-2 text-xs font-medium text-white/90">
+                                    <Loader2 size={13} className="animate-spin text-[var(--aip-accent)] shrink-0" />
+                                    <span>{t('Upgrading project vectors to new embedding space')}</span>
+                                </span>
+                                <div className="flex items-center gap-2 shrink-0">
+                                    <span className="text-xs font-bold tabular-nums text-[var(--aip-accent)]">
+                                        {isIndeterminate ? '0%' : `${percent}%`}
+                                    </span>
+                                    {!isIndeterminate && (
+                                        <span className="text-[10.5px] aip-muted tabular-nums">
+                                            ({done} / {total})
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden relative">
+                                <div
+                                    className="h-full bg-[var(--aip-accent)] transition-all duration-300 rounded-full"
+                                    style={{
+                                        width: isIndeterminate ? '5%' : `${percent}%`,
+                                    }}
+                                />
+                            </div>
+
+                            <div className="flex items-center justify-between text-[10.5px] aip-muted">
+                                <span>
+                                    {isIndeterminate
+                                        ? t('Scanning database and preparing vector queue…')
+                                        : t('Re-embedding past transcripts · fast on-device inference')}
+                                </span>
+                                <button
+                                    type="button"
+                                    className="hover:text-white underline transition-colors cursor-pointer text-[10.5px]"
+                                    onClick={() => {
+                                        setReindexing(false);
+                                        setReindexProgress(null);
+                                    }}
+                                >
+                                    {t('Dismiss')}
+                                </button>
+                            </div>
+                        </div>
+                    );
+                })()}
 
                 {(activeTestResult?.message || note) && (
                     <p className="aip-meta aip-danger-fg aip-provider-note pt-2">{activeTestResult?.message || note}</p>
@@ -1046,12 +1715,9 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
             <SkeletonProviderCard />
             <SkeletonProviderCard />
         </div>
-    ) : cardProviders.length === 0 ? (
-        <div className="aip-card aip-card-dashed text-center py-8">
-            <p className="text-xs aip-muted">{t('No configurable embedding providers were found.')}</p>
-        </div>
     ) : (
         <div className="aip-cq space-y-4">
+            {renderLocalEmbeddingLibraryCard()}
             {cardProviders.map(renderProvider)}
         </div>
     );

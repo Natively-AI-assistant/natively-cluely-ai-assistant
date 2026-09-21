@@ -145,6 +145,7 @@ export interface AppSettings {
         provider?: 'natively' | 'ollama' | 'custom' | 'openrouter' | 'voyage' | 'openai' | 'gemini' | 'local';
         model?: string;
         dimensions?: number;
+        localModelId?: string;
     };
     /**
      * Reranker configuration, independent of BOTH the generation model and the
@@ -196,6 +197,13 @@ export interface AppSettings {
      * because this file is plaintext on disk.
      */
     customEmbeddingEndpoint?: string;
+    /**
+     * A user-hosted OpenAI/Cohere-compatible reranking endpoint (LM Studio,
+     * TEI, llama.cpp's llama-server, vLLM, Infinity, or local proxy).
+     */
+    customRerankerEndpoint?: string;
+    customRerankerModel?: string;
+    localEmbeddingModelId?: string;
     /**
      * The user chose "Keep MiniLM". Suppresses the lightweight-embedding
      * warning permanently — an unstoppable warning is worse than none, and this

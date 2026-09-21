@@ -8373,9 +8373,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       dimensions = measured;
     }
 
-    // R-24: a refused write (degraded settings store) must NOT report success —
-    // re-initializing the pipeline and telling the user the model changed, on a
-    // value the disk never received, silently reverts on the next launch.
+    if (next?.provider === 'local' && next?.model) {
+      settings.set('localEmbeddingModelId', next.model);
+    }
+
     if (!settings.set('embedding', {
       mode: (next?.mode as any) || 'auto',
       provider: next?.provider as any,
@@ -8388,15 +8389,19 @@ export function initializeIpcHandlers(appState: AppState): void {
     const { buildEmbeddingConfig } = require('./rag/embeddingConfigIdentity');
     await ragManager?.initializeEmbeddings(buildEmbeddingConfig());
     const activeSpace = pipeline?.getActiveSpaceKey?.();
+    const incompatibleCount = (ragManager as any)?.vectorStore?.getIncompatibleSpaceCount?.(activeSpace) ?? 0;
 
-    // A space change means existing vectors are no longer comparable. The
-    // auto-reindex sweep already handles the work; the UI's job is to SAY so
-    // rather than let a silent re-index start.
+    if (incompatibleCount > 0 && ragManager?.reindexIncompatibleMeetings) {
+      ragManager.cancelPendingReindex?.();
+      void ragManager.reindexIncompatibleMeetings();
+    }
+
     return {
       success: true,
       previousSpace,
       activeSpace,
-      reindexRequired: !!previousSpace && !!activeSpace && previousSpace !== activeSpace,
+      reindexRequired: incompatibleCount > 0,
+      incompatibleCount,
     };
   });
 
@@ -8644,14 +8649,18 @@ export function initializeIpcHandlers(appState: AppState): void {
       selectedLocal,
       effective,
       lastTest: stored.lastTest ?? null,
+      customModel: stored.customModel ?? settings.get('customRerankerModel') ?? null,
+      customEndpoint: settings.get('customRerankerEndpoint') ?? null,
+      hasCustomKey: Boolean(CredentialsManager.getInstance().getCustomRerankerApiKey?.()),
     };
   });
 
   safeHandle('reranker:set-config', async (_evt, next: {
-    provider?: 'local' | 'natively' | 'openrouter' | 'jina';
+    provider?: 'local' | 'natively' | 'openrouter' | 'jina' | 'custom';
     openrouterModel?: string;
     jinaModel?: string;
     nativelyModel?: string;
+    customModel?: string;
     candidateCount?: number;
     fallbackToLocal?: boolean;
   }) => {
@@ -8660,12 +8669,16 @@ export function initializeIpcHandlers(appState: AppState): void {
     const current = (settings.get('reranker') as any) || {};
 
     const merged: any = { ...current };
-    if (next.provider === 'local' || next.provider === 'natively' || next.provider === 'openrouter' || next.provider === 'jina') {
+    if (next.provider === 'local' || next.provider === 'natively' || next.provider === 'openrouter' || next.provider === 'jina' || next.provider === 'custom') {
       merged.provider = next.provider;
     }
     if (typeof next.openrouterModel === 'string') merged.openrouterModel = next.openrouterModel.trim() || undefined;
     if (typeof next.jinaModel === 'string') merged.jinaModel = next.jinaModel.trim() || undefined;
     if (typeof next.nativelyModel === 'string') merged.nativelyModel = next.nativelyModel.trim() || undefined;
+    if (typeof next.customModel === 'string') {
+      merged.customModel = next.customModel.trim() || undefined;
+      settings.set('customRerankerModel', merged.customModel);
+    }
     if (typeof next.fallbackToLocal === 'boolean') merged.fallbackToLocal = next.fallbackToLocal;
     // Clamp rather than reject: a nonsensical depth should not be storable, and
     // silently keeping the old value is less confusing than an error toast.
@@ -8739,6 +8752,49 @@ export function initializeIpcHandlers(appState: AppState): void {
     return { success: true };
   });
 
+  safeHandle('reranker:set-custom-endpoint', async (_evt, input: { url?: string; apiKey?: string }) => {
+    const { normalizeCustomBaseUrl } = require('./rag/providers/CustomEmbeddingProvider');
+    const { SettingsManager } = require('./services/SettingsManager');
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const settings = SettingsManager.getInstance();
+
+    const raw = (input?.url || '').trim();
+    const normalized = raw ? normalizeCustomBaseUrl(raw) : '';
+    if (raw && !normalized) {
+      return { success: false, error: 'invalid_url', message: 'That does not look like a valid URL. Example: http://localhost:1234' };
+    }
+
+    if (!settings.set('customRerankerEndpoint', normalized || undefined)) {
+      return { success: false, error: 'settings_store_degraded', message: 'Could not save the endpoint. Your settings store is unavailable.' };
+    }
+    if (input?.apiKey !== undefined) {
+      const saved = CredentialsManager.getInstance().setCustomRerankerApiKey(input.apiKey || '');
+      if (saved === false) {
+        return { success: false, error: 'credential_store_degraded', message: 'Could not save the token. Your credential store is unavailable.' };
+      }
+    }
+
+    const { listCustomRerankModels } = require('./rag/customRerankModels');
+    const models = normalized
+      ? await listCustomRerankModels(normalized, CredentialsManager.getInstance().getCustomRerankerApiKey?.())
+      : [];
+    return {
+      success: true,
+      endpoint: normalized || null,
+      models,
+      reachable: models.length > 0,
+    };
+  });
+
+  safeHandle('reranker:get-custom-models', async () => {
+    const { SettingsManager } = require('./services/SettingsManager');
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const endpoint = SettingsManager.getInstance().get('customRerankerEndpoint') || '';
+    if (!endpoint) return [];
+    const { listCustomRerankModels } = require('./rag/customRerankModels');
+    return await listCustomRerankModels(endpoint, CredentialsManager.getInstance().getCustomRerankerApiKey?.());
+  });
+
   safeHandle('reranker:test', async (_evt, choice?: { model?: string }) => {
     // Sends ONE real rerank request through the exact path retrieval uses, so a
     // green test cannot pass while the real call fails. A cheaper probe (a
@@ -8754,22 +8810,33 @@ export function initializeIpcHandlers(appState: AppState): void {
     const stored = (settings.get('reranker') as any) || {};
     const { readHostedApiKey, readHostedModel } = require('./services/reranking/rerankerConfig');
     const { hostedRerankProvider } = require('./rag/hostedRerankProviders');
-    const provider = stored.provider === 'jina' ? 'jina' : 'openrouter';
-    const descriptor = hostedRerankProvider(provider);
+    const provider = stored.provider === 'custom' ? 'custom' : stored.provider === 'jina' ? 'jina' : 'openrouter';
+    const descriptor = provider === 'custom' ? null : hostedRerankProvider(provider);
     const model = (choice?.model || readHostedModel(stored) || '').trim();
 
-    // The privacy gate applies to the test too. A "Test connection" button that
-    // ignores it would be the one request a local-only user never consented to.
-    if (isLocalOnlyMode()) {
-      return { success: false, error: 'local-only-mode', message: describeIneligibility('local-only-mode') };
+    // The privacy gate applies to cloud hosted providers only. Local custom
+    // endpoints run on-device / local network and are permitted under local-only mode.
+    if (provider !== 'custom') {
+      if (isLocalOnlyMode()) {
+        return { success: false, error: 'local-only-mode', message: describeIneligibility('local-only-mode') };
+      }
+      if (!referenceFilesScopeAllowed()) {
+        return { success: false, error: 'reference-files-scope-denied', message: describeIneligibility('reference-files-scope-denied') };
+      }
     }
-    if (!referenceFilesScopeAllowed()) {
-      return { success: false, error: 'reference-files-scope-denied', message: describeIneligibility('reference-files-scope-denied') };
+
+    const baseUrl = provider === 'custom'
+      ? (settings.get('customRerankerEndpoint') || '')
+      : descriptor?.baseUrl;
+
+    if (!baseUrl) {
+      return { success: false, error: 'no_endpoint', message: 'No endpoint is configured for this reranker provider.' };
     }
 
     const reranker = new OpenRouterReranker({
-      baseUrl: descriptor?.baseUrl,
+      baseUrl,
       providerId: provider,
+      allowAnonymousApiKey: provider === 'custom',
       getApiKey: () => readHostedApiKey(provider),
       getModel: () => model,
     });
@@ -9018,6 +9085,341 @@ export function initializeIpcHandlers(appState: AppState): void {
       };
     }
   });
+
+  // ── Local Embedding Models (Bundled & Downloadable) ──────────────────────
+  const localEmbeddingDownloads = new Map<string, AbortController>();
+
+  safeHandle('embedding:list-local-models', async () => {
+    const { listEmbeddingCatalogStatus } = require('./services/embeddings/localEmbeddingModelInstaller');
+    const { SettingsManager } = require('./services/SettingsManager');
+    const settings = SettingsManager.getInstance();
+    const storedEmbedding = (settings.get('embedding') as any) || {};
+    const isLocalProvider = (storedEmbedding.provider || 'local') === 'local';
+    const selectedId = isLocalProvider
+      ? (settings.get('localEmbeddingModelId') || storedEmbedding.localModelId || storedEmbedding.model || 'minilm-l6-v2')
+      : null;
+
+    // Pre-read the acknowledged set once, outside the map.
+    const ackedSet: unknown = settings.get('embeddingCatalogAcknowledged');
+    const acknowledgedIds: string[] = Array.isArray(ackedSet) ? (ackedSet as string[]) : [];
+
+    const models = listEmbeddingCatalogStatus().map((m: any) => ({
+      id: m.id,
+      name: m.name,
+      runtime: m.runtime,
+      repo: m.repo,
+      params: m.params,
+      note: m.note,
+      bytes: m.bytes,
+      dimensions: m.dimensions,
+      supportedDimensions: m.supportedDimensions,
+      contextLength: m.contextLength,
+      recommended: m.recommended === true,
+      bundled: m.bundled === true,
+      license: m.license,
+      /** Whether the user has accepted this model's licence (always true when requiresAcknowledgement is false). */
+      acknowledged: !m.license?.requiresAcknowledgement || acknowledgedIds.includes(m.id),
+      state: m.status.state,
+      bytesOnDisk: m.status.bytesOnDisk,
+      selected: isLocalProvider && (selectedId === m.id || selectedId === m.repo),
+      supported: m.supported,
+      unsupportedReason: m.unsupportedReason ?? null,
+      activatable: m.supported,
+    }));
+
+    return { models, selectedId, builtInSelected: selectedId === 'minilm-l6-v2' };
+  });
+
+  safeHandle('embedding:install-local-model', async (event: any, id: string) => {
+    const { findEmbeddingCatalogModel } = require('./rag/embeddingModelCatalog');
+    const model = findEmbeddingCatalogModel(id);
+    if (!model) return { success: false, error: 'unknown_model' };
+    if (localEmbeddingDownloads.has(id)) return { success: false, error: 'already_downloading' };
+
+    // License gate: models that require explicit acknowledgement must not be
+    // installed until the user has confirmed in the UI.
+    if (model.license?.requiresAcknowledgement) {
+      const { SettingsManager } = require('./services/SettingsManager');
+      const ackedSet: string[] = (SettingsManager.getInstance().get('embeddingCatalogAcknowledged') as any) ?? [];
+      if (!Array.isArray(ackedSet) || !ackedSet.includes(id)) {
+        return {
+          success: false,
+          error: 'license_not_acknowledged',
+          message: `${model.name} requires licence acknowledgement (${model.license.spdx}). Please accept the licence terms before installing.`,
+          requiresAcknowledgement: true,
+          licenseUrl: model.license.url,
+          spdx: model.license.spdx,
+        };
+      }
+    }
+
+    const sender = event?.sender;
+    let lastSent = 0;
+    const emit = (fraction: number, currentFile: string) => {
+      const now = Date.now();
+      if (now - lastSent < 200 && fraction < 1) return;
+      lastSent = now;
+      try { sender?.send('embedding:model-progress', { id, fraction, currentFile }); } catch { /* window gone */ }
+    };
+
+    const controller = new AbortController();
+    localEmbeddingDownloads.set(id, controller);
+    try {
+      const { installEmbeddingCatalogModel } = require('./services/embeddings/localEmbeddingModelInstaller');
+      const result = await installEmbeddingCatalogModel(id, (p: any) => emit(p.fraction, p.currentFile), controller.signal);
+      if (!result.ok) return { success: false, error: 'download_failed', message: result.error };
+      return { success: true, digests: result.digests };
+    } catch (e: any) {
+      return { success: false, error: 'download_failed', message: String(e?.message || e) };
+    } finally {
+      localEmbeddingDownloads.delete(id);
+    }
+  });
+
+  safeHandle('embedding:cancel-local-model', async (_evt, id: string) => {
+    const controller = localEmbeddingDownloads.get(id);
+    if (!controller) return { success: false, error: 'not_downloading' };
+    controller.abort();
+    return { success: true };
+  });
+
+  safeHandle('embedding:remove-local-model', async (_evt, id: string) => {
+    const { SettingsManager } = require('./services/SettingsManager');
+    const settings = SettingsManager.getInstance();
+    const currentId = settings.get('localEmbeddingModelId');
+    if (currentId === id) {
+      return { success: false, error: 'in_use', message: 'This embedding model is in use. Choose another one before removing it.' };
+    }
+    const { removeEmbeddingCatalogModel } = require('./services/embeddings/localEmbeddingModelInstaller');
+    const res = removeEmbeddingCatalogModel(id);
+    return { success: res.ok, message: res.error };
+  });
+
+  safeHandle('embedding:use-local-model', async (_evt, id: string | null) => {
+    const { SettingsManager } = require('./services/SettingsManager');
+    const { findEmbeddingCatalogModel } = require('./rag/embeddingModelCatalog');
+    const { statusOf } = require('./services/embeddings/localEmbeddingModelInstaller');
+    const { LocalEmbeddingProvider } = require('./rag/providers/LocalEmbeddingProvider');
+
+    const settings = SettingsManager.getInstance();
+    const stored = (settings.get('embedding') as any) || {};
+    const previousLocalId = settings.get('localEmbeddingModelId') ?? stored.localModelId ?? null;
+    const targetId = id || 'minilm-l6-v2';
+
+    const model = findEmbeddingCatalogModel(targetId);
+    if (!model) return { success: false, error: 'unknown_model' };
+    if (!model.supported) {
+      return { success: false, error: 'not_supported', message: model.unsupportedReason ?? `${model.name} is not supported on this platform.` };
+    }
+    const status = statusOf(model);
+    if (status.state !== 'installed') {
+      return { success: false, error: 'not_installed', message: `${model.name} is not fully downloaded (missing ${status.missing.join(', ')}).` };
+    }
+
+    // License gate: models with requiresAcknowledgement must be explicitly
+    // ack'd via embedding:acknowledge-catalog-license BEFORE they can be activated.
+    if (model.license?.requiresAcknowledgement) {
+      const ackedSet: string[] = (settings.get('embeddingCatalogAcknowledged') as any) ?? [];
+      if (!Array.isArray(ackedSet) || !ackedSet.includes(targetId)) {
+        return {
+          success: false,
+          error: 'license_not_acknowledged',
+          message: `${model.name} requires licence acknowledgement (${model.license.spdx}). Please accept the licence terms in Settings before activating this model.`,
+          requiresAcknowledgement: true,
+          licenseUrl: model.license.url,
+          spdx: model.license.spdx,
+        };
+      }
+    }
+
+    // Pre-activation validation probe.
+    //
+    // Commit NOTHING to settings until we know the model can actually produce a
+    // valid embedding vector. A corrupt or runtime-incompatible model would
+    // otherwise leave the user with a broken embedding provider and no way to
+    // recover other than a manual settings reset.
+    //
+    // `skipSlotGate: true` prevents competing with the live provider's slot —
+    // the probe runs on a throw-away instance that is disposed immediately after.
+    let probeProvider: any = null;
+    try {
+      probeProvider = new LocalEmbeddingProvider({ modelId: targetId, skipSlotGate: true });
+      const probeVec = await Promise.race([
+        probeProvider.embed('embedding model validation probe'),
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error('Validation probe timed out after 20s')), 20_000)),
+      ]);
+      if (!Array.isArray(probeVec) || probeVec.length === 0) {
+        throw new Error('Model loaded but did not produce a valid embedding vector.');
+      }
+      // Confirm the declared dimension matches reality.
+      if (model.dimensions > 0 && probeVec.length !== model.dimensions) {
+        throw new Error(`Expected ${model.dimensions}-d vector but got ${probeVec.length}-d. The model file may be corrupt or a different variant.`);
+      }
+    } catch (probeErr: any) {
+      return {
+        success: false,
+        error: 'validation_failed',
+        message: `${model.name} failed the runtime check: ${String(probeErr?.message || probeErr)}. The model may be corrupt — try re-downloading it.`,
+      };
+    } finally {
+      if (probeProvider) {
+        try { await probeProvider.dispose('validation probe complete'); } catch { /* best effort */ }
+      }
+    }
+
+    // Save setting
+    const ok1 = settings.set('localEmbeddingModelId', targetId);
+    const ok2 = settings.set('embedding', {
+      ...stored,
+      mode: 'manual',
+      provider: 'local',
+      localModelId: targetId,
+      model: targetId,
+      dimensions: model.dimensions,
+    });
+    if (!ok1 || !ok2) {
+      return { success: false, error: 'settings_store_degraded', message: 'Could not save the embedding settings. Your settings store is unavailable.' };
+    }
+
+    try {
+      // Re-initialize active embedding pipeline so running RAG manager immediately switches to this model
+      const { buildEmbeddingConfig } = require('./rag/embeddingConfigIdentity');
+      const ragManager = appState.getRAGManager();
+      const pipeline = ragManager?.getEmbeddingPipeline?.();
+      const previousSpace = pipeline?.getActiveSpaceKey?.();
+      await ragManager?.initializeEmbeddings(buildEmbeddingConfig());
+      const activeSpace = pipeline?.getActiveSpaceKey?.();
+      const incompatibleCount = (ragManager as any)?.vectorStore?.getIncompatibleSpaceCount?.(activeSpace) ?? 0;
+
+      if (incompatibleCount > 0 && ragManager?.reindexIncompatibleMeetings) {
+        ragManager.cancelPendingReindex?.();
+        void ragManager.reindexIncompatibleMeetings();
+      }
+
+      return {
+        success: true,
+        activeId: targetId,
+        dimensions: model.dimensions,
+        previousSpace,
+        activeSpace,
+        reindexRequired: incompatibleCount > 0,
+        incompatibleCount,
+      };
+    } catch (e: any) {
+      // Revert if activation failed
+      settings.set('localEmbeddingModelId', previousLocalId);
+      settings.set('embedding', {
+        ...stored,
+        localModelId: previousLocalId,
+      });
+      return {
+        success: false,
+        error: 'activation_failed',
+        message: `Couldn't activate ${model.name}: ${String(e?.message || e)}. Reverted to previous model.`,
+      };
+    }
+  });
+
+  /**
+   * Record that the user has acknowledged the licence terms for a catalog
+   * embedding model that has `requiresAcknowledgement: true` (e.g. Jina v4/v5
+   * under CC-BY-NC-4.0). Must be called from the UI's licence-acceptance dialog
+   * BEFORE attempting to install or activate such a model.
+   */
+  safeHandle('embedding:acknowledge-catalog-license', async (_evt, id: string) => {
+    const { SettingsManager } = require('./services/SettingsManager');
+    const { findEmbeddingCatalogModel } = require('./rag/embeddingModelCatalog');
+    const model = findEmbeddingCatalogModel(id);
+    if (!model) return { success: false, error: 'unknown_model' };
+    if (!model.license?.requiresAcknowledgement) {
+      // No acknowledgement needed — idempotently succeed so callers don't need to branch.
+      return { success: true };
+    }
+
+    const settings = SettingsManager.getInstance();
+    const existing: unknown = settings.get('embeddingCatalogAcknowledged');
+    const current: string[] = Array.isArray(existing) ? (existing as string[]) : [];
+    if (!current.includes(id)) {
+      const updated = [...current, id];
+      if (!settings.set('embeddingCatalogAcknowledged', updated)) {
+        return { success: false, error: 'settings_store_degraded', message: 'Could not persist licence acknowledgement. Your settings store may be unavailable.' };
+      }
+    }
+    return { success: true };
+  });
+
+  safeHandle('embedding:test-local-model', async (_evt, id: string) => {
+    const { findEmbeddingCatalogModel } = require('./rag/embeddingModelCatalog');
+    const { statusOf } = require('./services/embeddings/localEmbeddingModelInstaller');
+    const { LocalEmbeddingProvider } = require('./rag/providers/LocalEmbeddingProvider');
+
+    const model = findEmbeddingCatalogModel(id);
+    if (!model) return { success: false, error: 'unknown_model' };
+    const status = statusOf(model);
+    if (status.state !== 'installed') {
+      return { success: false, error: 'not_installed', message: 'Model must be installed before testing' };
+    }
+
+    let provider: any = null;
+
+    try {
+      provider = new LocalEmbeddingProvider({ modelId: id, skipSlotGate: true });
+      const testText = 'Semantic search vector latency benchmark';
+
+      const testPromise = (async () => {
+        const start = Date.now();
+        const vector = await provider.embed(testText);
+        const latencyMs = Date.now() - start;
+        return { vector, latencyMs };
+      })();
+
+      const timeoutPromise = new Promise<{ vector: any; latencyMs: number }>((_, reject) => {
+        setTimeout(() => reject(new Error('Inference test timed out after 25s')), 25000);
+      });
+
+      const { vector, latencyMs } = await Promise.race([testPromise, timeoutPromise]);
+
+      if (!Array.isArray(vector) || vector.length === 0) {
+        throw new Error('the model loaded but did not produce a vector output');
+      }
+
+      let accelerator = 'CPU';
+      if (model.runtime === 'gguf') {
+        accelerator = (process.platform === 'darwin' && process.arch === 'arm64')
+          ? 'Apple Silicon Metal GPU'
+          : 'Vulkan / AVX2';
+      } else {
+        accelerator = 'ONNX Runtime (WASM / CPU)';
+      }
+
+      return {
+        success: true,
+        latencyMs,
+        dimensions: vector.length,
+        runtime: model.runtime,
+        accelerator,
+      };
+    } catch (e: any) {
+      return {
+        success: false,
+        error: 'test_failed',
+        message: String(e?.message || e),
+      };
+    } finally {
+      if (provider) {
+        try {
+          await provider.dispose('test completed');
+        } catch { /* best effort */ }
+      }
+    }
+  });
+
+  safeHandle('embedding:reveal-folder', async () => {
+    const { revealLocalEmbeddingModelsDirectory } = require('./services/embeddings/localEmbeddingModelInstaller');
+    const ok = await revealLocalEmbeddingModelsDirectory();
+    return { success: ok };
+  });
+
 
   // ── Extensions ───────────────────────────────────────────────────────────
   //
