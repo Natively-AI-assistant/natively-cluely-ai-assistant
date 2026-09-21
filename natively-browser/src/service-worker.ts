@@ -917,6 +917,7 @@ type PopupMessage =
   | { type: 'grant-host'; value: string }
   | { type: 'grant-all-sites' }
   | { type: 'all-sites-status' }
+  | { type: 'clear-grant-nudge' }
   | { type: 'status' }
   | { type: 'ws-status' }
   | { type: 'unpair' };
@@ -977,6 +978,10 @@ chrome.runtime.onMessage.addListener((msg: PopupMessage, _sender, sendResponse) 
       }
       case 'all-sites-status':
         sendResponse({ granted: await hasAllSitesPermission(chrome.permissions) });
+        return;
+      case 'clear-grant-nudge':
+        clearGrantNudge();
+        sendResponse({ kind: 'success' });
         return;
       case 'status':
         sendResponse(await connectionStatus());
