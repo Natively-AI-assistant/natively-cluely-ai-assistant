@@ -2025,9 +2025,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Was 'local' | 'openrouter' — already missing 'jina' before this change.
     // The object is forwarded opaquely so the omission never failed at runtime,
     // which is exactly why it went unnoticed; kept in step with the handler now.
-    provider?: 'local' | 'natively' | 'openrouter' | 'jina' | 'custom';
+    provider?: 'local' | 'natively' | 'openrouter' | 'jina' | 'voyage' | 'custom';
     openrouterModel?: string;
     jinaModel?: string;
+    voyageModel?: string;
     nativelyModel?: string;
     customModel?: string;
     candidateCount?: number;

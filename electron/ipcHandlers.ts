@@ -8561,6 +8561,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       model: hostedModel ?? undefined,
       localOnly: isLocalOnlyMode(),
       referenceFilesScopeAllowed: referenceFilesScopeAllowed(),
+      // Same input retrieval passes, or the panel reports a loopback custom
+      // endpoint as blocked in local-only mode while retrieval uses it.
+      customEndpoint: provider === 'custom' ? (settings.get('customRerankerEndpoint') || undefined) : undefined,
     });
 
     // The built-in, described honestly: "bundled" is not the same as "loadable".
@@ -8631,6 +8634,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       provider,
       openrouterModel: stored.openrouterModel ?? null,
       jinaModel: stored.jinaModel ?? null,
+      voyageModel: stored.voyageModel ?? null,
       nativelyModel: stored.nativelyModel ?? null,
       hostedModel,
       candidateCount: stored.candidateCount ?? null,
@@ -8656,9 +8660,10 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle('reranker:set-config', async (_evt, next: {
-    provider?: 'local' | 'natively' | 'openrouter' | 'jina' | 'custom';
+    provider?: 'local' | 'natively' | 'openrouter' | 'jina' | 'voyage' | 'custom';
     openrouterModel?: string;
     jinaModel?: string;
+    voyageModel?: string;
     nativelyModel?: string;
     customModel?: string;
     candidateCount?: number;
@@ -8669,11 +8674,12 @@ export function initializeIpcHandlers(appState: AppState): void {
     const current = (settings.get('reranker') as any) || {};
 
     const merged: any = { ...current };
-    if (next.provider === 'local' || next.provider === 'natively' || next.provider === 'openrouter' || next.provider === 'jina' || next.provider === 'custom') {
+    if (next.provider === 'local' || next.provider === 'natively' || next.provider === 'openrouter' || next.provider === 'jina' || next.provider === 'voyage' || next.provider === 'custom') {
       merged.provider = next.provider;
     }
     if (typeof next.openrouterModel === 'string') merged.openrouterModel = next.openrouterModel.trim() || undefined;
     if (typeof next.jinaModel === 'string') merged.jinaModel = next.jinaModel.trim() || undefined;
+    if (typeof next.voyageModel === 'string') merged.voyageModel = next.voyageModel.trim() || undefined;
     if (typeof next.nativelyModel === 'string') merged.nativelyModel = next.nativelyModel.trim() || undefined;
     if (typeof next.customModel === 'string') {
       merged.customModel = next.customModel.trim() || undefined;
@@ -8707,9 +8713,13 @@ export function initializeIpcHandlers(appState: AppState): void {
         message: 'The Natively reranker uses your Natively API key. Set it in the Natively API section.',
       };
     }
+    // Explicit per provider: the old two-way ternary would have written a
+    // Voyage key into the OpenRouter slot. Voyage shares the embedding key.
     const saved = provider === 'jina'
       ? cm.setJinaApiKey(key || '')
-      : cm.setOpenrouterApiKey(key || '');
+      : provider === 'voyage'
+        ? cm.setVoyageApiKey(key || '')
+        : cm.setOpenrouterApiKey(key || '');
     if (saved === false) {
       return { success: false, error: 'credential_store_degraded', message: 'Could not save the key. Your credential store is unavailable.' };
     }
@@ -8810,7 +8820,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     const stored = (settings.get('reranker') as any) || {};
     const { readHostedApiKey, readHostedModel } = require('./services/reranking/rerankerConfig');
     const { hostedRerankProvider } = require('./rag/hostedRerankProviders');
-    const provider = stored.provider === 'custom' ? 'custom' : stored.provider === 'jina' ? 'jina' : 'openrouter';
+    const provider = ['custom', 'jina', 'voyage', 'natively'].includes(stored.provider) ? stored.provider : 'openrouter';
     const descriptor = provider === 'custom' ? null : hostedRerankProvider(provider);
     const model = (choice?.model || readHostedModel(stored) || '').trim();
 
@@ -8844,6 +8854,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       baseUrl,
       providerId: provider,
       allowAnonymousApiKey: provider === 'custom',
+      wire: descriptor?.wire,
       getApiKey: () => readHostedApiKey(provider),
       getModel: () => model,
     });

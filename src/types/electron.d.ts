@@ -506,9 +506,10 @@ export interface ElectronAPI {
   // Embedding retrieval finds the candidate set; reranking decides the order of
   // those candidates. Configured independently of the embedding provider.
   getRerankerStatus: () => Promise<{
-    provider: 'local' | 'natively' | 'openrouter' | 'jina' | 'custom'
+    provider: 'local' | 'natively' | 'openrouter' | 'jina' | 'voyage' | 'custom'
     openrouterModel: string | null
     jinaModel: string | null
+    voyageModel?: string | null
     nativelyModel?: string | null
     customModel?: string | null
     customEndpoint?: string | null
@@ -530,7 +531,7 @@ export interface ElectronAPI {
     /** The catalogue model in use, when one is selected AND fully installed. */
     selectedLocal: { id: string; name: string } | null
     /** What would actually run right now, resolved the way retrieval resolves it. */
-    effective: { kind: 'local' | 'extension' | 'natively' | 'openrouter' | 'jina' | 'custom'; id: string | null }
+    effective: { kind: 'local' | 'extension' | 'natively' | 'openrouter' | 'jina' | 'voyage' | 'custom'; id: string | null }
     lastTest: { at: string; model: string; latencyMs: number; ok: boolean; failure?: string } | null
   }>
   getRerankerCatalog: (opts?: { refresh?: boolean }) => Promise<{
@@ -546,9 +547,10 @@ export interface ElectronAPI {
     error?: string
   }>
   setRerankerConfig: (next: {
-    provider?: 'local' | 'natively' | 'openrouter' | 'jina' | 'custom'
+    provider?: 'local' | 'natively' | 'openrouter' | 'jina' | 'voyage' | 'custom'
     openrouterModel?: string
     jinaModel?: string
+    voyageModel?: string
     nativelyModel?: string
     customModel?: string
     candidateCount?: number
@@ -567,7 +569,7 @@ export interface ElectronAPI {
   getCustomRerankerModels: () => Promise<Array<{ id: string; label: string }>>
   getRerankerHostedProviders: () => Promise<{
     providers: Array<{
-      id: 'openrouter' | 'jina'
+      id: 'natively' | 'openrouter' | 'jina' | 'voyage'
       name: string
       keyUrl: string
       keyPlaceholder: string

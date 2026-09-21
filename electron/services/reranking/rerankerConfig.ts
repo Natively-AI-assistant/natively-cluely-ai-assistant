@@ -16,7 +16,7 @@
 // import despite the note above about esbuild inlining a second copy of each.
 import { TRIAL_SENTINEL_KEY } from '../../config/constants';
 
-export type RerankerProvider = 'local' | 'natively' | 'openrouter' | 'jina' | 'custom';
+export type RerankerProvider = 'local' | 'natively' | 'openrouter' | 'jina' | 'voyage' | 'custom';
 
 export interface RerankerSettings {
   /**
@@ -35,6 +35,8 @@ export interface RerankerSettings {
   nativelyModel?: string;
   /** Jina AI model id, e.g. jina-reranker-v3.5. */
   jinaModel?: string;
+  /** Voyage AI model id, e.g. rerank-2.5. */
+  voyageModel?: string;
   /** User-hosted custom rerank model id (LM Studio, TEI, etc.). */
   customModel?: string;
   /**
@@ -178,7 +180,7 @@ export function evaluateHostedEligibility(input: EligibilityInputs): HostedEligi
     const blocked = customRerankPrivacyBlock(input);
     return blocked ? { eligible: false, reason: blocked } : { eligible: true };
   }
-  if (input.provider !== 'natively' && input.provider !== 'openrouter' && input.provider !== 'jina') {
+  if (input.provider !== 'natively' && input.provider !== 'openrouter' && input.provider !== 'jina' && input.provider !== 'voyage') {
     return { eligible: false, reason: 'provider-not-selected' };
   }
   if (input.localOnly) return { eligible: false, reason: 'local-only-mode' };
@@ -265,6 +267,18 @@ export function readHostedApiKey(provider: RerankerProvider): string | undefined
     const env = (process.env.JINA_API_KEY || '').trim();
     return env || undefined;
   }
+  if (provider === 'voyage') {
+    // The SAME credential the Voyage embedding provider uses — one vendor, one
+    // key, the way OpenRouter backs chat, embeddings and reranking. Explicit,
+    // because the fall-through below would hand Voyage the OpenRouter key.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { CredentialsManager } = require('../CredentialsManager');
+      const stored = CredentialsManager.getInstance().getVoyageApiKey?.();
+      if (stored && stored.trim()) return stored.trim();
+    } catch { /* no credential store: no key */ }
+    return undefined;
+  }
   return readOpenRouterApiKey();
 }
 
@@ -296,6 +310,12 @@ export function readHostedModel(settings: RerankerSettings): string | undefined 
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { defaultHostedModel } = require('../../rag/hostedRerankProviders') as typeof import('../../rag/hostedRerankProviders');
     return settings.jinaModel || defaultHostedModel('jina') || undefined;
+  }
+  if (settings.provider === 'voyage') {
+    // Static catalogue, same as Jina: unset means the recommended model.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { defaultHostedModel } = require('../../rag/hostedRerankProviders') as typeof import('../../rag/hostedRerankProviders');
+    return settings.voyageModel || defaultHostedModel('voyage') || undefined;
   }
   // OpenRouter's catalogue is FETCHED (staticCatalogue: false), so there is no
   // id to fall back to here that we have seen on the live API. It is filled in
@@ -446,6 +466,7 @@ export function buildHostedRerankPort(): RerankSeamPort | null {
   return new OpenRouterReranker({
     baseUrl: descriptor.baseUrl,
     providerId: descriptor.id,
+    wire: descriptor.wire,
     // Re-read per call rather than closing over the values: a key or model
     // changed in Settings must take effect without a restart.
     getApiKey: () => readHostedApiKey(readRerankerSettings().provider ?? 'local'),

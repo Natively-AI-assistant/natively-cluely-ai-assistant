@@ -93,6 +93,13 @@ export interface OpenRouterRerankerOptions {
   providerId?: string;
   /** Whether requests can proceed without an API key (e.g. for user-hosted custom endpoints). */
   allowAnonymousApiKey?: boolean;
+  /**
+   * Request/response field names when they are not Cohere's (`top_n` in,
+   * `results` out). Voyage uses `top_k` / `data`. A mismatch here is silent —
+   * the results array is missing, the call reads as malformed, and retrieval
+   * keeps the unreranked order — so it is set from the provider descriptor.
+   */
+  wire?: { topField: 'top_n' | 'top_k'; resultsField: 'results' | 'data' };
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
   now?: () => number;
@@ -232,7 +239,7 @@ export class OpenRouterReranker implements RerankSeamPort {
           },
           // ONLY the query and the candidate text. No file paths, no chunk ids,
           // no metadata — the mapping back to candidates is done locally, by index.
-          body: JSON.stringify({ model, query, documents: passages, top_n: passages.length }),
+          body: JSON.stringify({ model, query, documents: passages, [this.options.wire?.topField ?? 'top_n']: passages.length }),
           signal: AbortSignal.timeout(remaining),
         });
       } catch (e: any) {
@@ -275,7 +282,7 @@ export class OpenRouterReranker implements RerankSeamPort {
         return fail('malformed-response', res.status);
       }
 
-      const order = toSeamOrder(json?.results, passages.length);
+      const order = toSeamOrder(json?.[this.options.wire?.resultsField ?? 'results'], passages.length);
       if (!order) return fail('malformed-response', res.status);
 
       const stats: RerankRequestStats = {

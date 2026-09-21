@@ -94,7 +94,7 @@ const CustomEndpointMark: React.FC = () => (
     </span>
 );
 
-type RerankerProvider = 'local' | 'natively' | 'openrouter' | 'jina' | 'custom';
+type RerankerProvider = 'local' | 'natively' | 'openrouter' | 'jina' | 'voyage' | 'custom';
 type ModelGroup = 'recommended' | 'quality' | 'fast' | 'multimodal' | 'other';
 
 interface CatalogModel {
@@ -113,6 +113,7 @@ interface RerankerStatus {
     provider: RerankerProvider;
     openrouterModel: string | null;
     jinaModel: string | null;
+    voyageModel?: string | null;
     nativelyModel: string | null;
     customModel: string | null;
     customEndpoint: string | null;
@@ -130,7 +131,7 @@ interface RerankerStatus {
     ineligibleMessage: string | null;
     builtIn: { id: string; name: string; bundled: boolean; cached?: boolean; available?: boolean };
     selectedLocal: { id: string; name: string } | null;
-    effective: { kind: 'local' | 'extension' | 'natively' | 'openrouter' | 'jina' | 'custom'; id: string | null };
+    effective: { kind: 'local' | 'extension' | 'natively' | 'openrouter' | 'jina' | 'voyage' | 'custom'; id: string | null };
     lastTest: { at: string; model: string; latencyMs: number; ok: boolean; failure?: string } | null;
 }
 
@@ -576,7 +577,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
     const [busyCatalogId, setBusyCatalogId] = useState<string | null>(null);
     const [catalogError, setCatalogError] = useState<string | null>(null);
     const [hostedProviders, setHostedProviders] = useState<Array<{
-        id: 'natively' | 'openrouter' | 'jina'; name: string; keyUrl: string; keyPlaceholder: string;
+        id: 'natively' | 'openrouter' | 'jina' | 'voyage'; name: string; keyUrl: string; keyPlaceholder: string;
         staticCatalogue: boolean; hasApiKey: boolean;
         models: Array<{ id: string; label: string; note?: string; recommended?: boolean }>;
     }>>([]);
@@ -671,6 +672,10 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
             id: 'jina', name: 'Jina AI',
             keyUrl: 'https://jina.ai/api-dashboard/', keyPlaceholder: 'jina_…',
             staticCatalogue: true, hasApiKey: false, models: [],
+        }, {
+            id: 'voyage', name: 'Voyage AI',
+            keyUrl: 'https://dashboard.voyageai.com/', keyPlaceholder: 'pa-…',
+            staticCatalogue: true, hasApiKey: false, models: [],
         }]));
     }, []);
 
@@ -728,6 +733,18 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
         await window.electronAPI.setRerankerConfig?.(next);
         await refreshStatus();
     }, [refreshStatus]);
+
+    // One arm per hosted provider. A two-way ternary here used to send every
+    // non-Jina pick to OpenRouter, which would have written a Voyage model id
+    // into openrouterModel and switched the provider to OpenRouter.
+    const hostedModelConfig = (providerId: string, model: string): Parameters<NonNullable<typeof window.electronAPI.setRerankerConfig>>[0] => {
+        switch (providerId) {
+            case 'jina': return { provider: 'jina', jinaModel: model };
+            case 'voyage': return { provider: 'voyage', voyageModel: model };
+            case 'natively': return { provider: 'natively', nativelyModel: model };
+            default: return { provider: 'openrouter', openrouterModel: model };
+        }
+    };
 
     const activeOptions: AipSelectOption[] = useMemo(() => {
         // Every row: `provider/model` open, bare model closed. One helper so a
@@ -797,7 +814,8 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
         if (!status?.effective) return 'local::built-in';
         if (status.effective.kind === 'natively'
             || status.effective.kind === 'openrouter'
-            || status.effective.kind === 'jina') {
+            || status.effective.kind === 'jina'
+            || status.effective.kind === 'voyage') {
             return `${status.effective.kind}::${status.effective.id ?? ''}`;
         }
         if (status.effective.kind === 'custom') return `custom::${status.effective.id ?? ''}`;
@@ -835,6 +853,8 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                 await window.electronAPI.setRerankerConfig?.({ provider: 'openrouter', openrouterModel: id });
             } else if (kind === 'jina') {
                 await window.electronAPI.setRerankerConfig?.({ provider: 'jina', jinaModel: id });
+            } else if (kind === 'voyage') {
+                await window.electronAPI.setRerankerConfig?.({ provider: 'voyage', voyageModel: id });
             } else if (kind === 'custom') {
                 await window.electronAPI.setRerankerConfig?.({ provider: 'custom', customModel: id });
             } else if (kind === 'extension') {
@@ -873,6 +893,9 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
             if (status.lastTest?.ok) parts.push(`${Math.round(status.lastTest.latencyMs)} ms ${t('last test')}`);
         } else if (status.effective.kind === 'openrouter') {
             parts.push(t('Hosted'), t('Document text is sent to OpenRouter'));
+            if (status.lastTest?.ok) parts.push(`${Math.round(status.lastTest.latencyMs)} ms ${t('last test')}`);
+        } else if (status.effective.kind === 'jina' || status.effective.kind === 'voyage') {
+            parts.push(t('Hosted'), status.effective.kind === 'jina' ? t('Document text is sent to Jina AI') : t('Document text is sent to Voyage AI'));
             if (status.lastTest?.ok) parts.push(`${Math.round(status.lastTest.latencyMs)} ms ${t('last test')}`);
         } else if (status.effective.kind === 'custom') {
             parts.push(t('On-device'), t('Custom endpoint'));
@@ -1410,7 +1433,9 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                 const saved = savedKeyFor === p.id;
                 const selectedModel = p.id === 'natively'
                     ? status.nativelyModel
-                    : p.id === 'jina' ? status.jinaModel : status.openrouterModel;
+                    : p.id === 'jina' ? status.jinaModel
+                    : p.id === 'voyage' ? (status.voyageModel ?? null)
+                    : status.openrouterModel;
                 // Natively runs on the API key the user already configured, so
                 // this card must not offer a key field. Rendering one would
                 // invite a paste that reranker:set-hosted-key now refuses
@@ -1550,9 +1575,9 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                                         enabled={isActive && selectedModel ? [selectedModel] : []}
                                         defaultId={isActive ? (selectedModel ?? undefined) : undefined}
                                         onToggle={(id) => void setConfig(
-                                            p.id === 'jina' ? { provider: 'jina', jinaModel: id } : { provider: 'openrouter', openrouterModel: id })}
+                                            hostedModelConfig(p.id, id))}
                                         onSetDefault={(id) => void setConfig(
-                                            p.id === 'jina' ? { provider: 'jina', jinaModel: id } : { provider: 'openrouter', openrouterModel: id })}
+                                            hostedModelConfig(p.id, id))}
                                         onReset={() => {}}
                                         refreshing={p.staticCatalogue ? false : refreshing}
                                         onRefresh={p.staticCatalogue
