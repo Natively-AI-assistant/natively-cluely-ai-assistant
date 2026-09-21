@@ -26,8 +26,13 @@ import {
 } from '../../electron/utils/rollingTranscriptState.ts';
 import { categorizeSttError } from '../lib/sttErrorMapper';
 import { splitGistLine, splitGistLineStreaming, collapseBlockGaps } from '../lib/displayMarkup';
+import { BrowserProjectPanel, type ProjectPreset } from './BrowserProjectPanel';
 
-import type { SkillSummary } from '../types/electron';
+import type {
+  BrowserProjectDiscovery,
+  BrowserProjectDiscoveryFile,
+  SkillSummary,
+} from '../types/electron';
 
 function SkillPicker({
   skills,
@@ -384,6 +389,13 @@ const REMARK_PLUGINS = [remarkGfm, remarkMath];
 const REHYPE_PLUGINS: any[] = [[rehypeKatex, { throwOnError: false, strict: false, errorColor: '#cc0000' }]];
 
 import { DOM_CONTEXT_MAX_CHARS } from '../constants/domCapture';
+
+// A manual Ctrl/Cmd+Y capture can now scan and serialize a multi-file browser
+// project. The main process may first spend 1.2 seconds waking an idle MV3
+// worker, then gives project capture 12 seconds. Cover both bounded stages plus
+// a small delivery margin so Enter cannot start a competing auto-context pull.
+const MANUAL_PAGE_CAPTURE_DEADLINE_MS = 14_000;
+const MANUAL_PAGE_CAPTURE_POLL_MS = 100;
 
 // ── Streaming-height headroom buffer (native OS window resize during token
 // streaming) ─────────────────────────────────────────────────────────────
@@ -1017,6 +1029,7 @@ const CATEGORY_CHIP_LABEL: Record<string, string> = {
   coding_problem: 'Coding problem',
   coding_editor: 'Coding editor',
   interview_assessment: 'Coding assessment',
+  coding_project: 'Coding project',
   developer_docs: 'Developer docs',
   job_description: 'Job description',
   google_docs_visible: 'Google Docs',
@@ -1047,6 +1060,23 @@ const pageContextChipLabel = (pc: {
   if (pc.partial) bits.push('partial — capture manually?');
   return bits.join(' · ');
 };
+
+function browserProjectPresetMatches(file: BrowserProjectDiscoveryFile, preset: ProjectPreset): boolean {
+  if (!file.readable) return false;
+  if (preset === 'all') return true;
+  const path = file.path.replace(/\\/g, '/').toLowerCase();
+  const name = path.slice(path.lastIndexOf('/') + 1);
+  const isTest = /(^|\/)(__tests__|tests?|specs?)(\/|$)/.test(path)
+    || /\.(test|spec)\.[^/]+$/.test(path);
+  const isConfig = /(^|\/)(config|configs?)(\/|$)/.test(path)
+    || /(^|[.-])(config|rc)([.-]|$)/.test(name)
+    || /^\.(?:babelrc|eslintrc|prettierrc|editorconfig)(?:\.[^/]+)?$/.test(name)
+    || /^(?:package(?:-lock)?\.json|requirements[^/]*\.txt|pyproject\.toml|cargo\.toml|go\.mod|pom\.xml|build\.gradle(?:\.kts)?|settings\.gradle(?:\.kts)?|gradle\.properties|tsconfig(?:\.[^.]+)?\.json|vite\.config\.[^.]+|webpack\.config\.[^.]+|angular\.json|next\.config\.[^.]+|application[^/]*\.(?:ya?ml|properties)|\.env(?:\.[^/]+)?|dockerfile|docker-compose[^/]*\.ya?ml|gemfile|rakefile|procfile|cmakelists\.txt)$/.test(name);
+  if (preset === 'tests') return isTest;
+  if (preset === 'config') return isConfig;
+  return !isTest && !isConfig && (Boolean(file.language)
+    || /\.(?:[cm]?[jt]sx?|java|kt|kts|scala|py|rb|go|rs|php|cs|cpp|cc|cxx|c|h|hpp|swift|dart|vue|svelte|html?|css|scss|sass|less)$/.test(path));
+}
 
 const subtleSurfaceClass = 'overlay-subtle-surface';
 
@@ -1371,6 +1401,33 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // tabs and show a compact list. null = closed; [] = loading/empty.
   const [tabPicker, setTabPicker] = useState<Array<{ id: number; title: string; url: string }> | null>(null);
   const [tabPickerLoading, setTabPickerLoading] = useState(false);
+  const [projectPicker, setProjectPicker] = useState<{
+    project: BrowserProjectDiscovery;
+    tabId?: number;
+    connectionLease: string;
+    selectedPaths: Set<string>;
+    refreshAvailable: boolean;
+  } | null>(null);
+  const [projectBusy, setProjectBusy] = useState(false);
+  const [projectMessage, setProjectMessage] = useState<{
+    text: string;
+    tone: 'neutral' | 'ok' | 'warn' | 'error';
+  } | null>(null);
+
+  const beginExplicitPageCapture = useCallback((): number => {
+    // A newly requested capture supersedes any unconsumed context. Retire the
+    // old DOM and its structured/meta mirrors before marking the new request as
+    // pending, otherwise an immediate Enter could consume capture A while
+    // capture B is still in flight.
+    try { (window as any).lastCapturedDOM = ''; } catch (_) {}
+    capturedEnvelopeRef.current = null;
+    capturedMetaRef.current = null;
+    setPageContext(null);
+    setCaptureFallback(null);
+    const startedAt = Date.now();
+    pendingPageCaptureAtRef.current = startedAt;
+    return startedAt;
+  }, []);
 
   const openTabPicker = useCallback(async () => {
     setTabPickerLoading(true);
@@ -1393,6 +1450,133 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       /* the desktop logs the reason; the chip will appear on success */
     }
   }, []);
+
+  const scanBrowserProject = useCallback(async () => {
+    if (projectBusy) return;
+    setProjectBusy(true);
+    // A discovery lease is tied to the exact browser socket/workspace/tab that
+    // produced it. Retire the previous picker (and therefore its capture
+    // actions) before discovery so a failed or slow rescan cannot reuse a
+    // stale lease.
+    setProjectPicker(null);
+    setProjectMessage({ text: 'Scanning the active browser editor…', tone: 'neutral' });
+    setTabPicker(null);
+    setIsExpanded(true);
+    try {
+      const result = await window.electronAPI?.phoneMirrorDiscoverProject?.();
+      if (!result?.ok || !result.project || !result.connectionLease) {
+        const reason = result?.reason || (result?.ok
+          ? 'The browser connection changed while scanning. Scan the project again.'
+          : 'No multi-file project was detected on the active browser tab.');
+        setProjectMessage({ text: reason, tone: 'warn' });
+        setCaptureFallback({
+          kind: reason.startsWith('needs-host-permission:') ? 'needs-host-permission' : 'error',
+          label: reason.startsWith('needs-host-permission:')
+            ? 'Grant this site in the browser extension'
+            : 'No browser project detected',
+          detail: reason,
+          reason,
+          at: Date.now(),
+        });
+        return;
+      }
+      const readablePaths = result.project.files.filter((file) => file.readable).map((file) => file.path);
+      const restored = readablePaths.filter((path) =>
+        (result.previousSelectedPaths || []).some(
+          (selected) => path === selected || path.startsWith(`${selected}/`),
+        ));
+      setProjectPicker({
+        project: result.project,
+        tabId: result.tabId,
+        connectionLease: result.connectionLease,
+        selectedPaths: new Set(restored.length ? restored : readablePaths),
+        refreshAvailable: result.refreshAvailable === true,
+      });
+      setProjectMessage({
+        text: `Found ${result.project.files.length} project file${result.project.files.length === 1 ? '' : 's'}.`,
+        tone: result.project.files.some((file) => !file.readable) ? 'warn' : 'ok',
+      });
+    } catch (error) {
+      setProjectMessage({
+        text: error instanceof Error ? error.message : 'Project scan failed.',
+        tone: 'error',
+      });
+    } finally {
+      setProjectBusy(false);
+    }
+  }, [projectBusy]);
+
+  const applyBrowserProjectPreset = useCallback((preset: ProjectPreset) => {
+    setProjectPicker((current) => current ? {
+      ...current,
+      selectedPaths: new Set(
+        current.project.files
+          .filter((file) => browserProjectPresetMatches(file, preset))
+          .map((file) => file.path),
+      ),
+    } : current);
+  }, []);
+
+  const captureBrowserProject = useCallback(async (refresh: boolean) => {
+    if (!projectPicker || projectBusy) return;
+    const selectedPaths = [...projectPicker.selectedPaths].sort();
+    if (selectedPaths.length === 0) {
+      setProjectMessage({ text: 'Select at least one readable file.', tone: 'warn' });
+      return;
+    }
+    setProjectBusy(true);
+    setProjectMessage({
+      text: refresh ? 'Refreshing changed project files…' : 'Capturing selected project files…',
+      tone: 'neutral',
+    });
+    // Overlay capture uses the same one-motion contract as Ctrl/Cmd+Y. If the
+    // user immediately submits, handleWhatToSay waits for the selected project
+    // context instead of racing an auto-capture or consuming stale context.
+    const captureStartedAt = beginExplicitPageCapture();
+    const clearPendingCapture = () => {
+      if (pendingPageCaptureAtRef.current === captureStartedAt) {
+        pendingPageCaptureAtRef.current = null;
+      }
+    };
+    try {
+      const result = await window.electronAPI?.phoneMirrorCaptureProject?.({
+        workspaceId: projectPicker.project.workspaceId,
+        selectedPaths,
+        refresh,
+        tabId: projectPicker.tabId,
+        connectionLease: projectPicker.connectionLease,
+      });
+      if (!result?.ok) {
+        clearPendingCapture();
+        setProjectMessage({ text: result?.reason || 'Project capture failed.', tone: 'error' });
+        return;
+      }
+      if (result.unchanged) {
+        clearPendingCapture();
+        setProjectPicker((current) => current ? { ...current, refreshAvailable: true } : current);
+        setProjectMessage({ text: 'Project context is already up to date.', tone: 'ok' });
+        return;
+      }
+      setProjectPicker((current) => current ? { ...current, refreshAvailable: true } : current);
+      const details = [
+        typeof result.fileCount === 'number' ? `${result.fileCount} file${result.fileCount === 1 ? '' : 's'}` : '',
+        result.omittedCount ? `${result.omittedCount} omitted` : '',
+        result.truncatedCount ? `${result.truncatedCount} truncated` : '',
+      ].filter(Boolean).join(' · ');
+      setProjectMessage({
+        text: `Project captured${details ? ` · ${details}` : ''}.`,
+        tone: result.omittedCount || result.truncatedCount ? 'warn' : 'ok',
+      });
+    } catch (error) {
+      clearPendingCapture();
+      setProjectMessage({
+        text: error instanceof Error ? error.message : 'Project capture failed.',
+        tone: 'error',
+      });
+    } finally {
+      setProjectBusy(false);
+    }
+  }, [beginExplicitPageCapture, projectBusy, projectPicker]);
 
   /**
    * BROWSER DOM CONTEXT INTEGRATION
@@ -1551,11 +1735,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     let unsub: (() => void) | undefined;
     try {
       unsub = window.electronAPI?.onPageCaptureStarted?.(() => {
-        pendingPageCaptureAtRef.current = Date.now();
+        beginExplicitPageCapture();
       });
     } catch (_) { /* older preload without the channel */ }
     return () => { try { unsub?.(); } catch (_) {} };
-  }, []);
+  }, [beginExplicitPageCapture]);
 
   // Auto-expire the fallback notice — it explains a one-off event, so it should
   // not linger like the page-context pill (which arms the next answer).
@@ -7298,6 +7482,25 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     analytics.trackCommandExecuted('what_to_say');
 
     try {
+      // One-motion ⌘/Ctrl+Y→Enter: if a manual capture is IN FLIGHT (⌘/Ctrl+Y
+      // pressed a beat ago, /dom not yet delivered), wait for it before either
+      // Direct Assist or the legacy path consumes page context. Delivery or the
+      // fallback notice clears the pending flag and ends the wait early.
+      const pendingAt = pendingPageCaptureAtRef.current;
+      if (pendingAt) {
+        const waitDeadline = pendingAt + MANUAL_PAGE_CAPTURE_DEADLINE_MS;
+        while (
+          pendingPageCaptureAtRef.current === pendingAt
+          && Date.now() < waitDeadline
+          && !(typeof (window as any).lastCapturedDOM === 'string' && (window as any).lastCapturedDOM.trim().length > 0)
+        ) {
+          await new Promise((resolve) => setTimeout(
+            resolve,
+            Math.min(MANUAL_PAGE_CAPTURE_POLL_MS, Math.max(0, waitDeadline - Date.now())),
+          ));
+        }
+      }
+
       if (directAssistEnabled) {
         // Direct screenshot requests never trigger automatic page capture. A
         // deliberate, already-captured page is still consumed once and can ride
@@ -7356,24 +7559,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // is nothing to attach, so the answer is never blocked. The captured DOM (if
       // any) arrives via onDomContextReceived → window.lastCapturedDOM, which we
       // re-read below — reusing the proven domContext seam.
-      // One-motion ⌘Y→Enter: if a manual capture is IN FLIGHT (⌘Y pressed a
-      // beat ago, /dom not yet delivered), wait for it — up to the desktop's
-      // own capture timeout — instead of racing past it. Delivery or the
-      // fallback notice clears the pending flag and ends the wait early.
-      const pendingAt = pendingPageCaptureAtRef.current;
-      if (pendingAt && Date.now() - pendingAt < 5000) {
-        const waitDeadline = Date.now() + 3000;
-        while (
-          pendingPageCaptureAtRef.current
-          && Date.now() < waitDeadline
-          && !(typeof (window as any).lastCapturedDOM === 'string' && (window as any).lastCapturedDOM.trim().length > 0)
-        ) {
-          await new Promise((r) => setTimeout(r, 100));
-        }
-      }
       const hasManualContext =
         typeof (window as any).lastCapturedDOM === 'string' &&
         (window as any).lastCapturedDOM.trim().length > 0;
+      const manualCaptureStillPending = pendingPageCaptureAtRef.current !== null;
       // Screenshot wins over AUTOMATIC page capture (2026-08-19): a screenshot
       // is the user deliberately pointing at something; the auto-attach is a
       // guess about the active browser tab. When both would ride the same
@@ -7382,7 +7571,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // so with screenshots attached, skip the auto request entirely. Manual
       // ⌘/Ctrl+Shift+Y captures are just as deliberate as a screenshot and
       // still attach alongside (hasManualContext path unchanged).
-      if (!hasManualContext && currentAttachments.length === 0) {
+      if (!hasManualContext && !manualCaptureStillPending && currentAttachments.length === 0) {
         try {
           await window.electronAPI.phoneMirrorRequestAutoContext?.();
         } catch {
@@ -10351,6 +10540,22 @@ Provide only the answer, nothing else.`;
                 </div>
               )}
 
+              {projectPicker && (
+                <BrowserProjectPanel
+                  project={projectPicker.project}
+                  selectedPaths={projectPicker.selectedPaths}
+                  busy={projectBusy}
+                  refreshAvailable={projectPicker.refreshAvailable}
+                  message={projectMessage}
+                  onSelectionChange={(selectedPaths) => {
+                    setProjectPicker((current) => current ? { ...current, selectedPaths } : current);
+                  }}
+                  onPreset={applyBrowserProjectPreset}
+                  onCapture={(refresh) => { void captureBrowserProject(refresh); }}
+                  onClose={() => setProjectPicker(null)}
+                />
+              )}
+
               {/*
                 System Audio / Screen Recording Warning Banner.
 
@@ -11372,6 +11577,26 @@ Provide only the answer, nothing else.`;
                     )}
 
                     <div className="w-px h-3 mx-1" style={appearance.dividerStyle} />
+
+                    <button
+                      type="button"
+                      data-project-scan="true"
+                      onClick={() => { void scanBrowserProject(); }}
+                      disabled={projectBusy}
+                      title={projectBusy ? t('Scanning browser project…') : t('Scan browser project')}
+                      aria-label={projectBusy ? t('Scanning browser project…') : t('Scan browser project')}
+                      className={`
+                        w-7 h-7 flex items-center justify-center rounded-lg
+                        interaction-base interaction-press
+                        overlay-icon-surface overlay-icon-surface-hover overlay-text-interactive
+                        disabled:cursor-wait disabled:opacity-50
+                      `}
+                      style={appearance.iconStyle}
+                    >
+                      {projectBusy
+                        ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        : <Code className="w-3.5 h-3.5" />}
+                    </button>
 
                     <div className="relative">
                       <button

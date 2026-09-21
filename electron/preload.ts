@@ -1246,6 +1246,14 @@ interface ElectronAPI {
   // because a subsequent question's first token has to wait for the prior
   // response to drain through the supersession check.
   cancelChatStream: () => void;
+  phoneMirrorDiscoverProject: (tabId?: number) => Promise<unknown>;
+  phoneMirrorCaptureProject: (request: {
+    workspaceId: string;
+    selectedPaths: string[];
+    refresh?: boolean;
+    tabId?: number;
+    connectionLease: string;
+  }) => Promise<unknown>;
   onDomContextReceived: (
     callback: (dom: string, meta?: DomCaptureMeta, envelope?: unknown) => void,
   ) => () => void;
@@ -1544,6 +1552,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   phoneMirrorArmExtension: () => ipcRenderer.invoke('phone-mirror:arm-extension'),
   phoneMirrorListTabs: () => ipcRenderer.invoke('phone-mirror:list-tabs'),
   phoneMirrorCaptureTab: (tabId: number) => ipcRenderer.invoke('phone-mirror:capture-tab', tabId),
+  phoneMirrorDiscoverProject: (tabId?: number) =>
+    ipcRenderer.invoke('phone-mirror:discover-project', tabId),
+  phoneMirrorCaptureProject: (request: {
+    workspaceId: string;
+    selectedPaths: string[];
+    refresh?: boolean;
+    tabId?: number;
+    connectionLease: string;
+  }) => ipcRenderer.invoke('phone-mirror:capture-project', request),
   phoneMirrorRequestAutoContext: () => ipcRenderer.invoke('phone-mirror:request-auto-context'),
   phoneMirrorPushScreenshot: (screenshotPath?: string) =>
     ipcRenderer.invoke('phone-mirror:push-screenshot', screenshotPath),

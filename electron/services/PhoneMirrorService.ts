@@ -78,6 +78,51 @@ export interface ExtensionTab {
   url: string;
 }
 
+export interface ExtensionProjectFile {
+  path: string;
+  language?: string;
+  charCount: number;
+  revision: string;
+  readable: boolean;
+  reason?: string;
+  changed?: boolean;
+}
+
+export interface ExtensionProjectDocumentTarget {
+  frameId: number;
+  documentId?: string;
+}
+
+export interface ExtensionProjectDiscovery {
+  workspaceId: string;
+  name: string;
+  provider: string;
+  files: ExtensionProjectFile[];
+  warnings: string[];
+  estimatedChars: number;
+}
+
+export interface ExtensionProjectDiscoveryResult {
+  ok: boolean;
+  reason?: string;
+  project?: ExtensionProjectDiscovery;
+  tabId?: number;
+  /** Opaque, short-lived binding to the exact browser connection that discovered the project. */
+  connectionLease?: string;
+  refreshAvailable?: boolean;
+  previousSelectedPaths?: string[];
+}
+
+export interface ExtensionCaptureResult {
+  ok: boolean;
+  reason?: string;
+  category?: string;
+  fileCount?: number;
+  omittedCount?: number;
+  truncatedCount?: number;
+  unchanged?: boolean;
+}
+
 interface PersistedMessage {
   id: string;
   role: 'user' | 'assistant';
@@ -108,6 +153,16 @@ const CAPTURE_TIMEOUT_MS = 2_500;
 // provider degrades to "no browser context" rather than hanging the answer.
 const AUTO_CONTEXT_AI_TIMEOUT_MS = 6_000;
 const LIST_TABS_TIMEOUT_MS = 1_500;
+const PROJECT_DISCOVERY_TIMEOUT_MS = 8_000;
+const PROJECT_CAPTURE_TIMEOUT_MS = 12_000;
+// Phone commands and ordinary extension control frames stay intentionally tiny.
+// Project discovery is the one exception: a bounded list of up to 300 files can
+// legitimately exceed 4 KiB even though it contains metadata only (never source
+// contents). The WebSocket transport and the message router both enforce this cap.
+const WS_CONTROL_MAX_BYTES = 4 * 1024;
+const PROJECT_DISCOVERY_WS_MAX_BYTES = 512 * 1024;
+const PROJECT_CONNECTION_LEASE_MS = 5 * 60_000;
+const MAX_PROJECT_CONNECTION_LEASES = 64;
 // Application-level keepalive cadence to extension clients (under Chrome's ~30s MV3
 // idle-kill). Each `ka` frame runs the SW onmessage handler → resets its idle timer.
 const EXT_KEEPALIVE_MS = 20_000;
@@ -184,10 +239,38 @@ export class PhoneMirrorService {
   // Timestamp the extension socket announced `hello` — the tie-break for picking a
   // target when no browser has reported activity yet (most-recently-connected wins).
   private extConnectedAt = new WeakMap<WebSocket, number>();
+  // Authentication establishes the socket role at the HTTP upgrade boundary.
+  // A phone-token socket must never gain extension capabilities by self-declaring
+  // `{role:'extension'}` in a later, unauthenticated hello frame.
+  private wsAuthRoles = new WeakMap<WebSocket, 'phone' | 'extension'>();
   // In-flight desktop→extension requests keyed by reqId, resolved by the
   // matching `capture-ack`/`tabs` control frame (or a timeout).
-  private pendingCaptures = new Map<string, { resolve: (r: { ok: boolean; reason?: string; category?: string }) => void; timer: ReturnType<typeof setTimeout> }>();
-  private pendingTabs = new Map<string, { resolve: (tabs: ExtensionTab[]) => void; timer: ReturnType<typeof setTimeout> }>();
+  private pendingCaptures = new Map<string, {
+    resolve: (r: ExtensionCaptureResult) => void;
+    timer: ReturnType<typeof setTimeout>;
+    timeoutMs: number;
+    client: WebSocket;
+  }>();
+  private pendingTabs = new Map<string, {
+    resolve: (tabs: ExtensionTab[]) => void;
+    timer: ReturnType<typeof setTimeout>;
+    client: WebSocket;
+  }>();
+  private pendingProjectDiscoveries = new Map<string, {
+    resolve: (result: ExtensionProjectDiscoveryResult) => void;
+    timer: ReturnType<typeof setTimeout>;
+    client: WebSocket;
+  }>();
+  // A browser tab id is only meaningful inside one browser instance. Discovery
+  // therefore returns an opaque lease that pins later overlay capture/refresh
+  // requests to the exact WebSocket that supplied the project metadata.
+  private projectConnectionLeases = new Map<string, {
+    client: WebSocket;
+    workspaceId: string;
+    tabId?: number;
+    ownerTarget: ExtensionProjectDocumentTarget;
+    expiresAt: number;
+  }>();
   // reqIds the desktop issued for capture-dom and is still waiting to receive over
   // /dom. The FIRST matching /dom POST consumes its reqId and delivers to the
   // overlay; a later/duplicate POST for the same reqId (a 2nd browser that also
@@ -522,11 +605,12 @@ export class PhoneMirrorService {
         this.openCaptureReqIds.delete(reqId);
         resolve(r);
       };
+      const timeoutMs = opts?.timeoutMs ?? PROJECT_CAPTURE_TIMEOUT_MS;
       const timer = setTimeout(() => {
         this.pendingCaptures.delete(reqId);
         settle({ ok: false, reason: 'timeout' });
-      }, opts?.timeoutMs ?? CAPTURE_TIMEOUT_MS);
-      this.pendingCaptures.set(reqId, { resolve: settle, timer });
+      }, timeoutMs);
+      this.pendingCaptures.set(reqId, { resolve: settle, timer, timeoutMs, client: target });
       try {
         target.send(
           JSON.stringify({ type: 'capture-dom', reqId, tabId: opts?.tabId }),
@@ -587,11 +671,12 @@ export class PhoneMirrorService {
             : { attached: false, reason: r.reason },
         );
       };
+      const timeoutMs = opts?.timeoutMs ?? defaultTimeout;
       const timer = setTimeout(() => {
         this.pendingCaptures.delete(reqId);
         settle({ ok: false, reason: 'timeout' });
-      }, opts?.timeoutMs ?? defaultTimeout);
-      this.pendingCaptures.set(reqId, { resolve: settle, timer });
+      }, timeoutMs);
+      this.pendingCaptures.set(reqId, { resolve: settle, timer, timeoutMs, client: target });
       try {
         target.send(
           JSON.stringify({
@@ -603,6 +688,79 @@ export class PhoneMirrorService {
             extraCategories: opts?.extraCategories,
           }),
         );
+      } catch (_) {
+        clearTimeout(timer);
+        this.pendingCaptures.delete(reqId);
+        settle({ ok: false, reason: 'send-failed' });
+      }
+    });
+  }
+
+  /** Read a browser IDE's already-exposed project structure for the overlay. */
+  discoverProject(opts?: { tabId?: number; timeoutMs?: number }): Promise<ExtensionProjectDiscoveryResult> {
+    const target = this.pickExtensionClient();
+    if (!target) return Promise.resolve({ ok: false, reason: 'no-extension' });
+    const reqId = generateToken();
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.pendingProjectDiscoveries.delete(reqId);
+        resolve({ ok: false, reason: 'timeout' });
+      }, opts?.timeoutMs ?? PROJECT_DISCOVERY_TIMEOUT_MS);
+      this.pendingProjectDiscoveries.set(reqId, { resolve, timer, client: target });
+      try {
+        target.send(JSON.stringify({ type: 'discover-project', reqId, tabId: opts?.tabId }));
+      } catch (_) {
+        clearTimeout(timer);
+        this.pendingProjectDiscoveries.delete(reqId);
+        resolve({ ok: false, reason: 'send-failed' });
+      }
+    });
+  }
+
+  /** Capture the overlay's project-file selection and deliver it through /dom. */
+  requestProjectCapture(opts: {
+    workspaceId: string;
+    selectedPaths: string[];
+    refresh?: boolean;
+    tabId?: number;
+    connectionLease: string;
+    timeoutMs?: number;
+  }): Promise<ExtensionCaptureResult> {
+    const lease = this.resolveProjectConnectionLease(
+      opts.connectionLease,
+      opts.workspaceId,
+      opts.tabId,
+    );
+    if (!lease) {
+      return Promise.resolve({
+        ok: false,
+        reason: 'project-connection-expired',
+      });
+    }
+    const target = lease.client;
+    const reqId = generateToken();
+    this.openCaptureReqIds.add(reqId);
+    return new Promise((resolve) => {
+      const settle = (result: ExtensionCaptureResult) => {
+        this.openCaptureReqIds.delete(reqId);
+        resolve(result);
+      };
+      const timeoutMs = opts.timeoutMs ?? PROJECT_CAPTURE_TIMEOUT_MS;
+      const timer = setTimeout(() => {
+        this.pendingCaptures.delete(reqId);
+        settle({ ok: false, reason: 'timeout' });
+      }, timeoutMs);
+      this.pendingCaptures.set(reqId, { resolve: settle, timer, timeoutMs, client: target });
+      try {
+        target.send(JSON.stringify({
+          type: 'capture-project',
+          reqId,
+          workspaceId: opts.workspaceId,
+          selectedPaths: opts.selectedPaths.slice(0, 300),
+          refresh: opts.refresh === true,
+          tabId: opts.tabId,
+          ownerTarget: lease.ownerTarget,
+        }));
       } catch (_) {
         clearTimeout(timer);
         this.pendingCaptures.delete(reqId);
@@ -624,7 +782,7 @@ export class PhoneMirrorService {
         this.pendingTabs.delete(reqId);
         resolve([]);
       }, timeoutMs ?? LIST_TABS_TIMEOUT_MS);
-      this.pendingTabs.set(reqId, { resolve, timer });
+      this.pendingTabs.set(reqId, { resolve, timer, client: target });
       try {
         target.send(JSON.stringify({ type: 'list-tabs', reqId }));
       } catch (_) {
@@ -656,6 +814,64 @@ export class PhoneMirrorService {
       })),
     );
     return open[idx] ?? null;
+  }
+
+  private pruneProjectConnectionLeases(now = Date.now()): void {
+    for (const [id, lease] of this.projectConnectionLeases) {
+      if (
+        lease.expiresAt <= now ||
+        lease.client.readyState !== WebSocket.OPEN ||
+        !this.extClients.has(lease.client)
+      ) {
+        this.projectConnectionLeases.delete(id);
+      }
+    }
+  }
+
+  private createProjectConnectionLease(
+    client: WebSocket,
+    workspaceId: string,
+    ownerTarget: ExtensionProjectDocumentTarget,
+    tabId?: number,
+  ): string {
+    const now = Date.now();
+    this.pruneProjectConnectionLeases(now);
+    while (this.projectConnectionLeases.size >= MAX_PROJECT_CONNECTION_LEASES) {
+      const oldest = this.projectConnectionLeases.keys().next().value as string | undefined;
+      if (!oldest) break;
+      this.projectConnectionLeases.delete(oldest);
+    }
+    const id = generateToken();
+    this.projectConnectionLeases.set(id, {
+      client,
+      workspaceId,
+      ownerTarget,
+      tabId,
+      expiresAt: now + PROJECT_CONNECTION_LEASE_MS,
+    });
+    return id;
+  }
+
+  private resolveProjectConnectionLease(
+    id: string,
+    workspaceId: string,
+    tabId?: number,
+  ): {
+    client: WebSocket;
+    workspaceId: string;
+    tabId?: number;
+    ownerTarget: ExtensionProjectDocumentTarget;
+    expiresAt: number;
+  } | null {
+    const now = Date.now();
+    this.pruneProjectConnectionLeases(now);
+    const lease = this.projectConnectionLeases.get(id);
+    if (!lease || lease.workspaceId !== workspaceId) return null;
+    if (tabId !== lease.tabId) return null;
+    // A successful use renews the short lease so the overlay's "Refresh changed"
+    // action can reuse the same browser while the picker remains open.
+    lease.expiresAt = now + PROJECT_CONNECTION_LEASE_MS;
+    return lease;
   }
 
   /** Release everyone parked in waitForExtension() (an extension just connected). */
@@ -736,9 +952,14 @@ export class PhoneMirrorService {
    * control frame (so the phone-command path is skipped).
    */
   private handleExtensionFrame(ws: WebSocket, msg: Record<string, unknown>): boolean {
+    const authenticatedAsExtension = this.wsAuthRoles.get(ws) === 'extension';
     switch (msg.type) {
       case 'hello':
         if (msg.role === 'extension') {
+          // The hello frame announces protocol intent; it does not grant the role.
+          // Only a socket authenticated with the extension token at upgrade time
+          // can join the extension client set.
+          if (!authenticatedAsExtension) return true;
           const now = Date.now();
           this.extClients.add(ws);
           this.extActiveAt.set(ws, now);
@@ -759,10 +980,15 @@ export class PhoneMirrorService {
         }
         return false;
       case 'active':
-        if (this.extClients.has(ws)) this.extActiveAt.set(ws, Date.now());
+        if (authenticatedAsExtension && this.extClients.has(ws)) {
+          this.extActiveAt.set(ws, Date.now());
+        }
         return true;
       case 'capture-ack': {
+        if (!authenticatedAsExtension || !this.extClients.has(ws)) return true;
         if (typeof msg.reqId !== 'string') return true;
+        const pending = this.pendingCaptures.get(msg.reqId);
+        if (!pending || pending.client !== ws) return true;
         this.extActiveAt.set(ws, Date.now());
         const status = msg.status;
         if (status === 'done' || status === 'error' || status === 'none') {
@@ -771,18 +997,25 @@ export class PhoneMirrorService {
           // auto-attach (no high-confidence coding page, or a sensitive page that
           // is deliberately not captured) — NOT an error. The caller proceeds
           // without browser context.
-          const pending = this.pendingCaptures.get(msg.reqId);
-          if (pending) {
-            clearTimeout(pending.timer);
-            this.pendingCaptures.delete(msg.reqId);
-            pending.resolve(
-              status === 'done'
-                ? { ok: true, category: typeof msg.category === 'string' ? msg.category : undefined }
-                : status === 'none'
-                  ? { ok: false, reason: 'none' }
-                  : { ok: false, reason: typeof msg.error === 'string' ? msg.error : 'error' },
-            );
-          }
+          clearTimeout(pending.timer);
+          this.pendingCaptures.delete(msg.reqId);
+          pending.resolve(
+            status === 'done'
+              ? {
+                  ok: true,
+                  category: typeof msg.category === 'string' ? msg.category.slice(0, 64) : undefined,
+                  fileCount: typeof msg.fileCount === 'number' && Number.isFinite(msg.fileCount)
+                    ? Math.max(0, Math.floor(msg.fileCount)) : undefined,
+                  omittedCount: typeof msg.omittedCount === 'number' && Number.isFinite(msg.omittedCount)
+                    ? Math.max(0, Math.floor(msg.omittedCount)) : undefined,
+                  truncatedCount: typeof msg.truncatedCount === 'number' && Number.isFinite(msg.truncatedCount)
+                    ? Math.max(0, Math.floor(msg.truncatedCount)) : undefined,
+                  unchanged: msg.unchanged === true,
+                }
+              : status === 'none'
+                ? { ok: false, reason: 'none' }
+                : { ok: false, reason: typeof msg.error === 'string' ? msg.error : 'error' },
+          );
         } else if (status === 'started' || status === 'posting') {
           // Progress: the extension is alive and actively working (injecting the
           // content script, extracting, POSTing). Extend the deadline once so a slow
@@ -790,25 +1023,115 @@ export class PhoneMirrorService {
           // timeout and fall back to a screenshot while a real capture is in flight.
           // This is what CONTRACT.md means by "`started` extends the desktop deadline".
           const reqId = msg.reqId;
-          const pending = this.pendingCaptures.get(reqId);
-          if (pending) {
-            clearTimeout(pending.timer);
-            const timer = setTimeout(() => {
-              // pending.resolve is the settle() closure from requestDomCapture — it
-              // clears openCaptureReqIds and resolves. Delete the in-flight entry too.
-              this.pendingCaptures.delete(reqId);
-              pending.resolve({ ok: false, reason: 'timeout' });
-            }, CAPTURE_TIMEOUT_MS);
-            (timer as any)?.unref?.();
-            pending.timer = timer;
-          }
+          clearTimeout(pending.timer);
+          const timer = setTimeout(() => {
+            // pending.resolve is the settle() closure from requestDomCapture — it
+            // clears openCaptureReqIds and resolves. Delete the in-flight entry too.
+            this.pendingCaptures.delete(reqId);
+            pending.resolve({ ok: false, reason: 'timeout' });
+          }, pending.timeoutMs);
+          (timer as any)?.unref?.();
+          pending.timer = timer;
         }
         return true;
       }
+      case 'project-discovery': {
+        if (!authenticatedAsExtension || !this.extClients.has(ws)) return true;
+        if (typeof msg.reqId !== 'string') return true;
+        const pending = this.pendingProjectDiscoveries.get(msg.reqId);
+        if (!pending || pending.client !== ws) return true;
+        clearTimeout(pending.timer);
+        this.pendingProjectDiscoveries.delete(msg.reqId);
+        if (msg.ok !== true || !msg.project || typeof msg.project !== 'object') {
+          pending.resolve({
+            ok: false,
+            reason: typeof msg.error === 'string' ? msg.error.slice(0, 500) : 'project-discovery-failed',
+          });
+          return true;
+        }
+        const raw = msg.project as Record<string, unknown>;
+        const files: ExtensionProjectFile[] = Array.isArray(raw.files)
+          ? (raw.files as unknown[]).slice(0, 300).flatMap((entry) => {
+              if (!entry || typeof entry !== 'object') return [];
+              const file = entry as Record<string, unknown>;
+              const path = typeof file.path === 'string' ? file.path.trim().slice(0, 512) : '';
+              if (!path) return [];
+              return [{
+                path,
+                language: typeof file.language === 'string' ? file.language.slice(0, 64) : undefined,
+                charCount: typeof file.charCount === 'number' && Number.isFinite(file.charCount)
+                  ? Math.max(0, Math.min(10_000_000, Math.floor(file.charCount))) : 0,
+                revision: typeof file.revision === 'string' ? file.revision.slice(0, 128) : '',
+                readable: file.readable === true,
+                reason: typeof file.reason === 'string' ? file.reason.slice(0, 500) : undefined,
+                changed: file.changed === true,
+              }];
+            })
+          : [];
+        const project: ExtensionProjectDiscovery = {
+          workspaceId: typeof raw.workspaceId === 'string' ? raw.workspaceId.slice(0, 512) : '',
+          name: typeof raw.name === 'string' ? raw.name.slice(0, 300) : 'Detected project',
+          provider: typeof raw.provider === 'string' ? raw.provider.slice(0, 100) : '',
+          files,
+          warnings: Array.isArray(raw.warnings)
+            ? (raw.warnings as unknown[]).filter((x): x is string => typeof x === 'string').slice(0, 20).map((x) => x.slice(0, 500))
+            : [],
+          estimatedChars: typeof raw.estimatedChars === 'number' && Number.isFinite(raw.estimatedChars)
+            ? Math.max(0, Math.min(100_000_000, Math.floor(raw.estimatedChars))) : 0,
+        };
+        if (!project.workspaceId || project.files.length === 0) {
+          pending.resolve({ ok: false, reason: 'project-discovery-returned-no-files' });
+          return true;
+        }
+        const tabId = typeof msg.tabId === 'number' && Number.isInteger(msg.tabId) && msg.tabId >= 0
+          ? msg.tabId : undefined;
+        const rawOwner = msg.ownerTarget && typeof msg.ownerTarget === 'object'
+          ? msg.ownerTarget as Record<string, unknown>
+          : null;
+        const ownerFrameId = rawOwner?.frameId;
+        const ownerDocumentId = rawOwner?.documentId;
+        const ownerTarget: ExtensionProjectDocumentTarget | null =
+          typeof ownerFrameId === 'number'
+          && Number.isInteger(ownerFrameId)
+          && ownerFrameId >= 0
+          && (ownerDocumentId === undefined
+            || (typeof ownerDocumentId === 'string'
+              && ownerDocumentId.length > 0
+              && ownerDocumentId.length <= 256))
+            ? {
+                frameId: ownerFrameId,
+                ...(typeof ownerDocumentId === 'string' ? { documentId: ownerDocumentId } : {}),
+              }
+            : null;
+        if (!ownerTarget) {
+          pending.resolve({ ok: false, reason: 'project-discovery-missing-owner' });
+          return true;
+        }
+        pending.resolve({
+          ok: true,
+          project,
+          tabId,
+          connectionLease: this.createProjectConnectionLease(
+            pending.client,
+            project.workspaceId,
+            ownerTarget,
+            tabId,
+          ),
+          refreshAvailable: msg.refreshAvailable === true,
+          previousSelectedPaths: Array.isArray(msg.previousSelectedPaths)
+            ? (msg.previousSelectedPaths as unknown[])
+                .filter((x): x is string => typeof x === 'string')
+                .slice(0, 300)
+                .map((x) => x.slice(0, 512))
+            : [],
+        });
+        return true;
+      }
       case 'tabs': {
+        if (!authenticatedAsExtension || !this.extClients.has(ws)) return true;
         if (typeof msg.reqId !== 'string') return true;
         const pending = this.pendingTabs.get(msg.reqId);
-        if (pending) {
+        if (pending && pending.client === ws) {
           clearTimeout(pending.timer);
           this.pendingTabs.delete(msg.reqId);
           const tabs = Array.isArray(msg.tabs)
@@ -928,7 +1251,13 @@ export class PhoneMirrorService {
     // "loopback only" vs "(LAN)" in the Enable status row.
     this.bindAddress = host;
 
-    const wss = new WebSocketServer({ noServer: true });
+    const wss = new WebSocketServer({
+      noServer: true,
+      // A project-discovery frame is metadata-only but can contain up to 300
+      // bounded path records. Keep the transport ceiling aligned with the
+      // application-level cap below so `ws` rejects anything larger before parse.
+      maxPayload: PROJECT_DISCOVERY_WS_MAX_BYTES,
+    });
     this.wss = wss;
     server.on('upgrade', (req, socket, head) =>
       this.handleUpgrade(req as http.IncomingMessage, socket as any, head),
@@ -986,6 +1315,12 @@ export class PhoneMirrorService {
       resolve([]);
     }
     this.pendingTabs.clear();
+    for (const { resolve, timer } of this.pendingProjectDiscoveries.values()) {
+      clearTimeout(timer);
+      resolve({ ok: false, reason: 'shutting-down' });
+    }
+    this.pendingProjectDiscoveries.clear();
+    this.projectConnectionLeases.clear();
     if (wss) {
       for (const c of wss.clients) {
         try {
@@ -1320,14 +1655,18 @@ export class PhoneMirrorService {
       return;
     }
 
-    // The WS carries both client roles: phones authenticate with the phone token,
-    // the extension with the loopback extension token. Accept EITHER (constant-time
-    // against both; role is later self-declared via the `hello` frame).
+    // The WS carries two authenticated roles. Evaluate both secrets independently
+    // (without short-circuiting), then bind the resulting role to the upgraded
+    // socket. A later `hello` announces protocol intent but cannot change this role.
     const provided = url.searchParams.get('t') || '';
-    const wsTokenOk =
-      (this.token && timingSafeEqualStr(provided, this.token)) ||
-      (this.extToken && timingSafeEqualStr(provided, this.extToken));
-    if (!wsTokenOk) {
+    const phoneTokenOk = !!this.token && timingSafeEqualStr(provided, this.token);
+    const extensionTokenOk = !!this.extToken && timingSafeEqualStr(provided, this.extToken);
+    const authRole: 'phone' | 'extension' | null = extensionTokenOk
+      ? 'extension'
+      : phoneTokenOk
+        ? 'phone'
+        : null;
+    if (!authRole) {
       // Custom 4401 close code signals "auth failed" to the client (won't reconnect).
       socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
       socket.destroy();
@@ -1348,28 +1687,34 @@ export class PhoneMirrorService {
     wss.handleUpgrade(req, socket, head, (ws) => {
       upgraded = true;
       clearTimeout(handshakeTimer);
+      this.wsAuthRoles.set(ws, authRole);
       wss.emit('connection', ws, req);
     });
   }
 
   private handleWsConnection(ws: WebSocket, req: http.IncomingMessage): void {
-    // Send recent history immediately so a phone joining mid-session has context.
-    try {
-      ws.send(JSON.stringify({ type: 'history', messages: this.history.slice(-HISTORY_LIMIT) }));
-      // Replay in-flight partial as a SINGLE token frame containing the full
-      // accumulated content so far.  Previously this sent one frame per token
-      // (up to 500+ frames for a long response) — now it's always 1 frame.
-      if (this.livePartial && this.livePartial.content) {
-        ws.send(
-          JSON.stringify({
-            type: 'token',
-            streamId: this.livePartial.streamId,
-            token: this.livePartial.content,
-          }),
-        );
+    const authRole = this.wsAuthRoles.get(ws);
+    // Send recent history only to a phone-authenticated socket. Extension sockets
+    // are a separate capability channel and must never receive phone chat history,
+    // including during the interval before their hello frame arrives.
+    if (authRole === 'phone') {
+      try {
+        ws.send(JSON.stringify({ type: 'history', messages: this.history.slice(-HISTORY_LIMIT) }));
+        // Replay in-flight partial as a SINGLE token frame containing the full
+        // accumulated content so far.  Previously this sent one frame per token
+        // (up to 500+ frames for a long response) — now it's always 1 frame.
+        if (this.livePartial && this.livePartial.content) {
+          ws.send(
+            JSON.stringify({
+              type: 'token',
+              streamId: this.livePartial.streamId,
+              token: this.livePartial.content,
+            }),
+          );
+        }
+      } catch (_) {
+        /* client may be gone already */
       }
-    } catch (_) {
-      /* client may be gone already */
     }
 
     // Keepalive heartbeat. Drop dead clients within ~45s.
@@ -1394,6 +1739,9 @@ export class PhoneMirrorService {
       clearInterval(ping);
       // Drop any extension bookkeeping for this socket (no-op for phones).
       const wasExtension = this.extClients.delete(ws);
+      for (const [id, lease] of this.projectConnectionLeases) {
+        if (lease.client === ws) this.projectConnectionLeases.delete(id);
+      }
       // Stop the keepalive once the last extension is gone (it restarts on the next
       // `hello`). With no extension connected, any in-flight capture can't be served
       // here — let it time out to the screenshot fallback as designed.
@@ -1408,16 +1756,35 @@ export class PhoneMirrorService {
     // screenshot) or a companion extension (hello/capture-ack/tabs/active).
     ws.on('message', (data: any) => {
       try {
-        const raw = typeof data === 'string' ? data : (data as Buffer).toString('utf8');
-        if (raw.length > 4096) return; // guard oversized payloads
+        const raw = typeof data === 'string'
+          ? data
+          : Array.isArray(data)
+            ? Buffer.concat(data as Buffer[]).toString('utf8')
+            : data instanceof ArrayBuffer
+              ? Buffer.from(data).toString('utf8')
+              : Buffer.from(data as Buffer).toString('utf8');
+        const rawBytes = Buffer.byteLength(raw, 'utf8');
+        const canSendProjectDiscovery =
+          authRole === 'extension' && this.extClients.has(ws);
+        const maxBytes = canSendProjectDiscovery
+          ? PROJECT_DISCOVERY_WS_MAX_BYTES
+          : WS_CONTROL_MAX_BYTES;
+        if (rawBytes > maxBytes) return;
         const cmd = JSON.parse(raw) as unknown;
         if (!cmd || typeof cmd !== 'object') return;
         const c = cmd as Record<string, unknown>;
+        // Only the metadata-only project-discovery response may use the larger
+        // extension frame budget. Every other frame retains the legacy 4 KiB cap.
+        if (rawBytes > WS_CONTROL_MAX_BYTES && c.type !== 'project-discovery') return;
 
         // Companion-extension control frames are handled separately and must not
         // fall through to the phone-command path. handleExtensionFrame returns
         // true when it consumed the frame.
         if (this.handleExtensionFrame(ws, c)) return;
+
+        // Extension-token sockets are control-only. Conversely, phone-token
+        // sockets cannot promote themselves into the extension control path.
+        if (authRole !== 'phone') return;
 
         let validated: PhoneCommand | null = null;
         if (
@@ -1446,7 +1813,7 @@ export class PhoneMirrorService {
       }
     });
 
-    console.log(`[PhoneMirror] phone connected from ${req.socket.remoteAddress}`);
+    console.log(`[PhoneMirror] ${authRole === 'extension' ? 'extension' : 'phone'} socket connected from ${req.socket.remoteAddress}`);
     this.emitStatusClientCount();
   }
 
@@ -1460,7 +1827,7 @@ export class PhoneMirrorService {
       if (client.readyState !== WebSocket.OPEN) continue;
       // Phone StreamEvents (history/token/done/chat) are for phones only — never
       // leak them to a companion extension socket.
-      if (this.extClients.has(client)) continue;
+      if (this.wsAuthRoles.get(client) === 'extension') continue;
       // Backpressure guard: skip if buffered amount has run away (slow client).
       if ((client as any).bufferedAmount > 1_000_000) continue;
       try {

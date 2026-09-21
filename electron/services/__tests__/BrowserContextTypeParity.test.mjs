@@ -33,9 +33,9 @@ function extractUnion(source, typeName) {
   return [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]);
 }
 
-function extractEnvelopeFields(source) {
-  const start = source.indexOf('interface ContextEnvelope');
-  assert.ok(start >= 0, 'ContextEnvelope interface not found');
+function extractInterfaceFields(source, interfaceName) {
+  const start = source.indexOf(`interface ${interfaceName}`);
+  assert.ok(start >= 0, `${interfaceName} interface not found`);
   const braceStart = source.indexOf('{', start);
   let depth = 0;
   const fields = [];
@@ -60,13 +60,14 @@ function extractEnvelopeFields(source) {
 
 const UNIONS = {
   BrowserContextCategory: [
-    'coding_problem', 'coding_editor', 'interview_assessment', 'developer_docs',
+    'coding_problem', 'coding_editor', 'interview_assessment', 'coding_project', 'developer_docs',
     'job_description', 'google_docs_visible', 'notes', 'article', 'email', 'chat',
     'banking', 'auth', 'unknown',
   ],
   AutoPolicy: ['auto', 'auto_if_high_confidence', 'ask', 'manual', 'blocked'],
   BrowserContextSensitivity: ['low', 'medium', 'high', 'critical'],
   ClassificationConfidence: ['high', 'medium', 'low'],
+  ProjectFileStatus: ['included', 'unreadable', 'ignored', 'truncated', 'unchanged', 'removed'],
   CaptureMode: ['auto', 'manual', 'selected_text', 'screenshot_fallback'],
   ExtractionSource: [
     'platform-selector', 'embedded-state', 'editor-dom', 'selection',
@@ -77,6 +78,16 @@ const UNIONS = {
 const ENVELOPE_FIELDS = [
   'envelopeVersion', 'contextId', 'source', 'captureMode', 'category',
   'sensitivity', 'confidence', 'meta', 'payload',
+];
+
+const PROJECT_FILE_FIELDS = [
+  'path', 'language', 'content', 'revision', 'charCount', 'status', 'reason',
+];
+
+const CODING_PROJECT_FIELDS = [
+  'workspaceId', 'workspaceName', 'provider', 'problemStatement', 'files',
+  'omitted', 'selectedPaths', 'capturedFileCount', 'totalFileCount',
+  'budgetChars', 'usedChars', 'refreshMode', 'baseContextId',
 ];
 
 describe('Smart Browser Context — desktop type parity across 3 copies', () => {
@@ -99,10 +110,25 @@ describe('Smart Browser Context — desktop type parity across 3 copies', () => 
   test('ContextEnvelope top-level fields match in all 3 copies', () => {
     for (const [where, src] of Object.entries(sources)) {
       assert.deepEqual(
-        extractEnvelopeFields(src),
+        extractInterfaceFields(src, 'ContextEnvelope'),
         ENVELOPE_FIELDS,
         `ContextEnvelope fields drifted in ${where}`,
       );
     }
   });
+
+  for (const [interfaceName, expected] of Object.entries({
+    ProjectFileContext: PROJECT_FILE_FIELDS,
+    CodingProjectPayload: CODING_PROJECT_FIELDS,
+  })) {
+    test(`${interfaceName} top-level fields match in all 3 copies`, () => {
+      for (const [where, src] of Object.entries(sources)) {
+        assert.deepEqual(
+          extractInterfaceFields(src, interfaceName),
+          expected,
+          `${interfaceName} fields drifted in ${where}`,
+        );
+      }
+    });
+  }
 });
