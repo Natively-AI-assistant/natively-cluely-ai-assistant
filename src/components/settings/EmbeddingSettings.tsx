@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, Check, ChevronDown, Download, ExternalLink, FolderOpen, HardDrive, KeyRound, Loader2, Monitor, Search, Server, Trash2, X, Zap } from 'lucide-react';
+import { AlertCircle, Check, ChevronDown, Download, ExternalLink, FolderOpen, HardDrive, KeyRound, Loader2, Monitor, Search, Server, Trash2, X } from 'lucide-react';
 import { useT } from '../../i18n';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { AIP_ACTIVE_SELECT_CONTAINER, AIP_CSS, AipBadge, AipModelList, AipProviderMark, type AipTone } from './AIProvidersSettings';
@@ -1287,14 +1287,10 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                                         type="button"
                                         className="aip-btn"
                                         data-size="sm"
-                                        data-variant="ghost"
                                         disabled={locked}
                                         onClick={() => void testLocalModel(m.id)}
                                         title={t('Measure how long one embedding takes on this device')}
                                     >
-                                        {testingLocalModelId === m.id
-                                            ? <Loader2 size={12} className="animate-spin" aria-hidden="true" />
-                                            : <Zap size={12} strokeWidth={1.75} aria-hidden="true" />}
                                         <span>{testingLocalModelId === m.id ? t('Testing…') : t('Test')}</span>
                                     </button>
                                 )}
