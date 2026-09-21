@@ -1239,7 +1239,6 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                         />
                         <span className="text-xs font-semibold text-white truncate">{m.name}</span>
                         {m.bundled && <AipBadge tone="neutral" label={t('Included')} />}
-                        {m.recommended && <AipBadge tone="info" label={t('Recommended')} />}
                         {isSelected && <AipBadge tone="ok" label={t('In use')} />}
                         {installed && !isSelected && !m.bundled && <AipBadge tone="neutral" label={t('Downloaded')} />}
                     </div>

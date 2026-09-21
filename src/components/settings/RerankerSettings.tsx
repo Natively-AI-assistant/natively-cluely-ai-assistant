@@ -1154,7 +1154,6 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                             }}
                         />
                         <span className="text-xs font-semibold text-white truncate">{m.name}</span>
-                        {m.recommended && m.supported && <AipBadge tone="info" label={t('Recommended')} />}
                         {m.selected && <AipBadge tone="ok" label={t('In use')} />}
                         {installed && !m.selected && (
                             <AipBadge
