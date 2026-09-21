@@ -225,7 +225,7 @@ const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className
             </button>
             {error && (
                 <span
-                    className="text-[11px] text-red-300 bg-red-950/60 border border-red-500/30 rounded-lg px-2.5 py-1 max-w-[280px] leading-tight text-center"
+                    className="text-[11px] text-red-300 bg-red-950/95 backdrop-blur-sm border border-red-500/30 rounded-lg px-2.5 py-1 max-w-[280px] leading-tight text-center"
                     title={error}
                 >
                     {error}
