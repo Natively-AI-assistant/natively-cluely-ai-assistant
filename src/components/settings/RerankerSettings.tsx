@@ -1394,8 +1394,11 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                 only run hosted. It runs locally now — Core implements the
                 listwise protocol and the catalogue entry downloads the projector
                 — so the hosted card is the no-download, no-warm-up route to the
-                same model, not the only one. */}
-            {hostedProviders.map(p => {
+                same model, not the only one.
+                Natively gets no card (owner decision, 2026-09-22): the server
+                pins its model and the key comes from the Natively plan, so there
+                is nothing to configure. It stays selectable in Active Reranker. */}
+            {hostedProviders.filter(p => p.id !== 'natively').map(p => {
                 const isActive = status.effective.kind === p.id;
                 const isSelected = status.provider === p.id;
                 // status.hasApiKey is the presence flag for the SELECTED
