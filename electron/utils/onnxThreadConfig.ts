@@ -531,6 +531,16 @@ export function getMinFreeGBForOnnxSession(): number {
     return readMinFreeGB();
 }
 
+/**
+ * True when a new high-priority (STT channel) session of `weight` would have to
+ * WAIT right now. Read-only: it never changes admission. Lets the model
+ * preloader see that a live channel is starving so it can give back a worker
+ * nobody has claimed (see ModelPreloader.yieldUnclaimedWorkerIfStarving).
+ */
+export function isHighPriorityOnnxBudgetExhausted(weight: number = 1): boolean {
+    return !canAcquireNow('high', weight);
+}
+
 /** Returns the current max-concurrent cap (live, env-aware). */
 export function getHighPriorityOnnxBudget(): number {
     return readHighPriorityBudget();
