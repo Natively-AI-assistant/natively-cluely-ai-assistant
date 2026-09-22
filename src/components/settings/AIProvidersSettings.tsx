@@ -2571,6 +2571,17 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     const [fastResponseMode, setFastResponseMode] = useState(false);
     const [credentialsLoaded, setCredentialsLoaded] = useState(false);
     const canUseFastMode = !!(hasStoredKey.groq || hasStoredKey.natively || (codexCliConfig.enabled && codexOauthStatus.signedIn));
+    // Mirror of LLMHelper's `fastModeApplies` (2026-09-22): the runtime routes
+    // through fast mode ONLY when the active model is itself a Groq or Natively
+    // model, or Codex CLI is signed in — a Groq key with, say, an OpenAI model
+    // selected leaves the switch on and silently ignored. The switch's
+    // availability (canUseFastMode) is about KEYS; this is about the MODEL, and
+    // it is what the inline hint below tells the user.
+    const fastModeAppliesToActiveModel = !!(
+        (codexCliConfig.enabled && codexOauthStatus.signedIn) ||
+        defaultModel === 'natively' ||
+        /^(?:llama-|mixtral-|gemma-|meta-llama\/|qwen\/|qwen-|openai\/gpt-oss-|groq\/)/.test(defaultModel)
+    ) && !defaultModel.startsWith('codex-cli');
 
     // --- Dynamic Model Discovery ---
     const [preferredModels, setPreferredModels] = useState<Record<string, string>>({});
@@ -4242,6 +4253,9 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         <p className="text-[10px] aip-muted mt-0.5">{t('Uses the fastest available provider instead of your selected model.')}</p>
                         {!canUseFastMode && (
                             <p className="text-xs aip-warn-fg mt-0.5 font-medium">{t('Requires Groq, Natively API, or Codex CLI to be configured.')}</p>
+                        )}
+                        {canUseFastMode && fastResponseMode && !fastModeAppliesToActiveModel && (
+                            <p className="text-xs aip-warn-fg mt-0.5 font-medium">{t('Not applied to the current Active Model — pick a Groq or Natively model (or sign in to Codex CLI) for this to take effect.')}</p>
                         )}
                     </div>
                     {/* aria-disabled, not disabled: the onClick guard below is the
