@@ -5,7 +5,7 @@ import { resolveV2SystemPrompt, v2TierForPromptTier } from "./promptSystemV2";
 import { composeWtaSystemPrompt } from "./wtaSystemPrompt";
 import { estimateTokens } from "./modelCapabilities";
 import { TemporalContext } from "./TemporalContextBuilder";
-import { IntentResult } from "./IntentClassifier";
+import type { IntentResult } from './PlannerDecision';
 import { ScreenContext } from "../services/screen/ScreenContextService";
 import { PromptAssembler, escapeUserContent, INJECTION_REDACTION_MESSAGE, TRUNCATION_SUFFIX } from "../services/context/PromptAssembler";
 import { isIntelligenceFlagEnabled } from "../intelligence/intelligenceFlags";
@@ -14,6 +14,7 @@ import { assemblePromptV2 } from "../intelligence/PromptAssemblerV2";
 import { beginTrace, commitTrace } from "../intelligence/IntelligenceTrace";
 import { DOM_CONTEXT_MAX_CHARS } from "../config/constants";
 import { checkAnswerForCodeBugs } from "./CodeSanityCheck";
+import { providerRejectionUserMessage } from "./providerErrorClassifier";
 import { formatAnswerPlanForPrompt, isCodingAnswerType } from "./AnswerPlanner";
 import { resolveCodingPromptSignals, isDeicticAsk, isPromotedScreenCodingTurn } from "./codingPromptSignals";
 import type { AnswerPlan, AnswerType } from "./AnswerPlanner";
@@ -312,12 +313,11 @@ ${promptInstruction.trim()}
                 : undefined;
 
             const intentContextParts = [];
-            if (intentResult) {
-                intentContextParts.push(`<intent_and_shape>
-DETECTED INTENT: ${intentResult.intent}
-ANSWER SHAPE: ${intentResult.answerShape}
-</intent_and_shape>`);
-            }
+            // <intent_and_shape> removed 2026-09-05. It only ever entered the v2/v1
+            // carriers, both discarded whenever V3 composes the turn (default ON),
+            // so the model never saw it on the live path. `intentResult` stays in
+            // the signature for callers; it is not read here.
+            void intentResult;
             if (answerPlan) {
                 intentContextParts.push(formatAnswerPlanForPrompt(answerPlan, isCodeVerificationEnabled()));
             }
@@ -492,7 +492,49 @@ The user triggered this action with a coding problem on screen and NO new questi
                     }
                     if (referenceFilesAllowed) {
                         const _cog = requestSnapshot?.contextOsGeneration as import('../intelligence/context-os').ContextOsGenerationContext | undefined;
-                        const governedWtaTurn = Boolean(_cog?.govern && forceDocumentGrounding && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled'));
+                        // `!v3OwnedTurn` (T3-minimal, 2026-08-28). This is the
+                        // in-file copy of the gate at LLMHelper.ts:6656, and it
+                        // was the ONLY copy missing that term — a duplicated-
+                        // logic drift, not a design decision.
+                        //
+                        // When V3 composes the turn it has already run its own
+                        // governed retrieval and produced `v3Prompt`. Letting
+                        // the legacy Context OS pack ALSO govern splices two
+                        // governance layers into one turn: the pack resolves
+                        // against reference files only (EvidenceResolver.ts:326),
+                        // so an "introduce yourself" / "what are your AI
+                        // projects" question — answerable from the profile, and
+                        // answered correctly when typed into manual chat —
+                        // resolves `refuse_insufficient_evidence`, the block
+                        // below blanks `typedCandidateProfile`, and the canned
+                        // refusal hard-returns at :806 WITHOUT EVER CALLING THE
+                        // MODEL. V3's composed prompt, not consulted until
+                        // :1008, is discarded unread.
+                        //
+                        // Manual chat has always been protected: it passes
+                        // `{ v3Owned: true }` (ipcHandlers.ts:1473) one layer
+                        // down for exactly this reason. This is the same
+                        // protection, at the layer that actually needed it.
+                        //
+                        // The condition lives in ONE place now
+                        // (context-os/wtaGovernanceGate.ts). It was written out
+                        // three times before, and the copy that drifted is the
+                        // whole defect.
+                        const { wtaGovernanceDecision } = require('../intelligence/context-os/wtaGovernanceGate') as typeof import('../intelligence/context-os/wtaGovernanceGate');
+                        const _gate = wtaGovernanceDecision({
+                            govern: Boolean(_cog?.govern),
+                            v3PromptPresent: Boolean((requestSnapshot as any)?.v3Prompt),
+                            forceDocumentGrounding: Boolean(forceDocumentGrounding),
+                            evidencePackFlagEnabled: isIntelligenceFlagEnabled('contextOsEvidencePackEnabled'),
+                            yieldToV3FlagEnabled: isIntelligenceFlagEnabled('wtaGovernanceYieldsToV3'),
+                        });
+                        const governedWtaTurn = _gate.resolvePack;
+                        if (_gate.yieldedToV3) {
+                            console.log('[WhatToAnswerLLM] Context OS governance yielded to the V3-composed turn', {
+                                turnId: _cog?.contract?.turnId,
+                                reason: 'v3_owned_turn',
+                            });
+                        }
                         if (governedWtaTurn) {
                             const activeMode = modesManager.getActiveMode?.();
                             if (!activeMode || !modesManager.getReferenceFiles || !modesManager.retrieveHybridRaw) {
@@ -774,26 +816,52 @@ The user triggered this action with a coding problem on screen and NO new questi
             try {
                 const _cog = requestSnapshot?.contextOsGeneration as import('../intelligence/context-os').ContextOsGenerationContext | undefined;
                 const { isIntelligenceFlagEnabled } = require('../intelligence/intelligenceFlags');
-                if (_cog && _cog.govern && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')) {
+                // The SECOND copy of the gate, and the one that actually
+                // refuses (T3-minimal, 2026-08-28). Guarding only the resolver
+                // gate above is not enough: this block does not test
+                // `forceDocumentGrounding` or `governedWtaTurn` at all, and its
+                // pack falls back to `_cog.evidencePack` — supplied by the
+                // caller — so a V3 turn whose resolution was skipped above
+                // would still reach `refuse_insufficient_evidence` below and
+                // hard-return before any model call.
+                //
+                // Same shared decision as the resolver gate — one function, so
+                // these two can no longer drift apart the way this one drifted
+                // from LLMHelper's.
+                //
+                // Downstream is already protected: `_wtaRoute` sets
+                // `v3Owned: true` at :1081 and LLMHelper's gate has carried
+                // `!v3OwnedTurn` since it was written. This closes the last
+                // unguarded position.
+                const { wtaGovernanceDecision } = require('../intelligence/context-os/wtaGovernanceGate') as typeof import('../intelligence/context-os/wtaGovernanceGate');
+                // `forceDocumentGrounding` is deliberately not passed: it is
+                // block-scoped to the retrieval region above and out of scope
+                // here, and `renderPack` does not consult it.
+                const _renderGate = wtaGovernanceDecision({
+                    govern: Boolean(_cog?.govern),
+                    v3PromptPresent: Boolean((requestSnapshot as any)?.v3Prompt),
+                    evidencePackFlagEnabled: isIntelligenceFlagEnabled('contextOsEvidencePackEnabled'),
+                    yieldToV3FlagEnabled: isIntelligenceFlagEnabled('wtaGovernanceYieldsToV3'),
+                });
+                if (_cog && _renderGate.renderPack) {
                     const { buildInsufficientPropertyAnswer, renderGoverningFactualBlock } = require('../intelligence/context-os') as typeof import('../intelligence/context-os');
                     const pack = governedEvidencePack ?? _cog.evidencePack;
                     if (!pack) throw new Error('governed WTA turn missing canonical EvidencePack');
-                    // Screenshot outranks a TEXT-evidence decline (2026-08-19):
-                    // refuse/clarify here is a verdict about the text universe
-                    // only — with user-attached pixels it would silently drop
-                    // the screenshot (manual chat's clarify short-circuit is
-                    // already image-gated; this is the WTA twin). Fall through
-                    // WITHOUT rendering the declining pack: legacy composition
-                    // + the vision instruction answer from the screenshot,
-                    // while the profile stays suppressed (governed turn) and
-                    // no forbidden text source is added back.
+                    // Current-screen evidence outranks a TEXT-evidence decline
+                    // (2026-08-19/29): refuse/clarify here is a verdict about the
+                    // other text universe only. User-attached pixels, browser
+                    // DOM, or screen OCR must all fall through WITHOUT rendering
+                    // the declining pack; the screen instruction then answers
+                    // from the active visual channel while the profile stays
+                    // suppressed and no forbidden text source is added back.
                     const { declineYieldsToAttachedImages } = require('../intelligence/context-os') as typeof import('../intelligence/context-os');
                     const _declineYields = declineYieldsToAttachedImages({
                         answerPolicy: pack.answerPolicy,
                         hasAttachedImages,
+                        hasScreenText,
                     });
                     if (_declineYields) {
-                        console.log('[CONTEXT-OS] text-evidence decline yields to attached screenshot(s) — answering from pixels');
+                        console.log('[CONTEXT-OS] text-evidence decline yields to current-screen context — answering from visual evidence');
                     } else {
                     if (pack.answerPolicy === 'ask_clarification') {
                         // contract.reason is a developer diagnostic (e.g. "sourceAuthority=
@@ -819,7 +887,7 @@ The user triggered this action with a coding problem on screen and NO new questi
                     // retrieval pronouns; it never enters the provider packet as facts.
                     if (_cog.contract.sourceOwner === 'reference_files') transcriptForPrompt = '';
                     (_cog as any).evidencePack = pack;
-                    } // end !_declineYields — image-exempted turns skip decline AND pack rendering
+                    } // end !_declineYields — visual-context turns skip decline AND pack rendering
                 }
             } catch (cogErr: any) {
                 if (governedEvidenceResolutionStarted) throw cogErr;
@@ -985,6 +1053,11 @@ The user triggered this action with a coding problem on screen and NO new questi
                 ? {
                     answerType: answerPlan?.answerType,
                     contextOsGeneration: governedWtaContextOs,
+                    // Preserve the request-scoped visual channel through the
+                    // LLMHelper governance and final-prompt decline gates. DOM
+                    // and OCR turns have no image path, so image-only routing
+                    // metadata would re-refuse after WTA already yielded.
+                    hasScreenText,
                     // Grounding-campaign3 (2026-07-23): thread the t0 mode pin so
                     // LLMHelper._streamChatInner's always-on document-grounded
                     // retrieval reads the SAME mode the request was planned
@@ -994,6 +1067,7 @@ The user triggered this action with a coding problem on screen and NO new questi
                 }
                 : {
                     answerType: answerPlan?.answerType,
+                    hasScreenText,
                     pinnedModeId: requestSnapshot?.modeUniqueId ?? null,
                 };
             // CONTEXT INTELLIGENCE V3 (Phase 6) — prompt substitution, transport intact.
@@ -1098,6 +1172,15 @@ The user triggered this action with a coding problem on screen and NO new questi
             // fixes that and additionally checks arity and order against the real
             // signature — which an `as const` tuple silently did not.
             const _wtaArgs: Parameters<LLMHelper['streamChat']> = [_wtaUserMessage, imagePaths, undefined, _wtaSystemPrompt, true, true, packetScopes, abortSignal, wtaThinkingBudget, _wtaRoute];
+            // Hand this turn's fully-composed answer call to LLMHelper so the
+            // post-answer repair passes can reuse it. Because positions 5 and 6
+            // are both `true`, everything the answer knows — transcript,
+            // screenshot, reference files, realtime prompt, mode prompt,
+            // evidence pack — is already inside _wtaUserMessage/_wtaSystemPrompt
+            // rather than injected downstream, so a repair that replays this
+            // tuple sees the same turn at no retrieval cost. Keyed by this
+            // turn's abort signal so a later turn cannot inherit it.
+            this.llmHelper.rememberAnswerCall?.(abortSignal, _wtaArgs);
             const _wtaStream = typeof (this.llmHelper as any).streamChatWithOutcome === 'function'
                 ? (this.llmHelper as any).streamChatWithOutcome(..._wtaArgs)
                 : { stream: (this.llmHelper as any).streamChat(..._wtaArgs), outcome: { truncated: false } };
@@ -1182,12 +1265,21 @@ The user triggered this action with a coding problem on screen and NO new questi
             // support. Surface an actionable message for provider failures.
             const msg = String(error?.message ?? error ?? '').toLowerCase();
             const isProviderFailure = /\b(401|403|429)\b|api key|unauthor|forbidden|quota|rate.?limit|billing|exhausted|permission/.test(msg);
-            if (isProviderFailure) {
+            // A permanent rejection ("The '<model>' model is not supported when
+            // using Codex with a ChatGPT account", issue #543) is not retryable:
+            // the engine's regeneration would replay the same refused call and
+            // then say "press again". The provider's explanation is the answer.
+            const rejection = isProviderFailure ? null : providerRejectionUserMessage(error);
+            if (rejection) {
+                yield rejection;
+            } else if (isProviderFailure) {
                 yield "I couldn't reach the AI provider — this looks like an API key or rate-limit issue. Check your API keys / plan in Settings and try again.";
             } else {
-                // W6b: topic-aware graceful retry instead of the fixed canned line.
-                const { buildGracefulRetry } = require('./manualProfileIntelligence') as typeof import('./manualProfileIntelligence');
-                yield buildGracefulRetry(cleanedTranscript.split('\n').pop() || '');
+                // ALWAYS ANSWER (2026-09-07): yield NOTHING. The engine treats an
+                // empty stream as "regenerate once, then the honest
+                // buildGracefulRetry line". Yielding the line from here made it
+                // the answer and skipped the retry.
+                console.warn('[WhatToAnswerLLM] stream failed without a provider signal — leaving the answer empty so the engine retries');
             }
         }
     }

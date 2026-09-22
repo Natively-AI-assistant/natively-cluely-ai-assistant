@@ -1,0 +1,340 @@
+{
+ "blind_id": "S-2d571a3f",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 60206,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 41799,
+  "candidatesTokenCount": 2275,
+  "totalTokenCount": 51485,
+  "cachedContentTokenCount": 24521,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 41799
+   }
+  ],
+  "cacheTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 24521
+   }
+  ],
+  "thoughtsTokenCount": 7411,
+  "serviceTier": "standard"
+ },
+ "fact_count": 67,
+ "evaluation": {
+  "factual_accuracy": 6,
+  "important_information_retention": 10,
+  "hallucination_control": 8,
+  "action_item_retention": 10,
+  "decision_retention": 8,
+  "speaker_attribution": 9,
+  "numeric_accuracy": 8,
+  "entity_retention": 9,
+  "timeline_accuracy": 7,
+  "conclusion_accuracy": 6,
+  "structure": 5,
+  "conciseness": 2,
+  "readability": 4,
+  "overall_summary_quality": 5,
+  "critical_errors": [
+   "Listing superseded decisions (October 15 go-live) alongside the final decision (August 16 go-live) in the Decisions section.",
+   "Listing resolved questions (Zendesk plan, Queuewise end date) as open questions or inferred action items despite them being definitively answered during the call."
+  ],
+  "missing_important_information": [],
+  "hallucinated_information": [
+   "Inferred action item: 'The technical stack review should confirm Harbourline's exact Zendesk plan.' (This was already confirmed as Support Professional)",
+   "Open question: 'What is the exact end date of the Queuewise contract?' (This was confirmed as August 31)"
+  ],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C02",
+    "reported": "Which exact Zendesk plan is Harbourline using? [open]"
+   },
+   {
+    "correction_id": "C03",
+    "reported": "Harbourline's working rollout plan is a Q4 go-live around October 15, leaving two weeks before the November 1 support-tooling freeze. (Listed under Decisions)"
+   },
+   {
+    "correction_id": "C04",
+    "reported": "The Queuewise contract is believed to end December 31, with a planned period of overlap. [inferred] (Listed under Action items)"
+   }
+  ],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "partial"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "present"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "present"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "present"
+   },
+   {
+    "id": "F57",
+    "status": "present"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "partial"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   },
+   {
+    "id": "F62",
+    "status": "present"
+   },
+   {
+    "id": "F63",
+    "status": "present"
+   },
+   {
+    "id": "F64",
+    "status": "present"
+   },
+   {
+    "id": "F65",
+    "status": "present"
+   },
+   {
+    "id": "F66",
+    "status": "present"
+   },
+   {
+    "id": "F67",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture almost every detail from the transcript, resulting in perfect retention scores. However, the output is excessively verbose and highly repetitive, regurgitating the same facts across multiple sections (Context, Pain Points, Objections, Budget, Follow-up, etc.). Furthermore, the model failed to synthesize corrections made during the meeting. It lists superseded values—such as the October 15 go-live, the December 31 Queuewise end date, and the Zendesk plan—as current decisions, action items, or open questions, directly contradicting the correct final values it recorded elsewhere. This lack of synthesis severely impacts conciseness, readability, and conclusion accuracy."
+ }
+}

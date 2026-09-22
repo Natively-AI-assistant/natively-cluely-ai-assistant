@@ -1,4 +1,4 @@
-import { animate, AnimatePresence, motion, useMotionValue, useTransform } from 'framer-motion';
+import { animate, AnimatePresence, motion, motionValue, useMotionValue, useTransform } from 'framer-motion';
 import {
   ArrowRight,
   ArrowDown,
@@ -242,7 +242,9 @@ import {
 } from '../lib/overlayActionDedup.mjs';
 import { shouldDedupeManualSubmit } from '../lib/overlaySubmitDedup.mjs';
 import { decideScrollInterrupt } from '../lib/scrollInterruptDecision.mjs';
+import { decideStreamingHeightCommit } from '../lib/streamingHeightDecision.mjs';
 import { mergeTranscriptChunks } from '../lib/transcriptMerge.mjs';
+import { createTranscriptTailWaiter } from '../lib/answerTailWait.mjs';
 import {
   applyWhatToAnswerNullFeedbackMessages,
   finalizeStreamingByIntentMessages,
@@ -259,13 +261,25 @@ import {
   shouldHoldEagerCodeExpansion,
 } from '../lib/overlayCodeExpansion.mjs';
 import {
-  // OVERLAY_RESIZE_EASE (the bezier) is intentionally NOT imported here: the
-  // live width channel now uses OVERLAY_RESIZE_SPRING for velocity-continuous,
-  // interrupt-safe scroll-driven retargeting. The bezier remains exported from
-  // the easing module for its pure/tested deterministic samplers.
+  // OVERLAY_RESIZE_EASE (the old drawer bezier) is intentionally NOT imported
+  // here. THE TWO AXES CARRY DIFFERENT CURVES, on purpose:
+  //   WIDTH  — OVERLAY_RESIZE_SPRING, the 420ms weighted spring it has always
+  //            had. Also drives the panel-LEFT restore animate.
+  //   HEIGHT — OVERLAY_RESIZE_TWEEN, the transitions.dev "Card resize" signature
+  //            (300ms / cubic-bezier(0.22, 1, 0.36, 1)). The height axis did not
+  //            animate at all before 2026-09-13; it cut.
+  // Chosen by watching all the combinations play in the real overlay, not from
+  // first principles — see scripts/overlay-motion/README.md.
   OVERLAY_RESIZE_DURATION_MS,
   OVERLAY_RESIZE_SPRING,
+  OVERLAY_RESIZE_TWEEN,
+  OVERLAY_RESIZE_TWEEN_MS,
 } from '../../electron/utils/overlayResizeEasing.mjs';
+import {
+  decideHeightCommit,
+  shouldReportTweenHeight,
+} from '../lib/overlayHeightTween.mjs';
+import { planResizeRelease } from '../lib/overlaySnapToAuto.mjs';
 import { shouldAcceptIntelligenceIpc } from '../lib/overlayIntelligenceGeneration.mjs';
 import {
   shouldUseStreamingCodeUi,
@@ -273,7 +287,30 @@ import {
   splitStreamingCodeLines,
 } from '../lib/overlayStreamingCodeUi.mjs';
 import { widthDerivedScrollMax, verticalScrollCap } from '../lib/overlayScrollBudget.mjs';
+import {
+  OVERLAY_DEFAULT_WINDOW_WIDTH,
+  clearCustomOverlaySize,
+  maxWindowWidthFor,
+  maxWindowHeightFor,
+  collapsedWidthFor,
+  OVERLAY_PANEL_INSET,
+  OVERLAY_HOVER_GATE_PAD,
+  defaultCollapsedPanelWidth,
+  collapsedPanelForWindow,
+  panelWidthForWindow,
+  pinsHeightFor,
+  minWindowWidthFor,
+  manualHeightFloorFor,
+  panelWidthFloorFor,
+  releaseWindowWidthFor,
+  OVERLAY_MIN_WINDOW_HEIGHT,
+  computeResizeFrame,
+  pointerOverPanel,
+  pinnedViewportBudget,
+  type OverlayResizeDirection,
+} from '../lib/overlayCustomSize.mjs';
 import { resolveChatStreamToken, resolveChatStreamDone, resolveLiveAnswerBatch, resolveChatStreamSurfaceError } from '../lib/chatStreamGuard.mjs';
+import { buildDirectWhatToSayPayload } from '../lib/directAssistWhatToSayPayload.mjs';
 import {
   applyFirstStreamingToken,
   commitStreamingFlush,
@@ -328,7 +365,7 @@ import {
 } from '../lib/overlayAppearance';
 import { NegotiationCoachingCard } from '../premium';
 import type { DynamicActionPayload } from '../types/electron';
-import { getCodexCliModelDisplayName, litellmModelLabel } from '../utils/modelUtils';
+import { getCodexCliModelDisplayName, gatewayModelLabel, litellmModelLabel } from '../utils/modelUtils';
 import { getModifierSymbol, isMac, isWindows } from '../utils/platformUtils';
 import { DynamicActionBar } from './dynamic-actions/DynamicActionBar';
 import GlassEffectLayer from './ui/GlassEffectLayer';
@@ -393,6 +430,24 @@ import { DOM_CONTEXT_MAX_CHARS } from '../constants/domCapture';
 // reportShellSize's sync call below).
 const STREAMING_HEIGHT_GROW_BUFFER_PX = 96; // ~4 lines of headroom per forced grow
 
+// How long the ResizeObserver's own height reporting stays suppressed PAST the
+// NOMINAL end of an expand/contract animation. Whichever channel is running
+// drives the OS height itself meanwhile (see startTransition / the viewport
+// height channel) and clears this deadline in its own onComplete, so the tail is
+// a fail-safe for the case where onComplete never fires — an unmount mid-flight.
+//
+// IT HAS TO COVER A SPRING'S SETTLE, which is the part that is easy to get
+// wrong. `visualDuration` is VISUAL: OVERLAY_RESIZE_SPRING is nominally 420ms but
+// measured (ab-options-probe.mjs, "within 1px of rest") it settles at
+// 600-724ms — up to ~304ms past its own duration, because a critically-damped
+// spring has a long tail. A tail sized for a duration tween instead let the
+// deadline expire 60-180ms BEFORE the width spring finished, handing reporting
+// back to the observer mid-animation, which is exactly the per-frame native
+// setBounds the suppression exists to prevent. Sized to the slower channel and
+// shared: the height tween is nominally 300ms, so it just gets a longer
+// fail-safe, which costs nothing because its onComplete clears the deadline.
+const RESIZE_SUPPRESSION_TAIL_MS = 320;
+
 interface Message {
   id: string;
   role: 'user' | 'system' | 'interviewer';
@@ -412,6 +467,21 @@ interface Message {
   // the card, mirroring the "Screenshot attached" label — without it the pill
   // vanishes on use and nothing in the chat shows which page fed the answer.
   pageContext?: { title?: string; url?: string };
+  // Field names Direct Assist dropped to fit the model's context window (e.g.
+  // "referenceContext", "meetingTranscript") — never user content, just the
+  // name. Renders a small "context trimmed" notice on the question card so an
+  // incomplete-seeming answer isn't a silent mystery.
+  trimmedFields?: string[];
+  // Field names Direct Assist kept but REDUCED to fit (reference files
+  // re-shared across the budget, meeting transcript cut back to its most
+  // recent turns). Reported separately from trimmedFields because "shortened"
+  // and "gone" are different things to a reader judging an answer.
+  shortenedFields?: string[];
+  // Set when the ladder answered with a DIFFERENT provider than the one the
+  // user selected (a fallback rung fired). Verbatim provider ids, never a
+  // mapping table — the point is telling the user which provider actually
+  // received their request and got billed, not a pretty label.
+  fallbackNotice?: string;
   isCode?: boolean;
   intent?: string;
   // Verified code execution: set when the code in this message passed N executed
@@ -432,6 +502,73 @@ interface Message {
     currency: string;
   };
 }
+
+type DirectAssistSource = 'typed' | 'stt' | 'screenshot';
+
+interface DirectAssistHistoryTurn {
+  role: 'user' | 'assistant';
+  content: string;
+  /** Screenshots this turn was sent with. The attachment tray is cleared the
+   *  instant a turn dispatches, so without this a screenshot only ever existed
+   *  for the one turn that carried it and "what was in the screenshot I sent?"
+   *  two turns later reached the model as bare text. Main re-validates every
+   *  path and skips the ones the screenshot queue has since unlinked. */
+  imagePaths?: string[];
+}
+
+interface ActiveDirectAssistRequest {
+  requestId: string;
+  source: DirectAssistSource;
+  currentRequest: string;
+  /** Retained for the history write below, which runs after the tray is
+   *  cleared and so cannot read the attachments back off component state. */
+  imagePaths: string[];
+  placeholderId: string;
+  /** The user-role question card this request answers, so a 'start' event's
+   *  trimmedFields can be stamped onto the right card. */
+  userMessageId?: string;
+  lastSequence: number;
+  answerText: string;
+  completed?: boolean;
+  /** Provider the user actually selected, from the 'start' event. Kept so a
+   *  later provider_switch/done can word the notice against the ORIGINAL
+   *  choice even after an A -> B -> C walk overwrites who is "current". */
+  originalProvider?: string;
+  /** True once at least one provider_switch has fired for this request, so
+   *  'done' knows whether to surface a fallback notice at all. */
+  hasSwitched?: boolean;
+}
+
+type DirectAssistRendererEvent =
+  | { type: 'start'; requestId: string; provider: string; model: string; trimmedFields: string[]; shortenedFields?: string[] }
+  | { type: 'delta'; requestId: string; sequence: number; text: string }
+  | {
+      type: 'provider_switch';
+      requestId: string;
+      /** SNAPSHOT of the delta counter, never a slot of its own — always 0. */
+      sequence: number;
+      from: { provider: string; model: string };
+      to: { provider: string; model: string };
+      reason: string;
+    }
+  | { type: 'done'; requestId: string; sequence: number; provider: string; model: string; fullText?: string }
+  | { type: 'error'; requestId: string; sequence: number; error: { code: string; message: string; retryable: boolean } }
+  | { type: 'cancel'; requestId: string; sequence: number };
+
+const createDirectAssistRequestId = (): string => {
+  if (typeof globalThis.crypto?.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID();
+  }
+  return `direct-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+};
+
+const directAssistSkillId = (request: string): string | undefined => {
+  const match = request.match(/^\s*[/$]([a-z0-9][a-z0-9_-]*)(?=\s|$)/i);
+  return match?.[1];
+};
+
+const directAssistErrorText = (code: string, message: string): string =>
+  `❌ ${code}: ${message}`;
 
 interface NativelyInterfaceProps {
   onEndMeeting?: () => void;
@@ -784,8 +921,8 @@ const formatProviderLabel = (provider?: string | null): string => {
 };
 
 const getSttSummary = (
-  userStatus: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio',
-  interviewerStatus: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio',
+  userStatus: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio' | 'preparing',
+  interviewerStatus: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio' | 'preparing',
   userProvider: string,
   interviewerProvider: string,
   notConfigured: boolean,
@@ -814,6 +951,18 @@ const getSttSummary = (
       label: 'STT reconnecting',
       tone: 'warn',
       detail: `${formatProviderLabel(userProvider)} mic · ${formatProviderLabel(interviewerProvider)} system`,
+    };
+  }
+  if (userStatus === 'preparing' || interviewerStatus === 'preparing') {
+    const detail = interviewerStatus === 'preparing' && interviewerError
+      ? interviewerError
+      : userStatus === 'preparing' && userError
+      ? userError
+      : `${formatProviderLabel(userProvider)} mic · ${formatProviderLabel(interviewerProvider)} system`;
+    return {
+      label: 'Preparing Apple Speech…',
+      tone: 'warn',
+      detail,
     };
   }
   if (userStatus === 'awaiting-audio' || interviewerStatus === 'awaiting-audio') {
@@ -847,6 +996,20 @@ const hostnameFromUrl = (url?: string): string | undefined => {
     return undefined;
   }
 };
+
+// Human-readable label for a Direct Assist trimmedFields entry (a field name
+// from requestBuilder.ts). Falls back to the raw name for a field this map
+// hasn't been updated for, rather than rendering nothing.
+const DIRECT_ASSIST_TRIMMED_FIELD_LABELS: Record<string, string> = {
+  transcript: 'spoken text',
+  meetingTranscript: 'recent transcript',
+  history: 'conversation history',
+  referenceContext: 'reference files',
+  pageContext: 'screen content',
+  manualContext: 'manual notes',
+};
+const directAssistTrimmedFieldLabel = (field: string): string =>
+  DIRECT_ASSIST_TRIMMED_FIELD_LABELS[field] ?? field;
 
 // Smart Browser Context v2 — category-specific chip label. Falls back to the
 // host + "page ready" for legacy plain-string captures (no envelope category).
@@ -1047,6 +1210,36 @@ const MessageRow = React.memo(
               </div>
             )}
             {renderMessageText(msg)}
+            {/* Direct Assist dropped one or more context fields to fit the
+                model's context window (see requestBuilder's per-source drop
+                order) — surfaced so a thin-looking answer isn't a silent
+                mystery. Field names only, never the dropped content. */}
+            {msg.role === 'user' && (msg.trimmedFields?.length || msg.shortenedFields?.length) ? (
+              <div className="flex items-center gap-1 mt-1.5 text-[10px] opacity-60">
+                <HelpCircle className="w-2.5 h-2.5 flex-shrink-0" />
+                <span className="truncate max-w-[260px]">
+                  {t('Context trimmed')}
+                  {' · '}
+                  {[
+                    msg.shortenedFields?.length
+                      ? `${msg.shortenedFields.map((field) => t(directAssistTrimmedFieldLabel(field))).join(', ')} ${t('shortened to fit')}`
+                      : '',
+                    msg.trimmedFields?.length
+                      ? `${msg.trimmedFields.map((field) => t(directAssistTrimmedFieldLabel(field))).join(', ')} ${t('omitted (over context limit)')}`
+                      : '',
+                  ].filter(Boolean).join(', ')}
+                </span>
+              </div>
+            ) : null}
+            {/* The ladder answered with a different provider than the one the
+                user selected — the label above must never lie about who
+                actually received the request and got billed. */}
+            {msg.role === 'system' && msg.fallbackNotice && (
+              <div className="flex items-center gap-1 mt-1.5 text-[10px] opacity-60">
+                <HelpCircle className="w-2.5 h-2.5 flex-shrink-0" />
+                <span className="truncate max-w-[260px]">{msg.fallbackNotice}</span>
+              </div>
+            )}
             {/* Verified badge: the code in this message passed executed tests. */}
             {msg.role === 'system' && msg.codeVerified && (
               <div className="flex items-center gap-1 mt-1.5 text-[10px] font-medium text-green-500" title={`Ran ${msg.codeVerified.total} test case(s) successfully`}>
@@ -1096,12 +1289,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // launched. Showing green before verifying live audio masks the TCC zero-fill
   // failure mode where permissions look granted but no audio actually flows.
   const [sttUserStatus, setSttUserStatus] = useState<
-    'connected' | 'reconnecting' | 'failed' | 'awaiting-audio'
+    'connected' | 'reconnecting' | 'failed' | 'awaiting-audio' | 'preparing'
   >('awaiting-audio');
   const [sttUserError, setSttUserError] = useState<string>('');
   const [sttUserProvider, setSttUserProvider] = useState<string>('');
   const [sttInterviewerStatus, setSttInterviewerStatus] = useState<
-    'connected' | 'reconnecting' | 'failed' | 'awaiting-audio'
+    'connected' | 'reconnecting' | 'failed' | 'awaiting-audio' | 'preparing'
   >('awaiting-audio');
   const [sttInterviewerError, setSttInterviewerError] = useState<string>('');
   const [sttInterviewerProvider, setSttInterviewerProvider] = useState<string>('');
@@ -1110,6 +1303,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const [conversationContext, setConversationContext] = useState<string>('');
   const [isManualRecording, setIsManualRecording] = useState(false);
   const isRecordingRef = useRef(false); // Ref to track recording state (avoids stale closure)
+  // Answer/Stop tail collection — see answerTailWait.mjs. The recording ref
+  // stays open after the Stop press until the STT final lands (or a bounded
+  // window elapses); answerStopInFlightRef blocks a new Start meanwhile so it
+  // cannot reset the buffers mid-snapshot.
+  const answerTailWaiterRef = useRef<ReturnType<typeof createTranscriptTailWaiter> | null>(null);
+  if (answerTailWaiterRef.current === null) answerTailWaiterRef.current = createTranscriptTailWaiter();
+  const answerStopInFlightRef = useRef(false);
   const [manualTranscript, setManualTranscript] = useState('');
   const manualTranscriptRef = useRef<string>('');
   const [showTranscript, setShowTranscript] = useState(() => {
@@ -1621,6 +1821,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // freeze height reporting. A deadline lapses on its own. Set to 0 to release
   // immediately (session reset).
   const heightReportSuppressedUntilRef = useRef(0);
+  // True for the duration of a user resize drag. Declared up here because the
+  // ResizeObserver (above the drag handler) gates its height reporting on it.
+  const isResizingRef = useRef(false);
   // ── Streaming-height headroom-buffer state ────────────────────────────
   // See STREAMING_HEIGHT_GROW_BUFFER_PX's comment near the top of this file
   // for the full rationale (an earlier springed/interpolated version of this
@@ -1673,6 +1876,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
   // Settings State with Persistence
   const [isUndetectable, setIsUndetectable] = useState(false);
+  // Direct Assist is a persisted SettingsManager flag (default OFF, with a
+  // main-process kill switch). It is deliberately not mirrored to localStorage:
+  // every renderer must observe the same effective value the backend enforces.
+  const [directAssistEnabled, setDirectAssistEnabled] = useState(false);
   const [hideChatHidesWidget, setHideChatHidesWidget] = useState(() => {
     const stored = localStorage.getItem('natively_hideChatHidesWidget');
     return stored ? stored === 'true' : true;
@@ -1804,6 +2011,24 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     });
     return () => unsubscribe();
   }, [refreshCurrentModel]);
+
+  useEffect(() => {
+    let mounted = true;
+    window.electronAPI?.getDirectAssistEnabled?.()
+      .then((enabled) => {
+        if (mounted) setDirectAssistEnabled(enabled === true);
+      })
+      .catch(() => {
+        if (mounted) setDirectAssistEnabled(false);
+      });
+    const unsubscribe = window.electronAPI?.onDirectAssistEnabledChanged?.((enabled) => {
+      if (mounted) setDirectAssistEnabled(enabled === true);
+    });
+    return () => {
+      mounted = false;
+      unsubscribe?.();
+    };
+  }, []);
 
   // Dynamic Action Button Mode (Recap vs Brainstorm)
   const [actionButtonMode, setActionButtonMode] = useState<'recap' | 'brainstorm'>('recap');
@@ -2060,15 +2285,125 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // on every frame (correct at every in-between width — no clip/scale/transform).
   // Only HEIGHT flows to the OS, via the ResizeObserver / reportShellSize (and
   // a rate-limited channel during the tween).
-  const SHELL_WIDTH_COLLAPSED = 600;
-  const SHELL_WIDTH_EXPANDED = 732;
-  // The OS overlay window's FIXED width. MUST equal
-  // WindowHelper.OVERLAY_DEFAULT_WIDTH (the window's birth width — the
-  // startup-slide invariant) and SHELL_WIDTH_EXPANDED (the panel fills the
-  // window edge-to-edge when expanded; the old 780 gutter existed only for
-  // the resize toggle, which now has its own aux window).
-  const OVERLAY_WINDOW_WIDTH = SHELL_WIDTH_EXPANDED;
-  const shellWidth = useMotionValue(SHELL_WIDTH_COLLAPSED);
+  // The overlay's size is NOT remembered across launches or meetings: every
+  // meeting starts in the default state (154 tall at rest, 732 wide), and a
+  // manual size lasts for the meeting it was made in. Evin (2026-09-07): "when
+  // a new session starts no need to remember last session's size". Older
+  // builds persisted it in localStorage; those keys are cleared once here so
+  // they cannot resurface if a later build reads them again.
+  const restoredOverlaySize: { width: number | null; height: number | null } = useState(() => {
+    clearCustomOverlaySize(typeof window !== 'undefined' ? window.localStorage : null);
+    return { width: null, height: null };
+  })[0];
+  // ── Overlay window size ───────────────────────────────────────────────────
+  // The OS window's width used to be a compile-time constant (732). It is now a
+  // value the USER can change by dragging a resize handle — but it is still
+  // FIXED for the entire lifetime of an expand/collapse spring, so there is
+  // still no width setBounds during an animation (the flicker that the old
+  // fixed-width design existed to prevent).
+  //
+  // Critically, this is the SINGLE SOURCE OF TRUTH: the three consumers that
+  // derive geometry from the window width — the toggle aux window's anchor
+  // (sendOverlayToggleAnchor below), the settings/model popover margin
+  // (WindowHelper.getOverlayPanelLeftMargin) and the click-through hover gate —
+  // all read it, so they cannot disagree about how wide the window is.
+  // See src/lib/overlayCustomSize.mjs for the full rationale.
+  // Two different numbers, previously conflated into one:
+  //   customWindowWidth  — what the USER pinned. Persisted. Drives the REQUEST.
+  //   appliedWindowWidth — what the main process actually granted after its
+  //                        floor(workArea * 0.9) clamp. Session-only. Drives
+  //                        every geometry consumer, so the panel never renders
+  //                        wider than the window it lives in.
+  // Collapsing them made a clamp sticky: on a display too small for the 732
+  // default the clamped value became the renderer's "custom" width and was
+  // re-requested verbatim forever, so moving to a larger display never restored
+  // the default.
+  const [customWindowWidth, setCustomWindowWidth] = useState<number | null>(
+    restoredOverlaySize.width,
+  );
+  const [appliedWindowWidth, setAppliedWindowWidth] = useState<number | null>(null);
+  // The pinned window HEIGHT is a ref, not state: nothing RENDERS from its
+  // VALUE (the scroll budget flows through the `verticalCap` motion value, and
+  // the size reporters read it imperatively), so holding it in state would only
+  // add a re-render of this whole component on every frame of a height drag.
+  const customOverlayHeightRef = useRef<number | null>(restoredOverlaySize.height);
+  // WHETHER a height is pinned is state, because one thing does render from
+  // it: the chat viewport must be mounted to absorb a pinned height, even with
+  // no messages yet. It flips only on pin/unpin events (grab, reset, restore)
+  // — never per frame — so it costs no re-render during a drag.
+  const [heightPinned, setHeightPinned] = useState(restoredOverlaySize.height !== null);
+  // A pin has two lives, mirroring manualWidthOverrideRef: a LID for the
+  // answer it was taken on (the chat scrolls inside the chosen size, so a long
+  // chat can be shrunk and stay shrunk), and only a FLOOR once the NEXT answer
+  // starts — the overlay then grows to show that answer, with the unchanged
+  // auto budget, instead of streaming it into a slot the user reads as "no
+  // answer". True after a drag and on restore; false at the first token of a
+  // new stream (the same moment the width pin is relinquished).
+  const heightPinIsCeilingRef = useRef(restoredOverlaySize.height !== null);
+  // The stream (if any) that was live when the pin was taken. Tokens of THAT
+  // stream keep the ceiling (the user sized the overlay around the answer in
+  // progress); the first token of any OTHER stream relaxes it. Keyed on the
+  // id rather than on "id not yet reserved", because a typed question
+  // reserves its streaming id before its first token arrives.
+  const heightPinStreamIdRef = useRef<string | null>(null);
+
+  // The panel fills the window when expanded; the collapsed width scales with
+  // it. collapsedWidthFor(732) === 600 exactly, so with no custom size these
+  // are bit-identical to the constants they replace. Recomputed per render like
+  // the old literals were — every dependency array that listed the literals
+  // already lists these, so no memoisation is needed or wanted.
+  // What we ASK the OS for — the user's pin, else the default. Never the
+  // clamped result, or a clamp would latch permanently.
+  const REQUESTED_WINDOW_WIDTH = customWindowWidth ?? OVERLAY_DEFAULT_WINDOW_WIDTH;
+  // What the window actually IS. All anchor/hover-gate/OS geometry uses this.
+  const WINDOW_WIDTH = appliedWindowWidth ?? REQUESTED_WINDOW_WIDTH;
+  // The panel is inset from the window by OVERLAY_PANEL_INSET on every side
+  // (the padding on contentRef below), so that undetectable mode's ring has
+  // transparent room to paint OUTSIDE the card. Before this the expanded panel
+  // WAS the window width edge-to-edge, and the card was flush to the window on
+  // all four sides — measured live at y=0 in a 154px window — so an outward
+  // ring was clipped away entirely on the vertical axis and at full width on
+  // the horizontal one.
+  //
+  // The window keeps its exact previous numbers: every OS-facing value (the
+  // startup-slide birth width, the display budgets, persisted custom sizes, the
+  // min/max clamps in overlayCustomSize) is still expressed in window terms and
+  // is untouched. Only the PANEL gets narrower, by 2 x the inset.
+  //
+  // Horizontal slack is not a new idea here — the collapsed panel has always
+  // sat 66px in from each window edge, and panelLeft/mx-auto/the hover gate/the
+  // toggle anchor all already handle a panel narrower than its window. What is
+  // new is that the slack now also exists on the VERTICAL axis, and at the
+  // panel's fully expanded width.
+  const SHELL_WIDTH_EXPANDED = WINDOW_WIDTH - OVERLAY_PANEL_INSET * 2;
+  const SHELL_WIDTH_COLLAPSED = collapsedWidthFor(SHELL_WIDTH_EXPANDED);
+  // The OS overlay window's width. Equals SHELL_WIDTH_EXPANDED always (the
+  // panel fills the window edge-to-edge when expanded), and at its default
+  // equals WindowHelper.OVERLAY_DEFAULT_WIDTH (the window's birth width — the
+  // startup-slide invariant).
+  const OVERLAY_WINDOW_WIDTH = WINDOW_WIDTH;
+  // Latest-value ref for the two long-lived subscriptions below (the toggle
+  // anchor stream and the hover gate). They must read the LIVE window width but
+  // must NOT re-subscribe when it changes: a drag updates it ~30x/second, and
+  // depending on it would tear down and rebuild both subscriptions every frame
+  // — re-sending the hover-gate handshake IPC each time.
+  const overlayWindowWidthRef = useRef(OVERLAY_WINDOW_WIDTH);
+  overlayWindowWidthRef.current = OVERLAY_WINDOW_WIDTH;
+  // Non-null for the duration of a resize drag: the panel's LEFT inside the
+  // window, frozen at grab. While the window sits at its resize envelope the
+  // centred (windowW + w)/2 formula no longer describes the panel's edge, so
+  // the toggle-anchor stream sends panelLeft + w instead.
+  const dragPanelLeftRef = useRef<number | null>(null);
+  // The size reporters ask for this, not for the effective width.
+  const requestedWindowWidthRef = useRef(REQUESTED_WINDOW_WIDTH);
+  requestedWindowWidthRef.current = REQUESTED_WINDOW_WIDTH;
+  // The PANEL always starts COLLAPSED. A restored custom size sizes the
+  // WINDOW, not the panel's expand state — seeding the panel with the window
+  // width would boot it visually expanded while codeExpandedRef and
+  // isShellWide both still read "collapsed".
+  const shellWidth = useMotionValue(
+    collapsedPanelForWindow(restoredOverlaySize.width ?? OVERLAY_DEFAULT_WINDOW_WIDTH),
+  );
   // Vertical budget cap for the chat scroll area. Default Infinity = "not yet
   // measured / unbounded", so the width-derived aesthetic max applies until we
   // know the display height. measureVerticalCap (below) sets the real value:
@@ -2077,6 +2412,17 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // ≤ the budget the OS window will be granted, so the footer (model selector /
   // settings / send) can never be cropped below the clamped window edge.
   const verticalCap = useMotionValue(Infinity);
+  // 1 while the user has pinned a window height. widthDerivedScrollMax tops out
+  // at 560, and the shell is an auto-height column, so with the width bound
+  // still applied the PANEL could never exceed chrome+560 however tall the
+  // WINDOW was told to be — leaving a tall transparent strip below the panel
+  // that still swallowed clicks (the hover gate tests clientX only). When a
+  // height is pinned, the measured cap is the only bound that should apply.
+  const heightIsPinned = useMotionValue(0);
+  // The pinned slot (pin − chrome, ≥ 0): the viewport's min-height whenever a
+  // height is pinned, in BOTH of the pin's lives. In ceiling mode it equals
+  // the cap; in floor mode it is the minimum the content may grow above.
+  const pinnedRoom = useMotionValue(0);
   // scrollMaxH is the chat viewport's MAX-HEIGHT, derived from the LIVE
   // `shellWidth` motion value (the panel's actual animating width) mins'd against
   // the measured vertical budget cap. Binding it to the live width means the
@@ -2084,16 +2430,39 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // spring runs (widthDerivedScrollMax: 320px collapsed → 560px expanded), so the
   // visible chat region tracks the panel size frame-for-frame. This is a motion
   // value bound to a style, so it updates without a React re-render.
-  const scrollMaxH = useTransform([shellWidth, verticalCap], ([w, cap]: number[]) =>
-    // Pass the real collapsed/expanded panel widths so the 320→560 scroll-height
-    // ramp reaches its max at the actual expanded width (732), not the default 780.
-    Math.min(
-      widthDerivedScrollMax(w, {
-        collapsedWidth: SHELL_WIDTH_COLLAPSED,
-        expandedWidth: SHELL_WIDTH_EXPANDED,
-      }),
-      cap,
-    ),
+  // A user-pinned window height does NOT get its own branch here: it is folded
+  // into `verticalCap` by measureVerticalCap, which already knows the measured
+  // chrome height. That keeps one code path, reuses the tested
+  // verticalScrollCap helper instead of an ad-hoc `height - 160`, and — because
+  // verticalCap is a motion value — makes a pure-height drag (the `s` handle,
+  // which never changes shellWidth) actually recompute the scroll budget.
+  const scrollMaxH = useTransform(
+    [shellWidth, verticalCap, heightIsPinned],
+    ([w, cap, pinned]: number[]) =>
+      pinned
+        ? cap
+        : Math.min(
+            widthDerivedScrollMax(w, {
+              collapsedWidth: SHELL_WIDTH_COLLAPSED,
+              expandedWidth: SHELL_WIDTH_EXPANDED,
+            }),
+            cap,
+          ),
+  );
+  // A pinned height is a FLOOR on the viewport as well as a cap. The window is
+  // set to the pinned height by reportShellSize; without this the panel only
+  // grew when content overflowed, and everything under a short panel was
+  // window with nothing painted in it — it looked like the desktop and
+  // swallowed clicks. The panel and the window are one size, exactly as they
+  // are under auto expand/contract; the extra room is empty chat area. Unpinned
+  // the floor is 0 and the viewport is content-sized, bit-identical to before.
+  // A px STRING, not a number: framer-motion appends units only for the keys
+  // in motion-dom's number map, which has maxHeight but not minHeight — a bare
+  // number is set as `style.minHeight = 450`, which CSSOM rejects, leaving
+  // the previous value in place (verified live: the panel never grew).
+  const scrollMinH = useTransform(
+    [pinnedRoom],
+    ([room]: number[]) => (room > 0 ? `${Math.round(room)}px` : '0px'),
   );
   // NOTE: the resize toggle and the TopPill no longer render in this window at
   // all — each lives in its OWN tiny BrowserWindow (see
@@ -2346,6 +2715,61 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     streamingHeightCommittedRef.current = height;
   }, []);
 
+  // measureVerticalCap is declared below (it needs reportShellSize's neighbours);
+  // adoptAppliedSize has to reach it without listing it as a dependency.
+  const measureVerticalCapRef = useRef<(() => void) | null>(null);
+
+  // Adopt the size the main process ACTUALLY applied.
+  //
+  // This runs on EVERY report, not only at the end of a drag. The restore path
+  // is the case that matters: a width persisted on a 1920px external monitor is
+  // re-applied on a 1366px laptop, where the main process clamps it to
+  // floor(1366*0.9). If the renderer kept the requested width, the panel would
+  // render wider than its window and be clipped, the toggle anchor would stream
+  // (requested + panelW)/2 while getOverlayPanelLeftMargin measures the REAL
+  // width, and the two would disagree by exactly the offset that method exists
+  // to prevent. Converges in one extra round-trip: adopting re-reports the
+  // clamped value, which main applies verbatim and echoes back unchanged.
+  const adoptAppliedSize = useCallback((applied?: { width: number; height: number }) => {
+    if (!applied) return;
+    const { width, height } = applied;
+    if (typeof width === 'number' && width > 0 && width !== overlayWindowWidthRef.current) {
+      // The PANEL has to move with the window. Leaving shellWidth alone let a
+      // width restored from a bigger display sit wider than the window it was
+      // clamped into: the hover gate then computes a NEGATIVE margin and
+      // reports the whole window interactive, and the streamed panelRight
+      // points past the window's own right edge. Setting it is also the only
+      // thing that re-anchors the toggle and popover windows at all — that
+      // stream fires from shellWidth's 'change', nothing else.
+      // Compared against the PANEL's expanded width, not the window's: with the
+      // gutter they differ by 2 x the inset, and testing against the window
+      // would read a fully expanded panel as collapsed on every reconcile.
+      const wasExpanded = shellWidth.get() >= panelWidthForWindow(overlayWindowWidthRef.current) - 1;
+      // Written before the state update so the toggle-anchor stream and the
+      // hover gate — both of which read this ref — are correct immediately,
+      // not one render late.
+      overlayWindowWidthRef.current = width;
+      setAppliedWindowWidth(width);
+      shellWidth.set(wasExpanded ? panelWidthForWindow(width) : collapsedPanelForWindow(width));
+    }
+    // Only reconcile the height when the user actually pinned one; otherwise
+    // the window is content-sized and there is nothing to hold. And only
+    // DOWNWARD: a clamp (the restore-on-a-smaller-display case this exists
+    // for) can only ever shrink the request. An applied height ABOVE the pin
+    // is the window following a chrome that has outgrown the pin
+    // (reportShellSize sends max(pin, panel)); adopting it would silently
+    // lift the pin to the transcript's height and never return.
+    if (
+      typeof height === 'number' &&
+      height > 0 &&
+      customOverlayHeightRef.current !== null &&
+      height < customOverlayHeightRef.current
+    ) {
+      customOverlayHeightRef.current = height;
+      measureVerticalCapRef.current?.();
+    }
+  }, [shellWidth]);
+
   // Single canonical size-reporter. Width is ALWAYS the fixed
   // OVERLAY_WINDOW_WIDTH (the OS window never width-resizes — the CSS panel
   // animates inside it), so this is effectively a height-only reporter;
@@ -2372,6 +2796,25 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // window to re-rasterize in the background. Re-enabled the moment
     // isExpanded flips back to true.
     if (!isExpandedRef.current) return;
+    // A user resize drag owns the size channel for its duration: it reports at
+    // its own ~30fps cadence. Without this guard, every setCustomWindowWidth
+    // during the drag changes this callback's identity, re-runs the sizing
+    // effect, and fires a SECOND rAF-scheduled report per frame against the
+    // same window.
+    if (isResizingRef.current) return;
+    // An expand/contract transition owns the height channel for its duration and
+    // drives the OS window itself (leading on growth, following on shrink). The
+    // ResizeObserver already honours this deadline before routing here, but
+    // several effects call this reporter DIRECTLY on their own rAF/timer, and
+    // one of them fires on the send path: traced live, `reportShellSize` landed
+    // 1ms after a tween had led the window to its arrival height and pushed it
+    // straight back to the pre-growth 329px, under a panel already at 439 —
+    // a sliced footer until the next frame healed it. The deadline is the one
+    // place that knows a transition is in flight, so the guard belongs here at
+    // the choke point rather than at each caller. Self-expiring, and the
+    // transition's own onComplete clears it and then re-reports the exact
+    // settled height, so nothing skipped here is lost.
+    if (Date.now() < heightReportSuppressedUntilRef.current) return;
     // offsetHeight is the LAYOUT (untransformed) border-box height. We must NOT
     // use getBoundingClientRect().height here: that returns the POST-transform
     // box, so the shell's scale 0.95→1 / y 20→0 entry animation would feed a
@@ -2380,12 +2823,23 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // clock — the startup shake. Layout height is immune to descendant
     // transforms, so genuine content growth still flows through while the
     // entry flourish stays purely compositor-side.
-    // The OS window is a FIXED WIDTH (OVERLAY_WINDOW_WIDTH = 732) and never
-    // width-resizes — ALWAYS report that fixed width, never the live
-    // in-between CSS shell width. setOverlayDimensionsAnchored therefore sees
-    // widthDelta 0 on every call: a pure height-only, top-anchored resize.
-    const width = OVERLAY_WINDOW_WIDTH;
-    const height = contentRef.current.offsetHeight;
+    // The WINDOW width — never the live CSS panel width. The panel tweens
+    // inside the window; reporting its in-between width would push a native
+    // width setBounds on every frame of the spring (re-rastering a transparent
+    // blurred window) and would desynchronise the toggle anchor, the popover
+    // margin and the hover gate, all of which are computed against the window.
+    const width = requestedWindowWidthRef.current;
+    // A user-pinned height wins over measured content: the chat scrolls inside
+    // the chosen size rather than growing the window (measureVerticalCap has
+    // already bounded the scroll area to match). But never BELOW the panel:
+    // the chrome can outgrow a pin after the fact (a rolling transcript or a
+    // status pill appearing over a pin taken at the empty floor), and the
+    // viewport can shrink only to zero — the panel is then taller than the
+    // pin, and holding the window at the pin cuts the footer off. The window
+    // follows the panel up and returns to the pin when the chrome recedes.
+    const measured = contentRef.current.offsetHeight;
+    const pinned = customOverlayHeightRef.current;
+    const height = pinned !== null ? Math.max(pinned, measured) : measured;
     if (process.env.NODE_ENV === 'development') {
       const scrollEl = scrollContainerRef.current;
       console.log('[overlay-resize] reportShellSize', {
@@ -2397,14 +2851,22 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         screenAvailHeight: window.screen?.availHeight,
       });
     }
-    const api = window.electronAPI as any;
-    if (api?.updateContentDimensionsCentered) {
-      api.updateContentDimensionsCentered({ width, height });
+    if (window.electronAPI?.updateContentDimensionsCentered) {
+      void window.electronAPI
+        .updateContentDimensionsCentered({ width, height })
+        .then(adoptAppliedSize)
+        .catch(() => {
+          /* window gone; nothing to reconcile against */
+        });
     } else {
-      window.electronAPI?.updateContentDimensions({ width, height });
+      void window.electronAPI?.updateContentDimensions({ width, height });
     }
     syncStreamingHeightBaseline(height);
-  }, [attachedContext.length, OVERLAY_WINDOW_WIDTH, syncStreamingHeightBaseline]);
+    // Deliberately NOT dependent on OVERLAY_WINDOW_WIDTH — it reads the ref. A
+    // drag changes that width ~30x/second, and depending on it would give this
+    // callback a new identity every frame, tearing down and rebuilding the
+    // ResizeObserver (and every effect keyed on it) each time.
+  }, [attachedContext.length, syncStreamingHeightBaseline, adoptAppliedSize]);
 
   // Compute the vertical budget cap for the chat scroll area and push it into
   // the `verticalCap` motion value (which scrollMaxH mins against the
@@ -2425,23 +2887,48 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // No chat panel mounted → nothing to cap; let the width bound apply.
     if (!scrollEl || !contentEl) {
       verticalCap.set(Infinity);
+      heightIsPinned.set(0);
+      pinnedRoom.set(0);
       return;
     }
     const availHeight = typeof window !== 'undefined' ? window.screen?.availHeight ?? 0 : 0;
-    const chromeHeight = contentEl.offsetHeight - scrollEl.clientHeight;
-    const nextCap = verticalScrollCap({ availHeight, chromeHeight });
+    // Subtract the ANIMATED BOX, not the scroller. The card's height is
+    // `chrome + viewportBox`, and during an expand/contract tween the box and
+    // the scroller inside it differ by exactly the travel still to come. Using
+    // the scroller here would make `chrome` wrong for the length of every tween,
+    // which would move the cap, which would move the scroller's max-height —
+    // i.e. the viewport would breathe against its own animation. The box is the
+    // term that actually appears in the card's height, so it is the exact one.
+    const viewportBoxEl = viewportBoxRef.current;
+    const chromeHeight =
+      contentEl.offsetHeight - (viewportBoxEl?.offsetHeight ?? scrollEl.clientHeight);
+    // A pinned height is the vertical budget while it is a ceiling (the chat
+    // scrolls inside the size the user chose); once a new answer has started
+    // it is only a floor and the AUTO budget applies above it. The pin is
+    // still subject to the main-process clamp: a height restored from a
+    // taller display cannot size the viewport for a window the OS will never
+    // grant. See pinnedViewportBudget for the rule and the numbers.
+    const budget = pinnedViewportBudget({
+      pinnedHeight: customOverlayHeightRef.current,
+      pinIsCeiling: heightPinIsCeilingRef.current,
+      chromeHeight,
+      availHeight,
+    });
     if (process.env.NODE_ENV === 'development') {
       console.log('[overlay-resize] measureVerticalCap', {
         availHeight,
         chromeHeight,
         contentOffsetHeight: contentEl.offsetHeight,
         scrollClientHeight: scrollEl.clientHeight,
-        nextCap,
+        budget,
         attachedContextCount: attachedContext.length,
       });
     }
-    verticalCap.set(nextCap);
-  }, [attachedContext.length, verticalCap]);
+    verticalCap.set(budget.cap);
+    heightIsPinned.set(budget.ceiling ? 1 : 0);
+    pinnedRoom.set(budget.room);
+  }, [attachedContext.length, verticalCap, heightIsPinned, pinnedRoom]);
+  measureVerticalCapRef.current = measureVerticalCap;
 
   // NOTE: the old per-frame "chase" subscriber that pushed the live shell width
   // to setBounds every frame is GONE. The OS window is a fixed width (732) for
@@ -2453,6 +2940,34 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // ResizeObserver: rAF-debounced so the spring can update height without
   useLayoutEffect(() => {
     if (!contentRef.current) return;
+
+    // Stream-end settle. The streaming branch below commits `content + 96px`
+    // of headroom, and the settle back to the exact height was left to "the
+    // next observer fire after streamingMsgIdRef goes null" — which for most
+    // answers never comes: the last size change lands while the stream is
+    // still live, so it takes the buffered branch, and the window then sits
+    // 96px taller than the panel (measured: 499 over a 403 panel). Arm a
+    // quiet-period timer on every streaming fire; when it fires with the
+    // stream over, report the real height once. While the stream is still
+    // live (a plateaued answer at its scroll cap), keep waiting.
+    const STREAM_SETTLE_MS = 400;
+    let streamSettleTimer: number | null = null;
+    const armStreamSettle = () => {
+      if (streamSettleTimer !== null) window.clearTimeout(streamSettleTimer);
+      streamSettleTimer = window.setTimeout(() => {
+        streamSettleTimer = null;
+        if (isResizingRef.current) return;
+        if (
+          streamingMsgIdRef.current !== null ||
+          Date.now() < heightReportSuppressedUntilRef.current
+        ) {
+          armStreamSettle();
+          return;
+        }
+        measureVerticalCap();
+        reportShellSize();
+      }, STREAM_SETTLE_MS);
+    };
 
     const observer = new ResizeObserver(() => {
       if (rafDimUpdateRef.current) cancelAnimationFrame(rafDimUpdateRef.current);
@@ -2471,7 +2986,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         // the flicker. measureVerticalCap above keeps the scroll area bounded
         // meanwhile; the single authoritative height settle is deferred to the
         // transition's onComplete (one setBounds, not one per frame).
-        if (Date.now() < heightReportSuppressedUntilRef.current) {
+        // `isResizingRef` covers a user resize drag, which has no deadline —
+        // it ends when the pointer is released. Gating on the ref rather than a
+        // long timestamp means a lost pointerup can never wedge height
+        // reporting off for a fixed number of seconds; the drag's own teardown
+        // (including its pointercancel / lostpointercapture / blur paths) is
+        // the single thing that clears it.
+        if (isResizingRef.current || Date.now() < heightReportSuppressedUntilRef.current) {
           return;
         }
         // While a message is actively streaming, route through the
@@ -2488,6 +3009,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           if (contentRef.current && isExpandedRef.current) {
             driveStreamingHeightRef.current(contentRef.current.offsetHeight);
           }
+          armStreamSettle();
         } else {
           reportShellSize();
         }
@@ -2497,6 +3019,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     observer.observe(contentRef.current);
     return () => {
       observer.disconnect();
+      if (streamSettleTimer !== null) {
+        window.clearTimeout(streamSettleTimer);
+        streamSettleTimer = null;
+      }
       if (rafDimUpdateRef.current) {
         cancelAnimationFrame(rafDimUpdateRef.current);
         rafDimUpdateRef.current = null;
@@ -2508,13 +3034,16 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // both re-derive the vertical cap (a screenshot strip grows chrome) and
   // re-run the canonical reporter — no more "what width should I use right
   // now?" branching against animation flags.
+  // `customWindowWidth` is in the deps because reportShellSize is now
+  // identity-stable across width changes (it reads a ref). A reset, or a
+  // restored size at mount, therefore has no other path to the OS.
   useEffect(() => {
     const id = requestAnimationFrame(() => {
       measureVerticalCap();
       reportShellSize();
     });
     return () => cancelAnimationFrame(id);
-  }, [attachedContext, reportShellSize, measureVerticalCap]);
+  }, [attachedContext, customWindowWidth, reportShellSize, measureVerticalCap]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -2551,16 +3080,40 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const resizeOverlayWindow = useCallback(
     (height: number) => {
       if (height <= 0) return;
-      // Width is ALWAYS the fixed window width → widthDelta 0 in the main
-      // process; this collapses to a pure height-only resize.
-      const api = window.electronAPI as any;
-      if (api?.updateContentDimensionsCentered) {
-        api.updateContentDimensionsCentered({ width: OVERLAY_WINDOW_WIDTH, height });
-      } else {
-        window.electronAPI?.updateContentDimensions({ width: OVERLAY_WINDOW_WIDTH, height });
+      // Window width, not panel width — see reportShellSize. During the spring
+      // this is constant, so the main process still sees widthDelta 0 and the
+      // resize collapses to a pure height-only, top-anchored setBounds.
+      const width = requestedWindowWidthRef.current;
+      // Pinned: the chat scrolls inside the pin, so the streaming headroom is
+      // not wanted — but the window still may not sit below the panel (see
+      // reportShellSize: a chrome that outgrew the pin).
+      const pinned = customOverlayHeightRef.current;
+      const measured = contentRef.current?.offsetHeight ?? 0;
+      const targetHeight =
+        pinned === null
+          ? height
+          : heightPinIsCeilingRef.current
+            ? Math.max(pinned, measured)
+            : // Floor: the answer grows the window exactly as auto would
+              // (buffered headroom, settled at stream end), never below the pin.
+              Math.max(pinned, height);
+      // RETURNS the IPC promise. Callers that only push a height ignore it; the
+      // expand tween awaits it, because "the window has been ASKED for 496" and
+      // "the window IS 496" are one round trip apart and the difference is a
+      // frame of clipped footer.
+      if (window.electronAPI?.updateContentDimensionsCentered) {
+        return window.electronAPI
+          .updateContentDimensionsCentered({ width, height: targetHeight })
+          .then(adoptAppliedSize)
+          .catch(() => {});
       }
+      return Promise.resolve(
+        window.electronAPI?.updateContentDimensions({ width, height: targetHeight }),
+      )
+        .then(() => {})
+        .catch(() => {});
     },
-    [OVERLAY_WINDOW_WIDTH],
+    [adoptAppliedSize],
   );
 
   // Height channel used by the ResizeObserver WHILE a message is actively
@@ -2575,38 +3128,29 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // up to the reserved headroom, cuts the native call frequency from
   // "every wrapped line" to "every few wrapped lines" while keeping that
   // invariant exactly true at every instant — no lag, ever.
+  //
+  // The branching lives in src/lib/streamingHeightDecision.mjs (table-tested).
+  // 2026-09-12 live repro of the "window size changes rapidly when sending
+  // screenshots" review: the headroom was committed the instant the EMPTY
+  // placeholder row mounted, then the exact height was reported again 0.6s
+  // later, before any token — a +96/-96 bounce on every send. Headroom now
+  // waits for the first token (`hasText`); an empty placeholder reports its
+  // exact height and is not adopted as the current stream, so the first
+  // token still takes the brand-new-card branch and gets its own headroom.
   const driveStreamingHeight = useCallback(
     (targetHeight: number) => {
-      if (targetHeight <= 0) return;
-      const currentStreamId = streamingMsgIdRef.current;
-
-      // Brand-new answer card (or the very first measurement of the app's
-      // lifetime): commit fresh, with its own buffer. Comparing against
-      // whatever height an unrelated previous message left behind would be
-      // meaningless.
-      if (currentStreamId !== streamingHeightStreamIdRef.current) {
-        streamingHeightStreamIdRef.current = currentStreamId;
-        const committed = targetHeight + STREAMING_HEIGHT_GROW_BUFFER_PX;
-        streamingHeightCommittedRef.current = committed;
-        resizeOverlayWindow(committed);
-        return;
-      }
-
-      // Still comfortably inside the reserved headroom from the last grow —
-      // no native call needed at all. This is the common case for most
-      // token arrivals; it is what actually cuts the resize frequency.
-      if (targetHeight <= streamingHeightCommittedRef.current) return;
-
-      // Content caught up to (or exceeded) the reserved headroom: grow again,
-      // immediately, with a fresh buffer. No rate limiting is applied here —
-      // and none is needed, because a grow only fires once every ~4 lines of
-      // real content, which is already far below any perceptible-jitter
-      // frequency; adding a delay here would only reopen a window where
-      // real content briefly exceeds the committed (undersized) native
-      // height.
-      const committed = targetHeight + STREAMING_HEIGHT_GROW_BUFFER_PX;
-      streamingHeightCommittedRef.current = committed;
-      resizeOverlayWindow(committed);
+      const decision = decideStreamingHeightCommit({
+        streamId: streamingMsgIdRef.current,
+        lastStreamId: streamingHeightStreamIdRef.current,
+        committedHeight: streamingHeightCommittedRef.current,
+        measuredHeight: targetHeight,
+        hasText: streamingTextRef.current.length > 0,
+        bufferPx: STREAMING_HEIGHT_GROW_BUFFER_PX,
+      });
+      streamingHeightStreamIdRef.current = decision.nextStreamId;
+      streamingHeightCommittedRef.current = decision.nextCommittedHeight;
+      if (decision.action === 'none') return;
+      resizeOverlayWindow(decision.height);
     },
     [resizeOverlayWindow],
   );
@@ -2616,6 +3160,367 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // place before the ResizeObserver can possibly fire for this render, and
   // effects run after paint.
   driveStreamingHeightRef.current = driveStreamingHeight;
+
+  // The chat viewport's MOUNT GATE. Declared here rather than beside the JSX
+  // because the height channel below keys its measuring effect on it: that flip
+  // is the edge which starts both the expand and the contract.
+  const hasChatContent =
+    messages.length > 0 || isManualRecording || isProcessing || answerPanelPinned;
+  // `heightPinned`: a user-chosen height needs the viewport mounted to fill it,
+  // messages or not — otherwise the window is that tall and the panel is not.
+  const showAnswerPanel = hasChatContent || heightPinned;
+
+  // ── AUTO EXPAND / CONTRACT: the height channel ────────────────────────────
+  //
+  // The card's height used to be a pure consequence of layout: a row mounts,
+  // the panel is instantly taller, and the OS window follows in the same frame.
+  // Correct, and completely uncushioned — every discrete change was a cut.
+  // This gives that axis the same card-resize signature the width now carries
+  // (OVERLAY_RESIZE_TWEEN: 300ms / cubic-bezier(0.22, 1, 0.36, 1)).
+  //
+  // WHAT MOVES: a clipping wrapper around the chat viewport (`viewportBoxRef`),
+  // NOT the card. The card is `overflow-hidden` with the footer at the bottom of
+  // a flex column, so a card whose height lags its own content slices the footer
+  // off for the whole tween — the failure the streaming headroom exists to
+  // prevent. The viewport is the card's only elastic element, so animating its
+  // box keeps `cardHeight === chrome + viewportBox` true at EVERY instant of the
+  // tween: there is no frame in which the window can be shorter than the panel.
+  //
+  // WHAT DOES NOT MOVE: anything already owned by another clock. See
+  // decideHeightCommit in src/lib/overlayHeightTween.mjs — a WIDTH TRANSITION
+  // (the height is that motion's own consequence, and must stay in lockstep with
+  // it), streaming (its channel commits headroom AHEAD of content; a tween
+  // chases), a user resize drag (the pointer is the clock), a hidden window and
+  // reduced motion all SNAP.
+  const viewportHeight = useMotionValue(0);
+  // px STRING, not a bare number. motion-dom appends units only for the keys in
+  // its number map; emitting the string makes this immune to that trap either
+  // way (see scrollMinH's comment for the minHeight case that cost a build).
+  const viewportHeightPx = useTransform(viewportHeight, (h: number) =>
+    `${Math.max(0, Math.round(h))}px`,
+  );
+  const viewportBoxRef = useRef<HTMLDivElement>(null);
+  // The height currently COMMITTED to the box. `null` = never measured, which
+  // makes the next commit snap. Seeded on mount below: an overlay that is born
+  // with chat already in it (Cmd+B re-expand, a restored session) must not play
+  // an expand — it was already open.
+  const viewportAppliedRef = useRef<number | null>(null);
+  const viewportTweenRef = useRef<ReturnType<typeof animate> | null>(null);
+  const viewportTweenTargetRef = useRef<number | null>(null);
+
+  useLayoutEffect(() => {
+    // At mount: a viewport already in the DOM means the overlay opened WITH
+    // content, so the first commit snaps to it. No viewport means the overlay
+    // opened empty and its true height is 0 — the first answer then tweens open
+    // from 0 rather than snapping, which is the moment this whole channel is for.
+    viewportAppliedRef.current = scrollContainerRef.current ? null : 0;
+    viewportHeight.set(0);
+  }, [viewportHeight]);
+
+  const commitViewportHeight = useCallback(
+    (measured: number) => {
+      const decision = decideHeightCommit({
+        from: viewportAppliedRef.current,
+        to: measured,
+        // NOT "a stream exists" — a typed question reserves its streaming id
+        // before the first token, and that wait can run for seconds. Gating on
+        // the id alone made the overlay CUT open on send instead of gliding
+        // (measured live: 0 → 145px in one frame). This is the same predicate
+        // decideStreamingHeightCommit uses for its own headroom, so the two
+        // channels change hands at exactly one instant.
+        streamingWithText:
+          streamingMsgIdRef.current !== null && streamingTextRef.current.length > 0,
+        // A width transition owns the height for its duration — the viewport's
+        // natural height is re-wrapping under it every frame, so this is not a
+        // discrete change to animate, it is the width's own motion expressed on
+        // the other axis. See decideHeightCommit for why this one is the
+        // definition of the motion rather than an optimisation.
+        widthAnimating: animationControlsRef.current !== null,
+        resizing: isResizingRef.current,
+        // Cmd+B has hidden the OS window: there is nothing to watch, and a tween
+        // would spend 300ms pushing setBounds at an offscreen window and then
+        // reveal it mid-travel on re-expand. Treated as reduced motion — same
+        // branch, same snap.
+        reducedMotion: prefersReducedMotionRef.current || !isExpandedRef.current,
+      });
+      if (decision.action === 'none') return;
+      if (decision.action === 'snap') {
+        viewportTweenRef.current?.stop();
+        viewportTweenRef.current = null;
+        viewportTweenTargetRef.current = null;
+        viewportAppliedRef.current = decision.height;
+        viewportHeight.set(decision.height);
+        return;
+      }
+      // Already travelling to exactly this height — let it finish rather than
+      // restarting the curve from zero velocity on a repeat measurement.
+      if (viewportTweenTargetRef.current === decision.height) return;
+      viewportAppliedRef.current = decision.height;
+      viewportTweenTargetRef.current = decision.height;
+
+      // HOW THE OS WINDOW FOLLOWS. The two directions are NOT symmetric, and
+      // treating them as one channel is what put a clip on screen.
+      //
+      // GROWING — the window LEADS, in one setBounds, to the height the panel is
+      // travelling to. This is the streaming channel's own rule ("commit ahead
+      // of need, never chase") applied to the tween. Rate-limiting a follower
+      // instead leaves the window 30ms behind a panel that is getting taller,
+      // and since the card is `overflow-hidden` with the footer at the bottom,
+      // 30ms behind is a visibly sliced send button. Measured live before this:
+      // at t=474ms the card was 412 and the window still 380. Leading also cuts
+      // the native calls for an expand from ~9 to 1.
+      // SHRINKING — the window FOLLOWS the animated height, rate-limited. It may
+      // not shrink ahead of the panel (that clips), and a follower's lag leaves
+      // the window a few px taller than the panel for ~30ms, which is
+      // transparent and gone by the settle. The persistent version of that gap
+      // is the dead strip that swallowed desktop clicks; a transient one is not.
+      //
+      // The suppression deadline EXTENDS rather than resets, so a height tween
+      // overlapping a width tween cannot hand reporting back early.
+      heightReportSuppressedUntilRef.current = Math.max(
+        heightReportSuppressedUntilRef.current,
+        Date.now() + OVERLAY_RESIZE_TWEEN_MS + RESIZE_SUPPRESSION_TAIL_MS,
+      );
+      const growing = decision.height > viewportHeight.get();
+      // chrome = everything in the card that is not the animated box. Constant
+      // for the run, so chrome + target is exactly the card's height on arrival.
+      const chromeNow =
+        (contentRef.current?.offsetHeight ?? 0) - (viewportBoxRef.current?.offsetHeight ?? 0);
+      let lastReportAt = 0;
+      let lastReported = -1;
+      let healsIssued = 0;
+      let leadPending: Promise<void> | null = null;
+      if (growing && chromeNow > 0) {
+        lastReported = Math.round(chromeNow + decision.height);
+        lastReportAt = Date.now();
+        leadPending = resizeOverlayWindow(lastReported) ?? null;
+        syncStreamingHeightBaseline(lastReported);
+      }
+      const runTween = () => {
+      viewportTweenRef.current = animate(viewportHeight, decision.height, {
+        ...OVERLAY_RESIZE_TWEEN,
+        onUpdate: () => {
+          const h = contentRef.current?.offsetHeight ?? 0;
+          const now = Date.now();
+          if (growing && h <= lastReported) {
+            // The window is already at the arrival height and the panel has not
+            // outgrown it — but the lead can be UNDONE by a report that was
+            // already in flight when the tween started. The send path is exactly
+            // that case: pressing Enter mounts the viewport, whose observer
+            // reports the pre-growth height one rAF before this tween arms its
+            // suppression, and if that IPC lands second it shrinks the window
+            // back under a panel that is still growing. Measured live: the
+            // window led to 496 at t=474ms, was pulled back to 329 at t=490ms,
+            // and stayed there under a 496px panel until onComplete — a quarter
+            // second of sliced footer. So the lead is ASSERTED, not just set:
+            // one cheap read of the window's own height per frame, re-issued at
+            // the same 30fps gate if anything has undercut it. Self-healing
+            // against any racing writer, present or future, and a no-op once the
+            // window is where it belongs.
+            if (window.innerHeight >= lastReported) return;
+            // NOT rate-limited. The 33ms gate exists to stop a FOLLOWER issuing
+            // a setBounds per frame; a heal is not a follower — it fires only
+            // while something has the window below the panel, and stops the
+            // moment it is fixed. Gating it cost exactly one frame of sliced
+            // footer in the live trace (the undercut landed 16ms after the
+            // lead, inside the window the gate was holding). Capped so the one
+            // case where the window can NEVER reach the asked-for height — the
+            // main process clamping to floor(workArea.height * 0.9) on a short
+            // display — retries a few times instead of every frame for 300ms.
+            if (healsIssued >= 4) return;
+            healsIssued += 1;
+            lastReportAt = now;
+            resizeOverlayWindow(lastReported);
+            return;
+          }
+          if (!shouldReportTweenHeight({ now, lastReportAt, lastReported, height: h })) return;
+          lastReportAt = now;
+          lastReported = Math.round(h);
+          resizeOverlayWindow(h);
+          syncStreamingHeightBaseline(h);
+        },
+        onComplete: () => {
+          viewportTweenRef.current = null;
+          viewportTweenTargetRef.current = null;
+          // Hand reporting back BEFORE the settle, or the settle is swallowed by
+          // the very suppression it is meant to end — but ONLY if the WIDTH
+          // channel is not still running. Whichever transition finishes LAST
+          // releases the shared deadline; see startTransition's onComplete.
+          if (!animationControlsRef.current) heightReportSuppressedUntilRef.current = 0;
+          measureVerticalCapRef.current?.();
+          const settled = contentRef.current?.offsetHeight ?? 0;
+          if (settled > 0) {
+            resizeOverlayWindow(settled);
+            syncStreamingHeightBaseline(settled);
+          }
+        },
+      });
+      };
+
+      // START THE TWEEN ONLY ONCE THE LEAD HAS LANDED. Issuing the setBounds and
+      // animating in the same frame still clipped: the renderer paints frame 1
+      // of the tween before the main process has applied the new bounds, so the
+      // card overhangs the window by whatever that frame travelled (measured: 38px).
+      // Waiting for the IPC round trip — typically 1-3ms, well inside a frame —
+      // makes "the window is big enough" true before the first painted frame.
+      // The 80ms deadline is not optimism management: if the IPC is slow or the
+      // window is gone, the animation must still run, because the viewport is
+      // already mounted and a tween that never starts is a permanently wrong box.
+      if (leadPending) {
+        let started = false;
+        const startOnce = () => {
+          if (started) return;
+          started = true;
+          // A newer commit may have superseded this one while we waited.
+          if (viewportTweenTargetRef.current !== decision.height) return;
+          runTween();
+        };
+        void leadPending.then(startOnce, startOnce);
+        window.setTimeout(startOnce, 80);
+      } else {
+        runTween();
+      }
+    },
+    [viewportHeight, resizeOverlayWindow, syncStreamingHeightBaseline],
+  );
+
+  // Put the animated box on the viewport's CURRENT natural height, right now,
+  // in the caller's frame.
+  //
+  // The ResizeObserver path below is rAF-debounced, so it is always one frame
+  // behind — fine for a discrete change that is about to be tweened anyway, and
+  // NOT fine while the width is animating, where one frame of lag between the
+  // two axes is precisely the artifact being removed. The width transition
+  // therefore calls this from its own onUpdate: reading the scroller's
+  // offsetHeight there flushes layout at the width framer has just written, so
+  // the height applied is the one that width implies, in the same frame.
+  const syncViewportHeightToContent = useCallback(() => {
+    // Stop any in-flight height tween FIRST, before the "nothing to do" check.
+    // Calling this at all means another clock has taken the height over, and a
+    // tween must not keep running underneath it. Ordering it after the check
+    // left a hole: if the tween's target happened to equal the current natural
+    // height for a frame, the early return let it carry on animating on its own
+    // clock in the middle of a width transition.
+    if (viewportTweenRef.current) {
+      viewportTweenRef.current.stop();
+      viewportTweenRef.current = null;
+      viewportTweenTargetRef.current = null;
+    }
+    const el = scrollContainerRef.current;
+    const natural = el ? Math.max(0, Math.round(el.offsetHeight)) : 0;
+    if (viewportAppliedRef.current === natural) return;
+    viewportAppliedRef.current = natural;
+    viewportHeight.set(natural);
+  }, [viewportHeight]);
+
+  // The height AUTO sizing would choose RIGHT NOW, computed rather than
+  // remembered — a recorded value goes stale while a pin is in force, which is
+  // exactly when a release needs to consult it (pin, let three answers stream
+  // in, drag back: the remembered height is the one from before the pin).
+  //
+  // THERE IS DELIBERATELY NO CACHE BEHIND THIS. A previous version kept the last
+  // auto height in a ref as a fallback, refreshed from the reporter and both
+  // animation onCompletes. Instrumented against the real app it was both wrong
+  // and unused: clearing a pin let the reporter accept two STALE heights (553,
+  // then 537, where auto was 527) before onComplete corrected it, and the
+  // fallback never fired once — this function returned the right answer, to the
+  // pixel, every time. A cache that is only consulted when this returns 0 can
+  // only be consulted when there is no contentRef at all, and a release with no
+  // shell has nothing to decide.
+  //
+  // chrome + min(natural viewport, the caps that would apply unpinned). The
+  // viewport's natural height is not readable while pinned, because the pin is
+  // a min-height on it — so the floor is dropped with a DIRECT style write and
+  // put straight back. Direct, not through the MotionValue, because framer
+  // flushes styles on its own frame and this must be true for the very next
+  // layout read; framer rewrites the property next frame regardless.
+  //
+  // Returns 0 when it cannot be computed (no viewport mounted), which the
+  // caller treats as "fall back to the recorded height".
+  const measureAutoHeight = useCallback(() => {
+    const contentEl = contentRef.current;
+    if (!contentEl) return 0;
+    const boxEl = viewportBoxRef.current;
+    const scrollEl = scrollContainerRef.current;
+    // No viewport in the DOM: the panel IS its chrome, and that is the auto size.
+    if (!boxEl || !scrollEl) return contentEl.offsetHeight;
+    const chromeHeight = contentEl.offsetHeight - boxEl.offsetHeight;
+    if (!(chromeHeight >= 0)) return 0;
+    // RESTORED IN `finally`, and that is not ceremony. framer writes this
+    // property only when the MotionValue behind it CHANGES, and dropping the
+    // floor here does not change it — so a restore that is skipped is never
+    // written again. Probed in the real app by throwing between the write and
+    // the restore: the viewport kept `min-height: 0px` indefinitely, the pin's
+    // floor was gone, and the window sat 221px taller than the panel. That is
+    // the transparent dead strip, arrived at from a new direction.
+    const previousMinHeight = scrollEl.style.minHeight;
+    let naturalViewport = 0;
+    try {
+      scrollEl.style.minHeight = '0px';
+      naturalViewport = scrollEl.scrollHeight;
+    } finally {
+      scrollEl.style.minHeight = previousMinHeight;
+    }
+    const availHeight = typeof window !== 'undefined' ? window.screen?.availHeight ?? 0 : 0;
+    // Both bounds scrollMaxH applies when nothing is pinned. The width-derived
+    // one is read at the CURRENT panel width; a release that also changes the
+    // width can therefore be off by the 320↔560 difference, which only bites on
+    // content long enough to be capped either way.
+    const cap = Math.min(
+      widthDerivedScrollMax(shellWidth.get(), {
+        collapsedWidth: SHELL_WIDTH_COLLAPSED,
+        expandedWidth: SHELL_WIDTH_EXPANDED,
+      }),
+      verticalScrollCap({ availHeight, chromeHeight }),
+    );
+    return chromeHeight + Math.min(naturalViewport, cap);
+  }, [shellWidth, SHELL_WIDTH_EXPANDED]);
+
+  // Measure the viewport's NATURAL height and feed it to the commit rule.
+  //
+  // The observer watches the INNER scroller, whose height is still content-
+  // driven exactly as before — the animated height lives on the wrapper. That
+  // separation is what keeps this from being a feedback loop: writing the
+  // wrapper's height cannot change what is being measured.
+  useLayoutEffect(() => {
+    let raf: number | null = null;
+    const measure = () => {
+      raf = null;
+      const el = scrollContainerRef.current;
+      commitViewportHeight(el ? el.offsetHeight : 0);
+    };
+    const schedule = () => {
+      if (raf !== null) return;
+      raf = requestAnimationFrame(measure);
+    };
+    const el = scrollContainerRef.current;
+    // No viewport in the DOM: the panel is empty, so the box contracts to 0.
+    // This is the CONTRACT half of auto expand/contract — it runs on the same
+    // curve as the expand because it goes through the same commit rule.
+    if (!el) {
+      commitViewportHeight(0);
+      return;
+    }
+    const observer = new ResizeObserver(schedule);
+    observer.observe(el);
+    schedule();
+    return () => {
+      observer.disconnect();
+      if (raf !== null) cancelAnimationFrame(raf);
+    };
+    // showAnswerPanel is the mount gate for the scroller, so this must re-run
+    // when it flips — that is the edge that starts both the expand and the
+    // contract.
+  }, [showAnswerPanel, commitViewportHeight]);
+
+  useEffect(
+    () => () => {
+      viewportTweenRef.current?.stop();
+      viewportTweenRef.current = null;
+    },
+    [],
+  );
+
 
   // Re-pin the chat to the bottom for the current frame (iMessage-style sticky
   // bottom). Hoisted out of the animation callback so both the spring's
@@ -2664,6 +3569,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
   const startTransition = useCallback(
     (targetWidth: number) => {
+      // The user's drag owns `shellWidth` for its duration. Without this the
+      // first token of a code answer arriving mid-drag would call
+      // startTransition (queueToken's eager-expand path) and animate the panel
+      // out from under the pointer, fighting the drag's own .set() every frame.
+      // Guarding the single choke point covers all four callers — the manual
+      // toggle, checkCodeVisibility, the aux-window action and queueToken.
+      if (isResizingRef.current) return;
       codeExpandedRef.current = targetWidth === SHELL_WIDTH_EXPANDED;
 
       const fromWidth = Math.round(shellWidth.get());
@@ -2701,12 +3613,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       if (prefersReducedMotionRef.current) {
         if (animationControlsRef.current) animationControlsRef.current.stop();
         animationControlsRef.current = null;
-        heightReportSuppressedUntilRef.current = 0;
+        // Same rule as onComplete: only if nothing else owns the channel.
+        if (!viewportTweenRef.current) heightReportSuppressedUntilRef.current = 0;
         // Snap the width to the target with no animated travel; content reflows
         // once to the final width.
         shellWidth.set(targetWidth);
         pinScrollBottomIfNeeded();
         reserveScrollHeadroomIfNeeded();
+        // The width just changed, so the viewport's natural height did too.
+        syncViewportHeightToContent();
         const h = contentRef.current?.offsetHeight ?? 0;
         if (h > 0) {
           resizeOverlayWindow(h);
@@ -2724,9 +3639,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // deadline EXTENDS on every (re)trigger so a mid-flight scroll retarget
       // keeps the observer suppressed across the blended motion; a generous tail
       // covers the spring's settle past visualDuration. Self-expiring so an
-      // interrupted spring can never wedge reporting off.
-      heightReportSuppressedUntilRef.current =
-        Date.now() + OVERLAY_RESIZE_DURATION_MS + 260;
+      // interrupted spring can never wedge reporting off. Math.max, not a bare
+      // assignment: a height tween may already have armed a deadline, and this
+      // must never SHORTEN one. It is a fail-safe either way — onComplete clears
+      // it explicitly, and only once the other channel is idle too.
+      heightReportSuppressedUntilRef.current = Math.max(
+        heightReportSuppressedUntilRef.current,
+        Date.now() + OVERLAY_RESIZE_DURATION_MS + RESIZE_SUPPRESSION_TAIL_MS,
+      );
 
       // Height channel for the animation. The chat scroll viewport's max-height
       // is derived from the LIVE width (widthDerivedScrollMax: 320px collapsed →
@@ -2744,8 +3664,23 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // 30fps stays well under 60fps, so it does not reintroduce the per-frame
       // native setBounds that the suppression machinery exists to prevent.
       let lastHeightReportAt = 0;
-      let lastReportedHeight = -1;
       const HEIGHT_REPORT_INTERVAL_MS = 33; // ~30fps
+      // What the OS window has been TOLD. ARM THE HEADROOM UP FRONT rather than
+      // seeding with the panel's current height: the grow branch below can only
+      // react on the frame AFTER the panel crosses this value, so with no
+      // runway the first growth step clips by exactly that step. Measured: 27px
+      // and 22px single-frame clips, which is one line-wrap. One extra setBounds
+      // at the start buys ~4 lines of runway and the invariant holds from frame
+      // one. On a transition whose height SHRINKS this leaves the window a
+      // buffer too tall for the run — transparent, not hit-tested (the hover
+      // gate uses the panel rect), and settled exactly by onComplete.
+      let committedWindowHeight = contentRef.current?.offsetHeight ?? 0;
+      if (committedWindowHeight > 0) {
+        committedWindowHeight += STREAMING_HEIGHT_GROW_BUFFER_PX;
+        lastHeightReportAt = Date.now();
+        resizeOverlayWindow(committedWindowHeight);
+        syncStreamingHeightBaseline(committedWindowHeight);
+      }
 
       // WIDTH SPRING on the renderer clock (600↔732 inside the fixed window).
       // Why a spring instead of the old duration+bezier tween:
@@ -2766,29 +3701,107 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       //   drawer tween. Any micro-overshoot during an interrupted retarget is
       //   renderer-only (it nudges the CSS width, never a native width setBounds —
       //   the window width is fixed), so it is safe.
+      //
+      // 2026-09-13 — THE WIDTH KEEPS THIS SPRING, UNCHANGED. The overlay's auto
+      // expand/contract was reworked to give the HEIGHT axis a card-resize tween
+      // (300ms / cubic-bezier(0.22, 1, 0.36, 1) — see the viewport height channel
+      // above); the width was briefly moved to that curve too and then moved
+      // back, by choice, after watching the two side by side in the real overlay.
+      // Width stays the 420ms weighted spring it has always been.
+      //
+      // That decision also deleted machinery rather than adding it. A tweened
+      // width needed a hybrid — tween on a fresh transition, spring on a retarget
+      // — because a tween restarts from progress 0 and therefore from ZERO
+      // velocity, and the scroll scanner re-fires startTransition every time a
+      // code block crosses the viewport edge. Measured over five retargets at
+      // 150ms (scripts/overlay-motion/ab-retarget-probe.mjs, live CSS width
+      // sampled per rAF, velocity step read AT each retarget instant):
+      //     spring          mean step 0.55 px/ms
+      //     pure tween      mean step 1.86 px/ms   ← 3.4x the discontinuity
+      //     tween + spring  mean step 0.54 px/ms
+      // A spring needs none of that: framer retargets it in flight, carrying the
+      // current velocity into the new target, which is why .stop() is deliberately
+      // NOT called before re-issuing here. The rig still reaches the rejected
+      // variants for anyone re-opening the question — `?v=before,after` on
+      // overlayResizeHarness.html, plus `retarget=tween`.
       animationControlsRef.current = animate(shellWidth, targetWidth, {
         ...OVERLAY_RESIZE_SPRING,
         onUpdate: () => {
           pinScrollBottomIfNeeded();
           reserveScrollHeadroomIfNeeded();
-          const now = Date.now();
-          if (now - lastHeightReportAt < HEIGHT_REPORT_INTERVAL_MS) return;
+          // BEFORE the rate-limit check, and before reading contentRef: the two
+          // axes have to move together. The panel is a little wider than it was
+          // last frame, so the text has re-wrapped and the viewport's natural
+          // height has changed; the animated box takes that value now, in this
+          // frame, rather than one frame later via the observer. Rate-limiting
+          // this would be rate-limiting the height animation itself.
+          syncViewportHeightToContent();
           const h = contentRef.current?.offsetHeight ?? 0;
-          if (h <= 0 || h === lastReportedHeight) return;
+          if (h <= 0) return;
+
+          // THE WINDOW MUST LEAD A GROWING PANEL, NOT FOLLOW IT. The card is
+          // `overflow-hidden` with the footer at the bottom, so any frame where
+          // the window is shorter than the panel is a visibly sliced send
+          // button. A 30fps follower left 9 such frames, worst 36px, on the
+          // manual width toggle. Reporting every growth frame instead was not
+          // enough either — `resizeOverlayWindow` is async IPC, so the setBounds
+          // lands a frame late and a single 34px re-wrap step still clipped.
+          //
+          // So commit AHEAD, which is the rule the streaming height channel
+          // already runs on: overshoot by STREAMING_HEIGHT_GROW_BUFFER_PX (~4
+          // lines) and do nothing until the panel catches up to it. Fewer native
+          // calls than a follower, not more, and the invariant holds at every
+          // instant. The extra transparent height is not a dead strip that eats
+          // clicks — the hover gate hit-tests the PANEL's rect, not the window's
+          // — and onComplete settles the window to the exact height.
+          // Top up on a LOW-WATER MARK, not on the crossing. Reacting when the
+          // panel has already passed the committed height is inherently one
+          // frame late — measured as a single 25px clipped frame even with the
+          // headroom armed up front, because a line-wrap step lands entirely
+          // within one frame. Re-committing while half the buffer is still
+          // unused means the panel never reaches the window's edge at all, so
+          // any single-frame step below that half can't clip.
+          if (h + STREAMING_HEIGHT_GROW_BUFFER_PX / 2 > committedWindowHeight) {
+            committedWindowHeight = h + STREAMING_HEIGHT_GROW_BUFFER_PX;
+            lastHeightReportAt = Date.now();
+            resizeOverlayWindow(committedWindowHeight);
+            syncStreamingHeightBaseline(committedWindowHeight);
+            return;
+          }
+
+          // SHRINKING follows, rate-limited — a window taller than the panel is
+          // transparent and harmless, so it can lag. The `- BUFFER` guard is
+          // what stops this branch from immediately undoing the headroom the
+          // grow branch just committed and oscillating (+96/-96) against it:
+          // while the panel is still climbing INTO that headroom it is by
+          // definition within a buffer of the window, so nothing is reported.
+          const now = Date.now();
+          if (h >= committedWindowHeight - STREAMING_HEIGHT_GROW_BUFFER_PX) return;
+          if (now - lastHeightReportAt < HEIGHT_REPORT_INTERVAL_MS) return;
           lastHeightReportAt = now;
-          lastReportedHeight = h;
+          committedWindowHeight = h;
           resizeOverlayWindow(h);
           syncStreamingHeightBaseline(h);
         },
         onComplete: () => {
           animationControlsRef.current = null;
           // Hand reporting back to normal FIRST so the settle below actually
-          // fires (the ResizeObserver early-returns while suppression is live).
-          heightReportSuppressedUntilRef.current = 0;
+          // fires (the ResizeObserver early-returns while suppression is live) —
+          // but ONLY if the HEIGHT channel is not still mid-tween. The two
+          // overlap routinely: a code block appearing widens the panel AND grows
+          // the viewport, so both transitions run, and whichever finished first
+          // would otherwise zero the shared deadline out from under the other.
+          // That hands the channel back to `reportShellSize` while a tween is
+          // still driving it — two writers, the exact clobber the guard inside
+          // reportShellSize exists to prevent. The settle below does not need the
+          // deadline cleared: it calls resizeOverlayWindow directly, and the
+          // other channel clears the deadline when IT finishes.
+          if (!viewportTweenRef.current) heightReportSuppressedUntilRef.current = 0;
           // Authoritative HEIGHT settle: one setBounds for the final, exact
           // content height after the width (and therefore the width-derived
           // scroll max) has fully settled — guarantees the final frame is exact
           // even if the last rate-limited sample landed a few px short.
+          syncViewportHeightToContent();
           const settledHeight = contentRef.current?.offsetHeight ?? 0;
           resizeOverlayWindow(settledHeight);
           syncStreamingHeightBaseline(settledHeight);
@@ -2803,6 +3816,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       pinScrollBottomIfNeeded,
       reserveScrollHeadroomIfNeeded,
       isAutoScrollSuppressed,
+      syncViewportHeightToContent,
     ],
   );
 
@@ -2818,6 +3832,480 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     manualWidthOverrideRef.current = target;
     startTransition(target);
   }, [shellWidth, startTransition, SHELL_WIDTH_COLLAPSED, SHELL_WIDTH_EXPANDED]);
+
+  // ── Free-form resize handles ──────────────────────────────────────────────
+  // EAST-side directions only ('e', 's', 'se'). A west-side handle would need
+  // the window's X origin to move, which setOverlayDimensionsAnchored
+  // deliberately never does: an X-origin move flashes for a frame on macOS
+  // because Chromium does not sync setBounds to renderer paint. Growing
+  // rightward from a left-anchored window is the only artifact-free direction,
+  // so it is the only one offered — rather than shipping 'w'/'sw' handles that
+  // compute (startWidth - dx) while the window still grows rightward, which
+  // makes dragging the west edge leftward push the panel to the RIGHT.
+  //
+  // Pointer events are the single input path, so Windows never starts a
+  // duplicate mouse drag session alongside the pointer one.
+  // Content presence decides the PANEL's width floor (600 collapsed with
+  // nothing asked, 732 once there is content). A ref, so the drag callback
+  // does not take a new identity on every message.
+  const hasContentRef = useRef(false);
+  hasContentRef.current = messages.length > 0;
+
+  const handleResizePointerDown = useCallback(
+    (direction: OverlayResizeDirection, e: React.PointerEvent<HTMLDivElement>) => {
+      if (e.button !== 0 || isResizingRef.current) return;
+      // NOT preventDefault(): calling it on pointerdown suppresses the
+      // compatibility mouse events, and with them the `dblclick` that the
+      // reset gesture is built on. Text selection is prevented by
+      // `user-select: none` on .resize-handle instead, and window dragging by
+      // its -webkit-app-region: no-drag.
+      e.stopPropagation();
+
+      const handleEl = e.currentTarget;
+      const { pointerId } = e;
+      // Capture keeps the move stream coming even when the pointer leaves the
+      // 16px strip; best-effort because a detached node can reject it.
+      try {
+        handleEl.setPointerCapture(pointerId);
+      } catch {
+        /* capture is an optimisation, not a requirement */
+      }
+
+      const contentEl = contentRef.current;
+      const scrollEl = scrollContainerRef.current;
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const widthDriven = direction === 'e' || direction === 'se';
+      // DIRECT MANIPULATION. The edge under the pointer is the PANEL's edge and
+      // it starts where it visibly is — not at the window width (which snapped
+      // a collapsed panel 132px wider on the first move) and not at the
+      // pointer's x (which left a 66px dead zone against the floor). Wherever
+      // in the 16px strip the user grabbed, that offset to the edge holds for
+      // the whole drag, so the edge moves exactly as far as the pointer does.
+      const startWidth = Math.round(shellWidth.get());
+      // Where the window actually IS: the pin, or the panel when it stands
+      // taller than the pin (a floor-mode pin the answer has grown past, or a
+      // chrome that outgrew it).
+      const startHeight = Math.round(
+        Math.max(
+          customOverlayHeightRef.current ?? 0,
+          contentEl?.offsetHeight ?? OVERLAY_MIN_WINDOW_HEIGHT,
+        ),
+      );
+      // The panel's left inside the window (66 collapsed, 0 expanded), frozen
+      // for the drag: only the edge under the pointer moves.
+      const panelLeft = Math.round(contentEl?.getBoundingClientRect().left ?? 0);
+      const availWidth = window.screen?.availWidth ?? 0;
+      const availHeight = window.screen?.availHeight ?? 0;
+      const pinsHeight = pinsHeightFor(direction, customOverlayHeightRef.current !== null);
+      // (There used to be a `pinsWidth` here, consumed by a single
+      // `if (pinsWidth) setCustomWindowWidth(...)` that sat INSIDE a
+      // `if (widthDriven)` — where `customWindowWidth !== null || widthDriven`
+      // is true by construction. The release path now decides per axis through
+      // planResizeRelease, so the dead term is gone rather than moved.)
+      const previousManualOverride = manualWidthOverrideRef.current;
+      const previousPinIsCeiling = heightPinIsCeilingRef.current;
+      const previousPinStreamId = heightPinStreamIdRef.current;
+
+      // Floors — the controlled range. Panel widths, in the numbers the user
+      // sees; heights as the overlay would size itself right now. Both are
+      // bounded by where the drag starts, so a floor can never be a jump.
+      const minWidth = panelWidthFloorFor({ hasContent: hasContentRef.current, startWidth });
+      // Height: the chrome when empty (the default state), 450 once there are
+      // responses — a manual floor only. Auto expand/contract never consults
+      // it: it reports the content height whenever no height is pinned.
+      const minHeight = contentEl
+        ? manualHeightFloorFor({
+            hasContent: hasContentRef.current,
+            chromeHeight: scrollEl
+              ? contentEl.offsetHeight - scrollEl.clientHeight
+              : contentEl.offsetHeight,
+            maxHeight: maxWindowHeightFor(availHeight),
+          })
+        : OVERLAY_MIN_WINDOW_HEIGHT;
+      // Ceilings — what the window IS right now, until the envelope echo lands
+      // (one IPC round-trip, about a frame) and raises them. The panel cannot
+      // outgrow the window it is painted in, so the interim ceiling is the
+      // current window, never the display.
+      // panelLeft is contentEl's rect (the padding box), while startWidth is the
+      // CARD's width — different boxes since the panel became inset. Give back
+      // both insets or the drag lets the card grow into the ring's gutter.
+      let maxWidth = Math.max(
+        startWidth,
+        overlayWindowWidthRef.current - panelLeft - OVERLAY_PANEL_INSET * 2,
+      );
+      let maxHeight = startHeight;
+
+      isResizingRef.current = true;
+      dragPanelLeftRef.current = panelLeft;
+      // Mount the chat viewport before the first move so the panel can grow
+      // with the pointer (the drag renders in CSS through verticalCap), instead
+      // of the window growing under a panel that stays its chrome height.
+      if (pinsHeight) {
+        setHeightPinned(true);
+        // The drag renders through the pinned cap: the size under the pointer
+        // is the panel's size, exactly.
+        heightPinIsCeilingRef.current = true;
+        // Only a stream that has already SHOWN text keeps the ceiling: the
+        // user sized the overlay around an answer they can see. A question
+        // whose placeholder is reserved but has no tokens yet (the wait for
+        // the first token can run several seconds) must still grow the
+        // overlay when it arrives — otherwise a resize made while waiting
+        // reads as "no answer was produced".
+        heightPinStreamIdRef.current = streamingTextRef.current
+          ? streamingMsgIdRef.current
+          : null;
+      }
+      // Pin the panel where it is: mx-auto would re-centre it the instant the
+      // window grows to its envelope. Inline margins override the class; they
+      // are cleared once the window has shrunk back to fit, when centring
+      // resolves to the same place.
+      if (contentEl) {
+        contentEl.style.marginLeft = `${panelLeft}px`;
+        contentEl.style.marginRight = '0px';
+      }
+      // A manual WIDTH suspends auto expand/collapse, like the toggle does. A
+      // height-only drag leaves the width channel exactly as it found it.
+      if (widthDriven) manualWidthOverrideRef.current = startWidth;
+      // The hover gate is suppressed for the drag; make sure the window is
+      // interactive before it stops looking.
+      void window.electronAPI?.setOverlayHoverInteractive?.(true).catch(() => {});
+
+      // ONE native resize: grow to the envelope so the entire drag can render in
+      // CSS. Everything native waits on this promise so a release can never
+      // overtake the grab.
+      const envelopeApi = window.electronAPI?.overlayResizeEnvelope;
+      const envelopeReady: Promise<void> = envelopeApi
+        ? Promise.resolve(
+            envelopeApi({
+              phase: 'begin',
+              // Diagnostic only: lets the main-process trace tell a south drag
+              // from an east one, and shows the floors the drag was bounded by.
+              drag: { direction, startWidth, startHeight, minWidth, minHeight, panelLeft },
+            }),
+          )
+            .then((env) => {
+              if (!env || !isResizingRef.current) return;
+              maxWidth = Math.max(maxWidth, env.width - panelLeft - OVERLAY_PANEL_INSET * 2);
+              maxHeight = Math.max(maxHeight, env.height);
+            })
+            .catch(() => {
+              /* no envelope: the drag is bounded by the current window */
+            })
+        : Promise.resolve();
+
+      let latest = { width: startWidth, height: startHeight };
+      // A pointerdown that never moves is a CLICK, not a resize. Without this
+      // every click on a handle would pin the overlay at its current size —
+      // and, because the two clicks of a double-click each run this handler,
+      // the trailing end()'s async persist would race the reset that the
+      // dblclick just performed and write the cleared size straight back.
+      let moved = false;
+      // Pointer TRAVEL, not "the computed frame differs from the start frame".
+      const DRAG_THRESHOLD_PX = 3;
+
+      const move = (event: PointerEvent) => {
+        if (!isResizingRef.current) return;
+        // Self-healing net: if the button is already up we missed the pointerup
+        // (capture stolen by an OS gesture, release outside every Natively
+        // window). Ending here on the next move cannot false-positive the way a
+        // window 'blur' listener would — the overlay is a non-activating panel
+        // and blurs for reasons that have nothing to do with the drag.
+        if (event.buttons === 0) {
+          end();
+          return;
+        }
+        const dx = event.clientX - startX;
+        const dy = event.clientY - startY;
+        if (!moved) {
+          if (Math.abs(dx) <= DRAG_THRESHOLD_PX && Math.abs(dy) <= DRAG_THRESHOLD_PX) return;
+          moved = true;
+        }
+        const next = computeResizeFrame({
+          direction,
+          dx,
+          dy,
+          startWidth,
+          startHeight,
+          maxWidth,
+          maxHeight,
+          minWidth,
+          minHeight,
+        });
+        if (next.width === latest.width && next.height === latest.height) return;
+        // CSS only — no native call per frame. The panel is bound to shellWidth
+        // and the chat viewport to verticalCap (via measureVerticalCap), both
+        // MotionValues that update at display refresh rate without a render.
+        if (next.width !== latest.width) shellWidth.set(next.width);
+        if (pinsHeight && next.height !== latest.height) {
+          customOverlayHeightRef.current = next.height;
+          measureVerticalCap();
+        }
+        latest = next;
+      };
+
+      const detach = () => {
+        window.removeEventListener('pointermove', move, true);
+        window.removeEventListener('pointerup', end, true);
+        window.removeEventListener('pointercancel', end, true);
+        window.removeEventListener('lostpointercapture', end, true);
+      };
+
+      // Second native resize: fit the result (or, for a click, return to the
+      // pre-drag size). Always after the grab has landed.
+      const finishEnvelope = (final?: { width: number; height: number }) =>
+        envelopeReady.then(() => Promise.resolve(envelopeApi?.({ phase: 'end', final })));
+
+      const restoreCentering = () => {
+        dragPanelLeftRef.current = null;
+        if (contentEl) {
+          contentEl.style.marginLeft = '';
+          contentEl.style.marginRight = '';
+        }
+      };
+
+      function end() {
+        if (!isResizingRef.current) return;
+        // Cleared FIRST and unconditionally: the ResizeObserver gates on this
+        // ref, so nothing below can leave height reporting wedged off.
+        isResizingRef.current = false;
+        detach();
+        try {
+          handleEl.releasePointerCapture(pointerId);
+        } catch {
+          /* already released, or the node is gone */
+        }
+
+        if (!moved) {
+          // A click (or one half of a double-click). Nothing pinned, nothing
+          // persisted; the window returns to the size it had. Centring is
+          // restored only once it has — mx-auto inside the envelope would
+          // jump the panel for a frame.
+          manualWidthOverrideRef.current = previousManualOverride;
+          heightPinIsCeilingRef.current = previousPinIsCeiling;
+          heightPinStreamIdRef.current = previousPinStreamId;
+          // The viewport was mounted at grab for a drag that never came:
+          // unmount it again unless a height was already pinned, or a bare
+          // click on the south handle leaves an empty padded viewport behind.
+          setHeightPinned(customOverlayHeightRef.current !== null);
+          void finishEnvelope().catch(() => {}).finally(restoreCentering);
+          return;
+        }
+
+        const panelWidth = latest.width;
+        // A height-only drag must not touch the window's width: the panel may be
+        // sitting collapsed (856) inside a window the user widened earlier
+        // (1044), and fitting the window to the PANEL would shrink it by 188px
+        // on a drag that never moved the east edge. Only a width-driven drag
+        // re-fits the window; then the panel is flush when it fills the window
+        // and centred in the slack when it is narrower than the default.
+        const windowWidth = widthDriven
+          ? releaseWindowWidthFor(panelWidth + OVERLAY_PANEL_INSET * 2, availWidth)
+          : overlayWindowWidthRef.current;
+        const targetLeft = widthDriven ? Math.round((windowWidth - panelWidth) / 2) : panelLeft;
+        const settleHeight = pinsHeight ? latest.height : (contentEl?.offsetHeight ?? latest.height);
+
+        // Release settle. A collapsed panel was grabbed 66px in from the window
+        // edge; it glides home on the same spring the width channel uses —
+        // inside the still-transparent envelope, so nothing clips — and only
+        // then does the window shrink to fit. An expanded panel is already
+        // home: no glide, immediate fit. Reduce Motion snaps, as the spring
+        // itself does.
+        const glideHome = () =>
+          new Promise<void>((resolve) => {
+            if (!contentEl || targetLeft === panelLeft || prefersReducedMotionRef.current) {
+              if (contentEl) contentEl.style.marginLeft = `${targetLeft}px`;
+              resolve();
+              return;
+            }
+            const left = motionValue(panelLeft);
+            const unsubscribe = left.on('change', (v: number) => {
+              contentEl.style.marginLeft = `${v}px`;
+              // The glide moves the panel's LEFT, which shellWidth's stream
+              // never sees — keep the pill and toggle on the panel through it.
+              const l = Math.round(v);
+              window.electronAPI
+                ?.sendOverlayToggleAnchor?.({ panelRight: l + panelWidth, panelLeft: l })
+                .catch(() => {});
+            });
+            animate(left, targetLeft, {
+              ...OVERLAY_RESIZE_SPRING,
+              onComplete: () => {
+                unsubscribe();
+                contentEl.style.marginLeft = `${targetLeft}px`;
+                resolve();
+              },
+            });
+          });
+
+        void glideHome()
+          .then(() => finishEnvelope({ width: windowWidth, height: settleHeight }))
+          .then((applied) => {
+            // Adopt the size the window ACTUALLY became: the main process clamps
+            // to the work area of the display the window sits on, which can
+            // differ from window.screen on a multi-monitor setup.
+            const settledWidth =
+              typeof applied?.width === 'number' && applied.width > 0 ? applied.width : windowWidth;
+            const settledHeight =
+              typeof applied?.height === 'number' && applied.height > 0
+                ? applied.height
+                : settleHeight;
+            // Bounded by the panel width the settled WINDOW can hold, not by the
+            // window itself — the panel has to leave its gutter free.
+            // Bounded by the panel width the settled WINDOW can hold, not by the
+            // window itself — the panel has to leave its gutter free.
+            const settledPanel = Math.min(panelWidth, panelWidthForWindow(settledWidth));
+            overlayWindowWidthRef.current = settledWidth;
+            setAppliedWindowWidth(settledWidth);
+
+            // DID THEY MEAN AUTO? A drag that lands within a tolerance band of
+            // the size auto sizing would have chosen is read as an aim AT auto,
+            // not as a pin — you cannot hit the auto size by eye, and pinning a
+            // visually identical size would switch auto sizing off for the rest
+            // of the meeting. Per axis, because the pins are. The plan itself is
+            // pure and tested: planResizeRelease in src/lib/overlaySnapToAuto.mjs.
+            //
+            // The width's auto target is the CLAMPED default, not the bare 732:
+            // on a display too narrow for that, auto width is what the main
+            // process will actually grant, and comparing against 732 would put
+            // the band around a width the window can never take — swallowing
+            // deliberate pins below it.
+            const autoWidth = minWindowWidthFor(availWidth);
+            const plan = planResizeRelease({
+              widthDriven,
+              pinsHeight,
+              settledWidth,
+              settledHeight,
+              autoWidth,
+              autoHeight: measureAutoHeight(),
+            });
+
+            if (plan.width === 'auto') {
+              // Same end state as the double-click reset's width half: no pin,
+              // no panel override, auto width restored.
+              setCustomWindowWidth(null);
+              // The REFS too, not just the state. reportShellSize sends
+              // `requestedWindowWidthRef`, which is assigned from
+              // `customWindowWidth` during RENDER — so the report below (and any
+              // observer fire before React re-renders) would otherwise keep
+              // asking for the dragged width and the window would sit at it.
+              // Measured: the window stayed at 746 instead of returning to 732.
+              requestedWindowWidthRef.current = autoWidth;
+              overlayWindowWidthRef.current = autoWidth;
+              setAppliedWindowWidth(autoWidth);
+              manualWidthOverrideRef.current = null;
+              // TARGET THE WIDTH AUTO ACTUALLY WANTS, which is not always the
+              // collapsed one. `codeExpandedRef` still holds the auto expansion
+              // state from before the drag (the drag never writes it; only the
+              // pin branch below does), so it is the answer already. Forcing
+              // collapsed here instead made the panel dip to collapsed and then
+              // glide back up as the scroll scanner re-expanded it — measured in
+              // the real app with a code answer on screen: panelW bottomed out
+              // at 590 and returned to 718, a visible double animation on every
+              // release.
+              //
+              // Handing the decision to the scanner instead does NOT work: it
+              // early-returns when its computed visibility already equals
+              // `codeExpandedRef`, so in the no-code case nothing would move and
+              // the panel would simply stay at the dragged width.
+              const autoPanel = codeExpandedRef.current
+                ? panelWidthForWindow(autoWidth)
+                : collapsedPanelForWindow(autoWidth);
+              // Animated, not snapped: this is a release that hands the panel
+              // back to auto sizing, and everything else auto sizing does to the
+              // width is sprung. (The double-click RESET stays instant on
+              // purpose — it reads as "undo", not as a motion.)
+              if (prefersReducedMotionRef.current) shellWidth.set(autoPanel);
+              else animate(shellWidth, autoPanel, OVERLAY_RESIZE_SPRING);
+            } else if (plan.width === 'pin') {
+              setCustomWindowWidth(settledWidth);
+              shellWidth.set(settledPanel);
+              // The chosen panel width holds until the next stream (queueToken
+              // clears the override), exactly like the manual toggle.
+              manualWidthOverrideRef.current = settledPanel;
+              codeExpandedRef.current = settledPanel >= panelWidthForWindow(settledWidth) - 1;
+            }
+
+            if (plan.height === 'auto') {
+              // Drop the pin AND its two companions, or the height would stay
+              // suspended in the ceiling/stream bookkeeping with no pin left to
+              // justify it (see handleResizeReset, which clears the same three).
+              customOverlayHeightRef.current = null;
+              heightPinIsCeilingRef.current = false;
+              heightPinStreamIdRef.current = null;
+              setHeightPinned(false);
+            } else if (plan.height === 'pin') {
+              customOverlayHeightRef.current = settledHeight;
+            }
+            measureVerticalCap();
+            // Clearing a pin leaves the WINDOW at the dragged size with nothing
+            // to pull it back: the content did not move, so the ResizeObserver
+            // stays silent. Report once.
+            //
+            // This settles the WIDTH exactly (the refs above are already the
+            // auto width). It does NOT settle the height in this tick — the
+            // viewport still carries the pin's min-height here, because framer
+            // flushes that style on its own frame, so the height in this report
+            // is still the pinned one. The height converges a moment later
+            // through its own channel: the viewport shrinks, the measuring
+            // observer fires, and the tween settles the window exactly at its
+            // onComplete. Verified live: pin 802 -> aim back -> 582, the auto
+            // height, with the viewport's min-height back to 0px.
+            if (plan.width === 'auto' || plan.height === 'auto') {
+              reportShellSize();
+            }
+            // Session-only by design: nothing is persisted (see restoredOverlaySize).
+          })
+          .catch(() => {
+            /* the window went away mid-drag; local state is already correct */
+          })
+          .finally(restoreCentering);
+      }
+
+      window.addEventListener('pointermove', move, { passive: false, capture: true });
+      window.addEventListener('pointerup', end, { capture: true });
+      window.addEventListener('pointercancel', end, { capture: true });
+      // Safety net: a pointer stream can end without a pointerup when the
+      // capture is stolen (an OS gesture, a window-manager grab). Together with
+      // the buttons===0 check in `move`, this is what guarantees a drag cannot
+      // stay "live" and leave height reporting suppressed.
+      window.addEventListener('lostpointercapture', end, { capture: true });
+    },
+    // measureAutoHeight is listed because it closes over SHELL_WIDTH_EXPANDED
+    // (= WINDOW_WIDTH − inset·2, recomputed per render). Without it this
+    // callback keeps its cached closure whenever the other four deps are
+    // unchanged, and the release would size the auto height against a stale
+    // panel width. The one path that changes WINDOW_WIDTH without also changing
+    // `customWindowWidth` is adoptAppliedSize reconciling a width the main
+    // process clamped — a work-area or multi-monitor change, which is why this
+    // is a hygiene fix and not a reproduced one.
+    [customWindowWidth, shellWidth, measureVerticalCap, reportShellSize, measureAutoHeight],
+  );
+
+  // Double-click any handle to forget the custom size and return to
+  // auto-sizing for the rest of this meeting (a new meeting resets it anyway).
+  const handleResizeReset = useCallback(() => {
+    if (isResizingRef.current) return;
+    customOverlayHeightRef.current = null;
+    heightPinIsCeilingRef.current = false;
+    heightPinStreamIdRef.current = null;
+    setHeightPinned(false);
+    setCustomWindowWidth(null);
+    setAppliedWindowWidth(null);
+    manualWidthOverrideRef.current = null;
+    shellWidth.set(defaultCollapsedPanelWidth());
+    // A WIDTH pin re-reports through the sizing effect (it lists
+    // `customWindowWidth` in its deps). A height-only pin has no such path:
+    // clearing a null width is not a state change, the content did not move
+    // so the ResizeObserver stays silent, and both the viewport floor
+    // (heightIsPinned → minHeight) and the window would keep the old pinned
+    // size with nothing left to clear them. Re-derive the cap now the ref is
+    // null — the viewport drops back to content height synchronously — then
+    // report that height so the window contracts with it. (The width these
+    // read is a ref, not this render's closure, so nothing stale is sent.)
+    measureVerticalCap();
+    reportShellSize();
+  }, [shellWidth, measureVerticalCap, reportShellSize]);
 
   // ── Aux-window bridge ─────────────────────────────────────────────────────
   // The TopPill and resize toggle live in their own BrowserWindows. Broadcast
@@ -2871,27 +4359,61 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // integer dedupe keeps the IPC rate at ~60 msgs for a 0.3s spring, and
   // moving a 36px window is a compositor-only surface move (no re-raster).
   useEffect(() => {
-    let lastSent = -1;
+    let lastSent = '';
     const send = (w: number) => {
-      const panelRight = Math.round((OVERLAY_WINDOW_WIDTH + w) / 2);
-      if (panelRight === lastSent) return;
-      lastSent = panelRight;
-      window.electronAPI?.sendOverlayToggleAnchor?.({ panelRight }).catch(() => {});
+      const dragLeft = dragPanelLeftRef.current;
+      // Both edges: the toggle rides the right one, the pill is centred
+      // between them. While a drag renders inside a wider envelope the panel
+      // is left-anchored, so the centred derivation is wrong by the slack.
+      const panelLeft = Math.round(
+        // dragLeft is contentEl's rect — the PADDING box. The toggle rides the
+        // CARD's top-right corner, one inset further in. The centred branch
+        // needs no correction: it derives the card's left from the card's own
+        // width, and the gutter is symmetric.
+        dragLeft !== null ? dragLeft + OVERLAY_PANEL_INSET : (overlayWindowWidthRef.current - w) / 2,
+      );
+      const panelRight = Math.round(panelLeft + w);
+      const key = `${panelLeft}:${panelRight}`;
+      if (key === lastSent) return;
+      lastSent = key;
+      window.electronAPI?.sendOverlayToggleAnchor?.({ panelRight, panelLeft }).catch(() => {});
     };
     send(shellWidth.get());
     const unsubscribe = shellWidth.on('change', send);
     return () => unsubscribe();
-  }, [shellWidth, OVERLAY_WINDOW_WIDTH]);
+  }, [shellWidth]);
 
-  // Hover hit-test → margins click-through. The fixed window is wider than
-  // the collapsed panel (66px transparent margin each side); while the
-  // pointer is over a margin the main process flips the window to
-  // setIgnoreMouseEvents(true, {forward:true}) so clicks land on the app
-  // beneath. forward:true keeps mousemove streaming even while ignored, so
-  // crossing back over the panel re-arms interactivity BEFORE a click can
-  // happen. The default (main-process side) is interactive — the panel and
-  // its drag regions are never gated. PAD inflates the panel rect slightly so
-  // fast pointer travel can't outrun the flip at the boundary.
+  // Undetectable mode → `data-undetectable` on the document root. The resize
+  // handles' cursors are gated on it in CSS: content protection hides the
+  // WINDOW's pixels from capture, but the pointer is composited by the OS and
+  // captured regardless (ScreenCaptureKit showsCursor / WGC IsCursorCaptureEnabled
+  // both default on), so a ↔ hovering over apparently empty desktop is a tell.
+  // With the mode on, the handles keep the arrow — the one affordance that
+  // lives outside the protection boundary is the one that must go dark.
+  useEffect(() => {
+    const apply = (on: boolean) => {
+      document.documentElement.dataset.undetectable = on ? 'true' : 'false';
+    };
+    void window.electronAPI?.getUndetectable?.().then(apply).catch(() => {});
+    const unsubscribe = window.electronAPI?.onUndetectableChanged?.(apply);
+    return () => unsubscribe?.();
+  }, []);
+
+  // Hover hit-test → everything outside the PANEL is click-through. The window
+  // is wider than the collapsed panel (66px transparent margin each side) and
+  // can be taller than it too (a pinned height still settling, a restore the
+  // OS clamped, the release slack), so the test is the panel's actual rect on
+  // BOTH axes — not X-margin arithmetic, which assumed the panel filled the
+  // window's height and left a dead strip under a short panel that looked like
+  // the desktop and ate clicks. While the pointer is outside the main process
+  // flips the window to setIgnoreMouseEvents(true, {forward:true}) so clicks
+  // land on the app beneath. forward:true keeps mousemove streaming even while
+  // ignored, so crossing back over the panel re-arms interactivity BEFORE a
+  // click can happen. The default (main-process side) is interactive — the
+  // panel and its drag regions are never gated. PAD inflates the panel rect
+  // slightly so pointer jitter at the boundary cannot thrash the flag, and is
+  // deliberately SMALLER than the panel gutter so the gutter itself stays
+  // click-through — see OVERLAY_HOVER_GATE_PAD.
   useEffect(() => {
     let interactive = true;
     // Handshake reset: this effect only sends on boundary CROSSINGS, so the
@@ -2901,18 +4423,32 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // unconditional resync, an expanded panel (margin 0 → "inside" always
     // true → no crossing ever) would stay click-through forever.
     window.electronAPI?.setOverlayHoverInteractive?.(true).catch(() => {});
-    const PAD = 8;
+    // See OVERLAY_HOVER_GATE_PAD: must stay below OVERLAY_PANEL_INSET so the
+    // panel's transparent gutter passes clicks through to whatever is beneath
+    // instead of silently eating them.
+    const PAD = OVERLAY_HOVER_GATE_PAD;
     const onMouseMove = (e: MouseEvent) => {
-      const margin = (OVERLAY_WINDOW_WIDTH - shellWidth.get()) / 2;
-      const inside =
-        e.clientX >= margin - PAD && e.clientX <= OVERLAY_WINDOW_WIDTH - margin + PAD;
+      // A resize drag renders inside a window grown to its envelope, where
+      // this margin math is wrong and a false "outside" would flip the window
+      // click-through under a captured pointer. The drag forces interactive at
+      // grab and owns the window until release.
+      if (isResizingRef.current) return;
+      // The live rect: it follows the width spring, the release glide (the
+      // panel sliding home inside the still-oversized envelope) and a pinned
+      // height alike. Reading it forces layout only when layout is already
+      // dirty, and mousemove is delivered at most once per frame.
+      const inside = pointerOverPanel(
+        { x: e.clientX, y: e.clientY },
+        contentRef.current?.getBoundingClientRect() ?? null,
+        PAD,
+      );
       if (inside === interactive) return;
       interactive = inside;
       window.electronAPI?.setOverlayHoverInteractive?.(inside).catch(() => {});
     };
     window.addEventListener('mousemove', onMouseMove);
     return () => window.removeEventListener('mousemove', onMouseMove);
-  }, [shellWidth, OVERLAY_WINDOW_WIDTH]);
+  }, []);
 
   // Derive the resize-button icon state from the live shell width. Subscribing
   // to the motion value (rather than tracking each startTransition caller)
@@ -3459,6 +4995,18 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // Forgetting this would silently disable code-expansion for the entire
       // next meeting if the user had manually collapsed in the previous one.
       manualWidthOverrideRef.current = null;
+      // The manual SIZE is per meeting too: a height or width the user dragged
+      // in the previous meeting must not carry over. Back to the default state
+      // — 154 tall at rest, 732 wide — so the new meeting looks like a fresh
+      // launch. Clearing the width state re-reports the default window width
+      // through the sizing effect; the height follows the cleared messages via
+      // the ResizeObserver.
+      customOverlayHeightRef.current = null;
+      heightPinIsCeilingRef.current = false;
+      heightPinStreamIdRef.current = null;
+      setHeightPinned(false);
+      setCustomWindowWidth(null);
+      setAppliedWindowWidth(null);
       if (stableVisibilityTimerRef.current) {
         clearTimeout(stableVisibilityTimerRef.current);
         stableVisibilityTimerRef.current = null;
@@ -3471,11 +5019,21 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // to collapsed is a renderer-only width reset (content reflows once for
       // the fresh meeting) with no native resize and no sideways motion. The
       // toggle aux window follows via the shellWidth 'change' anchor stream.
-      shellWidth.set(SHELL_WIDTH_COLLAPSED);
+      // The DEFAULT collapsed width, not this render's SHELL_WIDTH_COLLAPSED,
+      // which would still reflect a width pinned in the previous meeting.
+      shellWidth.set(defaultCollapsedPanelWidth());
       setInputValue('');
       setAttachedContext([]);
       setManualTranscript('');
       setVoiceInput('');
+      // The refs are the dictation source of truth (the final-transcript
+      // merge reads voiceInputRef, not React state); a meeting ended mid-
+      // recording must not prepend its words to the next meeting's question.
+      manualTranscriptRef.current = '';
+      voiceInputRef.current = '';
+      isRecordingRef.current = false;
+      answerStopInFlightRef.current = false;
+      setIsManualRecording(false);
       setIsProcessing(false);
       if (rollingPartialDebounceRef.current !== null) {
         clearTimeout(rollingPartialDebounceRef.current);
@@ -3520,12 +5078,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         setSttUserStatus(data.state);
         setSttUserProvider(data.provider);
         if (data.error) setSttUserError(data.error);
-        if (data.state === 'connected') setSttUserError('');
+        if (data.state === 'connected' || data.state === 'awaiting-audio') setSttUserError('');
       } else if (data.channel === 'interviewer') {
         setSttInterviewerStatus(data.state);
         setSttInterviewerProvider(data.provider);
         if (data.error) setSttInterviewerError(data.error);
-        if (data.state === 'connected') setSttInterviewerError('');
+        if (data.state === 'connected' || data.state === 'awaiting-audio') setSttInterviewerError('');
       }
     });
   }, []);
@@ -3750,6 +5308,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // or 'phone'). Supersession is scoped to a surface because both paths
   // allocate stream ids from ONE shared counter in the main process.
   const chatStreamSourceRef = useRef<string | null>(null);
+  // Direct Assist owns a separate request-correlated stream and a deliberately
+  // isolated history. Only a successful terminal `done` appends turns here;
+  // transcript cards, RAG, WTA, partial output and cancelled turns never enter it.
+  const activeDirectAssistRef = useRef<ActiveDirectAssistRequest | null>(null);
+  const directAssistHistoryRef = useRef<DirectAssistHistoryTurn[]>([]);
   // Active LIVE-ANSWER generation id (audit finding #3, full). The live what-to-
   // answer path streams on `intelligence-token-batch` (kind='suggested_answer')
   // keyed only on intent, so two back-to-back live answers share the same intent
@@ -3759,6 +5322,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // generation. null = no id adopted yet (id-less items are always accepted →
   // backward compatible with the code-hint / brainstorm streams that omit it).
   const liveAnswerGenIdRef = useRef<number | null>(null);
+  // Direct Assist supersedes every legacy WTA generation visible to this
+  // renderer. The numeric MAX tombstone rejects tagged generations through the
+  // existing newest-wins guard; this companion flag also rejects older/id-less
+  // finals after the Direct reveal has sealed and activeDirectAssistRef clears.
+  // A deliberate new legacy WTA/code-hint/brainstorm request revives the lane.
+  const legacyIntelligenceTombstonedRef = useRef(false);
   // Deferred-finalize bookkeeping. THE ONE mechanism for "commit this row's
   // final isStreaming:false only once the reveal ticker has actually caught
   // up to the full text" — used by BOTH:
@@ -3937,10 +5506,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // from registerStreamingNode's mount-time call (and from
       // ensureRevealTicker on a fresh msgId) — i.e. on the very first paint
       // of the streaming node, before any token has arrived. At that moment
-      // the node's only children are the React-rendered blinking-dot
+      // the node's only children are the React-rendered thinking-label
       // indicator (see the `!msg.text` branch in renderMessageText); wiping
       // to '' here destroyed it before the browser ever got a frame to
-      // paint it, so the "thinking" dot never visibly appeared. There is no
+      // paint it, so the "Thinking..." label never visibly appeared. There is no
       // stale content to clear: this div is freshly mounted per message
       // (key="streaming" forces a full unmount on the PREVIOUS row when it
       // finalizes), so leaving existing children alone is always correct.
@@ -4040,6 +5609,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     if (streamingCodeRafRef.current !== null) {
       cancelAnimationFrame(streamingCodeRafRef.current);
       streamingCodeRafRef.current = null;
+    }
+    const direct = activeDirectAssistRef.current;
+    if (direct?.completed && direct.placeholderId === pending.msgId) {
+      activeDirectAssistRef.current = null;
     }
     setMessages((prev) => commitStreamingFlush(prev, pending.msgId, pending.text));
   }, []);
@@ -4245,6 +5818,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       streamingMsgIdRef.current = null;
       streamingIntentRef.current = null;
       streamingRenderModeRef.current = 'imperative';
+      const direct = activeDirectAssistRef.current;
+      if (direct?.completed && direct.placeholderId === pending.msgId) {
+        activeDirectAssistRef.current = null;
+      }
       setMessages((prev) => commitStreamingFlush(prev, pending.msgId, pending.text));
     }, safetyNetMs);
     if (!reuseMsgId) {
@@ -4295,6 +5872,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       streamingMsgIdRef.current = null;
       streamingIntentRef.current = null;
       streamingRenderModeRef.current = 'imperative';
+      const direct = activeDirectAssistRef.current;
+      if (direct?.completed && direct.placeholderId === pending.msgId) {
+        activeDirectAssistRef.current = null;
+      }
       setMessages((prev) => commitStreamingFlush(prev, pending.msgId, pending.text));
     }, safetyNetMs);
     ensureRevealTicker(msgId);
@@ -4304,6 +5885,17 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // Only the FIRST token of a stream calls setMessages (to mount the bubble).
   // Subsequent tokens bypass React entirely — zero re-renders mid-stream.
   const queueToken = useCallback((intent: string, token: string) => {
+    // A token of a stream other than the one the height pin was taken in: the
+    // pin stops being a ceiling so this answer can grow the overlay (the auto
+    // budget, unchanged) — it stays a floor. The viewport's max-height flips
+    // to the auto cap before the token lays out, so the growth is one motion.
+    if (
+      heightPinIsCeilingRef.current &&
+      streamingMsgIdRef.current !== heightPinStreamIdRef.current
+    ) {
+      heightPinIsCeilingRef.current = false;
+      measureVerticalCapRef.current?.();
+    }
     // If a new stream intent arrives while one is active, flush the current
     // stream into React state so the rows don't bleed into each other.
     if (
@@ -4581,7 +6173,347 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     }
   }, []);
 
+  const consumeDirectPageContext = useCallback(() => {
+    const rawDom = (window as any).lastCapturedDOM;
+    const dom = typeof rawDom === 'string' && rawDom.trim().length > 0
+      ? rawDom.substring(0, DOM_CONTEXT_MAX_CHARS)
+      : undefined;
+    const meta = dom ? capturedMetaRef.current : null;
+
+    // Page context is single-use in Direct Assist. Clear all renderer copies at
+    // the same time so a later turn cannot silently inherit a previous page.
+    if (typeof (window as any).lastCapturedDOM === 'string') {
+      (window as any).lastCapturedDOM = '';
+    }
+    capturedEnvelopeRef.current = null;
+    capturedMetaRef.current = null;
+    if (dom) setPageContext(null);
+
+    return dom
+      ? {
+          dom,
+          ...(meta?.url ? { url: meta.url } : {}),
+          ...(meta?.title ? { title: meta.title } : {}),
+        }
+      : undefined;
+  }, []);
+
+  const settleDirectAssistIncomplete = useCallback((
+    active: ActiveDirectAssistRequest,
+    terminalLabel: string,
+  ) => {
+    if (streamingMsgIdRef.current === active.placeholderId) {
+      if (streamingRafRef.current !== null) {
+        cancelAnimationFrame(streamingRafRef.current);
+        streamingRafRef.current = null;
+      }
+      if (streamingCodeRafRef.current !== null) {
+        cancelAnimationFrame(streamingCodeRafRef.current);
+        streamingCodeRafRef.current = null;
+      }
+      pendingFinalizeRef.current = null;
+      if (pendingFinalizeTimeoutRef.current !== null) {
+        clearTimeout(pendingFinalizeTimeoutRef.current);
+        pendingFinalizeTimeoutRef.current = null;
+      }
+      streamingNodeRef.current = null;
+      streamingTextRef.current = '';
+      streamingMsgIdRef.current = null;
+      streamingIntentRef.current = null;
+      streamingRenderModeRef.current = 'imperative';
+    }
+
+    setMessages((prev) => {
+      const idx = prev.findLastIndex((message) => message.id === active.placeholderId);
+      if (idx === -1) return prev;
+      if (!active.answerText && terminalLabel === 'Request cancelled.') {
+        return prev.filter((_, messageIndex) => messageIndex !== idx);
+      }
+      const text = active.answerText
+        ? `${active.answerText}\n\n_Incomplete — ${terminalLabel}_`
+        : terminalLabel;
+      const updated = [...prev];
+      updated[idx] = {
+        ...updated[idx],
+        text,
+        isStreaming: false,
+        isCode: text.includes('```') || text.includes('#include'),
+      };
+      return updated;
+    });
+    setIsProcessing(false);
+  }, []);
+
+  useEffect(() => {
+    if (!window.electronAPI?.onDirectAssistEvent) return;
+    const unsubscribe = window.electronAPI.onDirectAssistEvent((event: DirectAssistRendererEvent) => {
+      const active = activeDirectAssistRef.current;
+      if (!active || event.requestId !== active.requestId) return;
+      if (active.completed) return;
+
+      if (event.type === 'start') {
+        // Remember the provider the user actually selected. provider_switch
+        // and done fire later and must word their notice against THIS
+        // original choice, not whatever rung happens to be open at the time.
+        active.originalProvider = event.provider;
+
+        // Stamp which fields Direct Assist dropped to fit the context window
+        // onto the question card, so a thin-looking answer isn't a silent
+        // mystery. userMessageId is only set for surfaces that create a
+        // distinct question card (all current callers do).
+        if ((event.trimmedFields?.length || event.shortenedFields?.length) && active.userMessageId) {
+          const userMessageId = active.userMessageId;
+          const trimmed = [...(event.trimmedFields ?? [])];
+          const shortened = [...(event.shortenedFields ?? [])];
+          setMessages((prev) => prev.map((message) =>
+            message.id === userMessageId
+              ? { ...message, trimmedFields: trimmed, shortenedFields: shortened }
+              : message,
+          ));
+        }
+        return;
+      }
+
+      if (event.type === 'delta') {
+        if (event.sequence <= active.lastSequence) return;
+        active.lastSequence = event.sequence;
+        if (!event.text) return;
+        active.answerText += event.text;
+        queueToken('chat', event.text);
+        return;
+      }
+
+      if (event.type === 'provider_switch') {
+        // NOT terminal, and its sequence is a snapshot of the delta counter,
+        // never a slot of its own — it must never advance active.lastSequence
+        // (a switch always carries 0, which would otherwise be read as a
+        // stale/older terminal event by the guard below and settle the
+        // request as cancelled). The notice lands on the answer card, not
+        // the question card.
+        //
+        // provider_switch fires when a rung is OPENED, before it has
+        // produced a single token — and on an A -> B -> C walk, main queues
+        // switches and drains them back to back just before the first
+        // delta, so the renderer can see switch(A->B) then switch(B->C) with
+        // B never having answered anything. Word this as an ATTEMPT, never
+        // an outcome, so it stays accurate at every intermediate step and
+        // even if the ladder later fails entirely. 'done' (below) is the
+        // only place that upgrades this to "answered by".
+        active.hasSwitched = true;
+        const placeholderId = active.placeholderId;
+        const noticeText = `${event.from.provider} didn't respond — trying ${event.to.provider}…`;
+        setMessages((prev) => prev.map((message) =>
+          message.id === placeholderId
+            ? { ...message, fallbackNotice: noticeText }
+            : message,
+        ));
+        return;
+      }
+
+      // LATENT TRAP: everything past this point treats an unrecognized
+      // event.type as terminal — it falls through 'done' / 'error' into the
+      // bare settleDirectAssistIncomplete(active, 'Request cancelled.') at
+      // the bottom of this callback. That is correct for today's actual
+      // terminal types, but it is NOT "unknown ⇒ ignore": a future
+      // non-terminal event added without its own branch ABOVE this guard
+      // (next to 'start'/'delta'/'provider_switch') will read as a stale-or-
+      // fresh terminal event and settle the request as cancelled, exactly
+      // like provider_switch would have without its branch above.
+      //
+      // Terminal events carry the last emitted delta sequence, not the next
+      // sequence. Accept equality so start -> delta(1) -> done(1) seals; only a
+      // genuinely older terminal event is stale.
+      if (event.sequence < active.lastSequence) return;
+      active.lastSequence = event.sequence;
+
+      if (event.type === 'done') {
+        const answer = event.fullText ?? active.answerText;
+        if (!answer) {
+          activeDirectAssistRef.current = null;
+          settleDirectAssistIncomplete(
+            active,
+            directAssistErrorText('INCOMPLETE_STREAM', 'The model returned no answer.'),
+          );
+          return;
+        }
+
+        // Content actually arrived: if any provider_switch fired for this
+        // request, this is where — and only where — the attempt-worded
+        // notice upgrades to an outcome. Name the ORIGINAL selection and the
+        // provider that actually answered (event.provider, from done, not
+        // whichever rung a queued switch last opened). If the ladder never
+        // switched, leave fallbackNotice untouched (absent).
+        if (active.hasSwitched && active.originalProvider) {
+          const finalNoticeText = `${active.originalProvider} didn't respond — answered by ${event.provider}.`;
+          const finalPlaceholderId = active.placeholderId;
+          setMessages((prev) => prev.map((message) =>
+            message.id === finalPlaceholderId
+              ? { ...message, fallbackNotice: finalNoticeText }
+              : message,
+          ));
+        }
+
+        // The ONLY Direct history write. Both rows are appended atomically after
+        // a successful terminal event, then bounded by completed turns.
+        const completedTurns: DirectAssistHistoryTurn[] = [
+          ...directAssistHistoryRef.current,
+          {
+            role: 'user',
+            content: active.currentRequest,
+            ...(active.imagePaths.length ? { imagePaths: active.imagePaths } : {}),
+          },
+          { role: 'assistant', content: answer },
+        ];
+        directAssistHistoryRef.current = completedTurns.slice(-24);
+        setIsProcessing(false);
+
+        if (streamingMsgIdRef.current === active.placeholderId) {
+          // Keep Direct ownership until the reveal actually seals. Clearing it
+          // at the provider's done event would let a late legacy token enter the
+          // still-streaming row during the paced final reveal.
+          active.completed = true;
+          finalizeWhenRevealCaughtUp(active.placeholderId, 'chat', answer);
+        } else {
+          activeDirectAssistRef.current = null;
+          setMessages((prev) => prev.map((message) =>
+            message.id === active.placeholderId
+              ? {
+                  ...message,
+                  text: answer,
+                  isStreaming: false,
+                  isCode: answer.includes('```') || answer.includes('#include'),
+                }
+              : message,
+          ));
+        }
+        return;
+      }
+
+      if (event.type === 'error') {
+        activeDirectAssistRef.current = null;
+        settleDirectAssistIncomplete(
+          active,
+          directAssistErrorText(event.error.code, event.error.message),
+        );
+        return;
+      }
+
+      activeDirectAssistRef.current = null;
+      settleDirectAssistIncomplete(active, 'Request cancelled.');
+    });
+    return () => unsubscribe?.();
+  }, [finalizeWhenRevealCaughtUp, queueToken, settleDirectAssistIncomplete]);
+
+  const beginDirectAssist = useCallback(async ({
+    source,
+    currentRequest,
+    imagePaths,
+    pageContext: directPageContext,
+    transcript,
+    userMessageId,
+  }: {
+    source: DirectAssistSource;
+    currentRequest: string;
+    imagePaths?: string[];
+    pageContext?: { dom?: string; ocr?: string; url?: string; title?: string };
+    transcript?: string;
+    userMessageId?: string;
+  }) => {
+    legacyIntelligenceTombstonedRef.current = true;
+    liveAnswerGenIdRef.current = Number.MAX_SAFE_INTEGER;
+
+    const previous = activeDirectAssistRef.current;
+    if (previous) {
+      activeDirectAssistRef.current = null;
+      if (!previous.completed) {
+        void window.electronAPI?.cancelDirectAssist?.(previous.requestId, previous.source).catch(() => {});
+        settleDirectAssistIncomplete(previous, 'Superseded by a newer request.');
+      }
+    }
+
+    // Direct and legacy streams share the single answer panel. Retire any legacy
+    // owner before reserving the Direct placeholder; requestId correlation then
+    // rejects every late Direct event from an older turn.
+    window.electronAPI?.cancelChatStream?.();
+    chatStreamIdRef.current = null;
+    chatStreamSourceRef.current = null;
+    forceFinalizeStaleRagStream();
+    flushToken();
+
+    const requestId = createDirectAssistRequestId();
+    const placeholderId = genMessageId();
+    const active: ActiveDirectAssistRequest = {
+      requestId,
+      source,
+      currentRequest,
+      imagePaths: imagePaths ? [...imagePaths] : [],
+      placeholderId,
+      userMessageId,
+      lastSequence: -1,
+      answerText: '',
+    };
+    activeDirectAssistRef.current = active;
+    streamingMsgIdRef.current = placeholderId;
+    streamingIntentRef.current = 'chat';
+    streamingTextRef.current = '';
+    streamingNodeRef.current = null;
+    streamingRenderModeRef.current = 'imperative';
+    pinAnswerPanelRef.current();
+    setIsProcessing(true);
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: placeholderId,
+        role: 'system',
+        text: '',
+        intent: 'chat',
+        isStreaming: true,
+      },
+    ]);
+
+    try {
+      const response = await window.electronAPI.startDirectAssist({
+        requestId,
+        source,
+        // Preserve the current instruction byte-for-byte, including a /skill or
+        // $skill prefix. Main resolves `skillId`; it does not need renderer-side
+        // prompt rewriting or instruction injection.
+        currentRequest,
+        skillId: directAssistSkillId(currentRequest),
+        history: directAssistHistoryRef.current.slice(-24),
+        ...(directPageContext ? { pageContext: directPageContext } : {}),
+        ...(imagePaths && imagePaths.length > 0 ? { imagePaths } : {}),
+        ...(transcript ? { transcript } : {}),
+      });
+      if (activeDirectAssistRef.current?.requestId !== requestId) return;
+      if (!response.accepted || response.requestId !== requestId) {
+        activeDirectAssistRef.current = null;
+        const code = response.error?.code || 'DIRECT_ASSIST_REJECTED';
+        const message = response.error?.message || 'Direct Assist could not start this request.';
+        settleDirectAssistIncomplete(active, directAssistErrorText(code, message));
+      }
+    } catch (error) {
+      if (activeDirectAssistRef.current?.requestId !== requestId) return;
+      activeDirectAssistRef.current = null;
+      settleDirectAssistIncomplete(
+        active,
+        directAssistErrorText(
+          'DIRECT_ASSIST_UNAVAILABLE',
+          error instanceof Error ? error.message : String(error),
+        ),
+      );
+    }
+  }, [flushToken, forceFinalizeStaleRagStream, settleDirectAssistIncomplete]);
+
   const cancelActiveChatStream = useCallback(() => {
+    const direct = activeDirectAssistRef.current;
+    if (direct) {
+      activeDirectAssistRef.current = null;
+      if (!direct.completed) {
+        void window.electronAPI?.cancelDirectAssist?.(direct.requestId, direct.source).catch(() => {});
+        settleDirectAssistIncomplete(direct, 'Request cancelled.');
+      }
+    }
     window.electronAPI?.cancelChatStream?.();
     chatStreamIdRef.current = null;
     chatStreamSourceRef.current = null;
@@ -4611,7 +6543,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       cancelAnimationFrame(tokenBufRef.current.raf);
       tokenBufRef.current.raf = null;
     }
-  }, [flushToken]);
+  }, [flushToken, settleDirectAssistIncomplete]);
 
   const resetChatState = useCallback(() => {
     cancelActiveChatStream();
@@ -4620,6 +6552,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     setAnswerPanelPinned(false);
     lastManualSubmitRef.current = null;
     manualSubmitInFlightRef.current = false;
+    directAssistHistoryRef.current = [];
   }, [cancelActiveChatStream]);
 
   const finalizeStreamingByIntent = useCallback(
@@ -4835,13 +6768,21 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
             // Accumulate final transcripts, collapsing STT overlap/re-transcription
             // races (RC5, docs/context-rebuild/03_LIVE_REPRO_FINDINGS.md item 4)
             // instead of blindly concatenating.
-            setVoiceInput((prev) => {
-              const updated = mergeTranscriptChunks(prev, transcript.text);
-              voiceInputRef.current = updated;
-              return updated;
-            });
+            //
+            // The ref is the source of truth and is written SYNCHRONOUSLY, with
+            // the state set from the same value. It used to be written inside
+            // the setVoiceInput updater, which React runs lazily on the next
+            // render — so a Stop press woken by notifyFinal() below snapshotted
+            // the ref before React had applied the merge and still saw ''
+            // (live-reproduced 2026-09-11 with an injected final: the waiter
+            // resolved 'final' with voice "").
+            const updated = mergeTranscriptChunks(voiceInputRef.current, transcript.text);
+            voiceInputRef.current = updated;
+            setVoiceInput(updated);
             setManualTranscript(''); // Clear partial preview
             manualTranscriptRef.current = '';
+            // A Stop press may be waiting for exactly this chunk.
+            answerTailWaiterRef.current!.notifyFinal();
           } else {
             // Show live partial transcript
             setManualTranscript(transcript.text);
@@ -4885,6 +6826,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // AI Suggestions from native audio (legacy)
     cleanups.push(
       window.electronAPI.onSuggestionProcessingStart(() => {
+        if (activeDirectAssistRef.current) return;
+        // A processing-start event is the only trustworthy boundary for a new
+        // native legacy suggestion; revive after Direct's old generation was
+        // tombstoned, never merely because the Direct reveal finished.
+        legacyIntelligenceTombstonedRef.current = false;
+        liveAnswerGenIdRef.current = null;
         setIsProcessing(true);
         setIsExpanded(true);
       }),
@@ -4892,6 +6839,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     cleanups.push(
       window.electronAPI.onSuggestionGenerated((data) => {
+        if (activeDirectAssistRef.current) return;
+        if (legacyIntelligenceTombstonedRef.current) return;
         setIsProcessing(false);
         pinAnswerPanel();
         setMessages((prev) => [
@@ -4907,6 +6856,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     cleanups.push(
       window.electronAPI.onSuggestionError((err) => {
+        if (activeDirectAssistRef.current) return;
+        if (legacyIntelligenceTombstonedRef.current) return;
         setIsProcessing(false);
         setMessages((prev) => [
           ...prev,
@@ -4921,6 +6872,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     cleanups.push(
       window.electronAPI.onIntelligenceSuggestedAnswerToken((data) => {
+        if (activeDirectAssistRef.current) return;
+        if (legacyIntelligenceTombstonedRef.current) return;
         pinAnswerPanel();
         // Coaching now arrives via onIntelligenceNegotiationCoaching only —
         // sentinel detection on this stream has been removed.
@@ -4930,6 +6883,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     cleanups.push(
       window.electronAPI.onIntelligenceSuggestedAnswer((data) => {
+        if (activeDirectAssistRef.current) return;
+        if (legacyIntelligenceTombstonedRef.current) return;
         // Phase 4 defense-in-depth (forensic-report §6b): drop a final answer
         // belonging to a generation that's already been superseded by a newer
         // one — same supersession guard the streaming token path applies via
@@ -4966,6 +6921,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // path) so a late token batch can't append onto a row we're removing.
     cleanups.push(
       window.electronAPI.onIntelligenceSuggestedAnswerDiscard?.(() => {
+        if (activeDirectAssistRef.current) return;
+        if (legacyIntelligenceTombstonedRef.current) return;
         setIsProcessing(false);
         if (streamingNodeRef.current) streamingNodeRef.current.innerHTML = '';
         streamingNodeRef.current = null;
@@ -4994,6 +6951,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // engine also guards by generationId; this is the renderer-side backstop.)
     cleanups.push(
       window.electronAPI.onIntelligenceCodeVerified?.((data) => {
+        if (activeDirectAssistRef.current) return;
+        if (legacyIntelligenceTombstonedRef.current) return;
         setMessages((prev) => {
           const last = prev[prev.length - 1];
           if (!last || last.role !== 'system') return prev; // superseded by a newer turn
@@ -5013,6 +6972,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // so a genuine correction is never silently dropped.
     cleanups.push(
       window.electronAPI.onIntelligenceCodeCorrection?.((data) => {
+        if (activeDirectAssistRef.current) return;
+        if (legacyIntelligenceTombstonedRef.current) return;
         setMessages((prev) => {
           const last = prev[prev.length - 1];
           const corrected = {
@@ -5042,9 +7003,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // safety nets and only fire if some other code path emits them.
     cleanups.push(
       window.electronAPI.onIntelligenceTokenBatch((data) => {
+        if (activeDirectAssistRef.current) return;
         const { kind, items } = data;
         if (!items || items.length === 0) return;
         if (kind === 'suggested_answer') {
+          if (legacyIntelligenceTombstonedRef.current) return;
           pinAnswerPanel();
           for (const it of items) {
             // #3 (full): drop tokens belonging to a superseded live answer so a
@@ -5080,6 +7043,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // tokens through suggested_answer anymore).
     cleanups.push(
       window.electronAPI.onIntelligenceNegotiationCoaching((data) => {
+        if (activeDirectAssistRef.current) return;
+        if (legacyIntelligenceTombstonedRef.current) return;
         // Flush any pending streamed tokens before swapping the streaming
         // row to a coaching card; otherwise rAF-buffered text would be
         // appended onto the card row's empty text after this setMessages.
@@ -5119,6 +7084,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // STREAMING: Refinement
     cleanups.push(
       window.electronAPI.onIntelligenceRefinedAnswerToken((data) => {
+        if (activeDirectAssistRef.current) return;
         // PERF: rAF-coalesce per-token state updates.
         queueToken(data.intent, data.token);
       }),
@@ -5126,6 +7092,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     cleanups.push(
       window.electronAPI.onIntelligenceRefinedAnswer((data) => {
+        if (activeDirectAssistRef.current) return;
         setIsProcessing(false);
         finalizeStreamingByIntent(data.intent, data.answer);
       }),
@@ -5134,12 +7101,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // STREAMING: Recap
     cleanups.push(
       window.electronAPI.onIntelligenceRecapToken((data) => {
+        if (activeDirectAssistRef.current) return;
         queueToken('recap', data.token);
       }),
     );
 
     cleanups.push(
       window.electronAPI.onIntelligenceRecap((data) => {
+        if (activeDirectAssistRef.current) return;
         setIsProcessing(false);
         finalizeStreamingByIntent('recap', data.summary);
       }),
@@ -5159,12 +7128,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     cleanups.push(
       window.electronAPI.onIntelligenceFollowUpQuestionsToken((data) => {
+        if (activeDirectAssistRef.current) return;
         queueToken('follow_up_questions', data.token);
       }),
     );
 
     cleanups.push(
       window.electronAPI.onIntelligenceFollowUpQuestionsUpdate((data) => {
+        if (activeDirectAssistRef.current) return;
         setIsProcessing(false);
         finalizeStreamingByIntent('follow_up_questions', data.questions);
       }),
@@ -5172,6 +7143,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     cleanups.push(
       window.electronAPI.onIntelligenceClarify((data) => {
+        if (activeDirectAssistRef.current) return;
         setIsProcessing(false);
         finalizeStreamingByIntent('clarify', data.clarification);
       }),
@@ -5179,6 +7151,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     cleanups.push(
       window.electronAPI.onIntelligenceManualStarted(() => {
+        if (activeDirectAssistRef.current) return;
         setIsExpanded(true);
         setIsProcessing(true);
         prepareIntelligenceStreamPlaceholder('chat');
@@ -5187,6 +7160,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     cleanups.push(
       window.electronAPI.onIntelligenceManualResult((data) => {
+        if (activeDirectAssistRef.current) return;
         setIsProcessing(false);
         finalizeStreamingByIntent('chat', `🎯 **Answer:**\n\n${data.answer}`);
       }),
@@ -5194,6 +7168,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     cleanups.push(
       window.electronAPI.onIntelligenceError((data) => {
+        if (activeDirectAssistRef.current) return;
         setIsProcessing(false);
         setMessages((prev) => [
           ...prev,
@@ -5315,10 +7290,64 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     // Create AI response placeholder AFTER user message so thinking dots + response
     // appear BELOW the question card (not above it)
-    prepareIntelligenceStreamPlaceholder('what_to_answer');
+    if (!directAssistEnabled) {
+      legacyIntelligenceTombstonedRef.current = false;
+      liveAnswerGenIdRef.current = null;
+      prepareIntelligenceStreamPlaceholder('what_to_answer');
+    }
     analytics.trackCommandExecuted('what_to_say');
 
     try {
+      if (directAssistEnabled) {
+        // Direct screenshot requests never trigger automatic page capture. A
+        // deliberate, already-captured page is still consumed once and can ride
+        // alongside the image because the user explicitly attached both.
+        const directPageContext = consumeDirectPageContext();
+        if (directPageContext) {
+          setMessages((prev) => prev.map((message) =>
+            message.id === questionCardId
+              ? {
+                  ...message,
+                  pageContext: {
+                    title: directPageContext.title,
+                    url: directPageContext.url,
+                  },
+                }
+              : message,
+          ));
+        }
+        // The rolling bar is already capped at 8 KiB. Keep the latest few STT
+        // segments so a question split by punctuation/finalization stays intact,
+        // while older meeting discussion cannot become the primary request.
+        const directTranscriptSnapshot = pendingRollingPartialRef.current
+          ? mergeRollingTranscriptPartial(rollingTranscript, pendingRollingPartialRef.current)
+          : rollingTranscript;
+        const interviewerRequest = directTranscriptSnapshot
+          .split('  ·  ')
+          .slice(-4)
+          .join('  ·  ')
+          .trim()
+          .slice(-8192);
+        const hasScreenshots = currentAttachments.length > 0;
+        const directWhatToSayPayload = buildDirectWhatToSayPayload({
+          interviewerRequest,
+          dynamicPromptInstruction,
+          hasScreenshots,
+        });
+        await beginDirectAssist({
+          source: directWhatToSayPayload.source,
+          currentRequest: directWhatToSayPayload.currentRequest,
+          imagePaths: currentAttachments.map((attachment) => attachment.path),
+          pageContext: directPageContext,
+          // When a screenshot is the request surface, retain STT provenance as a
+          // separate untrusted field so main can enforce transcript scope instead
+          // of disguising meeting audio as typed text.
+          transcript: directWhatToSayPayload.transcript,
+          userMessageId: questionCardId,
+        });
+        return;
+      }
+
       // Smart Browser Context v2 — just-in-time auto-attach. If NO manual context
       // is already captured, ask the extension for the best auto context (it only
       // attaches a high-confidence coding page; sensitive/unknown pages are
@@ -5471,7 +7500,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       pinAnswerPanel();
     } finally {
       endOverlayAction('what_to_say');
-      setIsProcessing(false);
+      // A Direct stream outlives the start IPC acknowledgement; its correlated
+      // terminal event owns the processing state. Legacy WTA is request/response.
+      if (!directAssistEnabled) setIsProcessing(false);
     }
   };
 
@@ -5599,6 +7630,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       ]);
       return;
     }
+    legacyIntelligenceTombstonedRef.current = false;
+    liveAnswerGenIdRef.current = null;
     setIsExpanded(true);
     setIsProcessing(true);
     pinAnswerPanel();
@@ -5652,6 +7685,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
   const handleBrainstorm = async () => {
     if (!tryBeginOverlayAction('brainstorm')) return;
+    legacyIntelligenceTombstonedRef.current = false;
+    liveAnswerGenIdRef.current = null;
     setIsExpanded(true);
     setIsProcessing(true);
     analytics.trackCommandExecuted('brainstorm');
@@ -5716,6 +7751,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // without a streamId (back-compat) are always accepted.
     cleanups.push(
       window.electronAPI.onGeminiStreamToken((token, meta) => {
+        // Direct Assist owns this overlay row while active. A legacy token that
+        // was already queued before cancellation must never be adopted into it.
+        if (activeDirectAssistRef.current) return;
         const decision = resolveChatStreamToken(
           chatStreamIdRef.current, meta?.streamId,
           chatStreamSourceRef.current, (meta as any)?.source,
@@ -5730,6 +7768,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // Stream Done
     cleanups.push(
       window.electronAPI.onGeminiStreamDone((data) => {
+        if (activeDirectAssistRef.current) return;
         // Ignore a done from a superseded stream (audit finding #3) so it can't
         // tear down a newer stream's row. A done without a streamId is honored
         // (back-compat). On an honored done we clear the adopted id.
@@ -5875,6 +7914,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // Stream Error
     cleanups.push(
       window.electronAPI.onGeminiStreamError((error, meta?: { streamId?: number | null; source?: string }) => {
+        if (activeDirectAssistRef.current) return;
         // Guard (2026-07-31): a tagged error belonging to another stream must
         // not tear down the one we're rendering. A phone-mirror failure carries
         // source:'phone-mirror' and no streamId; a desktop failure carries the
@@ -5939,6 +7979,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // event adds the user turn + streaming placeholder before tokens arrive.
     cleanups.push(
       window.electronAPI.onPhoneMirrorIncomingChat(({ message }) => {
+        if (activeDirectAssistRef.current) return;
         flushToken();
         requestStartTimeRef.current = Date.now();
         const userId = genMessageId();
@@ -6065,6 +8106,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     if (window.electronAPI.onRAGStreamChunk) {
       cleanups.push(
         window.electronAPI.onRAGStreamChunk((data: { chunk: string }) => {
+          if (activeDirectAssistRef.current) return;
           ragArrivedTextRef.current += data.chunk;
           ensureRagRevealTicker();
         }),
@@ -6074,6 +8116,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     if (window.electronAPI.onRAGStreamComplete) {
       cleanups.push(
         window.electronAPI.onRAGStreamComplete(() => {
+          if (activeDirectAssistRef.current) return;
           setIsProcessing(false);
           requestStartTimeRef.current = null;
           if (STREAM_RENDER_CONFIG.flushImmediatelyOnComplete) {
@@ -6113,11 +8156,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     if (window.electronAPI.onRAGStreamError) {
       cleanups.push(
         window.electronAPI.onRAGStreamError((data: { error: string }) => {
+          if (activeDirectAssistRef.current) return;
+          flushRagChunkBuffer();
           // Errors are always instant, never deferred — flushRagChunkBuffer
           // resets ragDoneRef/accumulator/pacer so a still-running ticker
           // (if any) can't later overwrite the error text appended below
           // with a stale `fullText.slice(0, revealedLen)` commit.
-          flushRagChunkBuffer();
           setIsProcessing(false);
           requestStartTimeRef.current = null;
           setMessages((prev) => {
@@ -6151,14 +8195,47 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     if (isManualRecording) {
       if (!tryBeginOverlayAction('answer_now')) return;
       try {
-        // Stop recording - send accumulated voice input to Gemini
+        // Stop recording - send accumulated voice input to Gemini.
+        //
+        // The button flips to "Answer" immediately, but the recording gate
+        // (isRecordingRef) stays OPEN until the STT tail has landed: the
+        // transcript for the last second or two of speech arrives AFTER the
+        // Stop press (cloud finals 0.5–2s later, local models 1.5–7s), and the
+        // onNativeAudioTranscript handler drops every user chunk while the gate
+        // is closed. Closing it first — as this code did until 2026-09-11 —
+        // threw away exactly the chunk being waited for, so a short question
+        // came back as "No speech detected" (live-reproduced; see
+        // src/lib/__tests__/AnswerNowTranscriptTail2026_09_11.test.mjs).
+        // The button keeps reading "Stop" until the tail has landed: the state
+        // is truthful (the gate IS still open) and a second press in that window
+        // is absorbed by tryBeginOverlayAction instead of silently ignored.
+        answerStopInFlightRef.current = true;
+
+        // Ask main to flush the provider (a no-op for providers that finalize
+        // server-side). Local models report whether a final is now in flight.
+        // Older preloads may never acknowledge, so cap the wait.
+        let providerReportsPending = false;
+        try {
+          const finalizeResult: unknown = await Promise.race([
+            window.electronAPI.finalizeMicSTT(),
+            new Promise<void>((resolve) => setTimeout(resolve, 750)),
+          ]);
+          providerReportsPending = typeof finalizeResult === 'object' && finalizeResult !== null
+            && (finalizeResult as { pending?: boolean }).pending === true;
+        } catch (err) {
+          console.error('[NativelyInterface] Failed to finalize mic STT:', err);
+        }
+
+        // Event-driven: resolves the moment a FINAL user chunk is merged, and
+        // is bounded so an empty recording still returns promptly.
+        await answerTailWaiterRef.current!.wait({
+          hasCapturedFinal: voiceInputRef.current.trim().length > 0,
+          hasPendingInterim: manualTranscriptRef.current.trim().length > 0 || providerReportsPending,
+        });
         isRecordingRef.current = false;
+        answerStopInFlightRef.current = false;
         setIsManualRecording(false);
         setManualTranscript('');
-
-        window.electronAPI
-          .finalizeMicSTT()
-          .catch((err) => console.error('[NativelyInterface] Failed to send finalizeMicSTT:', err));
 
         const currentAttachments = attachedContext;
         setAttachedContext([]);
@@ -6205,10 +8282,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           return;
         }
 
+        const userMessageId = genMessageId();
         setMessages((prev) => [
           ...prev,
           {
-            id: genMessageId(),
+            id: userMessageId,
             role: 'user',
             text: question,
             hasScreenshot: currentAttachments.length > 0,
@@ -6220,6 +8298,34 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         setTimeout(() => {
           messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
         }, 50);
+
+        if (directAssistEnabled) {
+          const directPageContext = consumeDirectPageContext();
+          if (directPageContext) {
+            setMessages((prev) => prev.map((message) =>
+              message.id === userMessageId
+                ? {
+                    ...message,
+                    pageContext: {
+                      title: directPageContext.title,
+                      url: directPageContext.url,
+                    },
+                  }
+                : message,
+            ));
+          }
+          await beginDirectAssist({
+            // A recording turn with no recognized speech is image-only. Mark it
+            // as screenshot input so transcript privacy does not reject a valid
+            // deliberate capture that contains no transcript at all.
+            source: question ? 'stt' : 'screenshot',
+            currentRequest: question || 'Analyze the attached screenshot.',
+            imagePaths: currentAttachments.map((attachment) => attachment.path),
+            pageContext: directPageContext,
+            userMessageId,
+          });
+          return;
+        }
 
         // A previous turn's RAG answer may still be deferred-draining (see
         // forceFinalizeStaleRagStream's declaration) — force it to its final
@@ -6319,10 +8425,14 @@ Provide only the answer, nothing else.`;
           });
         }
       } finally {
+        answerStopInFlightRef.current = false;
         endOverlayAction('answer_now');
       }
     } else {
-      // Start recording - reset voice input state
+      // Start recording - reset voice input state.
+      // A previous Stop may still be collecting its transcript tail; starting
+      // now would wipe voiceInput while that snapshot is being taken.
+      if (answerStopInFlightRef.current) return;
       setVoiceInput('');
       voiceInputRef.current = '';
       setManualTranscript('');
@@ -6349,6 +8459,7 @@ Provide only the answer, nothing else.`;
   const handleManualSubmit = async () => {
     if (!inputValue.trim() && attachedContext.length === 0) return;
 
+    const rawUserText = inputValue;
     const userText = inputValue.trim();
     const nowMs = Date.now();
     if (manualSubmitInFlightRef.current) return;
@@ -6367,7 +8478,6 @@ Provide only the answer, nothing else.`;
     lastManualSubmitRef.current = { text: userText, atMs: nowMs };
 
     const currentAttachments = attachedContext;
-    const conversationContextForSubmit = buildConversationContextFromMessages(messages);
 
     // Clear inputs immediately
     setInputValue('');
@@ -6393,10 +8503,11 @@ Provide only the answer, nothing else.`;
         : prev,
     );
 
+    const userMessageId = genMessageId();
     setMessages((prev) => [
       ...prev,
       {
-        id: genMessageId(),
+        id: userMessageId,
         role: 'user',
         text: userText || (currentAttachments.length > 0 ? 'Analyze this screenshot' : ''),
         hasScreenshot: currentAttachments.length > 0,
@@ -6409,6 +8520,39 @@ Provide only the answer, nothing else.`;
     setTimeout(() => {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, 50);
+
+    if (directAssistEnabled) {
+      try {
+        const directPageContext = consumeDirectPageContext();
+        if (directPageContext) {
+          setMessages((prev) => prev.map((message) =>
+            message.id === userMessageId
+              ? {
+                  ...message,
+                  pageContext: {
+                    title: directPageContext.title,
+                    url: directPageContext.url,
+                  },
+                }
+              : message,
+          ));
+        }
+        await beginDirectAssist({
+          source: 'typed',
+          // Keep the user's typed instruction unchanged. Only an attachment-only
+          // turn needs a deterministic fallback because it has no text to retain.
+          currentRequest: rawUserText.trim().length > 0
+            ? rawUserText
+            : 'Analyze the attached screenshot.',
+          imagePaths: currentAttachments.map((attachment) => attachment.path),
+          pageContext: directPageContext,
+          userMessageId,
+        });
+      } finally {
+        manualSubmitInFlightRef.current = false;
+      }
+      return;
+    }
 
     // A previous turn's RAG answer may still be deferred-draining (see
     // forceFinalizeStaleRagStream's declaration) — force it to its final
@@ -6444,16 +8588,17 @@ Provide only the answer, nothing else.`;
     setIsExpanded(true);
     setIsProcessing(true);
     pinAnswerPanel();
+    const conversationContextForSubmit = buildConversationContextFromMessages(messages);
 
     try {
-      // JIT RAG pre-flight: try to use indexed meeting context first
-      if (currentAttachments.length === 0) {
-        const ragResult = await window.electronAPI.ragQueryLive?.(userText || '');
-        if (ragResult?.success) {
-          // JIT RAG handled it — response streamed via rag:stream-chunk events
-          return;
-        }
-      }
+      // No RAG pre-flight here (issue #552). It used to intercept every typed
+      // message during a live meeting and answer from transcript chunks alone,
+      // returning before conversationContextForSubmit was ever sent — so a
+      // follow-up like "do via stack" reached the model with no referent. The
+      // V3 chat path now carries the conversation ring AND live-meeting
+      // evidence (JIT semantic + raw transcript), so one transport serves
+      // both the first question and the follow-up. The voice path keeps its
+      // RAG query; its answers are recorded in main so this path can see them.
 
       // Pass imagePath if attached, AND conversation context
       // R-17: claim the desktop surface before the round-trip (see the note at
@@ -6553,9 +8698,9 @@ Provide only the answer, nothing else.`;
         // (a plain setMessages), never paintRevealedNow — nothing imperative
         // writes to the ref node in this mode anymore. Reusing that branch
         // would render blank the moment msg.text becomes non-empty (its
-        // isThinking flips false, killing the dots, with no React child to
+        // isThinking flips false, killing the label, with no React child to
         // fill the gap). Render straight off msg.text/React state instead —
-        // dots while still empty, paced text + cursor once content has
+        // the label while still empty, paced text + cursor once content has
         // arrived — the SAME shape (raw text + sibling cursor span, not
         // ReactMarkdown) as the "handoff gap" block further below. Raw text
         // is deliberate, not a shortcut: ReactMarkdown wraps text in a
@@ -6574,7 +8719,7 @@ Provide only the answer, nothing else.`;
         // React RECONCILE instead of unmount when this branch takes over
         // from the imperative one — i.e. diff this branch's real React
         // children against the imperative div's last-known-to-React
-        // children (typically the dots, since msg.text/React state never
+        // children (typically the label, since msg.text/React state never
         // changes during imperative-mode streaming). But the imperative
         // div's ACTUAL dom contents were long since overwritten out-of-band
         // by paintRevealedNow's `node.innerHTML = ...` (math-aware rendered output)
@@ -6597,9 +8742,7 @@ Provide only the answer, nothing else.`;
             >
               {isThinking ? (
                 <div className="flex items-center min-h-[24px] py-0.5">
-                  <div
-                    className={`natively-thinking-dot w-2 h-2 ${isLightTheme ? 'bg-slate-400' : 'bg-white'} rounded-full`}
-                  />
+                  <span className="natively-thinking-label text-[13px]">{t('Thinking...')}</span>
                 </div>
               ) : (
                 msg.text
@@ -6628,38 +8771,39 @@ Provide only the answer, nothing else.`;
               className="w-full ai-response-card my-2.5 min-h-[24px] transition-opacity duration-200 markdown-content whitespace-pre-wrap text-[14px] leading-relaxed natively-streaming-answer"
             >
               {/*
-               * Blinking-dot indicator INSIDE the streaming bubble. Renders
+               * Shimmering "Thinking..." label INSIDE the streaming bubble. Renders
                * while no tokens have arrived yet (text === ''). When the first
                * token lands, queueToken's mid-stream path does
                *   streamingNodeRef.current.textContent = streamingTextRef.current
                * which REPLACES these React-rendered children with a text node,
                * and the subsequent RAF replaces that with math-aware rendered HTML.
                *
-               * React's fiber still thinks the children are these dots — but
+               * React's fiber still thinks the child is this label — but
                * because we never re-trigger the streaming branch with
                * different JSX while text is flowing, no reconciliation kicks
                * in and the imperative DOM persists. Once the row finalizes,
-               * key="streaming" causes a full unmount, so the dots-vs-text
+               * key="streaming" causes a full unmount, so the label-vs-text
                * discrepancy never causes a reconciliation conflict.
                *
                * The outer div's className must stay constant across isThinking
                * — it is never re-rendered by React while tokens stream in (the
                * imperative writes above bypass reconciliation), so any
                * isThinking-conditional class here would freeze at whichever
-               * value was present on first paint. The dot's own layout
-               * (flex/items-center) lives on the inner wrapper below instead,
+               * value was present on first paint. That is also why the label
+               * takes its colours from the --overlay-text-* tokens in CSS
+               * rather than from the `isLightTheme` prop: the class string
+               * here stays constant, so there is nothing to freeze. Its
+               * layout (flex/items-center) lives on the inner wrapper below,
                * which unmounts cleanly once real text arrives.
                *
-               * Placing the dot INSIDE the bubble (instead of as a separate
+               * Placing the label INSIDE the bubble (instead of as a separate
                * pill below the message list) gives the classic messaging
-               * "typing indicator" UX — the dot appears where the answer
+               * "typing indicator" UX — the word appears where the answer
                * will, then smoothly hands off to the answer text.
                */}
               {!msg.text && (
                 <div className="flex items-center min-h-[24px] py-0.5">
-                  <div
-                    className={`natively-thinking-dot w-2 h-2 ${isLightTheme ? 'bg-slate-400' : 'bg-white'} rounded-full`}
-                  />
+                  <span className="natively-thinking-label text-[13px]">{t('Thinking...')}</span>
                 </div>
               )}
             </div>
@@ -7024,7 +9168,11 @@ Provide only the answer, nothing else.`;
         </div>
       );
     },
-    [isLightTheme, mdComponents, appearance],
+    // `t` is useCallback(..., [lang]) in i18n.tsx — its identity is stable
+    // across renders and changes only on a language switch, so listing it
+    // keeps the thinking label translatable without costing MessageRow its
+    // React.memo bailout (which compares this callback by identity).
+    [isLightTheme, mdComponents, appearance, t],
   );
 
   // We use a ref to hold the latest handlers to avoid re-binding the event listener on every render
@@ -7891,8 +10039,6 @@ Provide only the answer, nothing else.`;
     sttUserError,
     sttInterviewerError,
   );
-  const showAnswerPanel =
-    messages.length > 0 || isManualRecording || isProcessing || answerPanelPinned;
   // Only surface the STT pill for genuine problems (config error, failed, or a
   // dropped-then-reconnecting channel). The neutral 'awaiting-audio' state
   // ("Listening for audio…") is intentionally suppressed — it added a pill on
@@ -7907,7 +10053,9 @@ Provide only the answer, nothing else.`;
   const shouldShowSttSummaryPill =
     (sttSummary.tone === 'error' && !audioFailureBannerActive) ||
     sttUserStatus === 'reconnecting' ||
-    sttInterviewerStatus === 'reconnecting';
+    sttInterviewerStatus === 'reconnecting' ||
+    sttUserStatus === 'preparing' ||
+    sttInterviewerStatus === 'preparing';
   // Whether the vision chip will render (mirrors the IIFE's early-return guard).
   const visionPillFailed = screenContextStatus === 'failed' || !!latestVisionFailureReason;
   const visionPillSucceeded =
@@ -7947,6 +10095,7 @@ Provide only the answer, nothing else.`;
     const report = [
       '## STT Diagnostic Report',
       `App Version: ${version}`,
+      `Build Commit: ${import.meta.env.VITE_BUILD_COMMIT || 'unknown'}`,
       `Platform: ${osVersion} (${arch})`,
       `---`,
       `Microphone Provider: ${sttUserProvider}`,
@@ -8001,7 +10150,15 @@ Provide only the answer, nothing else.`;
       // width-resizes, so centering is stable — the panel's center (and the
       // pill window centered over this window) never moves as the panel
       // springs 600↔732 symmetrically inside it.
-      className="flex flex-col items-center w-fit mx-auto h-fit min-h-0 bg-transparent p-0 rounded-[24px] font-sans gap-2 overlay-text-primary"
+      // p-[6px] (OVERLAY_PANEL_INSET) is the ring's gutter, and it is load
+      // bearing on BOTH axes. Vertically this element's offsetHeight is what
+      // reportShellSize sends as the window height, so the padding grows the
+      // window and leaves the card inset from its top and bottom edges — the
+      // only way anything can paint outside the card, which was previously
+      // flush to the window. Horizontally it keeps contentEl's outer box at the
+      // full window width when the panel is expanded, so mx-auto still centres
+      // and panelLeft (measured from THIS element) stays self-consistent.
+      className="flex flex-col items-center w-fit mx-auto h-fit min-h-0 bg-transparent p-[6px] rounded-[24px] font-sans gap-2 overlay-text-primary"
     >
       {/*
        * Always-mounted: isExpanded drives opacity/scale/pointer-events only.
@@ -8046,12 +10203,12 @@ Provide only the answer, nothing else.`;
         // a11y-hidden subtree (a WCAG focus-trap violation if the input held
         // focus when Cmd+B fired). Only applied while collapsed.
         inert={!isExpanded}
-        className="flex flex-col items-center gap-2 w-full"
+        className="relative flex flex-col items-center gap-2 w-full"
       >
             <motion.div
               ref={shellRef}
               data-shell-card=""
-              className={`relative max-w-full backdrop-blur-2xl border rounded-[24px] overflow-hidden flex flex-col draggable-area overlay-shell-surface ${overlayPanelClass}`}
+              className={`relative max-w-full backdrop-blur-2xl border rounded-[24px] overflow-hidden flex flex-col draggable-area overlay-shell-surface overlay-shell-container ${overlayPanelClass}`}
               style={{
                 ...appearance.shellStyle,
                 // The panel width is bound to the LIVE `shellWidth` motion value,
@@ -8471,13 +10628,36 @@ Provide only the answer, nothing else.`;
                 />
               ) : null}
 
-              {/* Chat History - Only show if there are messages OR active states */}
+              {/* Chat History - Only show if there are messages OR active states,
+                  or a pinned height that needs a viewport to fill it. No padding
+                  while mounted for the pin alone: box-sizing keeps a padded box
+                  at its padding (32px) however small its max-height, which
+                  showed as a gap under the transcript and pushed the footer
+                  past the window once the chrome had outgrown the pin. */}
+              {/* AUTO EXPAND / CONTRACT — the animated box.
+                  Its height carries OVERLAY_RESIZE_TWEEN (300ms /
+                  cubic-bezier(0.22, 1, 0.36, 1)) while the panel's WIDTH keeps
+                  its 420ms spring; the scroller inside keeps its
+                  natural, content-driven height so the ResizeObserver that feeds
+                  the tween measures something the tween cannot change. The clip
+                  lives HERE and not on the card because the card's own
+                  overflow-hidden would slice the footer off for the whole tween.
+                  `relative z-10` is lifted off the scroller onto this box so the
+                  stacking order against the card's other children is unchanged.
+                  Always mounted: it is the box that plays the contract to 0 after
+                  the scroller has gone. */}
+              <motion.div
+                ref={viewportBoxRef}
+                data-viewport-box=""
+                className="relative z-10 overflow-hidden shrink-0"
+                style={{ height: viewportHeightPx }}
+              >
               {showAnswerPanel && (
                 <motion.div
                   ref={scrollContainerRef}
-                  className="relative z-10 flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-3 no-drag isolate"
+                  className={`relative flex-1 overflow-y-auto overflow-x-hidden ${hasChatContent ? 'p-4 space-y-3' : 'p-0'} no-drag isolate`}
                   layout={false}
-                  style={{ scrollbarWidth: 'none', maxHeight: scrollMaxH }}
+                  style={{ scrollbarWidth: 'none', maxHeight: scrollMaxH, minHeight: scrollMinH }}
                 >
                   {/* Every row spans the full inner width of the scroll
                                         container, which itself rides the shell's animated
@@ -8539,13 +10719,13 @@ Provide only the answer, nothing else.`;
                   )}
 
                   {/*
-                   * Blinking-dot "AI is thinking" indicator (no card chrome —
+                   * Shimmering "Thinking..." indicator (no card chrome —
                    * see `.ai-response-card` neutralization in index.css).
                    * Gated on `!hasStreamingPlaceholder` so it never co-exists
                    * with a streaming system row, which already renders its own
-                   * identical single-dot indicator inside `renderMessageText`
+                   * identical label inside `renderMessageText`
                    * (the `isThinking` branch there). Without this gate the
-                   * user would see TWO dot indicators during the wait — one
+                   * user would see the word TWICE during the wait — one
                    * per surface — even though neither has a visible bubble to
                    * "double up" with anymore.
                    *
@@ -8559,9 +10739,7 @@ Provide only the answer, nothing else.`;
                       (m) => m.role === 'system' && m.isStreaming,
                     ) && (
                     <div className="flex justify-start my-2.5 min-h-[24px] items-center">
-                      <div
-                        className={`natively-thinking-dot w-2 h-2 ${isLightTheme ? 'bg-slate-400' : 'bg-white'} rounded-full`}
-                      />
+                      <span className="natively-thinking-label text-[13px]">{t('Thinking...')}</span>
                     </div>
                   )}
                   <div ref={messagesEndRef} />
@@ -8575,6 +10753,7 @@ Provide only the answer, nothing else.`;
                   <div ref={scrollSpacerRef} aria-hidden="true" style={{ height: 0 }} />
                 </motion.div>
               )}
+              </motion.div>
 
               {/* Quick Actions - Minimal & Clean.
                   Split into an outer positioning-only wrapper + an inner row
@@ -8790,7 +10969,7 @@ Provide only the answer, nothing else.`;
                   )}
                 </AnimatePresence>
                 <div
-                  className={`flex flex-nowrap justify-center items-center gap-1.5 px-4 pb-3 overflow-x-hidden ${rollingTranscript && showTranscript ? 'pt-1' : 'pt-3'}`}
+                  className={`flex flex-wrap justify-center items-center gap-1.5 px-4 pb-3 max-w-full overflow-visible ${rollingTranscript && showTranscript ? 'pt-1' : 'pt-3'}`}
                 >
                 <button
                   onClick={handleWhatToSay}
@@ -9075,9 +11254,10 @@ Provide only the answer, nothing else.`;
 
                   {/* Custom Rich Placeholder */}
                   {!inputValue && (
-                    <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none text-[13px] overlay-text-muted">
-                      <span>{t('Ask anything on screen or conversation, or')}</span>
-                      <div className="flex items-center gap-1 opacity-80">
+                    <div className="absolute inset-x-3 top-1/2 -translate-y-1/2 min-w-0 overflow-hidden whitespace-nowrap pointer-events-none text-[13px] overlay-text-muted">
+                      <span className="overlay-input-placeholder-full inline-flex items-center gap-1.5">
+                        <span>{t('Ask anything on screen or conversation, or')}</span>
+                      <span className="flex items-center gap-1 opacity-80">
                         {(
                           shortcuts.selectiveScreenshot || [getModifierSymbol('cmd'), 'Shift', 'H']
                         ).map((key, i) => (
@@ -9091,8 +11271,10 @@ Provide only the answer, nothing else.`;
                             </kbd>
                           </React.Fragment>
                         ))}
-                      </div>
+                      </span>
                       <span>{t('for selective screenshot')}</span>
+                      </span>
+                      <span className="overlay-input-placeholder-compact">{t('Ask anything…')}</span>
                     </div>
                   )}
 
@@ -9103,8 +11285,11 @@ Provide only the answer, nothing else.`;
                   )}
                 </div>
 
-                {/* Bottom Row */}
-                <div className="flex items-center justify-between mt-3 px-0.5">
+                {/* Bottom Row. pointer-events-none on the ROW: it is a full-width,
+                    30px box at z-[60], above the resize handles (z-50), so its
+                    empty span shadowed the south handle's top and the corner. Only
+                    its controls take the pointer. */}
+                <div className="flex items-center justify-between mt-3 px-0.5 relative z-[60] pointer-events-none [&>*]:pointer-events-auto">
                   <div className="flex items-center gap-1.5">
                     <button
                       data-model-selector-toggle="true"
@@ -9142,6 +11327,13 @@ Provide only the answer, nothing else.`;
                           // verbatim for LiteLLM, so that path would render the
                           // full id and this chip is a 140px truncating control.
                           if (m.startsWith('litellm/')) return litellmModelLabel(m);
+                          // 9Router stacks the same two prefixes — ours and the
+                          // instance's upstream namespace — so a raw id reads
+                          // `ninerouter/minimax/MiniMax-M3`. Same position rule as
+                          // LiteLLM above: getCurrentModelDisplayName() returns
+                          // currentModelId verbatim for a gateway, so below the
+                          // displayName branch this chip renders the whole id.
+                          if (m.startsWith('ninerouter/')) return gatewayModelLabel(m);
                           // For everything else, prefer the authoritative
                           // displayName from `getCurrentLlmConfig` (handles
                           // custom-provider UUIDs and any future model aliases
@@ -9151,9 +11343,10 @@ Provide only the answer, nothing else.`;
                           if (currentModelDisplayName && currentModelDisplayName !== m) {
                             return currentModelDisplayName;
                           }
+                          if (m === 'gemini-3.8-flash') return 'Gemini 3.8 Flash';
+                          // Legacy ids, still valid and still selectable from
+                          // persisted state — name them instead of showing the slug.
                           if (m === 'gemini-3.7-flash') return 'Gemini 3.7 Flash';
-                          // Legacy id, still valid and still selectable from
-                          // persisted state — name it instead of showing the slug.
                           if (m === 'gemini-3.6-flash') return 'Gemini 3.6 Flash';
                           if (m === 'gemini-3.1-flash-lite') return 'Gemini 3.1 Flash Lite';
                           if (m === 'gemini-3.1-pro-preview') return 'Gemini 3.1 Pro';
@@ -9167,6 +11360,16 @@ Provide only the answer, nothing else.`;
                       </span>
                       <ChevronDown size={14} className="shrink-0 transition-transform" />
                     </button>
+
+                    {directAssistEnabled && (
+                      <span
+                        className="px-1.5 py-0.5 rounded-md text-[9px] font-semibold uppercase tracking-wide text-emerald-300 bg-emerald-400/10 border border-emerald-400/20"
+                        title={t('Direct Assist sends the current request straight to the active model')}
+                        data-testid="direct-assist-badge"
+                      >
+                        {t('Direct')}
+                      </span>
+                    )}
 
                     <div className="w-px h-3 mx-1" style={appearance.dividerStyle} />
 
@@ -9253,7 +11456,49 @@ Provide only the answer, nothing else.`;
                   </button>
                 </div>
               </div>
+
+              {/* Resize handles. EAST-side only — see handleResizePointerDown
+                  for why a west-side handle cannot be made artifact-free.
+                  Double-click any of them to return to automatic sizing. */}
+              <div
+                data-resize-handle="e"
+                className="resize-handle resize-handle-e absolute top-4 bottom-4 right-0 z-50 w-4 no-drag touch-none"
+                onPointerDown={(e) => handleResizePointerDown('e', e)}
+                onDoubleClick={handleResizeReset}
+                // The strip covers the right 16px of the message list and is a
+                // SIBLING of the scroll container, so a wheel over it would
+                // otherwise do nothing at all. Forward it by hand.
+                onWheel={(e) => {
+                  scrollContainerRef.current?.scrollBy({ top: e.deltaY });
+                }}
+                title={t('Drag to resize width · double-click to reset')}
+              />
+              <div
+                data-resize-handle="s"
+                className="resize-handle resize-handle-s absolute bottom-0 left-8 right-8 z-50 h-4 no-drag touch-none"
+                onPointerDown={(e) => handleResizePointerDown('s', e)}
+                onDoubleClick={handleResizeReset}
+                title={t('Drag to resize height · double-click to reset')}
+              />
             </motion.div>
+            {/* SE corner handle — OUTSIDE the card, which is overflow-hidden with a
+                24px radius: inside it the rounded corner clipped hit-testing, so
+                the outermost ~7px of the corner (exactly where a corner drag is
+                aimed) was dead, and the send button sits 12px from both edges.
+                Sitting above the card's stacking context it would cover that
+                button, so it is clipped to an L of 12px strips along the two
+                edges — the card's padding, which nothing else uses. */}
+            <div
+              data-resize-handle="se"
+              className="resize-handle resize-handle-se absolute bottom-0 right-0 z-50 h-9 w-9 no-drag touch-none"
+              style={{
+                clipPath:
+                  'polygon(100% 0, 100% 100%, 0 100%, 0 calc(100% - 12px), calc(100% - 12px) calc(100% - 12px), calc(100% - 12px) 0)',
+              }}
+              onPointerDown={(e) => handleResizePointerDown('se', e)}
+              onDoubleClick={handleResizeReset}
+              title={t('Drag to resize · double-click to reset')}
+            />
           </motion.div>
       {/* end always-mounted shell */}
     </div>

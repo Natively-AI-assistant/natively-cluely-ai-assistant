@@ -9,13 +9,15 @@
  *   gemini-3.1-flash-lite   minimal → 200    low → 200
  *   gemini-3.6-flash        minimal → 200    low → 200
  *   gemini-3.7-flash        minimal → 400    low → 200
+ *   gemini-3.8-flash        minimal → 400    low → 200   (re-probed 2026-09-03)
  *       ("Thinking level MINIMAL is not supported for this model.
  *         Please retry with other thinking level.")
  *
  * buildThinkingConfig used to send MINIMAL for ANY non-Pro model whenever the
  * threaded budget was <= 0 — and both interactive budgets (INTERACTIVE_ /
  * CODING_THINKING_BUDGET) are 0. So bumping the client's GEMINI_FLASH_MODEL to
- * gemini-3.7-flash without this floor 400s every interactive Gemini stream on
+ * gemini-3.7-flash (and now 3.8-flash) without this floor 400s every interactive
+ * Gemini stream on
  * the direct/BYOK path.
  *
  * Mirrors thinkingConfigForModel() in natively-api/lib/flashModelPicker.js —
@@ -42,9 +44,16 @@ test('gemini-3.7-flash floors at low — MINIMAL is a 400 on this model', () => 
   assert.deepEqual(buildThinkingConfig('gemini-3.7-flash', BUDGET_OFF), { thinkingLevel: ThinkingLevel.LOW })
 })
 
+// 3.8-flash was re-probed against the live API on 2026-09-03 and behaves exactly
+// like 3.7: MINIMAL → 400, low → 200. It is deliberately NOT in
+// MINIMAL_THINKING_MODELS; the default-to-LOW branch is what keeps it working.
+test('gemini-3.8-flash floors at low — MINIMAL is a 400 on this model too', () => {
+  assert.deepEqual(buildThinkingConfig('gemini-3.8-flash', BUDGET_OFF), { thinkingLevel: ThinkingLevel.LOW })
+})
+
 // Keep in sync with GEMINI_FLASH_MODEL in electron/LLMHelper.ts (module-private,
 // so it cannot be imported here) and electron/IntelligenceManager.ts.
-const SHIPPED_FLASH_MODEL = 'gemini-3.7-flash'
+const SHIPPED_FLASH_MODEL = 'gemini-3.8-flash'
 
 test('REGRESSION: the shipped flash model is never sent thinkingLevel minimal', () => {
   const cfg = buildThinkingConfig(SHIPPED_FLASH_MODEL, BUDGET_OFF)

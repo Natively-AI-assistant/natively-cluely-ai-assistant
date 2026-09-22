@@ -1,0 +1,454 @@
+# id: SALES-DISC-L
+# title: Routewell x Harbourline Logistics discovery call (ticket triage platform)
+# S0: Me — Dana Whitfield, Account Executive, Routewell
+# S1: Priya Raman, VP of Customer Operations, Harbourline Logistics
+# S2: Jon Okafor, IT and Security Lead, Harbourline Logistics
+# S3: Joan Petrakis, Senior Finance Manager, Harbourline Logistics
+# S4: Marcus Lindqvist, Sales Engineer, Routewell
+S1: Hi, can you hear me? I think my headset just switched over.
+S0: Yep, I can hear you fine. Hi Priya, thanks so much for making the time today.
+S1: Of course. Sorry, I'm a couple of minutes late, the previous meeting ran over and then my laptop decided to update itself.
+S0: Oh, that's the worst. No problem at all. How's everything in Columbus? I saw there were storms coming through last night.
+S1: Oh, it was wild. We lost power for like two hours. My daughter was thrilled because it meant no homework, she did her reading by flashlight.
+S0: Ha, that sounds like an adventure for a kid. We just got rain here in Denver, nothing dramatic. Honestly kind of boring.
+S1: I'll trade you boring. The basement was, um, not boring.
+S0: Oh no. Did it flood?
+S1: A little. Nothing a shop vac couldn't handle. Anyway. Jon should be joining too, he said he'd be a minute late.
+S2: I'm here, I'm here. Sorry. Jon Okafor, I run IT and security at Harbourline.
+S0: Hi Jon, great to meet you. Dana Whitfield, I'm the account executive at Routewell covering your region.
+S2: Nice to meet you, Dana.
+S1: Jon, did you watch the game last night? Or did the storm get you too?
+S2: I watched the first half and then the stream died. The Crew were up one nothing at that point, so I'm just going to assume they won.
+S1: They did not win. It ended one all. Stoppage time equalizer.
+S2: Don't tell me that. I was happier not knowing.
+S0: Are you both big soccer people?
+S1: My daughter plays, so I'm a soccer person by force. Jon is the actual fan.
+S2: Season ticket holder. It's a problem. My wife would say it's a problem.
+S0: I grew up with hockey, so I respect the commitment. Okay, so I know we have an hour blocked. I've got a sales engineer, Marcus, who'll hop on a bit later when we get into the product and the technical side.
+S1: That's perfect.
+S0: What I was hoping to do today is mostly listen. Understand how support runs at Harbourline today, where it hurts, what you've already tried, and what a good outcome looks like. And then Marcus can show you how our routing actually works against what you describe. Does that work?
+S1: That works. And honestly, the more you listen the better, because we've had a few vendor calls this month that were just forty minutes of slides.
+S0: Understood. No slides, I promise. So maybe start at the top. Priya, how would you describe the support operation today?
+S1: Sure. So, Harbourline, for context, we do fulfillment and last mile logistics for online retailers. Mostly mid-size direct to consumer brands, some bigger ones. So our support team is kind of handling two worlds.
+S1: One is the merchants, the brands who pay us, and then the other is their end customers, who are asking where is my parcel, my box arrived crushed, that kind of thing.
+S0: So you're supporting both the B2B merchant side and the consumer side on behalf of those merchants.
+S1: Exactly. And the merchant tickets are the ones where if we're slow, we lose accounts. The consumer ones are volume. Lots and lots of volume.
+S0: And how big is the team handling all of that?
+S1: We have about 120 agents right now. Split between Columbus and our Rotterdam site, which handles most of Europe.
+S0: Great, 120 agents across two sites. And when you say the pain, where does it show up first?
+S1: Routing. Everything starts with routing. Tickets land in the wrong queue, they sit there, someone eventually notices, they get moved, and by then the merchant is already angry.
+S1: We did a sample in February and something like 18% of tickets were misrouted on first assignment.
+S0: 18%, wow. And what does a misroute cost you in time, roughly?
+S1: On average a misrouted ticket adds about six hours before it reaches the right person. Sometimes a day, if it lands in the Rotterdam queue after they've gone home.
+S0: That's a big number. So what's doing the routing today?
+S1: That's a longer story, and Jon will have opinions. We have Zendesk, we have Salesforce for the merchant accounts, and in between there's a script that one of our former engineers wrote.
+S2: The sorter. We call it the sorter.
+S0: The sorter. Okay, I love that it has a name.
+S2: It has a name because it has a personality. And not a good one.
+S1: And then on top of that we have Queuewise, which does auto tagging and language detection. They're sort of our incumbent vendor in this space, but honestly, they tag, they don't really route.
+S0: Got it. So Queuewise tags, the sorter reads the tags and assigns queues. And you're on Zendesk Suite, I assume, since most teams your size are?
+S1: Uh, I think so, yeah. Jon would know the exact plan.
+S2: We can get into that.
+S0: Sure. Before we go deep into the stack, can I ask about the project itself? Is this a formal initiative with budget behind it, or more of an exploration right now?
+S1: No, it's real. It's on my plan for this year. We've set aside a budget of $50,000 for year one for this. That's software plus whatever implementation we need.
+S0: Okay, $50,000 for year one, all in. That's really helpful, thank you.
+S1: And I have some flexibility, but that's the number I've been working with.
+S0: And is that budget sitting with you, in customer operations?
+S1: Yes, it's in my budget. I'm the one who pitched it to leadership.
+S0: Great. And are you looking at anyone else right now? Totally fine if so.
+S1: We are. We've had two calls with Deflekt. And obviously the option of just renewing Queuewise and, you know, patching the sorter again.
+S2: Please don't make me patch the sorter again.
+S0: Ha, noted. What did you think of Deflekt so far?
+S1: The interface is nice. The agents who saw the demo liked it. Their price was lower than I expected, I think they came in at $31 per agent per month.
+S0: Okay. And anything that gave you pause?
+S2: Data residency. They don't have an EU region yet. They said it's coming later this year, but we've heard that before from other vendors.
+S0: That's fair. We'll definitely want to get into EU data, since Rotterdam is a big part of this.
+S0: And on timing, when would you ideally want something live?
+S1: So the plan has been Q4. We have a peak season change freeze that starts November 1, no changes to support tooling from November 1 through January 10. So the idea was to go live around October 15, give it two weeks to settle before the freeze.
+S0: Makes sense. So a Q4 go-live, targeting October 15, ahead of the November 1 freeze.
+S1: Right. And that also lines up with when the Queuewise contract ends. We believe that's December 31, so we'd have a couple of months of overlap.
+S0: Nice, overlap is good. Okay, let's go into the current stack. Jon, maybe you can walk me through how a ticket actually flows today?
+S2: Sure. So tickets come in through three channels. Email is the big one, then chat, then a web form on the tracking page.
+S1: Email is about 62% of volume, chat is about 25%, and the web form is the remaining 13%.
+S0: And total volume per month?
+S1: Normal months we're around 38,000 tickets a month. In peak, November and December, we hit about 55,000.
+S0: 38,000 normally, 55,000 at peak. Okay.
+S2: So a ticket lands in Zendesk. Queuewise picks it up through a webhook, it adds tags, language, a rough category like damaged, delayed, billing, returns. Then the sorter runs.
+S0: And the sorter runs how, is it triggered or scheduled?
+S2: It's a cron job. Every five minutes. It's a Python script running on a small VM in our data center, which I also don't love.
+S2: It pulls new tickets from the Zendesk API, reads the Queuewise tags, checks a bunch of keyword rules, and then it looks up the merchant in Salesforce to see what tier they are.
+S0: How many rules are we talking?
+S2: Last time I counted, around 340 rules. Nobody fully understands all of them. Some of them contradict each other and the order matters.
+S1: And the person who wrote it left two years ago.
+S0: Oof. So when someone wants a routing change today, what happens?
+S2: They file a ticket with my team, and then one of my two engineers edits the rules, tests it on, like, yesterday's tickets, and pushes it. It takes a couple of weeks usually because it's never top of the list.
+S0: So your team is two engineers?
+S2: Two engineers who handle all internal tooling, not just this. So anything that needs a lot of integration work from us is a real concern. I want to flag that now.
+S0: Totally fair, and we'll make sure Marcus covers what the integration actually involves on your side.
+S0: How many queues are tickets routed into?
+S1: 14 queues. Split by region, by language, by merchant tier, and then some special ones like claims and carrier escalations.
+S0: And languages, what are you supporting?
+S1: Four languages today. English, German, Dutch and Spanish. English is by far the biggest, around 70%. German is about 12%, and Dutch and Spanish are roughly 9% each.
+S1: There's a conversation about adding French next year because we might open a hub near Lyon, but that's not confirmed.
+S0: Okay, four languages today, possibly French next year. Tell me about the merchant tiers in Salesforce.
+S1: So merchants are Pro or Standard. Pro merchants are about 300 accounts, they have a contractual SLA with us.
+S0: What's the SLA?
+S1: For Pro merchants, first response within 1 hour. For everything else, standard merchants and consumers, it's first response within 4 business hours. And then we have an internal resolution target of 48 hours for everything.
+S0: And how are you doing against those today?
+S1: On the Pro one-hour SLA, we hit it about 71% of the time. Which is not good, because it's in their contracts. We've paid service credits twice this year.
+S0: And the target?
+S1: I want to be at 90% or better on the Pro SLA by the end of the year. That's the number I'm measured on, honestly.
+S0: 71% today, 90% target. Got it. And is the misrouting the main reason you miss it?
+S1: It's the biggest single reason. When we dug into the misses, more than half of them were a Pro merchant ticket sitting in a consumer queue because the sorter didn't match the merchant, or the email came from someone at the merchant using a personal Gmail.
+S0: That makes sense. Matching the sender to the account is a classic problem. Okay. And Jon, one quick check, because it affects how we'd connect. You're on Zendesk Suite, right, so you'd have the Suite APIs and their built-in intelligent triage available?
+S2: No, actually, that's a common assumption. We're not on Suite. We're on Zendesk Support Professional. We looked at Suite two years ago and it was too expensive for the seat count, so we stayed on Support Professional and bolted on Queuewise.
+S0: Ah, okay, thank you, that's important. So Zendesk Support Professional, not Suite. That means no Zendesk native intelligent triage in the picture, which actually simplifies things for us.
+S1: Sorry, I said I thought we were on Suite, I was wrong. Jon's right.
+S0: No problem at all, that's exactly why we ask. Oh, and I see Marcus just joined. Marcus, perfect timing.
+S4: Hi everyone, Marcus Lindqvist, sales engineer at Routewell. Sorry for jumping in partway, I was finishing up another call.
+S1: Hi Marcus. Priya, I run customer operations.
+S2: Jon, IT and security.
+S4: Great to meet you both. Dana's been sending me notes in chat, so I think I'm mostly caught up. Zendesk Support Professional, Salesforce for merchant tier, and a cron-based Python router with about 340 rules.
+S2: The sorter.
+S4: The sorter. I've seen a few of those. Nobody ever builds the sorter on purpose, it just kind of grows.
+S2: That's exactly what happened.
+S0: Marcus is based in Stockholm, by the way, so he's the one to ask about the EU side of things.
+S1: Oh nice. Is it still light out there?
+S4: It's getting there. This time of year it's light until about eight thirty, which after the winter feels like a miracle.
+S1: I can't imagine the winters.
+S4: You get used to it. Lots of candles. Lots of coffee. Okay. So maybe I'll describe how Routewell would sit in this flow, and you tell me where it breaks for you.
+S1: Please.
+S4: So, at a high level, we connect to Zendesk with a native app and the Zendesk API. Every new ticket gets classified within a few seconds. We look at the subject, the body, attachments metadata, the channel, and the requester.
+S4: The model predicts intent, urgency, language, and sentiment. And then there's a routing layer on top where you define the queue logic in a visual editor. So instead of 340 keyword rules, you'd typically end up with maybe 20 or 30 routing policies.
+S2: And who maintains those policies?
+S4: Your ops team can. That's kind of the point. The routing editor is built for ops, not engineering. Priya's team leads could change a policy on a Tuesday afternoon without filing an IT ticket.
+S1: That alone would be huge.
+S2: It would also make me nervous, but go on.
+S4: Fair. There's role based permissions and a full change history, and you can stage a policy change and replay it against the last seven days of tickets before you publish it. So you can see, if I change this rule, 400 tickets would have gone somewhere else.
+S2: Okay, that I like.
+S4: For the Salesforce part, the account tier lookup, we have a Salesforce connector. We match the requester's email domain to the account, and when it's a personal address we fall back to the order or tracking number in the ticket and look up the merchant that way.
+S1: The tracking number fallback is actually the thing we need. Half the Pro misses were personal emails.
+S4: Right, and for logistics customers the tracking number is usually the strongest signal we have. The confidence on that match tends to be very high.
+S2: Let me ask the integration question directly, then. Realistically, how much work is this for my team? Because like I said, it's two engineers and they're already underwater.
+S4: Totally fair. So the Zendesk side is the native app, that's an admin installing it and granting API scopes. An hour, maybe two with testing.
+S4: The Salesforce connector is configuration, not code. Someone with Salesforce admin rights needs to create a connected app and map two or three fields, the account tier and the tracking number object. Typically two to three weeks elapsed, but only a few days of actual effort, and most of that is waiting on approvals.
+S2: Our Salesforce admin sits in the sales ops team, not in my team, so that's another person to pull in.
+S0: Would it help if we did a working session directly with your Salesforce admin, so it's not on your engineers?
+S2: It would. Her name is Renata. I'll have to check her bandwidth, she's in the middle of a CPQ rollout.
+S4: And then the sorter. The plan would be that Routewell replaces both Queuewise tagging and the sorter. You'd turn off the cron job at cutover. So long term it's less work for your team, not more.
+S2: I hear that. Every vendor says long term it's less work. Short term is what I'm worried about.
+S0: That's a completely reasonable concern. What I'd suggest is we put together an actual integration plan with named tasks and hours for each side, so you're not taking our word for it.
+S2: Yes. Please. Something I can take to my manager.
+S0: Okay, I'll own that. Marcus and I will draft it.
+S1: Can I raise the other thing I'm worried about, which is honestly the people side?
+S0: Please.
+S1: So our agents have been burned by the sorter. When it routes something wrong, the agent gets blamed for a slow response. So there's a lot of distrust of anything automatic. If we roll out something that says AI in the name and it makes one visible mistake in week one, I will lose the team.
+S0: That's really important, and I appreciate you saying it. Can you tell me more about how the teams are set up? Are the team leads bought in?
+S1: The Columbus team leads mostly are, they've seen the data. Rotterdam is more skeptical. They had a bad experience with a workforce management tool a few years ago that felt like surveillance.
+S4: That's a very common reaction. A couple of things that help. First, agents can override a routing decision with one click and pick a reason, and those overrides feed back into the model. So the agents are actually training it, it's not happening to them.
+S4: Second, you set a confidence threshold. Anything below it, say below 0.7 confidence, doesn't get auto-routed at all. It goes to a human triage queue. So in the first weeks you can set the threshold high and only auto-route the tickets the model is really sure about.
+S1: How much would typically get auto-routed at a high threshold?
+S4: It varies a lot, but for logistics customers with a lot of where is my order tickets, it's often 60 to 70% at launch, and it goes up as the model learns your data.
+S1: Okay. That's a more comfortable story than flip a switch.
+S0: And we have a change management playbook we can share, including agent-facing materials. Some customers run agent champion groups in each site.
+S1: Rotterdam would need that. And, um, actually this reminds me. In the Netherlands, anything that could be used to evaluate agent performance might need to go to the works council. The on the nemings raad.
+S4: The ondernemingsraad, yes. We've seen that with Dutch customers. It depends on whether the tool processes data that could be used to assess individual employees.
+S1: I honestly don't know if this counts. Our override data is per agent, so maybe?
+S2: It could take a while if it does. When we did the WFM tool, the consultation was something like four to six weeks.
+S0: That's a real timeline risk. Is there someone at Harbourline who owns the relationship with the works council?
+S1: HR in Rotterdam, I think. Someone should check with them whether this needs a consultation, but I don't know who exactly. I'll need to figure out who the right person is.
+S0: Okay, let's keep that as an open item. It's worth knowing early.
+S4: For what it's worth, some Dutch customers configure the override reporting to be team level only, not per agent, which in some cases changed the answer. But that's for your HR and council to decide, not us.
+S1: Good to know. Write that down for me, Dana.
+S0: Already have. Priya, one thing I want to understand, when you think about success a year from now, is it mostly the Pro SLA number?
+S1: The Pro SLA is number one. Second would be misroutes, get that 18% down to something like 5%. And third, honestly, I want my team leads to stop spending their mornings manually moving tickets. Each lead spends probably an hour a day on that.
+S0: How many team leads?
+S1: 11 team leads. So that's a lot of hours.
+S0: That's about 11 hours a day of leadership time on manual triage. That's a good number for the business case.
+S1: I hadn't thought about it that way. Yes.
+S0: Jon, from your side, what does success look like?
+S2: Retiring the sorter and the VM it runs on. Not adding a new thing that I have to babysit. And passing our security review without surprises.
+S0: Clear. So let's talk security, because I suspect that's where you'll want the most detail.
+S2: Yes. So I have a standard list, and I'd rather go through the big items now than find out in week five of the review.
+S4: Go for it.
+S2: First, identity. We use Okta for everything. We need SSO through SAML for all users, no local passwords. And ideally SCIM provisioning so when someone leaves, access is removed automatically.
+S4: SAML SSO with Okta is supported on all plans, and you can enforce SSO only, so local passwords are disabled. SCIM is supported, but I want to be transparent, SCIM provisioning is only included in our Enterprise tier.
+S2: Hmm. That's not great. Offboarding is a big deal for us, we have seasonal turnover in the agent population.
+S0: Understood. Let me look at how we can handle SCIM in the proposal. I don't want to promise anything on the call, but I'll come back with options.
+S2: Okay. Second, data residency. Rotterdam handles EU consumers and EU merchants. That data needs to stay in the EU. That's not negotiable, our DPO has been very clear.
+S4: So we run a dedicated EU region in Frankfurt. Your EU tickets would be processed and stored there, including the classification model, it runs in region. US tickets would go through our US region in Virginia.
+S2: Including backups?
+S4: Including backups, they stay in region. There is one thing I want to flag though, so it doesn't surprise you in the review.
+S2: Go on.
+S4: We have an optional feature that generates a short ticket summary for agents. That uses a large language model sub-processor, and by default that sub-processor processes in the US. For EU customers, most people disable the summary feature for the EU region, or we can route it to an EU endpoint, but that's in limited availability right now.
+S2: Okay. So if we disabled summaries for EU, then nothing leaves the EU.
+S4: Correct. Classification and routing stay in Frankfurt.
+S2: I'll need that in writing, and I'll need your sub-processor list.
+S4: Absolutely.
+S0: Would you want summaries on for the US side?
+S1: I'd like to see them. Agents would probably love them. But not if it complicates the review.
+S2: Let's not decide that today. I'd rather review it separately.
+S0: Fair enough, we'll leave the summaries question open.
+S2: Third, compliance. Do you have a SOC 2 Type II?
+S4: Yes. SOC 2 Type II, the most recent report covers a twelve month period ending January 31 of this year. We're also working toward ISO 27001, we expect certification in Q4.
+S2: The SOC 2 Type II is what I need. ISO would be nice to have. And pen testing?
+S4: Annual third party penetration test. The last one was completed in February. We can share an executive summary of the findings and remediation under NDA.
+S2: Okay. Good. And then encryption, the usual. At rest, in transit, key management.
+S4: AES 256 at rest, TLS 1.2 or higher in transit. Keys are managed in AWS KMS per region. Customer managed keys are on the roadmap but not available today.
+S2: That's fine, we don't require customer managed keys. Okay, so here's my honest concern. Our vendor security review usually takes six to eight weeks.
+S0: Six to eight weeks. Can you walk me through what drives that?
+S2: We have a questionnaire, it's about 180 questions. Then I review the SOC 2 report, then our DPO reviews the data processing agreement, and then legal. And everyone's doing it on top of their day job. The questionnaire going back and forth is usually where the time goes.
+S0: That's helpful. We've done a lot of these, so most of the 180 questions we can probably answer from our existing trust package within a few days of receiving it.
+S2: That would help. The slowest vendors are the ones who take two weeks to fill in the questionnaire.
+S1: Six to eight weeks is going to be tight for October though.
+S2: I know. I'm not trying to be difficult, I just have to be honest about the process.
+S0: No, that's exactly what we need. Nobody's served by a timeline that ignores the review. Jon, if we got you the SOC 2 report, pen test summary and sub-processor list this week, is there a version where this is closer to four weeks?
+S2: Maybe. If the questionnaire comes back fast and complete, and if the DPA doesn't have weird clauses. I can't promise four weeks. But the documents early would definitely help.
+S4: We can send those as soon as there's an NDA in place.
+S1: We have a mutual NDA template. I'll ask our legal team to send it over today.
+S0: Perfect.
+S2: And I'll send our security questionnaire. I can get that to you by Thursday.
+S0: Thursday the 29th, great. Marcus, can you own getting the SOC 2 report, pen test summary and sub-processor list to Jon?
+S4: Yes, I'll send those by Wednesday, April 28, assuming the NDA is signed by then.
+S0: Great. Okay, so I want to talk about how we prove this out, because I think that's what de-risks both the security concern and Priya's change management concern.
+S1: Yes. Actually I had an idea on that. What if we did a live pilot? Say 60 days, with one team, maybe 25 agents in Columbus, real tickets, real routing. Then the team sees it working and becomes the champions.
+S0: I like the intent behind that a lot.
+S2: I'm going to push back on that, though. A live pilot means real customer data going into your platform, which means it needs the full security review done first, plus a signed DPA. So a pilot doesn't actually save us any time, it just adds a phase.
+S1: Hmm. That's a fair point.
+S2: And if the pilot team is 25 agents in Columbus, you're not testing Rotterdam at all, which is where the languages and the residency questions are.
+S4: Can I suggest an alternative we've used with other customers in the same spot?
+S1: Please.
+S4: A scoped proof of concept on historical data instead of a live pilot. You export a set of resolved tickets, anonymized, we load them into an isolated sandbox in the EU region, and we measure routing accuracy against what actually happened. Where did the ticket end up, after all the manual moves.
+S4: No live agents, no production integration, and because it's anonymized historical data, it usually only needs a light review rather than the full one.
+S2: If it's properly anonymized, names, emails, addresses, phone numbers removed, then yes, that's a much lighter review. I can approve that myself.
+S1: And what would we get out of it?
+S4: A report showing routing accuracy by queue, by language, by channel, and how much would have been auto-routed at different confidence thresholds. Compared against your current baseline, which is the 18% misroute rate.
+S1: So we'd basically have a number for the business case. That's more useful than a pilot, honestly.
+S0: I think so too. So are we agreed, no live pilot, and instead a scoped proof of concept on historical tickets?
+S1: Yes. Let's do the proof of concept instead of the pilot.
+S2: Agreed.
+S0: Great. Let's scope it. Marcus, what's a sensible size?
+S4: I'd suggest 10,000 resolved tickets, from a normal month, not peak. And I'd scope it to English and German, because that covers both sites and gives us one non-English language to prove out. Typically it runs about three weeks.
+S1: Do we need Dutch and Spanish in it? Rotterdam will ask.
+S4: We could add them, but with 10,000 tickets there wouldn't be many Dutch or Spanish examples. We could maybe drop Spanish and add Dutch?
+S1: Let me think about that. I don't want to decide it on the fly. Keep it English and German for now.
+S0: Okay, English and German for now, with Dutch possibly added later. What would success look like, so we agree up front?
+S1: If you can get routing accuracy to 85% or better on the historical set, that would be clearly better than the sorter. Today we're at about 82% right on first assignment.
+S4: 85% on first assignment across the 10,000 tickets. That's a reasonable bar. We usually do better than that on logistics data, but I'd rather agree to 85% and beat it.
+S1: I like that answer.
+S0: So who can pull the export? It needs the ticket content, the final queue, and the tags.
+S2: My team can do the export from Zendesk. I'll have one of my engineers do it.
+S1: Jon, are you sure? You just said they're underwater with the CPQ stuff.
+S2: I mean, they are.
+S1: Let me take it. Tomas on my team, he's our ops analyst, he pulls Zendesk exports all the time and he knows the anonymization script. I'll have Tomas do it instead.
+S2: Honestly that would be better. Thank you.
+S0: So Tomas owns the export. When could he have that ready?
+S1: Let's say by Friday, May 7. He's on vacation Monday and Tuesday next week.
+S0: Friday May 7 for the 10,000 ticket export. Great.
+S2: Sorry, one sec, my dog has decided the delivery driver is a threat. I'm muting.
+S1: Jon's dog has very strong opinions about logistics.
+S0: That's ironic for a logistics company.
+S1: We say she's in quality assurance.
+S2: Okay, I'm back. Sorry about that. She's a beagle, she has one volume setting.
+S4: We have a husky at home, so I understand. They're not quiet dogs either.
+S0: Okay. So while we're on the product, Marcus, do you want to quickly show them the routing editor? Just five minutes, so it's concrete.
+S4: Sure, let me share my screen. Can you see a screen with a list of routing policies on the left?
+S1: Yes.
+S4: So this is a demo environment set up for a logistics customer. Each of these is a policy. This one says, if intent is damaged parcel and merchant tier is Pro, route to the Pro claims queue, priority high.
+S4: And here's the replay button I mentioned. If I change this to also include delayed parcel and hit replay, it shows me that over the last seven days, 212 tickets would have routed differently, and I can click in and see them.
+S2: And who can publish that change?
+S4: That's a permission. In most setups, team leads can draft, and only ops admins can publish. And every publish is logged with who, when, and the diff.
+S2: Okay. That's better than the sorter, which is logged in, um, Git, sometimes.
+S1: Can the agents see why a ticket was routed to them?
+S4: Yes, there's a small panel in the Zendesk sidebar showing the predicted intent, the confidence, and which policy matched. That's usually the thing that builds trust with agents, they can see the reasoning.
+S1: That's really good. Rotterdam will want that.
+S4: Okay, I'll stop sharing so we're not staring at my demo account.
+S1: Dana, can we talk about price before we run out of time? Because Deflekt gave us a number and I need to be able to compare.
+S0: Of course. So our Professional tier lists at $45 per agent per month, billed annually. For a team your size, I'm comfortable working with $39 per agent per month.
+S0: At 120 agents that's $56,160 a year. And there's a one-time implementation fee of $9,500, which covers the Zendesk and Salesforce setup, the model training on your data, and the change management support.
+S1: So we're already over $50,000 before implementation.
+S0: I know. I don't want to hide that. I'd rather talk about it openly now.
+S1: And that's without SCIM, which Jon wants.
+S2: Which I do want.
+S0: Right. Enterprise tier, which includes SCIM, lists at $52. I'm not going to quote Enterprise on the call, but I'll put together options.
+S1: Okay. Let me pull in Joan from finance, she said she could join for the last part. She's the one who's going to ask me all the hard questions anyway. Give me one second, I'll message her.
+S0: Sure. While we wait, Priya, how did you land on the $50,000 number?
+S1: Honestly, it was roughly what we pay Queuewise, which is about $22,000 a year, plus what I estimated the sorter costs us in engineering time, plus some headroom. It wasn't very scientific.
+S0: That's more scientific than most budgets I see.
+S3: Hi, sorry, this is Joan. Joan Petrakis, I'm in finance, FP&A. Priya said you're talking numbers?
+S1: Hi Joan, thanks for jumping on. This is Dana, the account executive from Routewell, and Marcus, their sales engineer. And Jon's here.
+S3: Hi everyone. Hi Jon.
+S2: Hi Joan.
+S0: Hi Joan, thanks for joining. Yeah, we were just getting into pricing. Priya was about to walk through the budget.
+S3: Okay. What seat count are we pricing on?
+S1: We said 120. Oh, wait. Actually, no, sorry, I need to correct that. 120 was our number before we converted the seasonal agents to permanent in March. We're at 140 agents now. So it's 140 seats, not 120.
+S3: Yes, it's 140, the headcount plan has 140 support agents for the rest of the year.
+S0: Okay, thank you, that's important. So 140 seats. At $39 per agent per month that comes to $65,520 a year, plus the $9,500 implementation.
+S3: Okay. And Priya, you mentioned the $50,000 budget to them?
+S1: I did, yes. That's the number I've been planning with. I figured I can approve up to that.
+S3: So that's the thing I wanted to flag, and it's good that we're talking about it now. Any software purchase over $40,000 requires CFO approval. That's for year one total contract value, and it includes implementation fees.
+S1: Wait, I thought my approval limit was $50,000.
+S3: It was, until the policy change in January. VP approval limits went down to $40,000 across the board. Anything over that goes to Greg.
+S1: Oh. I missed that. Okay.
+S0: And Greg is your CFO?
+S3: Greg Hale, yes, our CFO. So practically speaking, at these numbers, Greg is the one who approves this. Priya recommends, but Greg is the decision maker on the money.
+S0: That's really helpful, thank you Joan. So Greg is effectively the economic buyer here.
+S3: Yes. And he's not a rubber stamp. He's pushed back on a few tools this year.
+S0: Understood. Can you walk me through the approval process and the timing?
+S3: Sure. So there's a Capital and Vendor Review Committee. Greg chairs it. It meets on the first Tuesday of every month.
+S3: To get on the agenda you submit a business case at least five business days before the meeting. The business case needs a few things. A three year total cost, not just year one. At least two competing quotes. And a sign off from IT security, or at minimum Jon's written confirmation that there are no blocking findings.
+S2: Which is my review.
+S3: Which is your review, yes.
+S0: So the next committee meeting would be?
+S3: The next one is Tuesday, June 1. So the business case would be due Monday, May 24. After that the next one is July 6.
+S0: And after the committee approves, what happens?
+S3: Then it goes to legal for contracting. That's usually about two weeks, assuming the vendor doesn't fight on the terms.
+S0: Okay. So if we made the June 1 committee, contract signature would be mid June, roughly.
+S3: Roughly, yes.
+S0: Marcus, how long is a typical implementation for a setup like this?
+S4: Six to eight weeks from signature to go-live, for Zendesk plus Salesforce with two regions. The model training on their historical data is part of that.
+S1: So mid June plus eight weeks is mid August. That's actually fine for October.
+S3: What were the two competing quotes going to be?
+S1: Deflekt, and Queuewise renewal plus keeping the sorter. Although I don't think that's really an equivalent option.
+S3: Greg will accept it as a baseline. He likes seeing the do nothing option.
+S0: That's fair. We can help frame the do nothing cost, the service credits, the 11 hours a day of team lead time, the engineering time on the sorter.
+S3: That would help. Greg responds to hours and credits more than to features.
+S3: One more thing. Greg generally prefers one year terms with new vendors. He doesn't like being locked in before a vendor has proven itself.
+S0: Okay, noted. I was going to ask whether a two year term would be interesting, because I could bring the per agent price down, probably to around $35.
+S3: I'd put it in the proposal as an option, but I wouldn't count on it. I'm not going to decide that today, and honestly I think Greg will say one year.
+S0: Understood. I'll include both, clearly labelled.
+S1: What if we started smaller? Like 100 seats in year one, just the email-heavy teams, and then expand?
+S3: That would bring the number down. Would that get under $40,000?
+S0: At 100 seats and $39, it's $46,800 a year. So still over $40,000, still needs Greg.
+S1: Hmm. And then half the team is on the old routing, which is a mess to manage. Honestly, I don't love my own idea.
+S3: Let's not do the partial thing. If it goes to Greg anyway, let's go to Greg with the real scope.
+S1: Okay. Fine by me.
+S0: I think that's the right call. Better to present the full 140 seats with a clear business case.
+S3: And Dana, send the pricing proposal to me directly, and copy Priya.
+S0: Will do. So pricing proposal to Jon and Priya.
+S3: No, Joan. J O A N. Jon's security. It's a very common mix up here, don't worry.
+S2: It happens about once a week. I get invoices, she gets firewall alerts.
+S0: Sorry about that! Joan with an A gets the pricing. Jon gets the security documents.
+S3: Perfect.
+S0: Okay, we've got about fifteen minutes left, so let me try to recap the next steps and who owns what, and you tell me what I got wrong.
+S1: Go ahead.
+S0: On our side. I'll send a revised pricing proposal to Joan, copying Priya, based on 140 seats. It'll include the Professional tier at $39, an option that includes SCIM, the implementation fee, and a two year option, clearly labelled as an option. I'll have that to you by Friday, April 30.
+S3: Friday works.
+S0: Marcus will send Jon the SOC 2 Type II report, the pen test executive summary, and our sub-processor list by Wednesday, April 28, once the NDA is signed.
+S4: Correct.
+S0: Marcus and I will also put together the integration plan, with tasks and estimated hours for each side, including the Salesforce connected app work with Renata. We'll send that by Tuesday, May 4.
+S2: Good. That's the one I really need.
+S0: And we'll share our change management playbook and the agent-facing materials, I'll send those along with the proposal.
+S1: Great.
+S0: On your side. Priya, you said legal would send the mutual NDA today.
+S1: Yes. Well, actually, hold on. Jon, doesn't legal route vendor NDAs through you now?
+S2: They do, since the new vendor intake process. It's easier if I just send it, I have the template. I'll send the NDA today, before end of day.
+S1: Okay, so Jon sends the NDA, not me. Thank you.
+S0: Got it, Jon sends the NDA today. Jon also sends the security questionnaire by Thursday, April 29.
+S2: Yes.
+S0: Tomas pulls the export of 10,000 anonymized resolved tickets, English and German, by Friday, May 7.
+S1: Right. I'll tell him today so he can get started before his days off.
+S0: Joan, is there a business case template that the committee expects? I'd love to build the business case in the format Greg is used to seeing.
+S3: There is. I'll send you the template and an example of one that got approved last year. I can do that by Monday, May 3.
+S0: That would be fantastic. And then Priya and I co-write the business case, targeting the May 24 deadline for the June 1 committee.
+S1: Yes. I'll need a lot of help on the three year cost part.
+S3: I'll help with that part, it's what I do.
+S0: And Jon, you'll check with Renata whether she has bandwidth for a Salesforce working session.
+S2: I'll ask her. No promises on when, the CPQ thing is eating her alive.
+S0: Understood. And then the works council question is still open. Someone needs to check with HR in Rotterdam whether it needs a consultation.
+S1: Yes. I still don't know who that is. I'll ask around, but let's leave it as open for now.
+S0: Okay. Now, next meeting. I'd love to get a follow-up where we go through the proposal and the integration plan together, ideally with Joan and, if possible, Greg.
+S3: Greg won't come to a vendor pricing call at this stage. Maybe later. Let's plan on me.
+S0: That's totally fine. How about Tuesday, May 4?
+S1: I'm free Tuesday afternoon.
+S2: Tuesday afternoon works for me.
+S3: May 4 is okay for me.
+S0: Let's say Tuesday, May 4 at 2 PM Eastern, one hour. I'll send the invite.
+S1: Perfect.
+S4: I'll be there. That's 8 PM for me, which is fine.
+S3: Oh, wait, sorry. I just looked at my calendar properly. May 4 is our quarterly forecast review. I'm going to be locked in a room with Greg all afternoon. I can't do the 4th.
+S0: No problem. What does later that week look like?
+S3: Thursday, May 6 I'm free after lunch.
+S1: Thursday the 6th at, say, 3 PM Eastern?
+S2: I have a vendor call until 3, but I can make 3 if it starts on time.
+S4: 3 PM Eastern is 9 PM Stockholm. It's fine, I'll make an exception for you.
+S0: Thank you Marcus. So let's move it to Thursday, May 6 at 3 PM Eastern instead of Tuesday. I'll send the invite for that.
+S3: Thank you. Sorry for the shuffle.
+S0: Not at all. That actually works better, since the integration plan is due on the 4th, so you'll have a couple of days to review it before we meet.
+S2: True. I'll actually read it.
+S1: Joan, before you go, are you going to the Rotterdam offsite in June?
+S3: I am. I'm told there will be herring. I'm not sure how I feel about that.
+S4: You have to try it. With onions. It's actually good.
+S3: I'll trust the Swede on this one.
+S1: Last time I went it rained for four days straight. I bought a second umbrella.
+S0: Between Columbus storms and Rotterdam rain, sounds like everyone needs better umbrellas.
+S1: And a sump pump. Anyway.
+S3: Priya, I have one more question, since we're talking timelines. You said the go-live was driven by the Queuewise contract ending, right?
+S1: Partly. The main thing is the November 1 freeze. But yes, the Queuewise contract ends December 31, so we'd cancel that after we go live.
+S3: That's what I wanted to double check. Because I was in the contracts system this morning for a different renewal, and I'm pretty sure the Queuewise end date I saw wasn't December. Give me one second, let me pull it up.
+S1: Oh no.
+S0: While Joan looks that up, Jon, can I ask two quick things I didn't get to?
+S2: Sure.
+S0: First, on Deflekt. You said the EU region was the concern. Is that a hard blocker for them, or something they could get past?
+S2: For now it's a hard blocker. If they can show me an EU region that's actually live, with a SOC 2 that covers it, I'd look again. Their own date was later this year, and I can't build a plan on a vendor's roadmap.
+S0: Makes sense. And second, on the ticket summaries for the US side. Is that something you'd review as part of the main review, or separately after?
+S2: Separately. I don't want it slowing down the main review. If Priya really wants summaries, we look at it after go-live.
+S1: I do want them, but I agree. Not in the critical path.
+S4: That's how most customers handle it. You can switch the feature on per region later without any re-implementation.
+S0: Great. And Priya, the French question, if the Lyon hub happens, does that change anything about what we're scoping now?
+S1: I don't think so. It wouldn't be until next year, and honestly I don't know yet if it's happening. Someone on the strategy team would know. I'm not going to plan around it.
+S4: For what it's worth, adding a language later is mostly a matter of training data. It wouldn't need a new implementation.
+S2: One more from me while Joan's digging. Data retention. If we ever leave, what happens to our ticket data on your side?
+S4: By default we delete customer data 90 days after the contract ends, and you get a deletion certificate. You can ask for a shorter window, we've done 30 days for some customers. And while you're a customer, you set the retention on processed tickets, the default is 24 months.
+S2: 30 days after termination would be my preference. I'll put that in the DPA comments.
+S0: Noted, we'll flag it for our legal team so it's not a surprise.
+S1: Marcus, a product question too. A lot of our damaged parcel tickets come in with photos attached. Does the model look at the photos?
+S4: Today the model uses attachment metadata, so it knows there's an image and how many, but it doesn't analyze the image content. Image understanding is something we're testing, but I wouldn't count it in the evaluation, it's not generally available.
+S1: Okay. Honestly, just knowing there's a photo is useful, those are almost always claims.
+S4: Right, and in practice an attachment plus the words damaged or broken is a very strong claims signal already.
+S1: And the chat channel, is that the same model? Chat tickets are short and messy, people just type help or where is it.
+S4: Same model, but chat classification uses the whole conversation up to the handoff, not just the first message. Very short chats do have lower confidence, so more of them would go to the human triage queue at first. I'd expect chat to have the lowest auto-route rate of your three channels.
+S1: That matches what I'd guess. The web form is the easy one, it has a dropdown.
+S2: A dropdown that nobody reads, but yes.
+S3: Okay, I have it. So. Bad news, or maybe good news, depending on how you look at it. The Queuewise contract does not end on December 31. It ends on August 31.
+S1: August 31? Are you sure?
+S3: I'm looking at the signed renewal. It was a two year renewal signed on September 1, two years ago, so the term ends August 31. I think the December 31 date was the original contract before the renewal.
+S1: Wow. Okay. That changes things.
+S3: And there's a notice clause. We have to give 90 days written notice if we're not renewing, otherwise it auto renews for another full year. So notice would have to go out by June 2.
+S2: June 2 is the day after the committee.
+S3: Yes, which is tight, but it works if Greg approves on June 1.
+S1: So we can't go live in Q4 anymore. If Queuewise goes away on August 31, and I don't want to renew for a whole year just to bridge two months, then we need to be live before that. That means Q3.
+S0: So the go-live moves from Q4 to Q3, before August 31.
+S1: Yes. Let's say go-live on Monday, August 16. That gives us two weeks of overlap with Queuewise before it ends.
+S0: August 16. Marcus, is that realistic?
+S4: If the contract is signed by mid June, it's six to eight weeks, so August 16 is achievable but there's not a lot of slack. It means the June 1 committee has to happen. We can't slip to July 6.
+S3: Right. July 6 would be too late for an August 16 go-live, and too late for the notice date.
+S0: Okay. So the June 1 committee is now the critical date. Which means the business case due May 24 is the critical date on our side.
+S2: Which means my security review needs to be done, or at least have no blocking findings, by May 24.
+S0: How do you feel about that?
+S2: Honestly, nervous. That's four weeks from today. It's doable only if the documents arrive on the 28th and the questionnaire comes back within a week. I'll prioritize it, but I'm not going to promise.
+S0: That's fair. We'll turn the questionnaire around within five business days of receiving it. I'll commit to that.
+S2: Okay. That helps.
+S1: And the proof of concept, three weeks was too long now, right? If the export is ready May 7, three weeks would take us to the end of May.
+S4: We can compress it. If the export arrives Friday, May 7, we'll load it Monday, May 10, run it through Thursday, May 20, and do the readout on Friday, May 21. That leaves the weekend and Monday to put the numbers into the business case.
+S1: May 21 readout. Okay. Tight, but okay.
+S0: I'll set up the readout invite too. Joan, would you like to be on that?
+S3: Yes, add me, the accuracy number goes straight into the business case.
+S3: And I'll check with procurement on the Queuewise notice terms, whether it has to be a letter, who signs it, and whether there's any option for a short extension instead of a full year. I'll confirm that by Friday, April 30.
+S1: Thank you, Joan. I'm glad you looked. We would have found out in September.
+S3: That's why I look.
+S2: Is there a risk here we're not talking about? If Greg doesn't approve on June 1, we've either renewed Queuewise for a year or we have nothing on September 1.
+S1: Yes. I don't have an answer for that yet.
+S3: Neither do I. We'd need to decide whether to send the notice before we know Greg's answer. That's not a decision for today.
+S0: Okay, let's capture that as an open question. What happens if the June 1 approval doesn't come through.
+S0: Let me do a very quick wrap on what's still open, so nothing gets lost. Whether SCIM gets included and at what price, that's on me in the proposal. Whether ticket summaries get used on the US side, parked until after go-live. Whether Dutch gets added to the proof of concept. Whether the Rotterdam works council needs to be consulted, and who owns that. Whether Renata has bandwidth for the Salesforce session. And the Queuewise notice risk if approval slips.
+S1: And whether Greg wants to meet you before the committee. Joan, do you think he will?
+S3: I don't know. Sometimes he asks for a fifteen minute call with the vendor, sometimes he doesn't. I'll find out.
+S0: That all sounds right. Anything I missed?
+S2: Just, please, integration plan by May 4.
+S0: May 4, you'll have it. And we'll see everyone Thursday, May 6 at 3 PM Eastern.
+S1: Thanks Dana, thanks Marcus. This was actually really useful. Much better than forty minutes of slides.
+S4: Thanks everyone. Jon, say hi to the beagle.
+S2: She says hi back. Probably loudly.
+S3: Thanks all. Bye.
+S0: Thank you all, talk soon. Bye.

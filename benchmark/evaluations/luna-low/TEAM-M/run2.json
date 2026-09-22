@@ -1,0 +1,350 @@
+{
+ "blind_id": "S-cea47f2e",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 80390,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 33113,
+  "candidatesTokenCount": 2389,
+  "totalTokenCount": 44318,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 33113
+   }
+  ],
+  "thoughtsTokenCount": 8816,
+  "serviceTier": "standard"
+ },
+ "fact_count": 72,
+ "evaluation": {
+  "factual_accuracy": 6,
+  "important_information_retention": 7,
+  "hallucination_control": 7,
+  "action_item_retention": 6,
+  "decision_retention": 6,
+  "speaker_attribution": 8,
+  "numeric_accuracy": 6,
+  "entity_retention": 7,
+  "timeline_accuracy": 6,
+  "conclusion_accuracy": 6,
+  "structure": 8,
+  "conciseness": 5,
+  "readability": 6,
+  "overall_summary_quality": 6,
+  "critical_errors": [
+   "Reported the superseded 10% rollout stage as a final decision and an action item, contradicting the final 5% decision.",
+   "Hallucinated that the migration runbook is due October 28 in the overview.",
+   "Contradicted the owner of the migration runbook, assigning it to Viktor in the overview and some action items, but to Maya in others."
+  ],
+  "missing_important_information": [
+   "The open bug counts (7 P1, 23 P2, 41 P3).",
+   "Rohan's action item to follow up with Joelle Park to ensure the legal review is done by September 30.",
+   "Dana's action item to escalate the ledger 3.4 dependency with Grace Obi.",
+   "Rohan's action item to email the 14 beta customers about the new launch date."
+  ],
+  "hallucinated_information": [
+   "The team assigned Viktor a migration runbook due October 28 (Overview)."
+  ],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C05",
+    "reported": "The first rollout stage is 10% of eligible accounts on October 14. / Speaker 4: Build the staged rollout plan around 10% on day one."
+   }
+  ],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "partial"
+   },
+   {
+    "id": "F02",
+    "status": "missing"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "partial"
+   },
+   {
+    "id": "F08",
+    "status": "partial"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "missing"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "missing"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "contradicted"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "partial"
+   },
+   {
+    "id": "F30",
+    "status": "present"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "partial"
+   },
+   {
+    "id": "F33",
+    "status": "partial"
+   },
+   {
+    "id": "F34",
+    "status": "partial"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "partial"
+   },
+   {
+    "id": "F43",
+    "status": "missing"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "partial"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "contradicted"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "partial"
+   },
+   {
+    "id": "F57",
+    "status": "present"
+   },
+   {
+    "id": "F58",
+    "status": "partial"
+   },
+   {
+    "id": "F59",
+    "status": "partial"
+   },
+   {
+    "id": "F60",
+    "status": "partial"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   },
+   {
+    "id": "F62",
+    "status": "missing"
+   },
+   {
+    "id": "F63",
+    "status": "missing"
+   },
+   {
+    "id": "F64",
+    "status": "present"
+   },
+   {
+    "id": "F65",
+    "status": "partial"
+   },
+   {
+    "id": "F66",
+    "status": "partial"
+   },
+   {
+    "id": "F67",
+    "status": "present"
+   },
+   {
+    "id": "F68",
+    "status": "present"
+   },
+   {
+    "id": "F69",
+    "status": "missing"
+   },
+   {
+    "id": "F70",
+    "status": "present"
+   },
+   {
+    "id": "F71",
+    "status": "present"
+   },
+   {
+    "id": "F72",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture a large amount of technical detail and correctly identify most of the launch risks and decisions. However, they suffer from significant contradictions and hallucinations. The overview incorrectly states that Viktor was assigned the migration runbook due October 28, while later sections assign it to Maya due September 28. The notes also report the superseded 10% rollout stage as both a final decision and an action item, directly contradicting the final 5% decision listed immediately after. Several important action items are missing, including Dana escalating the ledger dependency with Grace Obi, Rohan chasing Joelle Park for legal review, and Rohan emailing the beta customers. The notes are also highly repetitive, listing the same points multiple times across the summary, decisions, and action items sections."
+ }
+}

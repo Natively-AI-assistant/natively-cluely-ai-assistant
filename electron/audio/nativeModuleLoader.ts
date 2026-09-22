@@ -46,7 +46,20 @@ export interface NativeModule {
   // types into the overlay without it taking OS focus. Optional: requires a
   // binary rebuild (macOS additionally needs Accessibility permission).
   StealthKeyboardTap?: new () => {
-    start(callback: (err: Error | null, ev: CapturedKey) => void, overlayBounds?: OverlayBoundsInput | null): boolean;
+    start(
+      callback: (err: Error | null, ev: CapturedKey) => void,
+      // The app's own global shortcuts (printable-leak subset) the native hook
+      // should swallow + self-dispatch so they can't leak into the foreground
+      // app while a RegisterHotKey registration is temporarily dropped. Pass []
+      // to disable. Ignored on macOS (shortcuts are consumed by Carbon/IOKit
+      // before the tap); honoured by the Windows WH_KEYBOARD_LL hook.
+      appChords: Array<{ vk: number; mods: number; id: string }>,
+      // When true, engage shortcut-guard mode: swallow only the app's own chords,
+      // pass all other keys through, and install no outside-click/Alt+Tab hooks.
+      // When false, the full stealth-typing tap. Ignored on macOS.
+      shortcutOnly: boolean,
+      overlayBounds?: OverlayBoundsInput | null,
+    ): boolean;
     stop(): void;
     readonly isActive: boolean;
   };
@@ -76,6 +89,13 @@ export interface CapturedKey {
   flags: number;
   isKeyDown: boolean;
   isOutsideMouseDown?: boolean;
+  /**
+   * Non-empty ⟹ this event is the app's OWN global shortcut firing, swallowed
+   * by the native hook (Windows) so it can never leak into the foreground app.
+   * The value is the KeybindManager action id; StealthKeyboardManager dispatches
+   * it instead of typing. Always absent/empty on macOS.
+   */
+  appChordId?: string;
 }
 
 // Hard-required: crash the module load if any of these are missing.

@@ -51,7 +51,7 @@
       not launch — `open` reported only `RBSRequestErrorDomain Code=5` / POSIX 163 "Launchd job
       spawn failed". Proven by A/B: two copies of an identical trivial binary signed with the same
       Developer ID identity, differing ONLY by this entitlement — the one carrying it is SIGKILLed
-      (exit 137), the other runs. See MACOS_LAUNCH_FAILURE_2026-08-19.md.
+      (exit 137), the other runs.
 
       This does NOT resolve issue #322; it restores the 2.8.5 status quo. The recovery path
       (three failed cold starts escalate to needsCredentialReentry rather than an unrecoverable

@@ -5,23 +5,26 @@ import {
     X, Mic, Speaker, Monitor, Keyboard, User, LifeBuoy, LogOut, Upload,
     ArrowUp, ArrowDown, ArrowLeft, ArrowRight,
     Camera, RotateCcw, Eye, Layout, MessageSquare, Crop,
-    ChevronDown, ChevronUp, Check, BadgeCheck, Power, Palette, Calendar, Ghost, Sun, Moon, RefreshCw, Info, Globe, FlaskConical, Terminal, Settings, Activity, ExternalLink, Trash2,
+    ChevronDown, ChevronUp, Check, BadgeCheck, Power, Palette, Calendar, Ghost, Sun, Moon, RefreshCw, Info, Globe, FlaskConical, Terminal, Download, Settings, Activity, ExternalLink, Trash2,
     Sparkles, Pencil, Briefcase, Building2, Search, MapPin, CheckCircle, HelpCircle, Zap, SlidersHorizontal, PointerOff, Folder,
-    Star, AlertCircle, Gift, Smartphone, Cpu, Shield, Code2, Headphones, MessageSquareReply
+    Star, AlertCircle, Gift, Smartphone, Cpu, Shield, Code2, Headphones, Boxes
 } from 'lucide-react';
+import { AutoAnswerIcon } from './AutoAnswerIcon';
 import { HiCreditCard } from 'react-icons/hi2';
 import { analytics } from '../lib/analytics/analytics.service';
 import { AboutSection } from './AboutSection';
+import { ErrorBoundary } from './ErrorBoundary';
 import { HelpSettings } from './settings/HelpSettings';
 import { AIProvidersSettings } from './settings/AIProvidersSettings';
 import { PlansSettings } from './settings/PlansSettings';
 import { PhoneMirrorSettings } from './settings/PhoneMirrorSettings';
+import { RetrievalSettings } from './settings/RetrievalSettings';
 import { IntelligenceSettings } from './settings/IntelligenceSettings';
 import { SkillsSettings } from './settings/SkillsSettings';
 import { LocalWhisperModelPanel, type ChannelConfig as LocalWhisperChannelConfig } from './LocalWhisperModelPanel';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useShortcuts } from '../hooks/useShortcuts';
-import { isMac } from '../utils/platformUtils';
+import { isMac, isWindows } from '../utils/platformUtils';
 import { SettingsToggle } from './settings/SettingsToggle';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import {
@@ -39,10 +42,57 @@ import { Disclosure, DisclosureChevron } from './ui/AccordionSection';
 import { ProfileVisualizer, PremiumUpgradeModal } from '../premium';
 import GlassEffectLayer from './ui/GlassEffectLayer';
 import { BrandMark, BrandMonogram } from './ui/BrandMark';
+import { LiquidGlassBadge } from '../ui-components/LiquidGlassBadge';
+import { LiquidGlassButton } from '../ui-components/LiquidGlassButton';
 import icon from './icon.png';
+
+// Process Disguise tiles: Liquid Glass fed this card's own tokens. `.lg-action`
+// otherwise reads the legacy action blue, and `.lg-clear`'s defaults are the
+// modes sidebar's weights, not a tile sitting on --bg-item-surface / --bg-card.
+//
+// The shape is the tile the material replaced, not a pill: 58px (p-3 around a
+// 32px icon chip, plus the old 1px border), rounded-lg, left-aligned. A rounded
+// rect needs the cap fade as px stops that end at the 8px corner — percentage
+// stops would run the specular's ramp far across the flat top (design.md,
+// "Adapting it to an existing UI").
+const DISGUISE_TILE_SHAPE = {
+    '--lg-pill-h': '58px',
+    '--lg-radius': '8px',
+    '--lg-cap-0': '1px',
+    '--lg-cap-1': '3px',
+    '--lg-cap-2': '8px',
+    '--lg-icon-gap': '12px',
+    '--lg-label-weight': 500,
+    padding: '0 12px',
+};
+const SELECTED_PERIWINKLE = 'var(--accent-primary)';
+const SELECTED_PERIWINKLE_LIGHT = 'color-mix(in srgb, var(--periwinkle-200) 50%, var(--periwinkle-300))';
+const DISGUISE_TILE_SELECTED = {
+    ...DISGUISE_TILE_SHAPE,
+    '--legacy-action-bg': SELECTED_PERIWINKLE,
+    '--legacy-action-hover': 'var(--accent-hover)',
+    '--legacy-action-fg': 'var(--on-accent)',
+} as React.CSSProperties;
+// Light theme's accent (periwinkle-600) read too heavy as a whole tile, so the
+// selected tile takes a pale periwinkle halfway between the 200 and 300 steps.
+// A light fill needs the dark foreground (#14102A on it is ~10:1).
+// The opacity slider's knob is fed the same two values, so the selected colour
+// in this panel is one colour and not two that drift apart.
+const DISGUISE_TILE_SELECTED_LIGHT = {
+    ...DISGUISE_TILE_SHAPE,
+    '--legacy-action-bg': SELECTED_PERIWINKLE_LIGHT,
+    '--legacy-action-hover': 'var(--periwinkle-300)',
+    '--legacy-action-fg': 'var(--periwinkle-on-accent-dark)',
+} as React.CSSProperties;
+// `.lg-clear`'s own defaults: a translucent step over the card, so the surface
+// shows through and the rim is what the material adds. An opaque fill
+// (--bg-input) reads as a solid plate sitting in a hole, not as glass.
+const DISGUISE_TILE_RESTING = {
+    ...DISGUISE_TILE_SHAPE,
+} as React.CSSProperties;
 // Shared with the main process so the picker cannot offer a model the ipc
 // validator rejects. Pure data module — no node/electron imports.
-import { NVIDIA_NIM_STT_MODELS, DEFAULT_NVIDIA_NIM_STT_MODEL } from '../../electron/audio/nvidiaNimSttModels';
+import { NVIDIA_NIM_STT_MODELS, DEFAULT_NVIDIA_NIM_STT_MODEL, allowedLanguageKeysForNvidiaModel } from '../../electron/audio/nvidiaNimSttModels';
 
 // ---------------------------------------------------------------------------
 // StarRating — renders filled/empty stars for culture ratings
@@ -187,9 +237,14 @@ interface CustomSelectProps {
     /** Greys the control out and blocks the dropdown — used when the active
      *  local STT model doesn't accept this setting (see modelLanguageSupport). */
     disabled?: boolean;
+    /** Optional right-aligned tag per option, keyed by deviceId. Used to mark
+     *  Apple Speech languages as already installed vs downloaded on first use,
+     *  so the wait is visible BEFORE a meeting starts rather than as a silent
+     *  pause afterwards. Kept out of `label` because the label span truncates. */
+    badges?: Record<string, string>;
 }
 
-const CustomSelect: React.FC<CustomSelectProps> = ({ label, icon, value, options, onChange, placeholder = "Select device", disabled = false }) => {
+const CustomSelect: React.FC<CustomSelectProps> = ({ label, icon, value, options, onChange, placeholder = "Select device", disabled = false, badges }) => {
     const t = useT();
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = React.useRef<HTMLDivElement>(null);
@@ -239,7 +294,14 @@ const CustomSelect: React.FC<CustomSelectProps> = ({ label, icon, value, options
                                     className={`w-full text-left px-3 py-2 text-sm rounded-md flex items-center justify-between group transition-colors ${value === device.deviceId ? 'bg-bg-input hover:bg-bg-elevated text-text-primary' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
                                 >
                                     <span className="truncate">{device.label || `Device ${device.deviceId.slice(0, 5)}...`}</span>
-                                    {value === device.deviceId && <Check size={14} className="text-accent-primary" />}
+                                    <span className="flex items-center gap-2 shrink-0 pl-2">
+                                        {badges?.[device.deviceId] && (
+                                            <span className="text-[10px] uppercase tracking-wide text-text-secondary/80 whitespace-nowrap">
+                                                {badges[device.deviceId]}
+                                            </span>
+                                        )}
+                                        {value === device.deviceId && <Check size={14} className="text-accent-primary" />}
+                                    </span>
                                 </button>
                             ))}
                             {options.length === 0 && (
@@ -409,9 +471,10 @@ const SETTINGS_NAV_ORDER = [
     'general',
     'plans',
     'ai-providers',
-    'skills',
-    'calendar',
+    'retrieval',
     'audio',
+    'calendar',
+    'skills',
     'keybinds',
     'phone-mirror',
     'intelligence',
@@ -419,18 +482,54 @@ const SETTINGS_NAV_ORDER = [
     'about',
 ];
 
+/* Retrieval absorbed the old Embeddings and Reranker panels. Both ids are kept
+   as aliases rather than repointed at the call site: AI Providers' lightweight
+   notice is specifically about embeddings and should land on the Embedding
+   sub-tab, not at the top of a combined page. */
+const isRetrievalTab = (tab: string) =>
+    tab === 'retrieval' || tab === 'embedding' || tab === 'reranker';
+
 interface SettingsOverlayProps {
     isOpen: boolean;
     onClose: () => void;
     initialTab?: string;
+    /**
+     * Bumped by App on every open request, including a repeat of the tab that
+     * is already active. It is what makes the sync effect below re-assert
+     * instead of bailing on an unchanged `initialTab`.
+     */
+    initialTabSeq?: number;
     initialIsPremium?: boolean | null;
     initialHasNativelyKey?: boolean;
 }
+
+/**
+ * Where each speech provider issues API keys. The "Get API Key" button reads
+ * this; a provider missing from it used to render a link that did NOTHING when
+ * clicked — soniox and nvidia_nim were both in that state — so the button is now
+ * hidden unless there is somewhere to send the user.
+ *
+ * nvidia_nim points at the SPEECH catalogue rather than a settings page:
+ * build.nvidia.com/settings/api-keys 404s (it returns the SPA's not-found
+ * shell), and NVIDIA issues keys from a model card's "Generate API Key" button,
+ * so /explore/speech is both a working URL and the right context for an ASR key.
+ */
+const STT_KEY_URLS: Record<string, string> = {
+    groq: 'https://console.groq.com/keys',
+    openai: 'https://platform.openai.com/api-keys',
+    deepgram: 'https://console.deepgram.com',
+    elevenlabs: 'https://elevenlabs.io/app/settings/api-keys',
+    azure: 'https://portal.azure.com/#create/Microsoft.CognitiveServicesSpeech',
+    ibmwatson: 'https://cloud.ibm.com/catalog/services/speech-to-text',
+    soniox: 'https://console.soniox.com/api-keys',
+    nvidia_nim: 'https://build.nvidia.com/explore/speech',
+};
 
 const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     isOpen,
     onClose,
     initialTab = 'general',
+    initialTabSeq = 0,
     initialIsPremium = null,
     initialHasNativelyKey = false,
 }) => {
@@ -448,7 +547,16 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
        drop its internal state) when moving between them, so they collapse to
        one key — no remount, no transition, which is correct: the content
        didn't change. */
-    const panelKey = (activeTab === 'natively-api' || activeTab === 'natively-pro') ? 'plans' : activeTab;
+    /* Same collapse for the two legacy Retrieval ids: they render the SAME
+       <RetrievalSettings/>, differing only in which sub-tab opens, so they must
+       not read as a section change. Keying on activeTab would play a full panel
+       transition for a deep link that only moves the inner pill — and would put
+       'embedding'/'reranker' outside SETTINGS_NAV_ORDER, losing the direction. */
+    const panelKey = (activeTab === 'natively-api' || activeTab === 'natively-pro')
+        ? 'plans'
+        : isRetrievalTab(activeTab)
+            ? 'retrieval'
+            : activeTab;
 
     /* Read the previous key during render, write it in an effect — mutating a
        ref while rendering double-fires under StrictMode. */
@@ -504,6 +612,17 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         />
     );
 
+    /* The retrieval sub-tab a deep link is asking for, captured as ONE value.
+     *
+     * It must not be derived from `activeTab` at render time. `activeTab` and
+     * the nav sequence update on DIFFERENT renders, and reading them as two
+     * independent props let a stale pair through: bumping the sequence for a
+     * plain 'retrieval' request re-applied the PREVIOUS request's 'embedding'
+     * one render before activeTab caught up, throwing away the user's sub-tab.
+     * Caught by a regression guard on 2026-09-15. Target and sequence are now
+     * written together, from `initialTab`, which is the request itself. */
+    const [retrievalRequest, setRetrievalRequest] = useState<{ tab?: 'embedding' | 'reranker'; seq: number }>({ seq: 0 });
+
     // Sync active tab when modal opens
     useEffect(() => {
         if (isOpen && initialTab) {
@@ -516,10 +635,21 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                user's first real tab click. */
             if (initialTab !== activeTab) suppressPanelAnimRef.current = true;
             setActiveTab(initialTab);
+            setRetrievalRequest({
+                tab: initialTab === 'reranker' ? 'reranker'
+                    : initialTab === 'embedding' ? 'embedding'
+                        : undefined,
+                seq: initialTabSeq,
+            });
 
 
         }
-    }, [isOpen, initialTab]);
+        /* `initialTabSeq` is in the deps on purpose: a repeat request for the
+           tab that is ALREADY active must still re-assert, because the panel
+           below it may own state of its own (Retrieval's Embedding/Reranker
+           sub-tab) that the deep link is trying to reach. Without it the second
+           click of a deep link did nothing at all. */
+    }, [isOpen, initialTab, initialTabSeq]);
 
     const { shortcuts, updateShortcut, resetShortcuts, conflicts } = useShortcuts();
     // Small badge shown next to a shortcut row when globalShortcut.register()
@@ -541,6 +671,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     const [isMousePassthrough, setIsMousePassthrough] = useState(false);
     const [disguiseMode, setDisguiseMode] = useState<'terminal' | 'settings' | 'activity' | 'none'>('none');
     const [openOnLogin, setOpenOnLogin] = useState(false);
+    // Windows-only. Defaults to true to match the main-process policy (unset ⟹
+    // on), so the toggle doesn't flash off before the IPC read lands.
+    const [shortcutGuard, setShortcutGuard] = useState(true);
     const [themeMode, setThemeMode] = useState<'system' | 'light' | 'dark'>('system');
     const [isThemeDropdownOpen, setIsThemeDropdownOpen] = useState(false);
     const [isAiLangDropdownOpen, setIsAiLangDropdownOpen] = useState(false);
@@ -555,13 +688,23 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
 
     const [verboseLogging, setVerboseLogging] = useState(false);
+    const [showVerboseToast, setShowVerboseToast] = useState(false);
+    const verboseToastTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [exportingLogs, setExportingLogs] = useState(false);
+    const [exportResult, setExportResult] = useState<string | null>(null);
     const [ambientChatEnabled, setAmbientChatEnabled] = useState(false);
     const [autoAnswerEnabled, setAutoAnswerEnabled] = useState(false);
     const [meetingRetention, setMeetingRetention] = useState<'forever' | '7d' | '30d' | 'never'>('forever');
-    const [showVerboseToast, setShowVerboseToast] = useState(false);
     const [codeVerification, setCodeVerification] = useState(false);
     const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
-    const verboseToastTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    useEffect(() => {
+        if (!showVerboseToast) return;
+        verboseToastTimerRef.current = setTimeout(() => setShowVerboseToast(false), 10000);
+        return () => {
+            if (verboseToastTimerRef.current) clearTimeout(verboseToastTimerRef.current);
+        };
+    }, [showVerboseToast]);
 
     // Close dropdown when clicking outside
     // Sync with global state changes
@@ -580,14 +723,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             window.electronAPI?.getMeetingRetention?.().then(setMeetingRetention).catch(() => { });
         }
     }, [isOpen]);
-
-    useEffect(() => {
-        if (!showVerboseToast) return;
-        verboseToastTimerRef.current = setTimeout(() => setShowVerboseToast(false), 5200);
-        return () => {
-            if (verboseToastTimerRef.current) clearTimeout(verboseToastTimerRef.current);
-        };
-    }, [showVerboseToast]);
 
 
 
@@ -673,7 +808,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     // Active STT provider — declared here (not with the rest of the STT
     // settings below) because the local-model language-capability effect and
     // memo that follow depend on it.
-    const [sttProvider, setSttProvider] = useState<'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper'>('none');
+    const [sttProvider, setSttProvider] = useState<'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech'>('none');
+
+    // Declared here for the same reason sttProvider is: the NVIDIA
+    // language-capability memo below reads it, and which languages that model
+    // can recognise gates the recognition-language selector.
+    const [nvidiaNimSttModel, setNvidiaNimSttModel] = useState(DEFAULT_NVIDIA_NIM_STT_MODEL);
 
     // Local model language capability (local-whisper provider only).
     // Per-model: which RECOGNITION_LANGUAGES keys the model accepts, whether
@@ -687,6 +827,22 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         support: { languageSelectable: boolean; accentSelectable: boolean; allowedLanguageKeys: string[] };
     }> | null>(null);
     const [localWhisperConfig, setLocalWhisperConfig] = useState<LocalWhisperChannelConfig | null>(null);
+
+    // Apple Speech locale availability (macOS 26+). Apple transcribes 45
+    // locales, but only 14 of Natively's 30 language entries map to one — the
+    // other 20 fail at meeting start with "does not support language X". This
+    // restricts the list to what Apple can actually do and marks the rest as a
+    // first-use download, so the wait is visible before a meeting rather than
+    // as an unexplained pause during one.
+    const [appleSpeechLocales, setAppleSpeechLocales] = useState<{
+        available: boolean; supported: string[]; installed: string[]; reserved: string[]; maxReserved: number;
+    } | null>(null);
+    const [appleReleasing, setAppleReleasing] = useState<string>('');
+    // Live asset download started from Settings. Apple reports a 0..1 fraction
+    // and no transfer size, so the bar is a percentage — there is no MB figure
+    // to show (Progress.totalUnitCount is 1, not bytes).
+    const [appleInstall, setAppleInstall] = useState<{ locale: string; fraction: number } | null>(null);
+    const [appleInstallError, setAppleInstallError] = useState<string>('');
 
     // AI Response Language
     const [aiResponseLanguage, setAiResponseLanguage] = useState('English');
@@ -1020,9 +1176,148 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         }
     };
 
+    useEffect(() => {
+        const off = window.electronAPI?.onAppleSpeechInstallProgress?.((d) => {
+            setAppleInstall((cur) => (cur && cur.locale === d.locale ? { ...cur, fraction: d.fraction } : cur));
+        });
+        return () => { off?.(); };
+    }, []);
+
+    useEffect(() => {
+        if (sttProvider !== 'apple-speech') return;
+        let cancelled = false;
+        window.electronAPI?.getAppleSpeechLocales?.()
+            .then((r) => { if (!cancelled) setAppleSpeechLocales(r); })
+            .catch(() => { if (!cancelled) setAppleSpeechLocales(null); });
+        return () => { cancelled = true; };
+    }, [sttProvider]);
+
+    /** bcp47 -> lower-case, so es-ES and es-es compare equal. */
+    const appleLocaleSets = useMemo(() => {
+        if (sttProvider !== 'apple-speech' || !appleSpeechLocales?.available) return null;
+        return {
+            supported: new Set(appleSpeechLocales.supported.map((l) => l.toLowerCase())),
+            installed: new Set(appleSpeechLocales.installed.map((l) => l.toLowerCase())),
+        };
+    }, [sttProvider, appleSpeechLocales]);
+
+    // Feeds the same allowedLanguageKeySet the local/NVIDIA gates use, so the
+    // unsupported entries disappear from both selects with no new plumbing.
+    const appleLanguageCapability = useMemo(() => {
+        if (!appleLocaleSets) return null;
+        const keys = new Set<string>(['auto']);
+        for (const [key, l] of Object.entries(availableLanguages) as [string, any][]) {
+            const bcp = String(l?.bcp47 ?? '');
+            if (bcp && bcp !== 'auto' && appleLocaleSets.supported.has(bcp.toLowerCase())) keys.add(key);
+        }
+        return keys;
+    }, [appleLocaleSets, availableLanguages]);
+
+    /** bcp47 of the currently selected recognition language, if resolvable. */
+    const selectedAppleLocale = useMemo(() => {
+        if (!appleLocaleSets) return null;
+        // recognitionLanguage, not displayedRecognitionLanguage: the display
+        // fallback only fires for a locked local model, which cannot be active
+        // while Apple Speech is the provider, and it is declared further down.
+        const bcp = String((availableLanguages as any)[recognitionLanguage]?.bcp47 ?? '');
+        if (!bcp || bcp === 'auto') return null;
+        return appleLocaleSets.supported.has(bcp.toLowerCase()) ? bcp : null;
+    }, [appleLocaleSets, availableLanguages, recognitionLanguage]);
+
+    const selectedAppleNeedsDownload = !!selectedAppleLocale
+        && !!appleLocaleSets && !appleLocaleSets.installed.has(selectedAppleLocale.toLowerCase());
+
+    const startAppleDownload = async () => {
+        if (!selectedAppleLocale) return;
+        setAppleInstallError('');
+        setAppleInstall({ locale: selectedAppleLocale, fraction: 0 });
+        try {
+            const r = await window.electronAPI.installAppleSpeechLocale(selectedAppleLocale);
+            if (!r?.ok) setAppleInstallError(r?.error || 'The language download did not finish.');
+            const fresh = await window.electronAPI.getAppleSpeechLocales();
+            setAppleSpeechLocales(fresh);
+        } catch (e: any) {
+            setAppleInstallError(e?.message || 'The language download did not finish.');
+        } finally {
+            setAppleInstall(null);
+        }
+    };
+
+    /**
+     * Apple allocates at most `maxReserved` (5) locales per app and an install
+     * takes a slot permanently, so a sixth download fails with "Too many
+     * allocated locales, 5 maximum". Releasing is the only way back and it
+     * PURGES the asset, so the user is shown the limit and picks what to give
+     * up rather than having a language deleted silently to make room.
+     */
+    const appleSlots = useMemo(() => {
+        if (sttProvider !== 'apple-speech' || !appleSpeechLocales?.available) return null;
+        const max = appleSpeechLocales.maxReserved || 0;
+        if (!max) return null;
+        const label = (bcp: string) => {
+            const hit = Object.values(availableLanguages).find(
+                (l: any) => String(l?.bcp47 ?? '').toLowerCase() === bcp.toLowerCase(),
+            ) as any;
+            return hit?.label ? `${hit.group}${hit.label !== hit.group ? ` (${hit.label})` : ''}` : bcp;
+        };
+        return {
+            max,
+            used: appleSpeechLocales.reserved.length,
+            full: appleSpeechLocales.reserved.length >= max,
+            entries: appleSpeechLocales.reserved.map((bcp) => ({ bcp, label: label(bcp) })),
+        };
+    }, [sttProvider, appleSpeechLocales, availableLanguages]);
+
+    const releaseAppleLanguage = async (bcp: string) => {
+        setAppleReleasing(bcp);
+        setAppleInstallError('');
+        try {
+            const r = await window.electronAPI.releaseAppleSpeechLocale(bcp);
+            if (!r?.ok) setAppleInstallError(r?.error || 'Could not remove the language.');
+            setAppleSpeechLocales(await window.electronAPI.getAppleSpeechLocales());
+        } catch (e: any) {
+            setAppleInstallError(e?.message || 'Could not remove the language.');
+        } finally {
+            setAppleReleasing('');
+        }
+    };
+
+    /** Per-variant and per-group install badges for the two language selects. */
+    const appleLanguageBadges = useMemo(() => {
+        if (!appleLocaleSets) return undefined;
+        const variant: Record<string, string> = {};
+        const groupInstalled = new Map<string, boolean>();
+        for (const [key, l] of Object.entries(availableLanguages) as [string, any][]) {
+            const bcp = String(l?.bcp47 ?? '');
+            if (!bcp || bcp === 'auto') continue;
+            if (!appleLocaleSets.supported.has(bcp.toLowerCase())) continue;
+            const installed = appleLocaleSets.installed.has(bcp.toLowerCase());
+            variant[key] = installed ? t('Installed') : t('Download');
+            // A group counts as installed once any of its regions is on disk —
+            // picking that group lands on an installed region by default.
+            groupInstalled.set(l.group, (groupInstalled.get(l.group) ?? false) || installed);
+        }
+        const group: Record<string, string> = {};
+        for (const [name, installed] of groupInstalled) {
+            group[name] = installed ? t('Installed') : t('Download');
+        }
+        return { variant, group };
+    }, [appleLocaleSets, availableLanguages, t]);
+
+    // NVIDIA speech models are per-language deployments: the Vietnamese build
+    // serves vi-VN and nothing else, and the streaming English ones serve en-US
+    // only. Offering the full language list under them would let a user pick a
+    // language the selected model cannot recognise. Derived from each model's
+    // documented locales — see allowedLanguageKeysForNvidiaModel.
+    const nvidiaLanguageCapability = useMemo(() => {
+        if (sttProvider !== 'nvidia_nim') return null;
+        if (!availableLanguages || Object.keys(availableLanguages).length === 0) return null;
+        return allowedLanguageKeysForNvidiaModel(nvidiaNimSttModel, availableLanguages);
+    }, [sttProvider, nvidiaNimSttModel, availableLanguages]);
+
     // Language keys the active STT backend accepts. Unrestricted for cloud
     // providers; for local-whisper this is the active model's documented set.
-    const allowedLanguageKeySet = localLanguageCapability?.allowedKeys ?? null;
+    const allowedLanguageKeySet = localLanguageCapability?.allowedKeys ?? nvidiaLanguageCapability ?? appleLanguageCapability ?? null;
     const isLanguageEntryAllowed = (key: string) => !allowedLanguageKeySet || allowedLanguageKeySet.has(key);
 
     // Helper to get unique groups (restricted to what the active model accepts)
@@ -1154,8 +1449,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         reason?: string;
     } | null>(null);
 
-    // Nvidia Nim speech settings live beside the existing provider state.
-    const [nvidiaNimSttModel, setNvidiaNimSttModel] = useState(DEFAULT_NVIDIA_NIM_STT_MODEL);
     const [sttNvidiaNimKey, setSttNvidiaNimKey] = useState('');
     const [groqSttModel, setGroqSttModel] = useState('whisper-large-v3-turbo');
     const [sttGroqKey, setSttGroqKey] = useState('');
@@ -1263,7 +1556,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         return () => unsubscribe();
     }, []); // mount-once: isOpen is checked inside the callback
 
-    const handleSttProviderChange = async (provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper') => {
+    const handleSttProviderChange = async (provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech') => {
         setSttProvider(provider);
         setIsSttDropdownOpen(false);
         setSttTestStatus('idle');
@@ -1274,6 +1567,41 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         } catch (e) {
             console.error('Failed to set STT provider:', e);
         }
+    };
+
+    /**
+     * Commit a speech-model choice.
+     *
+     * Optimistic, then REVERTED if the write did not land. set-nvidia-nim-stt-model
+     * answers {success:false} for an unsupported id and for a degraded credential
+     * store (refuseWriteWhileDegraded), and the previous version neither awaited a
+     * result nor caught a rejection — so a refused write left the UI showing a model
+     * the next session would not load, with an unhandled rejection in the console.
+     */
+    const selectNvidiaNimSttModel = async (id: string) => {
+        const previous = nvidiaNimSttModel;
+        if (previous === id) return;
+        setNvidiaNimSttModel(id);
+        try {
+            const result = await window.electronAPI?.setNvidiaNimSttModel?.(id);
+            if (result && result.success === false) throw new Error(result.error || 'Could not save speech model');
+        } catch (err) {
+            console.error('[Settings] Failed to save NVIDIA NIM speech model:', err);
+            setNvidiaNimSttModel(previous);
+        }
+    };
+
+    /** Arrow-key navigation, which `role="radio"` obliges us to provide. */
+    const nvidiaNimSttModelKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
+        const forward = e.key === 'ArrowDown' || e.key === 'ArrowRight';
+        const back = e.key === 'ArrowUp' || e.key === 'ArrowLeft';
+        if (!forward && !back) return;
+        e.preventDefault();
+        const count = NVIDIA_NIM_STT_MODELS.length;
+        const next = (index + (forward ? 1 : -1) + count) % count;
+        void selectNvidiaNimSttModel(NVIDIA_NIM_STT_MODELS[next].id);
+        const group = e.currentTarget.parentElement;
+        (group?.querySelectorAll<HTMLElement>('[role="radio"]')[next])?.focus();
     };
 
     const handleSttKeySubmit = async (provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim', key: string) => {
@@ -1425,7 +1753,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     };
 
     const handleTestSttConnection = async () => {
-        if (sttProvider === 'none' || sttProvider === 'google' || sttProvider === 'natively' || sttProvider === 'local-whisper') return;
+        if (sttProvider === 'none' || sttProvider === 'google' || sttProvider === 'natively' || sttProvider === 'local-whisper' || sttProvider === 'apple-speech') return;
         const keyMap: Record<string, string> = {
             groq: sttGroqKey, openai: sttOpenaiKey, deepgram: sttDeepgramKey,
             elevenlabs: sttElevenLabsKey, azure: sttAzureKey, ibmwatson: sttIbmKey,
@@ -1562,6 +1890,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             }
             if (window.electronAPI?.getOpenAtLogin) {
                 window.electronAPI.getOpenAtLogin().then(setOpenOnLogin);
+            }
+            if (isWindows && window.electronAPI?.getStealthShortcutGuard) {
+                window.electronAPI.getStealthShortcutGuard().then(setShortcutGuard).catch(() => { });
             }
             if (window.electronAPI?.getThemeMode) {
                 window.electronAPI.getThemeMode().then(({ mode }) => setThemeMode(mode));
@@ -1742,7 +2073,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.2 }}
                     id="settings-backdrop"
-                    className={`fixed inset-0 z-50 flex items-center justify-center p-8 transition-colors duration-150 ${isPreviewingOpacity ? 'bg-transparent backdrop-blur-none pointer-events-none' : 'bg-black/60 backdrop-blur-sm'}`}
+                    className={`fixed inset-0 z-50 flex items-center justify-center p-8 transition-colors duration-150 ${isPreviewingOpacity ? 'bg-transparent backdrop-blur-none pointer-events-none' : 'bg-black/60'}`}
                     onClick={(e) => {
                         // Mirror Modes/Profile (App.tsx) close-on-outside-click.
                         // Skip when opacity slider preview is active — backdrop is
@@ -1811,19 +2142,17 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         {activeTab === 'ai-providers' && navActivePill}
                                         <FlaskConical size={16} /> {t('AI Providers')}
                                     </button>
+                                    {/* One entry for both halves of document search. The
+                                        legacy 'embedding' and 'reranker' ids still render
+                                        here (see isRetrievalTab) so existing deep links
+                                        land on the matching sub-tab instead of a blank
+                                        content area. */}
                                     <button
-                                        onClick={() => setActiveTab('skills')}
-                                        className={navItemClass(activeTab === 'skills')}
+                                        onClick={() => setActiveTab('retrieval')}
+                                        className={navItemClass(isRetrievalTab(activeTab))}
                                     >
-                                        {activeTab === 'skills' && navActivePill}
-                                        <Folder size={16} /> {t('Skills')}
-                                    </button>
-                                    <button
-                                        onClick={() => setActiveTab('calendar')}
-                                        className={navItemClass(activeTab === 'calendar')}
-                                    >
-                                        {activeTab === 'calendar' && navActivePill}
-                                        <Calendar size={16} /> {t('Calendar')}
+                                        {isRetrievalTab(activeTab) && navActivePill}
+                                        <Boxes size={16} /> {t('Retrieval')}
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('audio')}
@@ -1831,6 +2160,22 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                     >
                                         {activeTab === 'audio' && navActivePill}
                                         <Mic size={16} /> {t('Audio')}
+                                    </button>
+                                    {/* Temporarily hidden — TODO: re-enable Calendar settings nav item
+                                    <button
+                                        onClick={() => setActiveTab('calendar')}
+                                        className={navItemClass(activeTab === 'calendar')}
+                                    >
+                                        {activeTab === 'calendar' && navActivePill}
+                                        <Calendar size={16} /> {t('Calendar')}
+                                    </button>
+                                    */}
+                                    <button
+                                        onClick={() => setActiveTab('skills')}
+                                        className={navItemClass(activeTab === 'skills')}
+                                    >
+                                        {activeTab === 'skills' && navActivePill}
+                                        <Folder size={16} /> {t('Skills')}
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('keybinds')}
@@ -1922,6 +2267,18 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                     ? { duration: 0 }
                                     : { duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
                             >
+                            {/* A render error in ANY settings section used to destroy the
+                                whole launcher window. SettingsOverlay sits inside App's
+                                <ErrorBoundary context="Launcher">, so the throw bubbled all
+                                the way up and replaced the launcher with "Launcher crashed" —
+                                measured 2026-09-15 by injecting a throw into a panel.
+
+                                This boundary keeps the blast radius at the section. It needs
+                                no `key` of its own: the motion.div above is keyed on
+                                panelKey, so switching sections remounts this subtree and
+                                clears a latched error — without that, one bad section would
+                                show its fallback on every other tab too. */}
+                            <ErrorBoundary context={`Settings · ${panelKey}`}>
                             {activeTab === 'general' && (
                                 <div className="space-y-6 animated fadeIn">
                                     <div className="space-y-3.5">
@@ -1929,7 +2286,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                             <h3 className="text-lg font-bold text-text-primary mb-1">{t('General settings')}</h3>
                                             <p className="text-xs text-text-secondary mb-2">{t('Customize how Natively works for you')}</p>
 
-                                            <div className={`rounded-xl border ${isLight ? 'bg-bg-card border-border-subtle divide-y divide-border-subtle' : 'bg-transparent border-transparent divide-y divide-border-subtle/20'}`}>
+                                            <div className="rounded-xl border bg-transparent border-transparent divide-y divide-border-subtle/20">
                                             <div className="space-y-0">
                                                 {/* Detectable / Undetectable */}
                                                 <div className="flex items-center justify-between px-4 py-3">
@@ -1998,6 +2355,44 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     />
                                                 </div>
 
+                                                {/* Shortcut guard — Windows only. The macOS build has no
+                                                    equivalent: RegisterHotKey is the Windows API that silently
+                                                    drops registrations, so there is nothing to guard against on
+                                                    macOS and no toggle to show. */}
+                                                {isWindows && (
+                                                    <div className="flex items-center justify-between px-4 py-3">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                                <Keyboard size={20} />
+                                                            </div>
+                                                            <div>
+                                                                <h3 className="text-sm font-bold text-text-primary">{t('Protect Natively shortcuts')}</h3>
+                                                                <p className="text-xs text-text-secondary mt-0.5">{t('Stops a Natively shortcut from typing into the app underneath. Turn off if your antivirus flags the keyboard hook.')}</p>
+                                                            </div>
+                                                        </div>
+                                                        <SettingsToggle
+                                                            checked={shortcutGuard}
+                                                            label={t('Protect Natively shortcuts')}
+                                                            onChange={async () => {
+                                                                const previous = shortcutGuard;
+                                                                const newState = !previous;
+                                                                setShortcutGuard(newState); // Optimistic
+                                                                try {
+                                                                    const result = await window.electronAPI?.setStealthShortcutGuard?.(newState);
+                                                                    if (result && !result.success) {
+                                                                        setShortcutGuard(previous);
+                                                                        console.error('[Settings] Failed to set shortcut guard');
+                                                                    }
+                                                                } catch (err) {
+                                                                    setShortcutGuard(previous);
+                                                                    console.error('[Settings] Exception setting shortcut guard:', err);
+                                                                }
+                                                            }}
+                                                            className={shortcutGuard ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
+                                                        />
+                                                    </div>
+                                                )}
+
                                                 {/* Ambient AI Chat */}
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
@@ -2025,10 +2420,17 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
                                                         <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
-                                                            <MessageSquareReply size={20} />
+                                                            <AutoAnswerIcon size={20} />
                                                         </div>
                                                         <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">{t('Auto Answer')}</h3>
+                                                            <div className="flex items-center gap-2">
+                                                                <h3 className="text-sm font-bold text-text-primary">{t('Auto Answer')}</h3>
+                                                                {/* The same Liquid Glass tag as Direct Assist's, so the two
+                                                                    Beta features read as one decision rather than two. It
+                                                                    replaces a bespoke solid-yellow span whose --badge-beta-*
+                                                                    tokens now have no other reader. */}
+                                                                <LiquidGlassBadge variant="sky">{t('Beta')}</LiquidGlassBadge>
+                                                            </div>
                                                             <p className="text-xs text-text-secondary mt-0.5">{t('Answers appear as soon as the interviewer finishes a question')}</p>
                                                         </div>
                                                     </div>
@@ -2123,63 +2525,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                         className={`w-full text-left px-2 py-1.5 rounded-md text-xs flex items-center gap-2 transition-colors ${themeMode === option.mode ? 'text-text-primary bg-bg-item-active/50' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
                                                                     >
                                                                         <span className={themeMode === option.mode ? 'text-text-primary' : 'text-text-secondary group-hover:text-text-primary'}>{option.icon}</span>
-                                                                        <span className="font-medium">{t(option.label)}</span>
-                                                                    </button>
-                                                                ))}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </div>
-
-                                                {/* Meeting Interface Style */}
-                                                <div className="flex items-center justify-between px-4 py-3">
-                                                    <div className="flex items-center gap-4">
-                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
-                                                            <Layout size={20} />
-                                                        </div>
-                                                        <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">{t('Meeting Interface Style')}</h3>
-                                                            <p className="text-xs text-text-secondary mt-0.5">
-                                                                {meetingInterfaceTheme === 'liquid-glass'
-                                                                    ? t('Liquid glass — Apple-inspired transparent overlay')
-                                                                    : meetingInterfaceTheme === 'modern'
-                                                                        ? t('Modern — polished dark glass with cobalt accents')
-                                                                        : t('Default overlay appearance')}
-                                                            </p>
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="relative" ref={interfaceThemeDropdownRef}>
-                                                        <button
-                                                            onClick={() => setIsInterfaceThemeDropdownOpen(!isInterfaceThemeDropdownOpen)}
-                                                            className="bg-bg-component hover:bg-bg-elevated border border-border-subtle text-text-primary px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 min-w-[110px] justify-between"
-                                                        >
-                                                            <span className="text-ellipsis overflow-hidden whitespace-nowrap">
-                                                                {meetingInterfaceTheme === 'liquid-glass'
-                                                                    ? 'Liquid Glass'
-                                                                    : meetingInterfaceTheme === 'modern'
-                                                                        ? 'Modern'
-                                                                        : t('Default')}
-                                                            </span>
-                                                            <ChevronDown size={12} className={`shrink-0 transition-transform ${isInterfaceThemeDropdownOpen ? 'rotate-180' : ''}`} />
-                                                        </button>
-
-                                                        {isInterfaceThemeDropdownOpen && (
-                                                            <div className="absolute right-0 top-full mt-1 w-full bg-bg-elevated border border-border-subtle rounded-lg shadow-xl overflow-hidden z-20 p-1 animated fadeIn select-none">
-                                                                {([
-                                                                    { mode: 'default' as MeetingInterfaceTheme, label: 'Default' },
-                                                                    { mode: 'liquid-glass' as MeetingInterfaceTheme, label: 'Liquid Glass' },
-                                                                    { mode: 'modern' as MeetingInterfaceTheme, label: 'Modern' },
-                                                                ] as const).map((option) => (
-                                                                    <button
-                                                                        key={option.mode}
-                                                                        onClick={() => {
-                                                                            setMeetingInterfaceTheme(option.mode);
-                                                                            setMeetingInterfaceThemeState(option.mode);
-                                                                            setIsInterfaceThemeDropdownOpen(false);
-                                                                        }}
-                                                                        className={`w-full text-left px-2.5 py-1.5 rounded-md text-xs flex items-center gap-2 transition-colors ${meetingInterfaceTheme === option.mode ? 'text-text-primary bg-bg-item-active/50' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
-                                                                    >
                                                                         <span className="font-medium">{t(option.label)}</span>
                                                                     </button>
                                                                 ))}
@@ -2322,6 +2667,63 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 </button>
                                                 <Disclosure open={showAdvancedSettings}>
                                                 <div className="mt-1">
+                                                    {/* Meeting Interface Style */}
+                                                    <div className="flex items-center justify-between px-4 py-3">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                                <Layout size={20} />
+                                                            </div>
+                                                            <div>
+                                                                <h3 className="text-sm font-bold text-text-primary">{t('Meeting Interface Style')}</h3>
+                                                                <p className="text-xs text-text-secondary mt-0.5">
+                                                                    {meetingInterfaceTheme === 'liquid-glass'
+                                                                        ? t('Liquid glass — Apple-inspired transparent overlay')
+                                                                        : meetingInterfaceTheme === 'modern'
+                                                                            ? t('Modern — polished dark glass with cobalt accents')
+                                                                            : t('Default overlay appearance')}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="relative" ref={interfaceThemeDropdownRef}>
+                                                            <button
+                                                                onClick={() => setIsInterfaceThemeDropdownOpen(!isInterfaceThemeDropdownOpen)}
+                                                                className="bg-bg-component hover:bg-bg-elevated border border-border-subtle text-text-primary px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 min-w-[110px] justify-between"
+                                                            >
+                                                                <span className="text-ellipsis overflow-hidden whitespace-nowrap">
+                                                                    {meetingInterfaceTheme === 'liquid-glass'
+                                                                        ? 'Liquid Glass'
+                                                                        : meetingInterfaceTheme === 'modern'
+                                                                            ? 'Modern'
+                                                                            : t('Default')}
+                                                                </span>
+                                                                <ChevronDown size={12} className={`shrink-0 transition-transform ${isInterfaceThemeDropdownOpen ? 'rotate-180' : ''}`} />
+                                                            </button>
+
+                                                            {isInterfaceThemeDropdownOpen && (
+                                                                <div className="absolute right-0 top-full mt-1 w-full bg-bg-elevated border border-border-subtle rounded-lg shadow-xl overflow-hidden z-20 p-1 animated fadeIn select-none">
+                                                                    {([
+                                                                        { mode: 'default' as MeetingInterfaceTheme, label: 'Default' },
+                                                                        { mode: 'liquid-glass' as MeetingInterfaceTheme, label: 'Liquid Glass' },
+                                                                        { mode: 'modern' as MeetingInterfaceTheme, label: 'Modern' },
+                                                                    ] as const).map((option) => (
+                                                                        <button
+                                                                            key={option.mode}
+                                                                            onClick={() => {
+                                                                                setMeetingInterfaceTheme(option.mode);
+                                                                                setMeetingInterfaceThemeState(option.mode);
+                                                                                setIsInterfaceThemeDropdownOpen(false);
+                                                                            }}
+                                                                            className={`w-full text-left px-2.5 py-1.5 rounded-md text-xs flex items-center gap-2 transition-colors ${meetingInterfaceTheme === option.mode ? 'text-text-primary bg-bg-item-active/50' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
+                                                                        >
+                                                                            <span className="font-medium">{t(option.label)}</span>
+                                                                        </button>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+
                                                     {/* Mouse Passthrough Toggle — Adapted from public PR #113 */}
                                                     <div className="flex items-center justify-between px-4 py-3">
                                                         <div className="flex items-center gap-4">
@@ -2355,7 +2757,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             </div>
                                                             <div>
                                                                 <h3 className="text-sm font-bold text-text-primary">{t('Verbose debug logging')}</h3>
-                                                                <p className="text-xs text-text-secondary mt-0.5">{t('Print detailed audio, STT, and pipeline diagnostics')}</p>
+                                                                <p className="text-xs text-text-secondary mt-0.5">
+                                                                    {t('Record everything: audio, STT, routing, and the questions and answers themselves. API keys are always removed.')}
+                                                                </p>
                                                             </div>
                                                         </div>
                                                         <SettingsToggle
@@ -2365,12 +2769,16 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 const newState = !verboseLogging;
                                                                 setVerboseLogging(newState);
                                                                 window.electronAPI?.setVerboseLogging?.(newState);
+                                                                if (newState) setShowVerboseToast(true);
                                                             }}
                                                             className={verboseLogging ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
                                                         />
                                                     </div>
 
-                                                    {/* Verbose logging toast */}
+
+                                                    {/* Verbose logging notice — the log location AND the
+                                                        full-capture privacy disclosure as ONE card, shown for
+                                                        10s when the user turns logging on. */}
                                                     <AnimatePresence>
                                                         {showVerboseToast && (
                                                             <motion.div
@@ -2381,30 +2789,66 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
                                                                 className="mx-4 mb-1 overflow-hidden"
                                                             >
-                                                                <div className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
-                                                                    <div className="flex items-center gap-2.5 min-w-0">
-                                                                        <Terminal size={14} className="text-amber-400 shrink-0" />
-                                                                        <p className="text-xs text-amber-200/80 leading-snug truncate">
-                                                                            Logs → <span className="font-mono text-amber-300">~/Documents/natively_debug.log</span>
-                                                                        </p>
+                                                                <div className="px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                                                                    <div className="flex items-center justify-between gap-3">
+                                                                        <div className="flex items-center gap-2.5 min-w-0">
+                                                                            <Terminal size={14} className="text-amber-400 shrink-0" />
+                                                                            <p className="text-xs text-amber-200/80 leading-snug truncate">
+                                                                                Logs → <span className="font-mono text-amber-300">~/Documents/natively_debug.log</span>
+                                                                            </p>
+                                                                        </div>
+                                                                        <button
+                                                                            onClick={() => window.electronAPI?.openLogFile?.()}
+                                                                            className="shrink-0 text-[11px] font-medium text-amber-400 hover:text-amber-300 transition-colors px-2 py-0.5 rounded-md bg-amber-500/15 hover:bg-amber-500/25"
+                                                                        >
+                                                                            Open
+                                                                        </button>
                                                                     </div>
-                                                                    <button
-                                                                        onClick={() => window.electronAPI?.openLogFile?.()}
-                                                                        className="shrink-0 text-[11px] font-medium text-amber-400 hover:text-amber-300 transition-colors px-2 py-0.5 rounded-md bg-amber-500/15 hover:bg-amber-500/25"
-                                                                    >
-                                                                        Open
-                                                                    </button>
+                                                                    <p className="text-xs text-amber-200/80 leading-snug mt-2">
+                                                                        {t('Full capture records your transcripts, questions, and answers in plaintext on this device. API keys and tokens are always removed. Review a log before sharing it.')}
+                                                                    </p>
                                                                 </div>
-                                                                {/* 5-second drain bar */}
-                                                                <motion.div
-                                                                    className="h-[2px] bg-amber-500/40 rounded-b-xl"
-                                                                    initial={{ scaleX: 1, originX: 0 }}
-                                                                    animate={{ scaleX: 0 }}
-                                                                    transition={{ duration: 5, ease: 'linear', delay: 0.2 }}
-                                                                />
                                                             </motion.div>
                                                         )}
                                                     </AnimatePresence>
+
+                                                    {/* Export debug logs — collects the main log, the previous
+                                                        session, the structured JSONL records and a system-info
+                                                        header into one folder and reveals it. */}
+                                                    <div className="flex items-center justify-between px-4 py-3">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                                <Download size={20} />
+                                                            </div>
+                                                            <div>
+                                                                <h3 className="text-sm font-bold text-text-primary">{t('Export debug logs')}</h3>
+                                                                <p className="text-xs text-text-secondary mt-0.5">
+                                                                    {exportResult ?? t('Collect this session\u2019s logs into one folder to share')}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            disabled={exportingLogs}
+                                                            onClick={async () => {
+                                                                setExportingLogs(true);
+                                                                setExportResult(null);
+                                                                try {
+                                                                    const r = await window.electronAPI?.exportDebugLogs?.();
+                                                                    setExportResult(r?.success
+                                                                        ? t('Exported {{n}} file(s) \u2014 revealed in your file manager').replace('{{n}}', String(r.files?.length ?? 0))
+                                                                        : t('Export failed: {{e}}').replace('{{e}}', r?.error ?? 'unknown'));
+                                                                } catch (e: any) {
+                                                                    setExportResult(t('Export failed: {{e}}').replace('{{e}}', e?.message ?? 'unknown'));
+                                                                } finally {
+                                                                    setExportingLogs(false);
+                                                                }
+                                                            }}
+                                                            className="shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg bg-bg-item-surface border border-border-subtle text-text-primary hover:bg-bg-item-surface-hover transition-colors disabled:opacity-50"
+                                                        >
+                                                            {exportingLogs ? t('Exporting\u2026') : t('Export')}
+                                                        </button>
+                                                    </div>
 
                                                     {/* Code Verification — runs LLM-generated code against test cases + one-shot correction */}
                                                     <div className="flex items-center justify-between px-4 py-3">
@@ -2504,8 +2948,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         onPointerUp={stopPreviewingOpacity}
                                                         onPointerCancel={stopPreviewingOpacity}
                                                         onPointerLeave={stopPreviewingOpacity}
-                                                        className="w-full h-1.5 rounded-full appearance-none bg-bg-input accent-accent-primary"
-                                                        style={{ WebkitAppearance: 'none' } as React.CSSProperties}
+                                                        className="lg-slider w-full h-1.5 rounded-full appearance-none bg-bg-input"
+                                                        style={{
+                                                            WebkitAppearance: 'none',
+                                                            // Same body as the selected Process Disguise tile.
+                                                            '--lg-knob-bg': isLight ? SELECTED_PERIWINKLE_LIGHT : SELECTED_PERIWINKLE,
+                                                        } as React.CSSProperties}
                                                     />
 
                                                     <div className="flex justify-between mt-1.5">
@@ -2524,7 +2972,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                     </div>
 
                                     {/* Process Disguise */}
-                                    {/* Process Disguise */}
                                     <div className={`${isLight ? 'bg-bg-card' : 'bg-bg-item-surface'} rounded-xl p-5 border border-border-subtle`}>
                                         <div className="flex flex-col gap-1 mb-3">
                                             <div className="flex items-center gap-2">
@@ -2538,42 +2985,46 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                             </p>
                                         </div>
 
-                                        <div className={`grid grid-cols-2 gap-3 ${isUndetectable ? 'opacity-50 pointer-events-none' : ''}`}>
+                                        {/* `.lg-clear` inherits its label colour from this grid. No blanket
+                                            opacity when locked: `disabled` dims the parts and keeps the rim
+                                            (ui-components/design.md, States). */}
+                                        <div className={`grid grid-cols-2 gap-3 text-text-secondary ${isUndetectable ? 'pointer-events-none' : ''}`}>
                                             {isUndetectable && (
                                                 <p className="col-span-2 text-xs text-yellow-500/80 -mt-1 mb-1">
                                                     ⚠️ {t('Disable Undetectable mode first to change disguise.')}
                                                 </p>
                                             )}
                                             {[
-                                                { id: 'none', label: 'None (Default)', icon: <Layout size={14} /> },
-                                                { id: 'terminal', label: 'Terminal', icon: <Terminal size={14} /> },
-                                                { id: 'settings', label: 'System Settings', icon: <Settings size={14} /> },
-                                                { id: 'activity', label: 'Activity Monitor', icon: <Activity size={14} /> }
-                                            ].map((option) => (
-                                                <button
-                                                    key={option.id}
-                                                    disabled={isUndetectable}
-                                                    onClick={() => {
-                                                        if (isUndetectable) return;
-                                                        // @ts-ignore
-                                                        setDisguiseMode(option.id);
-                                                        // @ts-ignore
-                                                        window.electronAPI?.setDisguise(option.id);
-                                                        // Analytics
-                                                        analytics.trackModeSelected(`disguise_${option.id}`);
-                                                    }}
-                                                    className={`p-3 rounded-lg border text-left flex items-center gap-3 transition-all ${disguiseMode === option.id
-                                                        ? 'bg-accent-primary border-accent-primary text-on-accent shadow-lg shadow-[var(--accent-shadow-20)]'
-                                                        : 'bg-bg-input border-border-subtle text-text-secondary hover:text-text-primary hover:bg-bg-subtle-hover'
-                                                        } ${isUndetectable ? 'cursor-not-allowed' : ''}`}
-                                                >
-                                                    <div className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${disguiseMode === option.id ? 'bg-on-accent-surface text-on-accent' : 'bg-bg-item-surface text-text-secondary'
-                                                        }`}>
-                                                        {option.icon}
-                                                    </div>
-                                                    <span className="text-xs font-medium">{t(option.label)}</span>
-                                                </button>
-                                            ))}
+                                                // Names match what _applyDisguise renames the app to per platform.
+                                                { id: 'none', label: 'None (Default)', icon: <Layout size={18} strokeWidth={1.75} /> },
+                                                { id: 'terminal', label: isWindows ? 'Command Prompt' : 'Terminal', icon: <Terminal size={18} strokeWidth={1.75} /> },
+                                                { id: 'settings', label: isWindows ? 'Settings' : 'System Settings', icon: <Settings size={18} strokeWidth={1.75} /> },
+                                                { id: 'activity', label: isWindows ? 'Task Manager' : 'Activity Monitor', icon: <Activity size={18} strokeWidth={1.75} /> }
+                                            ].map((option) => {
+                                                const selected = disguiseMode === option.id;
+                                                return (
+                                                    <LiquidGlassButton
+                                                        key={option.id}
+                                                        variant={selected ? 'action' : 'clear'}
+                                                        className="lg-sm lg-tile w-full [&_.lg-content]:justify-start"
+                                                        icon={<span className={selected ? undefined : 'text-text-primary'}>{option.icon}</span>}
+                                                        aria-pressed={selected}
+                                                        disabled={isUndetectable}
+                                                        style={selected ? (isLight ? DISGUISE_TILE_SELECTED_LIGHT : DISGUISE_TILE_SELECTED) : DISGUISE_TILE_RESTING}
+                                                        onClick={() => {
+                                                            if (isUndetectable) return;
+                                                            // @ts-ignore
+                                                            setDisguiseMode(option.id);
+                                                            // @ts-ignore
+                                                            window.electronAPI?.setDisguise(option.id);
+                                                            // Analytics
+                                                            analytics.trackModeSelected(`disguise_${option.id}`);
+                                                        }}
+                                                    >
+                                                        {t(option.label)}
+                                                    </LiquidGlassButton>
+                                                );
+                                            })}
                                         </div>
                                     </div>
 
@@ -2582,6 +3033,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
                             {activeTab === 'ai-providers' && (
                                 <AIProvidersSettings
+                                    onNavigate={setActiveTab}
                                     aiResponseLanguage={aiResponseLanguage}
                                     availableAiLanguages={availableAiLanguages}
                                     isAiLangDropdownOpen={isAiLangDropdownOpen}
@@ -2828,6 +3280,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                Natively is our own logo component. Every option used to share one
                                                                generic <Mic>, which made the list unreadable at a glance. */
                                                             ...(hasNativelyKey ? [{ id: 'natively', label: 'Natively API', badge: 'Saved' as const, desc: t('Managed transcription via Natively backend'), color: 'blue', icon: <BrandMark provider="natively" />, neutralTile: true }] : []),
+                                                            /* Directly under Natively API: both are turnkey — no key to paste,
+                                                               nothing to configure — so they belong together at the top, ahead
+                                                               of the bring-your-own-key providers. macOS only; the mark is
+                                                               Apple's because the model runs on this machine. */
+                                                            ...(isMac ? [{ id: 'apple-speech', label: 'Apple Speech', badge: null, desc: t('On-device · macOS 26+'), color: 'green', icon: <BrandMark provider="apple" />, neutralTile: true }] : []),
                                                             { id: 'google', label: 'Google Cloud', badge: googleServiceAccountPath ? 'Saved' : null, desc: t('gRPC streaming via Service Account'), color: 'blue', icon: <BrandMark provider="google" />, neutralTile: true },
                                                             { id: 'groq', label: 'Groq Whisper', badge: hasStoredSttGroqKey ? 'Saved' : null, desc: t('Ultra-fast REST transcription'), color: 'orange', icon: <BrandMark provider="groq" />, neutralTile: true },
                                                             { id: 'nvidia_nim', label: 'Nvidia Nim', badge: hasStoredNvidiaNimKey ? 'Saved' : null, desc: t('Low-latency Nemotron / Parakeet streaming ASR'), color: 'green', icon: <BrandMark provider="nvidia_nim" />, neutralTile: true },
@@ -2891,13 +3348,56 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
                                             {sttProvider === 'nvidia_nim' && hasStoredNvidiaNimKey && (
                                                 <div className="bg-bg-card rounded-xl border border-border-subtle p-4">
-                                                    <label className="text-xs font-medium text-text-secondary mb-2.5 block">{t('Nvidia Nim Speech Model')}</label>
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                                        {NVIDIA_NIM_STT_MODELS.map((m) => (
-                                                            <button key={m.id} onClick={async () => { setNvidiaNimSttModel(m.id); await window.electronAPI?.setNvidiaNimSttModel?.(m.id); }} className={`rounded-lg px-3 py-2.5 text-left ${nvidiaNimSttModel === m.id ? 'bg-accent-primary text-on-accent shadow-md' : 'bg-bg-input hover:bg-bg-elevated text-text-primary'}`}>
-                                                                <span className="text-sm font-medium block">{m.label}</span><span className="text-[11px] opacity-70">{m.description}</span>
-                                                            </button>
-                                                        ))}
+                                                    <label id="nvidia-nim-stt-model-label" className="text-xs font-medium text-text-secondary mb-2.5 block">{t('Nvidia Nim Speech Model')}</label>
+                                                    {/* One column, not a 2-col grid: there are THREE models, so a
+                                                        two-up grid leaves a lone orphan on the second row, and the
+                                                        descriptions ("Multilingual streaming ASR (40 locales,
+                                                        auto-detect)") wrap at half width. Mutually exclusive choice,
+                                                        so radiogroup semantics with a roving tabindex — previously
+                                                        three unrelated <button>s whose selected state was carried by
+                                                        colour alone and was invisible to a screen reader. */}
+                                                    <div role="radiogroup" aria-labelledby="nvidia-nim-stt-model-label"
+                                                        /* Nine models run ~420px; cap it so the picker cannot
+                                                           dominate the Audio tab. Arrow-key navigation scrolls the
+                                                           focused row into view for free. */
+                                                        className="flex flex-col gap-1.5 max-h-64 overflow-y-auto custom-scrollbar pr-0.5">
+                                                        {NVIDIA_NIM_STT_MODELS.map((m, i) => {
+                                                            const selected = nvidiaNimSttModel === m.id;
+                                                            return (
+                                                                <button
+                                                                    key={m.id}
+                                                                    type="button"
+                                                                    role="radio"
+                                                                    aria-checked={selected}
+                                                                    tabIndex={selected ? 0 : -1}
+                                                                    onClick={() => void selectNvidiaNimSttModel(m.id)}
+                                                                    onKeyDown={(e) => nvidiaNimSttModelKeyDown(e, i)}
+                                                                    className={`block w-full rounded-lg px-3 py-2.5 text-left text-text-primary
+                                                                        transition-[background-color,box-shadow,transform] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)]
+                                                                        motion-safe:active:scale-[0.99] ${selected
+                                                                            ? 'bg-[color-mix(in_srgb,var(--accent-primary)_12%,var(--bg-input))] shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--accent-primary)_45%,transparent)]'
+                                                                            : 'bg-bg-input hover:bg-bg-elevated'}`}
+                                                                >
+                                                                    {/* Selected is a TINT plus a hairline accent ring, not
+                                                                        a solid accent slab: three full-width rows filled
+                                                                        with periwinkle overpowered a settings card, and
+                                                                        the label had to flip to --on-accent to stay
+                                                                        readable, which made the selected row the loudest
+                                                                        thing on the panel.
+                                                                        No check mark is needed even so: the ring is a
+                                                                        STRUCTURAL difference (present vs absent), not a
+                                                                        colour one, so the state survives greyscale and
+                                                                        colour-blind viewing — WCAG 1.4.1 without a second
+                                                                        glyph. `aria-checked` carries it to screen readers.
+                                                                        Opacity modifiers are unavailable here: the theme
+                                                                        colours are bare `var(--x)` with no <alpha-value>,
+                                                                        so `bg-accent-primary/12` would emit invalid CSS —
+                                                                        hence the explicit color-mix. */}
+                                                                    <span className="text-sm font-medium block leading-tight">{m.label}</span>
+                                                                    <span className={`text-[11px] leading-snug block mt-0.5 ${selected ? 'text-text-secondary' : 'text-text-tertiary'}`}>{m.description}</span>
+                                                                </button>
+                                                            );
+                                                        })}
                                                     </div>
                                                 </div>
                                             )}
@@ -2941,7 +3441,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                             )}
 
                                             {/* API Key Input (non-Google providers) */}
-                                            {sttProvider !== 'google' && sttProvider !== 'local-whisper' && sttProvider !== 'natively' && sttProvider !== 'none' && (
+                                            {sttProvider !== 'google' && sttProvider !== 'local-whisper' && sttProvider !== 'apple-speech' && sttProvider !== 'natively' && sttProvider !== 'none' && (
                                                 <div className="bg-bg-card rounded-xl border border-border-subtle p-4 space-y-3">
                                                     <label className="text-xs font-medium text-text-secondary block">
                                                         {sttProvider === 'nvidia_nim' ? 'Nvidia Nim' : sttProvider === 'groq' ? 'Groq' : sttProvider === 'openai' ? 'OpenAI STT' : sttProvider === 'elevenlabs' ? 'ElevenLabs' : sttProvider === 'azure' ? 'Azure' : sttProvider === 'ibmwatson' ? 'IBM Watson' : sttProvider === 'soniox' ? 'Soniox' : 'Deepgram'} API Key
@@ -3112,26 +3612,16 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 <>{t('Test Connection')}</>
                                                             )}
                                                         </button>
-                                                        <button
-                                                            onClick={() => {
-                                                                const urls: Record<string, string> = {
-                                                                    groq: 'https://console.groq.com/keys',
-                                                                    openai: 'https://platform.openai.com/api-keys',
-                                                                    deepgram: 'https://console.deepgram.com',
-                                                                    elevenlabs: 'https://elevenlabs.io/app/settings/api-keys',
-                                                                    azure: 'https://portal.azure.com/#create/Microsoft.CognitiveServicesSpeech',
-                                                                    ibmwatson: 'https://cloud.ibm.com/catalog/services/speech-to-text'
-                                                                };
-                                                                if (urls[sttProvider]) {
-                                                                    // @ts-ignore
-                                                                    window.electronAPI?.openExternal(urls[sttProvider]);
-                                                                }
-                                                            }}
-                                                            className="text-xs text-text-tertiary hover:text-text-primary flex items-center gap-1 transition-colors ml-1"
-                                                            title={t("Get API Key")}
-                                                        >
-                                                            <ExternalLink size={12} />
-                                                        </button>
+                                                        {STT_KEY_URLS[sttProvider] && (
+                                                            <button
+                                                                // @ts-ignore
+                                                                onClick={() => window.electronAPI?.openExternal(STT_KEY_URLS[sttProvider])}
+                                                                className="text-xs text-text-tertiary hover:text-text-primary flex items-center gap-1 transition-colors ml-1"
+                                                                title={t("Get API Key")}
+                                                            >
+                                                                <ExternalLink size={12} />
+                                                            </button>
+                                                        )}
                                                         {sttTestStatus === 'error' && (
                                                             <span className="text-xs text-red-400">{sttTestError}</span>
                                                         )}
@@ -3139,6 +3629,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 </div>
                                             )}
 
+                                            {sttProvider === 'apple-speech' && (
+                                                <p className="text-xs text-text-secondary">{t('Apple Speech runs transcription on your device. macOS may download the selected language model on first use; “Auto” uses your system language.')}</p>
+                                            )}
                                             {/* Local Whisper Model Panel */}
                                             {sttProvider === 'local-whisper' && (
                                                 <LocalWhisperModelPanel onModelConfigChanged={setLocalWhisperConfig} />
@@ -3161,6 +3654,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 onChange={handleGroupChange}
                                                 placeholder={t("Select Language")}
                                                 disabled={languageLocked}
+                                                badges={appleLanguageBadges?.group}
                                             />
 
                                             {/* Variant/Accent Selector (Conditional) — greyed out when the
@@ -3176,6 +3670,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         options={currentGroupVariants}
                                                         onChange={handleLanguageChange}
                                                         placeholder={t("Select Region")}
+                                                        badges={appleLanguageBadges?.variant}
                                                         disabled={!!localLanguageCapability && !localLanguageCapability.accentSelectable}
                                                     />
                                                 </div>
@@ -3192,6 +3687,116 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         {' '}{localLanguageCapability.accentSelectable
                                                             ? t('supports English only — language is fixed for this model.')
                                                             : t('supports English only — language and accent are fixed for this model.')}
+                                                    </p>
+                                                </div>
+                                            )}
+                                            {/* Apple Speech: the stored language may be one of the 20
+                                                Natively offers that Apple cannot transcribe. It is filtered
+                                                out of the selects above, so without this the control would
+                                                just sit on its placeholder with no explanation. */}
+                                            {appleLanguageCapability && storedLanguageUnsupported && (
+                                                <div className="flex gap-2 items-center mt-2 px-1">
+                                                    <AlertCircle size={14} className="text-amber-400 shrink-0" />
+                                                    <p className="text-xs text-amber-200/90">
+                                                        {`"${availableLanguages[recognitionLanguage]?.label ?? recognitionLanguage}" ${t("isn't available in Apple Speech — pick one of the listed languages.")}`}
+                                                    </p>
+                                                </div>
+                                            )}
+                                            {/* Download the selected language now, with a visible bar,
+                                                instead of letting the first meeting stall on it. Apple
+                                                reports a 0..1 fraction and no transfer size, so this is a
+                                                percentage — there is no MB figure available to show. */}
+                                            {appleLanguageCapability && selectedAppleNeedsDownload && (
+                                                <div className="mt-3 rounded-xl border border-border-subtle bg-bg-card p-3">
+                                                    {/* Gate on the locale actually downloading, not merely on
+                                                        "a download exists": switching language mid-download
+                                                        otherwise showed the NEW language's card wearing the
+                                                        OLD language's progress bar, and hid its own button. */}
+                                                    {appleInstall && appleInstall.locale === selectedAppleLocale ? (
+                                                        <>
+                                                            <div className="flex items-center justify-between mb-2">
+                                                                <span className="text-xs text-text-primary">
+                                                                    {t('Downloading language model…')}
+                                                                </span>
+                                                                <span className="text-xs tabular-nums text-text-secondary">
+                                                                    {Math.round(appleInstall.fraction * 100)}%
+                                                                </span>
+                                                            </div>
+                                                            <div className="h-1.5 w-full rounded-full bg-bg-input overflow-hidden">
+                                                                <div
+                                                                    className="h-full rounded-full bg-accent-primary transition-[width] duration-300 ease-out"
+                                                                    style={{ width: `${Math.max(2, appleInstall.fraction * 100)}%` }}
+                                                                />
+                                                            </div>
+                                                            <p className="text-[11px] text-text-secondary mt-2">
+                                                                {t('macOS is fetching this language. You can keep using Natively; the download continues in the background.')}
+                                                            </p>
+                                                        </>
+                                                    ) : (
+                                                        <div className="flex items-center justify-between gap-3">
+                                                            <div className="min-w-0">
+                                                                <p className="text-xs text-text-primary">
+                                                                    {t('This language is not downloaded yet.')}
+                                                                </p>
+                                                                <p className="text-[11px] text-text-secondary mt-0.5">
+                                                                    {t('Download it now, or the first meeting will wait while macOS fetches it.')}
+                                                                </p>
+                                                            </div>
+                                                            <button
+                                                                onClick={startAppleDownload}
+                                                                disabled={!!appleSlots?.full}
+                                                                title={appleSlots?.full ? t('Remove a downloaded language first.') : undefined}
+                                                                className="shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg bg-bg-input hover:bg-bg-elevated text-text-primary border border-border-subtle transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                                            >
+                                                                {t('Download')}
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                    {appleInstallError && (
+                                                        <p className="text-[11px] text-amber-200/90 mt-2">{appleInstallError}</p>
+                                                    )}
+                                                </div>
+                                            )}
+                                            {/* Apple allocates a fixed number of language slots per app
+                                                and an install takes one permanently, so the cap has to be
+                                                visible and recoverable — otherwise the sixth language just
+                                                fails with Apple's opaque "Too many allocated locales". */}
+                                            {appleSlots && appleSlots.entries.length > 0 && (
+                                                <div className="mt-3 rounded-xl border border-border-subtle bg-bg-card p-3">
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <span className="text-xs font-medium text-text-primary">
+                                                            {t('Downloaded languages')}
+                                                        </span>
+                                                        <span className={`text-[11px] tabular-nums ${appleSlots.full ? 'text-amber-300/90' : 'text-text-secondary'}`}>
+                                                            {appleSlots.used} / {appleSlots.max}
+                                                        </span>
+                                                    </div>
+                                                    <ul className="space-y-1">
+                                                        {appleSlots.entries.map((e) => (
+                                                            <li key={e.bcp} className="flex items-center justify-between gap-3">
+                                                                <span className="text-xs text-text-secondary truncate">{e.label}</span>
+                                                                <button
+                                                                    onClick={() => releaseAppleLanguage(e.bcp)}
+                                                                    disabled={appleReleasing === e.bcp}
+                                                                    className="shrink-0 text-[11px] px-2 py-1 rounded-md text-text-secondary hover:text-text-primary hover:bg-bg-input border border-transparent hover:border-border-subtle transition-colors disabled:opacity-40"
+                                                                >
+                                                                    {appleReleasing === e.bcp ? t('Removing…') : t('Remove')}
+                                                                </button>
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                    <p className="text-[11px] text-text-secondary mt-2">
+                                                        {appleSlots.full
+                                                            ? t('All language slots are in use. Remove one to download another — removing deletes the model, so it has to be downloaded again to use it.')
+                                                            : t('Apple allows a limited number of downloaded languages. Removing one deletes its model.')}
+                                                    </p>
+                                                </div>
+                                            )}
+                                            {appleLanguageCapability && (
+                                                <div className="flex gap-2 items-center mt-2 px-1">
+                                                    <Info size={14} className="text-text-secondary shrink-0" />
+                                                    <p className="text-xs text-text-secondary">
+                                                        {t('Languages marked Download are fetched by macOS the first time you use them — the first meeting starts once that finishes.')}
                                                     </p>
                                                 </div>
                                             )}
@@ -3221,11 +3826,15 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 </div>
                                             )}
 
-                                            <div className="flex gap-2 items-center mt-2 px-1">
-                                                <Info size={14} className="text-text-secondary shrink-0" />
-                                                <p className="text-xs text-text-secondary">
-                                                    {recognitionLanguage === 'auto'
-                                                        ? autoDetectedLanguage
+                                            {/* Auto mode only. The picker's own label already says this
+                                                is the meeting language, so restating it under every explicit
+                                                choice was noise — and it pushed the genuinely useful notes
+                                                (download state, slot budget) further down the panel. */}
+                                            {recognitionLanguage === 'auto' && (
+                                                <div className="flex gap-2 items-center mt-2 px-1">
+                                                    <Info size={14} className="text-text-secondary shrink-0" />
+                                                    <p className="text-xs text-text-secondary">
+                                                        {autoDetectedLanguage
                                                             ? (() => {
                                                                 const label = Object.values(availableLanguages).find((l: any) =>
                                                                     l.bcp47 === autoDetectedLanguage || l.iso639 === autoDetectedLanguage
@@ -3233,10 +3842,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 return `${t('Auto mode — detected:')} ${label ?? autoDetectedLanguage}`;
                                                               })()
                                                             : t('Auto mode — language will be detected from the first few seconds of audio.')
-                                                        : t('Select the primary language being spoken in the meeting.')
-                                                    }
-                                                </p>
-                                            </div>
+                                                        }
+                                                    </p>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
 
@@ -3713,6 +4322,23 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                 <PhoneMirrorSettings />
                             )}
 
+                            {isRetrievalTab(activeTab) && (
+                                /* No `key`. Keying on activeTab would remount both panels
+                                   whenever the id changed — including the 'embedding' ->
+                                   'retrieval' flip you get from clicking the sidebar item
+                                   you are ALREADY on, which discarded the user's sub-tab
+                                   and flashed skeletons for ~400ms. A mounted layout picks
+                                   up a late deep link through its own effect instead.
+
+                                   `initialTab` is passed ONLY for the legacy ids: plain
+                                   'retrieval' sends undefined, which is what tells the
+                                   layout to leave the current sub-tab alone. */
+                                <RetrievalSettings
+                                    initialTab={retrievalRequest.tab}
+                                    navSeq={retrievalRequest.seq}
+                                />
+                            )}
+
                             {activeTab === 'intelligence' && (
                                 <IntelligenceSettings />
                             )}
@@ -3724,6 +4350,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                             {activeTab === 'about' && (
                                 <AboutSection />
                             )}
+                            </ErrorBoundary>
                             </motion.div>
                         </div>
                     </div>

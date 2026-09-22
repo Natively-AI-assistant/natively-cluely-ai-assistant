@@ -18,7 +18,83 @@ import { fileURLToPath, pathToFileURL } from 'url';
 export const SAFE_DOCUMENT_EXTENSIONS = new Set([
   '.txt', '.md', '.markdown', '.json', '.csv', '.tsv',
   '.xml', '.html', '.htm', '.log', '.pdf', '.docx',
+  // Source and config files (2026-09-10). A code-review mode could attach its
+  // notes, its error log and its test results but NOT the code under review:
+  // `debug_code_snippet.ts` was refused with `reference_upload_failed` while
+  // the four files describing it uploaded fine. These are plain UTF-8 text and
+  // go through the same parseTextFile / binary-sniff path as `.txt`.
+  '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.py', '.go', '.java', '.kt',
+  '.rs', '.c', '.h', '.cpp', '.hpp', '.cs', '.rb', '.php', '.swift', '.scala',
+  '.sql', '.sh', '.ps1', '.yaml', '.yml', '.toml', '.ini', '.cfg', '.conf',
+  '.graphql', '.proto', '.dart', '.lua', '.r', '.tf',
 ]);
+
+/**
+ * Extensions whose text is HTML markup and must be flattened to prose before
+ * it is chunked, embedded or shown to the model.
+ *
+ * Measured 2026-09-10 on a board update uploaded as `.html`: the file was
+ * stored verbatim, so every chunk read `<tr><td>Net revenue retention</td>
+ * <td>108%</td>…` and the retrieval/prompt path scored and quoted tag soup.
+ * The model answered "108% (Q1)" to a question about Q3 because the column
+ * headers were three rows of markup away from the cell.
+ */
+const HTML_EXTENSIONS = new Set(['.html', '.htm']);
+
+const HTML_ENTITIES: Record<string, string> = {
+  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', ndash: '–',
+  mdash: '—', hellip: '…', copy: '©', reg: '®', trade: '™',
+  lsquo: '‘', rsquo: '’', ldquo: '“', rdquo: '”', bull: '•',
+  middot: '·', deg: '°', euro: '€', pound: '£', yen: '¥',
+};
+
+const decodeHtmlEntities = (text: string): string =>
+  text.replace(/&(#x[0-9a-fA-F]+|#\d+|[a-zA-Z]+);/g, (whole, body: string) => {
+    if (body[0] === '#') {
+      const code = body[1] === 'x' || body[1] === 'X' ? parseInt(body.slice(2), 16) : parseInt(body.slice(1), 10);
+      return Number.isFinite(code) && code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : whole;
+    }
+    const named = HTML_ENTITIES[body.toLowerCase()];
+    return named ?? whole;
+  });
+
+/**
+ * Flatten HTML to readable plain text: tables become one line per row with
+ * cells joined by " | ", list items get a "- " bullet, block elements end a
+ * line, scripts/styles/comments are dropped, entities are decoded and
+ * whitespace is normalised. Pure string work — no DOM, no dependency — so it
+ * behaves identically on macOS and Windows and inside a packaged build.
+ *
+ * Applied only when the text actually contains markup: a `.html` file that is
+ * plain prose (the existing format tests upload one) comes back unchanged.
+ */
+export const htmlToText = (html: string): string => {
+  if (!/<[a-zA-Z!/]/.test(html)) return html;
+  let s = html;
+  s = s.replace(/<!--[\s\S]*?-->/g, ' ');
+  s = s.replace(/<(script|style|noscript|template|svg|canvas)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, ' ');
+  s = s.replace(/<head\b[^>]*>[\s\S]*?<\/head\s*>/gi, (head) => {
+    const title = head.match(/<title\b[^>]*>([\s\S]*?)<\/title\s*>/i);
+    return title ? `${title[1]}\n` : ' ';
+  });
+  // Table cells → " | " separated rows. Header rows get a rule beneath them so
+  // a chunker never splits a header from its first data row without a cue.
+  s = s.replace(/<\/t[dh]\s*>\s*<t[dh]\b[^>]*>/gi, ' | ');
+  s = s.replace(/<t[dh]\b[^>]*>/gi, '');
+  s = s.replace(/<\/t[dh]\s*>/gi, '');
+  s = s.replace(/<\/tr\s*>/gi, '\n');
+  s = s.replace(/<\/thead\s*>/gi, '\n');
+  s = s.replace(/<li\b[^>]*>/gi, '\n- ');
+  s = s.replace(/<br\s*\/?>/gi, '\n');
+  s = s.replace(/<\/(p|div|h[1-6]|li|ul|ol|table|tr|section|article|header|footer|blockquote|pre|dt|dd|figcaption)\s*>/gi, '\n');
+  s = s.replace(/<(p|div|h[1-6]|ul|ol|table|section|article|header|footer|blockquote|pre|hr)\b[^>]*>/gi, '\n');
+  s = s.replace(/<[^>]+>/g, ' ');
+  s = decodeHtmlEntities(s);
+  s = s.replace(/ /g, ' ');
+  s = s.split('\n').map((line) => line.replace(/[ \t\r\f\v]+/g, ' ').replace(/\s*\|\s*/g, ' | ').trim()).join('\n');
+  s = s.replace(/\n{3,}/g, '\n\n').trim();
+  return s ? `${s}\n` : s;
+};
 
 /** 50 MB hard cap — should be enforced by the upload UI's progress bar first. */
 export const SAFE_DOCUMENT_MAX_BYTES = 50 * 1024 * 1024;
@@ -231,6 +307,7 @@ export const extractSafeDocumentText = async (
     content = String(data?.value || '');
   } else {
     content = parseTextFile(binary, fileName, extension);
+    if (HTML_EXTENSIONS.has(extension)) content = htmlToText(content);
   }
 
   if (!content.trim()) throw new Error('file parsed to empty text');

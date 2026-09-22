@@ -75,7 +75,7 @@ export interface TurnPlanInput {
   question: string;
   /** From `planAnswer(...).answerType` (ProfileIntelligence's signal). */
   answerType?: string | null;
-  /** From `IntentClassifier` (KnowledgeOrchestrator's signal). */
+  /** From the premium knowledge intent classifier (KnowledgeOrchestrator's signal). */
   intent?: string | null;
   /** From the canonical `resolveTurnSourceDecision(...)`. */
   turnSourceDecision?: TurnSourceDecision | null;

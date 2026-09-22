@@ -7,6 +7,7 @@ import { LLMHelper } from '../LLMHelper';
 import { preprocessTranscript, RawSegment } from './TranscriptPreprocessor';
 import { chunkTranscript } from './SemanticChunker';
 import { VectorStore } from './VectorStore';
+import type { AppAPIConfig } from './EmbeddingProviderResolver';
 import { EmbeddingPipeline } from './EmbeddingPipeline';
 import { RAGRetriever } from './RAGRetriever';
 import { LiveRAGIndexer } from './LiveRAGIndexer';
@@ -25,6 +26,17 @@ import type { ProviderDataScopePolicy } from '../llm/ProviderRouter';
  * callback-based onToken() the shared helper uses.
  */
 const RAG_STREAM_STALL_MS = 15_000;
+
+/**
+ * Appended to a queryMeeting/queryGlobal stream when it ends early (capped or
+ * post-commit-failed) so the truncation is VISIBLE in the rendered/persisted
+ * answer (see the two yield sites below). Exported (issue #552) so callers
+ * that need to detect a truncated live-RAG answer — e.g. ipcHandlers'
+ * recordLiveRagTurn, deciding whether to record the answer-side history
+ * sinks — compare against this constant instead of re-typing the string,
+ * which would silently drift from the yielded text.
+ */
+export const RAG_STREAM_INCOMPLETE_CODA = '\n\n_(Answer incomplete — the model stream ended early.)_';
 
 async function* raceGeneratorWithDeadline(
     stream: AsyncGenerator<string, void, unknown>,
@@ -62,7 +74,7 @@ async function* raceGeneratorWithDeadline(
     }
 }
 
-export interface RAGManagerConfig {
+export interface RAGManagerConfig extends Partial<AppAPIConfig> {
     db: Database.Database;
     // dbPath/extPath are unused by VectorStore now (it runs on `db` directly —
     // see VectorStore.ts's header comment for why the worker-thread design
@@ -71,13 +83,33 @@ export interface RAGManagerConfig {
     // out-of-process search path doesn't have to re-thread them.
     dbPath: string;
     extPath: string;
-    openaiKey?: string;
-    geminiKey?: string;
-    geminiKeys?: string[];   // optional pool for embedding key-rotation + 429 cooldown
-    ollamaUrl?: string;
-    providerDataScopes?: ProviderDataScopePolicy;
-    explicitKeyManagement?: boolean;
+    /**
+     * The embedding configuration, forwarded WHOLE (2026-08-30).
+     *
+     * This used to re-declare six fields by hand — openaiKey, geminiKey,
+     * geminiKeys, ollamaUrl, providerDataScopes, explicitKeyManagement — and the
+     * constructor re-listed the same six into `embeddingPipeline.initialize()`.
+     * `buildEmbeddingConfig()` returns an `AppAPIConfig` with far more than
+     * that (nativelyApiKey, nativelyTrialToken, nativelyApiUrl,
+     * ollamaEmbeddingModel/Dims, the per-provider model+dims hints, and the
+     * embeddingMode/embeddingProvider choice), and `main.ts` spreads it straight
+     * in — so every field outside the hand-written six was SILENTLY DROPPED on a
+     * normal app start.
+     *
+     * TypeScript could not catch it: spreading a typed variable into an object
+     * literal skips excess-property checking, so `typecheck:electron` stayed
+     * green while the managed-embedding tier and the user's chosen Ollama
+     * embedding model were never configured at all. The feature only appeared
+     * if the user later re-entered an OpenAI/Gemini key, because
+     * `initializeEmbeddings` forwards with `{...keys}` and therefore carried
+     * everything by accident.
+     *
+     * Carrying the type instead of a copy of its field names is what stops this
+     * recurring — the same lesson `embeddingConfigIdentity.ts` was written for,
+     * one layer down.
+     */
 }
+
 
 /**
  * RAGManager - Central orchestrator for RAG operations
@@ -117,15 +149,18 @@ export class RAGManager {
         this.embeddingPipeline = new EmbeddingPipeline(config.db, this.vectorStore);
         this.retriever = new RAGRetriever(this.vectorStore, this.embeddingPipeline);
         this.liveIndexer = new LiveRAGIndexer(this.vectorStore, this.embeddingPipeline);
+        // The pipeline signals when the user's pinned embedding space is active
+        // again; the sweep deferred while a stand-in was running belongs here.
+        this.embeddingPipeline.setPinnedSpaceRestoredHandler(() => this.scheduleAutoReindex());
 
-        this.embeddingPipeline.initialize({
-            openaiKey: config.openaiKey,
-            geminiKey: config.geminiKey,
-            geminiKeys: config.geminiKeys,
-            ollamaUrl: config.ollamaUrl,
-            providerDataScopes: config.providerDataScopes,
-            explicitKeyManagement: config.explicitKeyManagement,
-        }).then(() => {
+        // Forward the WHOLE embedding config. Hand-listing fields here is what
+        // dropped nativelyApiKey / nativelyTrialToken / nativelyApiUrl /
+        // ollamaEmbeddingModel / ollamaEmbeddingDims and the embeddingMode +
+        // embeddingProvider choice on every normal app start — see
+        // RAGManagerConfig's note. `db`/`dbPath`/`extPath` are this class's own
+        // and are the only fields the pipeline must not see.
+        const { db: _db, dbPath: _dbPath, extPath: _extPath, ...embeddingConfig } = config;
+        this.embeddingPipeline.initialize(embeddingConfig).then(() => {
             // Backfill provider metadata for meetings that were embedded before the
             // embedding_provider column was written (or where the write failed silently).
             this._backfillEmbeddingProviderMetadata();
@@ -158,7 +193,17 @@ export class RAGManager {
         return this.embeddingPipeline;
     }
 
-    initializeEmbeddings(keys: { openaiKey?: string, geminiKey?: string, geminiKeys?: string[], ollamaUrl?: string, providerDataScopes?: ProviderDataScopePolicy, explicitKeyManagement?: boolean }): void {
+    // `AppAPIConfig`, not a hand-written subset. This path already FORWARDED
+    // everything at runtime via `{...keys}` — which is precisely why the managed
+    // tier worked here and not in the constructor — but its type named only six
+    // fields, so it read as though the rest were unsupported.
+    // Returns the pipeline's init promise. It used to return void, so
+    // `await ragManager.initializeEmbeddings(...)` resolved on the next
+    // microtask — long before the provider was re-resolved — and every caller
+    // that then read getActiveSpaceKey() saw the OLD space. That made
+    // set-config's `reindexRequired` permanently false, so a genuine model
+    // switch re-indexed the whole corpus with no warning.
+    initializeEmbeddings(keys: AppAPIConfig): Promise<void> {
         const initPromise = this.embeddingPipeline.initialize({
             ...keys,
             explicitKeyManagement: keys.explicitKeyManagement,
@@ -167,15 +212,19 @@ export class RAGManager {
         // but a NULL metadata column (common for meetings embedded before this metadata
         // write was introduced, or where the write silently failed).
         if (initPromise && typeof initPromise.then === 'function') {
-            initPromise.then(() => {
+            // RETURNED, not just chained: a caller that awaits this needs the
+            // provider actually re-resolved before it reads getActiveSpaceKey().
+            // The backfill and re-index scheduling stay attached here so the
+            // fire-and-forget callers keep their existing behaviour.
+            return initPromise.then(() => {
                 this._backfillEmbeddingProviderMetadata();
                 this.scheduleAutoReindex();
             }).catch(() => { /* silent — backfill is non-critical */ });
-        } else {
-            // Synchronous path (shouldn't happen but be safe)
-            this._backfillEmbeddingProviderMetadata();
-            this.scheduleAutoReindex();
         }
+        // Synchronous path (shouldn't happen but be safe)
+        this._backfillEmbeddingProviderMetadata();
+        this.scheduleAutoReindex();
+        return Promise.resolve();
     }
 
     private _backfillEmbeddingProviderMetadata(): void {
@@ -293,7 +342,7 @@ export class RAGManager {
         // in the rendered/persisted answer (skipped on user abort — that is
         // a cancellation, not a truncation).
         if (streamOutcome.incomplete && !abortSignal?.aborted) {
-            yield '\n\n_(Answer incomplete \u2014 the model stream ended early.)_';
+            yield RAG_STREAM_INCOMPLETE_CODA;
         }
     }
 
@@ -311,13 +360,17 @@ export class RAGManager {
         // Retrieve from all meetings
         const context = await this.retriever.retrieveGlobal(query);
 
-        if (context.chunks.length === 0) {
-            yield NO_GLOBAL_CONTEXT_FALLBACK;
-            return;
-        }
+        // ALWAYS ANSWER (2026-09-07, owner's direction): an empty global search
+        // used to yield NO_GLOBAL_CONTEXT_FALLBACK with no model call — the
+        // launcher's chat ended in "I couldn't find any discussion about that".
+        // The model now gets an explicit "nothing matched" excerpt and the
+        // prompt's rule to note the gap and still answer from general knowledge.
+        const formatted = context.chunks.length === 0
+            ? `(No matching excerpts were found across the user's meetings for this question.)\n${NO_GLOBAL_CONTEXT_FALLBACK}`
+            : context.formattedContext;
 
         // Build prompt with intent hint
-        const prompt = buildRAGPrompt(query, context.formattedContext, 'global', context.intent);
+        const prompt = buildRAGPrompt(query, formatted, 'global', context.intent);
 
         // Stream response
         const streamOutcome: { incomplete?: boolean } = {};
@@ -335,7 +388,7 @@ export class RAGManager {
         // in the rendered/persisted answer (skipped on user abort — that is
         // a cancellation, not a truncation).
         if (streamOutcome.incomplete && !abortSignal?.aborted) {
-            yield '\n\n_(Answer incomplete \u2014 the model stream ended early.)_';
+            yield RAG_STREAM_INCOMPLETE_CODA;
         }
     }
 
@@ -455,6 +508,23 @@ export class RAGManager {
      */
     hasLiveChunks(): boolean {
         return this.liveIndexer.hasIndexedChunks();
+    }
+
+    /**
+     * The live index id when JIT chunks are QUERYABLE, else null (issue #552).
+     *
+     * "Running" and "has chunks" are two different questions, and every
+     * caller that wants meeting evidence needs both answered together:
+     * a meeting port scoped to an id with zero embedded chunks retrieves
+     * nothing, and one scoped to the meeting-metadata id retrieves nothing
+     * either — JIT rows are stored under the id passed to startLiveIndexing
+     * (a constant in main.ts), not under any id the meeting itself carries.
+     * This is the single source of that id for the V3 surfaces and the
+     * rag:query-live gate.
+     */
+    getLiveMeetingId(): string | null {
+        if (!this.liveIndexer.isRunning() || !this.liveIndexer.hasIndexedChunks()) return null;
+        return this.liveIndexer.getActiveMeetingId();
     }
 
     /**
@@ -662,6 +732,25 @@ export class RAGManager {
     scheduleAutoReindex(): void {
         const activeSpace = this.embeddingPipeline.getActiveSpaceKey();
         if (!activeSpace) return;
+        // Never migrate the corpus INTO a stand-in space. A pinned provider that
+        // is missing or down leaves something else active, and to
+        // getIncompatibleSpaceCount() that is indistinguishable from the user
+        // deliberately switching provider — so the sweep would clear every
+        // vector in the pinned space and re-embed the corpus at the stand-in's
+        // width, then do it all again in reverse when the pin came back.
+        // Deferred, not cancelled: promoteFallbackProvider re-arms this the
+        // moment the pinned provider is active again, and the sweep then also
+        // reconciles anything indexed at the stand-in's width in the meantime.
+        if (this.embeddingPipeline.isRunningOnUnpinnedFallback()) {
+            console.warn(
+                `[RAGManager] Deferring re-index: running on ${this.embeddingPipeline.getActiveProviderName()} `
+                + `(${activeSpace}) while the selected embedding provider is unavailable. `
+                + `Existing vectors are left in their own space and will be used again as soon as it returns.`
+            );
+            if (this._autoReindexTimer) clearTimeout(this._autoReindexTimer);
+            this._autoReindexTimer = null;
+            return;
+        }
         if (this.vectorStore.getIncompatibleSpaceCount(activeSpace) === 0) return;
         // Defer the kickoff so launch isn't slowed; _runReindex owns the in-flight guard.
         // Track the timer so a re-init (settings change) doesn't stack duplicate timers
@@ -714,6 +803,7 @@ export class RAGManager {
         const count = this.vectorStore.getIncompatibleSpaceCount(activeSpace);
         if (count === 0) {
             console.log('[RAGManager] No incompatible meetings to re-index.');
+            this._emitReindex('embedding:reindex-complete', { total: 0, space: activeSpace, partial: false });
             return;
         }
 

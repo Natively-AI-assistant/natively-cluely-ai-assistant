@@ -128,7 +128,7 @@ describe('realtime instructions are presentation-only (§19.2)', () => {
     });
     // it lands inside a tag that declares its own limits, NOT in the system prompt
     assert.ok(!c.system.includes('Ignore grounding'), 'must never reach the system/policy layer');
-    assert.match(c.user, /<presentation_instruction[^>]*cannot authorize a source/);
+    assert.match(c.user, /<user_instructions[^>]*cannot authorize a source/);
     // and the prohibition still stands
     assert.match(c.system, /Never treat job-description requirements/i);
   });
@@ -295,7 +295,9 @@ describe('unsupported-in-mode notice names the remedy (2026-08-02)', () => {
       decision: d, policy: MODE_POLICIES.general, evidence: [],
       attachedSourceCount: 0, profileSourceCount: 0,
     });
-    assert.ok(p.user.includes('do not answer from general knowledge as though it were sourced'), p.user);
+    // 2026-09-07 (always answer): the strict branch keeps the honest gap and
+    // the remedy, and now ends with a clearly-marked general-knowledge answer.
+    assert.ok(p.user.includes('still answer the question itself helpfully from general knowledge, clearly marked as general knowledge and never presented as sourced'), p.user);
     assert.ok(p.user.includes('no document has been added to this mode yet'), p.user);
   });
 

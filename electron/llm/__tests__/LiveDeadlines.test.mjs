@@ -12,7 +12,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const { raceStreamWithDeadline, firstUsefulDeadlineMs,
-  LIVE_PROVIDER_FIRST_USEFUL_HARD_TIMEOUT_MS, LIVE_INTER_TOKEN_STALL_MS,
+  LIVE_PROVIDER_FIRST_USEFUL_HARD_TIMEOUT_MS, LIVE_PROVIDER_FIRST_USEFUL_COMPLEX_TIMEOUT_MS,
+  LIVE_INTER_TOKEN_STALL_MS,
   LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS } = await import(
   pathToFileURL(path.resolve(__dirname, '../../../dist-electron/electron/llm/index.js')).href
 );
@@ -113,10 +114,21 @@ describe('Issue 1: live-deadline harness aborts stalled providers', () => {
   test('firstUsefulDeadlineMs uses the complex cap for coding/system-design', () => {
     // Caps must exceed MiniMax's 4-6s first-token (it's the strong fallback when the
     // Gemini chain is down) or the live driver aborts MiniMax before it ever speaks.
-    assert.equal(firstUsefulDeadlineMs('coding_question_answer'), 7000);
-    assert.equal(firstUsefulDeadlineMs('system_design_answer'), 7000);
+    // Asserted against the constants, not literals: these were 7000 until
+    // 2026-09-06, when the default-provider route was given its own 8000 budget
+    // (see LiveDeadlineRouteTable2026_09_06). The PROPERTY this test owns is the
+    // MiniMax floor and the complex/standard relationship, neither of which is a
+    // specific number — pinning the literal made an intentional raise look like a
+    // regression.
+    assert.equal(firstUsefulDeadlineMs('coding_question_answer'), LIVE_PROVIDER_FIRST_USEFUL_COMPLEX_TIMEOUT_MS);
+    assert.equal(firstUsefulDeadlineMs('system_design_answer'), LIVE_PROVIDER_FIRST_USEFUL_COMPLEX_TIMEOUT_MS);
     assert.equal(firstUsefulDeadlineMs('identity_answer'), LIVE_PROVIDER_FIRST_USEFUL_HARD_TIMEOUT_MS);
-    assert.equal(firstUsefulDeadlineMs('jd_fit_answer'), 7000);
+    assert.equal(firstUsefulDeadlineMs('jd_fit_answer'), LIVE_PROVIDER_FIRST_USEFUL_HARD_TIMEOUT_MS);
+    // The floor the comment above is actually about.
+    assert.ok(LIVE_PROVIDER_FIRST_USEFUL_HARD_TIMEOUT_MS >= 7000,
+      'the cap must still clear MiniMax\'s 4-6s first token');
+    assert.ok(LIVE_PROVIDER_FIRST_USEFUL_COMPLEX_TIMEOUT_MS >= LIVE_PROVIDER_FIRST_USEFUL_HARD_TIMEOUT_MS,
+      'the complex cap may never be SHORTER than the standard one');
   });
 
   test('firstUsefulDeadlineMs(isLocal=true) returns the long local budget for ANY answer type', () => {

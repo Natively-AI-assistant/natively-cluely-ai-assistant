@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Natively Fallback Models Installer for macOS
-# This script downloads and installs the required local fallback models (MiniLM, MobileBERT, Reranker)
+# This script downloads and installs the required local fallback models (MiniLM embedder, ms-marco reranker)
 # for the Natively desktop application into the application resources bundle.
 #
 # Exit immediately if a command exits with a non-zero status.
@@ -117,17 +117,12 @@ MODELS_TO_DOWNLOAD=(
   "Xenova/all-MiniLM-L6-v2/tokenizer_config.json"
   "Xenova/all-MiniLM-L6-v2/onnx/model_quantized.onnx"
   
-  # Xenova/mobilebert-uncased-mnli (Intent classifier fallback)
-  "Xenova/mobilebert-uncased-mnli/config.json"
-  "Xenova/mobilebert-uncased-mnli/tokenizer.json"
-  "Xenova/mobilebert-uncased-mnli/tokenizer_config.json"
-  "Xenova/mobilebert-uncased-mnli/onnx/model_quantized.onnx"
   
-  # Xenova/bge-reranker-base (Smart-retrieval reranker fallback)
-  "Xenova/bge-reranker-base/config.json"
-  "Xenova/bge-reranker-base/tokenizer.json"
-  "Xenova/bge-reranker-base/tokenizer_config.json"
-  "Xenova/bge-reranker-base/onnx/model_quantized.onnx"
+  # Xenova/ms-marco-MiniLM-L-6-v2 (bundled cross-encoder reranker)
+  "Xenova/ms-marco-MiniLM-L-6-v2/config.json"
+  "Xenova/ms-marco-MiniLM-L-6-v2/tokenizer.json"
+  "Xenova/ms-marco-MiniLM-L-6-v2/tokenizer_config.json"
+  "Xenova/ms-marco-MiniLM-L-6-v2/onnx/model_quantized.onnx"
 )
 
 download_file() {

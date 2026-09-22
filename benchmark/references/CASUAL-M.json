@@ -1,0 +1,1082 @@
+{
+  "id": "CASUAL-M",
+  "category": "casual_mixed",
+  "natively_mode": "general",
+  "length_bucket": "medium",
+  "speakers": [
+    {
+      "label": "S0",
+      "shown_to_model_as": "Me",
+      "name": "Dan Okafor",
+      "role": "product designer",
+      "org": "Brightline Studio"
+    },
+    {
+      "label": "S1",
+      "shown_to_model_as": "Speaker 1",
+      "name": "Priya Nair",
+      "role": "ER nurse",
+      "org": "St. Anne's Hospital"
+    },
+    {
+      "label": "S2",
+      "shown_to_model_as": "Speaker 2",
+      "name": "Tom Reyes",
+      "role": "financial analyst (leaving Pellmark, joining Halvorsen Logistics)",
+      "org": "Pellmark / Halvorsen Logistics"
+    }
+  ],
+  "context": "A casual video call among three old friends, Dan (the Natively user), Priya and Tom. About half the call is catch-up and banter (a TV finale, five-a-side football, Priya's new puppy, work complaints); interleaved throughout is the planning of a 3-night cabin trip for their friend Maya's 30th birthday, plus a secret surprise visit from Maya's brother.",
+  "facts": [
+    {
+      "id": "F01",
+      "type": "background",
+      "importance": "critical",
+      "statement": "The friends are planning a 3-night cabin trip to celebrate Maya's 30th birthday.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        54,
+        55,
+        56
+      ]
+    },
+    {
+      "id": "F02",
+      "type": "timeline",
+      "importance": "important",
+      "statement": "Maya's actual 30th birthday is Wednesday, October 21st.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        54
+      ]
+    },
+    {
+      "id": "F03",
+      "type": "decision",
+      "importance": "critical",
+      "statement": "The chosen location is Heron Point Cabin at Birchwater Lake, listed on Hearthstay, chosen over Hollins Ridge.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        69,
+        70,
+        71,
+        72
+      ]
+    },
+    {
+      "id": "F04",
+      "type": "number",
+      "importance": "important",
+      "statement": "Birchwater Lake is about a 3-hour drive, versus about 4.5 hours to Hollins Ridge.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        59
+      ]
+    },
+    {
+      "id": "F05",
+      "type": "entity",
+      "importance": "minor",
+      "statement": "Heron Point Cabin has a hot tub and three bedrooms, sleeps six, and is right on the water.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        69
+      ]
+    },
+    {
+      "id": "F06",
+      "type": "timeline",
+      "importance": "critical",
+      "statement": "The trip dates are Friday, October 23rd to Monday, October 26th.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        171,
+        177,
+        179,
+        335
+      ],
+      "notes": "supersedes the initial October 16th-19th plan (C02)"
+    },
+    {
+      "id": "F07",
+      "type": "background",
+      "importance": "important",
+      "statement": "The trip moved off the October 16th weekend because Priya (Speaker 1) is on night shifts that Friday, Saturday and Sunday and cannot swap, having already swapped twice this month.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        168,
+        169
+      ]
+    },
+    {
+      "id": "F08",
+      "type": "background",
+      "importance": "minor",
+      "statement": "The new weekend is two days after Maya's birthday; Maya also has a big work presentation on Friday the 16th.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        174,
+        175
+      ]
+    },
+    {
+      "id": "F09",
+      "type": "number",
+      "importance": "critical",
+      "statement": "The total cabin cost for three nights including fees is $1,140, and it is the same price for the October 23rd-26th dates.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        86,
+        177
+      ],
+      "notes": "explicit correction from $1,040 (C01)"
+    },
+    {
+      "id": "F10",
+      "type": "number",
+      "importance": "minor",
+      "statement": "The cabin is $325 a night plus fees; the initial total omitted the cleaning fee.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        86
+      ]
+    },
+    {
+      "id": "F11",
+      "type": "decision",
+      "importance": "important",
+      "statement": "Maya does not pay for the cabin because it is her birthday; the cost is split among the friends who attend.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        77,
+        78
+      ]
+    },
+    {
+      "id": "F12",
+      "type": "number",
+      "importance": "critical",
+      "statement": "With Mia unconfirmed, the $1,140 cabin cost is split among Dan, Priya and Tom at $380 each.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        263
+      ],
+      "notes": "supersedes $285 each with four payers (C03)"
+    },
+    {
+      "id": "F13",
+      "type": "number",
+      "importance": "important",
+      "statement": "If Mia confirms she is coming, the split goes back down to $285 each (four payers).",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        265
+      ]
+    },
+    {
+      "id": "F14",
+      "type": "person",
+      "importance": "critical",
+      "statement": "Mia Chen (Priya's book-club friend, not Maya) cannot do the October 23rd weekend because of her cousin's wedding on Saturday the 24th in Portland; she might come for the Sunday but is unconfirmed.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        81,
+        83,
+        259,
+        261
+      ],
+      "notes": "supersedes early 'Mia said she's probably in' (C08)"
+    },
+    {
+      "id": "F15",
+      "type": "action_item",
+      "importance": "important",
+      "statement": "Priya will get a firm yes or no from Mia by Sunday.",
+      "owner": "Priya",
+      "deadline": "by Sunday",
+      "position": "late",
+      "lines": [
+        267,
+        268
+      ]
+    },
+    {
+      "id": "F16",
+      "type": "action_item",
+      "importance": "critical",
+      "statement": "Dan books the cabin on Hearthstay, taking over from Priya.",
+      "owner": "Dan",
+      "deadline": "before Friday, September 25th (probably tomorrow)",
+      "position": "middle",
+      "lines": [
+        225,
+        226,
+        228,
+        336
+      ],
+      "notes": "owner change: Priya originally offered to book (C04)"
+    },
+    {
+      "id": "F17",
+      "type": "background",
+      "importance": "minor",
+      "statement": "Priya could not book because her $150 Hearthstay credit expired on September 1st and her card was flagged previously.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        223,
+        225
+      ]
+    },
+    {
+      "id": "F18",
+      "type": "number",
+      "importance": "critical",
+      "statement": "The deposit is 50% ($570) and is due by Friday, September 25th; after that the hold on the dates drops.",
+      "owner": null,
+      "deadline": "Friday, September 25th",
+      "position": "late",
+      "lines": [
+        270,
+        272
+      ],
+      "notes": "supersedes Dan's earlier guess 'end of the month' (C05)"
+    },
+    {
+      "id": "F19",
+      "type": "commitment",
+      "importance": "critical",
+      "statement": "Dan will pay the whole $570 deposit on his card and book before Friday, probably tomorrow.",
+      "owner": "Dan",
+      "deadline": "before Friday (September 25th)",
+      "position": "late",
+      "lines": [
+        273,
+        276,
+        336
+      ]
+    },
+    {
+      "id": "F20",
+      "type": "action_item",
+      "importance": "important",
+      "statement": "Priya will send Dan her $190 share of the deposit tonight.",
+      "owner": "Priya",
+      "deadline": "tonight",
+      "position": "late",
+      "lines": [
+        273,
+        274,
+        347
+      ]
+    },
+    {
+      "id": "F51",
+      "type": "action_item",
+      "importance": "important",
+      "statement": "Tom will send Dan his $190 share of the deposit by Wednesday, September 23rd (not the October 23rd trip start).",
+      "owner": "Tom",
+      "deadline": "Wednesday, September 23rd",
+      "position": "late",
+      "lines": [
+        273,
+        275,
+        276
+      ]
+    },
+    {
+      "id": "F21",
+      "type": "number",
+      "importance": "minor",
+      "statement": "The remaining $570 is charged automatically two weeks before check-in.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        278
+      ]
+    },
+    {
+      "id": "F22",
+      "type": "action_item",
+      "importance": "critical",
+      "statement": "Tom rents a seven-seat SUV from Ridgeway and will book it by October 1st.",
+      "owner": "Tom",
+      "deadline": "by October 1st",
+      "position": "late",
+      "lines": [
+        233,
+        303
+      ]
+    },
+    {
+      "id": "F23",
+      "type": "number",
+      "importance": "minor",
+      "statement": "Ridgeway SUVs cost about $64 a day.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        233
+      ]
+    },
+    {
+      "id": "F24",
+      "type": "logistics",
+      "importance": "critical",
+      "statement": "Departure is 9:30 on Friday, October 23rd: Tom picks up the SUV and everyone meets at Priya's place on Calloway Street.",
+      "owner": null,
+      "deadline": "Friday, October 23rd, 9:30",
+      "position": "late",
+      "lines": [
+        305,
+        306,
+        307,
+        308,
+        310
+      ],
+      "notes": "implicitly supersedes Tom's 'pick everyone up at like 8' (C06)"
+    },
+    {
+      "id": "F25",
+      "type": "logistics",
+      "importance": "important",
+      "statement": "Tom will pick up Maya on the way to Priya's, since Maya lives two streets over from him.",
+      "owner": "Tom",
+      "deadline": "Friday, October 23rd",
+      "position": "late",
+      "lines": [
+        309
+      ]
+    },
+    {
+      "id": "F26",
+      "type": "requirement",
+      "importance": "critical",
+      "statement": "Maya is celiac and strictly gluten-free; cross-contamination matters (separate toaster and chopping board).",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        142,
+        145,
+        338
+      ],
+      "notes": "corrects Tom's false assumption that Maya is vegetarian"
+    },
+    {
+      "id": "F27",
+      "type": "entity",
+      "importance": "important",
+      "statement": "Mia, not Maya, is the vegetarian.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        140,
+        338
+      ]
+    },
+    {
+      "id": "F28",
+      "type": "requirement",
+      "importance": "critical",
+      "statement": "Heron Point Cabin allows no pets of any kind (with a $250 fee if pet hair is found), so Priya's puppy Waffles cannot come.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        161,
+        163,
+        164
+      ],
+      "notes": "corrects Priya's assumption that the listing was pet friendly"
+    },
+    {
+      "id": "F29",
+      "type": "action_item",
+      "importance": "minor",
+      "statement": "Priya will ask her sister Anjali to look after Waffles that weekend.",
+      "owner": "Priya",
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        166
+      ]
+    },
+    {
+      "id": "F30",
+      "type": "decision",
+      "importance": "critical",
+      "statement": "The group decided against hiring a private chef (about $600) for the Saturday birthday dinner; they will cook themselves.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        181,
+        182,
+        183
+      ],
+      "notes": "floated by Tom at line 129"
+    },
+    {
+      "id": "F31",
+      "type": "commitment",
+      "importance": "important",
+      "statement": "Tom will cook Saturday dinner, a gluten-free lasagna.",
+      "owner": "Tom",
+      "deadline": "Saturday of the trip",
+      "position": "middle",
+      "lines": [
+        184
+      ]
+    },
+    {
+      "id": "F32",
+      "type": "background",
+      "importance": "critical",
+      "statement": "Surprise: Maya's brother Jonah is flying in from Denver, landing on the afternoon of Saturday the 24th, to walk in right before dinner.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        280,
+        281,
+        282,
+        284
+      ]
+    },
+    {
+      "id": "F33",
+      "type": "requirement",
+      "importance": "critical",
+      "statement": "Jonah's visit must stay completely secret from Maya: nothing in the birthday group chat (Maya is in it), only in the separate chat Operation Heron.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        286,
+        287,
+        291
+      ]
+    },
+    {
+      "id": "F34",
+      "type": "action_item",
+      "importance": "minor",
+      "statement": "Priya created the Operation Heron chat and will add Dan and Tom after the call.",
+      "owner": "Priya",
+      "deadline": "after the call",
+      "position": "late",
+      "lines": [
+        289
+      ]
+    },
+    {
+      "id": "F35",
+      "type": "decision",
+      "importance": "critical",
+      "statement": "The group gift is the green Polaroid camera ($179), with a gift budget of $60 each ($180 total).",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        242,
+        321,
+        323,
+        324
+      ],
+      "notes": "implicitly supersedes Dan's $50 each (C07)"
+    },
+    {
+      "id": "F36",
+      "type": "action_item",
+      "importance": "important",
+      "statement": "Priya buys the Polaroid, ordering it by October 16th; Dan and Tom each send her $60.",
+      "owner": "Priya",
+      "deadline": "by October 16th",
+      "position": "late",
+      "lines": [
+        326,
+        327
+      ]
+    },
+    {
+      "id": "F37",
+      "type": "background",
+      "importance": "important",
+      "statement": "Tom's last day at Pellmark is October 9th.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        16
+      ]
+    },
+    {
+      "id": "F38",
+      "type": "background",
+      "importance": "important",
+      "statement": "Tom starts as a senior financial analyst at Halvorsen Logistics on Monday, November 2nd.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        17,
+        251
+      ]
+    },
+    {
+      "id": "F39",
+      "type": "background",
+      "importance": "minor",
+      "statement": "Halvorsen is hybrid (two days from home) and will pay for Tom's CFA level two certification if he wants it.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        249,
+        255
+      ]
+    },
+    {
+      "id": "F40",
+      "type": "background",
+      "importance": "minor",
+      "statement": "Priya is moving to day shifts in November.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        127
+      ]
+    },
+    {
+      "id": "F41",
+      "type": "background",
+      "importance": "minor",
+      "statement": "Dan's rent is going up $200 a month when his lease renews in January, and he is apartment hunting.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        198,
+        202
+      ]
+    },
+    {
+      "id": "F42",
+      "type": "background",
+      "importance": "minor",
+      "statement": "Priya has an 11-week-old beagle puppy named Waffles.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        24,
+        26,
+        27
+      ]
+    },
+    {
+      "id": "F43",
+      "type": "decision",
+      "importance": "important",
+      "statement": "Everyone travels together in one car rather than driving separately (Dan does not trust his car).",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        312,
+        313,
+        314
+      ]
+    },
+    {
+      "id": "F44",
+      "type": "decision",
+      "importance": "important",
+      "statement": "The trip stays at three nights; Tom's idea of a fourth night to Tuesday was dropped because Priya works Tuesday.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        329,
+        330
+      ]
+    },
+    {
+      "id": "F45",
+      "type": "open_question",
+      "importance": "important",
+      "statement": "Open: whether Mia will come at all.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        342
+      ]
+    },
+    {
+      "id": "F46",
+      "type": "open_question",
+      "importance": "important",
+      "statement": "Open: how Jonah gets from the airport to the cabin (about three hours away; the group's only car will be at the lake).",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        299,
+        301,
+        342
+      ]
+    },
+    {
+      "id": "F47",
+      "type": "open_question",
+      "importance": "minor",
+      "statement": "Open: whether to rent kayaks on Birchwater (about $45 per person for a half day).",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        192,
+        196,
+        343
+      ]
+    },
+    {
+      "id": "F48",
+      "type": "open_question",
+      "importance": "important",
+      "statement": "Nobody has checked for a grocery store near the cabin that stocks gluten-free food; raised as 'someone should' with no owner.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        146,
+        147,
+        344
+      ],
+      "notes": "vague action item, no owner"
+    },
+    {
+      "id": "F49",
+      "type": "action_item",
+      "importance": "minor",
+      "statement": "Someone should make a playlist for the drive; no owner (Tom explicitly declined).",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        332,
+        334
+      ],
+      "notes": "vague action item, no owner"
+    },
+    {
+      "id": "F50",
+      "type": "background",
+      "importance": "minor",
+      "statement": "Jonah has not seen Maya in about fourteen months, since he moved to Denver.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        296,
+        297
+      ]
+    }
+  ],
+  "corrections": [
+    {
+      "id": "C01",
+      "what": "Total cabin cost for three nights",
+      "initial_value": "$1,040 (implying $260 each with four payers)",
+      "initial_line": 76,
+      "final_value": "$1,140",
+      "final_line": 86,
+      "explicit": true,
+      "fact_id": "F09"
+    },
+    {
+      "id": "C02",
+      "what": "Trip dates",
+      "initial_value": "Friday October 16th to Monday October 19th",
+      "initial_line": 73,
+      "final_value": "Friday October 23rd to Monday October 26th (moved because Priya is on nights the 16th weekend)",
+      "final_line": 179,
+      "explicit": true,
+      "fact_id": "F06"
+    },
+    {
+      "id": "C03",
+      "what": "Per-person cabin share",
+      "initial_value": "$285 each with four payers (Mia assumed in)",
+      "initial_line": 87,
+      "final_value": "$380 each among Dan, Priya and Tom (Mia unconfirmed); $285 only if Mia confirms",
+      "final_line": 263,
+      "explicit": true,
+      "fact_id": "F12"
+    },
+    {
+      "id": "C04",
+      "what": "Who books the cabin",
+      "initial_value": "Priya (using her Hearthstay credit)",
+      "initial_line": 89,
+      "final_value": "Dan",
+      "final_line": 226,
+      "explicit": true,
+      "fact_id": "F16"
+    },
+    {
+      "id": "C05",
+      "what": "Deposit deadline",
+      "initial_value": "end of the month (Dan's guess)",
+      "initial_line": 230,
+      "final_value": "Friday, September 25th",
+      "final_line": 270,
+      "explicit": true,
+      "fact_id": "F18"
+    },
+    {
+      "id": "C06",
+      "what": "Friday departure time/place",
+      "initial_value": "Tom picks everyone up at about 8 a.m.",
+      "initial_line": 235,
+      "final_value": "9:30 at Priya's place on Calloway Street",
+      "final_line": 308,
+      "explicit": false,
+      "fact_id": "F24"
+    },
+    {
+      "id": "C07",
+      "what": "Gift budget per person",
+      "initial_value": "$50 each",
+      "initial_line": 240,
+      "final_value": "$60 each ($180 total, for the $179 Polaroid)",
+      "final_line": 323,
+      "explicit": false,
+      "fact_id": "F35"
+    },
+    {
+      "id": "C08",
+      "what": "Whether Mia is coming",
+      "initial_value": "Mia said she's probably in",
+      "initial_line": 79,
+      "final_value": "Mia can't do the 23rd (cousin's wedding on the 24th); maybe Sunday, unconfirmed",
+      "final_line": 259,
+      "explicit": true,
+      "fact_id": "F14"
+    }
+  ],
+  "not_decisions": [
+    {
+      "statement": "Hiring a private chef (about $600) for Saturday dinner - floated by Tom, parked, then explicitly rejected",
+      "lines": [
+        129,
+        133,
+        182
+      ]
+    },
+    {
+      "statement": "Renting kayaks on Birchwater (~$45 per person) - left as a maybe, not decided",
+      "lines": [
+        192,
+        196,
+        343
+      ]
+    },
+    {
+      "statement": "Ordering a gluten-free cake from Crumb and Kettle, or baking one at the cabin - left as a maybe",
+      "lines": [
+        188,
+        191
+      ]
+    },
+    {
+      "statement": "Extending to four nights (staying until Tuesday) - floated by Tom and dropped",
+      "lines": [
+        328,
+        330
+      ]
+    },
+    {
+      "statement": "Driving separately in two cars - floated by Tom and rejected in favor of one car",
+      "lines": [
+        311,
+        314
+      ]
+    },
+    {
+      "statement": "Going to Hollins Ridge instead of Birchwater Lake - rejected as too far",
+      "lines": [
+        57,
+        59
+      ]
+    },
+    {
+      "statement": "Bringing Priya's puppy Waffles on the trip - not allowed",
+      "lines": [
+        91,
+        164
+      ]
+    },
+    {
+      "statement": "Mia doing the card and flowers if she comes - a passing suggestion, not agreed",
+      "lines": [
+        324
+      ]
+    },
+    {
+      "statement": "Priya booking the cabin with her Hearthstay credit - superseded, Dan books",
+      "lines": [
+        89,
+        90
+      ]
+    }
+  ],
+  "distractors": [
+    {
+      "statement": "Harbor Lights finale debate (Marguerite killed off in forty seconds; possible non-renewal)",
+      "lines": [
+        39,
+        43,
+        155
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "STT mis-recognition 'Harper Lights' for the show Harbor Lights",
+      "lines": [
+        48
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Tom's five-a-side team the Wanderers lost six-two with Tom in goal for the second half",
+      "lines": [
+        97,
+        100,
+        102
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Sunday football match and the disputed penalty",
+      "lines": [
+        109,
+        111
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Dan's reorg pre-meeting with Graham and a 22-slide deck",
+      "lines": [
+        117,
+        119
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Waffles eating chargers and a clog, puppy class with trainer Brenda, biting the vet's stethoscope",
+      "lines": [
+        27,
+        34,
+        36
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Previous Hollins Ridge trip: one album nine times, broken heater, Maya's sleeping bag",
+      "lines": [
+        62,
+        63,
+        65
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Priya's twelve-and-a-half hour shift three nurses short; ER patient who glued his hand to a ladder",
+      "lines": [
+        123,
+        215
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Tom's five-round Halvorsen interview where his laptop died; his two-monitor desk setup",
+      "lines": [
+        210,
+        212,
+        247
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Weather in late October around fifty by day and near freezing at night; Tom's old fleece",
+      "lines": [
+        316,
+        318
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Tom once told Priya about her own surprise party",
+      "lines": [
+        293
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "False assumption: the cabin is pet friendly / Waffles can come (Priya)",
+      "lines": [
+        91,
+        162
+      ],
+      "why": "false assumption later corrected"
+    },
+    {
+      "statement": "False assumption: Maya is vegetarian (Tom) - that is Mia; Maya is celiac",
+      "lines": [
+        139,
+        140
+      ],
+      "why": "false assumption later corrected"
+    },
+    {
+      "statement": "Similar-sounding names trap: Maya (birthday person) vs Mia Chen (possible fourth payer) vs a different Mia from Maya's work who moved to London",
+      "lines": [
+        80,
+        81,
+        82
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Similar-sounding detail: two different cousins' weddings: Maya got sick at her cousin's wedding; Mia's cousin's wedding is October 24th",
+      "lines": [
+        143,
+        259
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Superseded values: total $1,040 and $260 each",
+      "lines": [
+        76,
+        84
+      ],
+      "why": "superseded value"
+    },
+    {
+      "statement": "Superseded dates: October 16th-19th weekend",
+      "lines": [
+        73
+      ],
+      "why": "superseded value"
+    },
+    {
+      "statement": "Superseded: $285 each (four payers) as the current split",
+      "lines": [
+        87,
+        88
+      ],
+      "why": "superseded value"
+    },
+    {
+      "statement": "Superseded: pickup 'at like 8'",
+      "lines": [
+        235
+      ],
+      "why": "superseded value"
+    },
+    {
+      "statement": "Superseded: $50 each gift budget",
+      "lines": [
+        240
+      ],
+      "why": "superseded value"
+    },
+    {
+      "statement": "Multiple dates in play: 'Wednesday the 23rd' is September 23rd (Tom's $190 deadline), not the October 23rd trip start",
+      "lines": [
+        276
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Priya's $150 Hearthstay credit from a cancelled Lisbon booking (expired, not usable)",
+      "lines": [
+        89
+      ],
+      "why": "superseded value"
+    },
+    {
+      "statement": "Rejected idea costs: the $600 private chef and the extra $150 per person it would add",
+      "lines": [
+        133,
+        135
+      ],
+      "why": "superseded value"
+    },
+    {
+      "statement": "Maya's work presentation on the 16th",
+      "lines": [
+        175
+      ],
+      "why": "irrelevant"
+    }
+  ],
+  "open_questions_at_end": [
+    "Whether Mia Chen will come (she has a cousin's wedding on October 24th; maybe Sunday) - determines $380 vs $285 each; Priya to get an answer by Sunday",
+    "How Jonah will get from the airport to the cabin (about three hours; the group's one car will be at the lake)",
+    "Whether to rent kayaks on Birchwater",
+    "Nobody has checked for a gluten-free-friendly grocery store near the cabin",
+    "Whether to order (Crumb and Kettle) or bake a gluten-free cake; who makes the drive playlist"
+  ],
+  "summary_must_include": [
+    "3-night cabin trip for Maya's 30th at Heron Point Cabin, Birchwater Lake (F01, F03)",
+    "Dates moved to Fri Oct 23 - Mon Oct 26 because Priya is on nights the Oct 16 weekend (F06, F07)",
+    "Total $1,140 (corrected from $1,040); $380 each for Dan, Priya, Tom, or $285 if Mia confirms (F09, F12, F13)",
+    "Mia can't make the 23rd (cousin's wedding) and is unconfirmed; Priya gets a yes/no by Sunday (F14, F15)",
+    "Dan books the cabin (took over from Priya) and pays the $570 deposit due Fri Sept 25; Priya and Tom send $190 each (F16, F18, F19, F20, F51)",
+    "Tom rents a 7-seat Ridgeway SUV by Oct 1; everyone meets at Priya's on Calloway Street at 9:30 Fri Oct 23 (F22, F24)",
+    "Maya is celiac/strictly gluten-free, and the cabin allows no pets (F26, F28)",
+    "Private chef rejected; Tom cooks gluten-free lasagna Saturday (F30, F31)",
+    "Secret surprise: brother Jonah flies in from Denver Sat Oct 24; discuss only in the Operation Heron chat, not the group chat with Maya (F32, F33)",
+    "Gift: $179 green Polaroid at $60 each; Priya orders it by Oct 16 (F35, F36)",
+    "Tom starts at Halvorsen Logistics on Nov 2 (last day at Pellmark Oct 9) (F37, F38)",
+    "Open: Mia, Jonah's airport-to-cabin transport, kayaks, gluten-free grocery store (F45, F46, F47, F48)"
+  ]
+}

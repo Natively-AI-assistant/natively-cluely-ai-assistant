@@ -1,0 +1,390 @@
+{
+ "blind_id": "S-267a738f",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 94353,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 32378,
+  "candidatesTokenCount": 2014,
+  "totalTokenCount": 46179,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 32378
+   }
+  ],
+  "thoughtsTokenCount": 11787,
+  "serviceTier": "standard"
+ },
+ "fact_count": 82,
+ "evaluation": {
+  "factual_accuracy": 4,
+  "important_information_retention": 7,
+  "hallucination_control": 3,
+  "action_item_retention": 8,
+  "decision_retention": 8,
+  "speaker_attribution": 6,
+  "numeric_accuracy": 9,
+  "entity_retention": 7,
+  "timeline_accuracy": 4,
+  "conclusion_accuracy": 6,
+  "structure": 2,
+  "conciseness": 2,
+  "readability": 3,
+  "overall_summary_quality": 3,
+  "critical_errors": [
+   "Contextual hallucination: The notes categorize the candidate's technical design answers (e.g., using a unique constraint for idempotency, using a transactional outbox) as current Decisions made by the interviewing team.",
+   "Contextual hallucination: The notes assign past actions from the candidate's incident stories (e.g., shipping the reconciliation alert, tracking post-incident actions) as current Action Items with deadlines.",
+   "Factual error/Contradiction: The notes state that the failure behavior for Redis-based global rate limiting was not answered, which contradicts both the transcript and the notes' own earlier summary of the fallback behavior.",
+   "Factual error: The notes claim that whether Marcus shipped the reconciliation alert in time remains unanswered, contradicting the transcript where he explicitly states he shipped it in week five."
+  ],
+  "missing_important_information": [
+   "Priya Raman's name and role as the Engineering Manager running the interview.",
+   "Alex Brandt's name and his reason for joining late.",
+   "The size of the Payments Platform team (seven engineers including Ines).",
+   "The specific services owned by the Tessellate Payments Platform team.",
+   "The fact that Tessellate postmortems are blameless and action items are reviewed weekly."
+  ],
+  "hallucinated_information": [
+   "Stating that the failure behavior for Redis-based global rate limiting was not answered.",
+   "Stating that whether Marcus successfully shipped the near-real-time reconciliation alert remains unanswered.",
+   "Presenting the candidate's design proposals as team decisions.",
+   "Presenting the candidate's past actions as current action items."
+  ],
+  "superseded_values_reported": [],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "missing"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "missing"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "partial"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "missing"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "partial"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "partial"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "partial"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "partial"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "partial"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "present"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "partial"
+   },
+   {
+    "id": "F33",
+    "status": "contradicted"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "present"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "partial"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "contradicted"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "missing"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "partial"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "missing"
+   },
+   {
+    "id": "F53",
+    "status": "missing"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "present"
+   },
+   {
+    "id": "F57",
+    "status": "partial"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "present"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   },
+   {
+    "id": "F62",
+    "status": "present"
+   },
+   {
+    "id": "F63",
+    "status": "present"
+   },
+   {
+    "id": "F64",
+    "status": "present"
+   },
+   {
+    "id": "F65",
+    "status": "partial"
+   },
+   {
+    "id": "F66",
+    "status": "present"
+   },
+   {
+    "id": "F67",
+    "status": "present"
+   },
+   {
+    "id": "F68",
+    "status": "missing"
+   },
+   {
+    "id": "F69",
+    "status": "present"
+   },
+   {
+    "id": "F70",
+    "status": "present"
+   },
+   {
+    "id": "F71",
+    "status": "present"
+   },
+   {
+    "id": "F72",
+    "status": "present"
+   },
+   {
+    "id": "F73",
+    "status": "present"
+   },
+   {
+    "id": "F74",
+    "status": "present"
+   },
+   {
+    "id": "F75",
+    "status": "present"
+   },
+   {
+    "id": "F76",
+    "status": "present"
+   },
+   {
+    "id": "F77",
+    "status": "present"
+   },
+   {
+    "id": "F78",
+    "status": "present"
+   },
+   {
+    "id": "F79",
+    "status": "present"
+   },
+   {
+    "id": "F80",
+    "status": "present"
+   },
+   {
+    "id": "F81",
+    "status": "present"
+   },
+   {
+    "id": "F82",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture a significant amount of detail from the interview but suffer from severe structural and contextual failures. The most critical error is the misuse of the structured blocks: the candidate's technical design answers and past incident stories are hallucinated as current Action Items, Decisions, Open Questions, and Risks for the interviewing team. Furthermore, the notes contain direct factual contradictions, such as claiming the Redis fallback behavior and the reconciliation alert timeline were left unanswered, despite summarizing the answers elsewhere or contradicting the transcript. The text is also extremely repetitive, restating the same points across almost every section, and fails to identify the interviewers by name."
+ }
+}

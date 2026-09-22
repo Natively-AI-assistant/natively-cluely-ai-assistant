@@ -1,0 +1,1219 @@
+{
+  "id": "TECH-DISC-L",
+  "category": "technical_discussion",
+  "natively_mode": "general",
+  "length_bucket": "long",
+  "speakers": [
+    {
+      "label": "S0",
+      "shown_to_model_as": "Me",
+      "name": "Dana Okafor",
+      "role": "Tech Lead, Platform Team",
+      "org": "Kestrel Health"
+    },
+    {
+      "label": "S1",
+      "shown_to_model_as": "Speaker 1",
+      "name": "Ravi Menon",
+      "role": "Staff Engineer, Platform Team",
+      "org": "Kestrel Health"
+    },
+    {
+      "label": "S2",
+      "shown_to_model_as": "Speaker 2",
+      "name": "Pam Whitfield",
+      "role": "Site Reliability Engineer",
+      "org": "Kestrel Health"
+    },
+    {
+      "label": "S3",
+      "shown_to_model_as": "Speaker 3",
+      "name": "Sam Kowalczyk",
+      "role": "Backend Engineer, Platform Team",
+      "org": "Kestrel Health"
+    },
+    {
+      "label": "S4",
+      "shown_to_model_as": "Speaker 4",
+      "name": "Grace Liang",
+      "role": "Director of Engineering",
+      "org": "Kestrel Health"
+    }
+  ],
+  "context": "An internal engineering meeting at Kestrel Health, a patient appointment-reminder platform, held two days after a notification pipeline outage on September 8th. The first part is a mini post-incident review; the rest debates keeping RabbitMQ versus migrating to Kafka (MSK) or SQS/SNS, plus outbox, idempotency, DLQ, autoscaling and alerting fixes, with the engineering director joining late to make the final call.",
+  "facts": [
+    {
+      "id": "F01",
+      "type": "timeline",
+      "importance": "critical",
+      "statement": "The notification pipeline outage under review happened on Tuesday, September 8th.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        22
+      ]
+    },
+    {
+      "id": "F02",
+      "type": "timeline",
+      "importance": "important",
+      "statement": "At 14:02 notif-worker version 2.14.0 (the RabbitMQ consumer that sends SMS via Twilio and email via SendGrid) was deployed.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        28
+      ]
+    },
+    {
+      "id": "F03",
+      "type": "definition",
+      "importance": "important",
+      "statement": "notif-worker is the consumer service; notify-gateway is the HTTP service clinics call that publishes onto the queue.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        29
+      ]
+    },
+    {
+      "id": "F04",
+      "type": "timeline",
+      "importance": "important",
+      "statement": "The first alert fired at 14:19: the queue depth alert on notifications.v2 when depth crossed 50,000 messages.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        33
+      ]
+    },
+    {
+      "id": "F05",
+      "type": "timeline",
+      "importance": "minor",
+      "statement": "Pam declared a SEV-2 at 14:31; it was upgraded to SEV-1 at 15:10 as depth passed 400,000 and clinics called customer success.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        34,
+        38
+      ]
+    },
+    {
+      "id": "F06",
+      "type": "timeline",
+      "importance": "important",
+      "statement": "At 14:45 Sam rolled notif-worker back to 2.13.2, and the rollback did not help.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        36,
+        37
+      ]
+    },
+    {
+      "id": "F07",
+      "type": "number",
+      "importance": "critical",
+      "statement": "The backlog peaked at 1.8 million messages at 16:40.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        39
+      ]
+    },
+    {
+      "id": "F08",
+      "type": "timeline",
+      "importance": "important",
+      "statement": "At 16:52 Sam manually flipped RETRY_MODE back to delayed, which stopped the bleeding; the backlog drained by 18:35 and the incident was resolved at 19:12.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        41,
+        84
+      ]
+    },
+    {
+      "id": "F09",
+      "type": "number",
+      "importance": "critical",
+      "statement": "The incident lasted 4 hours and 53 minutes, from first alert at 14:19 to resolution at 19:12.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        42
+      ]
+    },
+    {
+      "id": "F10",
+      "type": "number",
+      "importance": "critical",
+      "statement": "p99 end-to-end delivery latency was 2.1 seconds before the incident and reached 47 minutes at the worst point.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        44,
+        45
+      ]
+    },
+    {
+      "id": "F11",
+      "type": "number",
+      "importance": "important",
+      "statement": "After the fix p99 delivery latency is 3.4 seconds, still above the 2.1 second baseline.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        47
+      ]
+    },
+    {
+      "id": "F12",
+      "type": "number",
+      "importance": "important",
+      "statement": "The Twilio 429 (rate-limited) rate went from a baseline of about 0.2% of sends to 38% at peak.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        49
+      ]
+    },
+    {
+      "id": "F13",
+      "type": "number",
+      "importance": "minor",
+      "statement": "The overall notification failure rate (not delivered within the reminder window) was 11% for the incident window.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        51
+      ]
+    },
+    {
+      "id": "F14",
+      "type": "number",
+      "importance": "critical",
+      "statement": "420 clinics were affected by the outage (per delivery logs, confirmed by customer success).",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        196,
+        276
+      ],
+      "notes": "supersedes the initial 312 figure (C01)"
+    },
+    {
+      "id": "F15",
+      "type": "number",
+      "importance": "critical",
+      "statement": "About 61,000 patients received late reminders and 9,400 patients received duplicate SMS messages.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        52,
+        276
+      ]
+    },
+    {
+      "id": "F16",
+      "type": "background",
+      "importance": "important",
+      "statement": "notif-worker 2.14.0 raised RabbitMQ prefetch from 10 to 200, causing OOM kills (Pam counted 212 OOM kills between 14:20 and 16:50) - an amplifier, not the root cause.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        56,
+        59
+      ],
+      "notes": "initial root-cause theory, later refined (C02)"
+    },
+    {
+      "id": "F17",
+      "type": "pain_point",
+      "importance": "critical",
+      "statement": "The dead-letter queue was never enabled on notifications.v2: the Terraform policy pattern used a hyphen (notifications-v2) instead of a dot, so failed messages requeued forever and the DLQ has always had zero messages.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        65,
+        67,
+        71
+      ]
+    },
+    {
+      "id": "F18",
+      "type": "pain_point",
+      "importance": "important",
+      "statement": "notif-worker is not on the Argo Rollouts canary pipeline (only notify-gateway and the scheduler are); it deploys straight to all replicas.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        73
+      ]
+    },
+    {
+      "id": "F19",
+      "type": "conclusion",
+      "importance": "critical",
+      "statement": "Refined root cause: the RETRY_MODE=inline ConfigMap change shipped with 2.14.0 made every retryable provider error an immediate nack/requeue with no backoff, creating a retry storm against Twilio.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        86
+      ],
+      "notes": "supersedes initial prefetch/OOM theory (C02)"
+    },
+    {
+      "id": "F20",
+      "type": "background",
+      "importance": "important",
+      "statement": "The rollback did not help because the Helm rollback only rolled back the image; the ConfigMap lives in a separate chart, so 2.13.2 also ran with RETRY_MODE inline.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        82
+      ]
+    },
+    {
+      "id": "F21",
+      "type": "entity",
+      "importance": "important",
+      "statement": "The trigger was a 240,000-reminder bulk batch uploaded by Northgate Medical Group through notify-gateway at 14:00.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        90
+      ]
+    },
+    {
+      "id": "F22",
+      "type": "pain_point",
+      "importance": "important",
+      "statement": "KEDA scaled notif-worker on queue depth from 8 to 40 pods (max replicas 40), producing about 240 attempted sends per second against Twilio's 100 messages/second short code limit.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        93,
+        94
+      ]
+    },
+    {
+      "id": "F23",
+      "type": "background",
+      "importance": "important",
+      "statement": "The duplicates came mainly from pods being OOM killed after Twilio accepted a message but before the RabbitMQ ack; there is no idempotency check on the send side.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        99
+      ]
+    },
+    {
+      "id": "F24",
+      "type": "number",
+      "importance": "critical",
+      "statement": "About 2,300 notifications were never sent: notify-gateway wrote them to Postgres but publisher confirms timed out (after 5 seconds) and they were never published (dual-write problem).",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        104,
+        107
+      ]
+    },
+    {
+      "id": "F25",
+      "type": "requirement",
+      "importance": "critical",
+      "statement": "Code freeze for peak season is October 23rd; open enrollment starts November 1st and notification volume roughly triples through mid December.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        116,
+        118
+      ]
+    },
+    {
+      "id": "F26",
+      "type": "number",
+      "importance": "important",
+      "statement": "Current volume is about 3 million messages a day (~90 million a month), about 9 million a day at peak.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        117
+      ]
+    },
+    {
+      "id": "F27",
+      "type": "requirement",
+      "importance": "important",
+      "statement": "The platform team is four engineers (Dana, Ravi, Sam, and Joaquin, who is on parental leave until September 21st); Pam is an SRE shared across three teams at about half time.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        120,
+        121
+      ]
+    },
+    {
+      "id": "F28",
+      "type": "requirement",
+      "importance": "critical",
+      "statement": "The RabbitMQ cluster costs about $3,800 a month; the messaging budget ceiling is $6,000 a month, and Grace cannot raise it before the next fiscal year starting in February.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        122,
+        287
+      ]
+    },
+    {
+      "id": "F29",
+      "type": "requirement",
+      "importance": "critical",
+      "statement": "HIPAA: payloads contain PHI, so any service must be covered by the AWS BAA, encrypted at rest with customer managed KMS keys, and PHI may not sit in a broker longer than 14 days.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        123
+      ]
+    },
+    {
+      "id": "F30",
+      "type": "risk",
+      "importance": "minor",
+      "statement": "An auditor finding from March (RabbitMQ inter-node traffic not using TLS) is still open with an end-of-year due date.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        124
+      ]
+    },
+    {
+      "id": "F31",
+      "type": "preference",
+      "importance": "important",
+      "statement": "Ravi advocated migrating to Kafka 3.6 on Amazon MSK before peak, citing replay, consumer-lag backpressure and per-clinic ordering.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        127,
+        134
+      ]
+    },
+    {
+      "id": "F32",
+      "type": "background",
+      "importance": "minor",
+      "statement": "Ravi's Kafka case drew on a QCon San Francisco talk from a food delivery company that had a similar retry-storm outage.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        137
+      ]
+    },
+    {
+      "id": "F33",
+      "type": "number",
+      "importance": "critical",
+      "statement": "MSK would cost about $5,200 a month steady state (three kafka.m5.xlarge brokers incl. cross-AZ transfer, modelled on the data team's bill), and about $9,000 a month while dual-running with RabbitMQ.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        169,
+        170,
+        171,
+        175
+      ],
+      "notes": "supersedes Ravi's $1,900 estimate (C03)"
+    },
+    {
+      "id": "F34",
+      "type": "number",
+      "importance": "important",
+      "statement": "Sam estimated the Kafka migration at 10 to 12 weeks for two people (quiet hours logic, retry topics), which would miss the October 23rd freeze.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        185
+      ],
+      "notes": "supersedes Ravi's six-week estimate (C04)"
+    },
+    {
+      "id": "F35",
+      "type": "conclusion",
+      "importance": "important",
+      "statement": "Kafka would not by itself fix the retry storm, missing DLQ or autoscaling problem; Ravi conceded the retry storm is a consumer design problem, not a broker problem.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        190,
+        194
+      ]
+    },
+    {
+      "id": "F36",
+      "type": "number",
+      "importance": "important",
+      "statement": "Pam estimated SQS plus SNS at $600-$1,100 a month (using $1,100), about $2,500 in 3x peak months, with built-in redrive DLQ, visibility-timeout backoff, BAA coverage and KMS CMK support.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        203,
+        206
+      ]
+    },
+    {
+      "id": "F37",
+      "type": "caveat",
+      "importance": "important",
+      "statement": "SQS caveats: 256 KB message size limit (insurance card email payloads may be large), standard queues are unordered and at-least-once, and there is no replay.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        208
+      ]
+    },
+    {
+      "id": "F38",
+      "type": "number",
+      "importance": "important",
+      "statement": "Option one (stay on RabbitMQ): upgrade 3.11.9 to 3.13.7, move notifications.v2 from classic mirrored to quorum queues, costing about $4,300 a month and about three weeks of work.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        218,
+        223,
+        227
+      ]
+    },
+    {
+      "id": "F39",
+      "type": "decision",
+      "importance": "important",
+      "statement": "notify-gateway will adopt the transactional outbox pattern: an outbox row in the same Postgres 14 transaction plus a relay running as its own deployment with its own alert.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        233,
+        234
+      ]
+    },
+    {
+      "id": "F40",
+      "type": "decision",
+      "importance": "critical",
+      "statement": "Idempotency will use a Postgres delivery_attempts table with a unique index on notification ID plus channel, not Redis.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        241,
+        243
+      ],
+      "notes": "supersedes Sam's Redis SETNX 24h TTL idea (C05)"
+    },
+    {
+      "id": "F41",
+      "type": "decision",
+      "importance": "critical",
+      "statement": "notif-worker max replicas will be capped at 16 (16 x 6 concurrent sends = 96/s, under Twilio's 100/s), down from 40, with a per-provider token bucket rate limiter and scaling on oldest message age instead of depth.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        249,
+        251,
+        328
+      ],
+      "notes": "supersedes proposed 20 (C06)"
+    },
+    {
+      "id": "F42",
+      "type": "conclusion",
+      "importance": "minor",
+      "statement": "p99 is still 3.4 seconds (vs the 2.1 second baseline) because 2.14.1, rolled out Wednesday, still runs prefetch 200 with a raised memory limit; Sam expects dropping prefetch to 30 to recover it.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        47,
+        268
+      ]
+    },
+    {
+      "id": "F43",
+      "type": "decision",
+      "importance": "critical",
+      "statement": "New alerts: page when oldest message age on notifications.v2 exceeds 180 seconds for 5 minutes; page when Twilio 429 rate exceeds 2% for 5 minutes; ticket when the DLQ has any message; page when the DLQ exceeds 500 messages.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        323,
+        325
+      ],
+      "notes": "age threshold supersedes 120 seconds (C07); replaces the 50,000 depth page"
+    },
+    {
+      "id": "F44",
+      "type": "decision",
+      "importance": "critical",
+      "statement": "Final decision (made by Grace, confirmed by Dana): stay on RabbitMQ for peak season with the 3.13 upgrade, quorum queues and consumer fixes.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        295,
+        298
+      ],
+      "notes": "implicit supersession of the midpoint tentative Kafka direction (C08)"
+    },
+    {
+      "id": "F45",
+      "type": "decision",
+      "importance": "critical",
+      "statement": "Kafka on MSK is rejected, not before peak and not on the post-peak roadmap unless something changes: $5,200 steady/$9,000 dual-run exceed the $6,000 ceiling, 10-12 weeks misses the freeze, it does not address the root cause, and the team lacks Kafka operations experience.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        294,
+        298
+      ]
+    },
+    {
+      "id": "F46",
+      "type": "decision",
+      "importance": "critical",
+      "statement": "SQS/SNS gets a timeboxed prototype now, with the migration decision at the January 13th architecture review.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        298,
+        301
+      ]
+    },
+    {
+      "id": "F47",
+      "type": "action_item",
+      "importance": "critical",
+      "statement": "Sam deletes the inline retry mode and implements exponential backoff on the delayed exchange (1s, 5s, 30s, 2m, 10m, max five attempts, then dead letter) plus a Twilio token bucket limiter at 100/s.",
+      "owner": "Sam Kowalczyk",
+      "deadline": "Friday, September 25th",
+      "position": "late",
+      "lines": [
+        303,
+        304
+      ]
+    },
+    {
+      "id": "F48",
+      "type": "action_item",
+      "importance": "important",
+      "statement": "Sam fixes the DLQ policy pattern in Terraform so notifications.v2 actually dead-letters.",
+      "owner": "Sam Kowalczyk",
+      "deadline": "Monday, September 14th",
+      "position": "late",
+      "lines": [
+        305
+      ]
+    },
+    {
+      "id": "F49",
+      "type": "action_item",
+      "importance": "important",
+      "statement": "Sam builds the delivery_attempts idempotency table with the unique index.",
+      "owner": "Sam Kowalczyk",
+      "deadline": "Wednesday, October 7th",
+      "position": "late",
+      "lines": [
+        309
+      ]
+    },
+    {
+      "id": "F50",
+      "type": "action_item",
+      "importance": "critical",
+      "statement": "Pam owns the RabbitMQ 3.11.9 to 3.13.7 upgrade and migration of notifications.v2 to quorum queues with a delivery limit of 5 (reassigned from Ravi).",
+      "owner": "Pam Whitfield",
+      "deadline": "Friday, October 9th",
+      "position": "late",
+      "lines": [
+        313,
+        318
+      ],
+      "notes": "owner change from Ravi (C09)"
+    },
+    {
+      "id": "F51",
+      "type": "action_item",
+      "importance": "critical",
+      "statement": "Dana owns the notification backlog runbook (config drift, DLQ checks, manual replica caps, pausing big batches; first section: rollback must include the ConfigMap chart), taken over from Pam.",
+      "owner": "Dana Okafor",
+      "deadline": "Thursday, September 24th",
+      "position": "late",
+      "lines": [
+        320,
+        321
+      ],
+      "notes": "owner change from Pam (C10)"
+    },
+    {
+      "id": "F52",
+      "type": "action_item",
+      "importance": "important",
+      "statement": "Pam implements the new alerts and switches autoscaling to oldest message age.",
+      "owner": "Pam Whitfield",
+      "deadline": "Friday, September 18th",
+      "position": "late",
+      "lines": [
+        323,
+        329
+      ]
+    },
+    {
+      "id": "F53",
+      "type": "action_item",
+      "importance": "minor",
+      "statement": "Pam lowers notif-worker max replicas from 40 to 16 today.",
+      "owner": "Pam Whitfield",
+      "deadline": "today (September 10th)",
+      "position": "late",
+      "lines": [
+        329
+      ]
+    },
+    {
+      "id": "F54",
+      "type": "action_item",
+      "importance": "important",
+      "statement": "Pam produces a 12-month cost estimate for all three options, including peak months and SQS dual-run, for Grace's early-October budget review.",
+      "owner": "Pam Whitfield",
+      "deadline": "Wednesday, September 30th",
+      "position": "late",
+      "lines": [
+        330,
+        331
+      ]
+    },
+    {
+      "id": "F55",
+      "type": "action_item",
+      "importance": "critical",
+      "statement": "Ravi runs the SQS/SNS prototype, timeboxed to 5 working days: notif-worker SMS path only, redrive policy, visibility timeout backoff, KMS CMK, and a check of largest payloads against 256 KB.",
+      "owner": "Ravi Menon",
+      "deadline": "start Monday, September 28th; readout Friday, October 2nd",
+      "position": "late",
+      "lines": [
+        333
+      ],
+      "notes": "replaces the two-week Kafka spike plan (C11)"
+    },
+    {
+      "id": "F56",
+      "type": "action_item",
+      "importance": "important",
+      "statement": "Ravi moves notif-worker onto the Argo Rollouts canary pipeline.",
+      "owner": "Ravi Menon",
+      "deadline": "Friday, October 16th",
+      "position": "late",
+      "lines": [
+        339
+      ]
+    },
+    {
+      "id": "F57",
+      "type": "action_item",
+      "importance": "important",
+      "statement": "Joaquin (back from leave September 21st) implements the outbox pattern and relay in notify-gateway; Dana briefs him on his first day.",
+      "owner": "Joaquin",
+      "deadline": "Friday, October 16th",
+      "position": "late",
+      "lines": [
+        341
+      ]
+    },
+    {
+      "id": "F58",
+      "type": "action_item",
+      "importance": "important",
+      "statement": "Dana writes the architecture decision record.",
+      "owner": "Dana Okafor",
+      "deadline": "Tuesday, September 15th",
+      "position": "late",
+      "lines": [
+        345
+      ]
+    },
+    {
+      "id": "F59",
+      "type": "action_item",
+      "importance": "important",
+      "statement": "Grace sends the incident note to the 420 clinics through customer success.",
+      "owner": "Grace Liang",
+      "deadline": "Monday, September 14th",
+      "position": "late",
+      "lines": [
+        346
+      ]
+    },
+    {
+      "id": "F60",
+      "type": "action_item",
+      "importance": "minor",
+      "statement": "Sam drops notif-worker prefetch to 30 in a separate deploy.",
+      "owner": "Sam Kowalczyk",
+      "deadline": "Tuesday, September 15th",
+      "position": "late",
+      "lines": [
+        307
+      ]
+    },
+    {
+      "id": "F61",
+      "type": "requirement",
+      "importance": "minor",
+      "statement": "Sales has promised two big hospital groups that reminders will be \"bulletproof\" for open enrollment.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        289
+      ]
+    },
+    {
+      "id": "F62",
+      "type": "pain_point",
+      "importance": "minor",
+      "statement": "There is a long-standing reschedule-then-cancel race condition; Pam suggested fixing it with a version number on the appointment rather than via queue ordering.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        210
+      ]
+    },
+    {
+      "id": "F63",
+      "type": "background",
+      "importance": "minor",
+      "statement": "notif-worker includes quiet hours logic (no texts between 9pm and 8am local time) implemented by republishing to a delayed exchange with a TTL.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        180
+      ]
+    },
+    {
+      "id": "F64",
+      "type": "background",
+      "importance": "minor",
+      "statement": "The nightly 02:00 batch for next-day appointments routinely pushes oldest message age to about 150 seconds.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        324
+      ]
+    },
+    {
+      "id": "F65",
+      "type": "open_question",
+      "importance": "important",
+      "statement": "Unresolved whether to resend or otherwise contact patients for the ~2,300 never-sent notifications; Grace has no answer yet.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        353
+      ]
+    },
+    {
+      "id": "F66",
+      "type": "open_question",
+      "importance": "important",
+      "statement": "Unresolved whether Twilio's 100 messages/second is a hard short-code limit or per account, and whether it can be raised for peak (no owner).",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        354
+      ]
+    },
+    {
+      "id": "F67",
+      "type": "open_question",
+      "importance": "minor",
+      "statement": "Unknown whether any insurance card email payloads exceed the 256 KB SQS limit.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        356
+      ]
+    },
+    {
+      "id": "F68",
+      "type": "open_question",
+      "importance": "important",
+      "statement": "Unknown whether the quorum queue migration needs a maintenance window (the 3.11 upgrade took a 20 minute window at 03:00).",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        357,
+        358
+      ]
+    },
+    {
+      "id": "F69",
+      "type": "open_question",
+      "importance": "minor",
+      "statement": "Undecided whether email and SMS should be split into separate notif-worker deployments.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        361
+      ]
+    }
+  ],
+  "corrections": [
+    {
+      "id": "C01",
+      "what": "Number of clinics affected",
+      "initial_value": "312 clinics",
+      "initial_line": 52,
+      "final_value": "420 clinics",
+      "final_line": 196,
+      "explicit": true,
+      "fact_id": "F14"
+    },
+    {
+      "id": "C02",
+      "what": "Incident root cause",
+      "initial_value": "prefetch bump 10->200 causing OOM kills plus Twilio rate limiting",
+      "initial_line": 56,
+      "final_value": "RETRY_MODE=inline ConfigMap change causing no-backoff requeue retry storm (prefetch/OOM only an amplifier)",
+      "final_line": 86,
+      "explicit": true,
+      "fact_id": "F19"
+    },
+    {
+      "id": "C03",
+      "what": "MSK monthly cost estimate",
+      "initial_value": "$1,900 a month",
+      "initial_line": 148,
+      "final_value": "$5,200 a month (steady state)",
+      "final_line": 171,
+      "explicit": true,
+      "fact_id": "F33"
+    },
+    {
+      "id": "C04",
+      "what": "Kafka migration timeline",
+      "initial_value": "six weeks",
+      "initial_line": 152,
+      "final_value": "10 to 12 weeks for two people",
+      "final_line": 185,
+      "explicit": true,
+      "fact_id": "F34"
+    },
+    {
+      "id": "C05",
+      "what": "Idempotency store",
+      "initial_value": "Redis SETNX with 24 hour TTL",
+      "initial_line": 238,
+      "final_value": "Postgres delivery_attempts unique index on notification ID plus channel",
+      "final_line": 243,
+      "explicit": true,
+      "fact_id": "F40"
+    },
+    {
+      "id": "C06",
+      "what": "notif-worker max replicas cap",
+      "initial_value": "20",
+      "initial_line": 247,
+      "final_value": "16",
+      "final_line": 249,
+      "explicit": true,
+      "fact_id": "F41"
+    },
+    {
+      "id": "C07",
+      "what": "Oldest message age page threshold",
+      "initial_value": "120 seconds for 5 minutes",
+      "initial_line": 257,
+      "final_value": "180 seconds for 5 minutes",
+      "final_line": 325,
+      "explicit": true,
+      "fact_id": "F43"
+    },
+    {
+      "id": "C08",
+      "what": "Architecture direction",
+      "initial_value": "tentatively migrate to Kafka on MSK before the October 23rd freeze",
+      "initial_line": 160,
+      "final_value": "stay on RabbitMQ for peak with fixes; Kafka rejected; SQS prototype and January 13th decision",
+      "final_line": 295,
+      "explicit": false,
+      "fact_id": "F44"
+    },
+    {
+      "id": "C09",
+      "what": "Owner of RabbitMQ 3.13.7 upgrade / quorum queue migration",
+      "initial_value": "Ravi",
+      "initial_line": 313,
+      "final_value": "Pam",
+      "final_line": 318,
+      "explicit": true,
+      "fact_id": "F50"
+    },
+    {
+      "id": "C10",
+      "what": "Owner of notification backlog runbook",
+      "initial_value": "Pam",
+      "initial_line": 317,
+      "final_value": "Dana",
+      "final_line": 320,
+      "explicit": true,
+      "fact_id": "F51"
+    },
+    {
+      "id": "C11",
+      "what": "Spike/prototype scope and timebox",
+      "initial_value": "two-week Kafka consumer spike (plan by Monday) owned by Ravi",
+      "initial_line": 162,
+      "final_value": "5-working-day SQS/SNS prototype, readout Friday October 2nd",
+      "final_line": 333,
+      "explicit": true,
+      "fact_id": "F55"
+    }
+  ],
+  "not_decisions": [
+    {
+      "statement": "Migrating the notification pipeline to Kafka on MSK (floated as the tentative direction at the midpoint, then rejected)",
+      "lines": [
+        160,
+        294
+      ]
+    },
+    {
+      "statement": "A two-week Kafka consumer spike plan by Ravi (cancelled)",
+      "lines": [
+        162,
+        335
+      ]
+    },
+    {
+      "statement": "Migrating to SQS/SNS - only a prototype was approved; the migration decision is deferred to January 13th",
+      "lines": [
+        301
+      ]
+    },
+    {
+      "statement": "Using Redis SETNX with a 24 hour TTL for idempotency (rejected in favour of Postgres)",
+      "lines": [
+        238
+      ]
+    },
+    {
+      "statement": "Throttling large per-clinic uploads at notify-gateway (floated, no owner, no decision)",
+      "lines": [
+        262,
+        359
+      ]
+    },
+    {
+      "statement": "Asking Twilio to raise short code throughput for peak (vague suggestion, no owner)",
+      "lines": [
+        260
+      ]
+    },
+    {
+      "statement": "Running a game day on the pipeline (suggested by Grace, explicitly not assigned)",
+      "lines": [
+        348,
+        350
+      ]
+    },
+    {
+      "statement": "Splitting email and SMS into separate notif-worker deployments (said \"ideally\", not decided)",
+      "lines": [
+        251
+      ]
+    },
+    {
+      "statement": "Resending the ~2,300 never-sent notifications (not decided)",
+      "lines": [
+        110
+      ]
+    },
+    {
+      "statement": "Setting max replicas to 20 (corrected to 16)",
+      "lines": [
+        247
+      ]
+    }
+  ],
+  "distractors": [
+    {
+      "statement": "Ravi assumed the dead-letter queue was enabled and poison messages were in notifications.v2.dlq",
+      "lines": [
+        61,
+        67
+      ],
+      "why": "false assumption later corrected"
+    },
+    {
+      "statement": "Pam assumed 2.14.0 had gone through canary so it probably was not the deploy",
+      "lines": [
+        72,
+        73
+      ],
+      "why": "false assumption later corrected"
+    },
+    {
+      "statement": "Initial theory that the prefetch change and OOM kills were the root cause",
+      "lines": [
+        56
+      ],
+      "why": "superseded value"
+    },
+    {
+      "statement": "312 clinics affected",
+      "lines": [
+        52
+      ],
+      "why": "superseded value"
+    },
+    {
+      "statement": "MSK at $1,900 a month and six-week migration",
+      "lines": [
+        148,
+        152
+      ],
+      "why": "superseded value"
+    },
+    {
+      "statement": "Small talk about Sam sleeping eleven hours and Ravi's kid asking if dinosaurs had birthdays",
+      "lines": [
+        15
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Tangent about the QCon San Francisco Kafka talk (neon green slides, \"the log is the database\", hand-drawn feature flag slides)",
+      "lines": [
+        140,
+        143
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Joke that the autoscaler DDoSed their own vendor / t-shirt",
+      "lines": [
+        96
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Joke about which incident holds the worst-of-the-year trophy (April SSO incident)",
+      "lines": [
+        273
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Joke about putting the Kafka dream in the dead letter queue",
+      "lines": [
+        365
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Similar names: notif-worker (consumer) vs notify-gateway (publisher); Sam vs Pam",
+      "lines": [
+        31
+      ],
+      "why": "similar names"
+    },
+    {
+      "statement": "Old alert: page at queue depth 50,000 (being replaced)",
+      "lines": [
+        256
+      ],
+      "why": "superseded value"
+    },
+    {
+      "statement": "Grace initially thought the meeting started at 3:30",
+      "lines": [
+        271
+      ],
+      "why": "irrelevant"
+    }
+  ],
+  "open_questions_at_end": [
+    "Whether to resend or otherwise contact patients for the ~2,300 never-sent notifications",
+    "Whether Twilio's 100 messages/second is a hard short-code or per-account limit and whether it can be raised for peak",
+    "Whether any insurance card email payloads exceed the 256 KB SQS limit",
+    "Whether the quorum queue migration needs a maintenance window",
+    "Whether to throttle large per-clinic uploads at notify-gateway (no owner; product input needed)",
+    "Whether to split email and SMS into separate notif-worker deployments"
+  ],
+  "summary_must_include": [
+    "Outage on September 8th: 4h53m, backlog peaked at 1.8M, p99 2.1s to 47 min (F01, F09, F07, F10)",
+    "Impact: 420 clinics, ~61,000 late reminders, 9,400 duplicate SMS, ~2,300 never sent (F14, F15, F24)",
+    "Root cause refined: RETRY_MODE=inline no-backoff retry storm, not prefetch/OOM; triggered by Northgate 240k batch (F19, F21)",
+    "DLQ was never enabled on notifications.v2 (F17)",
+    "Decision: stay on RabbitMQ for peak (3.13.7 + quorum queues + consumer fixes), ratified by Grace (F44)",
+    "Kafka/MSK rejected: cost over $6,000 ceiling, misses October 23rd freeze, does not fix root cause (F45, F28, F25)",
+    "SQS/SNS 5-day prototype by Ravi (readout October 2nd), decision January 13th (F55, F46)",
+    "Idempotency via Postgres unique index; outbox pattern in notify-gateway by Joaquin (F40, F57)",
+    "Max replicas capped at 16; alerts: oldest message age >180s, 429 rate >2%, DLQ thresholds (F41, F43)",
+    "Owner changes: Pam takes RabbitMQ upgrade (Oct 9th), Dana takes runbook (Sep 24th) (F50, F51)",
+    "Sam: backoff + rate limiter by September 25th (F47)"
+  ]
+}

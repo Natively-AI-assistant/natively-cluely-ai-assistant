@@ -18,10 +18,22 @@ import type { TurnDecision, EvidenceItem, SourceType } from '../contracts/types'
 import type { RetrievalPort } from '../orchestration/orchestrator';
 import type { RetrievalAttemptTrace } from '../observability/answer-trace';
 import { adaptLegacyChunks, type LegacyChunk } from './legacy-adapter';
+import { extractIdentifiers, positionalDirection, POSITIONAL_RE } from './query-rewrite';
 
 /** The shape the legacy retriever returns (ModeHybridRetriever.retrieve). */
 export interface LegacyRetrieveFn {
-  (query: string, opts: { topK: number; timeoutMs: number }): Promise<LegacyChunk[]>;
+  (query: string, opts: {
+    topK: number; timeoutMs: number; exhaustive?: boolean; tokenBudget?: number;
+    /** The turn's PLANNED source types (2026-09-11). A port that pools several
+     *  types can drop unplanned ones BEFORE its top-k, so a planned type is not
+     *  crowded out by one the scope gate would reject anyway. Advisory: the
+     *  gate below still filters. */
+    sourceTypes?: readonly SourceType[];
+    /** The USER'S question, even when `query` is a distilled or model-rewritten
+     *  retrieval query. A port whose POLICY (intent boosts, inventory admission)
+     *  depends on what was asked must read this, never `query` (2026-09-20). */
+    intentQuery?: string;
+  }): Promise<LegacyChunk[]>;
 }
 
 export interface SourceRegistry {
@@ -67,28 +79,37 @@ export interface LegacyPortDeps {
 // ONE bounded retry with a distilled query, fired only when the admitted
 // evidence visibly lacks what was asked for.
 
-/** Hyphenated codes: ≥2 hyphen segments AND (a digit or all-caps), so
- *  "QF-2026-0514" and "TECH-PDF-START-481" match while hyphenated prose
- *  ("state-of-the-art", "end-to-end") does not. */
-const IDENTIFIER_RE = /\b[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+){2,}\b/g;
+// Extracted to retrieval/query-rewrite.ts (2026-08-28) so the post-stream
+// doc-grounded validator can reuse the same distillation instead of retrying
+// with the query text that just failed. Behaviour here is unchanged.
 
-const extractIdentifiers = (question: string): string[] =>
-  (question.match(IDENTIFIER_RE) ?? ([] as string[])).filter((t) => /\d/.test(t) || t === t.toUpperCase());
+// ── A mode's own attachment is always in scope for a document plan ──────────
+//
+// THE DEFECT (2026-09-07, measured in the user's General mode with a résumé PDF
+// and a JD PDF attached and nothing else): "What latency did the FastAPI
+// backend handle chatbot requests at?" traced as DOCUMENT_FACT, planned
+// [REFERENCE_FILE], candidates 1, admitted 1, EVIDENCE 0 — and the user was
+// told the records don't mention it. The same fact surfaced one turn later for
+// a second-person phrasing, because that turn planned CANDIDATE_FILE.
+//
+// Two correct rules collided. `sourceTypeForFile` types a résumé-shaped
+// attachment RESUME/CANDIDATE_FILE and a JD JOB_DESCRIPTION so claim authority
+// can keep a JD from evidencing the user's experience. And DOCUMENT_FACT
+// deliberately narrows RETRIEVAL to the document pools so a value lookup does
+// not fan out across the Profile Intelligence résumé/JD pools (deep-run 2,
+// issue 5). The narrowing is about identity POOLS. This port never reads one:
+// every chunk it returns with MODE_REFERENCE_FILE provenance is a file the
+// user put in this mode. For a plan that consults the document pools, such a
+// chunk is admissible whatever identity type the shape detector stamped on it.
+// Claim authority still runs afterwards, so a JD attachment still cannot
+// evidence a USER_* claim — only the planned-type gate is relaxed, and only for
+// the mode's own files.
+const DOCUMENT_POOL_TYPES: readonly SourceType[] = ['REFERENCE_FILE', 'PROJECT_FILE', 'CODING_SAMPLE'];
 
-/** Positional-page qualifiers: the compound form only ("last-page", "first
- *  section"), never a bare positional word — "last quarter revenue" must not
- *  trigger document-position targeting. */
-const POSITIONAL_RE = /\b(first|last|final|middle|start|starting|opening|end|ending|closing)[-\s](page|pages|section|paragraph|line|chunk)s?\b/i;
-
-type PositionalDirection = 'first' | 'last' | 'middle';
-
-const positionalDirection = (question: string): PositionalDirection | undefined => {
-  const m = question.match(POSITIONAL_RE);
-  if (!m) return undefined;
-  const w = m[1].toLowerCase();
-  if (w === 'middle') return 'middle';
-  return w === 'first' || w === 'start' || w === 'starting' || w === 'opening' ? 'first' : 'last';
-};
+function isAdmissibleModeAttachment(e: EvidenceItem, allowed: ReadonlySet<SourceType>): boolean {
+  if (e.provenance !== 'MODE_REFERENCE_FILE') return false;
+  return DOCUMENT_POOL_TYPES.some((t) => allowed.has(t));
+}
 
 export function createLegacyRetrievalPort(deps: LegacyPortDeps): RetrievalPort {
   const now = deps.now ?? (() => 0);
@@ -123,6 +144,10 @@ export function createLegacyRetrievalPort(deps: LegacyPortDeps): RetrievalPort {
           raw = await deps.retrieve(query, {
             topK: decision.retrievalPlan.maximumCandidates,
             timeoutMs: decision.retrievalPlan.timeoutMs,
+            sourceTypes: decision.retrievalPlan.sourceTypes,
+            intentQuery: decision.resolvedQuestion,
+            ...(decision.retrievalPlan.exhaustive ? { exhaustive: true } : {}),
+            ...(typeof decision.retrievalPlan.evidenceTokens === 'number' ? { tokenBudget: decision.retrievalPlan.evidenceTokens } : {}),
           });
         } catch (e) {
           // §22.1: a retrieval failure is RECORDED, never silently converted
@@ -140,7 +165,7 @@ export function createLegacyRetrievalPort(deps: LegacyPortDeps): RetrievalPort {
           assumeInScopeWhenUnknown: deps.assumeInScopeWhenUnknown,
         });
 
-        const inScope = adapted.evidence.filter((e) => allowed.has(e.sourceType));
+        const inScope = adapted.evidence.filter((e) => allowed.has(e.sourceType) || isAdmissibleModeAttachment(e, allowed));
         const kept: EvidenceItem[] = neededClaims.size
           ? inScope.filter((e) => e.acceptedFor.some((c) => neededClaims.has(c)))
           : inScope;

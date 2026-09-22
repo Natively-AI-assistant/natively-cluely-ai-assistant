@@ -1,0 +1,276 @@
+{
+ "blind_id": "S-8cfd4c1e",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 45411,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 23019,
+  "candidatesTokenCount": 2071,
+  "totalTokenCount": 29600,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 23019
+   }
+  ],
+  "thoughtsTokenCount": 4510,
+  "serviceTier": "standard"
+ },
+ "fact_count": 51,
+ "evaluation": {
+  "factual_accuracy": 4,
+  "important_information_retention": 10,
+  "hallucination_control": 9,
+  "action_item_retention": 10,
+  "decision_retention": 10,
+  "speaker_attribution": 9,
+  "numeric_accuracy": 8,
+  "entity_retention": 10,
+  "timeline_accuracy": 4,
+  "conclusion_accuracy": 4,
+  "structure": 2,
+  "conciseness": 2,
+  "readability": 3,
+  "overall_summary_quality": 4,
+  "critical_errors": [
+   "Reports superseded decisions as final alongside the actual final decisions, creating direct contradictions (e.g., stating both Priya and Dan are booking the cabin, and both Oct 16-19 and Oct 23-26 are the dates).",
+   "Reports resolved issues as open questions (e.g., whether Waffles can come, departure time, Oct 16-19 dates).",
+   "Extreme repetition of sections (e.g., 'Action items' and 'Action items (structured)')."
+  ],
+  "missing_important_information": [],
+  "hallucinated_information": [
+   "Mia, if she comes, will handle the card and flowers (this was a passing suggestion by Priya, not an agreed action item)."
+  ],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C02",
+    "reported": "Selected dates are Friday October 16th to Monday the 19th, the weekend before Maya's birthday."
+   },
+   {
+    "correction_id": "C04",
+    "reported": "Priya will book the cabin, using her Hearthstay credit from the cancelled Lisbon trip."
+   },
+   {
+    "correction_id": "C06",
+    "reported": "What time the group will leave on the Friday, since Tom suggested an 8 a.m. pickup and Priya objected. [open]"
+   }
+  ],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [
+   "Tom played goalkeeper in the second half of the Wanderers game and let in four goals of the 6-2 loss.",
+   "Dan described a 22-slide pre-meeting deck from Graham with a slide that just says 'Alignment'.",
+   "Tom's Halvorsen interview involved five rounds, a 40-minute warehouse-budget case study, and his laptop dying mid-case, forcing him to finish on a whiteboard.",
+   "Priya's workplace anecdote: a man glued his hand to a ladder while fixing it, and the ladder sat in the ambulance bay for about three hours.",
+   "Waffles starts puppy class next Saturday with a trainer named Brenda who used to train police dogs.",
+   "Tom's fleece has a hole in it and dates from a charity 5K in 2019, which he calls vintage."
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "partial"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "present"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "present"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture almost every detail from the transcript, resulting in high retention scores. However, they suffer from severe structural and logical flaws. The notes are extremely repetitive, duplicating sections (e.g., 'Action items' and 'Action items (structured)'). More critically, they report superseded values as final decisions and action items alongside the actual final decisions, creating direct contradictions (e.g., stating both Priya and Dan are booking the cabin, and both Oct 16-19 and Oct 23-26 are the dates). They also list resolved issues as open questions. Furthermore, the notes include numerous irrelevant distractors."
+ }
+}

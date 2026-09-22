@@ -29,6 +29,12 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import os from 'node:os';
+
+// Hermetic (issue #558): Codex now also accepts the Codex CLI's `codex login`
+// from $CODEX_HOME/auth.json. Point it at an empty dir so these tests never
+// pick up — or send requests with — the developer's real CLI login.
+process.env.CODEX_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-codex-home-'));
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const compiledPath = path.resolve(__dirname, '../../../dist-electron/electron/services/CodexCliService.js');
@@ -43,8 +49,10 @@ test('DEFAULT_CODEX_CLI_CONFIG has expected shape', () => {
   assert.equal(DEFAULT_CODEX_CLI_CONFIG.enabled, false);
   // `path` is preserved for IPC backward-compat but is ignored at runtime.
   assert.equal(DEFAULT_CODEX_CLI_CONFIG.path, 'codex');
-  assert.equal(DEFAULT_CODEX_CLI_CONFIG.model, 'gpt-5.4');
-  assert.equal(DEFAULT_CODEX_CLI_CONFIG.fastModel, 'gpt-5.3-codex');
+  // Issue #558: gpt-5.4 / gpt-5.3-codex are rejected for a ChatGPT account
+  // (live, 2026-09-11). gpt-5.5 answered fastest of the models that work.
+  assert.equal(DEFAULT_CODEX_CLI_CONFIG.model, 'gpt-5.5');
+  assert.equal(DEFAULT_CODEX_CLI_CONFIG.fastModel, 'gpt-5.5');
   assert.equal(DEFAULT_CODEX_CLI_CONFIG.timeoutMs, 60_000);
   assert.equal(DEFAULT_CODEX_CLI_CONFIG.sandboxMode, 'read-only');
 });
@@ -131,16 +139,18 @@ test('resolveCodexReasoningEffort: unknown model id falls back to [low, medium, 
 // =============================================================================
 
 test('normalizeConfig: downgrades invalid effort for chosen model', () => {
-  // xhigh on gpt-5.3-codex is rejected by the Codex backend → resolver
+  // xhigh on gpt-5.1-codex is rejected by the Codex backend → resolver
   // returns the lowest-latency reasoning effort ('low') so a stale saved
   // value can't trigger a 400. The reasoning-only filter skips 'none' so we
   // don't silently turn a high-effort pick into zero reasoning.
-  const cfg = CodexCliService.normalizeConfig({ model: 'gpt-5.3-codex', modelReasoningEffort: 'xhigh' });
+  // (Was gpt-5.3-codex, which normalizeConfig now remaps to the default — the
+  // backend rejects it for a ChatGPT account, issue #558.)
+  const cfg = CodexCliService.normalizeConfig({ model: 'gpt-5.1-codex', modelReasoningEffort: 'xhigh' });
   assert.equal(cfg.modelReasoningEffort, 'low');
 });
 
 test('normalizeConfig: keeps valid effort for chosen model', () => {
-  const cfg = CodexCliService.normalizeConfig({ model: 'gpt-5.4', modelReasoningEffort: 'xhigh' });
+  const cfg = CodexCliService.normalizeConfig({ model: 'gpt-5.5', modelReasoningEffort: 'xhigh' });
   assert.equal(cfg.modelReasoningEffort, 'xhigh');
 });
 

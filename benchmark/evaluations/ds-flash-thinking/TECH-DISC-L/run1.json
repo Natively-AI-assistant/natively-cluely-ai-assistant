@@ -1,0 +1,353 @@
+{
+ "blind_id": "S-effce80f",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 91777,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 38872,
+  "candidatesTokenCount": 2411,
+  "totalTokenCount": 52484,
+  "cachedContentTokenCount": 24517,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 38872
+   }
+  ],
+  "cacheTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 24517
+   }
+  ],
+  "thoughtsTokenCount": 11201,
+  "serviceTier": "standard"
+ },
+ "fact_count": 69,
+ "evaluation": {
+  "factual_accuracy": 5,
+  "important_information_retention": 9,
+  "hallucination_control": 9,
+  "action_item_retention": 9,
+  "decision_retention": 8,
+  "speaker_attribution": 9,
+  "numeric_accuracy": 9,
+  "entity_retention": 9,
+  "timeline_accuracy": 9,
+  "conclusion_accuracy": 4,
+  "structure": 2,
+  "conciseness": 1,
+  "readability": 3,
+  "overall_summary_quality": 3,
+  "critical_errors": [
+   "Reports a cancelled action item (Ravi's Kafka spike plan) as an active action item in the structured list.",
+   "Reports a rejected decision (migrating to Kafka on MSK) as an active decision in the structured list.",
+   "Massive duplication of sections (e.g., 'Action items' and 'Action items (structured)'), leading to extreme bloat and internal contradictions.",
+   "The first summary bullet point is cut off mid-sentence ('while surfa')."
+  ],
+  "missing_important_information": [
+   "The fact that SQS has no replay capability (F37)."
+  ],
+  "hallucinated_information": [],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C08",
+    "reported": "Tentatively agreed that the direction is to migrate the notification pipeline to Kafka on Amazon MSK before the October 23rd code freeze."
+   },
+   {
+    "correction_id": "C11",
+    "reported": "Ravi: Ravi to write a two-week spike plan for the Kafka consumer — a prototype of notif-worker reading from MSK with the retry topics. (deadline: Monday)"
+   }
+  ],
+  "not_decisions_reported_as_decided": [
+   "Tentatively agreed that the direction is to migrate the notification pipeline to Kafka on Amazon MSK before the October 23rd code freeze."
+  ],
+  "distractors_included": [
+   "The joke about whether Tuesday or the April SSO incident counts as the worst incident of the year.",
+   "The joke about putting the Kafka dream in the dead letter queue.",
+   "The naming confusion from 2021 caused by someone who left the company.",
+   "Grace joining late and thinking the meeting started at 3:30.",
+   "Details about the QCon San Francisco Kafka talk (food delivery company, hiring six more SREs)."
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "partial"
+   },
+   {
+    "id": "F06",
+    "status": "partial"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "present"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "partial"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "present"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "present"
+   },
+   {
+    "id": "F57",
+    "status": "present"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "present"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   },
+   {
+    "id": "F62",
+    "status": "present"
+   },
+   {
+    "id": "F63",
+    "status": "present"
+   },
+   {
+    "id": "F64",
+    "status": "present"
+   },
+   {
+    "id": "F65",
+    "status": "present"
+   },
+   {
+    "id": "F66",
+    "status": "present"
+   },
+   {
+    "id": "F67",
+    "status": "present"
+   },
+   {
+    "id": "F68",
+    "status": "present"
+   },
+   {
+    "id": "F69",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture almost every detail from the transcript, resulting in high retention scores. However, the notes suffer from catastrophic structural and conciseness issues. They duplicate major sections (e.g., 'Action items' and 'Action items (structured)'), resulting in massive bloat and repetition. Furthermore, the notes include superseded values and rejected ideas as active decisions and action items (e.g., listing the tentative decision to migrate to Kafka and Ravi's cancelled Kafka spike plan as valid items in the structured lists), which creates direct contradictions within the text and severely harms factual and conclusion accuracy. The summary bullet is also cut off mid-sentence, and numerous irrelevant distractors are included."
+ }
+}

@@ -17,6 +17,8 @@
 //
 // Pure logic, no I/O, no LLM — callers own any regeneration.
 
+import { isProviderRejectionLine } from './providerErrorClassifier';
+
 // ── Artifact cleanup ─────────────────────────────────────────────────────────
 
 const CODE_FENCE_RE = /```[\s\S]*?```/g;
@@ -284,7 +286,9 @@ const PROVIDER_TRANSPORT_ERROR_TEXT =
   "I couldn't reach the AI provider — this looks like an API key or rate-limit issue. Check your API keys / plan in Settings and try again.";
 export function isProviderTransportError(text: string): boolean {
   if (!text) return false;
-  return text.trim() === PROVIDER_TRANSPORT_ERROR_TEXT;
+  // The permanent-rejection line (issue #543) carries the provider's own
+  // explanation, so it is matched by its fixed app-authored prefix.
+  return text.trim() === PROVIDER_TRANSPORT_ERROR_TEXT || isProviderRejectionLine(text);
 }
 
 /** A leading META-COMMENTARY preamble the model sometimes emits before the real

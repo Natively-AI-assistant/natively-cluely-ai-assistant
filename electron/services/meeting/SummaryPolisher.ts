@@ -13,7 +13,8 @@
 
 import type { LLMHelper } from '../../LLMHelper';
 import type { ActionItem, DecisionItem, MeetingNoteSection, RiskItem } from './MeetingSummaryV3';
-import { generateStructured } from './generateStructured';
+import { generateStructured, NOTE_CALL_TIMEOUT_MS } from './generateStructured';
+import { INCLUDE_NEXT_STEPS, getOverviewBand } from './MeetingSummaryReducer';
 
 export interface PolishSummaryParams {
   deterministicSummary: string[];        // the grounded buildSummary() output
@@ -28,11 +29,21 @@ export class SummaryPolisher {
   constructor(private readonly llmHelper: LLMHelper) {}
 
   // Build the grounded fact corpus the LLM is allowed to draw from (note content only).
-  private buildGroundedNotes(p: PolishSummaryParams): string {
+  //
+  // `includeActionItems` defaults to true for polishOverview() (a whole-meeting prose
+  // paragraph, where a commitment mentioned in passing is not the thing being removed).
+  // polish() passes false: while INCLUDE_NEXT_STEPS is false, the Summary must not end in
+  // a next-step sentence, and withholding the Action items block from the corpus is what
+  // makes that safe — the model cannot emit tokens it was never shown, so the
+  // newSignificantTokens() "no new information" gate (which reads this same `grounded`
+  // string as its reference set) never has an action item to catch. Leaving the block in
+  // and only prohibiting it in the prompt risks the model mentioning one anyway and being
+  // silently rejected by the gate, discarding the whole rewrite — a real bug on this branch.
+  private buildGroundedNotes(p: PolishSummaryParams, includeActionItems: boolean = true): string {
     const parts: string[] = [];
     if (p.deterministicSummary.length) parts.push(`Summary points:\n${p.deterministicSummary.map(s => `- ${s}`).join('\n')}`);
     if (p.decisions.length) parts.push(`Decisions:\n${p.decisions.map(d => `- ${d.text}`).join('\n')}`);
-    if (p.actionItems.length) parts.push(`Action items:\n${p.actionItems.map(a => `- ${a.owner ? `${a.owner}: ` : ''}${a.text}${a.deadline ? ` (by ${a.deadline})` : ''}`).join('\n')}`);
+    if (includeActionItems && p.actionItems.length) parts.push(`Action items:\n${p.actionItems.map(a => `- ${a.owner ? `${a.owner}: ` : ''}${a.text}${a.deadline ? ` (by ${a.deadline})` : ''}`).join('\n')}`);
     if (p.risks.length) parts.push(`Risks:\n${p.risks.map(r => `- ${r.text}`).join('\n')}`);
     if (p.sections.length) parts.push(`Section notes:\n${p.sections.flatMap(s => s.bullets.map(b => `- ${b.text}`)).join('\n')}`);
     return parts.join('\n\n');
@@ -40,16 +51,33 @@ export class SummaryPolisher {
 
   // Returns polished prose split into 3-5 lines, or null to keep the deterministic summary.
   async polish(p: PolishSummaryParams): Promise<string[] | null> {
-    const grounded = this.buildGroundedNotes(p);
+    // Action items withheld while INCLUDE_NEXT_STEPS is false — see buildGroundedNotes().
+    const grounded = this.buildGroundedNotes(p, INCLUDE_NEXT_STEPS);
     if (!grounded.trim() || p.deterministicSummary.length === 0) return null;
 
-    const systemPrompt = `Rewrite the meeting summary below into 3-5 short, clear sentences. Lead with the outcome, not chronology: sentence 1 = the meeting's purpose/topic, then the key decisions or conclusions, then the single most important next step.
+    // The opening sentence and the next-steps prohibition rule are the ONLY things that
+    // differ between the two branches below. Everything else — the shared STRICT RULES,
+    // the NOTES header, ${grounded} — is factored into `sharedRules` so the
+    // flag-off branch can never again drift into an incomplete prompt (see 2026-08-25 code
+    // review: the flag-on branch used to end right after "STRICT RULES:", silently
+    // stripping every anti-fabrication rule from the restore path).
+    const opening = INCLUDE_NEXT_STEPS
+      ? `Rewrite the meeting summary below into 3-5 short, clear sentences. Lead with the outcome, not chronology: sentence 1 = the meeting's purpose/topic, then the key decisions or conclusions, then the single most important next step.`
+      : `Rewrite the meeting summary below into 3-5 short, clear sentences. Lead with the outcome, not chronology: sentence 1 = the meeting's purpose/topic, then the key decisions or conclusions.`;
 
-STRICT RULES:
-- Use ONLY the facts in the NOTES below. Introduce NO new information, name, number, date, company, or owner that is not already present in the notes.
+    const nextStepsRule = INCLUDE_NEXT_STEPS
+      ? ''
+      : '\n- Do NOT add a next-steps / action-item sentence, and do NOT mention what happens next. That is deliberately omitted — the reader tracks it elsewhere.';
+
+    const sharedRules = `- Use ONLY the facts in the NOTES below. Introduce NO new information, name, number, date, company, or owner that is not already present in the notes.
 - Do not restate an agenda or add filler ("productive discussion", "the team aligned", "great meeting").
 - Plain, professional prose. No headings, no bullet markup inside sentences.
-- If the notes contain no concrete outcome, return an empty "summary" array.
+- If the notes contain no concrete outcome, return an empty "summary" array.`;
+
+    const systemPrompt = `${opening}
+
+STRICT RULES:${nextStepsRule}
+${sharedRules}
 
 NOTES:
 ${grounded}`;
@@ -62,6 +90,9 @@ ${grounded}`;
       jsonShapeHint,
       userContent: grounded,
       llmHelper: this.llmHelper,
+      // Timeout only — deliberately NOT routed to purpose:'extraction'. This is a prose
+      // polish (a writing task), not the benchmarked structured-extraction route.
+      callOpts: { timeoutMs: NOTE_CALL_TIMEOUT_MS },
       validate: (raw) => {
         const arr = (raw && typeof raw === 'object' && Array.isArray((raw as any).summary)) ? (raw as any).summary : null;
         if (!arr) return { ok: false, errors: ['missing summary array'], repaired: false };
@@ -75,7 +106,10 @@ ${grounded}`;
     });
 
     if (result.ok && result.data && result.data.summary.length > 0) return result.data.summary;
-    return null; // keep deterministic summary
+    // A rejected polish means the user silently receives the mechanical deterministic
+    // summary. That failure was invisible for the entire life of this feature — log it.
+    console.warn(`[SummaryPolisher] Summary polish rejected, keeping deterministic version: ${result.errors.join('; ') || 'unknown'}`);
+    return null;
   }
 
   // Whole-meeting Overview: a single grounded paragraph (up to ~400 words) covering the
@@ -83,7 +117,12 @@ ${grounded}`;
   // things landed. Drawn from the WHOLE meeting's grounded content (chunk briefs across the
   // timeline + topics + decisions/actions/risks + section bullets), never raw transcript.
   // Same "no new tokens" gate; returns null to keep the deterministic overview.
-  async polishOverview(p: PolishSummaryParams & { briefs?: string[]; topics?: string[] }): Promise<string | null> {
+  // `totalTokensEstimate` is NormalizedTranscript.totalTokensEstimate (chars/4), threaded
+  // in by MeetingContextAssembler — the same length signal buildOverview's deterministic
+  // fallback uses (see getOverviewBand in MeetingSummaryReducer.ts). It sets a CONCRETE
+  // target for THIS meeting rather than a generic ceiling: a model told "up to 400 words"
+  // reliably writes ~160; a model told "write 2-3 paragraphs, about 380 words" writes that.
+  async polishOverview(p: PolishSummaryParams & { briefs?: string[]; topics?: string[]; totalTokensEstimate?: number }): Promise<string | null> {
     const noteCorpus = this.buildGroundedNotes(p);
     const timeline = (p.briefs || []).filter(Boolean);
     const topics = (p.topics || []).filter(Boolean);
@@ -94,11 +133,20 @@ ${grounded}`;
     const grounded = groundedParts.join('\n\n');
     if (!grounded.trim()) return null;
 
-    const systemPrompt = `Write a single-paragraph overview of the ENTIRE meeting from the grounded notes below — a quick read that tells someone who missed it what happened. Up to 400 words; usually much shorter. Cover the meeting's purpose, the arc of what was discussed, the key decisions/outcomes, and where things landed. Flowing prose, ONE paragraph (no headings, no bullets).
+    const band = getOverviewBand(p.totalTokensEstimate ?? 0);
+    // Additive to the length target only — every rule below is unconditional and identical
+    // across bands, and the STRICT RULES / NOTES block is never assembled inside a
+    // conditional branch, so there is no way for a band to silently ship a truncated prompt
+    // (see the 2026-08-25 review note on SummaryPolisher.polish(), which DID have that bug).
+    const paragraphInstruction = band.paragraphs === 'one paragraph'
+      ? 'Flowing prose, ONE paragraph (no headings, no bullets).'
+      : `Flowing prose in ${band.paragraphs}, with a genuine paragraph break (a blank line) between each paragraph — no headings, no bullets, no bullet markup inside paragraphs.`;
+
+    const systemPrompt = `Write an overview of the ENTIRE meeting from the grounded notes below — a quick read that tells someone who missed it what happened, compressed without losing anything important. Target for THIS meeting: about ${band.targetWords} words (roughly ${band.minWords}-${band.maxWords} words). ${paragraphInstruction} Cover the meeting's purpose, the arc of what was discussed, the key decisions/outcomes, and where things landed.
 
 STRICT RULES:
 - Use ONLY the facts in the NOTES below. Introduce NO new information, name, number, date, company, or owner not already present.
-- No filler ("productive discussion", "the team aligned", "great meeting"). Every sentence must carry a real fact.
+- No filler ("productive discussion", "the team aligned", "great meeting"). Every sentence must carry a real fact — writing more paragraphs is not licence to pad; only expand if the notes actually contain that much grounded content.
 - If the notes contain no substance, return an empty "overview" string.
 
 NOTES:
@@ -112,11 +160,20 @@ ${grounded}`;
       jsonShapeHint,
       userContent: grounded,
       llmHelper: this.llmHelper,
+      // Timeout only — deliberately NOT routed to purpose:'extraction'. This is a prose
+      // polish (a writing task), not the benchmarked structured-extraction route.
+      callOpts: { timeoutMs: NOTE_CALL_TIMEOUT_MS },
       validate: (raw) => {
-        const text = (raw && typeof raw === 'object') ? String((raw as any).overview || '').replace(/\s+/g, ' ').trim() : '';
+        // Collapse only HORIZONTAL whitespace and normalize runs of blank lines to a single
+        // paragraph break (\n\n) — a plain `\s+ -> ' '` collapse (used elsewhere in this file
+        // for single-line fields) would flatten every paragraph break the medium/long bands
+        // just asked the model for, making that instruction a no-op.
+        const text = (raw && typeof raw === 'object')
+          ? String((raw as any).overview || '').replace(/\r\n/g, '\n').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim()
+          : '';
         if (!text || text.length < 20) return { ok: false, errors: ['missing/short overview'], repaired: false };
         const words = text.split(/\s+/);
-        const clipped = words.length > 400 ? words.slice(0, 400).join(' ') : text;
+        const clipped = words.length > band.maxWords ? words.slice(0, band.maxWords).join(' ') : text;
         const offending = newSignificantTokens(clipped, grounded);
         if (offending.length > 0) return { ok: false, errors: [`introduced new tokens: ${offending.slice(0, 5).join(', ')}`], repaired: false };
         return { ok: true, data: { overview: clipped }, errors: [], repaired: false };
@@ -124,7 +181,10 @@ ${grounded}`;
     });
 
     if (result.ok && result.data && result.data.overview) return result.data.overview;
-    return null; // keep deterministic overview
+    // A rejected polish means the user silently receives the mechanical deterministic
+    // overview. That failure was invisible for the entire life of this feature — log it.
+    console.warn(`[SummaryPolisher] Overview polish rejected, keeping deterministic version: ${result.errors.join('; ') || 'unknown'}`);
+    return null;
   }
 }
 
@@ -157,14 +217,23 @@ export function newSignificantTokens(polished: string, grounded: string): string
 
   // Tokenize the polished text preserving original case to detect proper nouns.
   const rawTokens = polished.split(/\s+/);
+  // Sentence-initial capitalisation is not a proper-noun signal. This used to be
+  // `i === 0` — the first token of the ENTIRE output — so every sentence after the first
+  // that opened with a capitalised non-stopword ("However,", "Additionally,") was scored
+  // as an invented proper noun and discarded the whole rewrite. The prompt asks for 3-5
+  // sentences, so the polish was being thrown away constantly, silently, in production.
+  let atSentenceStart = true;
   for (let i = 0; i < rawTokens.length; i++) {
-    const raw = rawTokens[i].replace(/[.,!?;:()"'’“”]/g, '');
+    const rawToken = rawTokens[i];
+    const raw = rawToken.replace(/[.,!?;:()"'’“”]/g, '');
+    const isFirstWord = atSentenceStart;
+    // Advance the flag BEFORE any `continue` below, or a skipped token leaves it stale.
+    if (raw) atSentenceStart = /[.!?]["'’”)]*$/.test(rawToken);
     if (!raw) continue;
     const lower = raw.toLowerCase();
     const lowerCore = lower.replace(/[^a-z0-9%$.]/g, '');
     if (!lowerCore || STOPWORDS.has(lowerCore)) continue;
 
-    const isFirstWord = i === 0; // sentence-initial capitalization is not a proper-noun signal
     const isNumberLike = /\d/.test(lowerCore) || /[%$]/.test(lowerCore);
     const isCalendar = MONTHS.has(lowerCore) || WEEKDAYS.has(lowerCore);
     const isProperNoun = !isFirstWord && /^[A-Z][a-zA-Z'’-]+$/.test(raw);

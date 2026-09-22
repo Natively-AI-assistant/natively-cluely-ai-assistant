@@ -212,6 +212,18 @@ const VALID_TIMELINE_TYPE = new Set<TimelineItemType>(['topic_shift', 'decision'
 const VALID_FOLLOWUP_TYPE = new Set<FollowUpDraftType>(['email', 'slack', 'project_update', 'crm_note', 'study_notes', 'interview_feedback']);
 const VALID_FOLLOWUP_TONE = new Set<FollowUpTone>(['professional', 'warm', 'concise', 'friendly']);
 
+// Realistic density is 5-12 findings per section per chunk; a well-covered section across
+// 4-10 chunks can legitimately reach ~120 bullets. This cap exists only to bound pathological
+// input (a runaway chunk count or a misbehaving extractor), not to trim a normal dense
+// meeting — 500 is far above anything the density contract should ever produce.
+//
+// Single source of truth: MeetingSummaryReducer.buildSections applies this same cap (with its
+// own truncation warning) BEFORE validateMeetingSummaryV3 runs, and sanitizeSections below
+// applies it again as the schema's own floor (so any summary object, not just one produced by
+// the reducer, gets the same protection). Both call sites import this constant so they cannot
+// drift apart.
+export const SECTION_BULLET_CAP = 500;
+
 export function cleanString(value: unknown): string {
   return String(value ?? '').replace(NUL_RE, '').replace(/\s+/g, ' ').trim();
 }
@@ -351,9 +363,9 @@ const ANSWER_FRAGMENT_TITLE_RES: RegExp[] = [
   /^(?:return|print|output|write|implement|initialize)\b/i,
   // Conversational acknowledgements: "Yes, that's right", "Okay, so…"
   /^(?:yes|no|sure|okay|ok|yeah|yep)\b\s*[,.!]/i,
-  // Complexity notation is answer vocabulary, never a meeting name
-  // ("The two-pointer approach solves this in O(n) time." — review 2026-08-22).
-  /\bO\([^)]{1,12}\)/,
+  // Complexity notation ("O(1)", "O(n log n)") is handled by
+  // isComplexityAnswerTitle below — a blanket reject also threw away
+  // legitimate DSA-interview names ("O(1) Store Class Design", 2026-08-26).
   // ── Session E live misses (2026-08-23) ────────────────────────────────
   // First-person answer speech: "I'll switch the solution to C++". A meeting
   // name never opens with "I " / "I'…" ("I/O Performance Review" is safe —
@@ -369,11 +381,47 @@ const ANSWER_FRAGMENT_TITLE_RES: RegExp[] = [
   /ഞാൻ|ഞങ്ങൾ|നിങ്ങൾ|എനിക്ക്/u,
 ];
 
+// ── Complexity notation: answer vs. name (2026-08-26) ────────────────────────
+// "O(n)" in a generated title is TWO different failures wearing one shape.
+//
+//   answer   "O(1)" / "O(n log n)" / "O(1) time, O(n) space"
+//   answer   "The two-pointer approach solves this in O(n) time"
+//   NAME     "O(1) Store Class Design" / "Designing an O(1) Store"
+//
+// The user runs DSA interviews constantly, so the complexity IS often the
+// distinguishing feature of the meeting — rejecting every title that mentions
+// it left those sessions unnamed. Reject only when the notation is the whole
+// point of the string rather than one token inside a descriptive noun phrase:
+//
+//   1. ≤2 tokens survive once the notation is removed — the notation IS the title.
+//   2. an assertion verb is present — the phrase claims something about the
+//      complexity ("solves this in O(n) time", "Hash map gives O(1) lookup"),
+//      i.e. it is the answer. Covers the "<language> code uses/is/…" verbs
+//      above plus the ones a complexity claim actually uses (gives/takes/
+//      costs/…), which land inside the 3-6-word window rule 3 can't see.
+//   3. more than 6 words — the naming prompt asks for 3-6, so anything longer
+//      quoting complexity is a sentence, not a name.
+//
+// Detection is the unchanged pattern; only the decision narrowed.
+const COMPLEXITY_NOTATION_RE = /\bO\([^)]{1,12}\)/g;
+const ASSERTION_VERB_RE = /\b(?:uses|is|does|works|runs|solves?|looks|gives?|takes|costs|achieves?|yields|requires?|reduces?|needs)\b/i;
+const TITLE_WORD_WINDOW_MAX = 6;
+
+function isComplexityAnswerTitle(t: string): boolean {
+  const stripped = t.replace(COMPLEXITY_NOTATION_RE, ' ');
+  if (stripped === t) return false; // no complexity notation at all
+  const residual = stripped.split(/[^A-Za-z0-9]+/).filter(Boolean);
+  if (residual.length <= 2) return true;
+  if (ASSERTION_VERB_RE.test(stripped)) return true;
+  return t.split(/\s+/).filter(Boolean).length > TITLE_WORD_WINDOW_MAX;
+}
+
 /** True when a GENERATED title reads as an answer fragment, not a name. */
 export function isAnswerFragmentTitle(title: string): boolean {
   const t = String(title || '').trim();
   if (!t) return false;
   if (ANSWER_FRAGMENT_TITLE_RES.some((re) => re.test(t))) return true;
+  if (isComplexityAnswerTitle(t)) return true;
   // A single all-lowercase token ("cpp") is an answer artifact — the 3-6-word
   // title prompt never legitimately produces one, and user/calendar titles do
   // not pass through this predicate.
@@ -561,7 +609,7 @@ function sanitizeSections(value: unknown, max: number): MeetingNoteSection[] {
   return arr(value).map((section: any, index: number) => ({
     id: cleanId(section?.id || section?.title || `section_${index}`),
     title: cleanString(section?.title || `Section ${index + 1}`),
-    bullets: sanitizeBullets(section?.bullets, 30),
+    bullets: sanitizeBullets(section?.bullets, SECTION_BULLET_CAP),
     order: num(section?.order) ?? index,
   })).filter((s: MeetingNoteSection) => s.title && s.bullets.length > 0)
     .sort((a, b) => a.order - b.order)

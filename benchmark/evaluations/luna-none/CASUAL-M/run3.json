@@ -1,0 +1,282 @@
+{
+ "blind_id": "S-7bbfde33",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 45494,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 22310,
+  "candidatesTokenCount": 1976,
+  "totalTokenCount": 29321,
+  "cachedContentTokenCount": 16315,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 22310
+   }
+  ],
+  "cacheTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 16315
+   }
+  ],
+  "thoughtsTokenCount": 5035,
+  "serviceTier": "standard"
+ },
+ "fact_count": 51,
+ "evaluation": {
+  "factual_accuracy": 4,
+  "important_information_retention": 9,
+  "hallucination_control": 10,
+  "action_item_retention": 9,
+  "decision_retention": 6,
+  "speaker_attribution": 4,
+  "numeric_accuracy": 6,
+  "entity_retention": 9,
+  "timeline_accuracy": 4,
+  "conclusion_accuracy": 4,
+  "structure": 2,
+  "conciseness": 2,
+  "readability": 3,
+  "overall_summary_quality": 4,
+  "critical_errors": [
+   "Superseded values are reported as final decisions and action items, creating direct contradictions within the notes (e.g., trip dates, who is booking the cabin).",
+   "Resolved issues are listed as open questions (e.g., departure time, whether Waffles can attend).",
+   "Severe structural issues with duplicate sections (e.g., 'Action items' and 'Action items (structured)') causing massive repetition.",
+   "Failed to resolve speaker labels ('Speaker 1', 'Speaker 2', 'Me') in the structured sections."
+  ],
+  "missing_important_information": [],
+  "hallucinated_information": [],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C02",
+    "reported": "The planned trip dates are Friday, October 16th through Monday, October 19th, pending Priya's rota check."
+   },
+   {
+    "correction_id": "C04",
+    "reported": "Priya will book Heron Point Cabin using her Hearthstay credit."
+   },
+   {
+    "correction_id": "C06",
+    "reported": "What time the group will leave on Friday. [open]"
+   },
+   {
+    "correction_id": "C03",
+    "reported": "agreed on the October 16–19 dates and an estimated $285 share each"
+   }
+  ],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [
+   "Dan described an ongoing workplace reorganization process involving a pre-meeting and a 22-slide deck.",
+   "Priya said she will move to day shifts in November after working a twelve-and-a-half-hour shift while three nurses were short."
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "missing"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "contradicted"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "missing"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "contradicted"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "missing"
+   },
+   {
+    "id": "F24",
+    "status": "contradicted"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "contradicted"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "present"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "missing"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "missing"
+   },
+   {
+    "id": "F42",
+    "status": "present"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture almost all the important information from the transcript but suffer from severe structural and factual issues. The model generated duplicate sections (e.g., 'Action items' and 'Action items (structured)'), leading to extreme repetition and poor conciseness. Furthermore, the notes present several superseded values as final decisions or open questions, directly contradicting the actual final agreements (e.g., listing the trip dates as Oct 16-19, stating Priya will book the cabin, and listing Waffles' attendance and departure time as open questions). Speaker attribution is also flawed, with raw labels like 'Speaker 1', 'Speaker 2', and 'Me' left unresolved in the structured sections. These contradictions and formatting failures make the notes highly confusing and unusable in their current state."
+ }
+}

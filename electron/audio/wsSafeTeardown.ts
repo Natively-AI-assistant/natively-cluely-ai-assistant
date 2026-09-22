@@ -11,8 +11,7 @@
  * meeting save and transcript persist silently no-ops for the rest of the
  * session. Live-reproduced through the real OpenAI provider in
  * scripts/audit/F-201-repro.mjs. (The same class was fixed for
- * NativelyProSTT on main in 21c4e22f — see the merge advisory in
- * AUDIT_REPORT.md; this helper is the branch-local mitigation for every
+ * NativelyProSTT on main in 21c4e22f; this helper is the branch-local mitigation for every
  * strip-then-close site.)
  *
  * Stripping listeners before close() is intentional at these sites (in-flight

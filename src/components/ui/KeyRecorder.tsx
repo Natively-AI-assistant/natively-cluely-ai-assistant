@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Check } from 'lucide-react';
+import { isRepresentableKey } from '../../utils/keyboardUtils';
 
 interface KeyRecorderProps {
     currentKeys: string[];
@@ -46,6 +47,16 @@ export const KeyRecorder: React.FC<KeyRecorderProps> = ({ currentKeys, onSave, c
             else if (key === 'Backspace') mainKey = 'Backspace';
             else if (key.startsWith('Arrow')) mainKey = key;
             else mainKey = key.toUpperCase();
+
+            // Applied to the RESULT, not as a fallback branch: the Key*/Digit*
+            // branches above hand back the layout's character, so on a non-US
+            // layout they yield the composed glyph too (Option+4 -> "₹", and a
+            // Cyrillic KeyA -> "ф"). Anything Electron cannot turn into an
+            // accelerator is treated as if it were never pressed — recording
+            // stays open and the existing bind stands. Letting it through would
+            // collapse the combo to an empty accelerator, which is how "unbound"
+            // is spelled, silently clearing the shortcut.
+            if (!isRepresentableKey(mainKey)) mainKey = '';
         }
 
         if (mainKey) {

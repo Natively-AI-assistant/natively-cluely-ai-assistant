@@ -1,0 +1,621 @@
+/**
+ * Pure helpers for the overlay's USER-CHOSEN window size (unit-tested).
+ *
+ * Why this exists
+ * ---------------
+ * The overlay OS window has historically been a FIXED width (732 =
+ * WindowHelper.OVERLAY_DEFAULT_WIDTH), with the panel animating 600↔732 purely
+ * in CSS, centered inside it. That invariant is load-bearing: three separate
+ * subsystems derive their geometry from "the window is 732 wide" —
+ *
+ *   1. the toggle aux window's anchor      (panelRight = (windowW + panelW) / 2)
+ *   2. the settings/model popover margin   (WindowHelper.getOverlayPanelLeftMargin)
+ *   3. the click-through hover gate        (margin = (windowW - panelW) / 2)
+ *
+ * — and a width setBounds on a transparent, backdrop-blurred window re-rasters
+ * and flickers on macOS, because Chromium does not sync setBounds to renderer
+ * paint.
+ *
+ * Making the overlay user-resizable does NOT mean giving up that invariant. It
+ * means the window width becomes a value the user can change (rarely, by
+ * dragging) instead of a compile-time constant — and every one of the three
+ * consumers above reads that same value. Within a session the width is still
+ * fixed for the entire expand/collapse spring, so there is still no width
+ * setBounds during an animation. That is what these helpers encode.
+ *
+ * Everything here is pure so the geometry can be tested without a display:
+ * see src/lib/__tests__/overlayCustomSize.test.mjs.
+ */
+
+import { verticalScrollCap } from './overlayScrollBudget.mjs';
+
+/** The window's birth width. MUST equal WindowHelper.OVERLAY_DEFAULT_WIDTH. */
+export const OVERLAY_DEFAULT_WINDOW_WIDTH = 732;
+
+/**
+ * The transparent gutter between the overlay WINDOW's edge and the painted
+ * PANEL, on all four sides.
+ *
+ * It exists so undetectable mode's ring has somewhere to paint OUTSIDE the
+ * card. Before it, the card was flush to the window on both axes (measured
+ * live: card y=0, h=153.625 in a 154px window), so anything drawn beyond the
+ * card's box — an outline, a box-shadow, anything — was clipped away by the
+ * native window bounds. Proven by pixel-sampling a forced outward ring: the
+ * side edges survived into the window's horizontal slack, the top and bottom
+ * did not exist at all.
+ *
+ * Applied as padding on the overlay's contentRef, whose offsetHeight IS the
+ * window height. The WINDOW keeps every number it had — this narrows the
+ * PANEL, so the startup-slide birth width, the display budgets, persisted
+ * custom sizes and the clamps in this file are all untouched.
+ *
+ * Horizontal slack was never new: the collapsed panel has always sat 66px in
+ * from each window edge, which is why panelLeft, mx-auto, the hover gate and
+ * the toggle anchor already cope with a panel narrower than its window. The
+ * gutter extends that to the VERTICAL axis and to the fully expanded width.
+ */
+export const OVERLAY_PANEL_INSET = 6;
+
+/**
+ * How far OUTSIDE the panel the hover gate still counts the pointer as "over
+ * the panel", and therefore keeps the window interactive.
+ *
+ * This must stay BELOW OVERLAY_PANEL_INSET, and that is the whole reason it is
+ * declared next to it. The gate inflates the panel rect by this much before
+ * testing, so any part of the gutter within it is interactive — and an
+ * interactive transparent region swallows clicks meant for the app underneath.
+ * On an overlay whose entire value is not being noticed, an invisible border
+ * that eats clicks is a behavioural tell, so the gutter has to stay
+ * click-through even though it is inside the window.
+ *
+ * It is not zero: the gate flips the window via IPC, so a little hysteresis
+ * keeps pointer jitter at the boundary from thrashing the flag. 2px is enough
+ * for that while leaving most of the gutter transparent to clicks.
+ *
+ * Note this is a REDUCTION in the app's click-eating footprint, not a new
+ * compromise. Before the gutter existed the same inflation was 8px, and on the
+ * horizontal axis — where the collapsed panel has always had 66px of margin
+ * inside its window — it was fully in effect: an 8px band around the panel
+ * already swallowed clicks. The band is now 2px, on all four sides.
+ */
+export const OVERLAY_HOVER_GATE_PAD = 2;
+/** The panel's collapsed width at the DEFAULT window width. */
+export const OVERLAY_DEFAULT_COLLAPSED_WIDTH = 600;
+/** Floor for a user-chosen width — below this the footer chrome cannot lay out. */
+export const OVERLAY_MIN_WINDOW_WIDTH = 360;
+/**
+ * FALLBACK floor for a user-chosen height, used only when the real one cannot
+ * be measured. It is no longer the floor itself: the overlay's default state
+ * measures 154, below this, and naturalWindowHeightFor supplies the measured
+ * value. WindowHelper.OVERLAY_MIN_HEIGHT holds the same number for the same
+ * reason (a size that could not be measured), but the two are no longer an
+ * invariant pair — neither clamps a size the renderer has actually measured.
+ */
+export const OVERLAY_MIN_WINDOW_HEIGHT = 216;
+/**
+ * The MANUAL height floor once there are responses. Auto expand/contract is the
+ * primary sizing and never consults this — it reports the content height
+ * whenever no height is pinned, and only a manual drag pins one. Chosen so a
+ * conversation can be brought back to a usable, scrolling panel: the old floor
+ * tracked the auto-grown height, which reaches the 830 display cap after a few
+ * exchanges and left the overlay un-shrinkable for the rest of the session.
+ */
+export const OVERLAY_CONTENT_MIN_WINDOW_HEIGHT = 450;
+/** Absolute sanity ceilings, applied before any display-derived clamp. */
+export const OVERLAY_MAX_WINDOW_WIDTH = 2560;
+export const OVERLAY_MAX_WINDOW_HEIGHT = 2560;
+
+/**
+ * The fraction of the work area the MAIN PROCESS will grant
+ * (WindowHelper.setOverlayDimensionsAnchored clamps to floor(workArea * 0.9)).
+ * The renderer mirrors it so a drag stops exactly where the window will stop,
+ * instead of racing past the clamp and persisting a width that can never be
+ * applied.
+ */
+export const OVERLAY_WORK_AREA_BUDGET = 0.9;
+
+export const CUSTOM_WIDTH_STORAGE_KEY = 'natively_custom_overlay_width';
+export const CUSTOM_HEIGHT_STORAGE_KEY = 'natively_custom_overlay_height';
+
+/** Clamp n into [lo, hi]. */
+export function clamp(n, lo, hi) {
+  return Math.min(Math.max(n, lo), hi);
+}
+
+/**
+ * Parse one persisted dimension. Returns null for absent, blank, non-numeric,
+ * or out-of-range values — a corrupt localStorage entry must fall back to the
+ * default geometry, never poison the window size.
+ */
+export function parseStoredDimension(raw, lo, hi) {
+  if (raw === null || raw === undefined) return null;
+  const text = String(raw).trim();
+  if (text === '') return null;
+  const value = Number(text);
+  if (!Number.isFinite(value)) return null;
+  const rounded = Math.round(value);
+  if (rounded < lo || rounded > hi) return null;
+  return rounded;
+}
+
+/**
+ * Read the persisted custom size. `storage` is any localStorage-like object;
+ * a throwing or absent storage (private mode, denied site data) yields the
+ * default geometry rather than an exception.
+ *
+ * Width and height are independent: a user may have pinned only one.
+ */
+export function readCustomOverlaySize(storage) {
+  const result = { width: null, height: null };
+  if (!storage) return result;
+  try {
+    result.width = parseStoredDimension(
+      storage.getItem(CUSTOM_WIDTH_STORAGE_KEY),
+      OVERLAY_MIN_WINDOW_WIDTH,
+      OVERLAY_MAX_WINDOW_WIDTH,
+    );
+    result.height = parseStoredDimension(
+      storage.getItem(CUSTOM_HEIGHT_STORAGE_KEY),
+      OVERLAY_MIN_WINDOW_HEIGHT,
+      OVERLAY_MAX_WINDOW_HEIGHT,
+    );
+  } catch {
+    return { width: null, height: null };
+  }
+  return result;
+}
+
+/**
+ * Persist a custom size. A `null` dimension means "not pinned" and REMOVES that
+ * key, so widening the overlay with the east handle does not silently freeze
+ * its height as well — the two axes are pinned independently, by the handle
+ * that actually drove them.
+ *
+ * Returns true only if the writes landed — a denied or quota-exhausted storage
+ * is reported, not swallowed, so the caller can tell the user the size is
+ * session-only.
+ */
+export function writeCustomOverlaySize(storage, size) {
+  if (!storage) return false;
+  try {
+    if (size.width === null || size.width === undefined) {
+      storage.removeItem(CUSTOM_WIDTH_STORAGE_KEY);
+    } else {
+      storage.setItem(CUSTOM_WIDTH_STORAGE_KEY, String(Math.round(size.width)));
+    }
+    if (size.height === null || size.height === undefined) {
+      storage.removeItem(CUSTOM_HEIGHT_STORAGE_KEY);
+    } else {
+      storage.setItem(CUSTOM_HEIGHT_STORAGE_KEY, String(Math.round(size.height)));
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Forget the custom size — the overlay returns to auto-sizing. */
+export function clearCustomOverlaySize(storage) {
+  if (!storage) return false;
+  try {
+    storage.removeItem(CUSTOM_WIDTH_STORAGE_KEY);
+    storage.removeItem(CUSTOM_HEIGHT_STORAGE_KEY);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The shortest the overlay may be dragged, given how tall its non-scrolling
+ * chrome currently measures. Below this the overflow-hidden shell would lay out
+ * taller than its own window and clip the footer.
+ */
+export function minWindowHeightFor(chromeHeight, minScroll = 120) {
+  if (!Number.isFinite(chromeHeight) || chromeHeight < 0) return OVERLAY_MIN_WINDOW_HEIGHT;
+  return Math.max(OVERLAY_MIN_WINDOW_HEIGHT, Math.ceil(chromeHeight) + minScroll);
+}
+
+/**
+ * The widest window the main process will actually grant on this display,
+ * mirroring WindowHelper's floor(workArea.width * 0.9) clamp. Falls back to the
+ * absolute ceiling when the display size is unknown (the main process clamps
+ * again regardless, and the applied size is echoed back).
+ */
+export function maxWindowWidthFor(availWidth) {
+  if (!Number.isFinite(availWidth) || availWidth <= 0) return OVERLAY_MAX_WINDOW_WIDTH;
+  return clamp(
+    Math.floor(availWidth * OVERLAY_WORK_AREA_BUDGET),
+    OVERLAY_MIN_WINDOW_WIDTH,
+    OVERLAY_MAX_WINDOW_WIDTH,
+  );
+}
+
+/** Height counterpart of maxWindowWidthFor. */
+export function maxWindowHeightFor(availHeight) {
+  if (!Number.isFinite(availHeight) || availHeight <= 0) return OVERLAY_MAX_WINDOW_HEIGHT;
+  return clamp(
+    Math.floor(availHeight * OVERLAY_WORK_AREA_BUDGET),
+    OVERLAY_MIN_WINDOW_HEIGHT,
+    OVERLAY_MAX_WINDOW_HEIGHT,
+  );
+}
+
+/**
+ * The NARROWEST window a manual resize may produce.
+ *
+ * Resizing is offered in a controlled range, not as free-form dragging: the
+ * overlay may be made bigger than the size it gives itself, never smaller. The
+ * width half of that rule is a single number, because the OS window is
+ * OVERLAY_DEFAULT_WINDOW_WIDTH in BOTH states — the 600↔732 animation moves
+ * the panel INSIDE a fixed window (see collapsedWidthFor), it never resizes the
+ * window.
+ *
+ * Stated in panel terms — the widths a user actually sees — the same floor
+ * reads as "the collapsed panel never goes below 600, the expanded panel never
+ * below 732". Both resolve here: collapsedWidthFor(732) === 600, and an
+ * expanded panel IS the window width.
+ *
+ * Takes the display rather than returning the bare constant so a display too
+ * small for the default cannot produce a floor ABOVE its own ceiling — an
+ * inverted range would make clamp() return the floor for every drag and pin
+ * the overlay wider than the window the main process will ever grant.
+ */
+export function minWindowWidthFor(availWidth) {
+  return Math.min(OVERLAY_DEFAULT_WINDOW_WIDTH, maxWindowWidthFor(availWidth));
+}
+
+/**
+ * The SHORTEST window a manual resize may produce: the height the overlay
+ * would auto-size itself to right now.
+ *
+ * This is the height half of the controlled range, and it is one rule covering
+ * both states the user described:
+ *
+ *   meeting just started, nothing asked → no scrollable content, so the window
+ *                                         IS its chrome (154 as measured)
+ *   questions/answers present           → chrome + the full scroll extent, i.e.
+ *                                         whatever it auto-grew to
+ *
+ * Note this is NOT minWindowHeightFor. That one answers a different question —
+ * "how short can the shell lay out before the overflow-hidden footer clips",
+ * chrome + a 120px usable viewport — and it is strictly TALLER than the empty
+ * state it is meant to bound (154 → 274). Using it as the resize floor is what
+ * made the first downward drag on an empty overlay jump it 120px taller.
+ *
+ * Capped at the display budget so a long conversation cannot floor the overlay
+ * above the tallest window the main process will grant.
+ */
+export function naturalWindowHeightFor(params) {
+  const { chromeHeight, scrollHeight = 0, maxHeight = OVERLAY_MAX_WINDOW_HEIGHT } = params ?? {};
+  // Unmeasurable chrome (shell not mounted, detached node) must fall back to
+  // the historical constant rather than floor the overlay at zero height.
+  if (!Number.isFinite(chromeHeight) || chromeHeight < 0) return OVERLAY_MIN_WINDOW_HEIGHT;
+  const scroll = Number.isFinite(scrollHeight) && scrollHeight > 0 ? Math.ceil(scrollHeight) : 0;
+  // Ceil, not round: a floor half a pixel short of the content is a floor that
+  // clips it.
+  const natural = Math.ceil(chromeHeight) + scroll;
+  const ceiling = Number.isFinite(maxHeight) ? Math.round(maxHeight) : OVERLAY_MAX_WINDOW_HEIGHT;
+  return Math.min(natural, ceiling);
+}
+
+// ── Smooth free-form resize ───────────────────────────────────────────────
+// A drag is rendered ENTIRELY in CSS inside a pre-grown transparent window:
+// one native resize on grab (to the envelope below), one on release (to fit),
+// none in between. Every native resize of a transparent, backdrop-blurred
+// window re-rasters it, which is why the old per-33ms setBounds stepped the
+// visible edge in 40–150px lurches while the toggle button — streamed at
+// frame rate — ran ahead of it. The 600↔732 spring has always been smooth for
+// exactly this reason: it never touches the native window.
+
+/**
+ * The largest window that fits WITHOUT MOVING ITS ORIGIN: grows right and down
+ * only, into transparent space, up to the same work-area budget the
+ * main-process clamp applies. Stopping at the work-area edge matters more than
+ * the budget — a request past the edge makes setOverlayDimensionsAnchored
+ * shift X/Y to fit, and an origin move flashes for a frame on macOS because
+ * Chromium does not sync setBounds to renderer paint. Never smaller than the
+ * window already is: shrinking on grab would clip the panel about to be dragged.
+ */
+export function resizeEnvelopeFor(params) {
+  const { x, y, width, height, workArea, budgetRatio = OVERLAY_WORK_AREA_BUDGET } = params;
+  const roomRight = workArea.x + workArea.width - x;
+  const roomDown = workArea.y + workArea.height - y;
+  const budgetWidth = Math.floor(workArea.width * budgetRatio);
+  const budgetHeight = Math.floor(workArea.height * budgetRatio);
+  return {
+    width: Math.round(Math.max(width, Math.min(budgetWidth, roomRight))),
+    height: Math.round(Math.max(height, Math.min(budgetHeight, roomDown))),
+  };
+}
+
+/**
+ * The narrowest the PANEL may be dragged — its default for the current state,
+ * stated in the panel widths the user actually sees: 600 collapsed with nothing
+ * asked, 732 expanded once there is content. Never above where the drag starts:
+ * text-only content leaves the panel collapsed at 600, and a 732 floor there
+ * would leap it 132px on the first move (see the jump guard in
+ * computeResizeFrame for the height-side twin of this rule).
+ */
+export function panelWidthFloorFor({ hasContent, startWidth }) {
+  const stateDefault = hasContent ? OVERLAY_DEFAULT_WINDOW_WIDTH : OVERLAY_DEFAULT_COLLAPSED_WIDTH;
+  return Math.min(stateDefault, Math.round(startWidth));
+}
+
+/**
+ * The window width that fits a released panel. Never below the default window
+ * width — a panel narrower than that centres inside the default, which is the
+ * existing collapsed geometry — and never past the display ceiling.
+ */
+export function releaseWindowWidthFor(panelWidth, availWidth) {
+  return clamp(Math.round(panelWidth), minWindowWidthFor(availWidth), maxWindowWidthFor(availWidth));
+}
+
+/**
+ * The SHORTEST a manual drag may make the window, for the current state:
+ *
+ *   meeting just started, nothing asked → the chrome height (154 measured): the
+ *                                         window IS its chrome, the default state
+ *   responses present                   → OVERLAY_CONTENT_MIN_WINDOW_HEIGHT, but
+ *                                         never below the chrome (that clips the
+ *                                         footer) nor above the display budget
+ *
+ * computeResizeFrame additionally bounds this by where the drag starts, so a
+ * chat that has only grown to 298 cannot be dragged below 298 — 450 only
+ * matters once the conversation has grown past it. Auto sizing is untouched.
+ */
+export function manualHeightFloorFor({ hasContent, chromeHeight, maxHeight }) {
+  if (!Number.isFinite(chromeHeight) || chromeHeight < 0) return OVERLAY_MIN_WINDOW_HEIGHT;
+  const chrome = Math.ceil(chromeHeight);
+  const floor = hasContent ? Math.max(OVERLAY_CONTENT_MIN_WINDOW_HEIGHT, chrome) : chrome;
+  const ceiling = Number.isFinite(maxHeight) ? Math.round(maxHeight) : OVERLAY_MAX_WINDOW_HEIGHT;
+  return Math.min(floor, ceiling);
+}
+
+/**
+ * Bring a size that was persisted under different conditions inside the floors
+ * and ceilings that apply NOW — an older build's 360px width floor, or a
+ * display larger than the one the app has just opened on.
+ *
+ * A null axis means "not pinned" and stays null: it is the absence of a choice,
+ * not a zero to be clamped up to the floor.
+ */
+export function clampCustomOverlaySize(size, bounds) {
+  const { minWidth, minHeight, maxWidth, maxHeight } = bounds ?? {};
+  return {
+    width: clampPinnedAxis(size?.width, minWidth, maxWidth),
+    height: clampPinnedAxis(size?.height, minHeight, maxHeight),
+  };
+}
+
+/**
+ * One axis of clampCustomOverlaySize. Preserves null, and bounds each side
+ * INDEPENDENTLY: at mount the height floor is not yet knowable (nothing is laid
+ * out, so there is no chrome to measure) while the ceiling already is, and a
+ * both-or-nothing clamp would silently drop the ceiling along with the floor.
+ * Floor applied last, so an inverted pair yields the floor — matching
+ * computeResizeFrame.
+ */
+function clampPinnedAxis(value, lo, hi) {
+  if (value === null || value === undefined || !Number.isFinite(value)) return null;
+  let out = Math.round(value);
+  if (Number.isFinite(hi)) out = Math.min(out, Math.round(hi));
+  if (Number.isFinite(lo)) out = Math.max(out, Math.round(lo));
+  return out;
+}
+
+/**
+ * The panel's COLLAPSED width for a given window width.
+ *
+ * Scaled proportionally rather than pinned at the historical 600, so the
+ * transparent side margin keeps the same ratio the hover gate and the aux
+ * window anchor were tuned for. A user who widens the overlay to 1200 gets a
+ * proportionally wider collapsed panel (984) rather than a 600px panel adrift
+ * in 300px of dead margin on each side.
+ *
+ * At the default 732 this returns exactly 600, so the default path is
+ * bit-identical to the pre-resize behaviour.
+ */
+export function collapsedWidthFor(windowWidth) {
+  const ratio = OVERLAY_DEFAULT_COLLAPSED_WIDTH / OVERLAY_DEFAULT_WINDOW_WIDTH;
+  return clamp(
+    Math.round(windowWidth * ratio),
+    Math.min(OVERLAY_MIN_WINDOW_WIDTH, windowWidth),
+    windowWidth,
+  );
+}
+
+/**
+ * Does this drag PIN the window height?
+ *
+ * Only a height-driving direction does — or a drag that started with the height
+ * already pinned. This matters because computeResizeFrame also CLAMPS the
+ * pass-through height to the display budget, so an east-only drag that starts
+ * taller than that budget produces a changed height without the user ever
+ * having asked for a height pin. Treating that as a pin would freeze the
+ * overlay's height as a side effect of merely widening it.
+ */
+export function pinsHeightFor(direction, heightAlreadyPinned) {
+  return Boolean(heightAlreadyPinned) || direction === 's' || direction === 'se';
+}
+
+/**
+ * Geometry for one pointer-move frame of a resize drag.
+ *
+ * Only EAST-side directions exist ('e', 's', 'se'). West-side handles would
+ * need the window's X origin to move, which setOverlayDimensionsAnchored
+ * deliberately never does (an X move flashes for a frame on macOS because
+ * Chromium does not sync setBounds to paint). Growing rightward from a
+ * left-anchored window is the only direction that is artifact-free, so those
+ * are the only handles offered.
+ */
+export function computeResizeFrame(params) {
+  const {
+    direction,
+    dx,
+    dy,
+    startWidth,
+    startHeight,
+    maxWidth = OVERLAY_MAX_WINDOW_WIDTH,
+    maxHeight = OVERLAY_MAX_WINDOW_HEIGHT,
+    // Like minHeight, a CALLER-SUPPLIED floor rather than a constant: the
+    // controlled range is anchored to the size the overlay gives itself on the
+    // display it is actually on (minWindowWidthFor). Defaults to the historical
+    // constant so a caller that does not pass one is unaffected.
+    minWidth = OVERLAY_MIN_WINDOW_WIDTH,
+    // The floor is a CALLER-SUPPLIED measurement, not a constant: the shell is
+    // overflow-hidden, so its real minimum is (measured chrome + a usable
+    // scroll viewport). A fixed 216 floor lets a tall-chrome build be dragged
+    // shorter than its own footer and clip it.
+    minHeight = OVERLAY_MIN_WINDOW_HEIGHT,
+  } = params;
+  // A MEASURED floor wins outright; OVERLAY_MIN_WINDOW_HEIGHT is only the
+  // fallback for callers that supply none. It cannot be a max() against 216:
+  // the overlay's own default state is 154 tall, so clamping the floor up to
+  // 216 would forbid returning to the very size the rule names as the minimum.
+  const requestedHeightFloor =
+    Number.isFinite(minHeight) && minHeight > 0
+      ? Math.round(minHeight)
+      : OVERLAY_MIN_WINDOW_HEIGHT;
+  // A floor ABOVE where the drag starts is not a floor, it is a jump. The
+  // height is clamped even on a width-only drag (it passes through), so the
+  // first move past the drag threshold would snap the window up to the floor —
+  // and pinsHeightFor('e', alreadyPinned) would then PERSIST that snap.
+  //
+  // This is reachable whenever the window is deliberately shorter than its
+  // natural height: a pinned height is NOT lifted when content grows past it
+  // (the chat scrolls inside the size the user chose), so a 298px pin with a
+  // 2000px scroll extent yields a natural floor of 830 against a startHeight of
+  // 298 — a 532px leap on the first move. Bounding by startHeight keeps the
+  // rule ("never shorter than the size it gave itself") and adds the half that
+  // makes it coherent with leaving pins alone: never shorter than it already
+  // is, either.
+  const heightFloor = Math.min(requestedHeightFloor, Math.round(startHeight));
+  const widthFloor =
+    Number.isFinite(minWidth) && minWidth > 0 ? Math.round(minWidth) : OVERLAY_MIN_WINDOW_WIDTH;
+  const widthDriven = direction === 'e' || direction === 'se';
+  const heightDriven = direction === 's' || direction === 'se';
+  return {
+    width: clamp(
+      Math.round(widthDriven ? startWidth + dx : startWidth),
+      widthFloor,
+      Math.max(widthFloor, maxWidth),
+    ),
+    height: clamp(
+      Math.round(heightDriven ? startHeight + dy : startHeight),
+      heightFloor,
+      Math.max(heightFloor, maxHeight),
+    ),
+  };
+}
+
+// ── Hover gate hit-test ───────────────────────────────────────────────────
+/**
+ * Is the pointer over the PANEL — the painted card — as opposed to a
+ * transparent part of the window? The window can be wider than the panel
+ * (the collapsed 66px margins) AND taller than it (a pinned height the content
+ * has not filled yet, the OS clamping a restored size, a release still
+ * settling), so the test is the panel's actual rectangle on both axes — never
+ * X-margin arithmetic that silently assumes the panel fills the window's
+ * height. A pointer outside it makes the window click-through (forward:true),
+ * so what looks like desktop behaves like desktop.
+ *
+ * No rect (panel not mounted, or laid out at zero size) answers TRUE: the
+ * main-process default is interactive, and a latched click-through with no
+ * boundary left to cross has no recovery.
+ *
+ * `pad` inflates the rect so fast pointer travel cannot outrun the flip at the
+ * boundary — an over-inclusive edge costs a few interactive pixels, an
+ * under-inclusive one drops a click on the panel's rim.
+ */
+export function pointerOverPanel(point, rect, pad = 0) {
+  if (!rect) return true;
+  const { left, top, right, bottom } = rect;
+  if (![left, top, right, bottom].every(Number.isFinite)) return true;
+  if (right <= left || bottom <= top) return true;
+  const p = Number.isFinite(pad) ? pad : 0;
+  return (
+    point.x >= left - p && point.x <= right + p && point.y >= top - p && point.y <= bottom + p
+  );
+}
+
+// ── Pinned viewport budget: a pin is a LID for this answer, a FLOOR after ──
+
+/**
+ * The chat viewport's budget while a height is pinned.
+ *
+ * A pin has two lives, mirroring the width channel (a manual width applies to
+ * THIS answer; the next answer's first token restores auto behaviour):
+ *
+ *   pinIsCeiling  — right after the drag (and on restore): the chat scrolls
+ *                   INSIDE the chosen size. cap = room = pin − chrome, so the
+ *                   panel is exactly the pin. This is what lets a long chat be
+ *                   shrunk to 450 and stay there.
+ *   !pinIsCeiling — a NEW answer has started: the pin is only a floor. The
+ *                   viewport keeps the pinned room as its minimum but may grow
+ *                   with the content up to the AUTO cap (the unchanged display
+ *                   budget; the width-derived bound applies on top in the
+ *                   caller), so the overlay grows to show the answer instead of
+ *                   streaming it into a 30px slot the user reads as "no answer".
+ *
+ * Unpinned: the auto cap, no room. `room` is what min-height is bound to;
+ * `ceiling` tells the caller whether max-height is the pinned cap or auto.
+ */
+export function pinnedViewportBudget({ pinnedHeight, pinIsCeiling, chromeHeight, availHeight }) {
+  const autoCap = verticalScrollCap({ availHeight, chromeHeight });
+  if (!Number.isFinite(pinnedHeight) || pinnedHeight === null || pinnedHeight <= 0) {
+    return { cap: autoCap, room: 0, ceiling: false };
+  }
+  if (!Number.isFinite(chromeHeight) || chromeHeight < 0) {
+    return { cap: autoCap, room: 0, ceiling: false };
+  }
+  const grantable = Math.min(Math.round(pinnedHeight), maxWindowHeightFor(availHeight));
+  const room = Math.max(0, grantable - Math.ceil(chromeHeight));
+  if (pinIsCeiling) {
+    // No safety margin and no minimum viewport: the pin is the size the window
+    // was actually granted, and at the floor the honest viewport is zero.
+    const cap = verticalScrollCap({
+      availHeight: grantable,
+      chromeHeight,
+      budgetRatio: 1,
+      minScroll: 0,
+      safetyMargin: 0,
+    });
+    return { cap, room, ceiling: true };
+  }
+  return { cap: autoCap, room, ceiling: false };
+}
+
+/**
+ * The collapsed PANEL width for the default window, with the panel gutter
+ * already taken off.
+ *
+ * The reset paths (session reset, and the size-pin clear) set the panel width
+ * directly rather than going through the SHELL_WIDTH_COLLAPSED derivation, so
+ * before this existed they used collapsedWidthFor(OVERLAY_DEFAULT_WINDOW_WIDTH)
+ * — the WINDOW width — and produced 600 while the derivation produced 590. The
+ * panel then sat 10px wider than the width every other path believed it had.
+ * Caught by measuring the live card after the gutter landed, not by a test.
+ */
+export function defaultCollapsedPanelWidth() {
+  return collapsedPanelForWindow(OVERLAY_DEFAULT_WINDOW_WIDTH);
+}
+
+/**
+ * The EXPANDED panel width for a given window width — the window minus its
+ * gutter on both sides.
+ *
+ * This and collapsedPanelForWindow are the only two places that convert a
+ * window width into a panel width. Before the gutter the conversion was the
+ * identity ("an expanded panel IS the window width") and so was written inline
+ * at half a dozen call sites; each of those is now an off-by-2x-inset waiting
+ * to happen, which is why they all route through here instead.
+ */
+export function panelWidthForWindow(windowWidth) {
+  return Math.max(0, Math.round(windowWidth) - OVERLAY_PANEL_INSET * 2);
+}
+
+/** The COLLAPSED panel width for a given window width. */
+export function collapsedPanelForWindow(windowWidth) {
+  return collapsedWidthFor(panelWidthForWindow(windowWidth));
+}

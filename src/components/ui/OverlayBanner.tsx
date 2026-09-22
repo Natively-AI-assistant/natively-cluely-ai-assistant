@@ -172,7 +172,7 @@ export const OverlayBanner: React.FC<OverlayBannerProps> = ({
     className={`relative no-drag flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 rounded-xl border border-amber-500/25 bg-amber-500/10 ${className}`.trim()}
     {...rest}
   >
-    <div className="flex items-start gap-2 flex-1 min-w-[220px]">
+    <div className="flex items-start gap-2 flex-[1_1_220px] min-w-0 max-w-full">
       <span className="shrink-0 flex h-[22px] w-[22px] items-center justify-center rounded-full bg-amber-500/20">
         {icon ?? <DefaultWarningIcon />}
       </span>

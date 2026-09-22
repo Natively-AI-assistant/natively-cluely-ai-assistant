@@ -9,13 +9,15 @@ import { useToggleInit } from './settings/useToggleInit';
 import MeetingDetails from './MeetingDetails';
 import TopSearchPill from './TopSearchPill';
 import GlobalChatOverlay from './GlobalChatOverlay';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion, type TargetAndTransition, type Variants } from 'framer-motion';
 import { FeatureSpotlight } from './FeatureSpotlight';
 import { analytics } from '../lib/analytics/analytics.service'; // Added analytics import
 import { useShortcuts } from '../hooks/useShortcuts';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { isMac } from '../utils/platformUtils';
+import { APP_FEATURE_VERSION } from '../utils/appVersion';
 import WindowControls from './WindowControls';
+import { LiquidGlassBadge } from '../ui-components/LiquidGlassBadge';
 import { emitOrchestratorEvent, setUserState as setOrchestratorUserState } from './onboarding/OrchestratedToasterHost';
 
 interface Meeting {
@@ -228,8 +230,28 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
 
         // Orchestrator: usage-time accumulator. Tick every 30s while launcher
         // is mounted and the window is foregrounded.
+        //
+        // This gate samples document.hasFocus() rather than
+        // document.visibilityState. The launcher window is created with
+        // `backgroundThrottling: false` (see WindowHelper.createWindow and the
+        // boot-reveal bug it fixes), and that option makes the Page Visibility
+        // API report this window as 'visible' even while it is hidden — so a
+        // visibilityState gate here would accrue usage time for a launcher the
+        // user has Cmd+H'd or covered behind another window.
+        //
+        // hasFocus() is sampled at tick time rather than tracked through the
+        // focus/blur handlers above, so there is no seeded-state or missed-event
+        // window to get out of sync: it is the ground truth those events report.
+        //
+        // KNOWN NARROWING, deliberate: this is stricter than the old gate. A
+        // launcher that is on screen and being read, but does not hold keyboard
+        // focus, no longer accrues usage time — where visibilityState would have
+        // counted it. Under `backgroundThrottling: false` there is no renderer-
+        // side signal left that distinguishes "on screen but unfocused" from
+        // "hidden", and under-counting an unfocused window is the safer error
+        // for this counter than billing time for a hidden one.
         const usageTimer = setInterval(() => {
-            if (document.visibilityState === 'visible') {
+            if (document.hasFocus()) {
                 emitOrchestratorEvent({ type: 'usage:tick', deltaMs: 30_000 });
             }
         }, 30_000);
@@ -408,6 +430,132 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
         return `${mm}:00`;
     };
 
+    // ── List ⇄ meeting-notes navigation transition ─────────────────────────────
+    // Cover/uncover model: the details panel is ALWAYS the upper layer (z-20) and
+    // the list is ALWAYS the lower layer (z-10). The list never moves laterally,
+    // it only recedes by scaling *up* past the clip box. Scaling up (rather than
+    // the usual iOS scale down) is deliberate: the container clips the overflow,
+    // so no edge of the window is ever uncovered mid-transition — important
+    // because this is a transparent Electron surface where an uncovered edge is a
+    // hole to the desktop, not a background colour.
+    //
+    // Because direction is decided by *which layer mounts*, not by which meeting
+    // is selected, handleOpenMeeting / handleForward / handleBack all produce the
+    // correct motion with no direction state to keep in sync.
+    //
+    // The details layer is split in two, and that split is the whole reason this
+    // reads as smooth. Fading one combined panel from opacity 0 meant the list
+    // stayed legible *through* the notes for the length of the fade — you read
+    // two documents stacked on each other, gradient promo card and all. Instead:
+    //
+    //   1. a veil painted in the meeting-notes grey covers the list first, fast.
+    //      A flat colour fading over content reads as a surface arriving; it has
+    //      no text of its own to ghost against.
+    //   2. the notes content settles onto that already-opaque surface. Because
+    //      MeetingDetails' own root is painted the SAME grey, fading the content
+    //      only ever fades the *text* — the background never flickers, and the
+    //      20px the content travels only ever uncovers more of the same colour.
+    const prefersReducedMotion = useReducedMotion();
+    // iOS/Ionic panel curve — strong ease-out, no overshoot. Used for the parts
+    // that are mechanical rather than expressive: the veil landing and lifting.
+    const NAV_EASE: [number, number, number, number] = [0.32, 0.72, 0, 1];
+
+    // Apple states its springs as duration + bounce rather than stiffness and
+    // damping, and this is the reason the motion reads as an object settling
+    // rather than a value being tweened: a spring decelerates asymmetrically and
+    // keeps a trace of momentum right at the end, where a bezier simply stops.
+    // Bounce stays near zero — a full-window surface that overshoots reads as
+    // sloppy, not playful. What is wanted is the settle, not the wobble.
+    const SETTLE = { type: 'spring' as const, duration: 0.62, bounce: 0.05 };
+    // Leaving is the system getting out of the way, so it is quicker and has no
+    // bounce at all.
+    const RELEASE = { type: 'spring' as const, duration: 0.46, bounce: 0 };
+
+    // Exactly the token MeetingDetails paints its own root with. If these two
+    // ever disagree the seam becomes visible as a tint shift mid-transition.
+    const NOTES_SURFACE = isLight ? 'bg-bg-secondary' : 'bg-bg-elevated';
+
+    // Nothing visual — this only carries the variant labels down to the two
+    // layers below and takes the panel out of the hit-testing path on the way out.
+    const panelVariants: Variants = {
+        hidden: {},
+        shown: {},
+        gone: { pointerEvents: 'none' },
+    };
+
+    // The grey. Deliberately NOT slowed along with everything else: it is the
+    // mechanical half of the transition, and it is also the thing standing
+    // between the notes and the list. It reaches full opacity around 160ms, and
+    // every frame after that the list is completely hidden — so time spent
+    // beyond this point would be spent on something nobody can see, while time
+    // added *before* it would put the list back underneath the notes text.
+    const veilVariants: Variants = prefersReducedMotion
+        ? {
+            hidden: { opacity: 0 },
+            shown: { opacity: 1, transition: { duration: 0.16, ease: 'linear' } },
+            gone: { opacity: 0, transition: { duration: 0.16, ease: 'linear' } },
+        }
+        : {
+            hidden: { opacity: 0 },
+            shown: { opacity: 1, transition: { duration: 0.16, ease: 'easeOut' } },
+            // Lingers well past the text, then lifts. Leaving in the other order
+            // would flash the list behind still-legible notes.
+            gone: { opacity: 0, transition: { duration: 0.3, ease: NAV_EASE, delay: 0.18 } },
+        };
+
+    // The notes. This is where the length lives — the part worth watching.
+    //
+    // The delay is tuned to one invariant, verified frame by frame: content must
+    // never be legible while the list still is. Whenever content opacity is above
+    // ~0.05, veil opacity is already above ~0.97.
+    //
+    // The scale is what separates this from a slide. Coming forward from 0.985
+    // while travelling the last 28px reads as the page arriving in depth rather
+    // than sliding along a rail; at full size the difference is a couple of
+    // pixels of text, which is exactly the amount you feel without seeing.
+    const contentVariants: Variants = prefersReducedMotion
+        ? {
+            hidden: { opacity: 0 },
+            shown: { opacity: 1, transition: { duration: 0.16, ease: 'linear', delay: 0.06 } },
+            gone: { opacity: 0, transition: { duration: 0.14, ease: 'linear' } },
+        }
+        : {
+            hidden: { opacity: 0, transform: 'translateX(28px) scale(0.985)' },
+            shown: {
+                opacity: 1,
+                transform: 'translateX(0px) scale(1)',
+                transition: {
+                    opacity: { duration: 0.34, ease: 'easeOut', delay: 0.15 },
+                    transform: SETTLE,
+                },
+            },
+            gone: {
+                opacity: 0,
+                transform: 'translateX(22px) scale(0.99)',
+                transition: {
+                    opacity: { duration: 0.18, ease: 'easeOut' },
+                    transform: RELEASE,
+                },
+            },
+        };
+
+    // The list keeps opacity 1 throughout — it is covered by an opaque surface,
+    // so cross-dissolving it too would only muddy the blend. It recedes a little
+    // further than before (4.5%) and on the same spring as the notes, so coming
+    // back the two halves settle as one movement rather than two.
+    //
+    // Under reduced motion it still needs *something* to animate even though it
+    // must not move: AnimatePresence drops an exiting child as soon as its exit
+    // animation finishes, and an empty target finishes on the first frame —
+    // measured, the list unmounted at 3ms and the veil then faded in over bare
+    // background. The 0.999 is imperceptible and holds the layer for the fade.
+    const listRecede: TargetAndTransition = prefersReducedMotion
+        ? { opacity: 0.999, transition: { duration: 0.16, ease: 'linear' } }
+        : { transform: 'scale(1.045)', transition: RELEASE };
+    const listSettle: TargetAndTransition = prefersReducedMotion
+        ? { opacity: 1, transition: { duration: 0.16, ease: 'linear' } }
+        : { transform: 'scale(1)', transition: SETTLE };
+
     return (
         <div className="h-full w-full flex flex-col bg-bg-primary text-text-primary font-sans overflow-hidden selection:bg-accent-secondary/30">
             {/* 1. Header (Static) */}
@@ -543,13 +691,6 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                         <div className="flex-1 pt-[2px]">
                                             <h3 className="text-[14px] font-semibold tracking-[-0.015em] mb-1 flex items-center gap-2">
                                                 <span className={isLight ? 'text-slate-900' : 'text-slate-100'}>{t('Profile Intel')}</span>
-                                                <span className={`text-[10px] font-medium px-1.5 py-[1px] rounded-[5px] ${
-                                                    isLight
-                                                    ? 'bg-blue-50 text-blue-600 border border-blue-100/50'
-                                                    : 'bg-blue-500/10 text-blue-400'
-                                                }`}>
-                                                    {t('Beta')}
-                                                </span>
                                             </h3>
                                             <p className={`text-[12px] leading-[1.35] mb-3.5 tracking-[-0.01em] ${
                                                 isLight ? 'text-slate-500' : 'text-slate-400'
@@ -652,13 +793,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                         <div className="flex-1 pt-[2px]">
                                             <h3 className="text-[14px] font-semibold tracking-[-0.015em] mb-1 flex items-center gap-2">
                                                 <span className={isLight ? 'text-slate-900' : 'text-slate-100'}>{t('Modes')}</span>
-                                                <span className={`text-[10px] font-medium px-1.5 py-[1px] rounded-[5px] ${
-                                                    isLight
-                                                    ? 'bg-orange-50 text-orange-600 border border-orange-100/50'
-                                                    : 'bg-orange-500/10 text-orange-400'
-                                                }`}>
-                                                    {t('Beta')}
-                                                </span>
+                                                <LiquidGlassBadge variant="sky">{t('Beta')}</LiquidGlassBadge>
                                             </h3>
                                             <p className={`text-[12px] leading-[1.35] mb-3.5 tracking-[-0.01em] ${
                                                 isLight ? 'text-slate-500' : 'text-slate-400'
@@ -721,30 +856,52 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                 {!isDetectable && (
                     <div className={`absolute inset-1 border-2 border-dashed rounded-2xl pointer-events-none z-[100] ${isLight ? 'border-black/15' : 'border-white/20'}`} />
                 )}
-                <AnimatePresence mode="wait">
+                {/* initial={false} — the panel that is present on first paint must not
+                    animate in: the launcher is opened by a global shortcut many times a
+                    day, and an entrance animation there only makes it feel slower. */}
+                <AnimatePresence initial={false}>
                     {selectedMeeting ? (
                         <motion.div
                             key="details"
-                            className="flex-1 overflow-hidden"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            transition={{ duration: 0.15 }}
+                            data-page="details"
+                            className="absolute inset-0 z-20 overflow-hidden"
+                            variants={panelVariants}
+                            initial="hidden"
+                            animate="shown"
+                            exit="gone"
                         >
-                            <MeetingDetails
-                                meeting={selectedMeeting}
-                                onBack={handleBack}
-                                onOpenSettings={onOpenSettings}
+                            {/* The grey, covering the list before any notes text
+                                is legible. Purely a surface — it holds no content,
+                                so there is nothing for the list to ghost against
+                                while it fades. */}
+                            <motion.div
+                                data-layer="veil"
+                                className={`absolute inset-0 ${NOTES_SURFACE}`}
+                                variants={veilVariants}
                             />
+                            {/* Settles onto the surface above. MeetingDetails paints
+                                its own root the same grey, so the 20px of travel
+                                only ever uncovers more of that same colour. */}
+                            <motion.div
+                                data-layer="content"
+                                className="relative h-full w-full"
+                                variants={contentVariants}
+                            >
+                                <MeetingDetails
+                                    meeting={selectedMeeting}
+                                    onBack={handleBack}
+                                    onOpenSettings={onOpenSettings}
+                                />
+                            </motion.div>
                         </motion.div>
                     ) : (
                         <motion.div
                             key="launcher"
-                            className="flex-1 flex flex-col overflow-hidden"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            transition={{ duration: 0.15 }}
+                            data-page="launcher"
+                            className="absolute inset-0 z-10 flex flex-col overflow-hidden"
+                            initial={listRecede}
+                            animate={listSettle}
+                            exit={listRecede}
                         >
 
                             {/* Main Area - Fixed Top, Scrollable Bottom */}
@@ -819,7 +976,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                              : 'bg-emerald-400/10 hover:bg-emerald-400/20 border-emerald-500/20 text-emerald-400'
                                                      }`}
                                                  >
-                                                     <span>{t("What's New in 2.8")}</span>
+                                                     <span>{`${t("What's New in")} v${APP_FEATURE_VERSION}`}</span>
                                                      <ArrowUpRight size={12} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
                                                  </button>
                                              )}
@@ -1053,21 +1210,22 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                                                 onClick={async () => {
                                                                                     setActiveMenuId(null);
                                                                                     analytics.trackPdfExported();
-                                                                                    // Fetch full details if needed
-                                                                                    if (window.electronAPI && window.electronAPI.getMeetingDetails) {
-                                                                                        try {
-                                                                                            const fullMeeting = await window.electronAPI.getMeetingDetails(m.id);
-                                                                                            if (fullMeeting) {
-                                                                                                generateMeetingPDF(fullMeeting);
-                                                                                            } else {
-                                                                                                generateMeetingPDF(m);
-                                                                                            }
-                                                                                        } catch (e) {
-                                                                                            console.error("Failed to fetch details for PDF", e);
-                                                                                            generateMeetingPDF(m);
+                                                                                    // Resolve full details when available, else fall back to the
+                                                                                    // list item. Wrapped in one try/catch so a failure anywhere —
+                                                                                    // including the CJK-font load inside generateMeetingPDF — is
+                                                                                    // surfaced instead of becoming an unhandled rejection.
+                                                                                    let target = m;
+                                                                                    try {
+                                                                                        if (window.electronAPI && window.electronAPI.getMeetingDetails) {
+                                                                                            const fullMeeting = await window.electronAPI.getMeetingDetails(m.id).catch((e) => {
+                                                                                                console.error("Failed to fetch details for PDF", e);
+                                                                                                return null;
+                                                                                            });
+                                                                                            if (fullMeeting) target = fullMeeting;
                                                                                         }
-                                                                                    } else {
-                                                                                        generateMeetingPDF(m);
+                                                                                        await generateMeetingPDF(target);
+                                                                                    } catch (e) {
+                                                                                        console.error("Failed to export meeting PDF", e);
                                                                                     }
                                                                                 }}
                                                                             >

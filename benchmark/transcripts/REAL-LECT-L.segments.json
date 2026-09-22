@@ -1,0 +1,3367 @@
+{
+ "id": "REAL-LECT-L",
+ "segments": [
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Happy new year to everybody. I'm christine grady from the department of bioethics here at the NIH clinical center, and we're going to spend the next hour talking about ethical principles in clinical research.",
+   "timestamp": 1789480826333,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "These are mostly my views and don't necessarily represent those of the government and I have no conflicts of interest.",
+   "timestamp": 1789480836333,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "How many of you have studied ethics, you in the room?",
+   "timestamp": 1789480840167,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "This may be very familiar territory, hopefully you can have some good questions or additions to the commentary.",
+   "timestamp": 1789480849267,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So I wanted to start with just a couple of examples of fairly randomly selected from the new england journal of medicine.",
+   "timestamp": 1789480856867,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "This is a study, double blind placebo controlled randomized study of people with traumatic brain injury seen in the emergency room, given progesterone to see if it made a difference in their symptoms and recovery.",
+   "timestamp": 1789480875567,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "This was a study that was done without informed consent.",
+   "timestamp": 1789480878667,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "It was done in an emergency room.",
+   "timestamp": 1789480881567,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Here's another example of a study looking at children with vasiculo-- can't say the word-- reflux, and again, there was a double blind randomized control study to see if antimicrobials made a difference in some of the reflux.",
+   "timestamp": 1789480905867,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Another study where the participants were pregnant women, they were randomized to two different time points in terms of thyroid screening and if they screened positive on the tests that were done, they were given thyroxin.",
+   "timestamp": 1789480921867,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The outcome, the primary outcome of the study was cognitive ability or i.q.",
+   "timestamp": 1789480928567,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Actually in their children at the age of 3.",
+   "timestamp": 1789480934767,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So all recently done study, all published in the new england journal of medicine.",
+   "timestamp": 1789480940100,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So I think the interesting question to ask ourselves is, are these studies ethical?",
+   "timestamp": 1789480944667,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And if you think so, or if you think-- if you're not sure, the question is, how do you make that decision?",
+   "timestamp": 1789480952367,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So for the people in the room, what do you think makes studies of the nature that I just showed you ethical or not ethical?",
+   "timestamp": 1789480960667,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Any idea? Informed consent? Okay. So we had patients WHO couldn't give informed consent, children WHO legally can't give informed consent, so does that mean two of the three were not ethical?",
+   "timestamp": 1789480982967,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Not necessarily, right? Okay. Risk versus benefit, and we didn't go into the details of those, but we'll talk about that in a little bit.",
+   "timestamp": 1789480996567,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Anything else? Yeah. No actual harm.",
+   "timestamp": 1789481001833,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay. So that's kind of-- falls into the rubric of risk versus benefit.",
+   "timestamp": 1789481008767,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I think it's really interesting to think about what does make research ethical.",
+   "timestamp": 1789481015167,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So that's what we're going to talk about.",
+   "timestamp": 1789481016667,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I want to point out a couple things before we go there, though.",
+   "timestamp": 1789481022167,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "What I often think of as the moral tension or ethical tension in research is pretty much captured by this slide.",
+   "timestamp": 1789481032667,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That is that the goal of research, the goal of clinical research, is to generate knowledge, useful knowledge about human health or illness, ways to prevent, diagnose or treat diseases, and the goal is not to benefit the individuals WHO participate in the trial, although",
+   "timestamp": 1789481055767,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "at times they do benefit. That sets up the problem ethically, and that is people WHO are asked to participate are actually are the means to developing useful information.",
+   "timestamp": 1789481065233,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And, therefore, they are at risk of exploitation.",
+   "timestamp": 1789481069033,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And that's really what a lot of the ethics of clinical research is sort of aimed at attending to.",
+   "timestamp": 1789481077867,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "We know that sometimes people think of clinical research like this, you know, people WHO participate in research are human guinea pigs.",
+   "timestamp": 1789481089167,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "They are susceptible to exploitation and sometimes are exploited, but I think it's interesting to think about how we reconcile this.",
+   "timestamp": 1789481106533,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So what I like to say is that the ethics of clinical research really requires recognizing that there are two parts to this puzzle, that generating useful knowledge is an ethical responsibility, and that knowledge can promote bone fits to society and future patients.",
+   "timestamp": 1789481125633,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And that that effort of generating useful knowledge for future patients in society has to be constrained by or balanced by, if you prefer the analogy, protecting and respecting the rights and welfare of the people WHO are participating, the participants.",
+   "timestamp": 1789481142867,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So there's this constant tension between these two, and that's how we think about the ethics of clinical research.",
+   "timestamp": 1789481150867,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Interestingly over time, over the history of clinical research, there's been interesting changes in how we think about this tension.",
+   "timestamp": 1789481160633,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So for many years, for hundreds of years, there were very few rules.",
+   "timestamp": 1789481165633,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Physicians, mostly physicians, experimented for two reasons, one, because they were curious and they had the luxury or the resources to be able to do so, and two, because they wanted to benefit individuals.",
+   "timestamp": 1789481178667,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "They found individuals that they didn't know what to do about in terms of their illnesses, and so they would experiment on them to try to figure out whether this works or does not work.",
+   "timestamp": 1789481190133,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "But there were no rules. We went through a-- what people have referred to as a utilitarian era in the united states, maybe in other parts of the world as well, where the emphasis was on benefit to society.",
+   "timestamp": 1789481206933,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And many of the participants in research during that era were people WHO are now recognized as vulnerable.",
+   "timestamp": 1789481213767,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "They were-- populations, people in prisons, people in institutions, mentally ill, orphanages, people WHO were seen as not only captive but in some respects, sort of marginal or marginal to society.",
+   "timestamp": 1789481230233,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And they made them useful by including them in research.",
+   "timestamp": 1789481240967,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That led, in the late 60s, early 70s, to a period of time where there was some pretty deep-- of the scope and limitations of research.",
+   "timestamp": 1789481257933,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So studies that you might be familiar with that sort of led to this level of scrutiny, where all of a sudden people realized for 40 years, we've been studying the natural history of a disease that had a treatment available to it and the",
+   "timestamp": 1789481276067,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "people in the study were not getting that treatment.",
+   "timestamp": 1789481277967,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "It led to a series of congressional hearings, led to an act of research, led to a commission, of behavioral and biomedical research, and then some rules.",
+   "timestamp": 1789481295533,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And the rules and regulations that we currently operate under were created at that time.",
+   "timestamp": 1789481303200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "They started at that time. And prior to that, there were very few rules about how we did research, or very few laws or regulations that had much authority.",
+   "timestamp": 1789481314133,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The rules and regulations that were put into place starting around the 70s really had the focus or the emphasis of protecting human subjects, providing lots of procedural rules and other rules that would lead to the protection of human subjects from undue risk from",
+   "timestamp": 1789481335833,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "exploitation and would respect their rights through the process of informed consent.",
+   "timestamp": 1789481340900,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "In the last probably 20 years or so, there has been increased recognition of the possibility of benefit through participation in research.",
+   "timestamp": 1789481352033,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "This is benefit not just for the individual-- sometimes the individual that participates, but benefit for populations.",
+   "timestamp": 1789481358933,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So a recognition, for example, that doing research with children sometimes is really important so that we don't end up with therapeutic orphans, people that-- children WHO we don't know how to treat appropriately for certain diseases.",
+   "timestamp": 1789481372300,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Whereas if we don't include them in research work in clinical practice, making guesses about how to treat children.",
+   "timestamp": 1789481382033,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So having children participate in research is a benefit to children at large.",
+   "timestamp": 1789481388233,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "International research has been seen in some cases as beneficial.",
+   "timestamp": 1789481393333,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And there's lots of ways that research has been seen as not just something to be protected against but beneficial in some ways.",
+   "timestamp": 1789481403933,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "During this same period of history, and I just went through a lot of history in a very short amount of time, I can answer questions if you want more details, but during the same stretch of history, there are lots of important codes and",
+   "timestamp": 1789481419467,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "guidelines that were written and are still-- still have some power.",
+   "timestamp": 1789481424833,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I suspect that many of these are familiar to you.",
+   "timestamp": 1789481431633,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The nuremberg code was written as part of the nurenburg trials, war crimes, and it still has some influence in terms of how we do research in the world, not just in the united states.",
+   "timestamp": 1789481446667,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "It's a very distinct code of 10 principles.",
+   "timestamp": 1789481450867,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The declaration of helsinki, which came along about 15 years later, was written by the world medical association, which is a group of-- like the american medical association and its equivalent in different countries around the world, and they wrote a document called the declaration",
+   "timestamp": 1789481471033,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "of helsinki, which was, some people say, in a little bit of a way a response to nuremberg in the following sense, that it recognized that a lot of research is done by physicians with patients, whereas the nuremberg code was written as a result",
+   "timestamp": 1789481487367,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "of research that was done with prisoners in the context of war.",
+   "timestamp": 1789481492467,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The declaration of helsinki, as people describe it, is a living document, it's been revised multiple times.",
+   "timestamp": 1789481499267,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "This slide needs to be updated.",
+   "timestamp": 1789481500967,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "It was most recently revised in 2013.",
+   "timestamp": 1789481504567,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And it has a lot of very important pieces to it and a lot of authority around the world.",
+   "timestamp": 1789481510500,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And I can talk about what those are if you want to know.",
+   "timestamp": 1789481513500,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The belmont report is a document that was written by the national commission that I mentioned a few minutes ago, and it's a pretty short, pretty clear exploitation of the principles that underlie the conduct of clinical research.",
+   "timestamp": 1789481529767,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I'm going to come back to that in a moment, if you haven't read that, I would say it take the time to do so.",
+   "timestamp": 1789481535267,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "It's not very long. Then from the WHO, cioms is the council of international organizations of medical sciences, and they, in collaboration with the world health organization, developed international guidelines which were designed to take the principles enunciated in the declaration of helsinki and apply",
+   "timestamp": 1789481557967,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "them to the context of doing research in the developing world.",
+   "timestamp": 1789481559267,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And there are two published versions of those guidelines, 1993 and 2002, and just in the last few months, a revised version is online for people to comment on.",
+   "timestamp": 1789481570367,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So if you're interested in international research in particular, it's worth taking a look at.",
+   "timestamp": 1789481577700,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "One of the things I particularly like about the cioms document is in addition to the principles, which many of these have, it has long-- not long, but clear detailed exploitations of how they came up with that principle and what they mean by it.",
+   "timestamp": 1789481591467,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So it's very useful. In the united states-- is a very influential document in the world.",
+   "timestamp": 1789481598767,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "It's a good clinical practice, which originally came about through the regulatory agency of the united states, the european union and japan, WHO wanted to find a way to agree on or harmonize the rule under which clinical research could be done so that if",
+   "timestamp": 1789481621267,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "you did research in one of those jurisdictions and wanted to have it approved in the other jurisdiction, you have to start all over again.",
+   "timestamp": 1789481632667,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Which a lot of countries do require.",
+   "timestamp": 1789481634767,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So ich-gcp has been adopted in a lot of countries around the world.",
+   "timestamp": 1789481645267,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "-- to speak to specifically to ethics, and it does adopt most of the principles from the declaration of helsinki.",
+   "timestamp": 1789481653167,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So you can see lots of interaction with this document.",
+   "timestamp": 1789481657667,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So the belmont report, I mentioned, is a document that was written by the national commission and it has three underlying principles for clinical research: respect for persons, beneficence and justice.",
+   "timestamp": 1789481671833,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "They take each of these and not only describe what they mean by it, but they also apply it to a specific aspect of clinical-- doing clinical research.",
+   "timestamp": 1789481680467,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So probably for those of you WHO have ever studied ethics, these are principles that are commonly discussed that don't just apply to clinical research, they apply to lots of things, but the idea of informed consent, they applied beneficence to the idea of risk-benefit",
+   "timestamp": 1789481704933,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "assessment and how you make those calculations, and justice to the idea of selecting-- fairly selecting subjects so that there are fair outcomes as well.",
+   "timestamp": 1789481721467,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The other important thing the belmont did was describe the difference between clinical research and clinical practice, to sort of make these kinds of distinctions.",
+   "timestamp": 1789481731433,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So one thing I already alerted you to was the goals.",
+   "timestamp": 1789481734733,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So the goal of clinical research is to generate useful knowledge.",
+   "timestamp": 1789481738233,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The goal of clinical care is not.",
+   "timestamp": 1789481741567,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "It's to benefit the person or persons in front of you, the persons that are being cared for in the practice.",
+   "timestamp": 1789481747167,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And you can see how sometimes, those two goals can come into tension and need to be reconciled.",
+   "timestamp": 1789481755167,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Methods are also very different. So common methods in clinical research.",
+   "timestamp": 1789481758767,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Talk about double blind trials, placebo controlled trials, health escalation trials of.",
+   "timestamp": 1789481765833,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The kinds of things we do all the time in research are very foreign in concept in clinical practice.",
+   "timestamp": 1789481772633,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "It would be very weird for you to go to your doctor with a sore threat and have the doctor say to you, um, I'm going to give you one of two drugs but neither you nor I are going to know what the drug",
+   "timestamp": 1789481787833,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "is, to heal your sore throat.",
+   "timestamp": 1789481788133,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And yet in research, we do that all the time.",
+   "timestamp": 1789481790233,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The other thing is, the other important difference from an ethical perspective is the justification for risk.",
+   "timestamp": 1789481802533,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "It's clearly not the case in clinical practice, there are risks involved but all of those risks are justified for the potential for the benefit that that intervention offers to that individual WHO is undergoing it.",
+   "timestamp": 1789481817067,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Whereas in reaccept, we often ask people to do certain things, procedures and interventions, that have no corresponding benefit to them.",
+   "timestamp": 1789481827333,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "They're really done to answer a question.",
+   "timestamp": 1789481828933,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So we might ask for an extra biopsy, an extra blood draw, an extra scan.",
+   "timestamp": 1789481836633,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Pharmacokinetics test. Something like that that exposes people to certain risks, so there's three ways that research and-- clinical research and clinical practice are distinguished and they're very important to keep in mind because they help US answer a lot of questions about what's acceptable",
+   "timestamp": 1789481860333,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "and what's not. And the belmont report begins to describe those differences.",
+   "timestamp": 1789481865633,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "In addition to codes and regulations-- sorry-- codes and guidelines, there are regulations.",
+   "timestamp": 1789481871333,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So in the united states, there's two important sets of regulations that are worth knowing about.",
+   "timestamp": 1789481878967,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "One is the common rule. How many of you know about the common rule?",
+   "timestamp": 1789481883233,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay. The common rule is the-- well, let me start with you have 45 CFR 46, also walking around the halls of this building, sometimes you hear people just talk about it like that, they don't call it the common rule, they call 45 CFR",
+   "timestamp": 1789481903000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "46. And so 45 CFR 46 is title 45 of the code of federal regulations part46.",
+   "timestamp": 1789481910633,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And it is the department of health and human services' version of the common rule.",
+   "timestamp": 1789481916433,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The regulations for protection of human subjects that anyone getting department of health and human services money has to follow.",
+   "timestamp": 1789481927233,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The reason it's called the common rule is that there are 16 other federal agencies that also follow the same set of regulations.",
+   "timestamp": 1789481936533,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Their regulations are found in different parts of the CFR, not all in title 45, but the content of the rule and the regulation is similar across 16 federal agencies in the united states.",
+   "timestamp": 1789481954833,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "One of the agencies that does not follow the common rule is FDA.",
+   "timestamp": 1789481958633,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And FDA has its own set of regulations.",
+   "timestamp": 1789481962100,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The regulations that are found at title 21of the CFR are part50 and 56, very similar to what's in the common rule, have a lot of the same requirements, but some important differences.",
+   "timestamp": 1789481979333,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And then there are other parts of the FDA regulations that are very important for somebody who's doing a treatment ind, for example, or a device trial.",
+   "timestamp": 1789481987933,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And then there are policies and guidelines that the NIH requires.",
+   "timestamp": 1789481992033,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So for example, how many of you are investigators?",
+   "timestamp": 1789481997333,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "A couple. So if-- how many of you are IRB members?",
+   "timestamp": 1789482002033,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Anybody? No. Okay. There are some requirements for inclusion of women and ethnic minorities and children in research that are NIH requirements, but that are-- requirements, I guess, and there are some others that the NIH has that are NIH policy that apply to clinical",
+   "timestamp": 1789482029833,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "research. So what does 45 CFR 46 include?",
+   "timestamp": 1789482034733,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "There are really three things that are-- there's a lot more than this.",
+   "timestamp": 1789482039333,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "There's the federal regulations are-- I don't know how many pages, 15 pages, something, of details.",
+   "timestamp": 1789482050067,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So if you're on an IRB or getting ready to write a study, you might really want to know about what the details are.",
+   "timestamp": 1789482058367,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "But basically they cover three broad areas.",
+   "timestamp": 1789482064533,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "One is a lot of description about the composition and function of local institutional review boards, or IRBS.",
+   "timestamp": 1789482072533,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Another is the criteria that IRBS should use when they're deciding whether or not a study is approvable.",
+   "timestamp": 1789482079267,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And the third is requirements regarding informed consent of individuals that are going to be included in a study.",
+   "timestamp": 1789482088967,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So these are spelled out in the common rule and also in 45 CFR 46.",
+   "timestamp": 1789482096467,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "45 CFR 46 also has subparts.",
+   "timestamp": 1789482098967,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Subparts that pertain to additional protections for groups of people that are considered vulnerable for a variety of reasons.",
+   "timestamp": 1789482106667,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Subpart b refers to fetuses, pregnant women and human in vitro fertilization, c to prisoners and d to children.",
+   "timestamp": 1789482114600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And there are some very specific additional requirements that-- entails.",
+   "timestamp": 1789482124267,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The FDA regs already mentioned, 21CFR 50 and 56 are very similar to what's found in the common rule, the part50 is about informed consent, part56 is about IRB composition and function.",
+   "timestamp": 1789482142767,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "There is also a subpart d in the FDA regs that deals with extra protections for research with children.",
+   "timestamp": 1789482149467,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Then there are ind and ide regulations found in 312 and 812 that are very important for an investigator testing a new investigational drug or device.",
+   "timestamp": 1789482165167,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So that's a whirlwind through a little with bit of history and a little bit of rules and regulations that exist.",
+   "timestamp": 1789482171767,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "What I want to spend the rest of the time talking with you about are some sort of conceptual ideas about how you think about research in a way that can help to answer the question of is this research ethical.",
+   "timestamp": 1789482183967,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And I want to preface it by saying that in our department, some 15 or so years ago now, we realized that a lot of the guidance that's found in the codes and the regulations were developed in response to specific problems.",
+   "timestamp": 1789482201167,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "They were developed historically at a time that they were responding to some events that happened in history.",
+   "timestamp": 1789482206133,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And so they have understandably kind of focus on the sort of details of that event that initiated their implementation.",
+   "timestamp": 1789482216567,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "In addition to, or for the same reason, perhaps, some issues are probably incompletely addressed in some of these guidances, and some of the guidances and regulations are at least interpreted to have divergent recommendations.",
+   "timestamp": 1789482235967,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So we thought that there was a need for investigators, people WHO are interested in understanding the ethics of research, for people WHO review research, IRB members and others, to have a systematic, coherent and universally applicable framework that they could use to make decisions",
+   "timestamp": 1789482255467,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "about-- or make judgments about whether or not a particular research that they were writing or reviewing was ethical.",
+   "timestamp": 1789482267333,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And so we proposed a seven-principle framework.",
+   "timestamp": 1789482271833,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The seven principles-- it's published in a couple of different places.",
+   "timestamp": 1789482276167,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The first paper was in 2010, it's also in the textbooks, there's some additions to this and a number of references I could provide to you if you want in some detail, but I'm going to go through it today.",
+   "timestamp": 1789482291667,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So there's seven principles. They include valuable scientific question, valid scientific methodology, fair subject selection, favorable risk-benefit evaluation, independent review, informed consent, and respect for enrolled subjects.",
+   "timestamp": 1789482304333,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "One thing before I go into each one of them I want to say is, we didn't make any of these up.",
+   "timestamp": 1789482309067,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So if you look at the various guidelines and codes, you will find-- of each of these, maybe not exact words, but the concepts and the ideas are there.",
+   "timestamp": 1789482324233,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "We've just put them together in a way that seems more systematic to US.",
+   "timestamp": 1789482327833,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "What I mean by that is that it seems right that you have to start at the top.",
+   "timestamp": 1789482332333,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "You have to answer the question, is this a valuable scientific question, before you go down the list.",
+   "timestamp": 1789482339533,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So the question of informed consent, informed consent is on there, it's a very important part of doing research, but you don't even get near it until you've gone through lots of other considerations in terms of-- so what does it mean to have a",
+   "timestamp": 1789482359167,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "valuable scientific question? So basically what this means is that it has to be worth doing, shorthand for it.",
+   "timestamp": 1789482368533,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "An ethical clinical research should answer a valuable question, one that will generate new knowledge or understanding about human health or illness, a socially, clinically, or scientifically useful question.",
+   "timestamp": 1789482382033,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "A good example of this is an article that was written by a very prolific writer in research ethics, benjamin friedman, WHO wrote an article about-- in this article, he was writing about social value in a certain way.",
+   "timestamp": 1789482397733,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And what he said was he had a nightmare, he was walking down the hall, one of his colleagues said I just successfully transplanted an appendix.",
+   "timestamp": 1789482411167,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And in the article, benji says-- he kind of scratched his head and he said, well, was that ethical?",
+   "timestamp": 1789482416867,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And his colleague responded, well, I got the guy's informed consent.",
+   "timestamp": 1789482421033,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And he uses that as an example of how informed consent doesn't solve the problem.",
+   "timestamp": 1789482426433,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "If there wasn't a good reason, a good question to answer by transplanting an appendix, something that you might learn, something you might use to do some important work with, and it wasn't ethical to do it.",
+   "timestamp": 1789482441233,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And it's an interesting concept because it seems like it is the most important first question to ask: is this research worth doing?",
+   "timestamp": 1789482452133,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Now importantly, it doesn't mean that the answer to the question has to be positive.",
+   "timestamp": 1789482456133,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "You can have negative-- you know, ask a question, get a negative answer, and that's still socially valuable.",
+   "timestamp": 1789482461733,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "It still gives you information that can be very useful, and in many cases is.",
+   "timestamp": 1789482468633,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "But if you can't say why this question is worth asking, then you probably have to re-ask yourself, is this research ethical.",
+   "timestamp": 1789482482933,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "There are many reasons that social value is important.",
+   "timestamp": 1789482485933,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The most benefit to society, sort of one side the of the balance that I showed of you before, and it also minimizes exploitation.",
+   "timestamp": 1789482493133,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "You're asking people to do things for a good reason, not just wasting their time for nothing.",
+   "timestamp": 1789482499733,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Therefore, it justifies asking them to accept some risk and burden and it's also a responsible way to use resources.",
+   "timestamp": 1789482507900,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The second principle in the framework is valid scientific methodology.",
+   "timestamp": 1789482513833,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And this basically says ethical research should be designed in an ethically rigorous manner.",
+   "timestamp": 1789482522133,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Of the design, the manner, that will yield valid reliable, generalizable and interpretable data.",
+   "timestamp": 1789482530033,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So the shorthand here is, you have a question that's worth asking, the second ethical requirement is to design it in a way that you get an answer that you can interpret.",
+   "timestamp": 1789482539533,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That you know what you found.",
+   "timestamp": 1789482541200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That you have data that's reasonably understandable.",
+   "timestamp": 1789482546633,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Again, doesn't have to be positive, it just has to be understandable.",
+   "timestamp": 1789482552733,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And it has to be designed in a way that's feasible as well.",
+   "timestamp": 1789482555533,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Now, this requires lots of details, lots of details in choices of end point, choices of design, choices of procedure, statistical method, et cetera.",
+   "timestamp": 1789482567900,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "You look at this list, some of you might say well, they're all scientific considerations.",
+   "timestamp": 1789482577133,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "In fact, they are scientific considerations, but every scientific choice that you make has ethical implications.",
+   "timestamp": 1789482582233,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So designing the study, picking the right outcome, picking the right design to give you the best, most rigorous answers to your question, choosing the precures that will be used to measure outcomes or data points, whatever, and not only planning your statistical methods but",
+   "timestamp": 1789482600533,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "managing the data are all ethical requirements of good clinical research.",
+   "timestamp": 1789482609567,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "There's lots of controversy about this.",
+   "timestamp": 1789482611567,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Not so much about the idea that things need to be designed in a way that give you a rigorous answer b you how do you balance the best design, the most rigorous design with some of the other things that you need to care",
+   "timestamp": 1789482625633,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "about, like the fact that you don't want to-- expose them to excessive risk.",
+   "timestamp": 1789482631033,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So some of you may have followed the debates that occurred over clinical trials related to ebola in the last year.",
+   "timestamp": 1789482638933,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "There were a lot of discussions about what's the right kind of design that both gives US an answer to the questions that are so urgently needed to be answered, and respects the rights and the welfare of the participants that are in the trial.",
+   "timestamp": 1789482655067,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "There's also a lot of really important ethical-- that goes into feasibility.",
+   "timestamp": 1789482661533,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So if you-- example, are designing a trial where you know you're not going to be able to get the participants that you need to answer it.",
+   "timestamp": 1789482671933,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That's sort of ethically a non-starter, because you can't ask some people to accept risk and burden to answer a question that you know you're not going to be able to answer if it's not feasible to get all the people that you need or",
+   "timestamp": 1789482685667,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "to get the equipment that you need.",
+   "timestamp": 1789482695567,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The third is fair subject selection.",
+   "timestamp": 1789482697267,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So if a question is worth answering, design, methodology is rigorous and is going to give you an answer that you can make sense out of, now you have to ask the question WHO do I include, WHO do I go after as part of",
+   "timestamp": 1789482711400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "this study? I think critically, especially looking historically, the first guide should be scientific objectives.",
+   "timestamp": 1789482722667,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Conclusion criteria-- and selection of subjects, and not the fact that people are easily available or vulnerable or marginal or that they are-- either.",
+   "timestamp": 1789482737967,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "There needs to be a fairness in terms of scientific objectives.",
+   "timestamp": 1789482745567,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Scientific objective is where you start and then you-- when you're thinking about fair subject selection, there's also a consideration of fairly distributing the harms and benefits.",
+   "timestamp": 1789482755567,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So let me give you an example.",
+   "timestamp": 1789482757367,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Let's imagine you think you're doing a study to test a treatment for breast cancer.",
+   "timestamp": 1789482762867,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Scientifically, you're going to need people in that study WHO have breast cancer, and maybe a very specific type of breast cancer.",
+   "timestamp": 1789482771067,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "When you're thinking about fairly distributing the harms and the benefits, you may want to -- you may think about, well, which subgroup within the population of people have breast cancer are more susceptible to the kinds of risks that this intervention might have?",
+   "timestamp": 1789482787867,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Maybe kidney disease or liver disease or some kinds of things that might need to be used as inclusion criteria in order to reduce the risk and protect some of the subgroups.",
+   "timestamp": 1789482803133,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "One of my colleagues talks about the best way to think about fair subject selection is to flip it on its head.",
+   "timestamp": 1789482810267,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "In other words, not start with WHO scientifically should you include in the study, but start with the idea that everybody should be included unless there's a reason to exclude them, justification for excluding them.",
+   "timestamp": 1789482826967,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So then the question becomes what are-- justification for excluding people?",
+   "timestamp": 1789482832367,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "One might be that they can't help answer the question, they don't meet the scientific objective.",
+   "timestamp": 1789482837867,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Another might be that they are at higher risk than everybody else, and a third and very important one is they may be more vulnerable than other populations and, therefore, we should think about whether we need to include them at the front end.",
+   "timestamp": 1789482853367,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I understand there will be another lecture, a whole lecture on vulnerability, so I won't say more about that, but if you have questions, we can talk about that.",
+   "timestamp": 1789482863033,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I think it's important to go back to something i've already alluded to, and that is in thinking about distributing or fair distribution of the risks and benefits, it's important to keep in mind this sort of pendulum swing that's been occurring between thinking of",
+   "timestamp": 1789482881067,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "research as always a burden, always subject to-- always in need of protection.",
+   "timestamp": 1789482885667,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And the sort of opposite swing of the pendulum, where research can be or is in many cases a benefit, and subjects need and want access.",
+   "timestamp": 1789482898867,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So thinking about your risks and benefits, you need to keep in mind those different-- and where any particular project might fall.",
+   "timestamp": 1789482912067,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "If you've got a question worth asking, a design that's rigorous, selecting the appropriate-- given scientist objectives, vulnerability, and now the question is, what's the risk-benefit look like?",
+   "timestamp": 1789482926533,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "For the participants in the study.",
+   "timestamp": 1789482928233,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So this is a sort of different kind of risk-benefit analysis than the first one, which is, is the study worth doing?",
+   "timestamp": 1789482937133,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "In a study that's worth doing, there are still ways that one can make sure that the risk to the individuals in the study are minimized and necessary.",
+   "timestamp": 1789482947567,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So you may see a proposal, for example, that asks to do, you know, 10 mris over the source of six months.",
+   "timestamp": 1789482957167,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So an interesting question to ask is, are 10 necessary, or could the question be answered by doing 6or 5or, you know, spreading them out over a further amount of time?",
+   "timestamp": 1789482971533,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Are there other ways to minimize the burden of those procedures to the participants?",
+   "timestamp": 1789482979767,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Are there risks to the individuals in the study justified by either benefit to them or potential benefit to them, or-- and/or the importance of the knowledge, the social value.",
+   "timestamp": 1789482994333,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And are benefits enhanced, are there ways to enhance benefits in the process of doing research.",
+   "timestamp": 1789483000933,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And these are pretty normal understandable questions, no big deal, but the process of doing it is not so straightforward.",
+   "timestamp": 1789483012467,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Justification about risk, for example, there's an interesting challenge in terms of defining what is a risk in research, how do we know how bad this risk is or how to think about this risk?",
+   "timestamp": 1789483029333,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And there are certainly lots of reasons to think about both probability and magnitude of risk, and different types of risk.",
+   "timestamp": 1789483040233,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So one of the things the regulations talk about is physical, psychological, social, financial risk.",
+   "timestamp": 1789483047833,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "It's interesting to think about how often in research you consider financial risk.",
+   "timestamp": 1789483053433,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Some people talk about-- i've had questioned raised that fall into the certain sort of categories.",
+   "timestamp": 1789483062933,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "If somebody has to travel through a very tough neighborhood or park really far away from the clinic and walk to the clinic and there's some hazards in that walk, are those risks of research, or are those separate from the risks of research?",
+   "timestamp": 1789483082033,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "How do we take those things into account when making an assessment of what the risks are.",
+   "timestamp": 1789483086733,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And I think importantly, in all cases of research, there is some uncertainty about risk.",
+   "timestamp": 1789483092933,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And if there wasn't some uncertainty about risk, we probably wouldn't be doing the research because part of doing research is helping to identify either what the risks are, the magnitude of the risks, the comparative risks, or some other nuance about the risk.",
+   "timestamp": 1789483109233,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So defining risks and measuring risks is a very important part of figuring this out but it's not easy in many cases.",
+   "timestamp": 1789483120433,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Minimizing risk is also something that we need to pay attention to and sometimes things are very straightforward, as I mentioned already, reducing the number of procedures, other things that people talk about are doing procedures that are clinically required, and in other words, instead",
+   "timestamp": 1789483140100,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "of asking for additional blood for research purposes, have it drawn at the time when clinical bloods are being drawn.",
+   "timestamp": 1789483148333,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Making sure that the people WHO are doing procedures have the right kind of training.",
+   "timestamp": 1789483152933,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So there are lots of really important, sometimes very obvious, ways to minimize risk.",
+   "timestamp": 1789483159433,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And limiting risk really gets down to how we protect certain groups of people.",
+   "timestamp": 1789483166400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So one of the ways, for example, that the regulations regarding the research with children work is it limits the amount of risk that children can be exposed to in research.",
+   "timestamp": 1789483178733,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Minimal risk procedures in research for children is basically-- we're generally fine.",
+   "timestamp": 1789483185833,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "More risk can be expected when there's benefit for the children in the study, and then the rule for anything more than a minimal risk without -- are much more stringent and in some cases research cannot be done.",
+   "timestamp": 1789483202633,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "There's also similar challenges in terms of defining benefits.",
+   "timestamp": 1789483207333,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "If you have a certain kind of serious illness, and there are few interventions available to treat that illness, and you are entering a study in which there's an intervention being offered, is that, by definition, a prospective benefit?",
+   "timestamp": 1789483229933,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Is it only an-- phase 3versus phase 1, for example, how do we decide what the prospect of benefit is in some cases?",
+   "timestamp": 1789483244167,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And a lot of information distinguishing what are called direct benefits versus secondary.",
+   "timestamp": 1789483250867,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So the direct benefit to our-- in a-- possible therapeutic benefit that one might derive from an intervention.",
+   "timestamp": 1789483259967,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The secondary benefits might be other medical care that you might receive because of the study, payment that you might receive as part of a study, feeling like you're contributing to society that might be psychologically beneficial, consider a secondary benefit.",
+   "timestamp": 1789483281767,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So importantly, going back to my original balancing scale, most guidance recognizes that interests other than the subject,, research in which we know in advance the individual participating will not benefit, there's no prospect of benefit, can sometimes be ethically acceptable, as long as the",
+   "timestamp": 1789483311900,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "rights of the individuals WHO are participants have been adequately protected.",
+   "timestamp": 1789483317700,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So the question worth asking, a design that's rigorous, the right population chosen, efforts made to minimize risks and enhance benefits, now the next thing on that list is independent review.",
+   "timestamp": 1789483333967,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And so this is a process which allows an investigator or a research team WHO has investments in research to have somebody else say, is this acceptable.",
+   "timestamp": 1789483347867,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "To ensure that the ethical requirements have been fulfilled, check any biases that the investigator might bring, and assure the public.",
+   "timestamp": 1789483360967,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So most research in the united states is independently-- by an institutional review board, IRB.",
+   "timestamp": 1789483371867,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "There's-- the methods of reviewing. Most countries around the world have an equivalent kind of ethics research review committee that looks at research before it starts.",
+   "timestamp": 1789483390167,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Criteria that are found both in the common rule and the FDA regulations that the IRB is supposed to use in order to determine whether a particular study is approvable, include these.",
+   "timestamp": 1789483402033,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And you'll see flavors of things that i've already talked about.",
+   "timestamp": 1789483406233,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That risks were minimized, there's more to that statement than on the slide.",
+   "timestamp": 1789483410567,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That risks are justified by any institute that benefits subjects or the importance of the knowledge, that subjects will be selected and treated fairly, and that informed consent was adequate.",
+   "timestamp": 1789483435267,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "There are lots of interesting challenges in the news right now, many IRBS have huge volume of protocol.",
+   "timestamp": 1789483442633,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "How many of you have ever been to an IRB meeting?",
+   "timestamp": 1789483448367,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay. So oftentimes an IRB meeting can last four hours, but you have maybe 10 protocols.",
+   "timestamp": 1789483459367,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Some of them, protocols sometimes are 300 pages long and dense in terms of their scientific background, et cetera.",
+   "timestamp": 1789483467433,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So the challenge is not trivial in terms of understanding what it's about, having a process of asking questions often of the investigator, and find these principles and thinking about, well, is this something that's-- in its current form?",
+   "timestamp": 1789483485867,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Consequently there's been plenty of evidence to show that IRBS are can-- tend to be inconsistent.",
+   "timestamp": 1789483494267,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "This has created problems in particular for multicenter studies or multisite studies, so if you have a study that has 100 different sites, oftentimes 100 different ir bs have to review it, and they may have to have either grossly different decisions or sometimes just",
+   "timestamp": 1789483514167,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "mildly different decisions but that impact the entire spectrum.",
+   "timestamp": 1789483519767,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So this is a problem that a lot of people have talked about, and lots of attention right now to using single IRB review for multisite studies.",
+   "timestamp": 1789483535233,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "This year, in september of 2015, the department of health and human services published what's called a notice of proposed rulemaking, that's what nprm stands for, maybe some of you have heard about it, and basically it's a proposal for changing the common rule.",
+   "timestamp": 1789483553567,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And there's some very interesting-- some minor and some huge changes in terms of what they're proposing.",
+   "timestamp": 1789483560833,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "One of them is this, that for multicenter studies, domestic, not international, a single IRB review will be required.",
+   "timestamp": 1789483572333,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "It won't be required to have different institutions reviewing-- different institutions, ir bs reviewing the study, but there's a lot of consternation about how this is going to look, whether it will be adequately protective and how you'll make arrangements to-- institutions-- so the sixth",
+   "timestamp": 1789483602733,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "of the seven on our list is informed consent.",
+   "timestamp": 1789483605733,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "As someone in the audience said, a lot of people, when they think about sort of abstractly, what is it that makes-- sorry-- research ethical, clinical research ethical, the answer often is informed consent, and certainly in most cases, informed consent is an important part",
+   "timestamp": 1789483622133,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "of doing ethical research. But what's interesting about it is, if you think about it, until you have a proposal that's worth doing and well designed and you've minimized risk and have somebody else review it, there is no reason to ask somebody for their",
+   "timestamp": 1789483636433,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "informed consent. You don't even get there until-- but informed consent, once you're there, has a goal of making sure that the people that you're offering participation to have an opportunity to decide whether they want to participate or continue to participate, and whether or",
+   "timestamp": 1789483654533,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "not the participating is compatible with their goals and their interests and their values.",
+   "timestamp": 1789483661433,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "A really important concept. Most of the documents, the code guidelines, regulations, have something related to informed consent.",
+   "timestamp": 1789483669533,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Some of them are very strong.",
+   "timestamp": 1789483671233,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So nuremberg code is famously quoted as saying-- the voluntary consent of the human subject is absolutely essential.",
+   "timestamp": 1789483684533,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The cioms guidelines says for all biomedical research involving human subjects, the investigator must obtain the informed consent of the prospective subject or authorized representative.",
+   "timestamp": 1789483695433,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "There are some exceptions, there are some ways to waive informed consent, emergencies are one example, so the study I showed you at the beginning where you're encountering and doing-- on people in the emergency room WHO have traumatic brain injury, there's a process that's",
+   "timestamp": 1789483717633,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "regulatorily described that one needs to go through in order to do that, but those kinds of research can sometimes be done without getting the consent of the individuals WHO are in a position, for the most part, to not be able to give informed",
+   "timestamp": 1789483730933,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "consent. So what does informed consent involve?",
+   "timestamp": 1789483742800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "It involved a number of steps, disclosure of information, understanding the information well enough to make a decision, a choice that they can make, which is hopefully voluntary, in other words, not forced or unduly influenced by others or other factors.",
+   "timestamp": 1789483762200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And then they authorize it. I don't know if you can see my picture, the cartoon which is not really that funny.",
+   "timestamp": 1789483771800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "People standing around the table looking at a guy who's being asked to sign consent and you can see them with their trench coats and their hats, putting the pressure on this poor guy who's sweating.",
+   "timestamp": 1789483783733,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Unfortunately, sometimes informed consent includes-- like that or feels like that to people.",
+   "timestamp": 1789483791633,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Other times, it's done, you know, in a very open and iterative way so that people really can engage with the information, ask question, understand it and make a decision.",
+   "timestamp": 1789483811867,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "There are lots of challenges to this.",
+   "timestamp": 1789483814467,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "You can tell i've spent a lot of time thinking about it, i've done some of my research on informed consent, but for example, just think about how many of you have seen consent forms that are used in the intramural program?",
+   "timestamp": 1789483827233,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Any of you? So oftentimes, not always, the consent form-- 15, 18 pages long.",
+   "timestamp": 1789483839733,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Those are long documents. Choice is about what to put in those consent documents and how to state things are really very ethically important and very difficult.",
+   "timestamp": 1789483856867,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "To be able to give people the information without making it so long and so cumbersome that they -- absorb it.",
+   "timestamp": 1789483867333,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Then the IRB has an important role in reviewing consent, both the plan for informing-- about various aspects of a study, how investigators of the research team are going to know whether or not somebody understands, and whether their choice is voluntary.",
+   "timestamp": 1789483885767,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So the seventh of our seven principle framework is what we call respect for-- subjects.",
+   "timestamp": 1789483893867,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "This is an element or a principle that I think really needs some more work.",
+   "timestamp": 1789483900767,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Let me tell you where it came from first and then why I say it needs more work.",
+   "timestamp": 1789483906167,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So in reviewing the documents, the codes of ethics, the literature on research ethics, the regulations, they all talk about what you do up front.",
+   "timestamp": 1789483914200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "You get review, you make sure the risks and benefits are justified and risks are minimized, and get a person's informed consent, and then your study begins.",
+   "timestamp": 1789483925367,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And much of the guidance, not all of it but much of the guidance doesn't say much else about what happens.",
+   "timestamp": 1789483932867,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That doesn't make any sense, right?",
+   "timestamp": 1789483934167,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Your ethical obligation to people that you're enrolling in research can't end the minute you get their informed consent, right?",
+   "timestamp": 1789483943033,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "You still have obligations to people.",
+   "timestamp": 1789483945467,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And so these obligations include at least things like protecting their confidentiality, monitoring their welfare, recognizing the that they have a white to withdraw, providing them new information as it becomes available that might affect their decision to participate, informing them of your findings, planning",
+   "timestamp": 1789483963467,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "for what happens at the end of the trial.",
+   "timestamp": 1789483965667,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "There are other things that are not on this list.",
+   "timestamp": 1789483968367,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Compensation for research related injury. There are a lot of things that people do talk about that are sort of in this-- under this rubric of what happens after the study begins.",
+   "timestamp": 1789483981567,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So I think both-- hopefully you can see why this is an important element but also you can see why there needs to be more work on this because some of these things are done without a lot of guidance.",
+   "timestamp": 1789483999767,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "There is some guidance, so for example, in the nuremberg-- sometimes should be at liberty to bring the experiment to an end, to withdraw at any time.",
+   "timestamp": 1789484009733,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Helsinki talks about privacy and confidentiality and minimizing the impact of the study on a person's physical and mental integrity.",
+   "timestamp": 1789484019667,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So those are the seven. Hopefully they made some sense.",
+   "timestamp": 1789484023667,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I think importantly, again, i've said this but, you know, we think of them as systematic and sequential.",
+   "timestamp": 1789484032667,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So you start at the top and work your way down, and that that's necessary, so when you're thinking about a study, whether you're writing it, reviewing it, entering as a participant, it's worth thinking about them one at a time and saying okay, does",
+   "timestamp": 1789484049567,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "this study have value, is it well designed, are the right people being asked to participate, the inclusion criteria-- has it been reviewed by an IRB?",
+   "timestamp": 1789484062033,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "If there are good processes in place for informed consent.",
+   "timestamp": 1789484066133,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And are all the things that happen to people, once the study starts, the monitoring, the confidentiality, the plans for what happens in the end, are those all adequate?",
+   "timestamp": 1789484075233,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And you can ask those questions for every single study that you consider in any way.",
+   "timestamp": 1789484080367,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "It also seems important to recognize that these can be universal.",
+   "timestamp": 1789484086067,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "In other words, they apply to all studies everywhere across town.",
+   "timestamp": 1789484090367,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "What's important, however, is thinking about how they're actually manifested.",
+   "timestamp": 1789484093667,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So risk, for example, might vary over time from one time point or another or to one geographic location to another.",
+   "timestamp": 1789484105733,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The method in which you disclose information in informed consent, might vary by population.",
+   "timestamp": 1789484112967,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Doesn't mean-- the principle of giving people the operation that they can use to make a decision, it's how you implement it that changes the study.",
+   "timestamp": 1789484123733,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And, of course, they're going to require some balancing and specifying.",
+   "timestamp": 1789484131133,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So the idea of having an adequate justification for the risk requires a lot of specification in terms of determining what are the risks, what are the risks that count in this case, how do we balance them with the benefits, what are the benefits",
+   "timestamp": 1789484146867,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "that count in this case. How do we weigh them, how do we balance them against the rigor of the study?",
+   "timestamp": 1789484153467,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And there are a lot of interesting examples of challenges, for example n randomized controlled trials, people worry about things like randomizing people.",
+   "timestamp": 1789484164433,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Especially if one of the arms to which people might be randomized is a placebo arm.",
+   "timestamp": 1789484171133,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "We worry about that from a placebo perspective, and yet if the question is worth asking and the design is rigorous, it might be that placebo is the best way to answer the question, and not only the best way to answer the question but",
+   "timestamp": 1789484185833,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "the fairest thing for the individual, because if you know up front that the drug is better than placebo, then maybe you shouldn't be doing the study.",
+   "timestamp": 1789484194733,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So it's that kind of balancing that needs to be done.",
+   "timestamp": 1789484204033,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "In order to apply those principles and reconcile the inherent conflicts and make informed judgments about ethical research, you need people WHO are investigators and research teams and IRB members, et cetera, WHO have this kind of-- use this kind of a framework so hopefully",
+   "timestamp": 1789484226133,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "all of you will be able to find it useful-- I want to end with just a minute or two about some interesting challenges that are going on that people have-- some of these actually are referred to in the nprm in the proposals to",
+   "timestamp": 1789484249233,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "changing the common rule, but certain ways that we do research now that were not envisioned when some of the regulations and code of ethics were written, so people are beginning to question, do we have the right set of guidance in terms of doing",
+   "timestamp": 1789484263133,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "research. I think the principles-- the seven principles that he just described are very useful in thinking through these new challenges of research.",
+   "timestamp": 1789484271033,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "But for example, more and more of the research that's being done is multisite and also multi-national.",
+   "timestamp": 1789484280733,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So you have differences between sites, differences between countries that make very important challenges in terms of how to do something right that's also scientifically rigorous.",
+   "timestamp": 1789484293733,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "We've already mentioned the IRB challenges in terms of multiple sites.",
+   "timestamp": 1789484298333,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "There's been a lot of attention in the last couple of years to learning healthcare systems,, quality improvement, comparative research, usual care research and whether or not these are similar to the clinical trial paradigms that the regulations and the guidance was written about.",
+   "timestamp": 1789484331333,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And there are huge debates in the literature, maybe some of you have heard of the study a couple years ago, there are still people writing that-- report study in terms of whether or not we have the right paradigm to thinking about research ethics.",
+   "timestamp": 1789484348833,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Also in the middle of lots of debate about research using data, samples, biospecimens, the notice of proposed rulemaking, the nprm, has some major changes in terms of how we do research-- somehow we currently do research that require assessments and data.",
+   "timestamp": 1789484374400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "There are lots of questions about whether or not the nprm proposals are correct and how they're going to change how we do research.",
+   "timestamp": 1789484384133,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And certainly much attention in the last couple of years to genomic data, selecting genomic data and sharing genomic data.",
+   "timestamp": 1789484392833,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "One of the other NIH policies that's very influential is the genomic data sharing policy, that requires NIH funded investigators to-- genomic research to share the data in-- so lots of interesting challenges in the changing-- this last slight is just a link to some",
+   "timestamp": 1789484421467,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "more information that you might find useful.",
+   "timestamp": 1789484422633,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So questions, comments, challenges? Nothing. Clear as mud?",
+   "timestamp": 1789484440133,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Those of you WHO studied ethics in the past, did this add anything to your knowledge base or was this repetitious?",
+   "timestamp": 1789484454267,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Nobody has any questions, any cases you want to raise?",
+   "timestamp": 1789484458067,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Things you've been wondering about? Did you have a question?",
+   "timestamp": 1789484483667,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "what do you mean by if I understand what you mean correctly, most of the time, especially for studies that involve intervention, there's a pretty thorough history and physical done, careful assessment of whether each individual meets the inclusion criteria that are specified to protect",
+   "timestamp": 1789484510800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "people in that study, and then a series of data points at which different measurements are taken to see how the individual is or is not responding to the intervention.",
+   "timestamp": 1789484523767,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Which includes not only, you know, measures of efficacy, if you will, but also safety, what kinds of toxicity, side effects, et cetera.",
+   "timestamp": 1789484531967,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So those are in research, especially research interventions, those are very carefully monitored, those kinds of things.",
+   "timestamp": 1789484542533,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Is that what you had in mind?",
+   "timestamp": 1789484558367,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "that's a good question. It is the nature of the beast that we don't know the full effect of things that we're trying in research, why we are monitoring so closely and watching people.",
+   "timestamp": 1789484581567,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And almost every study that you might encounter has what they call stopping rules, which are both for individuals if individuals experience this kind of side effect or this level of side effect, they will be taken out of the study or their dose will",
+   "timestamp": 1789484600067,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "be adjusted or withheld for a while, and there are also stopping rules usually for entire study.",
+   "timestamp": 1789484604333,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Two people have this it-- four people have this kind of level of side effect and the study will be changed or stopped or things like that.",
+   "timestamp": 1789484613167,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So those kinds of safeguards are built into studies all the time.",
+   "timestamp": 1789484617067,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "However, there's another issue that I think you're raising, and that is, what if somebody is hurt?",
+   "timestamp": 1789484622767,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And it is one of the more controversial areas, and that is that in the united states anyway, we do not have a requirement for or a system for compensating people WHO are hurt in research or injured in research.",
+   "timestamp": 1789484644367,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "What we do have is a regulation that requires investigators to tell people what will happen if they get hurt in research, and so consent forms often have language that says something like if you are injured as part of this research or if you",
+   "timestamp": 1789484658667,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "are hurt as part of this research, we will take care of you for a short-term or we will transfer you to someplace else that will be able to take care of you, but your insurance company will pay for that.",
+   "timestamp": 1789484669833,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So we don't have a good system.",
+   "timestamp": 1789484671733,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And that's something that's been a-- I think a-- it has been contentious because most people WHO think about it for more than a few minutes think that's a mistake, we ought to have a system in place for helping people WHO are hurt.",
+   "timestamp": 1789484688367,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "There's lots of literature on that.",
+   "timestamp": 1789484700733,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Other questions? Well, then, go forth.",
+   "timestamp": 1789484705933,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Remember, we have the department of bioethics which offers consults and classes and we have ethics grand rounds four times a year, discussions, so please take advantage of US.",
+   "timestamp": 1789484722433,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And thank you for your",
+   "timestamp": 1789484723433,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  }
+ ],
+ "words": 8518,
+ "speakerCount": 1,
+ "durationMs": 3923433,
+ "startEpochMs": 1789480800000,
+ "source": "https://www.youtube.com/watch?v=Uihjety2d5M"
+}

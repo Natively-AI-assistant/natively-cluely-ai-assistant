@@ -17,7 +17,9 @@ const source = readFileSync(sourcePath, 'utf8');
 test('meeting chat viewport disables horizontal scrolling while retaining vertical scrolling', () => {
   assert.match(
     source,
-    /ref=\{scrollContainerRef\}[\s\S]{0,180}className="[^"]*overflow-y-auto[^"]*overflow-x-hidden[^"]*"/,
+    // The attribute is a template literal (padding is conditional), so accept
+    // both `className="…"` and `className={`…`}`.
+    /ref=\{scrollContainerRef\}[\s\S]{0,180}className=(?:"|\{`)[^"`]*overflow-y-auto[^"`]*overflow-x-hidden[^"`]*/,
     'BUG: the meeting chat viewport must combine overflow-y-auto with overflow-x-hidden so regular answers cannot move the whole interface sideways.',
   );
 });

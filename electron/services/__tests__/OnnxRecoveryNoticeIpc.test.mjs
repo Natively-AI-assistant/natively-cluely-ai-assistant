@@ -27,21 +27,23 @@ test('AppState exposes setOnnxRecoveryNotice + takeOnnxRecoveryNotice', () => {
     assert.ok(body.includes('delete this.onnxRecoveryNotices'), 'takeOnnxRecoveryNotice must delete the stash to be one-shot');
 });
 
-test('main.ts consumes intent/embeddings/reranker sentinels at cold start', () => {
+test('main.ts consumes embeddings/reranker sentinels at cold start, and no longer the intent one', () => {
     const src = readSrc('electron/main.ts');
-    // Find the second setImmediate block (the generalized sentinel consume).
-    // Anchor on the CALL expression `consumeIntentClassifierSentinel()` (with
-    // parens) so the require() statement at line 837 is not matched. Then
-    // walk forward to a safe terminator — the closing of the setImmediate
-    // block — so the slice covers all three consume + stash branches.
-    const consumeStart = src.indexOf('consumeIntentClassifierSentinel()');
-    assert.ok(consumeStart > -1, 'main.ts must call consumeIntentClassifierSentinel');
+    // 2026-09-05: the intent family has no model any more. The MobileBERT
+    // classifier was removed, so main.ts must NOT consume or stash an intent
+    // sentinel; a stale consume would announce a recovery for a model that
+    // cannot crash because it does not load.
+    assert.equal(src.includes('consumeIntentClassifierSentinel'), false, 'intent sentinel consume must be gone with the classifier');
+    assert.equal(src.includes("setOnnxRecoveryNotice('intent'"), false, 'no intent recovery notice can be stashed');
+    // Anchor on the embeddings CALL expression (with parens) so the require()
+    // statement is not matched, then slice forward over the consume block.
+    const consumeStart = src.indexOf('consumeLocalEmbeddingSentinel()');
+    assert.ok(consumeStart > -1, 'main.ts must call consumeLocalEmbeddingSentinel');
     // The block ends with the catch clause's closing brace; search for the
     // first `} catch` (or `})` ) after the consume calls. Practical anchor:
     // 3500 chars after the start of the block is more than enough for the
     // ~80-line block.
     const block = src.slice(consumeStart, consumeStart + 3500);
-    assert.ok(block.includes("setOnnxRecoveryNotice('intent'"), 'intent notice must be stashed');
     assert.ok(block.includes("setOnnxRecoveryNotice('embeddings'"), 'embeddings notice must be stashed');
     assert.ok(block.includes("setOnnxRecoveryNotice('reranker'"), 'reranker notice must be stashed');
     assert.ok(block.includes("clearLocalEmbeddingPoison") || block.includes('Non-fatal'), 'must be inside the consume setImmediate');
@@ -53,7 +55,10 @@ test('ipcHandlers registers the onnx-get-recovery-notice + onnx-reset-family IPC
     assert.ok(src.includes("safeHandle('onnx-reset-family'"), 'must register onnx-reset-family');
     // The reset handler must delegate to the per-family clear helpers.
     const resetBody = src.slice(src.indexOf("safeHandle('onnx-reset-family'"));
-    assert.ok(resetBody.includes('clearIntentClassifierPoison'), 'reset must clear intent poison');
+    // The intent branch survives as a no-op success so an older renderer sending
+    // 'intent' is not met with an error; there is no poison to clear.
+    assert.ok(resetBody.includes("family === 'intent'"), 'reset must still accept the intent family');
+    assert.equal(resetBody.includes('clearIntentClassifierPoison'), false, 'there is no intent poison helper any more');
     assert.ok(resetBody.includes('clearLocalEmbeddingPoison'), 'reset must clear embedding poison');
     assert.ok(resetBody.includes('clearLocalRerankerPoison'), 'reset must clear reranker poison');
 });

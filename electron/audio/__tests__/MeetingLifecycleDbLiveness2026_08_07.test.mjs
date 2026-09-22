@@ -36,7 +36,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import Module from 'node:module';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../../..');
@@ -66,10 +66,14 @@ Module._load = function patchedLoad(request) {
     return origLoad.apply(this, arguments);
 };
 
-const { NativelyProSTT } = await import(
-    path.join(repoRoot, 'dist-electron/electron/audio/NativelyProSTT.js'));
-const { MeetingLifecycleQueue } = await import(
-    path.join(repoRoot, 'dist-electron/electron/audio/meetingLifecycleQueue.js'));
+// WINDOWS (2026-08-29): `await import()` needs a file:// URL, not a bare
+// absolute path. On POSIX `import('/Users/…')` happens to resolve; on Windows
+// `import('C:\\…')` throws ERR_UNSUPPORTED_ESM_URL_SCHEME, and because these
+// imports run at MODULE LOAD the whole file fails before a single test runs —
+// which is why this file showed up as one opaque file-level ✖ in the Windows
+// leg rather than as a failing assertion. `pathToFileURL` is the fix.
+const { NativelyProSTT } = await import(pathToFileURL(path.join(repoRoot, 'dist-electron/electron/audio/NativelyProSTT.js')).href);
+const { MeetingLifecycleQueue } = await import(pathToFileURL(path.join(repoRoot, 'dist-electron/electron/audio/meetingLifecycleQueue.js')).href);
 
 const settle = (ms) => new Promise(r => setTimeout(r, ms));
 

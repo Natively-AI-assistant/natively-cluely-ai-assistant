@@ -7,6 +7,10 @@ import {
   easeOutQuint,
   widthAt,
   isResizeComplete,
+  OVERLAY_RESIZE_TWEEN,
+  OVERLAY_RESIZE_TWEEN_EASE,
+  OVERLAY_RESIZE_TWEEN_MS,
+  easeCardResize,
 } from '../overlayResizeEasing.mjs';
 
 test('OVERLAY_RESIZE_EASE is the iOS drawer curve', () => {
@@ -110,4 +114,64 @@ test('isResizeComplete boundary', () => {
   assert.equal(isResizeComplete(OVERLAY_RESIZE_DURATION_MS - 1), false);
   assert.equal(isResizeComplete(OVERLAY_RESIZE_DURATION_MS), true);
   assert.equal(isResizeComplete(OVERLAY_RESIZE_DURATION_MS + 50), true);
+});
+
+// ── Card-resize tween (transitions.dev signature, adopted 2026-09-13) ───────
+test('OVERLAY_RESIZE_TWEEN is the transitions.dev card-resize signature', () => {
+  assert.equal(OVERLAY_RESIZE_TWEEN_MS, 300);
+  assert.deepEqual(OVERLAY_RESIZE_TWEEN_EASE, [0.22, 1, 0.36, 1]);
+  // framer consumes seconds; a ms value here would run 300x long.
+  assert.equal(OVERLAY_RESIZE_TWEEN.duration, 0.3);
+  assert.deepEqual(OVERLAY_RESIZE_TWEEN.ease, OVERLAY_RESIZE_TWEEN_EASE);
+  // No `type` key: it must land on framer's tween arm, not the spring arm.
+  assert.equal('type' in OVERLAY_RESIZE_TWEEN, false);
+});
+
+test('easeCardResize pins the endpoints', () => {
+  assert.equal(easeCardResize(0), 0);
+  assert.equal(easeCardResize(1), 1);
+  assert.equal(easeCardResize(-1), 0);
+  assert.equal(easeCardResize(2), 1);
+});
+
+test('easeCardResize is monotonic — a resize never reverses mid-flight', () => {
+  let prev = -1;
+  for (let i = 0; i <= 100; i++) {
+    const v = easeCardResize(i / 100);
+    assert.ok(v >= prev, `regressed at t=${i / 100}: ${v} < ${prev}`);
+    prev = v;
+  }
+});
+
+test('easeCardResize never overshoots — it can reach a native setBounds', () => {
+  for (let i = 0; i <= 100; i++) {
+    const v = easeCardResize(i / 100);
+    assert.ok(v >= 0 && v <= 1, `out of range at t=${i / 100}: ${v}`);
+  }
+});
+
+test('easeCardResize lands early: three-quarters of the travel by the quarter mark', () => {
+  assert.ok(easeCardResize(0.25) > 0.75, `${easeCardResize(0.25)}`);
+  assert.ok(easeCardResize(0.5) > 0.95, `${easeCardResize(0.5)}`);
+});
+
+test('the card curve departs harder than the drawer curve it replaces', () => {
+  // Pins the claim the module comment makes. The gap is concentrated in the
+  // first tenth — that early departure, not the tail, is what reads as
+  // responsive, and it compounds with the shorter duration.
+  assert.ok(easeCardResize(0.1) > easeOverlayResize(0.1) + 0.1);
+  for (const t of [0.1, 0.25, 0.5, 0.75, 0.9]) {
+    assert.ok(
+      easeCardResize(t) >= easeOverlayResize(t) - 0.02,
+      `card must not lag the drawer curve at t=${t}: ${easeCardResize(t)} vs ${easeOverlayResize(t)}`,
+    );
+  }
+});
+
+test('at equal WALL-CLOCK time the card tween is far ahead (curve + duration)', () => {
+  // 30ms in: fraction 0.1 of a 300ms tween vs 30/420 of the old one.
+  const card = easeCardResize(30 / OVERLAY_RESIZE_TWEEN_MS);
+  const drawer = easeOverlayResize(30 / OVERLAY_RESIZE_DURATION_MS);
+  assert.ok(card > 0.39 && card < 0.41, `${card}`);
+  assert.ok(drawer < 0.21, `${drawer}`);
 });

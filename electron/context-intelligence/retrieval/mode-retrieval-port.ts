@@ -21,7 +21,13 @@ export interface ModeRetrieverLike {
   retrieveHybridRaw?: (modeInfo: unknown, files: unknown[], opts: {
     query: string; topK: number; tokenBudget: number; allowRerank: boolean;
     forceDocumentGrounding?: boolean;
+    rerankSurface?: 'live' | 'manual';
+    meetingActive?: boolean;
+    rerankPoolMultiplier?: number;
+    queryEmbedRetryBudgetMs?: number;
   }) => Promise<{ chunks?: Array<Record<string, unknown>> } | null | undefined>;
+  /** Corpus arbitration: do these files hold the question's distinctive terms together? */
+  probeReferenceAnchors?: (modeInfo: unknown, files: unknown[], question: string) => boolean;
 }
 
 export interface ModeFileLike { id: string; fileName?: string; content?: string }
@@ -50,29 +56,48 @@ const JD_NAME = /\b(job[\s_-]?description|jd|job[\s_-]?post(ing)?|role[\s_-]?spe
 
 // Headings a résumé has and a JD does not, and vice versa. Counted, not matched
 // singly: one stray word must not retype a document.
+//
+// Heading markers accept a bare heading LINE as well as a markdown `#` heading
+// (2026-09-07). A plain-text résumé whose sections are just "Experience" /
+// "Education" on their own lines scored ZERO, was typed REFERENCE_FILE, and
+// every plan that named RESUME dropped it. Same for a JD whose title line is
+// "# Job description — …" with "Compensation range:" and "Role:" lines: none
+// of those were markers, so a JOB_REQUIREMENT question about the attached JD
+// planned JOB_DESCRIPTION and never saw the file (measured live: "What is the
+// compensation range for the Helio Labs role?" → "the job posting doesn't
+// list a compensation range" while the profile's OTHER JD was quoted instead).
 const RESUME_MARKERS = [
-  /^#{1,3}\s*(work\s+)?experience\b/im, /^#{1,3}\s*education\b/im, /^#{1,3}\s*projects?\b/im,
-  /\bcgpa\b|\bgpa\b/i, /^#{1,3}\s*(technical\s+)?skills?\b/im, /^#{1,3}\s*summary\b/im,
+  /^\s*#{0,3}\s*(work\s+)?experience\s*:?\s*$/im, /^\s*#{0,3}\s*education\s*:?\s*$/im, /^\s*#{0,3}\s*(notable\s+)?projects?\s*:?\s*$/im,
+  /\bcgpa\b|\bgpa\b/i, /^\s*#{0,3}\s*(technical\s+)?skills?\s*:?\s*$/im, /^\s*#{0,3}\s*(professional\s+)?summary\s*:?\s*$/im,
   /\bportfolio\b/i, /\bgithub\.com\/|\bgithub:/i,
 ];
 const JD_MARKERS = [
-  /minimum\s+qualifications/i, /preferred\s+qualifications/i, /^#{1,3}\s*responsibilities\b/im,
+  /minimum\s+qualifications/i, /preferred\s+qualifications/i, /^\s*#{0,3}\s*responsibilities\s*:?\s*$/im,
   /about\s+the\s+role/i, /what\s+you.{0,3}ll\s+do/i, /\byears?\s+of\s+(professional\s+)?experience\b/i,
-  /we\s+are\s+looking\s+for/i, /^#{1,3}\s*compensation\b/im,
+  /we\s+are\s+looking\s+for/i, /^\s*#{0,3}\s*compensation\b/im,
+  /^\s*#{0,3}\s*job\s+description\b/im, /\bcompensation\s+(range|band)\s*:/i, /^\s*(role|position)\s*:/im,
+  /^\s*#{0,3}\s*(must[\s-]+haves?|nice[\s-]+to[\s-]+haves?|requirements)\s*:?\s*$/im,
 ];
 
 const countMatches = (text: string, pats: RegExp[]) => pats.reduce((n, p) => n + (p.test(text) ? 1 : 0), 0);
+
+// A filename is tested as WORDS: `lfw_jd.md` and `evinjohn_resume.pdf` carry
+// the signal in a token that `\b` cannot see behind an underscore (a word
+// character). Tested against the raw name too, so `job-description.md` and
+// `Job Description.pdf` keep matching as before.
+const nameWords = (fileName: string) => `${fileName} ${fileName.replace(/\.[a-z0-9]{1,5}$/i, '').replace(/[^a-z0-9]+/gi, ' ')}`;
 
 export function classifyDocShape(fileName = '', content = ''): DocShape {
   const head = String(content).slice(0, 6000);   // structure lives near the top
   const resumeScore = countMatches(head, RESUME_MARKERS);
   const jdScore = countMatches(head, JD_MARKERS);
+  const name = nameWords(fileName);
 
   // An explicit filename wins, but only when the content does not clearly
   // contradict it — a file called `resume.md` containing "Minimum
   // Qualifications" is a JD someone named badly.
-  if (JD_NAME.test(fileName) && resumeScore <= jdScore) return 'job_description';
-  if (RESUME_NAME.test(fileName) && jdScore <= resumeScore) return 'resume';
+  if (JD_NAME.test(name) && resumeScore <= jdScore) return 'job_description';
+  if (RESUME_NAME.test(name) && jdScore <= resumeScore) return 'resume';
 
   // Otherwise require a clear structural margin.
   if (jdScore >= 2 && jdScore > resumeScore) return 'job_description';
@@ -179,6 +204,18 @@ export interface ModePortInput {
   /** MUST match the userId the caller puts on the turn's scope, or containment
    *  rejects every source. Callers pass one constant to both. */
   userId: string;
+  /**
+   * Which deadline this turn races — sizes the reranker's budget (3000ms live,
+   * 8000ms manual for a reranker the user selected; 1200ms for the bundled
+   * default). Absent means live, the tighter of the two.
+   */
+  rerankSurface?: 'live' | 'manual';
+  /**
+   * Is a meeting / STT session running? A FUNCTION, evaluated at retrieval time —
+   * the live engine only learns it after the port is built. Absent = unknown = the
+   * bundled embedder stays lexical-only (see ModeHybridRetriever).
+   */
+  meetingActive?: () => boolean;
 }
 
 /**
@@ -207,35 +244,93 @@ export function createModeRetrievalPort(input: ModePortInput): RetrievalPort {
     if (status) documentStatuses.set(f.id, status);
   }
 
-  return createLegacyRetrievalPort({
+  const port = createLegacyRetrievalPort({
     registry: { sourceTypes, activeVersions, chunkVersions, sourceScopes },
-    retrieve: async (query: string, opts: { topK: number }) => {
+    retrieve: async (query: string, opts: { topK: number; timeoutMs?: number; exhaustive?: boolean; tokenBudget?: number }) => {
       if (!input.modeInfo || !input.files.length || !input.modesManager.retrieveHybridRaw) return [];
+      // An exhaustive request (RetrievalPlan.exhaustive) needs the RETRIEVER
+      // to hand back more than the plan's widened topK can hold at the normal
+      // token budget, and the reranker to score a wider pool — otherwise the
+      // widened cap downstream just fills with padding.
+      const exhaustive = opts.exhaustive === true;
       const res = await input.modesManager.retrieveHybridRaw(input.modeInfo, input.files, {
-        query, topK: opts.topK, tokenBudget: input.tokenBudget, allowRerank: false,
-        // REQUIRED for usable recall. deduplicateChunks keeps the highest-scoring
-        // chunk PER FILE by default and switches to per-SECTION only under this
-        // flag. With a single 66-page reference file that default returns exactly
-        // ONE chunk no matter what topK asks for: measured 1 chunk, and the fact
-        // being asked about ("44%") was not in it. With the flag, 12 chunks and
-        // the fact ranks 2nd.
+        // The plan's own budget (multi-file turns) wins over the policy budget the
+        // caller constructed this port with, so retriever and packer agree.
+        query, topK: opts.topK, tokenBudget: Math.max(input.tokenBudget, opts.tokenBudget ?? 0) * (exhaustive ? 3 : 1),
+        ...(exhaustive ? { rerankPoolMultiplier: 2 } : {}),
+        // RERANK ON THE V3 PATH (2026-09-07). This was `allowRerank: false`, and
+        // V3 is the default answer path — so a reranker the user selected in
+        // Settings (Voyage, OpenRouter, a local cross-encoder) NEVER ran on a
+        // live or manual answer; only the legacy validator re-retrieval and the
+        // E2E inspect hook reranked. Measured: four V3 turns, zero rerank_gate
+        // traces, zero rerank_request telemetry, with a hosted reranker
+        // configured and its Test Connection green. The gate inside
+        // ModeHybridRetriever still decides (selected → every query, bundled
+        // → low-confidence only) and the budget follows the surface.
+        allowRerank: true,
+        rerankSurface: input.rerankSurface ?? 'live',
+        ...(input.meetingActive ? { meetingActive: (() => { try { return input.meetingActive!() === true; } catch { return true; } })() } : {}),
+        // The plan's retrieval budget reaches the query embed (2026-09-10). The
+        // legacy port has always passed `timeoutMs` here and this port ignored
+        // it, so the orchestrator's 1200 ms plan bounded nothing: a slow hosted
+        // embed route ran three 3 s attempts plus backoff (13.5 s measured)
+        // before the model was asked. Deliberately NOT rerankDeadlineMs — that
+        // would skip every rerank whose 3000 ms budget exceeds the 1200 ms plan
+        // and silently switch the selected reranker off on the V3 path.
+        ...(typeof opts.timeoutMs === 'number' ? { queryEmbedRetryBudgetMs: opts.timeoutMs } : {}),
+        // CORRECTED 2026-08-28. This block used to say `deduplicateChunks` keeps
+        // the highest-scoring chunk PER FILE by default, so that without this
+        // flag a single 66-page reference file returned exactly ONE chunk. That
+        // has been FALSE since 2026-07-31: `dedupeGroupKey` keys by
+        // `sourceId#chunkIndex` for every caller — exact-duplicate suppression
+        // only — and the `forceDocumentGrounding` parameter on
+        // `deduplicateChunks` is vestigial.
         //
-        // Safe here because V3 does not consume `formattedContext` (which is what
-        // the flag's other effects shape) — it takes `chunks` and applies its own
-        // source authority, scope and version filtering downstream.
+        // The stale text is worth recording rather than deleting, because it did
+        // real damage: it was read as current during the 2026-08-28 retrieval
+        // investigation and produced a wrong conclusion about why splitting a
+        // combined file helped, which had to be retracted. Verify behaviour
+        // against executed code, not docblocks — including this one.
+        //
+        // The flag is still passed, and still wanted, for its OTHER effects:
+        // topK 12 and a 3600-token budget instead of 6/1800, the per-file floor,
+        // answerability scoring, section-target and positional restore, and query
+        // normalization. Safe here because V3 does not consume
+        // `formattedContext` — it takes `chunks` and applies its own source
+        // authority, scope and version filtering downstream.
         forceDocumentGrounding: true,
       });
-      return (res?.chunks ?? []).map((c: Record<string, unknown>) => {
+      const chunks = (res?.chunks ?? []) as Array<Record<string, unknown>>;
+      // THE RERANKER'S ORDER MUST SURVIVE THIS SEAM (2026-09-07). The retriever
+      // selects the pool by cross-encoder score when it reranked, but `score`
+      // stays the hybrid+answerability value (Context OS reads it as a
+      // confidence). Downstream V3 sorts evidence by `finalScore` — the legacy
+      // port's accepted-slice fill and the packer's rank() — so handing it the
+      // hybrid score silently undid the rerank: measured on a live session,
+      // every turn's evidence was ordered by lexical+vector while telemetry
+      // showed a billed, successful rerank. When the pool carries rerank
+      // scores, they ARE the final score; a chunk the reranker never saw (the
+      // un-pooled tail) sinks just below the lowest reranked one, exactly as
+      // the retriever's own rankScore(byRerank) orders it.
+      const rerankScores = chunks
+        .map((c) => c.rerankScore)
+        .filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+      const rerankedPool = rerankScores.length > 0;
+      const tailFloor = rerankedPool ? Math.min(...rerankScores) - 1 : 0;
+      return chunks.map((c) => {
         const sid = String(c.sourceId ?? '');
         const status = documentStatuses.get(sid);
+        const rerankScore = typeof c.rerankScore === 'number' ? c.rerankScore : undefined;
         return {
           sourceId: sid,
           fileName: c.fileName as string | undefined,
           text: String(c.text ?? ''),
           chunkIndex: c.chunkIndex as number | undefined,
-          score: c.score as number | undefined,
+          score: rerankedPool ? (rerankScore ?? tailFloor) : (c.score as number | undefined),
           ftsScore: c.ftsScore as number | undefined,
           vectorScore: c.vectorScore as number | undefined,
+          ...(rerankScore !== undefined ? { rerankScore } : {}),
+          ...(typeof c.answerabilityScore === 'number' ? { answerabilityScore: c.answerabilityScore } : {}),
           // Provenance (issue 10 / Pattern D): everything this port reads is a
           // file the user attached to the MODE — whatever its name or content
           // claims to be. A reference file named like a transcript stays
@@ -250,4 +345,12 @@ export function createModeRetrievalPort(input: ModePortInput): RetrievalPort {
       });
     },
   });
+  return {
+    ...port,
+    probeAnchors: (question: string): boolean => {
+      if (!input.modeInfo || !input.files.length || !input.modesManager.probeReferenceAnchors) return false;
+      try { return input.modesManager.probeReferenceAnchors(input.modeInfo, input.files, question) === true; }
+      catch { return false; }
+    },
+  };
 }

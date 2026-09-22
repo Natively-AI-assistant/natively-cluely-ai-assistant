@@ -64,6 +64,9 @@ export type IntelligenceFlagKey =
   | 'globalSearchV2'               // Phase 11
   | 'inMeetingSearchV2'            // Phase 12
   | 'conversationMemoryV2'         // Phase 13 (same-session follow-ups)
+  // Multi-turn chat history on the V3 (default) chat path. OFF reverts to the
+  // pre-2026-08-29 behaviour: ONE turn, answer capped at 280 chars.
+  | 'chatHistoryMultiTurn'
   | 'lectureIntelligenceV2'        // Phase 14
   | 'diagramIntelligence'          // Phase 15
   | 'hindsightMemory'              // Phase 16 — long-term memory provider on at all
@@ -75,13 +78,18 @@ export type IntelligenceFlagKey =
   // telemetry. Changes NO answer and NO retrieved context — it only measures
   // how often a low-confidence gate would fire, so the thresholds for the
   // (later) local-reranker escalation can be tuned from real traffic first.
+  // Promoted to unconditional `true` in production (2026-08-30, user-directed
+  // override — no packaged-build field validation was run; see the FLAGS
+  // registry entry below for the full tradeoff note).
   | 'ragConfidenceGate'
   // Phase 1 — local cross-encoder rerank escalation. When the confidence gate
   // trips on a MANUAL/typed/follow-up query (looser latency than a live
   // transcript turn), widen the candidate pool and re-order it with an
-  // on-device bge-reranker. Default OFF. Requires ragConfidenceGate to also be
+  // on-device bge-reranker. Requires ragConfidenceGate to also be
   // on (the gate provides the trip signal). No-ops if the model can't load
   // (e.g. not bundled in a packaged build) → falls through to today's top-K.
+  // Promoted to unconditional `true` in production (2026-08-30, user-directed
+  // override — see the FLAGS registry entry below).
   | 'ragLocalRerank'
   // Phase 2 — Reciprocal Rank Fusion across the heterogeneous retrieval
   // sources (modes RAG + Profile Tree + Hindsight). Merges each source's
@@ -96,22 +104,35 @@ export type IntelligenceFlagKey =
   // PREWARMED at mode activation so it's never cold, and the rerank runs inside
   // the existing raceWithBudget(1500ms) retrieval envelope — if it ever
   // overruns, the race already falls through to the non-reranked block, so
-  // first-token latency can never regress. Default OFF. Requires ragLocalRerank
-  // (the reranker itself) to also be on.
+  // first-token latency can never regress. Requires ragLocalRerank
+  // (the reranker itself) to also be on. Promoted to unconditional `true` in
+  // production (2026-08-30, user-directed override) WITHOUT the packaged-
+  // build ONNX-pressure soak test this flag's own history called for — see
+  // the FLAGS registry entry below. Highest-risk promotion in this batch.
   | 'ragSpeculativeRerank'
+  // Extension-provided rerankers. When ON, an enabled reranker extension
+  // REPLACES the built-in LocalReranker at the single rerank seam rather than
+  // running beside it — there is one rerank stage, one budget and one fallback.
+  // Default OFF: no extension ships enabled, and the built-in stage is what
+  // users have today.
+  | 'extensionRerankers'
   // ── OKF Hybrid Knowledge System (2026-07-01 autopilot build) ─────────────
   // Generate OKF-compatible (Open Knowledge Format v0.1) "Knowledge Packs"
   // from uploaded reference files — source-attributed concept cards layered
   // ON TOP of (never replacing) the existing chunk-retrieval pipeline.
-  // Default ON in dev/test so the benchmark + test suite exercise the real
-  // path; configurable (default OFF) in production until validated.
+  // Promoted to unconditional `true` in production (2026-08-30, user-directed
+  // override — see the FLAGS registry entry below).
   | 'okfKnowledgePacks'
   // Export a generated Knowledge Pack as a real OKF v0.1 Markdown bundle
-  // (index.md/log.md/concept files). Default ON in dev/test.
+  // (index.md/log.md/concept files). Promoted to unconditional `true`
+  // (2026-08-30, user-directed override) — low risk: an explicit user export
+  // action, never fed back into retrieval or generation.
   | 'okfMarkdownExport'
   // Use OKF cards (in addition to raw chunks) in document-grounded retrieval
-  // and prompt assembly. Default ON in dev/test, guarded (OFF) in production
-  // until the 19-question benchmark is consistently green end-to-end.
+  // and prompt assembly. Promoted to unconditional `true` in production
+  // (2026-08-30, user-directed override — see the FLAGS registry entry below;
+  // the 19-question benchmark's own end-to-end green-in-production bar was
+  // not independently re-verified before this promotion).
   | 'okfHybridRetrieval'
   // Entity/relation graph layer derived from OKF cards (Phase 4). Default OFF
   // everywhere until Phase 4 ships.
@@ -127,15 +148,20 @@ export type IntelligenceFlagKey =
   // ON TOP of (never replacing) the deterministic fast path, structured-JSON
   // grounding, and context_nodes vector store. PROFILE packs are PII and obey
   // profileContextPolicy; they are FORBIDDEN in document-grounded custom modes.
-  // Default ON in dev/test so the 18-question benchmark exercises the real
-  // path; configurable (default OFF) in production until validated.
+  // Promoted to unconditional `true` in production (2026-08-30, user-directed
+  // override — see the FLAGS registry entry below). This path has, per
+  // contracts/flag.ts's header, never executed inside a shipped build before
+  // this change; there is no packaged-build evidence it works end-to-end.
   | 'okfProfilePacks'
   // Use profile OKF cards (in addition to context_nodes) in answer evidence.
   // Fail-closed: contributes nothing without an explicit AnswerPlan/route that
-  // allows profile context. Default ON in dev/test, guarded (OFF) in production.
+  // allows profile context. Promoted to unconditional `true` in production
+  // (2026-08-30, user-directed override — see the FLAGS registry entry below).
   | 'okfProfileHybridRetrieval'
   // Allow a profile Knowledge Pack to be exported as an OKF v0.1 Markdown
-  // bundle (explicit user action only). Default ON in dev/test.
+  // bundle (explicit user action only). Promoted to unconditional `true`
+  // (2026-08-30, user-directed override) — same low-risk reasoning as
+  // okfMarkdownExport above.
   | 'okfProfileMarkdownExport'
   // Typed relation graph derived from profile cards (Phase 4). Default OFF.
   | 'okfProfileGraphExpansion'
@@ -178,10 +204,21 @@ export type IntelligenceFlagKey =
   // Memory safety: assistant-claim extraction + validated-claim reuse gates.
   | 'contextOsMemorySafetyEnabled'
   // Enforce capability-scoped retrieval (block, not just log, forbidden fetches).
+  // Promoted to unconditional `true` in production (2026-08-30, user-directed
+  // override) WITHOUT the telemetry validation the Phase 7 incident report
+  // required before a production rollout — see the FLAGS registry entry
+  // below. This is a REAL enforcement gate: it can turn an answer into a
+  // refusal.
   | 'contextOsEnforceSourceCapabilities'
   // Property-aware evidence validation gates generation (refuse on mismatch).
+  // Promoted to unconditional `true` in production (2026-08-30, user-directed
+  // override) — same caveat as contextOsEnforceSourceCapabilities above: a
+  // REAL enforcement gate, no real-traffic false-refusal-rate validation.
   | 'contextOsPropertyValidation'
   // Coordinate evidence from multiple explicitly-authorized source families.
+  // Promoted to unconditional `true` in production (2026-08-30, SEPARATE
+  // user-directed override, same batch as the two flags above) — a real
+  // evidence-handling change, no packaged-build/real-traffic validation.
   | 'contextOsMultiFamilyEvidenceEnabled'
   // ── Answer-relevance semantic guard (campaign2 longsession, 2026-07-19) ──
   // Live-fires ONE bounded regeneration when a local zero-shot NLI check
@@ -219,10 +256,11 @@ export type IntelligenceFlagKey =
   // _generateProfileOkfPack('jd')) has been generated. Closing this fully
   // means awaiting the AOT pipeline before ingestDocument returns for a JD —
   // a genuine, user-facing slower upload-ack (AOT runs real LLM calls), not
-  // a free fix like the resume branch's setImmediate removal. Ships dev/
-  // test-only first (pattern 1) so the race-free sequence is exercised and
-  // tested without changing production upload latency until a documented
-  // promotion decision. See 05_MIGRATION_PLAN.md's Slice 5 STATUS note.
+  // a free fix like the resume branch's setImmediate removal. See
+  // 05_MIGRATION_PLAN.md's Slice 5 STATUS note. Promoted to unconditional
+  // `true` in production (2026-08-30, user-directed override): this is the
+  // "documented promotion decision" the plan called for, but it ships the
+  // slower-upload-ack tradeoff to every user, not just dev/test.
   | 'atomicJdProfilePackGeneration'
   // ── Pronoun-regex shadow observation (Phase 6 Slice 4 item 2, follow-up
   // pass, context-rebuild) ──────────────────────────────────────────────
@@ -239,8 +277,10 @@ export type IntelligenceFlagKey =
   // 'resume') and log agreement/divergence against the legacy gate's own
   // decision — a pure side-channel trace, zero change to
   // processQuestion's return value. Exists so a future promotion decision
-  // is evidence-based (real traffic, not this pass's synthetic corpus).
-  // Pattern 1 (dev/test-only default).
+  // on retiring the legacy gate is evidence-based (real traffic, not this
+  // pass's synthetic corpus). Promoted to unconditional `true` (2026-08-30,
+  // dev/prod parity audit): shadow-only means zero risk to running it
+  // everywhere, so there's no reason this flag stayed dev/test-only.
   | 'pronounRegexShadowObservation'
   // ── Impossible-evidence-state gate, Stage 0 shadow (answer-pipeline-
   // rebuild Phase 2, docs/answer-pipeline-rebuild/03_EVIDENCEPACK_DESIGN.md)
@@ -264,9 +304,13 @@ export type IntelligenceFlagKey =
   // check) is explicitly OUT of scope for this flag: RC-8 (also live-
   // confirmed the same day) shows a required-direction false-positive turns
   // a fixable heuristic bug into a permanent structural refusal if enforced
-  // before its own dedicated shadow period. Pattern 1 (dev/test-only
-  // default), mirrors modePolicyShadowObservation/pronounRegexShadowObservation
-  // immediately above.
+  // before its own dedicated shadow period. Promoted to unconditional `true`
+  // (2026-08-30, dev/prod parity audit) — shadow-only means zero risk to
+  // running it everywhere. NOTE: contextOsImpossibleStateGateEnforceForbidden
+  // (Stage 1, below) — the REAL behavior change — was LATER ALSO promoted to
+  // `true` (2026-08-30, separate user-directed override) WITHOUT the shadow
+  // period this design's own risk analysis called for first. See that flag's
+  // comment below for the specific risk this carries.
   | 'contextOsImpossibleStateGateShadow'
   // ── Impossible-evidence-state gate, Stage 1 enforcement (answer-pipeline-
   // rebuild Phase 2, docs/answer-pipeline-rebuild/03_EVIDENCEPACK_DESIGN.md)
@@ -289,7 +333,12 @@ export type IntelligenceFlagKey =
   // flags required, but because its enforceableViolations filter matches
   // ONLY the forbidden-direction violation code by name. See that filter's
   // own comment in ipcHandlers.ts before ever widening it.
-  // Pattern 1 (dev/test-only default).
+  // Promoted to unconditional `true` in production (2026-08-30, user-directed
+  // override): this skips the dedicated shadow-observation period this
+  // design's own risk analysis said was required before enabling the REAL
+  // (narrowing) behavior change — a false-positive here can turn a fixable
+  // heuristic bug into a permanent structural refusal for a real user. No
+  // real-traffic validation of this gate's false-positive rate exists.
   | 'contextOsImpossibleStateGateEnforceForbidden'
   // ── Prompt System v2 (2026-08-01) ─────────────────────────────────────────
   // One provider-neutral composer (electron/llm/promptSystemV2.ts) replaces the
@@ -301,13 +350,123 @@ export type IntelligenceFlagKey =
   // byte-for-byte the legacy constants. Rollout: enable per the mode-by-mode
   // order in the migration notes; the legacy constants are removable only
   // after this flag has been default-ON through a full release cycle.
-  | 'promptSystemV2';
+  | 'promptSystemV2'
+  // ── WTA governance yields to a V3-composed turn (2026-08-28) ──────────────
+  // `LLMHelper.ts` guards Context OS pack governance on `!v3OwnedTurn` — when
+  // V3 has already composed the turn, the legacy governance must not also run.
+  // `WhatToAnswerLLM`'s in-file copy of that gate never got the term, so on the
+  // live-audio path a V3 turn with real evidence could still hit
+  // `refuse_insufficient_evidence` in the legacy pack and hard-return a canned
+  // refusal BEFORE any model call — while manual chat, which sets
+  // `v3Owned: true`, answered the same question normally. That asymmetry is the
+  // reported "works typed, refuses on audio" bug.
+  //
+  // Default ON: this restores the invariant LLMHelper already enforces, and a
+  // literal default (never isInternalDevTestContext) so dev, test and
+  // production resolve it identically — the F5 split that let composePrompt be
+  // built, tested and never executed for a user.
+  //
+  // Flag OFF is byte-for-byte the pre-2026-08-28 behaviour, including for
+  // LEGACY (non-V3) WTA turns, which keep governance in BOTH positions: the new
+  // term only fires when `requestSnapshot.v3Prompt` is present, and a legacy
+  // turn has none.
+  //
+  // See docs/retrieval-handoff/02-WTA-VS-MANUAL.md §3b.
+  | 'wtaGovernanceYieldsToV3'
+  // ── The doc-grounded validator checks the block that was SENT (2026-08-28) ──
+  // The post-stream validator re-ran a separate LEGACY retrieval and judged the
+  // streamed answer against it. Under V3 the answer was grounded in V3's
+  // evidence — a different set — so a correct answer could be overwritten with
+  // "I could not find that in the retrieved sections of the document." by a
+  // witness who was not in the room. With this ON, a V3-composed turn is
+  // validated against `v3Prompt.evidenceBlock`, and a V3 turn that carried no
+  // evidence is not doc-validated at all (there is nothing it could have been
+  // grounded in, and the composer already shaped the answer around that).
+  //
+  // This is deliberately NOT a blanket V3 exemption: V3 is the default path, so
+  // exempting it would retire the zero-fabrication guard for nearly every WTA
+  // turn. `computeEvidenceCoverage` still has the final word.
+  //
+  // Default ON via a literal, never isInternalDevTestContext.
+  // See docs/retrieval-handoff/01-ROOT-CAUSES.md RC7(b).
+  | 'docGroundedValidatorUsesSentEvidence'
+  // ── Provider Performance Profile (docs/PROVIDER_PERFORMANCE_PROFILE_ARCHITECTURE.md)
+  //
+  // Staged deliberately (Phase 28/29): each flag turns on ONE consumer of the
+  // profile, and every one of them is independently revertible to the shipped
+  // constant. The evidence layer is separated from the things that act on it so
+  // that collecting data is never the same decision as changing a deadline.
+  //
+  // Observe-only. Records TTFT, inter-chunk gaps and termination reasons into
+  // the profile store. Changes NO deadline and NO answer. Default ON because it
+  // is the input everything else needs and it cannot alter behaviour — the
+  // observer is wrapped in its own try and the driver ignores its result.
+  | 'providerPerformanceProfile'
+  // Derive the inter-token STALL guard from observed healthy gaps instead of the
+  // flat LIVE_INTER_TOKEN_STALL_MS. Default ON.
+  //
+  // It IS a real behaviour change, and these are the guards that make it a safe
+  // one. The value is clamped to [2500, 8000] — it can never exceed today's
+  // constant, so no stream waits LONGER than it does now. Narrowing needs 5
+  // healthy streams, each of which must have contained at least 3 chunk
+  // intervals, and the input is a decaying MAXIMUM, so one genuine multi-second
+  // pause widens the guard immediately and ages out slowly. The `local` route is
+  // excluded entirely (STREAM_IDLE_ADAPTIVE_ROUTES) because an on-device model
+  // competing for the machine's own GPU can stall for reasons a hosted one
+  // cannot. And when it does fire, the partial answer is KEPT — unlike a TTFT
+  // deadline, which discards the turn.
+  | 'adaptiveStreamIdle'
+  // Let the profile move the first-token ceiling on routes the route table marks
+  // adaptive (today: user endpoints only). Default ON.
+  //
+  // Safe by construction rather than by tuning: this filter may only WIDEN what
+  // the shipped route table produced (see adaptiveTtftCeilingMs), so the worst
+  // case is that a slow gateway gets more room than it does today — which is the
+  // direction every defect in this area has needed.
+  | 'adaptiveTtft'
+  // Surface calibration/performance state in Settings and in the diagnostics
+  // dump. Read-only; no request behaviour attached. Default ON.
+  | 'providerPerformanceDiagnostics'
+  // ── The two BILLABLE flags. Default OFF, and that asymmetry against the four
+  //    above is the point: those cannot spend anything, these can. Phase 21 is
+  //    marked mandatory in a way Phase 5 is not, so the tie breaks toward
+  //    spending nothing until a human asks.
+  //
+  // Runs the 4K/12K/32K ladder through the real production request path. Manual
+  // trigger only — no provider-add hook, no launch hook, no staleness auto-run.
+  | 'calibration'
+  // Sends ONE 8x8 PNG to establish vision capability. A timeout NEVER yields
+  // UNSUPPORTED (rule 16); only an explicit provider rejection does.
+  | 'capabilityProbe'
+  // Widen-only connect timeout. Its own flag rather than riding on
+  // `adaptiveTtft`: those are two unrelated decisions, and coupling them meant
+  // disabling the first-token ceiling silently disabled connect widening too.
+  | 'adaptiveConnectTimeout'
+  // Downgrade the image-optimisation preset when a vision turn is predicted to
+  // blow its urgency budget. Default OFF — the only adaptive consumer that
+  // visibly DEGRADES output rather than being bounded so ON is safer or equal.
+  | 'adaptiveImageQuality';
 
 interface FlagSpec {
   /** env var name (NATIVELY_* convention). */
   env: string;
   /** SettingsManager key for a UI/persisted opt-in. */
   setting: string;
+  /**
+   * When true, the flag is PERMANENTLY ON (no user-facing toggle) and the
+   * SettingsManager override for `setting` is never consulted — a stale
+   * persisted value from when this flag WAS toggleable (on either side) is
+   * inert and can never re-surface. Only the env var and `default` still
+   * apply. Use this when retiring a settings-UI row for a flag that graduates
+   * to "just how the product works": flip this on and delete the UI entry,
+   * do NOT touch anyone's settings.json — that's what makes the retirement
+   * safe for users who already persisted the old value.
+   *
+   * The env var remains the operator kill-switch — deliberately NOT
+   * suppressed by this field — so the flag can still be forced off in the
+   * field without a release even after its UI is gone.
+   */
+  settingIgnored?: boolean;
   /**
    * Default when neither env nor settings decide. A plain `boolean` for a
    * fixed default; a thunk (`() => boolean`) for a CONTEXT-DEPENDENT default
@@ -358,13 +517,23 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   promptAssemblerV2: { env: 'NATIVELY_PROMPT_ASSEMBLER_V2', setting: 'promptAssemblerV2Enabled', default: false },
   answerDiversityGuard: { env: 'NATIVELY_ANSWER_DIVERSITY_GUARD', setting: 'answerDiversityGuardEnabled', default: false },
   meetingMemoryV2: { env: 'NATIVELY_MEETING_MEMORY_V2', setting: 'meetingMemoryV2Enabled', default: false },
-  // Meeting Notes V3 ships ON by default (product decision 2026-06-20). Each remains
-  // env/settings-overridable; set NATIVELY_MEETING_SUMMARY_V3=0 to revert to the legacy
-  // single-pass summary path. All paths keep a deterministic fallback and honor the
+  // Meeting Notes V3 is now the UNCONDITIONAL default (product decision 2026-08-25) —
+  // the experimental settings toggle has been removed. `settingIgnored: true` means a
+  // stale persisted `meetingSummaryV3Enabled` (from when the toggle existed, in either
+  // direction) is never read — this flag now only listens to the env kill-switch and
+  // its default. Set NATIVELY_MEETING_SUMMARY_V3=0 to force the legacy single-pass
+  // summary path in an emergency without a release; that is the ONLY remaining way to
+  // turn this off. All paths keep a deterministic fallback and honor the
   // post_call_summary data scope.
-  meetingSummaryV3: { env: 'NATIVELY_MEETING_SUMMARY_V3', setting: 'meetingSummaryV3Enabled', default: true },
+  meetingSummaryV3: { env: 'NATIVELY_MEETING_SUMMARY_V3', setting: 'meetingSummaryV3Enabled', settingIgnored: true, default: true },
   meetingModeAutoDetect: { env: 'NATIVELY_MEETING_MODE_AUTODETECT', setting: 'meetingModeAutoDetectEnabled', default: true },
-  followUpDraftV2: { env: 'NATIVELY_FOLLOWUP_DRAFT_V2', setting: 'followUpDraftV2Enabled', default: true },
+  // The LLM-written follow-up draft is now the UNCONDITIONAL default (product decision
+  // 2026-08-25) — the experimental settings toggle has been removed. `settingIgnored: true`
+  // means a stale persisted `followUpDraftV2Enabled` (from when the toggle existed, in
+  // either direction) is never read — this flag now only listens to the env kill-switch and
+  // its default. Set NATIVELY_FOLLOWUP_DRAFT_V2=0 to force the deterministic fallback draft
+  // in an emergency without a release; that is the ONLY remaining way to turn this off.
+  followUpDraftV2: { env: 'NATIVELY_FOLLOWUP_DRAFT_V2', setting: 'followUpDraftV2Enabled', settingIgnored: true, default: true },
   speakerLabelsV1: { env: 'NATIVELY_SPEAKER_LABELS_V1', setting: 'speakerLabelsV1Enabled', default: true },
   // Constrained LLM polish of the Summary (note-content-only, "no new tokens" gated). ON by
   // default — it can only improve readability and always falls back to the deterministic
@@ -375,49 +544,70 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   globalSearchV2: { env: 'NATIVELY_GLOBAL_SEARCH_V2', setting: 'globalSearchV2Enabled', default: false },
   inMeetingSearchV2: { env: 'NATIVELY_IN_MEETING_SEARCH_V2', setting: 'inMeetingSearchV2Enabled', default: false },
   conversationMemoryV2: { env: 'NATIVELY_CONVERSATION_MEMORY_V2', setting: 'conversationMemoryV2Enabled', default: false },
+  // DEFAULT ON, via a plain literal — never isInternalDevTestContext. This flag
+  // guards a REGRESSION fix (chat history was one turn / 280 chars from V3's
+  // default-ON flip on 2026-07-30 until 2026-08-29), and the suites assert the
+  // FIXED behaviour. A dev/test-only default would pin a behaviour users never
+  // get, which is precisely the failure contracts/flag.ts's header records.
+  // Off is a genuine rollback to the one-turn window, not a half state.
+  chatHistoryMultiTurn: { env: 'NATIVELY_CHAT_HISTORY_MULTI_TURN', setting: 'chatHistoryMultiTurnEnabled', default: true },
   lectureIntelligenceV2: { env: 'NATIVELY_LECTURE_INTELLIGENCE_V2', setting: 'lectureIntelligenceV2Enabled', default: false },
   diagramIntelligence: { env: 'NATIVELY_DIAGRAM_INTELLIGENCE', setting: 'diagramIntelligenceEnabled', default: false },
   hindsightMemory: { env: 'NATIVELY_HINDSIGHT_MEMORY', setting: 'hindsightMemoryEnabled', default: false },
   hindsightLiveRecall: { env: 'NATIVELY_HINDSIGHT_LIVE_RECALL', setting: 'hindsightLiveRecallEnabled', default: false },
   hindsightPostMeetingRetain: { env: 'NATIVELY_HINDSIGHT_POST_MEETING_RETAIN', setting: 'hindsightPostMeetingRetainEnabled', default: false },
-  // Phase 0 — observe-only confidence telemetry. Was default OFF everywhere
-  // for stability (2026-07-09); the underlying stability issue is resolved
-  // (2026-07-14 flag-parity repair) — restored to dev/test/benchmark default-ON
-  // (matching okfProfilePacks' precedent) so the benchmark and a real dev-mode
-  // Electron run (`npm run electron:dev`, which sets NODE_ENV=development)
-  // exercise the same effective flags. Still default OFF in production/packaged
-  // builds until validated in the field.
-  ragConfidenceGate: { env: 'NATIVELY_RAG_CONFIDENCE_GATE', setting: 'ragConfidenceGateEnabled', default: isInternalDevTestContext },
-  // Phase 1 — local cross-encoder rerank escalation (manual/follow-up). Was
-  // default OFF for stability (2026-07-09); resolved (2026-07-14) — restored to
-  // dev/test/benchmark default-ON. Still OFF in production until validated.
-  ragLocalRerank: { env: 'NATIVELY_RAG_LOCAL_RERANK', setting: 'ragLocalRerankEnabled', default: isInternalDevTestContext },
+  // Phase 0 — observe-only confidence telemetry. Promoted to unconditional
+  // `true` (2026-08-30, user-directed override): the operator explicitly
+  // chose to ship the dev/test-validated default to production WITHOUT the
+  // packaged-build field validation this flag's prior comment called for.
+  // See the 2026-08-30 dev/prod-parity-audit conversation for the tradeoff.
+  ragConfidenceGate: { env: 'NATIVELY_RAG_CONFIDENCE_GATE', setting: 'ragConfidenceGateEnabled', default: true },
+  // Phase 1 — local cross-encoder rerank escalation (manual/follow-up).
+  // Promoted to unconditional `true` (2026-08-30, user-directed override) —
+  // same override as ragConfidenceGate above, no packaged-build validation.
+  ragLocalRerank: { env: 'NATIVELY_RAG_LOCAL_RERANK', setting: 'ragLocalRerankEnabled', default: true },
   // Phase 2 — Reciprocal Rank Fusion across heterogeneous retrieval sources. Default OFF.
   ragRrfFusion: { env: 'NATIVELY_RAG_RRF_FUSION', setting: 'ragRrfFusionEnabled', default: false },
-  // Phase 3 — allow rerank on the live transcript path (prewarmed + budget-guarded).
-  // Default OFF for stability (2026-07-09); enable explicitly after soak testing
-  // the local ONNX pressure profile on packaged builds.
-  ragSpeculativeRerank: { env: 'NATIVELY_RAG_SPECULATIVE_RERANK', setting: 'ragSpeculativeRerankEnabled', default: false },
-  // OKF Hybrid Knowledge System. Was default OFF everywhere for stability
-  // (2026-07-09); the underlying issue is resolved (2026-07-14 flag-parity
-  // repair) — restored to dev/test/benchmark default-ON (matching
-  // okfProfilePacks' precedent) so a real dev-mode Electron run
-  // (`npm run electron:dev`) and the benchmark harness exercise identical
-  // Context OS behavior. Still default OFF in production until validated.
-  okfKnowledgePacks: { env: 'NATIVELY_OKF_KNOWLEDGE_PACKS', setting: 'okfKnowledgePacksEnabled', default: isInternalDevTestContext },
-  okfMarkdownExport: { env: 'NATIVELY_OKF_MARKDOWN_EXPORT', setting: 'okfMarkdownExportEnabled', default: isInternalDevTestContext },
-  okfHybridRetrieval: { env: 'NATIVELY_OKF_HYBRID_RETRIEVAL', setting: 'okfHybridRetrievalEnabled', default: isInternalDevTestContext },
+  // Phase 3 — allow rerank on the live transcript path (prewarmed + budget-
+  // guarded). Promoted to unconditional `true` (2026-08-30, user-directed
+  // override): the original comment called for soak-testing the local ONNX
+  // pressure profile on packaged builds first — that soak test was NOT run.
+  // This is the highest-risk promotion in this batch: it runs the reranker
+  // on the LIVE transcript path across real user hardware diversity with no
+  // field data on memory/CPU pressure. Revert this one first if packaged
+  // users report crashes, hangs, or ONNX-related instability.
+  ragSpeculativeRerank: { env: 'NATIVELY_RAG_SPECULATIVE_RERANK', setting: 'ragSpeculativeRerankEnabled', default: true },
+  // Extension rerankers (see electron/services/reranking/RerankerRegistry.ts).
+  // OFF by default and gated a second time by an extension actually being
+  // installed AND enabled, so flipping this alone changes nothing.
+  extensionRerankers: { env: 'NATIVELY_EXTENSION_RERANKERS', setting: 'extensionRerankersEnabled', default: false },
+  // OKF Hybrid Knowledge System. Promoted to unconditional `true` (2026-08-30,
+  // user-directed override) — no packaged-build validation.
+  okfKnowledgePacks: { env: 'NATIVELY_OKF_KNOWLEDGE_PACKS', setting: 'okfKnowledgePacksEnabled', default: true },
+  // Promoted to unconditional `true` (2026-08-30, user-directed override):
+  // this only writes a markdown bundle on an explicit user export action —
+  // it never feeds back into retrieval or answer generation, so the risk
+  // profile is low relative to the other 2026-08-30 promotions.
+  okfMarkdownExport: { env: 'NATIVELY_OKF_MARKDOWN_EXPORT', setting: 'okfMarkdownExportEnabled', default: true },
+  okfHybridRetrieval: { env: 'NATIVELY_OKF_HYBRID_RETRIEVAL', setting: 'okfHybridRetrievalEnabled', default: true },
   // Entity/relation graph layer derived from OKF cards (Phase 4). Default OFF.
   okfGraphExpansion: { env: 'NATIVELY_OKF_GRAPH_EXPANSION', setting: 'okfGraphExpansionEnabled', default: false },
   okfKnowledgeUi: { env: 'NATIVELY_OKF_KNOWLEDGE_UI', setting: 'okfKnowledgeUiEnabled', default: false },
   okfUserEditableCards: { env: 'NATIVELY_OKF_USER_EDITABLE_CARDS', setting: 'okfUserEditableCardsEnabled', default: false },
-  // OKF Profile Intelligence — default ON in dev/test/benchmark contexts so the
-  // 18-question profile benchmark + test suite exercise the real path; default
-  // OFF in production until validated end-to-end. Graph/UI stay OFF everywhere
-  // until their phases ship.
-  okfProfilePacks: { env: 'NATIVELY_OKF_PROFILE_PACKS', setting: 'okfProfilePacksEnabled', default: isInternalDevTestContext },
-  okfProfileHybridRetrieval: { env: 'NATIVELY_OKF_PROFILE_HYBRID_RETRIEVAL', setting: 'okfProfileHybridRetrievalEnabled', default: isInternalDevTestContext },
-  okfProfileMarkdownExport: { env: 'NATIVELY_OKF_PROFILE_MARKDOWN_EXPORT', setting: 'okfProfileMarkdownExportEnabled', default: isInternalDevTestContext },
+  // OKF Profile Intelligence. Promoted to unconditional `true` (2026-08-30,
+  // user-directed override): per contracts/flag.ts's header, this OKF
+  // provenance/pack-generation path has never executed inside a shipped
+  // build before this change — there is no packaged-build evidence it works
+  // end-to-end. This is the flag most directly tied to PI/interview-mode
+  // answer quality; verify a real profile pack actually generates on a
+  // packaged build before trusting it in front of a live interview. Graph/UI
+  // stay OFF everywhere until their phases ship.
+  okfProfilePacks: { env: 'NATIVELY_OKF_PROFILE_PACKS', setting: 'okfProfilePacksEnabled', default: true },
+  okfProfileHybridRetrieval: { env: 'NATIVELY_OKF_PROFILE_HYBRID_RETRIEVAL', setting: 'okfProfileHybridRetrievalEnabled', default: true },
+  // Promoted to unconditional `true` (2026-08-30, user-directed override) —
+  // same low-risk reasoning as okfMarkdownExport above (explicit user export
+  // action only, no feedback into retrieval/generation).
+  okfProfileMarkdownExport: { env: 'NATIVELY_OKF_PROFILE_MARKDOWN_EXPORT', setting: 'okfProfileMarkdownExportEnabled', default: true },
   okfProfileGraphExpansion: { env: 'NATIVELY_OKF_PROFILE_GRAPH_EXPANSION', setting: 'okfProfileGraphExpansionEnabled', default: false },
   okfProfileKnowledgeUi: { env: 'NATIVELY_OKF_PROFILE_KNOWLEDGE_UI', setting: 'okfProfileKnowledgeUiEnabled', default: false },
   // Safety isolation gates — ON everywhere by default.
@@ -483,15 +673,26 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   // dev/test — so the P0 incident's manual-test run computed the CORRECT
   // sourceOwner=clarify decision but nothing downstream was required to obey
   // it (docs/context-os/real-custom-mode-repair/04_AUTHORITY_CONFLICT_REPORT.md).
-  // Now ON by default in dev/test (same convention as the sibling Context OS
-  // flags above) so the enforcement path is actually exercised whenever the
-  // rest of Context OS is; production stays default OFF until telemetry
-  // validates the blocking behavior, per the incident's Phase 7 requirement
-  // that "production flags remain safely default-OFF unless deliberately
-  // rolled out."
-  contextOsEnforceSourceCapabilities: { env: 'NATIVELY_CONTEXT_OS_ENFORCE_CAPABILITIES', setting: 'contextOsEnforceSourceCapabilitiesEnabled', default: isInternalDevTestContext },
-  contextOsPropertyValidation: { env: 'NATIVELY_CONTEXT_OS_PROPERTY_VALIDATION', setting: 'contextOsPropertyValidationEnabled', default: isInternalDevTestContext },
-  contextOsMultiFamilyEvidenceEnabled: { env: 'NATIVELY_CONTEXT_OS_MULTI_FAMILY_EVIDENCE', setting: 'contextOsMultiFamilyEvidenceEnabled', default: isInternalDevTestContext },
+  // contextOsEnforceSourceCapabilities and contextOsPropertyValidation:
+  // promoted to unconditional `true` (2026-08-30, user-directed override).
+  // WARNING — unlike the shadow-observation promotions above, these are REAL
+  // enforcement gates: they can turn a turn that previously got an answer
+  // into a refusal (blocked capability / evidence-property mismatch). The
+  // Phase 7 incident report's own requirement — "production flags remain
+  // safely default-OFF unless deliberately rolled out" — is being overridden
+  // here without the telemetry validation it called for. There is no
+  // real-traffic measurement of the false-refusal rate this introduces. If
+  // users report answers that used to work now getting refused/declined,
+  // these two flags are the first thing to revert.
+  contextOsEnforceSourceCapabilities: { env: 'NATIVELY_CONTEXT_OS_ENFORCE_CAPABILITIES', setting: 'contextOsEnforceSourceCapabilitiesEnabled', default: true },
+  contextOsPropertyValidation: { env: 'NATIVELY_CONTEXT_OS_PROPERTY_VALIDATION', setting: 'contextOsPropertyValidationEnabled', default: true },
+  // Promoted to unconditional `true` (2026-08-30, SEPARATE user-directed
+  // override, same batch as the two flags above): coordinates evidence from
+  // multiple explicitly-authorized source families into one answer — a real
+  // evidence-handling behavior change, no packaged-build/real-traffic
+  // validation. Same revert priority as contextOsEnforceSourceCapabilities/
+  // contextOsPropertyValidation if answer composition looks wrong in the field.
+  contextOsMultiFamilyEvidenceEnabled: { env: 'NATIVELY_CONTEXT_OS_MULTI_FAMILY_EVIDENCE', setting: 'contextOsMultiFamilyEvidenceEnabled', default: true },
   // Default false (not isInternalDevTestContext) even in dev/test — unlike
   // the Context OS flags above, this one's live-fire behavior was PROVEN to
   // regress real answers in run-032 (see the flag's doc comment). Dev/test
@@ -500,10 +701,45 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   // silently exercised by every dev-context test run the way the Context OS
   // rollout flags intentionally are.
   answerRelevanceGuardLive: { env: 'NATIVELY_ANSWER_RELEVANCE_GUARD_LIVE', setting: 'answerRelevanceGuardLiveEnabled', default: false },
-  atomicJdProfilePackGeneration: { env: 'NATIVELY_ATOMIC_JD_PROFILE_PACK', setting: 'atomicJdProfilePackGenerationEnabled', default: isInternalDevTestContext },
-  pronounRegexShadowObservation: { env: 'NATIVELY_PRONOUN_REGEX_SHADOW_OBSERVATION', setting: 'pronounRegexShadowObservationEnabled', default: isInternalDevTestContext },
-  contextOsImpossibleStateGateShadow: { env: 'NATIVELY_CONTEXT_OS_IMPOSSIBLE_STATE_GATE_SHADOW', setting: 'contextOsImpossibleStateGateShadowEnabled', default: isInternalDevTestContext },
-  contextOsImpossibleStateGateEnforceForbidden: { env: 'NATIVELY_CONTEXT_OS_IMPOSSIBLE_STATE_GATE_ENFORCE_FORBIDDEN', setting: 'contextOsImpossibleStateGateEnforceForbiddenEnabled', default: isInternalDevTestContext },
+  // Promoted to unconditional `true` (2026-08-30, user-directed override).
+  // NOTE the tradeoff this flag's own comment documents: awaiting the AOT
+  // pipeline before ingestDocument() returns for a JD makes JD upload
+  // genuinely, user-facingly SLOWER (real LLM calls in the critical path) —
+  // this is not a free correctness fix, it's a deliberate latency-for-
+  // correctness tradeoff now shipped to every user.
+  atomicJdProfilePackGeneration: { env: 'NATIVELY_ATOMIC_JD_PROFILE_PACK', setting: 'atomicJdProfilePackGenerationEnabled', default: true },
+  // Promoted to unconditional `true` (2026-08-30, dev/prod parity audit): this
+  // is a pure shadow-observation side channel (divergence logging only, zero
+  // change to processQuestion's return value — see the union member's
+  // comment above), so there is no answer-quality or stability risk to
+  // running it in production. Never scope a flag like this to
+  // isInternalDevTestContext purely to save telemetry volume — that's the
+  // exact dev/prod-divergence footgun contracts/flag.ts's header documents.
+  pronounRegexShadowObservation: { env: 'NATIVELY_PRONOUN_REGEX_SHADOW_OBSERVATION', setting: 'pronounRegexShadowObservationEnabled', default: true },
+  // Promoted to unconditional `true` (2026-08-30, dev/prod parity audit): Stage
+  // 0 is shadow-only (divergence logging, zero change to the prompt/pack/return
+  // value — see the union member's comment above). Note this is NOT the same
+  // flag as contextOsImpossibleStateGateEnforceForbidden (Stage 1, a REAL
+  // behavior change) — see its own entry below for its current default.
+  //
+  // (This line used to read "that one stays dev/test-only pending its own
+  // rollout". It was promoted to `default: true` on 2026-08-30 by user-directed
+  // override without the shadow period it names, twelve lines below, so the two
+  // comments contradicted each other about one production enforcement gate.
+  // The entry below is the accurate one; this cross-reference no longer asserts
+  // a default it does not own.)
+  contextOsImpossibleStateGateShadow: { env: 'NATIVELY_CONTEXT_OS_IMPOSSIBLE_STATE_GATE_SHADOW', setting: 'contextOsImpossibleStateGateShadowEnabled', default: true },
+  // Promoted to unconditional `true` (2026-08-30, user-directed override).
+  // WARNING: unlike its Stage 0 shadow sibling above, this IS the real
+  // enforcement gate — its own union-member comment calls it "the first REAL
+  // behavior change" (it can narrow what evidence the legacy fast path
+  // injects, i.e. cause a refusal it previously wouldn't have). It is
+  // leak-safe by construction (ANDed in, can only narrow, fails open) but
+  // was explicitly deferred pending its own dedicated shadow-observation
+  // period (Stage 0 above) precisely because a false-positive here turns a
+  // fixable heuristic bug into a permanent structural refusal. No shadow
+  // period was actually run before this promotion.
+  contextOsImpossibleStateGateEnforceForbidden: { env: 'NATIVELY_CONTEXT_OS_IMPOSSIBLE_STATE_GATE_ENFORCE_FORBIDDEN', setting: 'contextOsImpossibleStateGateEnforceForbiddenEnabled', default: true },
   // Prompt System v2 — PROMOTED TO DEFAULT ON (2026-08-02) after the full
   // benchmark campaign: 8 runs × 600 scenarios vs the frozen legacy prompts
   // (benchmarks/prompt-v2-vs-legacy/results/COMPLETE-WIN.md). Final warm-cache
@@ -517,6 +753,18 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   // promptSystemV2Enabled setting reverts to the legacy constants everywhere
   // (every call site is `resolveV2SystemPrompt(...) ?? legacy`).
   promptSystemV2: { env: 'NATIVELY_PROMPT_SYSTEM_V2', setting: 'promptSystemV2Enabled', default: true },
+  // Literal `true`, NOT isInternalDevTestContext — see the union member's note.
+  wtaGovernanceYieldsToV3: { env: 'NATIVELY_WTA_GOVERNANCE_YIELDS_TO_V3', setting: 'wtaGovernanceYieldsToV3Enabled', default: true },
+  docGroundedValidatorUsesSentEvidence: { env: 'NATIVELY_DOC_GROUNDED_VALIDATOR_SENT_EVIDENCE', setting: 'docGroundedValidatorUsesSentEvidenceEnabled', default: true },
+  // ── Provider Performance Profile ─────────────────────────────────────────
+  providerPerformanceProfile: { env: 'NATIVELY_PROVIDER_PERFORMANCE_PROFILE', setting: 'providerPerformanceProfileEnabled', default: true },
+  adaptiveStreamIdle: { env: 'NATIVELY_ADAPTIVE_STREAM_IDLE', setting: 'adaptiveStreamIdleEnabled', default: true },
+  adaptiveTtft: { env: 'NATIVELY_ADAPTIVE_TTFT', setting: 'adaptiveTtftEnabled', default: true },
+  providerPerformanceDiagnostics: { env: 'NATIVELY_PROVIDER_PERFORMANCE_DIAGNOSTICS', setting: 'providerPerformanceDiagnosticsEnabled', default: true },
+  calibration: { env: 'NATIVELY_PROVIDER_CALIBRATION', setting: 'providerCalibrationEnabled', default: false },
+  capabilityProbe: { env: 'NATIVELY_CAPABILITY_PROBE', setting: 'capabilityProbeEnabled', default: false },
+  adaptiveConnectTimeout: { env: 'NATIVELY_ADAPTIVE_CONNECT_TIMEOUT', setting: 'adaptiveConnectTimeoutEnabled', default: true },
+  adaptiveImageQuality: { env: 'NATIVELY_ADAPTIVE_IMAGE_QUALITY', setting: 'adaptiveImageQualityEnabled', default: false },
 };
 
 const ON_VALUES = new Set(['1', 'true', 'on', 'enabled', 'yes']);
@@ -541,6 +789,7 @@ function readEnvOverride(key: IntelligenceFlagKey): 'on' | 'off' | null {
 }
 
 function readSettingOverride(key: IntelligenceFlagKey): boolean | null {
+  if (FLAGS[key].settingIgnored) return null;
   try {
     // From electron/intelligence/ → ../services/SettingsManager
     const { SettingsManager } = require('../services/SettingsManager');
@@ -637,6 +886,10 @@ export const isRagRrfFusionEnabled = (): boolean =>
  */
 export const isRagSpeculativeRerankEnabled = (): boolean =>
   isIntelligenceFlagEnabled('ragSpeculativeRerank');
+
+/** True when an enabled reranker EXTENSION may take over the rerank seam from the built-in reranker. */
+export const isExtensionRerankersEnabled = (): boolean =>
+  isIntelligenceFlagEnabled('extensionRerankers');
 
 /** True when uploaded reference files should be indexed into OKF Knowledge Packs. */
 export const isOkfKnowledgePacksEnabled = (): boolean =>
@@ -750,10 +1003,14 @@ export function intelligenceFlagKeys(): IntelligenceFlagKey[] {
 /**
  * The flags a verification build expects to be ON. Kept as a short, explicit
  * list rather than "every isInternalDevTestContext() flag" so this assertion is
- * legible and doesn't silently grow/shrink as unrelated flags are added. The
- * Context OS core entries are production-default-ON; the retrieval/OKF entries
- * remain a verification-only expectation because production deliberately keeps
- * those higher-cost augmentations opt-in.
+ * legible and doesn't silently grow/shrink as unrelated flags are added.
+ *
+ * UPDATE (2026-08-30): ragConfidenceGate/ragLocalRerank/okfKnowledgePacks/
+ * okfHybridRetrieval are now ALSO production-default-ON (user-directed
+ * override, no packaged-build field validation — see each flag's FLAGS
+ * registry comment above). This list is left as-is; it still asserts what a
+ * verification build depends on, it's just no longer the only environment
+ * where these resolve true.
  */
 export const REQUIRED_CONTEXT_OS_FLAGS_FOR_VERIFICATION: IntelligenceFlagKey[] = [
   'ragConfidenceGate',
@@ -832,6 +1089,9 @@ export function setIntelligenceFlag(key: IntelligenceFlagKey, value: boolean | n
     if (typeof key !== 'string' || !Object.prototype.hasOwnProperty.call(FLAGS, key)) return false;
     const spec = FLAGS[key];
     if (!spec || typeof spec.setting !== 'string') return false;
+    // The flag no longer reads its setting (permanently-on, no UI toggle) — persisting a
+    // value here would silently do nothing and mislead a future caller. Refuse instead.
+    if (spec.settingIgnored) return false;
     const { SettingsManager } = require('../services/SettingsManager');
     const sm = SettingsManager.getInstance();
     if (value === null) {

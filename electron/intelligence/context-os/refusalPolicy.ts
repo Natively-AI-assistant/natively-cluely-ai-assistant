@@ -73,9 +73,17 @@ export function packGovernsGeneration(input: {
   hasReferenceFiles?: boolean;
 }): boolean {
   if (input.answerPolicy !== 'refuse_insufficient_evidence') return true;
-  if (!sourceAuthorityPermitsRefusal(input.sourceAuthority)) return false;
-  if (input.sourceAuthority === 'transcript_only') return true;
-  return input.hasReferenceFiles === true;
+  // ALWAYS ANSWER (2026-09-07, owner's direction). A refusal pack used to
+  // govern generation for the four bounded-universe authorities (and only with
+  // files present), yielding "This is not directly mentioned in the uploaded
+  // material" WITHOUT calling the model. The owner's product decision is that
+  // the app answers regardless: the turn falls through to generation with
+  // whatever evidence was retrieved, and the composer's own absence framing
+  // (say what the material does not state, then answer from general knowledge,
+  // clearly marked) does the honest part. The authority classification below
+  // is kept exported because clarificationIsActionable and telemetry read it.
+  void sourceAuthorityPermitsRefusal;
+  return false;
 }
 
 /** The authorities whose universe is the mode's uploaded reference files. */
@@ -141,32 +149,51 @@ const KNOWN_SOURCE_AUTHORITIES: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * WHEN DOES A TEXT-EVIDENCE DECLINE YIELD TO USER-ATTACHED PIXELS?
+ * WHEN DOES A TEXT-EVIDENCE DECLINE YIELD TO CURRENT-SCREEN EVIDENCE?
  *
  * Audit 2026-08-19 (user directive: "no context of screenshot is dropped if
- * the contexts disagree"): a screenshot is the user DELIBERATELY handing the
- * turn its evidence. Every canned decline in the govern path — the WTA
+ * the contexts disagree"): a screenshot, browser DOM capture, or screen OCR is
+ * the user DELIBERATELY handing the turn its current-screen evidence. Every
+ * canned decline in the govern path — the WTA
  * refuse/clarify short-circuits, LLMHelper's final-prompt-boundary refusal,
  * and the post-stream doc-grounded answer swap — is a verdict about the TEXT
  * evidence universe only ("your files/transcript don't contain this"). With a
- * screenshot attached that verdict is answering the wrong question: the user's
- * evidence for THIS turn includes the pixels, which the text pipeline cannot
- * see. Refusing there silently drops the screenshot.
+ * current screen attached that verdict is answering the wrong question: the
+ * user's evidence for THIS turn includes either pixels or captured screen text.
+ * Refusing there silently drops the current screen.
  *
  * Manual chat already draws this line (its clarify short-circuit is gated
  * `!imagePaths?.length`, ipcHandlers). This predicate is the shared, testable
  * form of that rule for every other decline site. It does NOT weaken source
  * isolation: the text-evidence pack still governs what TEXT sources render
  * (forbidden sources stay forbidden; the profile stays suppressed on governed
- * turns) — only the decision to answer-vs-decline yields to the attachment.
+ * turns) — only the decision to answer-vs-decline yields to current-screen
+ * evidence. The historical function name is retained for API compatibility.
  */
+/**
+ * ALWAYS ANSWER (2026-09-07, owner's direction). The source-switch
+ * clarification ("This mode only answers from your uploaded material, so I'm
+ * not pulling from your résumé here. Switch to a mode…") ended the turn with
+ * no model call at four sites (engine WTA, manual chat ×2, phone mirror).
+ * Measured live in Looking-for-Work with three files attached: "walk me through
+ * your background" got that line in 1.2s. The decision layer still computes
+ * `shouldClarifyInsteadOfProfile` (telemetry, tests, the contract that strips a
+ * denied source), but no surface short-circuits on it any more — generation
+ * proceeds with whatever the contract allows and the composer names the gap.
+ */
+export function clarificationShortCircuitEnabled(): boolean {
+  return false;
+}
+
 export function declineYieldsToAttachedImages(input: {
   /** The pack/validator verdict being considered. */
   answerPolicy: 'refuse_insufficient_evidence' | 'ask_clarification' | string;
   /** True when the user attached screenshot(s) to this turn. */
   hasAttachedImages: boolean;
+  /** True when the current screen arrived as browser DOM or OCR text. */
+  hasScreenText?: boolean;
 }): boolean {
-  if (!input.hasAttachedImages) return false;
+  if (!input.hasAttachedImages && !input.hasScreenText) return false;
   return input.answerPolicy === 'refuse_insufficient_evidence'
     || input.answerPolicy === 'ask_clarification';
 }
@@ -178,8 +205,8 @@ export function declineYieldsToAttachedImages(input: {
  * validateFinalPromptEvidence fails for five distinct reasons and only ONE of
  * them is the decline class this rule was scoped to:
  *
- *   answer_policy_ask_clarification          ← decline: yields to pixels
- *   answer_policy_refuse_insufficient_evidence ← decline: yields to pixels
+ *   answer_policy_ask_clarification          ← decline: yields to current screen
+ *   answer_policy_refuse_insufficient_evidence ← decline: yields to current screen
  *   rendered_manifest_invalid                ← structural: prompt is untrustworthy
  *   serialized_evidence_marker_missing       ← structural: prompt is untrustworthy
  *   missing_required_evidence_family:…       ← contract breach: required grounding absent
@@ -190,19 +217,21 @@ export function declineYieldsToAttachedImages(input: {
  * verbatim to every cloud provider with no downstream re-validation — the exact
  * outcome declineYieldsToAttachedImages's own contract above promises against
  * ("forbidden sources stay forbidden"). The decline reasons are the only ones
- * the upstream image exemption actually creates: a refuse/clarify pack that was
+ * the upstream visual-context exemption creates: a refuse/clarify pack that was
  * let through at the govern block still carries its policy into this validator,
  * so without this narrow yield those turns would be re-refused at the boundary.
  *
- * Fails CLOSED for every other reason, with or without pixels.
+ * Fails CLOSED for every other reason, with or without current-screen evidence.
  */
 export function boundaryDeclineYieldsToAttachedImages(input: {
   /** validateFinalPromptEvidence's `reason` for the failing verdict. */
   reason: string;
   /** True when the user attached screenshot(s) to this turn. */
   hasAttachedImages: boolean;
+  /** True when the current screen arrived as browser DOM or OCR text. */
+  hasScreenText?: boolean;
 }): boolean {
-  if (!input.hasAttachedImages) return false;
+  if (!input.hasAttachedImages && !input.hasScreenText) return false;
   return input.reason === 'answer_policy_ask_clarification'
     || input.reason === 'answer_policy_refuse_insufficient_evidence';
 }

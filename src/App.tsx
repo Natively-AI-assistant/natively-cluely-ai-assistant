@@ -13,6 +13,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import UpdateBanner from "./components/UpdateBanner"
 import { NativelyQuotaBanner } from "./components/NativelyQuotaBanner"
 import { FreeTrialBanner }      from "./components/trial/FreeTrialBanner"
+import type { TrialUsage, TrialLimits } from './types/nativelyUsage';
 import { FreeTrialModal }       from "./components/trial/FreeTrialModal"
 import { OrchestratorProvider, OrchestratedToasterHost, setUserState as setOrchestratorUserState, emitOrchestratorEvent } from "./components/onboarding/OrchestratedToasterHost"
 import ReviewPromptHost from "./components/ReviewPromptHost"
@@ -29,6 +30,7 @@ import ReviewPromptHost from "./components/ReviewPromptHost"
 // unmounting the whole tree — the black-screen root cause. Do not remove
 // the extension.
 import { getOrchestrator } from "./lib/onboarding/orchestrator.ts"
+import { isInternalCaptureDevice } from "../electron/audio/audioDeviceSelection.mjs"
 import { AlertCircle, RefreshCw } from "lucide-react"
 import { clampOverlayOpacity, OVERLAY_OPACITY_DEFAULT, getDefaultOverlayOpacity } from "./lib/overlayAppearance"
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from './lib/meetingInterfaceTheme'
@@ -182,6 +184,34 @@ const App: React.FC = () => {
   // Memoizing to [] makes the splash timers arm exactly once.
   const dismissStartup = useCallback(() => setShowStartup(false), []);
 
+  /**
+   * Tell main the boot reveal has landed, so it can restore background
+   * throttling on this window.
+   *
+   * WindowHelper creates the launcher with `backgroundThrottling: false`
+   * because Chromium stops rAF for a hidden window and this reveal is a Framer
+   * Motion transition — but nothing turned it back on, so the opt-out outlived
+   * the one-shot animation. Measured 2026-09-03: a hidden window with the
+   * opt-out ran 600 rAF frames in 10s where a throttled one ran 0, which means
+   * a launcher hidden during summary generation kept compositing ~19 infinite
+   * `.mn-skel` animations off screen.
+   *
+   * Hung off the entrance animation's own completion rather than a timer, so
+   * the reveal is provably finished before throttling returns. Once only —
+   * AnimatePresence can re-run this branch.
+   */
+  const revealReported = useRef(false);
+  const reportRevealComplete = useCallback(() => {
+    if (revealReported.current) return;
+    if (!(isLauncherWindow || isDefault)) return;
+    revealReported.current = true;
+    try {
+      window.electronAPI?.notifyLauncherRevealComplete?.();
+    } catch {
+      /* a missing bridge just means throttling stays as it was */
+    }
+  }, [isLauncherWindow, isDefault]);
+
   // Bug 1 + Bug 2: only mount the launcher-side floating card AFTER the
   // startup animation has finished AND a 3s settle window has elapsed.
   // Triggers `false → true` 3s after `showStartup` flips false; tracked via
@@ -194,7 +224,17 @@ const App: React.FC = () => {
     return () => clearTimeout(t);
   }, [showStartup]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [settingsInitialTab, setSettingsInitialTab] = useState<string>('general');
+  /* Settings deep-link target, plus a sequence number that increments on EVERY
+     request even when the tab is unchanged.
+
+     Without `seq`, re-issuing the SAME tab was a silent no-op: setState with an
+     equal value does not re-render, so SettingsOverlay's sync effect never ran.
+     That was invisible while a tab id mapped to exactly one view, and became a
+     real defect once Retrieval grew Embedding/Reranker sub-tabs — clicking AI
+     Providers' lightweight-embedding notice a second time (after browsing to
+     the Reranker sub-tab) left the user where they were. Reproduced live
+     2026-09-15 before this fix. */
+  const [settingsNav, setSettingsNav] = useState<{ tab: string; seq: number }>({ tab: 'general', seq: 0 });
   const [activeManagerPanel, setActiveManagerPanel] = useState<ManagerPanel>(null);
   const [managerPanelDirection, setManagerPanelDirection] = useState<ManagerPanelDirection>('forward');
   const managerDialogRef = useRef<HTMLDivElement>(null);
@@ -214,7 +254,7 @@ const App: React.FC = () => {
     // Settings replaces the manager rather than closing back to its launcher trigger.
     managerOpenerRef.current = null;
     setActiveManagerPanel(null);
-    setSettingsInitialTab(tab);
+    setSettingsNav(prev => ({ tab, seq: prev.seq + 1 }));
     setIsSettingsOpen(true);
   }, []);
 
@@ -315,7 +355,9 @@ const App: React.FC = () => {
   // ── Free Trial global state ────────────────────────────────
   const [activeTrial, setActiveTrial] = useState<{
     expiresAt: string;
-    usage: { ai: number; stt_seconds: number; search: number };
+    usage: TrialUsage;
+    /** Carried from /v1/trial/status so the banner does not hardcode allowances. */
+    limits?: TrialLimits;
   } | null>(null);
   const [showTrialExpiredModal, setShowTrialExpiredModal] = useState(false);
 
@@ -584,7 +626,8 @@ const App: React.FC = () => {
         } else {
           setActiveTrial({
             expiresAt: res.expires_at ?? '',
-            usage:     res.usage     ?? { ai: 0, stt_seconds: 0, search: 0 },
+            usage:     res.usage     ?? { ai: 0, ai_tokens: 0, stt_seconds: 0, search: 0 },
+            limits:    (res as { limits?: TrialLimits }).limits,
           });
         }
       } catch { /* ignore — non-critical */ }
@@ -592,6 +635,7 @@ const App: React.FC = () => {
     window.electronAPI?.getLocalTrial?.().then((local: any) => {
       if (!local?.hasToken) return;
       if (local.expired) {
+        // (expiry branch below)
         // Already expired at launch — wipe immediately then show modal after a brief delay
         if (!profileWiped) {
           profileWiped = true;
@@ -600,6 +644,22 @@ const App: React.FC = () => {
         setTimeout(() => setShowTrialExpiredModal(true), 10_000);
         return;
       }
+      // Seed the banner from the LOCAL token before the first poll answers.
+      //
+      // This is the "closed the app and reopened it inside the 30 minutes and
+      // the trial was gone" report. The trial was fine — the countdown just
+      // had nothing to render: activeTrial was only ever set from
+      // checkTrial(), a network call, so on every relaunch the banner stayed
+      // absent until /v1/trial/status came back, and stayed absent FOREVER if
+      // that call failed (it returns early on !ok, offline included).
+      //
+      // expiresAt is stored locally at start, so the clock is already knowable
+      // offline. Usage starts at zero and is replaced by the poll below —
+      // the settings panel has seeded itself exactly this way all along.
+      setActiveTrial({
+        expiresAt: local.expiresAt ?? '',
+        usage: { ai: 0, ai_tokens: 0, stt_seconds: 0, search: 0 },
+      });
       checkTrial();
       trialPollId = setInterval(checkTrial, 30_000);
     }).catch(() => {});
@@ -834,7 +894,20 @@ const App: React.FC = () => {
   const handleStartMeeting = async () => {
     try {
       localStorage.setItem('natively_last_meeting_start', Date.now().toString());
-      const inputDeviceId = localStorage.getItem('preferredInputDeviceId');
+      // Self-heal a poisoned preference. Until the picker started filtering
+      // them, Natively's own system-audio tap aggregate could be enumerated as
+      // an input device (private CoreAudio aggregates are hidden from other
+      // processes, not from ours) and saved here. It is not a microphone and
+      // never exists at mic-start time, so every meeting failed with
+      // "Input device 'NativelySystemAudioTap' not found". Main falls back to
+      // the default either way; dropping the key stops the stale value from
+      // being shown as the user's choice in Settings forever.
+      let inputDeviceId = localStorage.getItem('preferredInputDeviceId');
+      if (isInternalCaptureDevice(inputDeviceId)) {
+        console.warn(`[App] Discarding saved input device "${inputDeviceId}" — it is one of Natively's own capture devices, not a microphone.`);
+        localStorage.removeItem('preferredInputDeviceId');
+        inputDeviceId = null;
+      }
       let outputDeviceId = localStorage.getItem('preferredOutputDeviceId');
       // SCK is a macOS-only backend (ScreenCaptureKit + CoreAudio Process Tap
       // live in the Rust speaker module under #[cfg(target_os = "macos")]).
@@ -1052,6 +1125,7 @@ const App: React.FC = () => {
               duration: 0.6,
               ease: [0.19, 1, 0.22, 1], // Expo-out: snappy start, smooth landing
             }}
+            onAnimationComplete={reportRevealComplete}
           >
             <QueryClientProvider client={queryClient}>
               <ToastProvider>
@@ -1072,7 +1146,8 @@ const App: React.FC = () => {
                   onClose={() => {
                     setIsSettingsOpen(false);
                   }}
-                  initialTab={settingsInitialTab}
+                  initialTab={settingsNav.tab}
+                  initialTabSeq={settingsNav.seq}
                   initialIsPremium={hasLoadedLicense ? isPremiumActive : null}
                   initialHasNativelyKey={hasNativelyApi}
                 />
@@ -1084,7 +1159,7 @@ const App: React.FC = () => {
                       initial="initial"
                       animate="animate"
                       exit="exit"
-                      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+                      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
                       onClick={(event) => {
                         if (event.target !== event.currentTarget) return;
                         closeManagerPanel();
@@ -1240,6 +1315,7 @@ const App: React.FC = () => {
           <FreeTrialBanner
             expiresAt={activeTrial.expiresAt}
             usage={activeTrial.usage}
+            limits={activeTrial.limits}
             onUpgrade={() => openSettingsExclusive('plans')}
           />
         )}
@@ -1247,7 +1323,7 @@ const App: React.FC = () => {
         {/* Post-trial upgrade modal — shown when trial expires */}
         {!isolateModals && (isLauncherWindow || isDefault) && showTrialExpiredModal && (
           <FreeTrialModal
-            usage={activeTrial?.usage ?? { ai: 0, stt_seconds: 0, search: 0 }}
+            usage={activeTrial?.usage ?? { ai: 0, ai_tokens: 0, stt_seconds: 0, search: 0 }}
             onByok={async () => {
               await window.electronAPI?.endTrialByok?.();
             }}

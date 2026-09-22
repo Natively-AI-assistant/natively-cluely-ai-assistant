@@ -27,6 +27,7 @@ const {
   SAFE_DOCUMENT_EXTENSIONS,
   SAFE_DOCUMENT_MAX_BYTES,
   computeParseTimeoutMs,
+  htmlToText,
 } = await import(moduleUrl);
 
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-safe-document-'));
@@ -41,15 +42,20 @@ function createFixture(name, content) {
 
 test('declares the complete shared Modes / Profile document format contract', () => {
   assert.deepEqual(
-    [...SAFE_DOCUMENT_EXTENSIONS],
+    [...SAFE_DOCUMENT_EXTENSIONS].slice(0, 12),
     ['.txt', '.md', '.markdown', '.json', '.csv', '.tsv', '.xml', '.html', '.htm', '.log', '.pdf', '.docx'],
   );
+  // 2026-09-10: source/config files are plain text and a code-review mode
+  // needs the code under review, not only the notes about it.
+  for (const ext of ['.ts', '.tsx', '.js', '.py', '.go', '.java', '.rs', '.sql', '.yaml', '.yml', '.toml', '.sh']) {
+    assert.ok(SAFE_DOCUMENT_EXTENSIONS.has(ext), `${ext} must be an accepted reference-file type`);
+  }
   assert.equal(SAFE_DOCUMENT_MAX_BYTES, 50 * 1024 * 1024);
 });
 
 test('extracts every plain-text document format without changing its content', async () => {
   const content = 'Sarah Chen\nsarah@example.com\nSenior Software Engineer\n';
-  for (const ext of ['.txt', '.md', '.markdown', '.json', '.csv', '.tsv', '.xml', '.html', '.htm', '.log']) {
+  for (const ext of ['.txt', '.md', '.markdown', '.json', '.csv', '.tsv', '.xml', '.html', '.htm', '.log', '.ts', '.py', '.yaml']) {
     const result = await extractSafeDocumentText(createFixture(`resume${ext}`, content));
     assert.equal(result.extension, ext);
     assert.equal(result.content, content);
@@ -136,4 +142,32 @@ test('calls parser.destroy() exactly once on a successful PDF parse', async () =
   } finally {
     destroySpy.mock.restore();
   }
+});
+
+
+// 2026-09-10: `.html` reference files were stored verbatim, so chunks,
+// embeddings and the prompt all saw `<tr><td>` markup; a board-update table
+// was answered from the wrong column because the headers sat three rows of
+// tags away from the cell. HTML is flattened to prose at extraction.
+test('flattens HTML tables, lists and headings to prose; plain text is untouched', async () => {
+  const html = `<!doctype html><html><head><title>Q3 Update</title><style>td{color:red}</style></head>
+<body><h1>Lumen &amp; Co</h1><script>alert(1)</script>
+<table><tr><th>Metric</th><th>Q1</th><th>Q3</th></tr>
+<tr><td>Net revenue retention</td><td>108%</td><td>117%</td></tr></table>
+<ul><li>New logos: 94 (target&nbsp;80)</li><li>Sales cycle &ndash; 41 days</li></ul>
+<p>Cash <b>$34.9M</b><br>Runway 36 months</p></body></html>`;
+  const result = await extractSafeDocumentText(createFixture('q3_update.html', html));
+  const lines = result.content.split('\n');
+  assert.ok(lines.includes('Q3 Update'), 'the title survives as a line');
+  assert.ok(lines.includes('Lumen & Co'), 'entities are decoded');
+  assert.ok(lines.includes('Metric | Q1 | Q3'), 'a header row is one line of cells');
+  assert.ok(lines.includes('Net revenue retention | 108% | 117%'), 'a data row keeps its cells together');
+  assert.ok(lines.includes('- New logos: 94 (target 80)'), 'list items become bullets, nbsp decoded');
+  assert.ok(lines.includes('- Sales cycle – 41 days'), 'named entities decode');
+  assert.ok(lines.includes('Cash $34.9M'), 'inline tags are dropped');
+  assert.ok(lines.includes('Runway 36 months'), '<br> breaks a line');
+  assert.ok(!/<[a-z]/i.test(result.content), 'no tags remain');
+  assert.ok(!/alert\(1\)|color:red/.test(result.content), 'script and style bodies are dropped');
+  assert.equal(htmlToText('Sarah Chen\nsarah@example.com\n'), 'Sarah Chen\nsarah@example.com\n', 'tag-free text is returned byte-identical');
+  assert.equal(result.binarySha256, crypto.createHash('sha256').update(html).digest('hex'), 'the binary hash is of the original bytes');
 });

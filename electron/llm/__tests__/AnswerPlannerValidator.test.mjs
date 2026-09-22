@@ -80,16 +80,14 @@ test('validateAnswerStructure repairs unstructured dsa answer', () => {
   assertCodingMarkdownContract(result.repaired ?? '');
 });
 
-test('classifyIntent prioritizes coding over generic example phrasing', async () => {
-  const prompts = [
-    'give me an example of a React component in TypeScript',
-    'can you give a concrete implementation of binary search in Python?',
-  ];
-
-  for (const prompt of prompts) {
-    const result = await classifyIntent(prompt, prompt, 0);
-    assert.equal(result.intent, 'coding', `${prompt} classified as ${result.intent}`);
-  }
+test('planAnswer routes example-phrased coding asks as coding without the deleted classifier tier (2026-09-05)', () => {
+  // The legacy regex tier caught this with `example of .* in .*`; its removal left
+  // the planner's `intent === 'coding'` arm permanently false. CODING_PATTERNS now
+  // carries the shape, with an object required so behavioral asks stay out.
+  const coding = planAnswer({ question: 'give me an example of a React component in TypeScript', transcriptContext: '', intentResult: { intent: 'general', confidence: 0.5 } });
+  assert.equal(coding.answerType, 'coding_question_answer');
+  const behavioral = planAnswer({ question: 'give me an example of a conflict in your last team and how you handled it', transcriptContext: '', intentResult: { intent: 'general', confidence: 0.5 } });
+  assert.notEqual(behavioral.answerType, 'coding_question_answer', 'a behavioral "example of ... in your ..." must not become code');
 });
 
 test('planAnswer classifies required odd/even manual prompts as coding answers', () => {

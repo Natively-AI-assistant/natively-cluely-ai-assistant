@@ -226,18 +226,54 @@ export class DatabaseManager {
      * produced by an `npm install` that ran under a Rosetta shell).
      */
     private reportInitFailure(error: unknown): void {
-        const err = error as NodeJS.ErrnoException;
-        const msg = err?.message || String(error);
-        const isArchMismatch =
-            err?.code === 'ERR_DLOPEN_FAILED' ||
-            /incompatible architecture|ERR_DLOPEN_FAILED|mach-o/i.test(msg);
+        // better-sqlite3 loads through the `bindings` package, which SWALLOWS the
+        // real dlopen error at each candidate path and then reports
+        // "Could not locate the bindings file. Tried: …" — a message that names a
+        // MISSING file even when the file is present and merely unloadable. The
+        // previous /incompatible architecture|ERR_DLOPEN_FAILED|mach-o/i test
+        // therefore never matched the most common genuine cause, so users hit the
+        // generic branch and never saw the rebuild guidance. See
+        // electron/lib/bindingFailure.cjs for the evidence.
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { diagnoseBindingFailure } = require('../lib/bindingFailure.cjs');
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { binaryArch } = require('../lib/nativeArch.cjs');
 
-        if (isArchMismatch) {
+        let diagnosis: { kind: string; path?: string; actual?: string; expected?: string; tried?: string[] };
+        try {
+            diagnosis = diagnoseBindingFailure(error, {
+                exists: (p: string) => fs.existsSync(p),
+                archOf: (p: string) => binaryArch(p),
+                processArch: process.arch,
+            });
+        } catch {
+            // Diagnosis must never be the thing that breaks startup reporting.
+            diagnosis = { kind: 'other' };
+        }
+
+        if (diagnosis.kind === 'arch-mismatch') {
+            const where = diagnosis.path ? `\n  Offending binary: ${diagnosis.path}` : '';
+            const what = diagnosis.actual
+                ? ` (binary is ${diagnosis.actual}, this app is ${diagnosis.expected})`
+                : '';
             console.error(
                 '[DatabaseManager] FATAL: native module (better-sqlite3) failed to load — the compiled ' +
-                'binary architecture does not match the Electron runtime. Local database is DISABLED ' +
+                `binary architecture does not match the Electron runtime${what}. Local database is DISABLED ` +
+                '(meeting history, modes, and notes will not persist this session).' + where + '\n' +
+                '  Fix: run `npm run rebuild:native` from a native (non-Rosetta) terminal, then restart the app.\n' +
+                '  If this is an INSTALLED app (not a dev checkout), you have the wrong build for your Mac — ' +
+                'download the arm64 DMG on Apple Silicon, or the standard DMG on Intel.'
+            );
+        } else if (diagnosis.kind === 'binding-missing') {
+            // Every candidate path was genuinely absent: a packaging/installation
+            // fault, NOT something a rebuild fixes. Saying "rebuild" here would send
+            // users down the wrong path.
+            console.error(
+                '[DatabaseManager] FATAL: native module (better-sqlite3) is MISSING from this build — no ' +
+                'binary exists at any of the paths it was looked for. Local database is DISABLED ' +
                 '(meeting history, modes, and notes will not persist this session).\n' +
-                '  Fix: run `npm run rebuild:native` from a native (non-Rosetta) terminal, then restart the app.'
+                `  Searched ${diagnosis.tried?.length ?? 0} path(s); first: ${diagnosis.tried?.[0] ?? 'n/a'}\n` +
+                '  This is an installation/packaging fault — reinstall the app.'
             );
         } else {
             console.error(
@@ -419,6 +455,46 @@ export class DatabaseManager {
     // Each version is applied exactly once, in order.
     // New migrations append a new `if (version < N)` block.
     // ============================================
+
+    /**
+     * Ensure the reserved '__profile_okf__' mode row exists.
+     *
+     * APPLIED UNCONDITIONALLY ON EVERY BOOT, NOT VERSION-GATED (live defect,
+     * 2026-09-13). This INSERT used to live inside the `version < 23` block. A
+     * live profile was observed at user_version 31 carrying v23's `pii` column
+     * but NOT this row, so the gate could never run again and the row could
+     * never come back. Every profile Knowledge Pack write then failed the
+     * knowledge_sources.mode_id -> modes(id) foreign key with "FOREIGN KEY
+     * constraint failed", and because ProfilePackBuilder.generateForProfile
+     * deliberately swallows its own errors (the OKF layer must never fail an
+     * ingest), ingest kept reporting success while the profile card layer
+     * silently never persisted a single row.
+     *
+     * `INSERT OR IGNORE` is idempotent by construction — the same reasoning as
+     * the meetings.user_titled ALTER further down — so it must not depend on a
+     * counter that concurrent branches can race or that a one-shot can strand.
+     * Running it every boot also self-heals any database already in that state.
+     *
+     * Safe to call from anywhere after migration v11 created `modes`; it is
+     * invoked from runMigrations immediately after the v23 block.
+     */
+    private ensureProfileOkfSentinelMode(): void {
+        if (!this.db) return;
+        try {
+            const result = this.db.prepare(`
+                INSERT OR IGNORE INTO modes (id, name, template_type, custom_context, is_active, created_at)
+                VALUES ('__profile_okf__', 'Profile Intelligence (reserved)', '__reserved__', '', 0, CURRENT_TIMESTAMP)
+            `).run();
+            if (result.changes > 0) {
+                console.log('[DatabaseManager] Restored the reserved __profile_okf__ mode row (profile Knowledge Packs could not persist without it)');
+            }
+        } catch (e) {
+            // Never fatal: without the sentinel, profile OKF packs stay broken
+            // (the pre-fix status quo), but every other table still works, so a
+            // failure here must not take the whole boot down with it.
+            console.error('[DatabaseManager] Failed to ensure the reserved __profile_okf__ mode row:', (e as Error)?.message || e);
+        }
+    }
 
     private runMigrations() {
         if (!this.db) return;
@@ -1266,7 +1342,7 @@ export class DatabaseManager {
             // pii=1 so downstream tooling (export, UI, any future consumer) can filter
             // PII cards. Reference-file cards keep the default pii=0 — no behavior
             // change for the existing document OKF path.
-            console.log('[DatabaseManager] Applying migration v22 → v23: profile OKF (reserved mode + knowledge_cards.pii)');
+            console.log('[DatabaseManager] Applying migration v22 → v23: profile OKF (knowledge_cards.pii)');
             const addPiiColumn = () => {
                 try {
                     this.db!.exec(`ALTER TABLE knowledge_cards ADD COLUMN pii INTEGER NOT NULL DEFAULT 0`);
@@ -1277,12 +1353,13 @@ export class DatabaseManager {
                 }
             };
             addPiiColumn();
-            this.db.prepare(`
-                INSERT OR IGNORE INTO modes (id, name, template_type, custom_context, is_active, created_at)
-                VALUES ('__profile_okf__', 'Profile Intelligence (reserved)', '__reserved__', '', 0, CURRENT_TIMESTAMP)
-            `).run();
             this.db.pragma('user_version = 23');
         }
+
+        // The '__profile_okf__' sentinel row itself is ensured on EVERY boot,
+        // not inside the v23 gate where it used to live — see
+        // ensureProfileOkfSentinelMode for the live defect that forced this.
+        this.ensureProfileOkfSentinelMode();
 
         // Version 23 → 24: Context OS memory safety (docs/context-os/, Phase 9).
         // assistant_claims separates factual CLAIMS from conversational assistant
@@ -1715,6 +1792,43 @@ export class DatabaseManager {
                 // never applied, and `version < 30` would be false forever after.
                 // That is R-05 verbatim, and R-05 only became reachable because
                 // an earlier block was written this same way.
+                return;
+            }
+        }
+
+        if (version < 31) {
+            console.log('[DatabaseManager] Applying migration v30 → v31: screenshot description cache');
+            try {
+                // A screenshot's text transcription, keyed by the EXACT bytes of
+                // the image. Describing a screen costs a vision call with a
+                // multi-second budget, and the same screen is re-attached
+                // constantly (re-captures of one window, one slide, one error
+                // dialog), so this is a cache before it is storage.
+                //
+                // The key is a sha256 of the file, deliberately NOT
+                // ImageHashService.computeHash — that is a 16x16 grayscale
+                // average hash built for CHANGE DETECTION, and it collides
+                // across screens that merely look alike at that resolution.
+                // Serving one screen's transcription for another is a
+                // confidently wrong answer about an error code the user can see
+                // with their own eyes, which is worse than no cache at all.
+                this.db.exec(`
+                    CREATE TABLE IF NOT EXISTS screenshot_descriptions (
+                        image_sha256 TEXT PRIMARY KEY,
+                        description  TEXT NOT NULL,
+                        provider     TEXT NOT NULL DEFAULT '',
+                        model        TEXT NOT NULL DEFAULT '',
+                        created_at   INTEGER NOT NULL
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_screenshot_descriptions_created
+                        ON screenshot_descriptions(created_at);
+                `);
+                this.db.pragma('user_version = 31');
+            } catch (e) {
+                console.error('[DatabaseManager] v31 screenshot description cache failed (leaving version at 30 to retry next launch):', e);
+                // Same rule as v28/v29/v30 above: stop rather than fall through,
+                // so a later migration cannot stamp user_version past a v31 that
+                // never applied and make `version < 31` false forever.
                 return;
             }
         }
@@ -2975,6 +3089,50 @@ export class DatabaseManager {
             return info.changes > 0;
         } catch (error) {
             console.error(`[DatabaseManager] Failed to update summary status for meeting ${id}:`, error);
+            return false;
+        }
+    }
+
+    /**
+     * Terminal state for a post-meeting summary that threw before saveMeeting could run.
+     *
+     * On that path the placeholder row endMeeting wrote is never rewritten — saveMeeting
+     * is never reached — so the meeting kept title "Processing..." and legacySummary
+     * "Generating summary..." forever while its status said 'failed'. The stale blurb is
+     * not cosmetic: it is what pdfGenerator prints into an exported PDF, what
+     * searchGlobalMeetings offers as a result snippet, and what RAGManager indexes as the
+     * meeting's summary when no overview exists.
+     *
+     * `is_processed` is deliberately left alone — 0 is exactly what getUnprocessedMeetings
+     * and recoverUnprocessedMeetings key on to retry this meeting at the next app start,
+     * and that retry is the reason a hard failure is not permanent.
+     *
+     * A manual rename still wins, via the same user_titled guard replaceDetailedSummary
+     * uses; and because this is NOT updateMeetingTitle, the fallback name written here is
+     * not stamped as the user's, so a later successful run replaces it freely.
+     */
+    public markSummaryGenerationFailed(id: string, fallbackTitle: string): boolean {
+        if (!this.db) return false;
+        try {
+            const row = this.db.prepare('SELECT summary_json FROM meetings WHERE id = ?').get(id) as any;
+            if (!row) return false;
+            // An unreadable blob is left exactly as it is: the status and title still have
+            // to land, and rewriting JSON we could not parse would destroy more than it fixes.
+            let jsonStr: string | null = null;
+            try {
+                const existingData = JSON.parse(row.summary_json || '{}') || {};
+                if (existingData.legacySummary) jsonStr = JSON.stringify({ ...existingData, legacySummary: '' });
+            } catch { /* leave summary_json untouched */ }
+
+            const titleClause = 'title = CASE WHEN COALESCE(user_titled, 0) = 1 THEN title ELSE ? END';
+            const info = jsonStr === null
+                ? this.db.prepare(`UPDATE meetings SET summary_status = 'failed', ${titleClause} WHERE id = ?`)
+                    .run(fallbackTitle, id)
+                : this.db.prepare(`UPDATE meetings SET summary_json = ?, summary_status = 'failed', ${titleClause} WHERE id = ?`)
+                    .run(jsonStr, fallbackTitle, id);
+            return info.changes > 0;
+        } catch (error) {
+            console.error(`[DatabaseManager] Failed to mark summary generation failed for meeting ${id}:`, error);
             return false;
         }
     }

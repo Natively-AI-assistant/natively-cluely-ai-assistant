@@ -1,0 +1,336 @@
+{
+ "blind_id": "S-46ddebaa",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 71563,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 37383,
+  "candidatesTokenCount": 2371,
+  "totalTokenCount": 47684,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 37383
+   }
+  ],
+  "thoughtsTokenCount": 7930,
+  "serviceTier": "standard"
+ },
+ "fact_count": 67,
+ "evaluation": {
+  "factual_accuracy": 6,
+  "important_information_retention": 9,
+  "hallucination_control": 7,
+  "action_item_retention": 8,
+  "decision_retention": 9,
+  "speaker_attribution": 6,
+  "numeric_accuracy": 8,
+  "entity_retention": 9,
+  "timeline_accuracy": 7,
+  "conclusion_accuracy": 8,
+  "structure": 6,
+  "conciseness": 2,
+  "readability": 5,
+  "overall_summary_quality": 6,
+  "critical_errors": [
+   "Contradiction: The notes correctly state Harbourline is on Zendesk Support Professional, but then list 'What exact Zendesk plan is Harbourline on?' as an open question.",
+   "Contradiction/Misattribution: The notes assign the action item to send the mutual NDA to both Priya (Speaker 1) and Jon (Speaker 2).",
+   "Misattribution: The notes list 'Speaker 1 (me): Send a revised pricing proposal...' Speaker 1 is Priya, while 'Me' is Dana.",
+   "Superseded values reported as current: The notes list the October 15 go-live and December 31 Queuewise contract end date as inferred action items, despite them being superseded later in the call."
+  ],
+  "missing_important_information": [
+   "The specific date coverage of the SOC 2 report (12 months ending Jan 31).",
+   "That Deflekt and the Queuewise-renewal option will serve as the two competing quotes for the business case.",
+   "That Priya's approval limit was lowered from $50,000 to $40,000 in January."
+  ],
+  "hallucinated_information": [
+   "Security questionnaire by Thursday, May 29 (the transcript says April 29)."
+  ],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C03",
+    "reported": "Target go-live around October 15, two weeks before the November 1 freeze [inferred]"
+   },
+   {
+    "correction_id": "C04",
+    "reported": "Queuewise contract believed to end December 31 [inferred]"
+   }
+  ],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [
+   "replay showing 212 tickets would route differently"
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "partial"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "contradicted"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "contradicted"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "present"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "partial"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "partial"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "present"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "present"
+   },
+   {
+    "id": "F57",
+    "status": "present"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "partial"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   },
+   {
+    "id": "F62",
+    "status": "present"
+   },
+   {
+    "id": "F63",
+    "status": "present"
+   },
+   {
+    "id": "F64",
+    "status": "present"
+   },
+   {
+    "id": "F65",
+    "status": "present"
+   },
+   {
+    "id": "F66",
+    "status": "present"
+   },
+   {
+    "id": "F67",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture almost all the important information from the transcript, but suffer from severe repetition, bloating the text significantly. The same facts are repeated across Overview, Summary, Account Context, Pain Points, Buying Signals, Objections, Budget/Timeline, Follow-up email, and the structured blocks. There are also several contradictions: the notes correctly identify the Zendesk plan but then list it as an open question, and they assign the NDA action item to both Priya and Jon. Additionally, superseded values (October 15 go-live, Dec 31 contract end) are incorrectly listed as inferred action items, and there is a date typo (May 29 instead of April 29) and a speaker misattribution ('Speaker 1 (me)')."
+ }
+}

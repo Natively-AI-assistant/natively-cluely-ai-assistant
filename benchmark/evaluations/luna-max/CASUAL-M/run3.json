@@ -1,0 +1,291 @@
+{
+ "blind_id": "S-0bf150b0",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 34346,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 20397,
+  "candidatesTokenCount": 2165,
+  "totalTokenCount": 24990,
+  "cachedContentTokenCount": 16309,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 20397
+   }
+  ],
+  "cacheTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 16309
+   }
+  ],
+  "thoughtsTokenCount": 2428,
+  "serviceTier": "standard"
+ },
+ "fact_count": 51,
+ "evaluation": {
+  "factual_accuracy": 2,
+  "important_information_retention": 2,
+  "hallucination_control": 4,
+  "action_item_retention": 1,
+  "decision_retention": 2,
+  "speaker_attribution": 4,
+  "numeric_accuracy": 2,
+  "entity_retention": 3,
+  "timeline_accuracy": 2,
+  "conclusion_accuracy": 2,
+  "structure": 4,
+  "conciseness": 6,
+  "readability": 6,
+  "overall_summary_quality": 2,
+  "critical_errors": [
+   "The notes completely miss the second half of the transcript, omitting the secret surprise visit from Jonah, the group gift, the car rental, and the deposit payment.",
+   "Reported superseded trip dates (Oct 16-19) instead of the final dates (Oct 23-26).",
+   "Reported that Priya is booking the cabin, which was superseded when her credit was found to be expired and Dan took over.",
+   "Reported the pet policy and private chef as unresolved/deferred, when they were definitively resolved later in the call (no pets allowed, no private chef).",
+   "Included a system error/hallucination in the Overview: 'No meeting content was available for this chunk...'"
+  ],
+  "missing_important_information": [
+   "The final trip dates are October 23rd to 26th.",
+   "Dan is booking the cabin and paying the $570 deposit by September 25th; Priya and Tom will send him $190 each.",
+   "Tom is renting a 7-seat SUV and they will all leave from Priya's place at 9:30 on Friday.",
+   "Maya's brother Jonah is flying in to surprise her, which must be kept secret in the 'Operation Heron' chat.",
+   "The group is buying a $179 Polaroid camera as a gift, splitting the cost at $60 each.",
+   "The cabin strictly forbids pets, so Waffles cannot come.",
+   "The group decided against the private chef and Tom will cook a gluten-free lasagna on Saturday."
+  ],
+  "hallucinated_information": [
+   "No meeting content was available for this chunk, so no decisions, action items, or other findings could be identified. No meeting content was provided for this chunk."
+  ],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C02",
+    "reported": "Friday, October 16 through Monday, October 19"
+   },
+   {
+    "correction_id": "C03",
+    "reported": "$285 share each"
+   },
+   {
+    "correction_id": "C04",
+    "reported": "Priya will handle the Hearthstay booking and apply approximately $150 of her existing Hearthstay credit."
+   }
+  ],
+  "not_decisions_reported_as_decided": [
+   "Priya will book the cabin through Hearthstay and use her available credit."
+  ],
+  "distractors_included": [
+   "Dan's work reorganization currently involves a pre-meeting with a 22-slide deck, including a slide labeled Alignment.",
+   "Waffles is eleven weeks old, has started puppy training next Saturday with Brenda, and is not yet reliably house-trained."
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "contradicted"
+   },
+   {
+    "id": "F07",
+    "status": "missing"
+   },
+   {
+    "id": "F08",
+    "status": "missing"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "missing"
+   },
+   {
+    "id": "F13",
+    "status": "partial"
+   },
+   {
+    "id": "F14",
+    "status": "missing"
+   },
+   {
+    "id": "F15",
+    "status": "missing"
+   },
+   {
+    "id": "F16",
+    "status": "contradicted"
+   },
+   {
+    "id": "F17",
+    "status": "contradicted"
+   },
+   {
+    "id": "F18",
+    "status": "missing"
+   },
+   {
+    "id": "F19",
+    "status": "missing"
+   },
+   {
+    "id": "F20",
+    "status": "missing"
+   },
+   {
+    "id": "F51",
+    "status": "missing"
+   },
+   {
+    "id": "F21",
+    "status": "missing"
+   },
+   {
+    "id": "F22",
+    "status": "missing"
+   },
+   {
+    "id": "F23",
+    "status": "missing"
+   },
+   {
+    "id": "F24",
+    "status": "missing"
+   },
+   {
+    "id": "F25",
+    "status": "missing"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "contradicted"
+   },
+   {
+    "id": "F29",
+    "status": "missing"
+   },
+   {
+    "id": "F30",
+    "status": "contradicted"
+   },
+   {
+    "id": "F31",
+    "status": "missing"
+   },
+   {
+    "id": "F32",
+    "status": "missing"
+   },
+   {
+    "id": "F33",
+    "status": "missing"
+   },
+   {
+    "id": "F34",
+    "status": "missing"
+   },
+   {
+    "id": "F35",
+    "status": "missing"
+   },
+   {
+    "id": "F36",
+    "status": "missing"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "missing"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "missing"
+   },
+   {
+    "id": "F42",
+    "status": "present"
+   },
+   {
+    "id": "F43",
+    "status": "missing"
+   },
+   {
+    "id": "F44",
+    "status": "missing"
+   },
+   {
+    "id": "F45",
+    "status": "partial"
+   },
+   {
+    "id": "F46",
+    "status": "missing"
+   },
+   {
+    "id": "F47",
+    "status": "missing"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "missing"
+   },
+   {
+    "id": "F50",
+    "status": "missing"
+   }
+  ],
+  "rationale": "The notes only summarize the first half of the transcript and completely ignore the second half. As a result, they report superseded information as final decisions (e.g., the trip dates, who is booking the cabin, the pet policy, and the private chef). They miss critical final decisions, including the deposit payment, the car rental, the group gift, and the entire secret plan for Maya's brother Jonah to surprise her. Furthermore, the overview contains a system error message ('No meeting content was available for this chunk...'). The notes are largely unusable because they present an inaccurate and incomplete record of the meeting's final outcomes."
+ }
+}

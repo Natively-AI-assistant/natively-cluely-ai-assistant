@@ -12,7 +12,11 @@
 //
 // Fixes under test:
 //   - decisions ranked by confidence (chronology only breaks ties);
-//   - the next step prefers explicit over inferred;
+//   - [SUPERSEDED 2026-08-25] the next step used to prefer explicit over inferred; the
+//     unlabelled next-step slot itself was then removed from the Summary altogether (same
+//     product reversal as the labelled "Next steps" block — see INCLUDE_NEXT_STEPS in
+//     MeetingSummaryReducer.ts). The ranking code is kept (cheap, re-lands if the flag
+//     flips) but its output no longer reaches tldr; the test below now asserts that.
 //   - a HIGH-severity risk is always in the headline;
 //   - the Summary leads with the mode's defining section (technical-interview
 //     -> Hiring signal, lecture -> Study summary, call-center -> Customer
@@ -60,15 +64,17 @@ describe('headline selection quality', () => {
       `the late high-confidence decision must reach the headline: ${JSON.stringify(summary.tldr)}`);
   });
 
-  test('an explicit later action item beats an inferred first one', () => {
+  test('SUPERSEDED: no action item, explicit or inferred, reaches the Summary', () => {
     const summary = reduce([
       atom({ actionItems: [
         { text: 'Someone should probably look at the flaky test.', explicitness: 'inferred', confidence: 'low', evidence: ev },
         { text: 'Dana ships the hotfix tomorrow.', owner: 'Dana', explicitness: 'explicit', confidence: 'high', evidence: ev },
       ] }),
     ]);
-    assert.ok(summary.tldr.some(l => /Dana.*hotfix/.test(l)),
-      `the explicit action must be the headline next step: ${JSON.stringify(summary.tldr)}`);
+    assert.ok(!summary.tldr.some(l => /Dana.*hotfix/.test(l)),
+      `the unlabelled next-step slot was removed from the Summary 2026-08-25 — the explicit action item must not reach tldr: ${JSON.stringify(summary.tldr)}`);
+    assert.ok(!summary.tldr.some(l => /flaky test/.test(l)),
+      `the unlabelled next-step slot was removed from the Summary 2026-08-25 — the inferred action item must not reach tldr either: ${JSON.stringify(summary.tldr)}`);
   });
 
   test('a HIGH-severity mid-meeting risk always reaches the headline', () => {

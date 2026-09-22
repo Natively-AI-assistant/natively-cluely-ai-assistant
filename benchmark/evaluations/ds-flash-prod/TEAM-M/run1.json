@@ -1,0 +1,365 @@
+{
+ "blind_id": "S-c75579b5",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 92469,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 35297,
+  "candidatesTokenCount": 2642,
+  "totalTokenCount": 49835,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 35297
+   }
+  ],
+  "thoughtsTokenCount": 11896,
+  "serviceTier": "standard"
+ },
+ "fact_count": 72,
+ "evaluation": {
+  "factual_accuracy": 4,
+  "important_information_retention": 8,
+  "hallucination_control": 4,
+  "action_item_retention": 5,
+  "decision_retention": 6,
+  "speaker_attribution": 7,
+  "numeric_accuracy": 4,
+  "entity_retention": 8,
+  "timeline_accuracy": 4,
+  "conclusion_accuracy": 5,
+  "structure": 3,
+  "conciseness": 3,
+  "readability": 4,
+  "overall_summary_quality": 4,
+  "critical_errors": [
+   "Contradicted the launch date by stating the 48-hour rollout window and launch-week on-call start on October 13th instead of October 14th.",
+   "Reported October 22nd as the deadline for Rohan's beta customer email, but it should be September 22nd.",
+   "Listed Maya building the rollout plan around 10% as an action item, even though this was explicitly reversed to 5%.",
+   "Listed Viktor as the owner of the migration runbook in Decisions and Action Items, contradicting the decision to reassign it to Maya.",
+   "Hallucinated an action item for Ines to mock up a middle empty-state option, which was not agreed upon.",
+   "Included numerous non-actionable facts and dates as '[inferred]' action items.",
+   "The Summary section contains a truncated bullet point ('while invoice preview p9')."
+  ],
+  "missing_important_information": [
+   "Viktor's deadline of September 30 for the preview latency caching.",
+   "Four of the P1 bugs are customer-visible.",
+   "Kestrel Logistics is a freight company, $410,000 ARR, and a top ten account."
+  ],
+  "hallucinated_information": [
+   "Ines: Mock up a middle empty-state option combining a setup checklist with a small preview thumbnail of a populated dashboard.",
+   "October 13th as the start of the 48-hour rollout window.",
+   "October 22nd as the deadline for the beta customer email."
+  ],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C04",
+    "reported": "Build a real runbook for the migration before touching the other nine shards, due Monday the 28th. (owner: Viktor)"
+   },
+   {
+    "correction_id": "C05",
+    "reported": "Maya: Build the rollout plan around 10% of eligible accounts on day one."
+   }
+  ],
+  "not_decisions_reported_as_decided": [
+   "Ines mocking up a middle empty-state option."
+  ],
+  "distractors_included": [
+   "The office move requires self-packing with crates arriving Monday, sealed by October 1st, and the move on the 2nd.",
+   "Ask facilities whether monitors move with the team or new ones are provisioned in the Harlow building.",
+   "Rohan's stairs/stakeholders joke was flagged to go into the retro doc."
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "partial"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "missing"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "partial"
+   },
+   {
+    "id": "F20",
+    "status": "missing"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "partial"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "contradicted"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "present"
+   },
+   {
+    "id": "F31",
+    "status": "partial"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "missing"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "partial"
+   },
+   {
+    "id": "F43",
+    "status": "partial"
+   },
+   {
+    "id": "F44",
+    "status": "partial"
+   },
+   {
+    "id": "F45",
+    "status": "partial"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "partial"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "contradicted"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "partial"
+   },
+   {
+    "id": "F57",
+    "status": "present"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "partial"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   },
+   {
+    "id": "F62",
+    "status": "present"
+   },
+   {
+    "id": "F63",
+    "status": "present"
+   },
+   {
+    "id": "F64",
+    "status": "present"
+   },
+   {
+    "id": "F65",
+    "status": "present"
+   },
+   {
+    "id": "F66",
+    "status": "contradicted"
+   },
+   {
+    "id": "F67",
+    "status": "present"
+   },
+   {
+    "id": "F68",
+    "status": "present"
+   },
+   {
+    "id": "F69",
+    "status": "partial"
+   },
+   {
+    "id": "F70",
+    "status": "partial"
+   },
+   {
+    "id": "F71",
+    "status": "present"
+   },
+   {
+    "id": "F72",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture a large amount of the transcript's information but suffer from severe structural and factual issues. They contradict themselves by listing superseded decisions as action items (e.g., Maya building the rollout plan around 10%, Viktor owning the migration runbook). There are multiple timeline errors, such as stating the rollout starts on October 13th instead of the 14th, and setting the beta email deadline to October 22nd instead of September 22nd. The structure is highly repetitive, and the Action Items section is cluttered with non-actionable '[inferred]' facts. Additionally, the Summary section contains a truncated sentence, and an action item for Ines to mock up a middle empty-state option was hallucinated."
+ }
+}

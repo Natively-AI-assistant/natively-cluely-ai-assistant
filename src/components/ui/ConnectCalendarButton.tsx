@@ -45,14 +45,16 @@ const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className
             const res = await window.electronAPI.calendarConnect();
             if (res.success) {
                 setConnected(true);
+                setConnectError('');
                 onConnect?.();
                 // Track calendar connection (analytics imported statically above)
                 analytics.trackCalendarConnected();
             } else {
+                console.error('[ConnectCalendarButton] Connection error:', res.error);
                 setConnectError(getCalendarConnectErrorMessage(res.error, t));
             }
         } catch (err) {
-            console.error(err);
+            console.error('[ConnectCalendarButton] Connection exception:', err);
             setConnectError(getCalendarConnectErrorMessage(err, t));
         } finally {
             setLoading(false);
@@ -149,7 +151,7 @@ const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className
     }
 
     return (
-        <>
+        <div className="flex flex-col items-center gap-1.5 w-fit">
             <button
                 onClick={handleClick}
                 disabled={loading}
@@ -223,12 +225,12 @@ const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className
                 </span>
             </button>
             {connectError && (
-                <p role="alert" className="mt-2 flex max-h-16 max-w-[260px] items-start gap-1.5 overflow-y-auto pr-1 text-left text-[11px] leading-snug text-red-300">
+                <p role="alert" title={connectError} className="flex max-h-16 max-w-[280px] items-start gap-1.5 overflow-y-auto rounded-lg border border-red-500/30 bg-red-950/95 px-2.5 py-1 text-left text-[11px] leading-snug text-red-300 backdrop-blur-sm">
                     <AlertCircle size={13} className="mt-0.5 shrink-0" />
                     <span>{connectError}</span>
                 </p>
             )}
-        </>
+        </div>
     );
 };
 

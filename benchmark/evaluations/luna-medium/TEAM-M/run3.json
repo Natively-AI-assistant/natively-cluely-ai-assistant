@@ -1,0 +1,362 @@
+{
+ "blind_id": "S-b76235be",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 105184,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 33653,
+  "candidatesTokenCount": 2418,
+  "totalTokenCount": 49378,
+  "cachedContentTokenCount": 24508,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 33653
+   }
+  ],
+  "cacheTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 24508
+   }
+  ],
+  "thoughtsTokenCount": 13307,
+  "serviceTier": "standard"
+ },
+ "fact_count": 72,
+ "evaluation": {
+  "factual_accuracy": 4,
+  "important_information_retention": 6,
+  "hallucination_control": 6,
+  "action_item_retention": 5,
+  "decision_retention": 5,
+  "speaker_attribution": 2,
+  "numeric_accuracy": 4,
+  "entity_retention": 6,
+  "timeline_accuracy": 4,
+  "conclusion_accuracy": 4,
+  "structure": 7,
+  "conciseness": 2,
+  "readability": 4,
+  "overall_summary_quality": 3,
+  "critical_errors": [
+   "Hallucinated the migration runbook deadline as October 28 instead of September 28.",
+   "Reported the superseded 10% rollout plan as a final decision and action item.",
+   "Reported the superseded assignment of the migration runbook to Viktor as an action item.",
+   "Failed to resolve speaker labels (Speaker 1, Speaker 3, Speaker 4, Me) to their actual names."
+  ],
+  "missing_important_information": [
+   "Dana escalating the ledger 3.4 dependency with Grace Obi.",
+   "Viktor writing the shadow-rating reconciliation script by October 7.",
+   "Viktor's proposal to launch on October 20 for two weeks of testing.",
+   "Kestrel Health as a separate beta account."
+  ],
+  "hallucinated_information": [
+   "Migration runbook due October 28 (transcript says September 28)."
+  ],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C04",
+    "reported": "Viktor: Create the migration runbook before work begins on the remaining nine shards."
+   },
+   {
+    "correction_id": "C05",
+    "reported": "The initial rollout stage is 10% of eligible accounts on October 14. / Speaker 4: Build the rollout plan around 10% of eligible accounts on day one."
+   }
+  ],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "partial"
+   },
+   {
+    "id": "F02",
+    "status": "missing"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "partial"
+   },
+   {
+    "id": "F08",
+    "status": "partial"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "contradicted"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "partial"
+   },
+   {
+    "id": "F19",
+    "status": "partial"
+   },
+   {
+    "id": "F20",
+    "status": "missing"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "contradicted"
+   },
+   {
+    "id": "F26",
+    "status": "partial"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "partial"
+   },
+   {
+    "id": "F30",
+    "status": "partial"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "partial"
+   },
+   {
+    "id": "F34",
+    "status": "missing"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "partial"
+   },
+   {
+    "id": "F43",
+    "status": "missing"
+   },
+   {
+    "id": "F44",
+    "status": "partial"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "partial"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "partial"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "partial"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "partial"
+   },
+   {
+    "id": "F57",
+    "status": "present"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "partial"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   },
+   {
+    "id": "F62",
+    "status": "present"
+   },
+   {
+    "id": "F63",
+    "status": "present"
+   },
+   {
+    "id": "F64",
+    "status": "present"
+   },
+   {
+    "id": "F65",
+    "status": "present"
+   },
+   {
+    "id": "F66",
+    "status": "present"
+   },
+   {
+    "id": "F67",
+    "status": "partial"
+   },
+   {
+    "id": "F68",
+    "status": "present"
+   },
+   {
+    "id": "F69",
+    "status": "missing"
+   },
+   {
+    "id": "F70",
+    "status": "present"
+   },
+   {
+    "id": "F71",
+    "status": "missing"
+   },
+   {
+    "id": "F72",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes suffer from severe repetition, poor speaker attribution, and multiple critical errors. They fail to map speaker labels (Speaker 1, Speaker 3, Speaker 4, Me) to their actual names (Rohan, Viktor, Maya, Dana) despite the cast list. The notes hallucinate the migration runbook deadline as 'October 28' instead of September 28. Furthermore, they report superseded values as final decisions and action items, specifically assigning Viktor to write the runbook (it was reassigned to Maya) and stating the rollout will start at 10% (it was explicitly reversed to 5%). Important details like Dana's escalation with Grace Obi and Viktor's reconciliation script are missing. The extreme redundancy across numerous sections severely impacts conciseness and readability."
+ }
+}

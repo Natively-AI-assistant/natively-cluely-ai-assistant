@@ -339,3 +339,98 @@ describe('self-presentation questions grade on claim authority, not a pronoun te
     assert.ok(propertyHeadTerms('what are the RTO and RPO in the dossier').length >= 2);
   });
 });
+
+// ── Trace latency is MEASURED, not a placeholder (2026-08-27) ────────────────
+//
+// THE REGRESSION THIS EXISTS TO PREVENT.
+//
+// From the day this trace was written until 2026-08-27, `latency` was a literal
+// block of zeros — `const t0 = 0` was the total. It typechecked, it looked like
+// a measurement, and the operational-telemetry table collected 173 production
+// rows reporting 0ms for every phase before anyone noticed.
+//
+// The telemetry unit tests did not catch it because they fed a hand-built trace
+// carrying realistic numbers. A fixture cannot detect a PRODUCER that never
+// populates the field — only driving the real producer can, which is why this
+// test lives here and not beside the emitter.
+describe('trace latency is measured, not hardcoded', () => {
+  const slowPort = (delayMs) => ({
+    async retrieve() {
+      await new Promise((r) => setTimeout(r, delayMs));
+      const { evidence } = adaptLegacyChunks(
+        [{ id: 'resume-1', text: 'Led the WebRTC rewrite.', score: 0.9 }], ADAPT,
+      );
+      return { evidence, attempts: [] };
+    },
+  });
+
+  // BOUNDED BY THE CALLER'S OWN STOPWATCH, on purpose. An earlier version of
+  // this test asserted `totalMs >= 35 && < 30_000`, and the original bug
+  // (`const t0 = 0`, making the span time-since-process-start) SAILED THROUGH
+  // both bounds — a few hundred ms into a test run looks exactly like a slow
+  // turn. Only comparing against the wall time of this specific call can tell a
+  // duration apart from an epoch.
+  test('totalMs is the duration of THIS call, not time since process start', async () => {
+    clearConversationState('s1');
+    const wall0 = performance.now();
+    const r = await orchestrate(
+      req({ manualQuestion: 'Tell me about your WebRTC project.' }), slowPort(40),
+    );
+    const wall = performance.now() - wall0;
+    const { totalMs } = r.trace.latency;
+    assert.ok(totalMs >= 35, `totalMs must measure the turn, got ${totalMs}`);
+    assert.ok(totalMs <= wall + 25,
+      `totalMs (${totalMs.toFixed(1)}) must not exceed this call's wall time ` +
+      `(${wall.toFixed(1)}ms) — a larger value means it is measuring from the ` +
+      'wrong origin, which is exactly the bug this test exists for');
+  });
+
+  test('retrievalMs measures the retrieval await specifically', async () => {
+    clearConversationState('s2');
+    const wall0 = performance.now();
+    const r = await orchestrate(
+      req({ sessionId: 's2', manualQuestion: 'Tell me about your WebRTC project.' }), slowPort(60),
+    );
+    const wall = performance.now() - wall0;
+    const { retrievalMs, totalMs } = r.trace.latency;
+    assert.ok(retrievalMs >= 50, `retrievalMs must measure the port, got ${retrievalMs}`);
+    assert.ok(retrievalMs <= totalMs, 'a phase cannot exceed the turn that contains it');
+    // Same wall-clock bound as above rather than a magic slack: both phases
+    // must fit inside the call that produced them.
+    assert.ok(totalMs <= wall + 25 && retrievalMs <= wall + 25,
+      `phases (total ${totalMs.toFixed(1)}, retrieval ${retrievalMs.toFixed(1)}) must fit ` +
+      `inside this call's wall time (${wall.toFixed(1)}ms)`);
+  });
+
+  test('every latency field is a finite, non-negative number', async () => {
+    clearConversationState('s3');
+    const wall0 = performance.now();
+    const r = await orchestrate(
+      req({ sessionId: 's3', manualQuestion: 'Tell me about your WebRTC project.' }), slowPort(1),
+    );
+    const wall = performance.now() - wall0;
+    for (const [k, v] of Object.entries(r.trace.latency)) {
+      assert.equal(typeof v, 'number', `${k} must be a number`);
+      assert.ok(Number.isFinite(v) && v >= 0, `${k} must be finite and >= 0, got ${v}`);
+      assert.ok(v <= wall + 25, `${k} (${v}) must fit inside the call's ${wall.toFixed(1)}ms`);
+    }
+  });
+
+  test('a turn with no retrieval reports 0ms retrieval — a measured zero', async () => {
+    clearConversationState('s4');
+    const r = await orchestrate(req({ sessionId: 's4', manualQuestion: 'What is 2 + 2?' }));
+    assert.equal(r.trace.latency.retrievalMs, 0, 'no port ran, so no time was spent in one');
+    assert.ok(r.trace.latency.totalMs >= 0);
+  });
+
+  test('providerAttempts stays EMPTY — the provider has not run yet', async () => {
+    // Populating this here would attribute the PREVIOUS turn's model to this
+    // one. An empty array is honest; a stale model is telemetry that lies.
+    clearConversationState('s5');
+    const r = await orchestrate(
+      req({ sessionId: 's5', manualQuestion: 'Tell me about your WebRTC project.' }), slowPort(1),
+    );
+    assert.deepEqual(r.trace.providerAttempts, []);
+    assert.equal(r.trace.latency.providerTtfbMs, 0, 'and its timing is honestly unmeasured');
+  });
+});

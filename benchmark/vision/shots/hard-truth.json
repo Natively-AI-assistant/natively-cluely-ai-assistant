@@ -1,0 +1,48 @@
+{
+ "dense_table": {
+  "row19": {
+   "sku": "SKU-1180",
+   "region": "APAC",
+   "units": 1242,
+   "margin": "11.6"
+  },
+  "row7": {
+   "sku": "SKU-1060",
+   "region": "APAC",
+   "units": 1614,
+   "margin": "12.2"
+  },
+  "total_rows": 26
+ },
+ "ci_matrix": {
+  "failed": [
+   "build (windows, node 20)",
+   "unit (shard 3/4)",
+   "e2e (webkit)",
+   "docker (arm64)",
+   "publish-dry-run"
+  ],
+  "skipped": [
+   "bundle-size",
+   "docker (amd64)",
+   "notify"
+  ],
+  "counts": {
+   "failed": 5,
+   "skipped": 3,
+   "passed": 16
+  }
+ },
+ "log_tiny": {
+  "error_line_number": 23,
+  "order": "8f3c21ab",
+  "keyword": "idempotency",
+  "attempt": 3
+ },
+ "pr_pair": {
+  "cause": "operands swapped: Date.now() - at should be at - Date.now()",
+  "added_line": 37,
+  "expected": 5000,
+  "actual": 0
+ }
+}

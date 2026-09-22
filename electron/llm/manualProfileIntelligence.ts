@@ -1642,16 +1642,24 @@ export const logManualProfileRoute = ({
 //     input → same output for testability),
 //   - never echoes a question longer than a few words (no transcript dumping).
 
+// ALWAYS ANSWER (2026-09-07, owner's direction, measured in a 1,000-turn live
+// campaign): these lines fire when the model returned NOTHING — an empty or
+// aborted stream — and the old wording ("Could you repeat that?", "I didn't
+// fully catch that — could you rephrase?") told the user the APP had not heard
+// them, which is untrue and is exactly the message they asked never to see. The
+// engine now regenerates once before reaching here; this is the last resort,
+// and it says what happened (no answer came back) and what to do (press again).
+// It never asks the user to repeat or rephrase anything.
 const RETRY_TEMPLATES: ReadonlyArray<(topic: string) => string> = [
   (t) => t
-    ? `Could you say a bit more about ${t}? I want to make sure I answer the right thing.`
-    : 'Could you repeat that? I want to make sure I address your question properly.',
+    ? `I couldn't generate an answer about ${t} just now. Press again and I'll retry.`
+    : "I couldn't generate an answer just now. Press again and I'll retry.",
   (t) => t
-    ? `I didn't fully catch the question about ${t} — could you rephrase it?`
-    : "I didn't fully catch that — could you rephrase the question?",
+    ? `The answer about ${t} didn't come through from the AI provider. Press again to retry.`
+    : "The answer didn't come through from the AI provider. Press again to retry.",
   (t) => t
-    ? `Just to make sure I get this right — what specifically about ${t} would you like me to cover?`
-    : 'Just to make sure I get this right — could you ask that once more?',
+    ? `No answer came back for ${t} this time. Press again and I'll take another run at it.`
+    : 'No answer came back this time. Press again and I\'ll take another run at it.',
 ];
 
 // Topic = a short noun-ish tail of the question. Conservative: strip leading

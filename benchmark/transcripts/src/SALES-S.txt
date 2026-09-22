@@ -1,0 +1,67 @@
+# id: SALES-S
+# title: Lumenstack pricing follow-up with Harrow Freight
+# S0: Me — Daniel Okafor, Account Executive, Lumenstack
+# S1: Renata Voss, Procurement Manager, Harrow Freight
+# S2: Tomasz Brennan, Director of Engineering, Harrow Freight
+S1: Hi Daniel, can you hear me? My headset's been acting up all week.
+S0: Hey Renata, yep, I can hear you fine. Thanks for jumping on again so quickly.
+S1: Of course. Sorry I'm a couple minutes late, I was stuck in the parking garage behind a delivery truck, which, working at a freight company, I guess I deserve.
+S0: Ha, occupational hazard. Did you ever get the bathroom renovation finished? Last time you said the tiles were three weeks late.
+S1: Don't get me started. Still waiting on the tiles. Anyway, Tomasz said he'll join around the halfway point, he's coming out of a sprint review.
+S0: Perfect, that works. So let me just recap the proposal we sent over last Tuesday so we're all looking at the same thing.
+S0: The Lumenstack Pro plan lists at $38 per seat per month, and that includes 2 terabytes of monitored data ingest a month across all your pipelines.
+S0: Anything over that is billed at $0.40 per gigabyte, but based on what your team told us, you're sitting around 1.3 terabytes today, so you've got headroom.
+S0: And the proposal was built on 45 seats on a 12 month term.
+S1: Right. Okay, so I'll be straightforward with you. We have a quote from Cartograph, and they came in at $29 per seat per month for basically the same seat count.
+S1: So there's a pretty big gap there, and I- I need to be able to explain to our CFO why we'd pay the difference.
+S0: That's fair, and I appreciate you sharing the number. Does the Cartograph quote include ingest, or is that metered separately?
+S1: Um, I believe it's metered separately. I'd have to double check, but I think it was 500 gigabytes included and then usage on top.
+S0: Okay, so that's a meaningful difference at your volume. At 1.3 terabytes you'd be paying overage on Cartograph from day one.
+S0: That said, I do have some flexibility on price, but it's tied to term length. On a 12 month term I can do 12% off list.
+S1: 12% gets us to what, about 33 and change?
+S0: $33.44 per seat. If you went to 24 months, I can take it to 18% off, which brings it to $31.16 per seat per month, locked for the full term.
+S1: Hm. 24 months is a bigger commitment. Let me think about that while we sort out the seat count, because I actually need to fix something in the proposal.
+S1: The 45 seats is wrong. That was a typo on our side when I sent the headcount over. It's 54, five four. We flipped the digits.
+S0: Oh, good catch. So 54 seats, not 45. That changes the totals, I'll rework it.
+S1: Yeah, it's the 38 data engineers plus the 16 analytics folks who are on call for the dashboards.
+S0: Got it, 54. Oh, and it looks like Tomasz just joined.
+S2: Hey, sorry, sprint review ran over. Tomasz here, director of engineering. Hi Daniel.
+S0: Hey Tomasz, good to meet you properly. We were just at the part where Renata corrected the seat count to 54, and I'd put two pricing options on the table.
+S0: 12% off on a 12 month term, or 18% off, so $31.16 per seat, if you commit to 24 months.
+S2: Honestly, from the engineering side, 24 months is fine. We're not going to rip out observability after a year. The migration off our homegrown alerting alone is going to take a quarter.
+S2: One product question while I'm here. The Pro plan covers the Snowflake and dbt connectors, right? Those are the two we actually care about.
+S0: Yes, both are included in Pro, along with the Airflow integration. The only connector that costs extra is the mainframe one, and I don't think you need that.
+S2: No, thankfully we retired the mainframe two years ago.
+S1: Okay. If Tomasz is comfortable, then let's go with the 24 month term at the 18%.
+S0: Great. So 54 seats at $31.16 for 24 months. That's roughly $20,190 per year.
+S1: Now, on payment. Our standard is quarterly in arrears, we really don't love paying a full year upfront.
+S0: I understand. The 18% on a 24 month deal is really built around annual upfront billing. Quarterly would pull that discount back down to around 15%.
+S1: Hmm. What about quarterly, but in advance, not arrears?
+S0: I can't do quarterly at the 18%, I'm sorry, that's a hard line from our finance team.
+S1: Okay. Then annual upfront, but I want net 45 payment terms on the invoice, not net 30.
+S0: Net 45 I can do. So annual upfront, invoiced once each year, net 45.
+S1: Fine, let's settle on that.
+S2: Can I jump in on timing? We'd originally talked about starting October 1st, but that's the week of our data center cutover, and nobody's going to touch onboarding that week.
+S0: Would the middle of the month work better?
+S2: October 15th. Let's make that the start date instead.
+S1: Works for me, the 15th.
+S2: The other thing, and this is a blocker for us, our security team needs your completed security questionnaire before legal will sign anything. We use the SIG Lite.
+S2: And we'll need your DPA, plus the latest SOC 2 Type II report.
+S0: No problem, we have a completed SIG Lite on file. I'll send the questionnaire, the DPA, and the SOC 2 report over by Friday.
+S1: Speaking of onboarding, one thing I'd love to see is the onboarding package thrown in for free. Your proposal lists it at $6,000.
+S2: That would help us a lot, honestly, with the migration.
+S0: I hear you. I can't commit to that on this call. I'd need to take it to my manager, Jon, and see what's possible given we're already at 18%.
+S1: Okay, but please do ask. It'd make this a much easier sell internally.
+S0: I will. So, next steps. I'll send a revised order form with 54 seats, 24 months, 18% off, annual upfront, net 45, and an October 15th start, by Thursday end of day.
+S1: And once I have that, I'll route it to our legal team. Joan Park in legal handles vendor contracts, she usually turns things around in five business days.
+S2: I'll get our security team to review the SIG Lite as soon as it lands, so it doesn't hold up Joan.
+S0: Perfect. Oh, one thing I should've asked. Tomasz, you mentioned the analytics team might grow next year?
+S2: Yeah, we might add another 10 seats or so in the spring if the new BI team gets approved.
+S1: Which raises something. If we add seats mid-term, do those get the same 18% rate, or are they at list?
+S0: That's a good question. I honestly don't know how our deal desk handles mid-term adds on a multi-year contract. Let me find out.
+S1: Okay, because that'll matter for the business case.
+S0: I'll put it to our deal desk today and mention it in the email with the order form, but I can't promise an answer by Thursday.
+S0: Anything else before we drop?
+S2: Nope, that's it from me. I've got to run, we have a cutover dry run at three.
+S1: Same. Talk soon, Daniel.
+S0: Thanks both, talk soon.

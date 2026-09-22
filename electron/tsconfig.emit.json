@@ -19,7 +19,7 @@
 // this config through node_modules/typescript7/bin/tsc, NOT the TS 5.x binary.
 // Verified: TS 7.0.2 emits requireable CommonJS ("use strict", no `import`).
 // This keeps the whole check+emit pipeline on TS 7; the TS 5.x package survives
-// only for tools that consume the compiler API (see docs/ts7-upgrade-report.md).
+// only for tools that consume the compiler API.
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {

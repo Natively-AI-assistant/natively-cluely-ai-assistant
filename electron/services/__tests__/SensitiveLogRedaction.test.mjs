@@ -82,7 +82,6 @@ test('STT providers log transcript metadata without transcript text', () => {
 test('IPC and meeting summary logs avoid answer and LLM response snippets', () => {
   const ipc = read('electron/ipcHandlers.ts');
   const persistence = read('electron/MeetingPersistence.ts');
-  const intent = read('electron/llm/IntentClassifier.ts');
 
   assert.match(ipc, /gemini - chat response received`, \{ length: result\?\.length \?\? 0 \}/);
   assert.match(ipc, /Updated IntelligenceManager\.Last message`,[\s\S]{0,120}length: intelligenceManager\.getLastAssistantMessage\(\)\?\.length \?\? 0/);
@@ -98,10 +97,33 @@ test('IPC and meeting summary logs avoid answer and LLM response snippets', () =
   // the log moved into `mapWorkerResult(result, textLength: number)`, so the raw
   // text is not even in scope there — it cannot be logged by accident. The pin
   // still demanded the literal `textLength: text.length` from the old call site.
-  const slmLog = intent.match(/SLM classified`[^;]*;/);
-  assert.ok(slmLog, 'the SLM classification log must still exist');
-  assert.match(slmLog[0], /textLength/, 'must log the classified text LENGTH');
-  assert.doesNotMatch(slmLog[0], /text\.(?:substring|slice)\(|\$\{\s*text\s*\}|[,{]\s*text\s*[,}]/,
-    'must never log the classified text itself — only its length');
-  assert.doesNotMatch(intent, /text\.substring\(/);
+
+  // Intent-classifier log pins removed 2026-09-05 with the classifier.
+});
+
+test('main.ts transcript content traces are gated, never unconditional', () => {
+  const source = read('electron/main.ts');
+
+  // The ONE deliberate exception to "lengths, never words": a dev-only trace
+  // of the raw STT stream and of the exact text the Auto Answer judge rules
+  // on. It must never be reachable without the Context-Intelligence content
+  // gate, which itself requires a dev build AND verbose AND an explicit env
+  // opt-in, and fails closed when unbound or packaged.
+  const helper = source.match(/private contentTraceEnabled\(\)[\s\S]{0,400}?\n  \}/);
+  assert.ok(helper, 'the contentTraceEnabled gate helper must exist');
+  assert.match(helper[0], /getContentInclusionEnabled\(\) === true/,
+    'the gate must delegate to the content-inclusion resolver, not re-implement it');
+  assert.match(helper[0], /catch \{ return false; \}/, 'and fail CLOSED if that lookup throws');
+
+  for (const tag of ['\\[AutoAnswer:text\\]', '\\[STT:']) {
+    const re = new RegExp(`[^\\n]*${tag}[^\\n]*`, 'g');
+    const uses = source.match(re) ?? [];
+    assert.ok(uses.length > 0, `expected a ${tag} trace to exist`);
+    for (const use of uses) {
+      const at = source.indexOf(use);
+      const preceding = source.slice(Math.max(0, at - 400), at);
+      assert.match(preceding, /contentTraceEnabled\(\)/,
+        `every ${tag} trace must sit behind contentTraceEnabled(): ${use.trim()}`);
+    }
+  }
 });

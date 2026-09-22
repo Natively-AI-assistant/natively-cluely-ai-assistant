@@ -3,9 +3,9 @@
 // Why this exists — a coverage hole that a code review caught:
 // ./tsconfig.json drops `../premium/electron/**/*.ts` from its ROOT FILE SET so
 // that `strict: true` applies to this repository's own sources without forcing
-// strictness onto a separate private submodule (docs/ts7-upgrade-report.md §7.2,
-// option D). The consequence was under-stated at the time: "premium still
-// type-checks as a dependency, verified 0 x TS2307" is NOT true in the way it
+// strictness onto a separate private submodule (option D). The consequence was
+// under-stated at the time: "premium still type-checks as a dependency, verified
+// 0 x TS2307" is NOT true in the way it
 // reads. TS2307 is cannot-find-module — it proves imports RESOLVE, not that
 // files are CHECKED. Measured: the root file set went from 47 premium files to
 // 9, because only what an `import` pulls in stays in the program. The other 38

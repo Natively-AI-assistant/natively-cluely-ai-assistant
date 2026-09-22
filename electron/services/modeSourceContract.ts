@@ -128,6 +128,16 @@ export interface ModeSourceContract {
    */
   migrationRevision?: number;
   /**
+   * Revision of the DEFAULT SEED rules this contract was built under, for
+   * `origin: 'default_new_mode'` only (T8, 2026-08-28).
+   *
+   * Separate from `migrationRevision` on purpose: that one versions the
+   * prompt-heuristic migration, and re-using it to ship a seed change would
+   * re-run the prompt migration over every migrated contract in every user's
+   * database. See CURRENT_SEED_REVISION.
+   */
+  seedRevision?: number;
+  /**
    * Which `templateType` this contract was SEEDED for, for
    * `origin: 'default_new_mode'` only. Defense-in-depth self-heal field
    * (Knowledge Source canonical-gate repair, 2026-07-16): if a mode's
@@ -205,6 +215,29 @@ export interface GroundingProfile {
  */
 export const CURRENT_MIGRATION_REVISION = 2;
 
+/**
+ * Revision of the DEFAULT SEED rules, for `origin: 'default_new_mode'` only.
+ *
+ * DELIBERATELY SEPARATE from CURRENT_MIGRATION_REVISION, which versions the
+ * prompt-heuristic migration. Bumping that one to ship a seed change would
+ * re-run the prompt migration over every `migrated_from_prompt` contract in
+ * every user's database — a far wider blast radius than the change warrants,
+ * and it breaks the standing invariant that a prompt-migrated contract is never
+ * overwritten by anything but a newer PROMPT migration. Seed semantics and
+ * migration semantics change independently, so they get independent counters.
+ *
+ *   seed rev 1 — everything before 2026-08-28 (contracts with no stamp).
+ *   seed rev 2 — interview-prep seeds gain `reference_files` in
+ *                allowedExplicitSwitches (T8), so the "Primary knowledge
+ *                source" control can grant it. Without a seed revision an
+ *                EXISTING Technical Interview mode would keep the old
+ *                permission set forever and the fix would reach only modes
+ *                created after it shipped. A seed carries no user intent by
+ *                definition (see `isTemplateAwareSeed` in ModesManager), so
+ *                re-seeding loses nothing; `user_selected` is never touched.
+ */
+export const CURRENT_SEED_REVISION = 2;
+
 const CONFLICT_POLICY_FOR_AUTHORITY: Record<ModeSourceAuthority, ModeConflictPolicy> = {
   reference_files_only: 'reference_files_win',
   reference_files_primary: 'reference_files_win',
@@ -244,8 +277,24 @@ export function defaultSourceContractForNewMode(
 ): ModeSourceContract {
   const isInterviewPrep = templateType === 'looking-for-work'
     || templateType === 'technical-interview';
+  // `reference_files` added to the interview-prep switch list 2026-08-28 (T8).
+  //
+  // Technical Interview and Looking-for-Work are seeded `profile_only`, so
+  // `documentGroundedFromContract` returns false, `forceDocumentGrounding` is
+  // false, and everything gated on it is skipped: half the retrieval window
+  // (topK 6 / 1800 tokens instead of 12 / 3600), no per-file floor, no
+  // answerability scoring, no section-target or positional restore, no identity
+  // block, no query normalization. A user attaching reference files to
+  // Technical Interview got a materially weaker retrieval than the same files in
+  // General -- which is exactly the mode inversion the beta tester reported.
+  //
+  // The seed itself is NOT changed: the authority stays `profile_only`, so
+  // uploading a file still cannot silently widen what the mode may read. What
+  // changes is that the existing "Primary knowledge source" control can now
+  // OFFER reference files here, so the user can say so explicitly. An upload is
+  // not consent; a switch is.
   const allowedExplicitSwitches: ModeSourceSwitch[] = isInterviewPrep
-    ? ['profile', 'job_description']
+    ? ['profile', 'job_description', 'reference_files']
     : ['reference_files'];
   const defaultOwner: ModeSourceOwner = isInterviewPrep ? 'profile' : 'reference_files';
   const sourceAuthority: ModeSourceAuthority = (isInterviewPrep
@@ -278,6 +327,10 @@ export function defaultSourceContractForNewMode(
     // `migrated_from_prompt` carry undefined (they're authoritative
     // regardless of template).
     seededForTemplateType: isContractTemplateType(templateType) ? templateType : undefined,
+    // Stamped as of seed rev 2 (T8, 2026-08-28). Seeds carried no revision
+    // before, so `?? 1` makes every pre-existing one look stale exactly once,
+    // it re-seeds, and the new stamp makes the check idempotent.
+    seedRevision: CURRENT_SEED_REVISION,
   };
 }
 

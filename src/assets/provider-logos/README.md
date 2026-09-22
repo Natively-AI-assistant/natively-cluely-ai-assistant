@@ -7,7 +7,7 @@ affiliation.
 
 ## Provenance
 
-Thirteen SVGs are vendored from [`@lobehub/icons-static-svg`][pkg] v1.94.0
+Sixteen SVGs are vendored from [`@lobehub/icons-static-svg`][pkg] v1.94.0
 (MIT, © 2023 LobeHub — full text in `LICENSE` beside this file).
 
 ```
@@ -24,6 +24,9 @@ elevenlabs.svg   ← elevenlabs.svg
 apple.svg        ← apple.svg
 microsoft.svg    ← microsoft-color.svg   (title corrected, see below)
 nvidia.svg       ← nvidia-color.svg
+openrouter.svg   ← openrouter.svg       (monochrome, see below)
+voyage.svg       ← voyage.svg           (monochrome, see below)
+jina.svg         ← jina.svg             (monochrome, only variant upstream)
 ```
 
 The last four were added for the speech provider selector, and the variant taken
@@ -41,6 +44,89 @@ identically in both themes. It arrives already `1em`-sized, so unlike
 
 Before this file existed the provider rendered an `NI` monogram, which the
 speech-selector coverage test flagged as an unrecorded fallback.
+
+### 9Router
+
+`ninerouter.png` is the **digit 9** from 9Router's own favicon
+(`public/favicon.svg` in `decolua/9router`, MIT — full text in
+`LICENSE.ninerouter` beside this file), rendered to raster and kept white on
+transparency.
+
+Their published mark is that digit in white on a rounded square filled with an
+orange gradient (`#f97815` -> `#c2590a`). Only the **glyph** is vendored, not
+the tile: every mark here sits on the panel's OWN tile, which already applies a
+brand wash, so shipping their tile too would nest one rounded square inside
+another. The wash colour is the gradient's start stop, recorded in
+`AI_PROVIDER_BRANDS` — so the pair reproduces their mark rather than replacing
+it.
+
+It is therefore in `WHITE_ON_TRANSPARENT_MARKS`: the art is genuinely white, so
+the light theme needs the `brightness(0)` flatten to make it visible. That set
+is opt-in precisely because the same filter destroys a full-colour mark, which
+is why the orange never enters the PNG.
+
+Their other official variant, `public/icons/icon-512.svg`, is a white "9R" on
+near-black — the same glyph idea with a second letter and no brand colour. The
+favicon is taken because the wash needs a brand hex, and because one character
+reads better than two at the 16px the tile actually renders.
+
+### Fluxion AI
+
+The one mark here that is not from lobehub — Fluxion is a small aggregator
+gateway with no entry in any icon set. `fluxion.png` is the **F monogram** taken
+from their own wordmark logo (`https://fluxionai.world/logo.png`), cropped away
+from the "FluxionAPI" lettering with the white plate unpremultiplied to alpha.
+
+**Why not their orbital-galaxy brand mark** (`docs.fluxionai.world/brand-logo-mark.png`),
+which is the image Fluxion themselves lead with: the tile renders a **16px**
+glyph, and the galaxy is an illustration, not an icon. Rendered at true size it
+is a faint smudge on the dark tile and an unrecognisable grey blob in the light
+one — measured, not assumed. Every other mark here is a simple glyph (a star, an
+asterisk, a monogram) for exactly this reason. The only published copy is also
+flattened onto white, and since the artwork's highlights are white, unflattening
+it to alpha cannot recover the glow that carries the design.
+
+**A third asset to avoid:** `https://fluxionai.world/logo.svg` is an
+interlocking-S glyph whose own `<title>` reads **"Sub2API"** — artwork predating
+the Fluxion branding. It shipped here briefly by mistake.
+
+If Fluxion ever publishes a simplified icon-sized mark, prefer it over the
+monogram. No licence statement accompanies any of these assets, so the mark is
+used purely nominatively, as stated at the top of this file.
+
+### Jina
+
+Added for the hosted Jina reranker in Settings → Reranker, which is the only way
+to run `jina-reranker-v3.5` without a 410 MB download. Upstream ships this mark
+in monochrome ONLY — there is no `jina-color.svg` — so the variant choice made
+itself, and `currentColor` adapts to both themes as with `groq` and `openai`.
+
+The `AI_PROVIDER_BRANDS` hex is `#009191`, which is NOT lobehub's published
+`COLOR_PRIMARY` for this brand (`#000`). A black wash is invisible on the dark
+tile — the failure the legibility rule below describes — so the hex is taken
+from Jina's own favicon instead: `#009191` is its dominant non-neutral colour
+(5758 of ~16k pixels), and `api.jina.ai`'s docs theme uses the same value.
+
+### OpenRouter and Voyage — why the monochrome variant
+
+Both were added for the embedding providers in Settings → Embeddings, and both
+ship upstream in `-color` as well. Neither `-color` file is usable here, for
+opposite reasons, and both fail the legibility rule this file already states:
+
+```
+openrouter-color.svg   fill="#C8FF00"   lime — illegible on the LIGHT tile
+voyage-color.svg       fill="#012E33"   near-black teal — vanishes on the DARK tile
+```
+
+`.aip-tile--mark` paints `var(--aip-btn-bg)`, which follows the theme, so a mark
+pinned to either extreme is unreadable in one of them. NVIDIA's `#74B71B` survives
+both because it is mid-tone; lime and near-black do not. The monochrome variants
+paint `currentColor` and adapt for free — the same treatment `groq`, `openai` and
+`ollama` already get, and for the same reason.
+
+The published hexes are still recorded in `AI_PROVIDER_BRANDS` (`#C8FF00`,
+`#012E33`) because that field drives the tile *wash* and the monogram fallback,
+not the mark's own fill.
 
 `deepgram.svg` comes from [simple-icons][si] v16.28.0, which licenses its icons
 under **CC0-1.0** — a different licence from the lobehub set, so its full text

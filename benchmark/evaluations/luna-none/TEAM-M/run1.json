@@ -1,0 +1,361 @@
+{
+ "blind_id": "S-9251f8dd",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 79346,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 33419,
+  "candidatesTokenCount": 2371,
+  "totalTokenCount": 45146,
+  "cachedContentTokenCount": 24507,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 33419
+   }
+  ],
+  "cacheTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 24507
+   }
+  ],
+  "thoughtsTokenCount": 9356,
+  "serviceTier": "standard"
+ },
+ "fact_count": 72,
+ "evaluation": {
+  "factual_accuracy": 6,
+  "important_information_retention": 8,
+  "hallucination_control": 6,
+  "action_item_retention": 8,
+  "decision_retention": 9,
+  "speaker_attribution": 8,
+  "numeric_accuracy": 6,
+  "entity_retention": 9,
+  "timeline_accuracy": 4,
+  "conclusion_accuracy": 8,
+  "structure": 5,
+  "conciseness": 3,
+  "readability": 5,
+  "overall_summary_quality": 5,
+  "critical_errors": [
+   "Incorrectly states the migration runbook is due October 28 instead of September 28.",
+   "Incorrectly states Ines's usability session results are due October 24 instead of September 24.",
+   "Incorrectly states Payments Platform is shipping its ledger change on October 29 instead of September 29.",
+   "Contradicts itself on the owner of the migration runbook, assigning it to Viktor in some places and Maya in others."
+  ],
+  "missing_important_information": [
+   "The date of the meeting (September 17).",
+   "Viktor's September 30 deadline for the invoice preview caching fix.",
+   "The existence of Kestrel Health as a separate, happy beta customer."
+  ],
+  "hallucinated_information": [
+   "October 28 as the deadline for the migration runbook.",
+   "October 24 as the deadline for the usability session results.",
+   "October 29 as the delivery date for the Payments Platform ledger change."
+  ],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C04",
+    "reported": "The team assigned Viktor a migration runbook due October 28"
+   }
+  ],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [
+   "The October 2 office move creates an operational risk because staff may not be at desks when the tripwire occurs."
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "missing"
+   },
+   {
+    "id": "F02",
+    "status": "missing"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "partial"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "missing"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "contradicted"
+   },
+   {
+    "id": "F18",
+    "status": "partial"
+   },
+   {
+    "id": "F19",
+    "status": "partial"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "contradicted"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "partial"
+   },
+   {
+    "id": "F31",
+    "status": "contradicted"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "partial"
+   },
+   {
+    "id": "F34",
+    "status": "contradicted"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "partial"
+   },
+   {
+    "id": "F43",
+    "status": "missing"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "partial"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "partial"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "present"
+   },
+   {
+    "id": "F57",
+    "status": "present"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "present"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   },
+   {
+    "id": "F62",
+    "status": "present"
+   },
+   {
+    "id": "F63",
+    "status": "present"
+   },
+   {
+    "id": "F64",
+    "status": "present"
+   },
+   {
+    "id": "F65",
+    "status": "partial"
+   },
+   {
+    "id": "F66",
+    "status": "present"
+   },
+   {
+    "id": "F67",
+    "status": "present"
+   },
+   {
+    "id": "F68",
+    "status": "present"
+   },
+   {
+    "id": "F69",
+    "status": "present"
+   },
+   {
+    "id": "F70",
+    "status": "partial"
+   },
+   {
+    "id": "F71",
+    "status": "present"
+   },
+   {
+    "id": "F72",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture a high volume of information and correctly document the complex rollout plan, bug statuses, and Kestrel Logistics escalation. However, the notes suffer from severe timeline hallucinations, repeatedly substituting 'October' for 'September' (e.g., stating the migration runbook is due October 28, usability results are due October 24, and the ledger dependency is due October 29). Additionally, the notes are extremely repetitive, duplicating the same facts across multiple unstructured and structured sections, which severely impacts conciseness and readability. The notes also contradict themselves regarding the owner of the migration runbook."
+ }
+}

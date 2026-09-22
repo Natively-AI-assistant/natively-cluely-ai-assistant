@@ -90,13 +90,14 @@ test('every call site that passes a `mac-` PermissionReason is gated on darwin',
   }
 });
 
-test('macOS build declares screen, microphone, and system audio usage descriptions', () => {
+test('macOS build declares screen, microphone, system audio, and speech usage descriptions', () => {
   const extendInfo = pkg.build?.mac?.extendInfo ?? {};
 
   for (const key of [
     'NSScreenCaptureUsageDescription',
     'NSMicrophoneUsageDescription',
     'NSAudioCaptureUsageDescription',
+    'NSSpeechRecognitionUsageDescription',
   ]) {
     assert.equal(typeof extendInfo[key], 'string', `${key} should be declared in package.json build.mac.extendInfo`);
     assert.ok(extendInfo[key].trim().length > 0, `${key} should not be empty`);

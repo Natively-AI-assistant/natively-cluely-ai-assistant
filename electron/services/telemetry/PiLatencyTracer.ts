@@ -15,6 +15,13 @@ import { telemetryService } from './TelemetryService';
  * re-reading the JSONL log.
  */
 export type PiMilestone =
+    // A first attempt produced no answer in time and the SAME request was
+    // re-sent. Distinct markers so a log can tell "retried and succeeded" from
+    // "succeeded slowly" — without them a 25s time-to-first-token has no
+    // explanation in the trace.
+    | 'answer_regeneration_started'
+    | 'answer_regeneration_succeeded'
+    | 'answer_regeneration_failed'
   | 'question_submitted'
   | 'what_to_answer_clicked'
   | 'transcript_window_loaded'

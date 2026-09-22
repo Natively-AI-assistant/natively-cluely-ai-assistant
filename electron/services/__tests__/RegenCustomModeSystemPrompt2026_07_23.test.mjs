@@ -58,9 +58,14 @@ test('documentGroundedPrompt: appendCustomModeSystemPromptLayer is idempotent wh
 
 test('ipcHandlers: the manual-chat regen streamChat call passes a non-undefined systemPromptOverride', () => {
   const src = read('electron/ipcHandlers.ts');
+  // The call became argument-tuple based on 2026-09-06 so the repair can replay
+  // the answer's images/transcript/scopes (RepairReplaysAnswerCall2026_09_06).
+  // The INVARIANT this test owns is unchanged and still enforced: the regen runs
+  // under the composed regenSystemPrompt, not undefined. A caller-supplied
+  // system prompt overrides the replayed one precisely so this keeps holding.
   assert.match(
     src,
-    /llmHelper\.streamChat\(\s*strictPrompt,\s*undefined,\s*undefined,\s*regenSystemPrompt,\s*true,\s*true,\s*\[\]/,
+    /repairCallArgs\(\s*llmHelper,[^)]*strictPrompt,[^)]*regenSystemPrompt\s*\)/,
     'the regen call must use the composed regenSystemPrompt, not undefined (the pre-fix regression)',
   );
   assert.match(
@@ -77,9 +82,12 @@ test('ipcHandlers: the manual-chat regen streamChat call passes a non-undefined 
 test('IntelligenceEngine: the WTA doc-grounded repair streamChat call passes a non-undefined systemPromptOverride', () => {
   const src = read('electron/IntelligenceEngine.ts');
   // Match the exact positional arg pattern: (repairPrompt, undefined, undefined, wtaRepairSystemPrompt, true, true, ['reference_files'], signal)
+  // Tuple-based since 2026-09-06 (see the note in the ipcHandlers test above).
+  // Same invariant: the doc-grounded repair runs under its OWN system prompt and
+  // its own reference_files scope, both of which beat the replayed answer's.
   assert.match(
     src,
-    /this\.llmHelper\.streamChat\(\s*repairPrompt,\s*undefined,\s*undefined,\s*wtaRepairSystemPrompt,\s*true,\s*true,\s*\['reference_files'\]/,
+    /this\.repairCallArgs\([\s\S]{0,200}?repairPrompt,[\s\S]{0,200}?wtaRepairSystemPrompt,[\s\S]{0,80}?\['reference_files'\]/,
     'the WTA doc-grounded repair must use wtaRepairSystemPrompt, not undefined',
   );
   assert.match(

@@ -2,11 +2,11 @@ import React, { useEffect, useRef } from 'react';
 import { useT } from '../i18n';
 import {
     Github, Twitter, Shield, Cpu, Database,
-    Heart, Linkedin, Instagram, Mail, MicOff, Star, Bug, Globe, Sparkles, Zap, Camera, LayoutGrid, User, Volume2, Activity, MessageSquare, Link, Smartphone, Calendar, ListTodo, Users, WifiOff, Send
+    Heart, Linkedin, Instagram, Mail, MicOff, Star, Bug, Globe, Sparkles, Zap, Camera, LayoutGrid, User, Volume2, Activity, MessageSquare, Link, Smartphone, Calendar, ListOrdered, Boxes, Users, WifiOff, Send
 } from 'lucide-react';
 import evinProfile from '../assets/evin.png';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
-import { getPlatformShortcut } from '../utils/platformUtils';
+import { APP_FEATURE_VERSION } from '../utils/appVersion';
 
 interface AboutSectionProps { }
 
@@ -14,6 +14,8 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
     const t = useT();
     const isLight = useResolvedTheme() === 'light';
     const donationClickTimeRef = useRef<number | null>(null);
+    const appVersion = import.meta.env.VITE_APP_VERSION || 'unknown';
+    const buildCommit = import.meta.env.VITE_BUILD_COMMIT || 'unknown';
 
     // Initial check for donation status not needed for visuals anymore (since we removed key input)
     // but we might want to hide the support button if donated? 
@@ -66,78 +68,78 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
 
             {/* What's New Section */}
             <div>
-                <h4 className="text-xs font-bold text-text-tertiary uppercase tracking-wider mb-2 px-1">{t("What's New in v2.8")}</h4>
+                <h4 className="text-xs font-bold text-text-tertiary uppercase tracking-wider mb-2 px-1">{`${t("What's New in")} v${APP_FEATURE_VERSION}`}</h4>
                 <div className="bg-bg-item-surface rounded-xl border border-border-subtle overflow-hidden">
-                    {/* 1. Stateful "Intelligence OS" */}
+                    {/* 1. Direct Assist */}
                     <div className="p-3 border-b border-border-subtle bg-bg-card/50">
                         <div className="flex items-start gap-4">
-                            <div className="w-10 h-10 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-400 shrink-0">
-                                <Cpu size={20} />
-                            </div>
-                            <div>
-                                <h5 className="text-sm font-bold text-text-primary mb-1">Stateful "Intelligence OS"</h5>
-                                <p className="text-xs text-text-secondary leading-relaxed">
-                                    Transitioned to a stateful control plane with mode-aware priors (Sales, Technical, Lecture) that automatically route queries and filter context based on your active task.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* 2. Hindsight Long-Term Memory */}
-                    <div className="p-3 border-b border-border-subtle bg-bg-card/50">
-                        <div className="flex items-start gap-4">
-                            <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-400 shrink-0">
-                                <Database size={20} />
-                            </div>
-                            <div>
-                                <h5 className="text-sm font-bold text-text-primary mb-1">Hindsight Long-Term Memory</h5>
-                                <p className="text-xs text-text-secondary leading-relaxed">
-                                    Integrates a secure local sidecar vector database that indexes past meetings, custom profiles, and documents, retrieving relevant semantic matches dynamically.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* 3. Spoken Answer Humanizer */}
-                    <div className="p-3 border-b border-border-subtle bg-bg-card/50">
-                        <div className="flex items-start gap-4">
-                            <div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center text-red-400 shrink-0">
-                                <MessageSquare size={20} />
-                            </div>
-                            <div>
-                                <h5 className="text-sm font-bold text-text-primary mb-1">Spoken Answer Humanizer</h5>
-                                <p className="text-xs text-text-secondary leading-relaxed">
-                                    Deterministically rewrites raw LLM outputs to strip corporate jargon, filter out structure bugs (em-dashes, empty bullets), and optimize prose for natural spoken flow.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* 4. Sandboxed Code Verification */}
-                    <div className="p-3 border-b border-border-subtle bg-bg-card/50">
-                        <div className="flex items-start gap-4">
-                            <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-400 shrink-0">
+                            <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-400 shrink-0">
                                 <Zap size={20} />
                             </div>
                             <div>
-                                <h5 className="text-sm font-bold text-text-primary mb-1">Sandboxed Code Verification</h5>
+                                <h5 className="text-sm font-bold text-text-primary mb-1">Direct Assist</h5>
                                 <p className="text-xs text-text-secondary leading-relaxed">
-                                    Automatically executes Python, JS, and SQLite code in isolated local subprocesses, verifying correctness and auto-correcting errors before displaying a verified badge.
+                                    The model sees your last three minutes of conversation and your reference files verbatim — no retrieval, no summarising in between. Off by default; enable it in AI Providers.
                                 </p>
                             </div>
                         </div>
                     </div>
 
-                    {/* 5. Regional STT-Relay Migration */}
-                    <div className="p-3 bg-bg-card/50">
+                    {/* 2. Bring Your Own Reranker */}
+                    <div className="p-3 border-b border-border-subtle bg-bg-card/50">
                         <div className="flex items-start gap-4">
-                            <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-400 shrink-0">
-                                <Globe size={20} />
+                            <div className="w-10 h-10 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-400 shrink-0">
+                                <ListOrdered size={20} />
                             </div>
                             <div>
-                                <h5 className="text-sm font-bold text-text-primary mb-1">Regional STT-Relay Migration</h5>
+                                <h5 className="text-sm font-bold text-text-primary mb-1">Bring Your Own Reranker</h5>
                                 <p className="text-xs text-text-secondary leading-relaxed">
-                                    Migrated realtime audio transcription to low-latency regional VPS hosts with transaction-scoped quota advisory locks to prevent double-billing.
+                                    Choose what picks the material behind your answers — hosted through Jina AI or OpenRouter, or run locally. Installs from Hugging Face in Settings › Reranker.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 3. Providers That Fail Over */}
+                    <div className="p-3 border-b border-border-subtle bg-bg-card/50">
+                        <div className="flex items-start gap-4">
+                            <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-400 shrink-0">
+                                <Activity size={20} />
+                            </div>
+                            <div>
+                                <h5 className="text-sm font-bold text-text-primary mb-1">Providers That Fail Over</h5>
+                                <p className="text-xs text-text-secondary leading-relaxed">
+                                    A stalled provider no longer costs you the answer. OpenAI, Claude, DeepSeek, LiteLLM, NVIDIA NIM and custom endpoints now switch to a spare, or retry in parallel. Local models are untouched.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 4. Lighter and Faster */}
+                    <div className="p-3 border-b border-border-subtle bg-bg-card/50">
+                        <div className="flex items-start gap-4">
+                            <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-400 shrink-0">
+                                <Cpu size={20} />
+                            </div>
+                            <div>
+                                <h5 className="text-sm font-bold text-text-primary mb-1">Lighter and Faster</h5>
+                                <p className="text-xs text-text-secondary leading-relaxed">
+                                    Around a quarter less memory, and windows open faster. Each used to load the entire app — the tiny overlay toggle booted the Markdown and maths renderers just to draw a button.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 5. Choose Your Embedding Model */}
+                    <div className="p-3 bg-bg-card/50">
+                        <div className="flex items-start gap-4">
+                            <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400 shrink-0">
+                                <Boxes size={20} />
+                            </div>
+                            <div>
+                                <h5 className="text-sm font-bold text-text-primary mb-1">Choose Your Embedding Model</h5>
+                                <p className="text-xs text-text-secondary leading-relaxed">
+                                    Set what finds your material: Gemini, OpenAI, Voyage AI, OpenRouter, Ollama or any OpenAI-compatible endpoint, each with a live Test. In Settings › Embeddings.
                                 </p>
                             </div>
                         </div>
@@ -410,6 +412,9 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                         ))}
                     </div>
                 </div>
+                <p className="mt-4 text-[11px] text-text-tertiary font-mono">
+                    {`Version ${appVersion} · Build ${buildCommit}`}
+                </p>
             </div>
         </div >
     );

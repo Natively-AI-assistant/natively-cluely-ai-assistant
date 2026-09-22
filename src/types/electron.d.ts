@@ -32,11 +32,66 @@ export interface DynamicActionPayload {
   }
 }
 
+export type DirectAssistSource = 'typed' | 'stt' | 'screenshot'
+
+export interface DirectAssistRequest {
+  requestId: string
+  source: DirectAssistSource
+  currentRequest: string
+  skillId?: string
+  manualContext?: string
+  referenceContext?: string
+  pageContext?: { dom?: string; ocr?: string; url?: string; title?: string } | null
+  history?: Array<{
+    role: 'user' | 'assistant'
+    content: string
+    /** Screenshots that turn was sent with, so a follow-up question can still
+     *  see them. Main re-validates each path and silently skips any the
+     *  screenshot queue has unlinked. */
+    imagePaths?: string[]
+  }>
+  transcript?: string
+  imagePaths?: string[]
+  requestedLanguage?: string
+  requestedFormat?: string
+  maxContextChars?: number
+}
+
+export interface DirectAssistError {
+  code: string
+  message: string
+  retryable: boolean
+}
+
+export type DirectAssistEvent =
+  | { type: 'start'; requestId: string; provider: string; model: string; trimmedFields: string[]; shortenedFields: string[] }
+  | { type: 'delta'; requestId: string; sequence: number; text: string }
+  | {
+      type: 'provider_switch'
+      requestId: string
+      /** SNAPSHOT of the delta counter, never a slot of its own — always 0. */
+      sequence: number
+      from: { provider: string; model: string }
+      to: { provider: string; model: string }
+      reason: string
+    }
+  | { type: 'done'; requestId: string; sequence: number; provider: string; model: string; fullText?: string }
+  | { type: 'error'; requestId: string; sequence: number; partial: boolean; error: DirectAssistError }
+  | { type: 'cancel'; requestId: string; sequence: number }
+
 export interface ElectronAPI {
   updateContentDimensions: (dimensions: {
     width: number
     height: number
   }) => Promise<void>
+  // X-anchored overlay resize. Resolves with the size the main process
+  // ACTUALLY applied after its floor(workArea * 0.9) clamp — the renderer
+  // adopts that value so its panel width, toggle anchor and hover-gate margin
+  // never drift from the real window. Optional: older preloads lack it.
+  updateContentDimensionsCentered?: (dimensions: {
+    width: number
+    height: number
+  }) => Promise<{ width: number; height: number } | undefined>
   // Overlay aux windows (pill / resize toggle) coordination
   sendOverlayUiState?: (state: Record<string, unknown>) => Promise<void>
   onOverlayUiState?: (
@@ -51,7 +106,12 @@ export interface ElectronAPI {
   }) => Promise<void>
   isOverlayGroupDragManaged?: () => Promise<boolean>
   onOverlayUiAction?: (callback: (action: { type: string }) => void) => () => void
-  sendOverlayToggleAnchor?: (payload: { panelRight: number }) => Promise<void>
+  sendOverlayToggleAnchor?: (payload: { panelRight: number; panelLeft?: number }) => Promise<void>
+  overlayResizeEnvelope?: (
+    payload:
+      | { phase: 'begin'; drag?: { direction: string; startWidth: number; startHeight: number; minWidth: number; minHeight: number; panelLeft: number } }
+      | { phase: 'end'; final?: { width: number; height: number } },
+  ) => Promise<{ width: number; height: number } | undefined>
   setOverlayHoverInteractive?: (interactive: boolean) => Promise<void>
   dismissOverlayPopovers?: (opts?: { settings?: boolean; model?: boolean }) => Promise<void>
   onToggleExpand: (callback: () => void) => () => void
@@ -144,7 +204,7 @@ export interface ElectronAPI {
   onOpenSettingsTab: (callback: (tab: string) => void) => () => void
 
   // LLM Model Management
-  getCurrentLlmConfig: () => Promise<{ provider: "ollama" | "gemini" | "custom" | "codex-cli"; /** @deprecated use `modelId` for selection, `displayName` for UI */ model: string; modelId: string; displayName: string; isOllama: boolean }>
+  getCurrentLlmConfig: () => Promise<{ provider: "ollama" | "gemini" | "custom" | "codex-cli" | "antigravity"; /** @deprecated use `modelId` for selection, `displayName` for UI */ model: string; modelId: string; displayName: string; isOllama: boolean }>
   getAvailableOllamaModels: () => Promise<string[]>
   /** Whether a denied data scope would actually be handled on-device. */
   getLocalFallbackStatus: () => Promise<{ text: boolean; vision: boolean }>
@@ -159,7 +219,7 @@ export interface ElectronAPI {
   runLocalFallbackPreflight: () => Promise<any>
   switchToOllama: (model?: string, url?: string) => Promise<{ success: boolean; error?: string }>
   switchToGemini: (apiKey?: string, modelId?: string) => Promise<{ success: boolean; error?: string }>
-  testLlmConnection: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim', apiKey?: string) => Promise<{ success: boolean; error?: string }>
+  testLlmConnection: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion', apiKey?: string) => Promise<{ success: boolean; error?: string }>
   selectServiceAccount: () => Promise<{ success: boolean; path?: string; cancelled?: boolean; error?: string }>
 
   // API Key Management
@@ -168,15 +228,23 @@ export interface ElectronAPI {
   setOpenaiApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
   setClaudeApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
   setDeepseekApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
-  setNvidiaNimApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
+  setNvidiaNimApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string; sttProviderCleared?: boolean }>
+  /** `retrievalDeactivated` is true when CLEARING the key also switched an OpenRouter embedding/reranker off. */
+  setOpenrouterApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string; retrievalDeactivated?: boolean }>
+  setFluxionConfig: (config: { apiKey?: string; protocol?: 'openai' | 'anthropic' }) => Promise<{ success: boolean; error?: string; message?: string; protocol?: 'openai' | 'anthropic'; protocolDetected?: boolean }>
   setLitellmConfig: (config: { apiKey: string; baseURL: string; maxTokens?: number }) => Promise<{ success: boolean; error?: string }>
+  setNinerouterConfig: (config: { apiKey: string; baseURL: string; maxTokens?: number; thinking?: string }) => Promise<{ success: boolean; error?: string }>
+  getAvailableNinerouterModels: () => Promise<string[]>
+  refreshNinerouterModels: () => Promise<string[]>
+  /** POSTs an unroutable model id: 401 means the key is wrong, anything else means it was accepted. */
+  testNinerouterConnection: (config?: { apiKey?: string; baseURL?: string }) => Promise<{ ok: boolean; reason?: 'auth' | 'unreachable' | 'unconfigured'; error?: string; status?: number }>
   getAvailableLiteLLMModels: () => Promise<string[]>
   refreshLiteLLMModels: () => Promise<string[]>
   getCloudFetchedModels: () => Promise<{ models: Record<string, { id: string; label: string }[]>; fetchedAt: Record<string, number> }>
   getDisabledProviders: () => Promise<string[]>
   setDisabledProviders: (providers: string[]) => Promise<{ success: boolean; error?: string }>
   setCloudEnabledModels: (provider: string, models: string[]) => Promise<{ success: boolean; error?: string }>
-  setNativelyApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
+  setNativelyApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string; proPending?: boolean; proError?: string }>
   setNvidiaNimSttModel: (model: string) => Promise<{ success: boolean; error?: string }>
   // ── In-app review / testimonial prompt ─────────────────────────────────
   reviewGetPromptState: () => Promise<{
@@ -209,9 +277,11 @@ export interface ElectronAPI {
     can_use_publicly: boolean;
     display_name_publicly: boolean;
   }) => Promise<{ ok: boolean; error?: string; status?: number }>
-  getNativelyPricing: () => Promise<{ ok: boolean; currency?: string; fetchedAt?: string; stale?: boolean; products?: Record<string, { id: string; dodoProductId: string; name: string; amount: number | null; currency: string; formattedPrice: string | null; interval: 'month' | 'year' | 'lifetime'; checkoutUrl: string; coupon: { code: string; eligible: boolean; discountPercent: number; reason?: string } }>; error?: string; status?: number }>
-  getNativelyUsage: (force?: boolean) => Promise<{ ok: boolean; error?: string; plan?: string; quota?: { transcription: { used: number; limit: number; remaining: number }; ai: { used: number; limit: number; remaining: number }; search: { used: number; limit: number; remaining: number }; resets_at: string }; member_since?: string }>
-  getStoredCredentials: () => Promise<{ hasNativelyKey?: boolean; hasGeminiKey: boolean; hasGroqKey: boolean; hasOpenaiKey: boolean; hasClaudeKey: boolean; hasDeepseekKey: boolean; hasNvidiaNimKey?: boolean; hasLitellmBaseURL?: boolean; litellmBaseURL?: string | null; litellmMaxTokens?: number | null; googleServiceAccountPath: string | null; sttProvider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively'; hasSttGroqKey: boolean; hasSttOpenaiKey: boolean; hasDeepgramKey: boolean; hasElevenLabsKey: boolean; hasAzureKey: boolean; azureRegion: string; hasIbmWatsonKey: boolean; ibmWatsonRegion: string; groqSttModel?: string; hasSonioxKey?: boolean; hasTavilyKey?: boolean; geminiPreferredModel?: string; groqPreferredModel?: string; openaiPreferredModel?: string; claudePreferredModel?: string; deepseekPreferredModel?: string; nvidia_nimPreferredModel?: string; litellmPreferredModel?: string; disabledProviders?: string[]; cloudEnabledModels?: Record<string, string[]>; sttGroqKey?: string; sttOpenaiKey?: string; sttDeepgramKey?: string; sttElevenLabsKey?: string; sttAzureKey?: string; sttIbmKey?: string; sttSonioxKey?: string; openAiSttBaseUrl?: string }>
+  // See src/types/nativelyUsage.ts — one definition, shared with the preload
+  // bridge. Four user-facing categories over five server-side meters.
+  getNativelyUsage: (force?: boolean) => Promise<import('./nativelyUsage').NativelyUsageResponse>
+  getNativelyPlans: () => Promise<import('./nativelyUsage').NativelyPlansResponse>
+  getStoredCredentials: () => Promise<{ hasNativelyKey?: boolean; hasGeminiKey: boolean; hasGroqKey: boolean; hasOpenaiKey: boolean; hasClaudeKey: boolean; hasDeepseekKey: boolean; hasNvidiaNimKey?: boolean; hasOpenrouterKey?: boolean; hasFluxionKey?: boolean; fluxionProtocol?: 'openai' | 'anthropic'; hasLitellmBaseURL?: boolean; litellmBaseURL?: string | null; litellmMaxTokens?: number | null; hasNinerouterBaseURL?: boolean; hasNinerouterKey?: boolean; ninerouterBaseURL?: string | null; ninerouterMaxTokens?: number | null; ninerouterThinking?: string | null; ninerouterModelMeta?: Record<string, { reasoning?: boolean; thinkingCanDisable?: boolean; thinkingFormat?: string }>; googleServiceAccountPath: string | null; sttProvider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech'; hasSttGroqKey: boolean; hasSttOpenaiKey: boolean; hasDeepgramKey: boolean; hasElevenLabsKey: boolean; hasAzureKey: boolean; azureRegion: string; hasIbmWatsonKey: boolean; ibmWatsonRegion: string; groqSttModel?: string; hasSonioxKey?: boolean; hasTavilyKey?: boolean; geminiPreferredModel?: string; groqPreferredModel?: string; openaiPreferredModel?: string; claudePreferredModel?: string; deepseekPreferredModel?: string; nvidia_nimPreferredModel?: string; openrouterPreferredModel?: string; fluxionPreferredModel?: string; litellmPreferredModel?: string; ninerouterPreferredModel?: string; disabledProviders?: string[]; cloudEnabledModels?: Record<string, string[]>; sttGroqKey?: string; sttOpenaiKey?: string; sttDeepgramKey?: string; sttElevenLabsKey?: string; sttAzureKey?: string; sttIbmKey?: string; sttSonioxKey?: string; openAiSttBaseUrl?: string }>
   // R-10 resolution flow: ambiguous credential stores (names + last-4 only; null when nothing to resolve).
   getAmbiguousCredentialStores: () => Promise<{
     keyring: { keys: { name: string; last4: string }[]; mtimeIso: string | null };
@@ -229,7 +299,8 @@ export interface ElectronAPI {
   openMicSettings:      () => Promise<{ ok: boolean; reason?: string }>
 
   // Free Trial
-  startTrial:     () => Promise<{ ok: boolean; hasToken?: boolean; started_at?: string; expires_at?: string; expired?: boolean; already_used?: boolean; converted_to?: string | null; usage?: { ai: number; stt_seconds: number; search: number }; limits?: { duration_ms: number; ai_requests: number; stt_minutes: number; search_requests: number }; error?: string; status?: number }>
+  /** `persisted: false` = started and live for THIS session, but the credential store could not write it, so a restart loses it. The server keeps the trial and re-issues it (idempotent per hardware id). */
+  startTrial:     () => Promise<{ ok: boolean; hasToken?: boolean; persisted?: boolean; started_at?: string; expires_at?: string; expired?: boolean; already_used?: boolean; converted_to?: string | null; usage?: { ai: number; stt_seconds: number; search: number }; limits?: { duration_ms: number; ai_requests: number; stt_minutes: number; search_requests: number }; error?: string; status?: number }>
   getTrialStatus: () => Promise<{ ok: boolean; expired?: boolean; remaining_ms?: number; started_at?: string; expires_at?: string; converted_to?: string | null; usage?: { ai: number; stt_seconds: number; search: number }; limits?: object; error?: string }>
   getLocalTrial:  () => Promise<{ hasToken: boolean; trialClaimed?: boolean; expiresAt?: string; startedAt?: string; expired?: boolean }>
   convertTrial:   (choice: string) => Promise<{ ok: boolean }>
@@ -238,8 +309,12 @@ export interface ElectronAPI {
   onTrialEnded:   (cb: (data: { choice: string }) => void) => () => void
 
   // STT Provider Management
-  setSttProvider: (provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper') => Promise<{ success: boolean; error?: string }>
+  setSttProvider: (provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech') => Promise<{ success: boolean; error?: string }>
   getSttProvider: () => Promise<string>
+  getAppleSpeechLocales: () => Promise<{ available: boolean; supported: string[]; installed: string[]; reserved: string[]; maxReserved: number }>
+  installAppleSpeechLocale: (locale: string) => Promise<{ ok: boolean; error?: string }>
+  releaseAppleSpeechLocale: (locale: string) => Promise<{ ok: boolean; error?: string }>
+  onAppleSpeechInstallProgress: (cb: (data: { locale: string; fraction: number }) => void) => () => void
   setGroqSttApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
   setOpenAiSttApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
   setOpenAiSttBaseUrl: (url: string) => Promise<{ success: boolean; error?: string }>
@@ -293,7 +368,7 @@ export interface ElectronAPI {
   onAudioCaptureFailed: (callback: (payload: { channel: 'system' | 'mic'; message: string; attempt: number; maxAttempts: number; terminal?: boolean; stuck?: boolean; titleKey?: string }) => void) => () => void
 
   // STT Status Events
-  onSttStatusChanged: (callback: (data: { state: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio'; provider: string; error?: string; channel: 'user' | 'interviewer'; reconnectAttempts?: number }) => void) => () => void
+  onSttStatusChanged: (callback: (data: { state: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio' | 'preparing'; provider: string; error?: string; channel: 'user' | 'interviewer'; reconnectAttempts?: number }) => void) => () => void
 
   getNativeAudioStatus: () => Promise<{ connected: boolean }>
 
@@ -312,6 +387,16 @@ export interface ElectronAPI {
     imageCount?: number;
     usedImageInput?: boolean;
   }>
+  startDirectAssist: (request: DirectAssistRequest) => Promise<{
+    accepted: boolean
+    requestId: string
+    error?: DirectAssistError
+  }>
+  cancelDirectAssist: (
+    requestId: string,
+    source?: DirectAssistSource
+  ) => Promise<{ success: boolean; cancelled: boolean; error?: string }>
+  onDirectAssistEvent: (callback: (event: DirectAssistEvent) => void) => () => void
   generateClarify: () => Promise<{ clarification: string | null }>
   generateCodeHint: (imagePaths?: string[], problemStatement?: string) => Promise<{ hint: string | null }>
   generateBrainstorm: (imagePaths?: string[], problemStatement?: string) => Promise<{ script: string | null }>
@@ -352,6 +437,13 @@ export interface ElectronAPI {
   knowledgeApproveCard: (cardId: string) => Promise<{ success: boolean; card?: any; error?: string }>
   knowledgeRejectCard: (cardId: string) => Promise<{ success: boolean; card?: any; error?: string }>
   knowledgeRestoreCardVersion: (params: { cardId: string; versionId: string }) => Promise<{ success: boolean; card?: any; error?: string }>
+  // Provider Performance Profile — read-only diagnostics, plus the manual
+  // "forget what you measured" reset. There is deliberately no "start
+  // calibration" call: calibration is passive, so nothing can be billed.
+  providerPerformanceGetDiagnostics?: () => Promise<any>;
+  providerPerformanceReset?: (providerId?: string) => Promise<any>;
+  providerPerformanceCalibrate?: () => Promise<any>;
+
   knowledgeGetCardHistory: (cardId: string) => Promise<{ success: boolean; versions: any[]; error?: string }>
   modesGetNoteSections: (modeId: string) => Promise<Array<{ id: string; modeId: string; title: string; description: string; sortOrder: number }>>
   modesAddNoteSection: (modeId: string, title: string, description: string) => Promise<{ success: boolean; section?: any; error?: string }>
@@ -371,6 +463,235 @@ export interface ElectronAPI {
   searchInMeeting: (query: string) => Promise<{ enabled: boolean; results: any[] }>
   generateLectureNotes: (opts?: { title?: string; course?: string }) => Promise<{ enabled: boolean; notes: any }>
   generateDiagram: (text?: string) => Promise<{ enabled: boolean; diagram: any }>
+  // ── Embedding settings (configured independently of the generation model) ──
+  getEmbeddingStatus: () => Promise<{
+    active: { configured: boolean; provider?: string | null; model?: string | null; dimensions?: number | null; space?: string | null; location?: 'on-device' | 'cloud' | 'unknown'; lightweight?: boolean }
+    configured: { mode?: 'auto' | 'manual'; provider?: string; model?: string; dimensions?: number }
+    acknowledged: boolean
+    scopeAllowsCloud: boolean
+    /** §5: a third-party AI provider is configured while embeddings stay lightweight. */
+    shouldWarn: boolean
+  }>
+  getEmbeddingCatalog: () => Promise<{
+    providers: Array<{
+      id: 'natively' | 'ollama' | 'custom' | 'openrouter' | 'voyage' | 'openai' | 'gemini' | 'local'
+      name: string
+      cloud: boolean
+      managed?: boolean
+      available: boolean
+      unavailableReason?: 'no_key' | 'not_running' | 'blocked_by_policy' | 'not_configured'
+      endpoint?: string
+      capabilityUnknown?: boolean
+      models: Array<{ id: string; label: string; dimensions: number; dimensionsVerified: boolean; supportedDimensions?: number[]; lightweight?: boolean; recommended?: boolean; note?: string }>
+    }>
+    hasCatalog?: { openai?: boolean; gemini?: boolean }
+  }>
+  testEmbeddingModel: (choice?: { provider?: string; model?: string }) => Promise<{
+    ok: boolean; provider?: string; model?: string; dimensions?: number; space?: string; latencyMs?: number; error?: string; status?: number; message?: string
+  }>
+  setEmbeddingConfig: (next: { mode?: string; provider?: string; model?: string; dimensions?: number }) => Promise<{
+    success: boolean; previousSpace?: string; activeSpace?: string; reindexRequired?: boolean; incompatibleCount?: number; error?: string; message?: string
+  }>
+  fetchEmbeddingModels: (providerId: string) => Promise<{
+    success: boolean; models?: Array<{ id: string; label: string; dimensions: number; dimensionsVerified: boolean; supportedDimensions?: number[] }>; count?: number; error?: string
+  }>
+  setEmbeddingVoyageKey: (key: string) => Promise<{ success: boolean; error?: string; message?: string }>
+  setEmbeddingOpenRouterKey: (key: string) => Promise<{ success: boolean; models?: unknown[]; count?: number; error?: string; message?: string }>
+  setEmbeddingCustomEndpoint: (input: { url?: string; apiKey?: string }) => Promise<{
+    success: boolean; endpoint?: string | null; models?: Array<{ id: string; capabilityKnown: boolean }>; reachable?: boolean; error?: string; message?: string
+  }>
+  acknowledgeLightweightEmbeddings: (acknowledged: boolean) => Promise<{ success: boolean }>
+
+  // ── Reranker ───────────────────────────────────────────────────────────
+  // Embedding retrieval finds the candidate set; reranking decides the order of
+  // those candidates. Configured independently of the embedding provider.
+  getRerankerStatus: () => Promise<{
+    provider: 'local' | 'natively' | 'openrouter' | 'jina' | 'voyage' | 'custom'
+    openrouterModel: string | null
+    jinaModel: string | null
+    voyageModel?: string | null
+    nativelyModel?: string | null
+    customModel?: string | null
+    customEndpoint?: string | null
+    hasCustomKey?: boolean
+    /** The model id for whichever hosted provider is selected. */
+    hostedModel: string | null
+    candidateCount: number | null
+    /** The pool an untouched install reranks — the ceiling the retriever
+     *  clamps to. The renderer renders THIS as the fallback rather than a
+     *  literal of its own. */
+    candidateCountDefault: number
+    fallbackToLocal: boolean
+    /** Presence only. The key itself never crosses the IPC boundary. */
+    hasApiKey: boolean
+    eligible: boolean
+    ineligibleReason: 'provider-not-selected' | 'local-only-mode' | 'reference-files-scope-denied' | 'no-api-key' | 'no-model' | null
+    ineligibleMessage: string | null
+    builtIn: { id: string; name: string; bundled: boolean; cached?: boolean; available?: boolean }
+    /** The catalogue model in use, when one is selected AND fully installed. */
+    selectedLocal: { id: string; name: string } | null
+    /** What would actually run right now, resolved the way retrieval resolves it. */
+    effective: { kind: 'local' | 'extension' | 'natively' | 'openrouter' | 'jina' | 'voyage' | 'custom'; id: string | null }
+    lastTest: { at: string; model: string; latencyMs: number; ok: boolean; failure?: string } | null
+  }>
+  getRerankerCatalog: (opts?: { refresh?: boolean }) => Promise<{
+    models: Array<{
+      id: string; label: string; vendor: string; contextLength?: number
+      free: boolean; multimodal: boolean
+      group: 'recommended' | 'quality' | 'fast' | 'multimodal' | 'other'
+      note?: string; description?: string
+    }>
+    /** True when discovery failed and these are the last known models. */
+    stale: boolean
+    fetchedAt: number | null
+    error?: string
+  }>
+  setRerankerConfig: (next: {
+    provider?: 'local' | 'natively' | 'openrouter' | 'jina' | 'voyage' | 'custom'
+    openrouterModel?: string
+    jinaModel?: string
+    voyageModel?: string
+    nativelyModel?: string
+    customModel?: string
+    candidateCount?: number
+    fallbackToLocal?: boolean
+  }) => Promise<{ success: boolean; reranker?: unknown; error?: string }>
+  setRerankerOpenRouterKey: (key: string) => Promise<{ success: boolean; error?: string; message?: string }>
+  setRerankerHostedKey: (provider: string, key: string) => Promise<{ success: boolean; error?: string; message?: string }>
+  setRerankerCustomEndpoint: (input: { url?: string; apiKey?: string }) => Promise<{
+    success: boolean
+    endpoint?: string | null
+    models?: Array<{ id: string; label: string }>
+    reachable?: boolean
+    error?: string
+    message?: string
+  }>
+  getCustomRerankerModels: () => Promise<Array<{ id: string; label: string }>>
+  getRerankerHostedProviders: () => Promise<{
+    providers: Array<{
+      id: 'natively' | 'openrouter' | 'jina' | 'voyage'
+      name: string
+      keyUrl: string
+      keyPlaceholder: string
+      staticCatalogue: boolean
+      models: Array<{ id: string; label: string; note?: string; recommended?: boolean }>
+      /** Presence only — the key never crosses this boundary. */
+      hasApiKey: boolean
+    }>
+  }>
+  listLocalRerankerModels: () => Promise<{
+    models: Array<{
+      id: string; name: string; runtime: 'onnx' | 'gguf'; repo: string
+      params: string; note: string; bytes: number; recommended: boolean
+      license: { spdx: string; url: string; commercialUseRestricted: boolean; requiresAcknowledgement: boolean }
+      state: 'not-installed' | 'partial' | 'installed'
+      bytesOnDisk: number
+      selected: boolean
+      /** GGUF only: the extension that can execute it. */
+      extensionId: string | null
+      extensionInstalled: boolean | null
+      /** GGUF only: a binary that must be on PATH, e.g. llama-server. */
+      requiresBinary: string | null
+      /** False when Core cannot execute it even once downloaded. */
+      supported: boolean
+      unsupportedReason: string | null
+      /** Only supported ONNX models run in Core's own runtime and can be activated here. */
+      activatable: boolean
+    }>
+    selectedId: string | null
+    builtInSelected: boolean
+  }>
+  installLocalRerankerModel: (id: string) => Promise<{
+    success: boolean; error?: string; message?: string; extensionId?: string; digests?: Record<string, string>
+  }>
+  cancelLocalRerankerModel: (id: string) => Promise<{ success: boolean; error?: string }>
+  removeLocalRerankerModel: (id: string) => Promise<{ success: boolean; error?: string; message?: string }>
+  useLocalRerankerModel: (id: string | null) => Promise<{
+    success: boolean; activeId?: string | null; topIndex?: number; error?: string; message?: string
+  }>
+  onLocalRerankerModelProgress: (callback: (p: { id: string; fraction: number; currentFile: string }) => void) => () => void
+
+  listLocalEmbeddingModels: () => Promise<{
+    models: Array<{
+      id: string; name: string; runtime: 'onnx' | 'gguf'; repo: string
+      params: string; note: string; bytes: number; dimensions: number
+      supportedDimensions?: number[]
+      contextLength?: number
+      recommended: boolean; bundled?: boolean
+      license: { spdx: string; url: string; commercialUseRestricted: boolean; requiresAcknowledgement: boolean }
+      /** true when requiresAcknowledgement is false, or the user has already accepted. */
+      acknowledged: boolean
+      state: 'not-installed' | 'partial' | 'installed'
+      bytesOnDisk: number
+      selected: boolean
+      supported: boolean
+      unsupportedReason: string | null
+      activatable: boolean
+    }>
+    selectedId: string | null
+    builtInSelected: boolean
+  }>
+  installLocalEmbeddingModel: (id: string) => Promise<{
+    success: boolean; error?: string; message?: string; digests?: Record<string, string>
+    /** Present when error === 'license_not_acknowledged'. */
+    requiresAcknowledgement?: boolean; licenseUrl?: string; spdx?: string
+  }>
+  cancelLocalEmbeddingModel: (id: string) => Promise<{ success: boolean; error?: string }>
+  removeLocalEmbeddingModel: (id: string) => Promise<{ success: boolean; error?: string; message?: string }>
+  useLocalEmbeddingModel: (id: string | null) => Promise<{
+    success: boolean; activeId?: string | null; dimensions?: number; reindexRequired?: boolean; incompatibleCount?: number; error?: string; message?: string
+    /** Present when error === 'license_not_acknowledged'. */
+    requiresAcknowledgement?: boolean; licenseUrl?: string; spdx?: string
+  }>
+  testLocalEmbeddingModel: (id: string) => Promise<{
+    success: boolean; latencyMs?: number; dimensions?: number; runtime?: 'onnx' | 'gguf'; accelerator?: string; error?: string; message?: string
+  }>
+  revealLocalEmbeddingModelsFolder: () => Promise<{ success: boolean }>
+  /** Persist the user's acceptance of a catalog model's licence terms. Must be called before install/use on models where requiresAcknowledgement is true. */
+  acknowledgeLocalEmbeddingCatalogModel: (id: string) => Promise<{ success: boolean; error?: string; message?: string }>
+  onLocalEmbeddingModelProgress: (callback: (p: { id: string; fraction: number; currentFile: string }) => void) => () => void
+
+  listExtensions: () => Promise<{
+    available: boolean
+    extensions: Array<{
+      id: string; name: string; version: string; type: string
+      author: string; homepage: string; source: string
+      enabled: boolean; running: boolean; disabledReason: string | null
+      permissions: string[]
+      models: Array<{
+        key: string; format: string; approxBytes: number
+        state: 'not-downloaded' | 'downloading' | 'ready' | 'verification-failed' | 'blocked-unacknowledged'
+        bytes: number | null; reason: string | null
+        license: {
+          spdx: string; url: string
+          commercialUseRestricted: boolean; requiresAcknowledgement: boolean; acknowledged: boolean
+        }
+      }>
+    }>
+  }>
+  installExtensionFromFolder: () => Promise<{ success: boolean; id?: string; error?: string; errors?: string[]; warnings?: string[] }>
+  setExtensionEnabled: (id: string, enabled: boolean) => Promise<{ success: boolean; error?: string }>
+  removeExtension: (id: string) => Promise<{ success: boolean; error?: string }>
+  acknowledgeExtensionLicense: (id: string, modelKey: string) => Promise<{ success: boolean; error?: string }>
+  downloadExtensionModel: (id: string, modelKey: string) => Promise<{ success: boolean; status?: unknown; error?: string; message?: string }>
+  cancelExtensionModelDownload: (id: string, modelKey: string) => Promise<{ success: boolean; error?: string }>
+  browseExtensionRegistry: (url?: string) => Promise<{ ok: boolean; entries: Array<{ id: string; repo: string; latestVersion: string; apiVersion: string; category: string; modelLicenses?: string[] }> }>
+  onExtensionModelProgress: (callback: (p: { id: string; modelKey: string; fraction: number }) => void) => () => void
+
+  testReranker: (choice?: { model?: string }) => Promise<{
+    success: boolean
+    model?: string
+    /** Round trip INCLUDING network. Not model inference time. */
+    latencyMs?: number
+    costUsd?: number | null
+    scoresFinite?: boolean
+    indicesValid?: boolean
+    rankedExpectedFirst?: boolean
+    /** The probe ran, but its result could not be cached to settings. */
+    persistError?: string
+    error?: string
+    message?: string
+  }>
   getIntelligenceFlags: () => Promise<Array<{ key: string; enabled: boolean; setting: string; env: string; default: boolean }>>
   setIntelligenceFlag: (key: string, value: boolean | null) => Promise<{ success: boolean; enabled?: boolean; error?: string }>
   getContextDebugConfig: () => Promise<{ level: 'off' | 'standard' | 'verbose'; levelSource: 'environment' | 'setting' | 'default'; contentInclusion: boolean; storedLevel?: 'off' | 'standard' | 'verbose'; logDirectory?: string | null; currentFile?: string | null; error?: string }>
@@ -443,8 +764,15 @@ export interface ElectronAPI {
   setDefaultModel: (modelId: string) => Promise<{ success: boolean; error?: string }>;
   toggleModelSelector: (coords: { x: number; y: number; activate?: boolean }) => Promise<void>;
   modelSelectorCloseIfOpen: () => Promise<void>;
-  forceRestartOllama: () => Promise<void>;
+  // NOTE: this interface and the one in electron/preload.ts are maintained
+  // separately and drift. That drift is what hid the Ollama bug: the settings
+  // screen reached these through a generic `invoke` that neither file declares
+  // and preload does not expose, behind a @ts-ignore that silenced the error.
+  /** Real handler shape — `{ success }`, not void. */
+  forceRestartOllama: () => Promise<{ success: boolean; reason?: string }>;
   isOllamaReachable: () => Promise<boolean>;
+  /** Start the local Ollama daemon when Ollama is the selected provider. */
+  ensureOllamaRunning: () => Promise<{ success: boolean; reason?: string; [k: string]: unknown }>;
 
   // Settings Window
   toggleSettingsWindow: (coords?: { x: number; y: number }) => Promise<void>;
@@ -459,8 +787,15 @@ export interface ElectronAPI {
   codexCliLogout: (config?: any) => Promise<{ success: boolean; action: string; output?: string; error?: string; resolvedPath?: string; config?: any }>;
   codexCliLogin: (config?: any) => Promise<{ success: boolean; action: string; output?: string; error?: string; resolvedPath?: string; config?: any }>;
   codexCliDoctor: (config?: any) => Promise<{ success: boolean; action: string; output?: string; error?: string; resolvedPath?: string; config?: any }>;
+  getCodexCliModels: () => Promise<{ source: 'codex-cli' | 'unavailable'; models: { id: string; name: string }[]; fetchedAt?: string; clientVersion?: string }>;
   // ChatGPT OAuth (PKCE) — replaces the old `codex login` CLI subprocess.
-  codexLoginStatus: () => Promise<{ success: boolean; signedIn: boolean; email?: string; expiresAt?: number; error?: string }>;
+  codexLoginStatus: () => Promise<{ success: boolean; signedIn: boolean; source?: 'natively' | 'codex-cli' | null; cliLogin?: 'ok' | 'expired' | 'missing' | 'api-key' | 'invalid'; email?: string; expiresAt?: number; error?: string }>;
+  antigravityStatus: () => Promise<{ signedIn: boolean; inProgress: boolean; expiresAt?: number; projectId?: string; error?: string }>;
+  antigravityStartLogin: () => Promise<{ success: boolean; error?: string }>;
+  antigravityCancelLogin: () => Promise<void>;
+  antigravitySignOut: () => Promise<{ success: boolean; error?: string }>;
+  antigravityModels: (force?: boolean) => Promise<{ success: boolean; models: { id: string; label: string }[]; error?: string }>;
+  onAntigravityStatusChanged: (callback: (status: { signedIn: boolean; inProgress: boolean; expiresAt?: number; projectId?: string; error?: string }) => void) => () => void;
   codexStartLogin: () => Promise<{ success: boolean; email?: string; expiresAt?: number; error?: string }>;
   codexSignOut: () => Promise<{ success: boolean; error?: string }>;
   codexRefreshTokens: () => Promise<{ success: boolean; email?: string; expiresAt?: number; error?: string }>;
@@ -607,7 +942,11 @@ export interface ElectronAPI {
   // JD & Research API
   profileUploadJD: (filePath: string) => Promise<{ success: boolean; error?: string }>
   profileDeleteJD: () => Promise<{ success: boolean; error?: string }>
-  profileResearchCompany: (companyName: string) => Promise<{ success: boolean; dossier?: any; error?: string; searchQuotaExhausted?: boolean }>
+  // forceRefresh omitted/false serves the cached dossier the JD-upload AOT run
+  // already paid for; only the explicit Refresh pill passes true. Must stay in
+  // sync with the declaration in electron/preload.ts — this is the copy the
+  // renderer typechecks against.
+  profileResearchCompany: (companyName: string, forceRefresh?: boolean) => Promise<{ success: boolean; dossier?: any; error?: string; searchQuotaExhausted?: boolean }>
   profileGenerateNegotiation: (force?: boolean) => Promise<{ success: boolean; script?: any; error?: string }>
   profileGenerateCoverLetter: (force?: boolean) => Promise<{ success: boolean; letter?: any; error?: string }>
   profileGetNegotiationState: () => Promise<{ success: boolean; state?: any; isActive?: boolean; error?: string }>
@@ -617,8 +956,8 @@ export interface ElectronAPI {
   setTavilyApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
 
   // Dynamic Model Discovery
-  fetchProviderModels: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek', apiKey: string) => Promise<{ success: boolean; models?: {id: string, label: string}[]; error?: string }>
-  setProviderPreferredModel: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'litellm', modelId: string) => Promise<void>
+  fetchProviderModels: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion', apiKey: string) => Promise<{ success: boolean; models?: {id: string, label: string}[]; error?: string }>
+  setProviderPreferredModel: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'litellm' | 'ninerouter', modelId: string) => Promise<void>
 
   // License Management
   licenseActivate: (key: string) => Promise<{ success: boolean; error?: string }>
@@ -638,12 +977,22 @@ export interface ElectronAPI {
   // Verbose / Debug Logging
   getVerboseLogging: () => Promise<boolean>;
   setVerboseLogging: (enabled: boolean) => Promise<{ success: boolean }>;
+  exportDebugLogs: () => Promise<{ success: boolean; path?: string; files?: string[]; error?: string }>;
+
+  // Windows shortcut guard — the always-on WH_KEYBOARD_LL hook that swallows
+  // and self-dispatches Natively's own chords. Default on; an explicit false is
+  // the opt-out for EDR/AV-sensitive setups. No-op off Windows.
+  getStealthShortcutGuard: () => Promise<boolean>;
+  setStealthShortcutGuard: (enabled: boolean) => Promise<{ success: boolean }>;
 
   // Ambient AI Chat — when enabled, meetings run without mic/system audio capture
   getAmbientChatEnabled: () => Promise<boolean>;
   setAmbientChatEnabled: (enabled: boolean) => Promise<{ success: boolean }>;
   getAutoAnswerEnabled: () => Promise<boolean>;
   setAutoAnswerEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
+  getDirectAssistEnabled: () => Promise<boolean>;
+  setDirectAssistEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
+  onDirectAssistEnabledChanged: (callback: (enabled: boolean) => void) => () => void;
 
   getCodeVerification: () => Promise<boolean>;
   setCodeVerification: (enabled: boolean) => Promise<{ success: boolean }>;
@@ -687,6 +1036,9 @@ export interface ElectronAPI {
   // Cropper API
   cropperConfirmed: (bounds: { x: number; y: number; width: number; height: number }) => void;
   cropperCancelled: () => void;
+  /** Launcher only: the boot reveal animation has fully landed, so main can
+   *  restore this window's background throttling. */
+  notifyLauncherRevealComplete: () => void;
   onResetCropper: (callback: (data: { hudPosition: { x: number; y: number } }) => void) => () => void;
 
   // Platform

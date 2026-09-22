@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { Check, Loader2 } from 'lucide-react';
-import { CODEX_CLI_MODEL, CODEX_CLI_MODEL_PRESETS, codexCliSelectorId, getCodexCliModelDisplayName, isModelAllowed, litellmModelLabel, STANDARD_CLOUD_MODELS, prettifyModelId } from '../utils/modelUtils';
+import { CODEX_CLI_MODEL, codexCliSelectorId, codexModelOptions, gatewayModelLabel, isModelAllowed, litellmModelLabel, STANDARD_CLOUD_MODELS, prettifyModelId } from '../utils/modelUtils';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
 import {
@@ -118,6 +118,17 @@ const ModelSelectorWindow = () => {
 
                 // 3. Codex CLI
                 const codexCliConfig = await window.electronAPI?.getCodexCliConfig?.();
+                // Codex is only offered with a usable ChatGPT sign-in (Natively's
+                // own or `codex login`) — the same gate Settings applies. Listing
+                // it regardless let a signed-out user pick a model that routing
+                // then silently answered from another provider (issue #558).
+                const codexSignedIn = codexCliConfig?.enabled
+                    ? !!(await window.electronAPI?.codexLoginStatus?.().catch(() => null))?.signedIn
+                    : false;
+                // The installed Codex CLI's own model list; presets when there is none.
+                const codexModels = codexSignedIn
+                    ? codexModelOptions(await window.electronAPI?.getCodexCliModels?.().catch(() => undefined))
+                    : [];
 
                 // 4. Ollama
                 let ollamaModels: string[] = [];
@@ -172,17 +183,24 @@ const ModelSelectorWindow = () => {
                     }
                 }
 
+                try {
+                    const result = await window.electronAPI.antigravityModels();
+                    for (const model of result.models) {
+                        models.push({ id: `antigravity:${model.id}`, name: `${model.label} (Antigravity)`, type: 'cloud', provider: 'antigravity' });
+                    }
+                } catch { /* Offline or signed out; other providers remain available. */ }
+
                 // Custom Providers
                 customProviders.forEach((p: any) => {
                     models.push({ id: p.id, name: p.name, type: 'custom' });
                 });
 
                 // Codex CLI
-                if (codexCliConfig?.enabled) {
-                    models.push({ id: CODEX_CLI_MODEL.id, name: `${CODEX_CLI_MODEL.name} (${prettifyModelId(codexCliConfig.model)})`, type: 'codex-cli', provider: 'codex-cli' });
-                    CODEX_CLI_MODEL_PRESETS.forEach(model => {
-                        const id = codexCliSelectorId(model.id);
-                        models.push({ id, name: getCodexCliModelDisplayName(id) || model.name, type: 'codex-cli', provider: 'codex-cli' });
+                if (codexCliConfig?.enabled && codexSignedIn) {
+                    const configuredName = codexModels.find(model => model.id === codexCliConfig.model)?.name || prettifyModelId(codexCliConfig.model);
+                    models.push({ id: CODEX_CLI_MODEL.id, name: `${CODEX_CLI_MODEL.name} (${configuredName})`, type: 'codex-cli', provider: 'codex-cli' });
+                    codexModels.forEach(model => {
+                        models.push({ id: codexCliSelectorId(model.id), name: model.name, type: 'codex-cli', provider: 'codex-cli' });
                     });
                 }
 
@@ -202,6 +220,20 @@ const ModelSelectorWindow = () => {
                     });
                 } catch {
                     // LiteLLM proxy may not be running — ignore.
+                }
+
+                // 9Router — auto-discovered from the configured instance. Same
+                // shape and the same try/catch: an instance that is not running
+                // must never block the rest of the list.
+                try {
+                    const ninerouterModels = await window.electronAPI?.getAvailableNinerouterModels?.() || [];
+                    ninerouterModels.forEach((m: string) => {
+                        // `m` still carries 9Router's own `<upstreamAlias>/` prefix, so
+                        // the label takes the last segment the same way LiteLLM's does.
+                        models.push({ id: `ninerouter/${m}`, name: `${gatewayModelLabel(m)} (9Router)`, type: 'cloud', provider: 'ninerouter' });
+                    });
+                } catch {
+                    // 9Router may not be running — ignore.
                 }
 
                 if (cancelled || myToken !== runToken) return;

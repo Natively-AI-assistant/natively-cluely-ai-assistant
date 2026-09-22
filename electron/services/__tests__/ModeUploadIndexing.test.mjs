@@ -101,7 +101,11 @@ describe('W3: indexFile persistence', () => {
         assert.ok(chunks[0].embedding instanceof Buffer, 'vector persisted as BLOB');
         assert.equal(chunks[0].embedding_space, SPACE_A);
 
-        assert.deepEqual(r.getFileIndexStatus('f1'), { status: 'ready', chunkCount: chunks.length });
+        // embeddedChunkCount is asserted, not ignored: it is what distinguishes a
+        // COMPLETE index from a partially embedded one that still reports 'ready',
+        // and a file where it lags chunkCount is one nothing would ever finish.
+        assert.deepEqual(r.getFileIndexStatus('f1'),
+            { status: 'ready', chunkCount: chunks.length, embeddedChunkCount: chunks.length });
     });
 
     test('unchanged hash + same space → second indexFile is a no-op (no re-embed)', async () => {
@@ -179,8 +183,14 @@ describe('W3: hot-path retrieval', () => {
         // Status reporting from B's perspective is 'pending' (state row says
         // ready-in-space-A, which is unusable for B) — until the background
         // re-index lands, after which it flips to ready-in-space-B.
+        // 'indexing' belongs here too. The background re-index this comment
+        // describes goes pending -> indexing -> ready, and which of the three is
+        // observed is a race with when the assertion runs. It became likelier
+        // once indexFile started acquiring a process-wide concurrency permit
+        // (one extra await before the work begins), but it was always reachable —
+        // the state was written by this path long before that.
         const status = rB.getFileIndexStatus('f1').status;
-        assert.ok(status === 'pending' || status === 'ready', `status=${status}`);
+        assert.ok(['pending', 'indexing', 'ready'].includes(status), `status=${status}`);
     });
 
     test('cold DB (never indexed) still retrieves via ephemeral embed (no regression)', async () => {
@@ -211,7 +221,8 @@ describe('W3: fallback promotion (MEDIUM #5)', () => {
 
         // indexFile must route through the fallback-aware path exactly once.
         assert.equal(pipeline.calls.fallback, 1, 'fallback path used once');
-        assert.deepEqual(r.getFileIndexStatus('f1'), { status: 'ready', chunkCount: chunks.length });
+        assert.deepEqual(r.getFileIndexStatus('f1'),
+            { status: 'ready', chunkCount: chunks.length, embeddedChunkCount: chunks.length });
     });
 
     test('promoted-space file is queryable in the fallback space (no cross-space skip)', async () => {
@@ -244,5 +255,89 @@ describe('W3: fallback promotion (MEDIUM #5)', () => {
         const chunks = db.prepare('SELECT * FROM mode_reference_chunks WHERE file_id = ?').all('f1');
         assert.ok(chunks.length >= 1, 'chunk text persisted for lexical fallback');
         assert.equal(chunks[0].embedding, null, 'no vector stored on double-failure');
+    });
+});
+
+describe('W3: persistence failure must not be reported as a complete index', () => {
+    // persistChunks used to return void and swallow its exception, so a failed
+    // transaction (locked db, full disk) was followed straight away by
+    // updateIndexState marking the file `ready` with a FULL embedded count over
+    // ZERO rows. The file then reported itself completely indexed and retrieved
+    // nothing — and once the skip condition began checking embeddedChunkCount,
+    // that lie satisfied it, so nothing ever revisited the file.
+    //
+    // The count is now DERIVED from the rows rather than from what the embedding
+    // loop believed it had, which is why this cannot silently pass any more.
+    //
+    // Verified to have teeth: reverting BOTH the derived count and the boolean
+    // return makes the two tests below fail. Reverting only the boolean does
+    // not — the derived count closes the hole on its own, because a row count
+    // over an empty table is zero no matter what the writer claimed. The
+    // boolean is defence in depth, not the fix.
+
+    /** Make the chunk table un-writable, the way a real disk/lock failure looks. */
+    function breakChunkWrites(db) {
+        db.exec('DROP TABLE IF EXISTS mode_reference_chunks_broken');
+        db.exec('ALTER TABLE mode_reference_chunks RENAME TO mode_reference_chunks_broken');
+        // A table of the same name whose NOT NULL column the insert never supplies:
+        // every INSERT throws, exactly as a constraint/disk failure would.
+        db.exec(`CREATE TABLE mode_reference_chunks (
+            file_id TEXT, chunk_index INTEGER, text TEXT, embedding BLOB,
+            embedding_space TEXT, created_at INTEGER,
+            must_be_set TEXT NOT NULL
+        )`);
+    }
+
+    test('a failed chunk write is NOT recorded as ready', async () => {
+        const pipeline = makePipeline();
+        const r = new ModeHybridRetriever(db, mockVectorStore, pipeline);
+        breakChunkWrites(db);
+
+        await r.indexFile(FILE);   // must never throw — indexing is best-effort
+
+        const st = r.getFileIndexStatus('f1');
+        assert.notEqual(st.status, 'ready',
+            'a file whose chunks were never written must not report ready');
+        assert.equal(st.embeddedChunkCount, 0,
+            'no rows were written, so no chunks may be counted as embedded');
+    });
+
+    test('the failed file is retried rather than frozen', async () => {
+        const pipeline = makePipeline();
+        const r = new ModeHybridRetriever(db, mockVectorStore, pipeline);
+        breakChunkWrites(db);
+        await r.indexFile(FILE);
+
+        // Restore the real table and index again: the file must NOT be skipped.
+        db.exec('DROP TABLE mode_reference_chunks');
+        db.exec('ALTER TABLE mode_reference_chunks_broken RENAME TO mode_reference_chunks');
+        const before = pipeline.calls.batch.length;
+        await r.indexFile(FILE);
+        assert.ok(pipeline.calls.batch.length > before,
+            're-indexing must actually re-embed — the earlier failure left nothing to reuse');
+
+        const st = r.getFileIndexStatus('f1');
+        assert.equal(st.status, 'ready');
+        assert.equal(st.embeddedChunkCount, st.chunkCount, 'now genuinely complete');
+    });
+
+    test('the embedded count comes from the ROWS, not from the caller', async () => {
+        const pipeline = makePipeline();
+        const r = new ModeHybridRetriever(db, mockVectorStore, pipeline);
+        await r.indexFile(FILE);
+
+        const rows = db.prepare(
+            'SELECT COUNT(*) AS n FROM mode_reference_chunks WHERE file_id = ? AND embedding IS NOT NULL'
+        ).get('f1').n;
+        assert.equal(r.getFileIndexStatus('f1').embeddedChunkCount, rows,
+            'the state row must agree with the vectors actually on disk');
+
+        // Delete a vector behind its back. A cached count would still claim
+        // completeness; a derived one cannot.
+        db.prepare('UPDATE mode_reference_chunks SET embedding = NULL WHERE file_id = ? AND chunk_index = 0').run('f1');
+        const after = db.prepare(
+            'SELECT COUNT(*) AS n FROM mode_reference_chunks WHERE file_id = ? AND embedding IS NOT NULL'
+        ).get('f1').n;
+        assert.equal(after, rows - 1, 'fixture check: one vector removed');
     });
 });

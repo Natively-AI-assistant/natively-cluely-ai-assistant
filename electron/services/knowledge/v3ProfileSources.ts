@@ -192,3 +192,141 @@ export function collectV3ProfileSources(orchestrator: unknown): CollectedProfile
     return EMPTY;
   }
 }
+
+// ── Semantic arm for the profile documents' raw text ────────────────────────
+//
+// The V3 profile port ranks with BM25 only. Rather than build a second vector
+// stack, each profile document's RAW TEXT is indexed by the mode retriever as a
+// pseudo reference file — `profile:<kind>:<contentHash>` — so chunking, batched
+// embedding, embedding-space handling, stale-index detection, hybrid ranking and
+// reranking all come from the one place that already does them. The pseudo-files
+// are never rows in the reference-file table: no UI lists them, and they are not
+// counted as mode attachments.
+
+const PROFILE_FILE_PREFIX = 'profile:';
+const PROFILE_PSEUDO_MODE = { id: '__profile_raw__' };
+
+export interface ProfilePseudoFile { id: string; modeId: string; fileName: string; content: string; createdAt: string; docSourceId: string; kind: string }
+
+export function profilePseudoFiles(docs: ReadonlyArray<{ kind: string; sourceId: string; versionId: string; fileName: string; rawText?: string | null }>): ProfilePseudoFile[] {
+  return docs
+    .filter((d) => d.kind !== 'fact' && typeof d.rawText === 'string' && d.rawText.trim().length > 0)
+    .map((d) => ({
+      id: `${PROFILE_FILE_PREFIX}${d.kind}:${d.versionId}`, modeId: PROFILE_PSEUDO_MODE.id, fileName: d.fileName,
+      content: d.rawText as string, createdAt: '', docSourceId: d.sourceId, kind: d.kind,
+    }));
+}
+
+interface ProfileRawModesManager {
+  retrieveHybridRaw?: (mode: unknown, files: unknown[], opts: Record<string, unknown>) => Promise<{ chunks?: Array<Record<string, unknown>> } | null | undefined>;
+  indexReferenceFile?: (file: unknown) => Promise<void>;
+  pruneReferenceFileIndexesByPrefix?: (prefix: string, keepId: string) => number;
+}
+
+/**
+ * The function the profile port takes as `rawRetriever`. Null when there is no
+ * raw text or no retriever — the port then keeps its BM25 raw chunks.
+ */
+export function buildProfileRawRetriever(
+  modesManager: ProfileRawModesManager | null | undefined,
+  docs: Parameters<typeof profilePseudoFiles>[0],
+  opts: { tokenBudget: number; rerankSurface: 'live' | 'manual'; meetingActive?: () => boolean },
+): ((query: string, o: { topK: number; timeoutMs?: number }) => Promise<Array<{ sourceId: string; text: string; chunkIndex: number; score: number }>>) | null {
+  const files = profilePseudoFiles(docs);
+  if (!modesManager?.retrieveHybridRaw || files.length === 0) return null;
+  const docIdByFile = new Map(files.map((f) => [f.id, f.docSourceId]));
+  return async (query, o) => {
+    let meetingActive: boolean | undefined;
+    try { meetingActive = opts.meetingActive ? opts.meetingActive() === true : undefined; } catch { meetingActive = true; }
+    const res = await modesManager.retrieveHybridRaw!(PROFILE_PSEUDO_MODE, files, {
+      query, topK: o.topK, tokenBudget: opts.tokenBudget, allowRerank: true, rerankSurface: opts.rerankSurface,
+      forceDocumentGrounding: true, ...(meetingActive === undefined ? {} : { meetingActive }),
+      // The mode port forwards these (2026-09-10, after a measured 13.5 s stall); this binding did not.
+      ...(typeof o.timeoutMs === 'number' ? { timeoutMs: o.timeoutMs, queryEmbedRetryBudgetMs: o.timeoutMs } : {}),
+    });
+    const out: Array<{ sourceId: string; text: string; chunkIndex: number; score: number }> = [];
+    for (const c of res?.chunks ?? []) {
+      const docId = docIdByFile.get(String(c.sourceId ?? ''));
+      if (!docId) continue;
+      // The retriever returns chunks in its FINAL order (rerank and rank fusion
+      // applied). `rerankScore` is on another scale — fusion caps it near 0.2 — so
+      // preferring it, as this did, pushed every reranked row under the port's
+      // relevance gate. The first-stage score is the comparable one; order is kept
+      // by never letting a later row score above an earlier one.
+      const native = Number(c.score ?? 0);
+      const prev = out.length ? out[out.length - 1].score : Number.POSITIVE_INFINITY;
+      out.push({ sourceId: docId, text: String(c.text ?? ''), chunkIndex: Number(c.chunkIndex ?? 0), score: Math.min(native, prev) });
+    }
+    return out;
+  };
+}
+
+const PROFILE_RAW_KINDS = ['resume', 'jd'] as const;
+
+/**
+ * Drop the raw-text index of every profile document that is no longer the
+ * active one — for EVERY kind, including kinds that have no active document.
+ *
+ * Review finding, reproduced (2026-09-20): pruning used to run only for kinds
+ * that still had an active document, so deleting a résumé pruned nothing and its
+ * text and vectors stayed on disk; and a re-upload while v1 was still embedding
+ * had v1's in-flight job write its rows back after the prune. Both are personal
+ * data outliving the user's request to remove it.
+ */
+function pruneSupersededProfileIndexes(modesManager: ProfileRawModesManager, activeFiles: ProfilePseudoFile[]): void {
+  for (const kind of PROFILE_RAW_KINDS) {
+    const keep = activeFiles.find((f) => f.kind === kind)?.id ?? '';
+    try { modesManager.pruneReferenceFileIndexesByPrefix?.(`${PROFILE_FILE_PREFIX}${kind}:`, keep); } catch { /* non-fatal */ }
+  }
+}
+
+/** One run at a time: an index job that is still writing must finish before the next run prunes. */
+let profileIndexChain: Promise<unknown> = Promise.resolve();
+
+/**
+ * Index the profile documents' raw text (idempotent; the retriever skips a file
+ * whose hash, space and chunker version are current) and drop every superseded
+ * or deleted version's index — before indexing, and AGAIN after, because the
+ * documents can change while a job runs. Called after an ingest AND after a
+ * delete or wipe — fire and forget. A document ingested before this shipped is
+ * otherwise indexed lazily, by the retriever, the first time a question touches it.
+ */
+export function indexProfileRawText(modesManager: ProfileRawModesManager | null | undefined, orchestrator: unknown): Promise<number> {
+  const run = async (): Promise<number> => {
+    if (!modesManager) return 0;
+    const current = () => profilePseudoFiles(collectV3ProfileSources(orchestrator).docs as never);
+    const files = current();
+    pruneSupersededProfileIndexes(modesManager, files);
+    if (modesManager.indexReferenceFile) {
+      for (const f of files) await modesManager.indexReferenceFile(f).catch(() => { /* logged inside */ });
+    }
+    pruneSupersededProfileIndexes(modesManager, current());
+    return files.length;
+  };
+  const next = profileIndexChain.then(run, run);
+  profileIndexChain = next.catch(() => 0);
+  return next;
+}
+
+/** Fire-and-forget wrapper for the ingest, delete and wipe handlers: never throws, never blocks the caller. */
+export function kickProfileRawIndex(orchestrator: unknown): void {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { ModesManager } = require('../ModesManager');
+    void indexProfileRawText(ModesManager.getInstance(), orchestrator).catch(() => { /* non-fatal */ });
+  } catch { /* non-fatal: the retriever indexes lazily on first use */ }
+}
+
+/**
+ * Remove EVERY profile raw-text index, needing no orchestrator. For the wipe
+ * paths (trial end, "wipe profile data"): those must clear personal data even
+ * when the knowledge orchestrator was never initialised this session.
+ */
+export function wipeProfileRawIndexes(): void {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { ModesManager } = require('../ModesManager');
+    const mm = ModesManager.getInstance() as ProfileRawModesManager;
+    profileIndexChain = profileIndexChain.then(() => pruneSupersededProfileIndexes(mm, []), () => pruneSupersededProfileIndexes(mm, []));
+  } catch { /* non-fatal */ }
+}

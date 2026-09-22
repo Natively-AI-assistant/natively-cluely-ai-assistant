@@ -1,0 +1,356 @@
+{
+ "blind_id": "S-5ba9a783",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 70524,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 33981,
+  "candidatesTokenCount": 2465,
+  "totalTokenCount": 44664,
+  "cachedContentTokenCount": 24508,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 33981
+   }
+  ],
+  "cacheTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 24508
+   }
+  ],
+  "thoughtsTokenCount": 8218,
+  "serviceTier": "standard"
+ },
+ "fact_count": 69,
+ "evaluation": {
+  "factual_accuracy": 4,
+  "important_information_retention": 8,
+  "hallucination_control": 4,
+  "action_item_retention": 8,
+  "decision_retention": 6,
+  "speaker_attribution": 6,
+  "numeric_accuracy": 8,
+  "entity_retention": 8,
+  "timeline_accuracy": 6,
+  "conclusion_accuracy": 4,
+  "structure": 2,
+  "conciseness": 1,
+  "readability": 3,
+  "overall_summary_quality": 3,
+  "critical_errors": [
+   "Reported the tentative decision to migrate to Kafka as a final decision, contradicting the actual final decision to stay on RabbitMQ.",
+   "Reported the cancelled Kafka spike plan as an active action item.",
+   "Hallucinated that the broker decision remains unresolved pending Grace's input, despite Grace making the final decision during the meeting."
+  ],
+  "missing_important_information": [
+   "The date of the outage (Tuesday, September 8th).",
+   "The fact that the team lacks Kafka operations experience.",
+   "The sales promise to hospital groups that reminders would be bulletproof."
+  ],
+  "hallucinated_information": [
+   "The team was expected to continue examining the autoscaler as a fourth possible amplifier, with Pam providing the details (this was an introduction to Pam speaking, not a future action item).",
+   "The team deferred discussion of whether prefetch explains why post-fix p99 latency remains at 3.4 seconds (it was not deferred; Sam explained it and they agreed to fix it).",
+   "Which broker option will be selected remains unresolved pending Grace's input.",
+   "The final broker option has not been selected because Grace has not yet heard the options."
+  ],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C08",
+    "reported": "The tentative direction is to migrate the notification pipeline to Kafka on Amazon MSK before the October 23 production code freeze."
+   },
+   {
+    "correction_id": "C11",
+    "reported": "Ravi: Ravi will write a two-week spike plan for a Kafka consumer prototype in which notif-worker reads from MSK and uses retry topics. (deadline: Monday)"
+   }
+  ],
+  "not_decisions_reported_as_decided": [
+   "The tentative direction is to migrate the notification pipeline to Kafka on Amazon MSK before the October 23 production code freeze.",
+   "Ravi: Ravi will write a two-week spike plan for a Kafka consumer prototype in which notif-worker reads from MSK and uses retry topics."
+  ],
+  "distractors_included": [
+   "Including the tentative Kafka decision and cancelled spike plan as actual decisions and action items."
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "missing"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "partial"
+   },
+   {
+    "id": "F06",
+    "status": "partial"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "partial"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "partial"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "partial"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "partial"
+   },
+   {
+    "id": "F28",
+    "status": "partial"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "present"
+   },
+   {
+    "id": "F31",
+    "status": "partial"
+   },
+   {
+    "id": "F32",
+    "status": "missing"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "partial"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "partial"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "partial"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "partial"
+   },
+   {
+    "id": "F45",
+    "status": "partial"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "present"
+   },
+   {
+    "id": "F57",
+    "status": "partial"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "present"
+   },
+   {
+    "id": "F61",
+    "status": "missing"
+   },
+   {
+    "id": "F62",
+    "status": "missing"
+   },
+   {
+    "id": "F63",
+    "status": "partial"
+   },
+   {
+    "id": "F64",
+    "status": "present"
+   },
+   {
+    "id": "F65",
+    "status": "present"
+   },
+   {
+    "id": "F66",
+    "status": "present"
+   },
+   {
+    "id": "F67",
+    "status": "present"
+   },
+   {
+    "id": "F68",
+    "status": "present"
+   },
+   {
+    "id": "F69",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes suffer from severe structural bloat, repeating the same information across duplicate sections (e.g., 'Action items' and 'Action items (structured)'). This repetition destroys conciseness and readability. Furthermore, the notes present superseded, tentative decisions (migrating to Kafka, writing a Kafka spike plan) as final decisions and action items, directly contradicting the actual final decisions recorded later in the same document. The notes also hallucinate that the broker decision remains unresolved pending Grace's input, even though Grace explicitly made the decision during the meeting. While most facts are retained, the contradictions and hallucinations make the notes highly unreliable."
+ }
+}

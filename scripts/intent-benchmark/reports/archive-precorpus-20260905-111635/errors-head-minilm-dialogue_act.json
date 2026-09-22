@@ -1,0 +1,1388 @@
+{
+  "provider": "head-minilm",
+  "axis": "dialogue_act",
+  "totalRows": 377,
+  "failures": 137,
+  "counts": {
+    "bad_model": 80,
+    "bad_label": 2,
+    "overlapping_labels": 54,
+    "context_missing": 0,
+    "inherently_multi_intent": 0,
+    "deterministic_signal_missing": 0,
+    "should_never_be_classified": 1
+  },
+  "uncategorised": 0,
+  "examples": [
+    {
+      "id": "gen-0016",
+      "mode": "general",
+      "channel": "mic",
+      "input": "whats the status on the q three report",
+      "correct": "question",
+      "predicted": "request",
+      "category": "overlapping_labels",
+      "reason": "A question asking for status is functionally a request for information, making both labels defensible."
+    },
+    {
+      "id": "gen-0032",
+      "mode": "general",
+      "channel": "mic",
+      "input": "i mean it sounds expensive but we could uh we could try a pilot",
+      "correct": "statement",
+      "predicted": "answer",
+      "category": "bad_model",
+      "reason": "The turn is clearly a statement of opinion/intent rather than a direct answer to a specific question."
+    },
+    {
+      "id": "gen-0035",
+      "mode": "general",
+      "channel": "mic",
+      "input": "sort of curious about the timeline for the two thousand twenty four launch",
+      "correct": "question",
+      "predicted": "request",
+      "category": "overlapping_labels",
+      "reason": "Expressing curiosity about a timeline is both a question and a request for information."
+    },
+    {
+      "id": "gen-0051",
+      "mode": "general",
+      "channel": "mic",
+      "input": "okay move to the next thing",
+      "correct": "request",
+      "predicted": "statement",
+      "category": "bad_model",
+      "reason": "The turn is an imperative command, which is clearly a request."
+    },
+    {
+      "id": "gen-0072",
+      "mode": "general",
+      "channel": "mic",
+      "input": "i think i think that query",
+      "correct": "statement",
+      "predicted": "answer",
+      "category": "overlapping_labels",
+      "reason": "The turn is a partial statement that functions as an answer to the previous question."
+    },
+    {
+      "id": "gen-0086",
+      "mode": "general",
+      "channel": "mic",
+      "input": "i think i think thats right yeah",
+      "correct": "backchannel",
+      "predicted": "answer",
+      "category": "overlapping_labels",
+      "reason": "The turn acts as both a backchannel confirmation and an answer to the previous confirmation request."
+    },
+    {
+      "id": "gen-0099",
+      "mode": "general",
+      "channel": "mic",
+      "input": "yeah i think we were talking about that yesterday actually",
+      "correct": "backchannel",
+      "predicted": "answer",
+      "category": "overlapping_labels",
+      "reason": "The turn is a conversational filler/backchannel that also serves as an answer to the previous topic."
+    },
+    {
+      "id": "ti-0026",
+      "mode": "technical-interview",
+      "channel": "mic",
+      "input": "so the time complexity would be",
+      "correct": "statement",
+      "predicted": "answer",
+      "category": "overlapping_labels",
+      "reason": "The turn is a statement that functions as an answer to the interviewer's prompt."
+    },
+    {
+      "id": "ti-0027",
+      "mode": "technical-interview",
+      "channel": "mic",
+      "input": "can everyone see my screen",
+      "correct": "request",
+      "predicted": "statement",
+      "category": "bad_model",
+      "reason": "The turn is a polar question (request for confirmation), not a statement."
+    },
+    {
+      "id": "ti-0030",
+      "mode": "technical-interview",
+      "channel": "system",
+      "input": "is that file on your end",
+      "correct": "question",
+      "predicted": "statement",
+      "category": "bad_model",
+      "reason": "The turn is clearly a question."
+    },
+    {
+      "id": "ti-0059",
+      "mode": "technical-interview",
+      "channel": "mic",
+      "input": "sort of kind of",
+      "correct": "answer",
+      "predicted": "backchannel",
+      "category": "overlapping_labels",
+      "reason": "The turn is a vague response that functions as both an answer and a backchannel."
+    },
+    {
+      "id": "ti-0081",
+      "mode": "technical-interview",
+      "channel": "mic",
+      "input": "so the query is what you want me to write now",
+      "correct": "question",
+      "predicted": "request",
+      "category": "overlapping_labels",
+      "reason": "The turn is a question that functions as a request for clarification."
+    },
+    {
+      "id": "ti-0083",
+      "mode": "technical-interview",
+      "channel": "system",
+      "input": "right moving on let us consider memory limits",
+      "correct": "request",
+      "predicted": "statement",
+      "category": "overlapping_labels",
+      "reason": "The turn is a statement of intent that functions as a request to move the conversation forward."
+    },
+    {
+      "id": "ti-0092",
+      "mode": "technical-interview",
+      "channel": "mic",
+      "input": "wait and the other one",
+      "correct": "question",
+      "predicted": "statement",
+      "category": "bad_model",
+      "reason": "The turn is clearly a question."
+    },
+    {
+      "id": "ti-0099",
+      "mode": "technical-interview",
+      "channel": "mic",
+      "input": "how about the second one",
+      "correct": "question",
+      "predicted": "request",
+      "category": "overlapping_labels",
+      "reason": "The turn is a question that functions as a request for information."
+    },
+    {
+      "id": "lfw-0005",
+      "mode": "looking-for-work",
+      "channel": "system",
+      "input": "wait does he know that",
+      "correct": "statement",
+      "predicted": "question",
+      "category": "bad_model",
+      "reason": "The turn is clearly a question syntactically and semantically."
+    },
+    {
+      "id": "lfw-0063",
+      "mode": "looking-for-work",
+      "channel": "system",
+      "input": "how would you uh how would you go about debugging a distributed memory leak",
+      "correct": "question",
+      "predicted": "request",
+      "category": "overlapping_labels",
+      "reason": "A request for information is often classified as a question or a request depending on the taxonomy; both are defensible."
+    },
+    {
+      "id": "lfw-0069",
+      "mode": "looking-for-work",
+      "channel": "system",
+      "input": "have you noticed any gaps in the job description that concern you",
+      "correct": "question",
+      "predicted": "request",
+      "category": "overlapping_labels",
+      "reason": "The turn is a question that functions as a request for information; the labels overlap."
+    },
+    {
+      "id": "lfw-0070",
+      "mode": "looking-for-work",
+      "channel": "mic",
+      "input": "to be honest i i really want to make sure i know how the",
+      "correct": "statement",
+      "predicted": "interruption",
+      "category": "bad_model",
+      "reason": "The turn is a statement of intent, not an interruption."
+    },
+    {
+      "id": "lfw-0074",
+      "mode": "looking-for-work",
+      "channel": "system",
+      "input": "that makes sense um could you walk me through a time when you had to manage a conflict within your team",
+      "correct": "question",
+      "predicted": "request",
+      "category": "overlapping_labels",
+      "reason": "A request for a story or explanation is both a question and a request."
+    },
+    {
+      "id": "lfw-0077",
+      "mode": "looking-for-work",
+      "channel": "system",
+      "input": "i see you listed ruby on rails but we mainly use python for our back end",
+      "correct": "statement",
+      "predicted": "answer",
+      "category": "bad_model",
+      "reason": "The turn is a statement of fact/observation, not an answer to a previous question."
+    },
+    {
+      "id": "lfw-0082",
+      "mode": "looking-for-work",
+      "channel": "system",
+      "input": "did you have a good trip or is the traffic kind of bad today",
+      "correct": "question",
+      "predicted": "answer",
+      "category": "bad_model",
+      "reason": "The turn is clearly a question."
+    },
+    {
+      "id": "lfw-0085",
+      "mode": "looking-for-work",
+      "channel": "system",
+      "input": "so tell me a bit about your experience with building scalable systems",
+      "correct": "request",
+      "predicted": "question",
+      "category": "overlapping_labels",
+      "reason": "An imperative request for information is often labeled as a question or a request."
+    },
+    {
+      "id": "lfw-0107",
+      "mode": "looking-for-work",
+      "channel": "mic",
+      "input": "but and the other one you know the the one regarding the q three budget",
+      "correct": "question",
+      "predicted": "interruption",
+      "category": "bad_model",
+      "reason": "The turn is a question seeking clarification, not an interruption."
+    },
+    {
+      "id": "lfw-0120",
+      "mode": "looking-for-work",
+      "channel": "mic",
+      "input": "i guess that makes sense",
+      "correct": "statement",
+      "predicted": "backchannel",
+      "category": "bad_model",
+      "reason": "The turn is a statement of opinion/agreement, not a backchannel."
+    },
+    {
+      "id": "lfw-0123",
+      "mode": "looking-for-work",
+      "channel": "mic",
+      "input": "um how how did you arrive at that conclusion about my background",
+      "correct": "question",
+      "predicted": "request",
+      "category": "overlapping_labels",
+      "reason": "The turn is a question that functions as a request for explanation; both labels are defensible."
+    },
+    {
+      "id": "lfw-0124",
+      "mode": "looking-for-work",
+      "channel": "system",
+      "input": "so can you tell me a bit about yourself",
+      "correct": "question",
+      "predicted": "request",
+      "category": "overlapping_labels",
+      "reason": "An imperative request for information is often labeled as a question or a request."
+    },
+    {
+      "id": "lfw-0125",
+      "mode": "looking-for-work",
+      "channel": "mic",
+      "input": "i mean like i started in web dev and then i moved into backend engineering primarily focusing on python and and uh distributed systems",
+      "correct": "answer",
+      "predicted": "statement",
+      "category": "overlapping_labels",
+      "reason": "An answer to a question is also a statement; the labels are not mutually exclusive."
+    },
+    {
+      "id": "lfw-0131",
+      "mode": "looking-for-work",
+      "channel": "mic",
+      "input": "so the the thing is we wont see the benefits until the scale increases right",
+      "correct": "statement",
+      "predicted": "question",
+      "category": "overlapping_labels",
+      "reason": "A statement ending in 'right' functions as a question seeking confirmation; both labels are defensible."
+    },
+    {
+      "id": "sal-0006",
+      "mode": "sales",
+      "channel": "system",
+      "input": "oh wait did you did you send that over",
+      "correct": "question",
+      "predicted": "interruption",
+      "category": "bad_model",
+      "reason": "The turn is a question, not an interruption."
+    },
+    {
+      "id": "sal-0021",
+      "mode": "sales",
+      "channel": "mic",
+      "input": "i should clarify that the the budget is",
+      "correct": "statement",
+      "predicted": "question",
+      "category": "bad_model",
+      "reason": "The turn is clearly a statement of intent to clarify, not a question."
+    },
+    {
+      "id": "sal-0027",
+      "mode": "sales",
+      "channel": "system",
+      "input": "so the the the price point is",
+      "correct": "statement",
+      "predicted": "question",
+      "category": "bad_model",
+      "reason": "The turn is a declarative statement about a price point, not a question."
+    },
+    {
+      "id": "sal-0034",
+      "mode": "sales",
+      "channel": "mic",
+      "input": "i need to uh i need to check with the",
+      "correct": "statement",
+      "predicted": "request",
+      "category": "bad_model",
+      "reason": "The turn is a statement of current action/need, not a request for the system to perform an action."
+    },
+    {
+      "id": "sal-0042",
+      "mode": "sales",
+      "channel": "system",
+      "input": "okay cool sounds like we could maybe maybe start the pilot next week",
+      "correct": "statement",
+      "predicted": "answer",
+      "category": "overlapping_labels",
+      "reason": "The turn functions as both a statement of opinion and an answer to the previous context regarding the pilot."
+    },
+    {
+      "id": "sal-0048",
+      "mode": "sales",
+      "channel": "system",
+      "input": "yeah exactly so i i think we are ready to move on to the next step",
+      "correct": "statement",
+      "predicted": "answer",
+      "category": "overlapping_labels",
+      "reason": "The turn is a statement that also serves as an answer to the previous negotiation context."
+    },
+    {
+      "id": "sal-0054",
+      "mode": "sales",
+      "channel": "system",
+      "input": "so we want to start looking at the implementation in the next few weeks",
+      "correct": "statement",
+      "predicted": "request",
+      "category": "bad_model",
+      "reason": "The turn is a statement of desire/plan, not a request for the system to do something."
+    },
+    {
+      "id": "sal-0072",
+      "mode": "sales",
+      "channel": "mic",
+      "input": "uh look we we just need",
+      "correct": "statement",
+      "predicted": "answer",
+      "category": "bad_model",
+      "reason": "The turn is a statement of current status, not an answer to the specific contract question."
+    },
+    {
+      "id": "sal-0073",
+      "mode": "sales",
+      "channel": "mic",
+      "input": "no that is fine",
+      "correct": "answer",
+      "predicted": "interruption",
+      "category": "bad_model",
+      "reason": "The turn is a direct answer to the system's apology/price context."
+    },
+    {
+      "id": "sal-0077",
+      "mode": "sales",
+      "channel": "mic",
+      "input": "can we set that up",
+      "correct": "request",
+      "predicted": "interruption",
+      "category": "bad_model",
+      "reason": "The turn is a clear request for a feature setup."
+    },
+    {
+      "id": "sal-0101",
+      "mode": "sales",
+      "channel": "mic",
+      "input": "can you walk me through the pricing for the enterprise tier and compare it to the pro plan",
+      "correct": "request",
+      "predicted": "question",
+      "category": "overlapping_labels",
+      "reason": "A request for information is functionally a question; the taxonomy overlap makes this ambiguous."
+    },
+    {
+      "id": "sal-0115",
+      "mode": "sales",
+      "channel": "system",
+      "input": "we are not looking right now without seeing the the actual roadmap",
+      "correct": "request",
+      "predicted": "statement",
+      "category": "bad_label",
+      "reason": "The turn is a statement of current position, not a request."
+    },
+    {
+      "id": "sal-0122",
+      "mode": "sales",
+      "channel": "system",
+      "input": "i kind of think we need to wait until the q three",
+      "correct": "statement",
+      "predicted": "answer",
+      "category": "overlapping_labels",
+      "reason": "The turn is a statement that functions as an answer to the previous question."
+    },
+    {
+      "id": "rec-0019",
+      "mode": "recruiting",
+      "channel": "mic",
+      "input": "how about the database",
+      "correct": "statement",
+      "predicted": "question",
+      "category": "overlapping_labels",
+      "reason": "The turn is a statement that functions as a question/inquiry about the database."
+    },
+    {
+      "id": "rec-0061",
+      "mode": "recruiting",
+      "channel": "mic",
+      "input": "so can you walk me through the system design for that scaling problem",
+      "correct": "question",
+      "predicted": "request",
+      "category": "overlapping_labels",
+      "reason": "A request to walk through a design is both a question and a request."
+    },
+    {
+      "id": "rec-0070",
+      "mode": "recruiting",
+      "channel": "mic",
+      "input": "thats great can you tell me more about the the migration from the legacy",
+      "correct": "question",
+      "predicted": "request",
+      "category": "overlapping_labels",
+      "reason": "A request to tell more is both a question and a request."
+    },
+    {
+      "id": "rec-0088",
+      "mode": "recruiting",
+      "channel": "system",
+      "input": "im sort of thinking that the sql vector should be optimized before we proceed with the migration",
+      "correct": "statement",
+      "predicted": "answer",
+      "category": "bad_model",
+      "reason": "The turn is a declarative statement expressing an opinion, not an answer to a specific question."
+    },
+    {
+      "id": "rec-0090",
+      "mode": "recruiting",
+      "channel": "mic",
+      "input": "uh considering the candidate has answered four of the five core competencies i think we are at a score of",
+      "correct": "statement",
+      "predicted": "question",
+      "category": "bad_model",
+      "reason": "The turn is a statement of opinion/observation, not a question."
+    },
+    {
+      "id": "rec-0104",
+      "mode": "recruiting",
+      "channel": "mic",
+      "input": "what about the second one though",
+      "correct": "question",
+      "predicted": "request",
+      "category": "overlapping_labels",
+      "reason": "The turn is a question that functions as a request for information, making both labels defensible."
+    },
+    {
+      "id": "rec-0118",
+      "mode": "recruiting",
+      "channel": "mic",
+      "input": "i mean we could sort of uh look at",
+      "correct": "statement",
+      "predicted": "answer",
+      "category": "bad_model",
+      "reason": "The turn is an incomplete statement, not an answer."
+    },
+    {
+      "id": "tm-0010",
+      "mode": "team-meet",
+      "channel": "system",
+      "input": "did we send the email",
+      "correct": "question",
+      "predicted": "statement",
+      "category": "bad_model",
+      "reason": "The turn is clearly a question."
+    },
+    {
+      "id": "tm-0082",
+      "mode": "team-meet",
+      "channel": "mic",
+      "input": "i mean like is that the the sort of the right way to approach",
+      "correct": "question",
+      "predicted": "answer",
+      "category": "bad_model",
+      "reason": "The turn is a question seeking confirmation."
+    },
+    {
+      "id": "tm-0087",
+      "mode": "team-meet",
+      "channel": "mic",
+      "input": "i think we should uh",
+      "correct": "statement",
+      "predicted": "answer",
+      "category": "bad_model",
+      "reason": "The turn is an incomplete statement, not an answer."
+    },
+    {
+      "id": "tm-0096",
+      "mode": "team-meet",
+      "channel": "mic",
+      "input": "i mean we could uh we could try the",
+      "correct": "statement",
+      "predicted": "answer",
+      "category": "bad_model",
+      "reason": "The turn is an incomplete statement, not an answer."
+    },
+    {
+      "id": "tm-0104",
+      "mode": "team-meet",
+      "channel": "mic",
+      "input": "i mean i kind of worry about the scaling factor if we use a flat file there",
+      "correct": "statement",
+      "predicted": "answer",
+      "category": "bad_model",
+      "reason": "The turn is a statement of concern, not an answer."
+    },
+    {
+      "id": "tm-0118",
+      "mode": "team-meet",
+      "channel": "mic",
+      "input": "i think i think we decided to go with the cloud native approach",
+      "correct": "statement",
+      "predicted": "answer",
+      "category": "bad_model",
+      "reason": "The turn is a statement of fact/opinion, not an answer."
+    },
+    {
+      "id": "tm-0123",
+      "mode": "team-meet",
+      "channel": "system",
+      "input": "we really need to get the status on the audit log from",
+      "correct": "statement",
+      "predicted": "request",
+      "category": "bad_model",
+      "reason": "The turn is a statement of necessity, not a request."
+    },
+    {
+      "id": "lec-0025",
+      "mode": "lecture",
+      "channel": "mic",
+      "input": "wait could you explain that last part about the dynamic programming again",
+      "correct": "request",
+      "predicted": "question",
+      "category": "overlapping_labels",
+      "reason": "The turn is a request for explanation phrased as a question, making both labels defensible."
+    },
+    {
+      "id": "lec-0035",
+      "mode": "lecture",
+      "channel": "mic",
+      "input": "exactly right thats the point",
+      "correct": "answer",
+      "predicted": "backchannel",
+      "category": "bad_model",
+      "reason": "The turn is an affirmative answer to the previous context."
+    },
+    {
+      "id": "lec-0065",
+      "mode": "lecture",
+      "channel": "mic",
+      "input": "whats twenty three",
+      "correct": "question",
+      "predicted": "request",
+      "category": "overlapping_labels",
+      "reason": "The turn is a question asking for information, which can be interpreted as a request for information."
+    },
+    {
+      "id": "lec-0099",
+      "mode": "lecture",
+      "channel": "mic",
+      "input": "is that sort of off topic but have you ever seen this used in",
+      "correct": "question",
+      "predicted": "request",
+      "category": "overlapping_labels",
+      "reason": "The turn is a question that also functions as a request for the speaker to address a topic."
+    },
+    {
+      "id": "lec-0107",
+      "mode": "lecture",
+      "channel": "mic",
+      "input": "you see if we walk through a worked example of the mapping",
+      "correct": "statement",
+      "predicted": "request",
+      "category": "bad_model",
+      "reason": "The turn is a declarative continuation of a previous request, clearly a statement."
+    },
+    {
+      "id": "sem-0007",
+      "mode": "seminar",
+      "channel": "mic",
+      "input": "uh looking for the for the file",
+      "correct": "statement",
+      "predicted": "interruption",
+      "category": "bad_model",
+      "reason": "The turn is a statement of current activity, not an interruption."
+    },
+    {
+      "id": "sem-0018",
+      "mode": "seminar",
+      "channel": "mic",
+      "input": "so the the thing is we need to",
+      "correct": "statement",
+      "predicted": "interruption",
+      "category": "bad_model",
+      "reason": "The turn is a statement of intent/need, not an interruption."
+    },
+    {
+      "id": "sem-0053",
+      "mode": "seminar",
+      "channel": "system",
+      "input": "wait did you fix the bug in the",
+      "correct": "interruption",
+      "predicted": "question",
+      "category": "overlapping_labels",
+      "reason": "The turn starts with 'wait' (interruption) but is syntactically a question."
+    },
+    {
+      "id": "sem-0138",
+      "mode": "seminar",
+      "channel": "system",
+      "input": "i think i think the figures in slide four contradict the appendix",
+      "correct": "statement",
+      "predicted": "question",
+      "category": "bad_model",
+      "reason": "The turn is a clear statement of opinion/fact, not a question."
+    },
+    {
+      "id": "sem-0139",
+      "mode": "seminar",
+      "channel": "system",
+      "input": "so the figures in slide four contradict the appendix i guess",
+      "correct": "statement",
+      "predicted": "answer",
+      "category": "bad_model",
+      "reason": "The turn is a statement of opinion, not an answer to a specific question."
+    },
+    {
+      "id": "sem-0150",
+      "mode": "seminar",
+      "channel": "system",
+      "input": "wait you you said the results are consistent but i think the results are their",
+      "correct": "question",
+      "predicted": "request",
+      "category": "bad_model",
+      "reason": "The turn is a challenge phrased as a question, not a request."
+    },
+    {
+      "id": "cc-0023",
+      "mode": "call-center",
+      "channel": "system",
+      "input": "sort of i guess",
+      "correct": "statement",
+      "predicted": "backchannel",
+      "category": "bad_model",
+      "reason": "The turn is a statement of opinion, not a backchannel."
+    },
+    {
+      "id": "cc-0031",
+      "mode": "call-center",
+      "channel": "system",
+      "input": "can you hear me now",
+      "correct": "statement",
+      "predicted": "request",
+      "category": "bad_model",
+      "reason": "The turn is a statement confirming status, not a request for action."
+    },
+    {
+      "id": "cc-0036",
+      "mode": "call-center",
+      "channel": "system",
+      "input": "is that the uh",
+      "correct": "statement",
+      "predicted": "interruption",
+      "category": "bad_model",
+      "reason": "The turn is an incomplete statement, not an interruption."
+    },
+    {
+      "id": "cc-0038",
+      "mode": "call-center",
+      "channel": "system",
+      "input": "the the thing is i i cant see where the reset button is",
+      "correct": "request",
+      "predicted": "question",
+      "category": "overlapping_labels",
+      "reason": "The turn is a statement of a problem that functions as an implicit request for help."
+    },
+    {
+      "id": "cc-0050",
+      "mode": "call-center",
+      "channel": "system",
+      "input": "wait i am super frustrated right now because i have been on hold for like an hour",
+      "correct": "statement",
+      "predicted": "request",
+      "category": "bad_model",
+      "reason": "The turn is a statement of emotional state, not a request."
+    },
+    {
+      "id": "cc-0066",
+      "mode": "call-center",
+      "channel": "system",
+      "input": "and so i think we should maybe uh can you just confirm that the payment went through",
+      "correct": "question",
+      "predicted": "request",
+      "category": "overlapping_labels",
+      "reason": "The turn contains a statement of opinion followed by a direct question."
+    },
+    {
+      "id": "cc-0082",
+      "mode": "call-center",
+      "channel": "mic",
+      "input": "so the customer said their account balance is not updating correctly",
+      "correct": "statement",
+      "predicted": "question",
+      "category": "bad_model",
+      "reason": "The turn is a statement reporting information, not a question."
+    },
+    {
+      "id": "cc-0095",
+      "mode": "call-center",
+      "channel": "system",
+      "input": "this is the third time my account settings have been blank and i am just about done with this",
+      "correct": "statement",
+      "predicted": "question",
+      "category": "bad_model",
+      "reason": "The turn is a statement of frustration, not a question."
+    },
+    {
+      "id": "cc-0097",
+      "mode": "call-center",
+      "channel": "system",
+      "input": "i need you to reset the gateway manually right now",
+      "correct": "request",
+      "predicted": "statement",
+      "category": "bad_model",
+      "reason": "The turn is a clear imperative request for action, which the model failed to identify."
+    },
+    {
+      "id": "cus-ther-0004",
+      "mode": "custom-therapy-supervision",
+      "channel": "system",
+      "input": "uh",
+      "correct": "backchannel",
+      "predicted": "statement",
+      "category": "should_never_be_classified",
+      "reason": "The turn consists of a filler word 'uh' which is noise and should not be classified as a dialogue act."
+    },
+    {
+      "id": "cus-ther-0013",
+      "mode": "custom-therapy-supervision",
+      "channel": "mic",
+      "input": "i was thinking should we approach the client regarding their anger outburst with a technique probe",
+      "correct": "question",
+      "predicted": "request",
+      "category": "overlapping_labels",
+      "reason": "The turn is phrased as a question but functions as a request for guidance or approval, making both labels defensible."
+    },
+    {
+      "id": "cus-ther-0031",
+      "mode": "custom-therapy-supervision",
+      "channel": "mic",
+      "input": "and then i just need to make sure that the",
+      "correct": "interruption",
+      "predicted": "statement",
+      "category": "bad_model",
+      "reason": "The turn is clearly an incomplete sentence indicating an interruption, which the model misclassified as a statement."
+    },
+    {
+      "id": "cus-ther-0039",
+      "mode": "custom-therapy-supervision",
+      "channel": "mic",
+      "input": "i was uh wondering if we should document this as a potential breach of safety or just a standard incident report",
+      "correct": "question",
+      "predicted": "request",
+      "category": "overlapping_labels",
+      "reason": "The turn is a statement of uncertainty that functions as a request for advice, making both labels defensible."
+    },
+    {
+      "id": "cus-ther-0042",
+      "mode": "custom-therapy-supervision",
+      "channel": "mic",
+      "input": "so we we could uh we could try the the grounding exercise or perhaps wait until the client is more open",
+      "correct": "statement",
+      "predicted": "answer",
+      "category": "overlapping_labels",
+      "reason": "The turn is a statement of potential options provided in response to a question, making both 'statement' and 'answer' defensible."
+    },
+    {
+      "id": "cus-ther-0054",
+      "mode": "custom-therapy-supervision",
+      "channel": "mic",
+      "input": "i mean maybe we should like",
+      "correct": "statement",
+      "predicted": "interruption",
+      "category": "bad_model",
+      "reason": "The turn is an incomplete statement, not an interruption of the other speaker."
+    },
+    {
+      "id": "cus-inv-0009",
+      "mode": "custom-investor-update",
+      "channel": "mic",
+      "input": "i think i think that makes sense",
+      "correct": "statement",
+      "predicted": "backchannel",
+      "category": "overlapping_labels",
+      "reason": "The turn is a statement of agreement that functions as a backchannel, making both labels defensible."
+    },
+    {
+      "id": "cus-inv-0018",
+      "mode": "custom-investor-update",
+      "channel": "mic",
+      "input": "the the thing is we wont have enough cash",
+      "correct": "statement",
+      "predicted": "answer",
+      "category": "overlapping_labels",
+      "reason": "The turn is a statement of fact provided in response to a question, making both 'statement' and 'answer' defensible."
+    },
+    {
+      "id": "cus-inv-0027",
+      "mode": "custom-investor-update",
+      "channel": "system",
+      "input": "um i think i think we should probably focus on",
+      "correct": "statement",
+      "predicted": "answer",
+      "category": "overlapping_labels",
+      "reason": "The turn is a statement of opinion provided in response to a question, making both 'statement' and 'answer' defensible."
+    },
+    {
+      "id": "cus-inv-0044",
+      "mode": "custom-investor-update",
+      "channel": "system",
+      "input": "could you send me that link",
+      "correct": "request",
+      "predicted": "interruption",
+      "category": "bad_model",
+      "reason": "The turn is a clear request for a link, which the model failed to identify."
+    },
+    {
+      "id": "cus-inv-0064",
+      "mode": "custom-investor-update",
+      "channel": "mic",
+      "input": "uh look the the main metric we need to watch is the",
+      "correct": "statement",
+      "predicted": "question",
+      "category": "bad_model",
+      "reason": "The turn is a statement introducing a topic, not a question."
+    },
+    {
+      "id": "cus-inv-0073",
+      "mode": "custom-investor-update",
+      "channel": "mic",
+      "input": "hey can you talk me through the growth metrics for q three specifically the user retention cohort",
+      "correct": "request",
+      "predicted": "question",
+      "category": "overlapping_labels",
+      "reason": "The turn is phrased as a question but is functionally a request for information, making both labels defensible."
+    },
+    {
+      "id": "cus-inv-0087",
+      "mode": "custom-investor-update",
+      "channel": "mic",
+      "input": "yeah kind of sort of",
+      "correct": "answer",
+      "predicted": "backchannel",
+      "category": "overlapping_labels",
+      "reason": "The turn is a vague response to a confirmation question, making both 'answer' and 'backchannel' defensible."
+    },
+    {
+      "id": "cus-inv-0094",
+      "mode": "custom-investor-update",
+      "channel": "mic",
+      "input": "and the other one um regarding the partnership deals",
+      "correct": "request",
+      "predicted": "question",
+      "category": "overlapping_labels",
+      "reason": "The turn is a statement of a new topic that functions as a request to discuss it, making both labels defensible."
+    },
+    {
+      "id": "cus-inv-0126",
+      "mode": "custom-investor-update",
+      "channel": "mic",
+      "input": "can you walk me through the the runway i mean how much runway is left",
+      "correct": "request",
+      "predicted": "question",
+      "category": "bad_model",
+      "reason": "The turn is clearly a request for information, which the model failed to identify."
+    },
+    {
+      "id": "cus-cr-0010",
+      "mode": "custom-code-review",
+      "channel": "system",
+      "input": "hey wait did you get the email",
+      "correct": "question",
+      "predicted": "interruption",
+      "category": "bad_model",
+      "reason": "The turn is a direct question, not an interruption."
+    },
+    {
+      "id": "cus-cr-0045",
+      "mode": "custom-code-review",
+      "channel": "system",
+      "input": "is that the the cashing layer again",
+      "correct": "statement",
+      "predicted": "question",
+      "category": "overlapping_labels",
+      "reason": "The turn is phrased as a question but functions as a statement of inquiry/observation, making both labels defensible."
+    },
+    {
+      "id": "cus-cr-0047",
+      "mode": "custom-code-review",
+      "channel": "system",
+      "input": "two thousand and twenty three",
+      "correct": "statement",
+      "predicted": "answer",
+      "category": "overlapping_labels",
+      "reason": "The turn is a statement that serves as an answer to a previous question, making both labels defensible."
+    },
+    {
+      "id": "cus-cr-0055",
+      "mode": "custom-code-review",
+      "channel": "system",
+      "input": "i think we should uh",
+      "correct": "statement",
+      "predicted": "answer",
+      "category": "bad_model",
+      "reason": "The turn is a fragmented statement, not an answer to a specific question."
+    },
+    {
+      "id": "cus-cr-0065",
+      "mode": "custom-code-review",
+      "channel": "system",
+      "input": "the naming convention for the helper methods is uh not consistent with the rest",
+      "correct": "statement",
+      "predicted": "interruption",
+      "category": "bad_model",
+      "reason": "The turn is a clear statement of opinion, not an interruption."
+    },
+    {
+      "id": "cus-cr-0067",
+      "mode": "custom-code-review",
+      "channel": "mic",
+      "input": "sounds good yeah i can live with that approach",
+      "correct": "answer",
+      "predicted": "backchannel",
+      "category": "bad_model",
+      "reason": "The turn is a clear answer to a previous suggestion, not just a backchannel."
+    },
+    {
+      "id": "cus-cr-0086",
+      "mode": "custom-code-review",
+      "channel": "mic",
+      "input": "i feel like we should use a custom vector here instead of that array",
+      "correct": "statement",
+      "predicted": "request",
+      "category": "bad_model",
+      "reason": "The turn is a statement of opinion/suggestion, not a request."
+    },
+    {
+      "id": "cus-cr-0116",
+      "mode": "custom-code-review",
+      "channel": "mic",
+      "input": "could we try to refactor that part i think i think thats",
+      "correct": "request",
+      "predicted": "statement",
+      "category": "bad_model",
+      "reason": "The turn is a clear request for refactoring."
+    },
+    {
+      "id": "cus-cr-0126",
+      "mode": "custom-code-review",
+      "channel": "mic",
+      "input": "i mean it seems like the the query performance is fine",
+      "correct": "statement",
+      "predicted": "answer",
+      "category": "bad_model",
+      "reason": "The turn is a statement of opinion, not an answer to the previous system turn."
+    },
+    {
+      "id": "cus-cr-0137",
+      "mode": "custom-code-review",
+      "channel": "mic",
+      "input": "yeah does the the approach make sense to me",
+      "correct": "question",
+      "predicted": "backchannel",
+      "category": "bad_model",
+      "reason": "The turn is a question, not a backchannel."
+    },
+    {
+      "id": "cus-cr-0139",
+      "mode": "custom-code-review",
+      "channel": "mic",
+      "input": "its not strictly necessary for the production",
+      "correct": "statement",
+      "predicted": "interruption",
+      "category": "bad_model",
+      "reason": "The turn is a statement, not an interruption."
+    },
+    {
+      "id": "cus-cr-0143",
+      "mode": "custom-code-review",
+      "channel": "mic",
+      "input": "i think we could uh we could use a list instead",
+      "correct": "statement",
+      "predicted": "answer",
+      "category": "bad_model",
+      "reason": "The turn is a statement of suggestion, not an answer."
+    },
+    {
+      "id": "gen-0109",
+      "mode": "general",
+      "channel": "system",
+      "input": "i think i think that works fine",
+      "correct": "answer",
+      "predicted": "backchannel",
+      "category": "overlapping_labels",
+      "reason": "The turn is both a backchannel confirmation and an answer to the system's question."
+    },
+    {
+      "id": "gen-0120",
+      "mode": "general",
+      "channel": "mic",
+      "input": "so we could uh we could try to implement the factory pattern there i think",
+      "correct": "statement",
+      "predicted": "answer",
+      "category": "overlapping_labels",
+      "reason": "The turn is a statement that also functions as an answer to the system's request for suggestions."
+    },
+    {
+      "id": "gen-0127",
+      "mode": "general",
+      "channel": "system",
+      "input": "so can you uh walk me through the the way the billing cycle aligns with q three",
+      "correct": "question",
+      "predicted": "request",
+      "category": "overlapping_labels",
+      "reason": "The turn is a request for information phrased as a question; both labels are defensible."
+    },
+    {
+      "id": "gen-0141",
+      "mode": "general",
+      "channel": "mic",
+      "input": "so the the thing is we could uh we could try",
+      "correct": "statement",
+      "predicted": "answer",
+      "category": "bad_model",
+      "reason": "The turn is clearly a statement of intent or opinion, not an answer to the previous question."
+    },
+    {
+      "id": "gen-0156",
+      "mode": "general",
+      "channel": "mic",
+      "input": "can you explain this concept and give me some examples of how to apply it in our current q three roadmap",
+      "correct": "question",
+      "predicted": "request",
+      "category": "overlapping_labels",
+      "reason": "The turn is a request for an explanation phrased as a question; both labels are defensible."
+    },
+    {
+      "id": "gen-0159",
+      "mode": "general",
+      "channel": "mic",
+      "input": "so the the thing is we need to we should probably rewrite this module and then extract the configs",
+      "correct": "request",
+      "predicted": "answer",
+      "category": "bad_model",
+      "reason": "The turn is a proposal/request for action, not an answer to the previous question."
+    },
+    {
+      "id": "gen-0161",
+      "mode": "general",
+      "channel": "mic",
+      "input": "i mean the the main reason we moved to the cloud was to reduce our operational overhead is that right",
+      "correct": "question",
+      "predicted": "answer",
+      "category": "overlapping_labels",
+      "reason": "The turn provides an answer while ending in a tag question; both labels are defensible."
+    },
+    {
+      "id": "ti-0134",
+      "mode": "technical-interview",
+      "channel": "mic",
+      "input": "can you hear me now",
+      "correct": "statement",
+      "predicted": "request",
+      "category": "bad_model",
+      "reason": "The turn is a standard check-in question, not a statement."
+    },
+    {
+      "id": "ti-0150",
+      "mode": "technical-interview",
+      "channel": "mic",
+      "input": "if we use the the hash map",
+      "correct": "statement",
+      "predicted": "answer",
+      "category": "bad_model",
+      "reason": "The turn is a conditional statement, not an answer to a specific question."
+    },
+    {
+      "id": "lfw-0181",
+      "mode": "looking-for-work",
+      "channel": "mic",
+      "input": "wait i think i want to ask two things about the the team structure",
+      "correct": "statement",
+      "predicted": "question",
+      "category": "overlapping_labels",
+      "reason": "The turn is a statement about an upcoming question; both labels are defensible."
+    },
+    {
+      "id": "sal-0131",
+      "mode": "sales",
+      "channel": "system",
+      "input": "sounds like a solid strategy i think we can move to the next phase",
+      "correct": "statement",
+      "predicted": "answer",
+      "category": "bad_model",
+      "reason": "The turn is a statement of opinion, not an answer to a question."
+    },
+    {
+      "id": "sal-0153",
+      "mode": "sales",
+      "channel": "system",
+      "input": "we have a bunch of users",
+      "correct": "answer",
+      "predicted": "statement",
+      "category": "bad_label",
+      "reason": "The turn is a direct answer to the previous question 'how many seats do you need'."
+    },
+    {
+      "id": "sal-0157",
+      "mode": "sales",
+      "channel": "mic",
+      "input": "i think that the q three rollout sounds like a great time to switch",
+      "correct": "statement",
+      "predicted": "answer",
+      "category": "bad_model",
+      "reason": "The turn is a statement of opinion, not an answer to a question."
+    },
+    {
+      "id": "sal-0161",
+      "mode": "sales",
+      "channel": "system",
+      "input": "yeah we are happy with what we have in place right now",
+      "correct": "statement",
+      "predicted": "answer",
+      "category": "bad_model",
+      "reason": "The turn is a statement of current status, not an answer to the previous question about API rate limits."
+    },
+    {
+      "id": "rec-0165",
+      "mode": "recruiting",
+      "channel": "system",
+      "input": "um i suppose i could uh try",
+      "correct": "statement",
+      "predicted": "answer",
+      "category": "bad_model",
+      "reason": "The turn is a statement of hesitation/intent, not an answer to a question."
+    },
+    {
+      "id": "rec-0167",
+      "mode": "recruiting",
+      "channel": "system",
+      "input": "and then the the data structure is",
+      "correct": "statement",
+      "predicted": "answer",
+      "category": "bad_model",
+      "reason": "The turn is a statement of thought, not an answer to a question."
+    },
+    {
+      "id": "rec-0171",
+      "mode": "recruiting",
+      "channel": "system",
+      "input": "is that the the sequel query",
+      "correct": "statement",
+      "predicted": "question",
+      "category": "overlapping_labels",
+      "reason": "The turn is a statement identifying an object phrased as a question; both labels are defensible."
+    },
+    {
+      "id": "rec-0191",
+      "mode": "recruiting",
+      "channel": "system",
+      "input": "so we have like two options for the database scheme",
+      "correct": "statement",
+      "predicted": "answer",
+      "category": "bad_model",
+      "reason": "The turn is clearly a statement of fact/opinion and not an answer to a specific question."
+    },
+    {
+      "id": "rec-0200",
+      "mode": "recruiting",
+      "channel": "system",
+      "input": "i feel like there might be a better approach than the one we just discussed",
+      "correct": "statement",
+      "predicted": "answer",
+      "category": "bad_model",
+      "reason": "The turn is a statement expressing an opinion, not an answer to a question."
+    },
+    {
+      "id": "rec-0239",
+      "mode": "recruiting",
+      "channel": "system",
+      "input": "so the the primary concern is the scalability i guess",
+      "correct": "statement",
+      "predicted": "answer",
+      "category": "bad_model",
+      "reason": "The turn is a statement summarizing a concern, not an answer."
+    },
+    {
+      "id": "tm-0131",
+      "mode": "team-meet",
+      "channel": "system",
+      "input": "did you see that email from dave about the cashing",
+      "correct": "statement",
+      "predicted": "request",
+      "category": "bad_model",
+      "reason": "The turn is a statement introducing a new topic, not a request."
+    },
+    {
+      "id": "tm-0149",
+      "mode": "team-meet",
+      "channel": "system",
+      "input": "hey sarah are you free to",
+      "correct": "request",
+      "predicted": "interruption",
+      "category": "bad_model",
+      "reason": "The turn is a request for availability, not an interruption."
+    },
+    {
+      "id": "tm-0150",
+      "mode": "team-meet",
+      "channel": "mic",
+      "input": "total mess i",
+      "correct": "statement",
+      "predicted": "answer",
+      "category": "overlapping_labels",
+      "reason": "The turn is a fragment that could be interpreted as a statement or an answer to the previous question."
+    },
+    {
+      "id": "tm-0156",
+      "mode": "team-meet",
+      "channel": "system",
+      "input": "is it possible to um to sort of reduce the cache size",
+      "correct": "question",
+      "predicted": "request",
+      "category": "overlapping_labels",
+      "reason": "A question asking for a possibility is often functionally a request for action in a technical meeting context."
+    },
+    {
+      "id": "tm-0162",
+      "mode": "team-meet",
+      "channel": "system",
+      "input": "so i think that covers the main technical debt we have for",
+      "correct": "statement",
+      "predicted": "answer",
+      "category": "bad_model",
+      "reason": "The turn is a statement concluding a summary, not an answer."
+    },
+    {
+      "id": "lec-0115",
+      "mode": "lecture",
+      "channel": "mic",
+      "input": "can you walk us through how the scalar factor applies to the gradient here",
+      "correct": "question",
+      "predicted": "request",
+      "category": "overlapping_labels",
+      "reason": "A question asking for an explanation is also a request for the speaker to perform an action."
+    },
+    {
+      "id": "lec-0119",
+      "mode": "lecture",
+      "channel": "mic",
+      "input": "right okay i think i i get the connection now",
+      "correct": "backchannel",
+      "predicted": "statement",
+      "category": "overlapping_labels",
+      "reason": "The turn functions as both a backchannel acknowledgement and a statement of understanding."
+    },
+    {
+      "id": "cc-0146",
+      "mode": "call-center",
+      "channel": "system",
+      "input": "um the the server is just kind of timing out when i try to log in",
+      "correct": "answer",
+      "predicted": "statement",
+      "category": "bad_model",
+      "reason": "The turn is a direct answer to the system's previous question about the error."
+    },
+    {
+      "id": "cc-0152",
+      "mode": "call-center",
+      "channel": "mic",
+      "input": "so we could uh we could try the update again i mean",
+      "correct": "answer",
+      "predicted": "statement",
+      "category": "bad_model",
+      "reason": "The turn is a proposal/answer to the system's question about what to do next."
+    },
+    {
+      "id": "cc-0174",
+      "mode": "call-center",
+      "channel": "mic",
+      "input": "um yeah so the the charge",
+      "correct": "statement",
+      "predicted": "backchannel",
+      "category": "bad_model",
+      "reason": "The turn is a statement of fact regarding the charge, not a backchannel."
+    },
+    {
+      "id": "cc-0187",
+      "mode": "call-center",
+      "channel": "system",
+      "input": "i just dont understand why my bill is so high i want my money back",
+      "correct": "request",
+      "predicted": "question",
+      "category": "bad_model",
+      "reason": "The turn is a request for a refund, not a question."
+    },
+    {
+      "id": "cc-0193",
+      "mode": "call-center",
+      "channel": "system",
+      "input": "whats the process for the policy on recurring payments",
+      "correct": "request",
+      "predicted": "question",
+      "category": "bad_model",
+      "reason": "The turn is a request for information, not a question."
+    },
+    {
+      "id": "gen-0183",
+      "mode": "general",
+      "channel": "system",
+      "input": "so we have the the vector of improvement and then wait what was the third point",
+      "correct": "statement",
+      "predicted": "question",
+      "category": "bad_model",
+      "reason": "The user is asking a question about the third point. While it contains a statement about the vector of improvement, the primary intent of the turn is to elicit information, making 'question' the correct label. The model correctly identified the question, but the ground truth label 'statement' is incorrect for this turn."
+    },
+    {
+      "id": "gen-0199",
+      "mode": "general",
+      "channel": "mic",
+      "input": "uh yeah thats totally fine i think i think we can proceed with that",
+      "correct": "answer",
+      "predicted": "backchannel",
+      "category": "bad_model",
+      "reason": "The user is providing an answer to the system's previous wait time, confirming they are ready to proceed. This is a clear answer to the system's implicit check-in, not a backchannel."
+    }
+  ]
+}

@@ -1,0 +1,280 @@
+{
+ "blind_id": "S-b142705f",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 53959,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 21900,
+  "candidatesTokenCount": 2037,
+  "totalTokenCount": 29610,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 21900
+   }
+  ],
+  "thoughtsTokenCount": 5673,
+  "serviceTier": "standard"
+ },
+ "fact_count": 51,
+ "evaluation": {
+  "factual_accuracy": 3,
+  "important_information_retention": 8,
+  "hallucination_control": 4,
+  "action_item_retention": 4,
+  "decision_retention": 4,
+  "speaker_attribution": 4,
+  "numeric_accuracy": 4,
+  "entity_retention": 8,
+  "timeline_accuracy": 3,
+  "conclusion_accuracy": 3,
+  "structure": 2,
+  "conciseness": 2,
+  "readability": 3,
+  "overall_summary_quality": 3,
+  "critical_errors": [
+   "Massive internal contradictions: The notes list superseded/initial states as current action items, decisions, and open questions, directly contradicting the final decisions listed elsewhere in the same notes.",
+   "Misattribution/Hallucination: Lists an action item for Dan ('Me') to send Priya $190, when in fact Priya owes Dan $190.",
+   "Timeline error: States the proposed trip is the weekend before Maya's October 21 birthday, but the final dates (Oct 23-26) are the weekend after."
+  ],
+  "missing_important_information": [
+   "Tom's job change timeline (leaving Pellmark October 9, starting at Halvorsen Logistics November 2)."
+  ],
+  "hallucinated_information": [
+   "Dan ('Me') owes Priya $190 and needs to send it to her tonight.",
+   "The final proposed trip dates (Oct 23-26) are the weekend before Maya's October 21 birthday."
+  ],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C02",
+    "reported": "The planned trip dates are Friday, October 16 through Monday, October 19, subject to Priya checking her work rota."
+   },
+   {
+    "correction_id": "C04",
+    "reported": "Priya will book Heron Point Cabin using her Hearthstay credit."
+   },
+   {
+    "correction_id": "C06",
+    "reported": "The Friday departure time remains undecided despite Tom suggesting 8 a.m."
+   },
+   {
+    "correction_id": "C03",
+    "reported": "The cabin cost is $1,140 total, split among four paying people at $285 each."
+   },
+   {
+    "correction_id": "C08",
+    "reported": "Will Priya's work rota allow her to attend from October 16 through October 19? [open]"
+   }
+  ],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "partial"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "contradicted"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "contradicted"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "contradicted"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "contradicted"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "contradicted"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "contradicted"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "contradicted"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "missing"
+   },
+   {
+    "id": "F38",
+    "status": "missing"
+   },
+   {
+    "id": "F39",
+    "status": "missing"
+   },
+   {
+    "id": "F40",
+    "status": "missing"
+   },
+   {
+    "id": "F41",
+    "status": "missing"
+   },
+   {
+    "id": "F42",
+    "status": "missing"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "missing"
+   }
+  ],
+  "rationale": "The notes suffer from massive internal contradictions because they report both the initial/superseded states of the conversation and the final decisions as current facts. For example, the notes state that Dan will book the cabin, but also list an action item for Priya to book it with her credit; they state the trip is Oct 23-26, but list Oct 16-19 as a decision; they state pets are prohibited, but list the pet policy as an open question. Additionally, there is a hallucinated action item for Dan to send Priya $190 (Priya owes Dan). The structure is extremely repetitive, dumping chronological developments into the structured blocks without synthesizing the final outcome."
+ }
+}

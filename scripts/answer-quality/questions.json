@@ -1,0 +1,322 @@
+[
+  {
+    "question": "wait i mean how does the the sequel query handle duplicate entries there",
+    "truth": "coding",
+    "shapes": {
+      "oracle": "coding",
+      "none": "general",
+      "production": "summary_probe",
+      "router": "coding"
+    }
+  },
+  {
+    "question": "wait i mean could you rewrite the function to handle those null values and plan a way to test it",
+    "truth": "coding",
+    "shapes": {
+      "oracle": "coding",
+      "none": "general",
+      "production": "behavioral",
+      "router": "coding"
+    }
+  },
+  {
+    "question": "so we could uh we could try adding a secondary index here and maybe that would improve the query speed",
+    "truth": "coding",
+    "shapes": {
+      "oracle": "coding",
+      "none": "general",
+      "production": "coding",
+      "router": "coding"
+    }
+  },
+  {
+    "question": "how would you uh how would you go about debugging a distributed memory leak",
+    "truth": "coding",
+    "shapes": {
+      "oracle": "coding",
+      "none": "general",
+      "production": "deep_dive",
+      "router": "coding"
+    }
+  },
+  {
+    "question": "yeah like how does the the cashing layer know when to",
+    "truth": "coding",
+    "shapes": {
+      "oracle": "coding",
+      "none": "general",
+      "production": "behavioral",
+      "router": "coding"
+    }
+  },
+  {
+    "question": "uh so we need to see how you would uh structure the sql query for this",
+    "truth": "coding",
+    "shapes": {
+      "oracle": "coding",
+      "none": "general",
+      "production": "summary_probe",
+      "router": "coding"
+    }
+  },
+  {
+    "question": "whats the status on the q three report",
+    "truth": "general",
+    "shapes": {
+      "oracle": "general",
+      "none": "general",
+      "production": "coding",
+      "router": "general"
+    }
+  },
+  {
+    "question": "are we still tracking the twenty three percent margin for the retail side",
+    "truth": "general",
+    "shapes": {
+      "oracle": "general",
+      "none": "general",
+      "production": "summary_probe",
+      "router": "general"
+    }
+  },
+  {
+    "question": "okay move to the next thing",
+    "truth": "general",
+    "shapes": {
+      "oracle": "general",
+      "none": "general",
+      "production": "clarification",
+      "router": "general"
+    }
+  },
+  {
+    "question": "take notes on this entire call because we need to send a summary after",
+    "truth": "general",
+    "shapes": {
+      "oracle": "general",
+      "none": "general",
+      "production": "example_request",
+      "router": "general"
+    }
+  },
+  {
+    "question": "i see you listed ruby on rails but we mainly use python for our back end",
+    "truth": "general",
+    "shapes": {
+      "oracle": "general",
+      "none": "general",
+      "production": "coding",
+      "router": "general"
+    }
+  },
+  {
+    "question": "did you have a good trip or is the traffic kind of bad today",
+    "truth": "general",
+    "shapes": {
+      "oracle": "general",
+      "none": "general",
+      "production": "deep_dive",
+      "router": "general"
+    }
+  },
+  {
+    "question": "sort of curious about the timeline for the two thousand twenty four launch",
+    "truth": "clarification",
+    "shapes": {
+      "oracle": "clarification",
+      "none": "general",
+      "production": "coding",
+      "router": "clarification"
+    }
+  },
+  {
+    "question": "so the query is what you want me to write now",
+    "truth": "clarification",
+    "shapes": {
+      "oracle": "clarification",
+      "none": "general",
+      "production": "clarification",
+      "router": "clarification"
+    }
+  },
+  {
+    "question": "can you walk me through the the main requirements again",
+    "truth": "clarification",
+    "shapes": {
+      "oracle": "clarification",
+      "none": "general",
+      "production": "summary_probe",
+      "router": "clarification"
+    }
+  },
+  {
+    "question": "have you noticed any gaps in the job description that concern you",
+    "truth": "clarification",
+    "shapes": {
+      "oracle": "clarification",
+      "none": "general",
+      "production": "summary_probe",
+      "router": "clarification"
+    }
+  },
+  {
+    "question": "so so you you think the salary range is",
+    "truth": "clarification",
+    "shapes": {
+      "oracle": "clarification",
+      "none": "general",
+      "production": "clarification",
+      "router": "clarification"
+    }
+  },
+  {
+    "question": "right and uh and does your software integrate with salesforce",
+    "truth": "clarification",
+    "shapes": {
+      "oracle": "clarification",
+      "none": "general",
+      "production": "general",
+      "router": "clarification"
+    }
+  },
+  {
+    "question": "um what about the second one",
+    "truth": "follow_up",
+    "shapes": {
+      "oracle": "follow_up",
+      "none": "general",
+      "production": "behavioral",
+      "router": "follow_up"
+    }
+  },
+  {
+    "question": "but and the other one you know the the one regarding the q three budget",
+    "truth": "follow_up",
+    "shapes": {
+      "oracle": "follow_up",
+      "none": "general",
+      "production": "general",
+      "router": "follow_up"
+    }
+  },
+  {
+    "question": "do we have no idea how much time the setup will take",
+    "truth": "follow_up",
+    "shapes": {
+      "oracle": "follow_up",
+      "none": "general",
+      "production": "coding",
+      "router": "follow_up"
+    }
+  },
+  {
+    "question": "thats great can you tell me more about the the migration from the legacy",
+    "truth": "follow_up",
+    "shapes": {
+      "oracle": "follow_up",
+      "none": "general",
+      "production": "example_request",
+      "router": "follow_up"
+    }
+  },
+  {
+    "question": "what about the second one though",
+    "truth": "follow_up",
+    "shapes": {
+      "oracle": "follow_up",
+      "none": "general",
+      "production": "deep_dive",
+      "router": "follow_up"
+    }
+  },
+  {
+    "question": "uh tell me more about that",
+    "truth": "follow_up",
+    "shapes": {
+      "oracle": "follow_up",
+      "none": "general",
+      "production": "example_request",
+      "router": "follow_up"
+    }
+  },
+  {
+    "question": "so the the thing is we need to sort of aggregate these findings and um tell me what you would push back on regarding the current strategy",
+    "truth": "summary_probe",
+    "shapes": {
+      "oracle": "summary_probe",
+      "none": "general",
+      "production": "example_request",
+      "router": "summary_probe"
+    }
+  },
+  {
+    "question": "summarise that and tell me what you would push back on regarding the contract",
+    "truth": "summary_probe",
+    "shapes": {
+      "oracle": "summary_probe",
+      "none": "general",
+      "production": "example_request",
+      "router": "summary_probe"
+    }
+  },
+  {
+    "question": "summarise the latency section and uh tell me what you would push back on regarding the throughput",
+    "truth": "summary_probe",
+    "shapes": {
+      "oracle": "summary_probe",
+      "none": "general",
+      "production": "example_request",
+      "router": "summary_probe"
+    }
+  },
+  {
+    "question": "what was the the suggestion for the family therapy session again",
+    "truth": "summary_probe",
+    "shapes": {
+      "oracle": "summary_probe",
+      "none": "general",
+      "production": "deep_dive",
+      "router": "summary_probe"
+    }
+  },
+  {
+    "question": "could you compare this to the earlier intake report and summarize the differences",
+    "truth": "summary_probe",
+    "shapes": {
+      "oracle": "summary_probe",
+      "none": "general",
+      "production": "follow_up",
+      "router": "summary_probe"
+    }
+  },
+  {
+    "question": "so the the primary concern is the scalability i guess",
+    "truth": "summary_probe",
+    "shapes": {
+      "oracle": "summary_probe",
+      "none": "general",
+      "production": "coding",
+      "router": "summary_probe"
+    }
+  },
+  {
+    "question": "how would you answer that question about our tech stack in the interview",
+    "truth": "behavioral",
+    "shapes": {
+      "oracle": "behavioral",
+      "none": "general",
+      "production": "behavioral",
+      "router": "behavioral"
+    }
+  },
+  {
+    "question": "can you tell me about a time you had a major disagreement with a team member",
+    "truth": "behavioral",
+    "shapes": {
+      "oracle": "behavioral",
+      "none": "general",
+      "production": "follow_up",
+      "router": "behavioral"
+    }
+  }
+]

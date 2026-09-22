@@ -93,3 +93,43 @@ describe('MeetingPersistence wires the rejection (drift pin)', () => {
     assert.match(src, /Generated title rejected as answer fragment/);
   });
 });
+
+// ── Complexity notation: answer vs. name (2026-08-26) ─────────────────────────
+// The blanket `O(...)` reject added in 3208faa7 caught the failure it was built
+// for (a bare complexity answer used as the meeting name) but also threw away
+// legitimate DSA-interview titles that merely MENTION the complexity. The user
+// runs those interviews constantly, so both directions matter. The narrowing
+// keeps a title only when the notation sits inside a short descriptive noun
+// phrase: ≥3 non-notation tokens, no assertion verb, within the 3-6-word window
+// the naming prompt asks for.
+describe('complexity notation is rejected only when it IS the answer', () => {
+  for (const t of [
+    'O(1)',
+    'O(n log n)',
+    'O(1) time, O(n) space',
+    // Assertion verb: the phrase claims something about the complexity. These
+    // sit INSIDE the 3-6-word naming window, so only the verb clause catches
+    // them — they are exactly the shape 3208faa7 was built for.
+    'Solution runs in O(n) time',
+    'Hash map gives O(1) lookup',
+    'Binary search gives O(log n)',
+    'Two pointers achieve O(n) runtime',
+    'Sorting takes O(n log n) time',
+    // Pre-existing rejection (2026-08-22) — must not regress.
+    'The two-pointer approach solves this in O(n) time',
+  ]) {
+    test(`rejected: "${t}"`, () => assert.equal(isAnswerFragmentTitle(t), true, t));
+  }
+
+  for (const t of [
+    'O(1) Store Class Design',
+    'Designing an O(1) Store',
+    // Measured-KEPT baseline from the same session — regression guard.
+    'Store Class Design',
+    'Insert Remove GetRandom Design',
+    'Random-Access Store Design',
+    'Cloud Reading App Design',
+  ]) {
+    test(`kept: "${t}"`, () => assert.equal(isAnswerFragmentTitle(t), false, t));
+  }
+});

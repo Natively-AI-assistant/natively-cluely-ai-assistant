@@ -59,6 +59,14 @@ export interface StreamRouteOptions {
    */
   pinnedModeId?: string | null;
   /**
+   * True when the current screen is present as browser DOM or OCR text rather
+   * than an attached image. WhatToAnswerLLM computes this from the request-
+   * scoped screen inputs and threads only the boolean to the transport layer,
+   * so Context OS decline gates treat both visual channels consistently without
+   * copying screen content into routing metadata.
+   */
+  hasScreenText?: boolean;
+  /**
    * Context Intelligence V3 (2026-07-31): this stream's prompts were composed
    * END-TO-END by the V3 decision layer — one frozen TurnDecision, scope/
    * version/claim-authority-filtered evidence, one composed prompt. When true,

@@ -28,9 +28,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const { planAnswer } = await import(
   pathToFileURL(path.resolve(__dirname, '../../../dist-electron/electron/llm/AnswerPlanner.js')).href
 );
-const { classifyIntent } = await import(
-  pathToFileURL(path.resolve(__dirname, '../../../dist-electron/electron/llm/IntentClassifier.js')).href
-);
+// classifyIntent import removed 2026-09-05: the regex tier it exercised is gone.
 
 const p = (q) => planAnswer({ question: q, source: 'what_to_answer', speakerPerspective: 'interviewer' });
 
@@ -73,22 +71,5 @@ describe('genuine data-structure usage is unaffected (over-fix guards)', () => {
   });
 });
 
-describe('IntentClassifier fast path no longer forces coding@0.95 on demonstrative "stack"', () => {
-  test('the regex tier still fast-paths a genuine DSA stack question (control)', async () => {
-    const r = await classifyIntent('can you implement a stack using two queues', '', 0);
-    assert.equal(r.intent, 'coding');
-    assert.equal(r.confidence, 0.95);
-  });
+// 'IntentClassifier fast path ...' describe removed 2026-09-05 with the classifier.
 
-  test('"Why did you choose that stack?" does not carry the regex tier\'s coding@0.95 signature', async () => {
-    // Mirrors IntentClassifierStackUpIdiom2026_07_17: the private regex tier
-    // returns coding at exactly 0.95; the SLM/context tiers never do. If the
-    // demonstrative-stack neutralizer is reverted, this question re-acquires
-    // that exact signature and this assertion fails.
-    const r = await classifyIntent('Why did you choose that stack?', '', 0);
-    assert.ok(
-      !(r.intent === 'coding' && r.confidence === 0.95),
-      `regex fast path misclassified as coding@0.95 (got ${r.intent}@${r.confidence})`
-    );
-  });
-});

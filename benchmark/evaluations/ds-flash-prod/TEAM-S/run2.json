@@ -1,0 +1,169 @@
+{
+ "blind_id": "S-c0e1bcb3",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 37950,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 10549,
+  "candidatesTokenCount": 1150,
+  "totalTokenCount": 15510,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 10549
+   }
+  ],
+  "thoughtsTokenCount": 3811,
+  "serviceTier": "standard"
+ },
+ "fact_count": 29,
+ "evaluation": {
+  "factual_accuracy": 8,
+  "important_information_retention": 10,
+  "hallucination_control": 10,
+  "action_item_retention": 8,
+  "decision_retention": 10,
+  "speaker_attribution": 10,
+  "numeric_accuracy": 10,
+  "entity_retention": 10,
+  "timeline_accuracy": 10,
+  "conclusion_accuracy": 9,
+  "structure": 5,
+  "conciseness": 3,
+  "readability": 4,
+  "overall_summary_quality": 6,
+  "critical_errors": [
+   "A preference to load test the workout history endpoint was incorrectly formalized as an assigned action item."
+  ],
+  "missing_important_information": [],
+  "hallucinated_information": [],
+  "superseded_values_reported": [],
+  "not_decisions_reported_as_decided": [
+   "Theo: Load test the new workout history endpoint before it goes to production. (Reported as an action item)"
+  ],
+  "distractors_included": [
+   "The coffee machine issue on the third floor needs to be fixed before Thursday if the branch cut is to proceed, per Ravi's joke.",
+   "Cherry-picking late fixes onto the release branch risks losing fixes, as happened when the analytics fix was lost in 4.10."
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "partial"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "missing"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture almost all important information accurately, with no hallucinations and correct handling of superseded values. However, the notes suffer from severe repetition, with the exact same sentences copy-pasted across the Overview, Summary, Progress, Decisions, and Follow-up sections. Additionally, a stated preference (Theo wanting to load test) is incorrectly formalized as an action item, and irrelevant distractors (the coffee machine joke, historical context about 4.10) are included."
+ }
+}

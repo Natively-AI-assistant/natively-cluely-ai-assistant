@@ -7,8 +7,7 @@
 // this branch the process keeps running with dead persistence).
 // Live-reproduced through the real OpenAI provider (stalled TLS handshake)
 // in scripts/audit/F-201-repro.mjs. Related: main's 21c4e22f fixes the
-// NativelyProSTT site with fuller lifecycle machinery — merge advisory in
-// AUDIT_REPORT.md.
+// NativelyProSTT site with fuller lifecycle machinery.
 //
 // Contracts pinned here: no STT provider file contains a bare
 // strip-then-close on a WebSocket; every former site routes through

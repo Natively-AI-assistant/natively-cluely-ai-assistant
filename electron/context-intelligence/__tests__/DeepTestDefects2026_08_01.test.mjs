@@ -88,8 +88,11 @@ describe('D3: postmortem ownership questions are not misrouted to the meeting tr
   test('technical-interview: "Who owns the follow-up?" retrieves from documents', () => {
     const r = classify('Who owns the follow-up?', 'technical-interview');
     assert.equal(r.shouldRetrieve, true, r.reason);
-    assert.ok(!r.claimTypes.includes('MEETING_STATEMENT'),
-      `no meeting transcript exists in this mode: ${JSON.stringify(r.claimTypes)}`);
+    // UPDATED 2026-09-11: technical-interview now authorizes the transcript as
+    // a SECONDARY source, so the meeting claim may stand as an alternative —
+    // what D3 protects is that the attached documents are still read.
+    assert.ok(r.requiredSourceTypes.includes('REFERENCE_FILE'),
+      `documents must still be planned: ${JSON.stringify(r.requiredSourceTypes)}`);
   });
 
   test('NON-REGRESSION team-meet: "Who owns the source-contract patch?" stays transcript-only', () => {
@@ -210,10 +213,17 @@ describe('D7: sourceTypeForFile', () => {
     assert.equal(t, 'CODING_SAMPLE');
   });
 
-  test('a prose doc becomes PROJECT_FILE in technical-interview', () => {
+  // UPDATED 2026-08-28 (T8). This used to assert PROJECT_FILE, and the reason it
+  // did was a FALLBACK, not a decision: technical-interview authorized no
+  // REFERENCE_FILE, so `sourceTypeForFile` had nowhere else to put a prose
+  // document. Now that the mode authorizes one, prose is stamped as what it
+  // actually is. The property this test exists for — a prose doc and a code file
+  // are stamped DIFFERENTLY, and the .md is admissible — is asserted directly.
+  test('a prose doc is stamped as a reference file in technical-interview', () => {
     const t = sourceTypeForFile('01_small_project_summary.md',
       '# QueueForge Current Architecture Summary\n- API: FastAPI\n- Dead-letter topic: queueforge.jobs.dead', TI);
-    assert.equal(t, 'PROJECT_FILE');
+    assert.equal(t, 'REFERENCE_FILE');
+    assert.ok(TI.includes(t), 'the stamp must be a type the mode authorizes');
   });
 
   test('NON-REGRESSION: a real résumé is still RESUME in looking-for-work', () => {

@@ -770,7 +770,7 @@ export function validateAgainstSourceContract(input: SourceContractValidatorInpu
   }
 
   // 1. Existing numeric + list completeness (re-uses the tested primitives)
-  const numericCheck = detectUnsupportedDocumentAnswer({ answer, retrievedBlock });
+  const numericCheck = detectUnsupportedDocumentAnswer({ answer, retrievedBlock, question });
   if (numericCheck.unsupported) {
     reasons.push(`unsupported_numeric_value: ${numericCheck.unsupportedTokens.join(', ')}`);
     unsupportedTokens.push(...numericCheck.unsupportedTokens);

@@ -1,0 +1,1500 @@
+{
+  "id": "INT-TECH-L",
+  "category": "interview",
+  "natively_mode": "recruiting",
+  "length_bucket": "long",
+  "speakers": [
+    {
+      "label": "S0",
+      "shown_to_model_as": "Me",
+      "name": "Priya Raman",
+      "role": "Engineering Manager, Payments Platform",
+      "org": "Tessellate Pay"
+    },
+    {
+      "label": "S1",
+      "shown_to_model_as": "Speaker 1",
+      "name": "Marcus Oyelaran",
+      "role": "Candidate for Senior Backend Engineer; currently Senior Software Engineer",
+      "org": "Quillbank"
+    },
+    {
+      "label": "S2",
+      "shown_to_model_as": "Speaker 2",
+      "name": "Alex Brandt",
+      "role": "Staff Engineer, Payments Platform",
+      "org": "Tessellate Pay"
+    }
+  ],
+  "context": "A remote technical interview for a Senior Backend Engineer (L5) role on the Payments Platform team at fictional fintech Tessellate Pay. Engineering manager Priya Raman interviews candidate Marcus Oyelaran, joined late by staff engineer Alex Brandt, covering background, an idempotent payment ledger design, an incident story, behavioural questions, role logistics and compensation. After Marcus leaves, Priya and Alex hold a short private debrief.",
+  "facts": [
+    {
+      "id": "F01",
+      "type": "person",
+      "importance": "important",
+      "statement": "Priya Raman (Me) is the Engineering Manager for the Payments Platform team at Tessellate Pay and runs the interview.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        11
+      ],
+      "notes": null
+    },
+    {
+      "id": "F02",
+      "type": "person",
+      "importance": "important",
+      "statement": "Diane is the recruiter on the role and coordinates scheduling for the final round.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        13,
+        315
+      ],
+      "notes": null
+    },
+    {
+      "id": "F03",
+      "type": "person",
+      "importance": "important",
+      "statement": "Alex Brandt, a staff engineer on Payments Platform, joined late because an incident review ran over and the room booking system kicked him out.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        91
+      ],
+      "notes": null
+    },
+    {
+      "id": "F04",
+      "type": "background",
+      "importance": "critical",
+      "statement": "The candidate, Marcus Oyelaran, is currently a senior software engineer on the payments orchestration team at Quillbank.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        23
+      ],
+      "notes": null
+    },
+    {
+      "id": "F05",
+      "type": "timeline",
+      "importance": "important",
+      "statement": "Marcus joined Quillbank in April 2023, started on the payouts team, and moved to payments orchestration about a year in.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        32
+      ],
+      "notes": null
+    },
+    {
+      "id": "F06",
+      "type": "background",
+      "importance": "minor",
+      "statement": "At Quillbank Marcus owns the layer between product APIs and external payment processors: retries, routing between processors, idempotency and the payment state machine.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        33
+      ],
+      "notes": null
+    },
+    {
+      "id": "F07",
+      "type": "number",
+      "importance": "minor",
+      "statement": "Quillbank routes across 3 payment processors, having dropped a fourth last year over badly formatted settlement files.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        35
+      ],
+      "notes": null
+    },
+    {
+      "id": "F08",
+      "type": "number",
+      "importance": "minor",
+      "statement": "Marcus's current orchestration team at Quillbank is six engineers plus him, with a shared EM and PM.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        39
+      ],
+      "notes": "Quillbank team size, not Tessellate's"
+    },
+    {
+      "id": "F09",
+      "type": "timeline",
+      "importance": "critical",
+      "statement": "Marcus worked at Ferrow from September 2020 to March 2023, as a backend engineer and then senior engineer.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        41
+      ],
+      "notes": null
+    },
+    {
+      "id": "F10",
+      "type": "background",
+      "importance": "critical",
+      "statement": "At Ferrow, Marcus was on the data (data platform) team working on streaming pipelines, not on Ferrow's payments team.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        42,
+        100
+      ],
+      "notes": "corrects Alex's false assumption (C10)"
+    },
+    {
+      "id": "F11",
+      "type": "background",
+      "importance": "important",
+      "statement": "Before his professional career Marcus was a research assistant in a distributed systems lab at McMaster for about a year during his master's, and did two internships (Routeway and a now-defunct insurance startup).",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        44,
+        45
+      ],
+      "notes": null
+    },
+    {
+      "id": "F12",
+      "type": "number",
+      "importance": "critical",
+      "statement": "Marcus has 6 years of professional full-time experience plus 2 years of internships and research (he initially said 8 years).",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        49,
+        51
+      ],
+      "notes": "supersedes the initial '8 years' (C01)"
+    },
+    {
+      "id": "F13",
+      "type": "entity",
+      "importance": "important",
+      "statement": "Marcus's stack: Go, Kubernetes, Postgres and Kafka at Quillbank; Kotlin, Kafka and Flink at Ferrow.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        27,
+        28
+      ],
+      "notes": null
+    },
+    {
+      "id": "F14",
+      "type": "preference",
+      "importance": "minor",
+      "statement": "Marcus is strongest in Go (daily for three years) and would need a couple of weeks to warm back up on Kotlin.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        59
+      ],
+      "notes": null
+    },
+    {
+      "id": "F15",
+      "type": "example",
+      "importance": "minor",
+      "statement": "Marcus reads Postgres query plans himself and spent a week untangling misused advisory locks at Quillbank.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        61,
+        63
+      ],
+      "notes": null
+    },
+    {
+      "id": "F16",
+      "type": "background",
+      "importance": "minor",
+      "statement": "Marcus is comfortable with Kubernetes as a service owner but is not a cluster operator; Tessellate runs on EKS with an infra team owning the clusters.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        65,
+        66
+      ],
+      "notes": null
+    },
+    {
+      "id": "F17",
+      "type": "background",
+      "importance": "important",
+      "statement": "Marcus is looking because Quillbank's orchestration work is mature and incremental, and he wants to work on the ledger, which a different org owns at Quillbank.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        54,
+        55
+      ],
+      "notes": null
+    },
+    {
+      "id": "F18",
+      "type": "requirement",
+      "importance": "critical",
+      "statement": "The technical question was to design an idempotent, double-entry payment ledger for merchant money movement where client services retry, possibly concurrently.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        70,
+        72,
+        78
+      ],
+      "notes": null
+    },
+    {
+      "id": "F19",
+      "type": "number",
+      "importance": "important",
+      "statement": "Design assumptions given by Priya: peak about 3,000 ledger writes per second, average about 800, and single-currency transactions with no FX in the ledger.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        76,
+        82
+      ],
+      "notes": null
+    },
+    {
+      "id": "F20",
+      "type": "concept",
+      "importance": "important",
+      "statement": "Marcus's data model: accounts, transactions, and append-only entries; mistakes are fixed with reversing transactions, never updates or deletes.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        85,
+        86
+      ],
+      "notes": null
+    },
+    {
+      "id": "F21",
+      "type": "concept",
+      "importance": "critical",
+      "statement": "Idempotency is enforced by a Postgres unique constraint on client ID plus idempotency key; a unique violation means the request was seen and the existing result is returned.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        88,
+        106,
+        108
+      ],
+      "notes": null
+    },
+    {
+      "id": "F22",
+      "type": "concept",
+      "importance": "important",
+      "statement": "Marcus stores a hash of the request body with the key; the same key with a different payload returns a 422 idempotency key reuse error.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        110
+      ],
+      "notes": null
+    },
+    {
+      "id": "F23",
+      "type": "number",
+      "importance": "minor",
+      "statement": "At Quillbank a processor retries webhooks for up to 72 hours, so idempotency records were kept for 7 days.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        112
+      ],
+      "notes": null
+    },
+    {
+      "id": "F24",
+      "type": "concept",
+      "importance": "minor",
+      "statement": "Two identical concurrent requests are serialized by Postgres blocking the second insert on the unique index until the first commits or rolls back.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        117,
+        118
+      ],
+      "notes": null
+    },
+    {
+      "id": "F25",
+      "type": "concept",
+      "importance": "important",
+      "statement": "Balances are updated with select-for-update on a per-account balance row with a version number, locking rows in a consistent account ID order to avoid deadlocks.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        123,
+        124
+      ],
+      "notes": null
+    },
+    {
+      "id": "F26",
+      "type": "concept",
+      "importance": "important",
+      "statement": "For hot accounts, Marcus would append entries with periodic snapshots and no synchronous balance for a fee account, but keep a synchronous locked balance for merchant accounts that authorize payouts.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        131,
+        132
+      ],
+      "notes": null
+    },
+    {
+      "id": "F27",
+      "type": "concept",
+      "importance": "critical",
+      "statement": "Marcus proposed a transactional outbox: an outbox row is written in the same Postgres transaction as the entries and a relay publishes it to Kafka.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        138
+      ],
+      "notes": null
+    },
+    {
+      "id": "F28",
+      "type": "concept",
+      "importance": "critical",
+      "statement": "The outbox relay gives at-least-once delivery; effectively-once behaviour comes from idempotent consumers deduping on the ledger transaction ID, and Kafka exactly-once only holds within Kafka.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        144,
+        145,
+        146
+      ],
+      "notes": "supersedes Marcus's initial end-to-end exactly-once claim (C02)"
+    },
+    {
+      "id": "F29",
+      "type": "concept",
+      "importance": "minor",
+      "statement": "For ordering, events are partitioned by account (primary merchant account) and consumers use a per-account monotonically increasing entry sequence to detect gaps.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        151,
+        152,
+        154
+      ],
+      "notes": null
+    },
+    {
+      "id": "F30",
+      "type": "concept",
+      "importance": "important",
+      "statement": "If a processor times out, the payout goes to an unknown state (not failed), reserved funds stay held, retries reuse the same idempotency key, and a reconciliation job resolves it from settlement files or status APIs.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        161,
+        162,
+        164,
+        165
+      ],
+      "notes": null
+    },
+    {
+      "id": "F31",
+      "type": "number",
+      "importance": "minor",
+      "statement": "Marcus would alert if a payout sits in the unknown state for longer than 24 hours.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        167
+      ],
+      "notes": null
+    },
+    {
+      "id": "F32",
+      "type": "number",
+      "importance": "minor",
+      "statement": "Processor retries use exponential backoff with jitter starting at 200 milliseconds and capped at about 30 seconds, with a circuit breaker per processor.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        169,
+        170
+      ],
+      "notes": null
+    },
+    {
+      "id": "F33",
+      "type": "concept",
+      "importance": "important",
+      "statement": "To enforce a processor's global cap of 200 requests per second, Marcus would use a Redis token bucket with a Lua script and, if Redis fails, fall back to a conservative per-worker local limit rather than failing open.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        171,
+        172,
+        175
+      ],
+      "notes": null
+    },
+    {
+      "id": "F34",
+      "type": "risk",
+      "importance": "important",
+      "statement": "Tessellate's ledger Postgres uses asynchronous replication today; Marcus would push for synchronous replication to at least one standby, which Alex said is an active internal debate.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        181,
+        182,
+        183
+      ],
+      "notes": null
+    },
+    {
+      "id": "F35",
+      "type": "example",
+      "importance": "critical",
+      "statement": "Marcus's incident story: in March 2025 at Quillbank, a refactor had moved idempotency key generation inside the retry loop, so a processor latency spike (p99 from about 400 ms to over 9 seconds) caused duplicate payouts.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        187,
+        188,
+        189
+      ],
+      "notes": null
+    },
+    {
+      "id": "F36",
+      "type": "number",
+      "importance": "critical",
+      "statement": "The incident sent 1,412 duplicate payouts totalling about 2.3 million dollars.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        193
+      ],
+      "notes": null
+    },
+    {
+      "id": "F37",
+      "type": "number",
+      "importance": "important",
+      "statement": "It took 38 minutes to detect the duplicates, and detection came from a merchant emailing support rather than internal alerting.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        195
+      ],
+      "notes": null
+    },
+    {
+      "id": "F38",
+      "type": "background",
+      "importance": "important",
+      "statement": "In the incident Marcus was the secondary on call doing comms for the first 20 minutes, then took over as incident commander to the end.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        197,
+        198
+      ],
+      "notes": "refines his initial 'I led the incident' (C03)"
+    },
+    {
+      "id": "F39",
+      "type": "number",
+      "importance": "important",
+      "statement": "Within two weeks all funds were recovered except about 41,000 dollars, which was written off.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        203
+      ],
+      "notes": null
+    },
+    {
+      "id": "F40",
+      "type": "conclusion",
+      "importance": "important",
+      "statement": "Incident fixes: idempotency key derived deterministically from the payout ID, a lint rule and stable-key test, and a near real time reconciliation alert; a game day six weeks later detected the same bug in under 5 minutes.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        205,
+        206,
+        207
+      ],
+      "notes": null
+    },
+    {
+      "id": "F41",
+      "type": "background",
+      "importance": "minor",
+      "statement": "Marcus wrote the postmortem, owned two of the five follow-up actions and tracked all of them to completion.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        209
+      ],
+      "notes": null
+    },
+    {
+      "id": "F42",
+      "type": "background",
+      "importance": "important",
+      "statement": "Marcus admitted he had approved the faulty refactor himself and would now insist on tests that exercise the retry path.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        212,
+        213
+      ],
+      "notes": null
+    },
+    {
+      "id": "F43",
+      "type": "concept",
+      "importance": "minor",
+      "statement": "Marcus tests a ledger with invariants (entries sum to zero; balance equals snapshot plus later entries), property-based tests against real Postgres, and an hourly production checker that pages but never auto-corrects.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        219,
+        220,
+        221,
+        223
+      ],
+      "notes": null
+    },
+    {
+      "id": "F44",
+      "type": "concept",
+      "importance": "minor",
+      "statement": "For the Kotlin-to-Go migration Marcus would run shadow mode with a comparator, a target diff rate under 0.01%, and flip reads after two weeks of zero diffs; he cited a half-even vs half-up rounding mismatch.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        225,
+        226,
+        227,
+        229
+      ],
+      "notes": null
+    },
+    {
+      "id": "F45",
+      "type": "example",
+      "importance": "minor",
+      "statement": "On Go OOM kills in Kubernetes, Marcus would compare container memory to Go heap metrics and check GOMEMLIMIT, which Priya said bit the team last year.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        236,
+        237,
+        238
+      ],
+      "notes": null
+    },
+    {
+      "id": "F46",
+      "type": "example",
+      "importance": "important",
+      "statement": "Conflict story: Marcus disagreed with Quillbank PM Rohan over launching instant payouts; they compromised on a 5,000 dollar per-payout cap for the first 6 weeks for merchants over a year old, and Marcus shipped the reconciliation alert in week five.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        241,
+        247,
+        249
+      ],
+      "notes": null
+    },
+    {
+      "id": "F47",
+      "type": "example",
+      "importance": "important",
+      "statement": "Failure story: Marcus led a Spark-to-Flink migration at Ferrow estimated at 3 months that took 7, because he planned one big cutover; he now plans independently shippable slices.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        251,
+        252,
+        256
+      ],
+      "notes": null
+    },
+    {
+      "id": "F48",
+      "type": "person",
+      "importance": "minor",
+      "statement": "Marcus's former manager at Ferrow was a different Alex, Alex Kowalczyk, now at a climate startup.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        102,
+        104,
+        253
+      ],
+      "notes": "not the co-interviewer Alex Brandt"
+    },
+    {
+      "id": "F49",
+      "type": "preference",
+      "importance": "important",
+      "statement": "Marcus's self-stated strengths are calm, methodical debugging of production systems and writing clear design docs used as templates at Quillbank.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        260,
+        261
+      ],
+      "notes": null
+    },
+    {
+      "id": "F50",
+      "type": "preference",
+      "importance": "important",
+      "statement": "Marcus's self-stated weakness is taking too much on himself instead of delegating; he now pairs a mid-level engineer on every project he leads.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        263,
+        264
+      ],
+      "notes": null
+    },
+    {
+      "id": "F51",
+      "type": "logistics",
+      "importance": "critical",
+      "statement": "The role is Senior Backend Engineer on Payments Platform, leveled at L5.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        266
+      ],
+      "notes": null
+    },
+    {
+      "id": "F52",
+      "type": "number",
+      "importance": "critical",
+      "statement": "The Payments Platform team has seven engineers including Ines, who starts on Monday, plus Priya as manager; Marcus would be the eighth.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        268,
+        269,
+        271
+      ],
+      "notes": "supersedes Priya's 'six engineers' (C04)"
+    },
+    {
+      "id": "F53",
+      "type": "logistics",
+      "importance": "important",
+      "statement": "The team owns the ledger, payout orchestration, and the processor integrations.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        267
+      ],
+      "notes": null
+    },
+    {
+      "id": "F54",
+      "type": "logistics",
+      "importance": "critical",
+      "statement": "On-call is a weekly primary/secondary rotation; Marcus would be primary about one week in seven.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        272
+      ],
+      "notes": null
+    },
+    {
+      "id": "F55",
+      "type": "number",
+      "importance": "important",
+      "statement": "On-call averaged about 4 pages a week last quarter, mostly business hours, with a stipend of 400 dollars per week when primary.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        274,
+        275
+      ],
+      "notes": null
+    },
+    {
+      "id": "F56",
+      "type": "logistics",
+      "importance": "critical",
+      "statement": "The role is hybrid: two days a week in the Toronto office, Tuesdays and Thursdays; exceptions need VP of engineering Dan's approval and are rarely granted, and Marcus accepted two days.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        277,
+        279,
+        280
+      ],
+      "notes": null
+    },
+    {
+      "id": "F57",
+      "type": "background",
+      "importance": "important",
+      "statement": "Marcus lives in Hamilton, about an hour each way to Toronto on the GO train.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        19,
+        278
+      ],
+      "notes": null
+    },
+    {
+      "id": "F58",
+      "type": "logistics",
+      "importance": "critical",
+      "statement": "Marcus became a Canadian permanent resident in July and needs no visa sponsorship; the open work permit on his resume is outdated.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        282
+      ],
+      "notes": "supersedes resume's open work permit (C05)"
+    },
+    {
+      "id": "F59",
+      "type": "number",
+      "importance": "critical",
+      "statement": "Marcus's compensation expectation is about 240 total comp, with a base salary expectation of about 190.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        286,
+        288
+      ],
+      "notes": "240 is total comp, not base (C06)"
+    },
+    {
+      "id": "F60",
+      "type": "number",
+      "importance": "critical",
+      "statement": "Priya gave the L5 base band as 170,000 to 200,000 CAD, plus a 10% target bonus and an equity grant of about 150,000 over four years; 190 base is within band.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        289,
+        291
+      ],
+      "notes": null
+    },
+    {
+      "id": "F61",
+      "type": "number",
+      "importance": "important",
+      "statement": "Marcus's current base salary at Quillbank is 176,000.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        290
+      ],
+      "notes": null
+    },
+    {
+      "id": "F62",
+      "type": "timeline",
+      "importance": "critical",
+      "statement": "Marcus's realistic notice period is 6 weeks, although his contract says four weeks.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        316,
+        318
+      ],
+      "notes": "supersedes 'four weeks' (C07)"
+    },
+    {
+      "id": "F63",
+      "type": "number",
+      "importance": "important",
+      "statement": "Marcus has an equity vest at Quillbank on November 15th worth about 22,000 dollars that he does not want to forfeit.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        317,
+        371
+      ],
+      "notes": null
+    },
+    {
+      "id": "F64",
+      "type": "timeline",
+      "importance": "critical",
+      "statement": "Marcus's planned start date is Monday, November 23rd, just after the vest.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        319,
+        371
+      ],
+      "notes": "implicitly supersedes the mid-October start floated earlier (C08)"
+    },
+    {
+      "id": "F65",
+      "type": "entity",
+      "importance": "important",
+      "statement": "The first 90 days would focus on Project Tally, migrating the ledger from the Kotlin service Abacus to a new Go service, with onboarding and on-call shadowing in month one and cutover targeted for Q2 2027.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        299,
+        300
+      ],
+      "notes": null
+    },
+    {
+      "id": "F66",
+      "type": "concept",
+      "importance": "minor",
+      "statement": "Tally is an incremental migration using dual writes and shadow reads, one transaction type at a time.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        302
+      ],
+      "notes": null
+    },
+    {
+      "id": "F67",
+      "type": "risk",
+      "importance": "important",
+      "statement": "The team's biggest technical debt is the Abacus Kotlin monolith nobody on the team wrote, and a single ledger Postgres primary with asynchronous replicas at about 70% CPU at peak.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        305,
+        306
+      ],
+      "notes": null
+    },
+    {
+      "id": "F68",
+      "type": "logistics",
+      "importance": "minor",
+      "statement": "Tessellate postmortems are blameless: sev one and sev two incidents get a written postmortem within five business days, action items are reviewed weekly, and the incident commander role rotates.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        310,
+        311
+      ],
+      "notes": null
+    },
+    {
+      "id": "F69",
+      "type": "logistics",
+      "importance": "important",
+      "statement": "The final round has four sessions: a system design deep dive, a coding session, a cross-functional conversation with the product lead, and a conversation with Dan, the VP of engineering.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        314
+      ],
+      "notes": null
+    },
+    {
+      "id": "F70",
+      "type": "conclusion",
+      "importance": "important",
+      "statement": "In the debrief Alex rated Marcus strongly on failure modes and the incident story with concrete numbers, and valued that he volunteered approving the faulty PR.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        334,
+        335
+      ],
+      "notes": null
+    },
+    {
+      "id": "F71",
+      "type": "conclusion",
+      "importance": "important",
+      "statement": "Priya's main reservation is that Marcus confidently claimed end-to-end exactly-once and only reached at-least-once after Alex walked him through the crash; Alex felt he recovered quickly.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        339,
+        340,
+        341
+      ],
+      "notes": null
+    },
+    {
+      "id": "F72",
+      "type": "conclusion",
+      "importance": "important",
+      "statement": "Observed weaknesses: Alex found him hand-wavy on multi-account event ordering; Priya found his answers ran long and heard little cross-team influence.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        342,
+        347,
+        348
+      ],
+      "notes": null
+    },
+    {
+      "id": "F73",
+      "type": "conclusion",
+      "importance": "minor",
+      "statement": "Priya noticed the 8-vs-6 years discrepancy but does not hold it against him; Alex attributes it to counting internships.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        344,
+        345
+      ],
+      "notes": null
+    },
+    {
+      "id": "F74",
+      "type": "decision",
+      "importance": "critical",
+      "statement": "Priya and Alex decided to advance Marcus to the final round; this is not an offer or hire decision.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        350,
+        351,
+        352
+      ],
+      "notes": null
+    },
+    {
+      "id": "F75",
+      "type": "decision",
+      "importance": "critical",
+      "statement": "The named concern for the final round to probe is whether Marcus can reason about consistency boundaries across Postgres, Kafka and processors unprompted, with cross-team influence as a secondary concern.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        352,
+        353
+      ],
+      "notes": null
+    },
+    {
+      "id": "F76",
+      "type": "action_item",
+      "importance": "critical",
+      "statement": "Alex owns the system design follow-up pre-read for the final round, built around the async replication failover case, and will send it through Diane by Friday the 25th.",
+      "owner": "Alex Brandt",
+      "deadline": "Friday the 25th",
+      "position": "late",
+      "lines": [
+        355,
+        356,
+        357
+      ],
+      "notes": "owner changed from Priya to Alex (C09)"
+    },
+    {
+      "id": "F77",
+      "type": "action_item",
+      "importance": "critical",
+      "statement": "Priya will email Diane today to kick off scheduling the final round, which she wants to happen the week of October 5th.",
+      "owner": "Priya Raman",
+      "deadline": "today (final round week of October 5th)",
+      "position": "late",
+      "lines": [
+        358
+      ],
+      "notes": null
+    },
+    {
+      "id": "F78",
+      "type": "action_item",
+      "importance": "important",
+      "statement": "Priya and Alex will both submit their scorecards by end of day tomorrow, Wednesday.",
+      "owner": "Priya Raman and Alex Brandt",
+      "deadline": "end of day tomorrow (Wednesday)",
+      "position": "late",
+      "lines": [
+        375
+      ],
+      "notes": null
+    },
+    {
+      "id": "F79",
+      "type": "action_item",
+      "importance": "minor",
+      "statement": "Priya will raise skipping the take-home with Dan, but the question is left open.",
+      "owner": "Priya Raman",
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        363,
+        364
+      ],
+      "notes": null
+    },
+    {
+      "id": "F80",
+      "type": "logistics",
+      "importance": "minor",
+      "statement": "Alex is out on October 1st and 2nd.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        359
+      ],
+      "notes": null
+    },
+    {
+      "id": "F81",
+      "type": "decision",
+      "importance": "important",
+      "statement": "The level stays L5 for now; staff level may be revisited only if the final round shows staff-level scope.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        369
+      ],
+      "notes": null
+    },
+    {
+      "id": "F82",
+      "type": "action_item",
+      "importance": "minor",
+      "statement": "Someone (no owner assigned) should check with the comp team whether there is room for a sign-on bonus at L5 this cycle.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        373,
+        374
+      ],
+      "notes": "vague, no owner; Alex declined"
+    }
+  ],
+  "corrections": [
+    {
+      "id": "C01",
+      "what": "Candidate's years of experience",
+      "initial_value": "about 8 years",
+      "initial_line": 25,
+      "final_value": "6 years professional plus 2 years of internships and research",
+      "final_line": 49,
+      "explicit": true,
+      "fact_id": "F12"
+    },
+    {
+      "id": "C02",
+      "what": "Outbox delivery guarantee",
+      "initial_value": "exactly-once delivery end to end via Kafka transactions",
+      "initial_line": 140,
+      "final_value": "at-least-once relay with idempotent consumers deduping on transaction ID",
+      "final_line": 145,
+      "explicit": true,
+      "fact_id": "F28"
+    },
+    {
+      "id": "C03",
+      "what": "Marcus's role in the March 2025 incident",
+      "initial_value": "I led the incident",
+      "initial_line": 197,
+      "final_value": "secondary on call, then incident commander from about 20 minutes in",
+      "final_line": 198,
+      "explicit": true,
+      "fact_id": "F38"
+    },
+    {
+      "id": "C04",
+      "what": "Payments Platform team size",
+      "initial_value": "six engineers",
+      "initial_line": 267,
+      "final_value": "seven engineers including Ines",
+      "final_line": 268,
+      "explicit": true,
+      "fact_id": "F52"
+    },
+    {
+      "id": "C05",
+      "what": "Work authorization",
+      "initial_value": "open work permit (per resume)",
+      "initial_line": 281,
+      "final_value": "permanent resident since July, no sponsorship",
+      "final_line": 282,
+      "explicit": true,
+      "fact_id": "F58"
+    },
+    {
+      "id": "C06",
+      "what": "Meaning of the 240 compensation figure",
+      "initial_value": "240 read as base salary",
+      "initial_line": 287,
+      "final_value": "240 total comp; base expectation 190",
+      "final_line": 288,
+      "explicit": true,
+      "fact_id": "F59"
+    },
+    {
+      "id": "C07",
+      "what": "Notice period",
+      "initial_value": "four weeks",
+      "initial_line": 294,
+      "final_value": "6 weeks",
+      "final_line": 316,
+      "explicit": true,
+      "fact_id": "F62"
+    },
+    {
+      "id": "C08",
+      "what": "Start date",
+      "initial_value": "around mid-October",
+      "initial_line": 295,
+      "final_value": "Monday, November 23rd",
+      "final_line": 319,
+      "explicit": false,
+      "fact_id": "F64"
+    },
+    {
+      "id": "C09",
+      "what": "Owner of the system design follow-up",
+      "initial_value": "Priya",
+      "initial_line": 354,
+      "final_value": "Alex",
+      "final_line": 356,
+      "explicit": true,
+      "fact_id": "F76"
+    },
+    {
+      "id": "C10",
+      "what": "Ferrow team",
+      "initial_value": "Ferrow's payments team (Alex's assumption)",
+      "initial_line": 99,
+      "final_value": "Ferrow's data team",
+      "final_line": 100,
+      "explicit": true,
+      "fact_id": "F10"
+    }
+  ],
+  "not_decisions": [
+    {
+      "statement": "Considering Marcus for a staff-level role instead of senior (floated by Alex; Priya declined to change the level now)",
+      "lines": [
+        337,
+        369
+      ]
+    },
+    {
+      "statement": "Skipping the take-home for Marcus (needs Dan's sign-off; left open)",
+      "lines": [
+        361,
+        362,
+        364
+      ]
+    },
+    {
+      "statement": "Adding a pairing session on the Abacus Kotlin code to the final round (floated by Priya, rejected)",
+      "lines": [
+        365,
+        366,
+        367
+      ]
+    },
+    {
+      "statement": "A sign-on bonus to cover the November 15th vest or enable an earlier start (no promises, unassigned check with comp)",
+      "lines": [
+        320,
+        372,
+        373
+      ]
+    },
+    {
+      "statement": "An exception to allow one office day a week instead of two (policy is two days; Marcus accepted)",
+      "lines": [
+        278,
+        279
+      ]
+    },
+    {
+      "statement": "Moving the ledger database to synchronous replication (Marcus's suggestion; active internal debate, not decided)",
+      "lines": [
+        182,
+        183
+      ]
+    },
+    {
+      "statement": "Making an offer or hire decision (explicitly not decided; only advanced to final round)",
+      "lines": [
+        350
+      ]
+    }
+  ],
+  "distractors": [
+    {
+      "statement": "Marcus's camera updating when he clicked the link",
+      "lines": [
+        8
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Small talk about rain, Priya biking in, and the GO train",
+      "lines": [
+        19,
+        20,
+        21
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Joke about a processor's settlement files using a different date format by day of week",
+      "lines": [
+        35,
+        37
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "The defunct insurance startup had good snacks",
+      "lines": [
+        47
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Room booking system reserving Alex's room for 'Quarterly Vibes Sync'",
+      "lines": [
+        94,
+        95,
+        328
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Assumption that Marcus worked on Ferrow's payments team (Ferrow being Tessellate's main SMB competitor)",
+      "lines": [
+        99
+      ],
+      "why": "false assumption later corrected"
+    },
+    {
+      "statement": "Two different Alexes: co-interviewer Alex Brandt and Marcus's former Ferrow manager Alex Kowalczyk",
+      "lines": [
+        102,
+        103,
+        253
+      ],
+      "why": "similar names"
+    },
+    {
+      "statement": "Dan (VP of engineering) vs Diane (recruiter)",
+      "lines": [
+        279,
+        285
+      ],
+      "why": "similar names"
+    },
+    {
+      "statement": "Initial claim of about 8 years of experience",
+      "lines": [
+        25
+      ],
+      "why": "superseded value"
+    },
+    {
+      "statement": "Initial claim of end-to-end exactly-once delivery",
+      "lines": [
+        140
+      ],
+      "why": "superseded value"
+    },
+    {
+      "statement": "The 'exactly-once is a unicorn' joke and scorecard banter",
+      "lines": [
+        148,
+        376,
+        377
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Quillbank-side numbers (six-engineer orchestration team, 3 processors, 72-hour retries, 7-day key retention) that are not Tessellate's",
+      "lines": [
+        35,
+        39,
+        112
+      ],
+      "why": "irrelevant (different company)"
+    },
+    {
+      "statement": "Advisory lock hash collision anecdote",
+      "lines": [
+        63
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Alex's Slack going off like a slot machine",
+      "lines": [
+        231,
+        232
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Priya's team size of six engineers",
+      "lines": [
+        267
+      ],
+      "why": "superseded value"
+    },
+    {
+      "statement": "Notice period of four weeks and a mid-October start",
+      "lines": [
+        294,
+        295
+      ],
+      "why": "superseded value"
+    },
+    {
+      "statement": "240 interpreted as base salary",
+      "lines": [
+        286,
+        287
+      ],
+      "why": "superseded value"
+    },
+    {
+      "statement": "Open work permit on the resume",
+      "lines": [
+        281
+      ],
+      "why": "superseded value"
+    },
+    {
+      "statement": "Rohan still teasing Marcus about 'we are not shipping this' at team dinners",
+      "lines": [
+        249
+      ],
+      "why": "irrelevant"
+    }
+  ],
+  "open_questions_at_end": [
+    "Whether the take-home will be skipped for Marcus (pending Dan's sign-off)",
+    "Whether Marcus should be considered for staff level rather than L5",
+    "Whether there is room for a sign-on bonus at L5 to offset the November 15th vest (no owner assigned)",
+    "Whether Marcus can reason about consistency boundaries unprompted and shows cross-team influence (to be probed in the final round)",
+    "The offer/hire decision itself, pending the final round"
+  ],
+  "summary_must_include": [
+    "Candidate Marcus Oyelaran: senior engineer on Quillbank payments orchestration, previously Ferrow's data team; 6 years professional plus 2 years internships/research (F04, F09, F10, F12)",
+    "Ledger design: unique constraint on client ID + idempotency key, transactional outbox, at-least-once delivery with idempotent consumers after the exactly-once claim was corrected (F21, F27, F28)",
+    "March 2025 duplicate payouts incident: 1,412 payouts, about $2.3M, 38 minutes to detect; Marcus secondary on call then incident commander (F35, F36, F37, F38)",
+    "Role: Senior Backend Engineer L5, team of seven engineers, on-call about one week in seven, hybrid Tuesdays/Thursdays in Toronto (F51, F52, F54, F56)",
+    "Compensation: expects about 190 base / 240 total comp; L5 base band 170-200k CAD plus 10% bonus and ~150k equity over four years (F59, F60)",
+    "Notice period 6 weeks because of a November 15th vest; start Monday November 23rd; permanent resident, no sponsorship (F62, F63, F64, F58)",
+    "Decision: advance to the final round (not an offer); concern to probe is reasoning about consistency boundaries unprompted, secondary cross-team influence (F74, F75)",
+    "Actions: Alex sends the system design follow-up via Diane by Friday the 25th; Priya emails Diane today to schedule the final round for the week of October 5th; scorecards by end of day Wednesday (F76, F77, F78)",
+    "Not decided: staff level, skipping the take-home, sign-on bonus (F81, F79, F82)",
+    "Interviewer observations: strong on failure modes and incident story; concerns about the exactly-once overclaim, long answers, and thin cross-team influence (F70, F71, F72)"
+  ]
+}

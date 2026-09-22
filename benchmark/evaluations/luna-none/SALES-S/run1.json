@@ -1,0 +1,169 @@
+{
+ "blind_id": "S-a03bb522",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 33265,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 9577,
+  "candidatesTokenCount": 987,
+  "totalTokenCount": 14297,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 9577
+   }
+  ],
+  "thoughtsTokenCount": 3733,
+  "serviceTier": "standard"
+ },
+ "fact_count": 28,
+ "evaluation": {
+  "factual_accuracy": 8,
+  "important_information_retention": 8,
+  "hallucination_control": 8,
+  "action_item_retention": 10,
+  "decision_retention": 9,
+  "speaker_attribution": 10,
+  "numeric_accuracy": 8,
+  "entity_retention": 10,
+  "timeline_accuracy": 10,
+  "conclusion_accuracy": 7,
+  "structure": 10,
+  "conciseness": 8,
+  "readability": 9,
+  "overall_summary_quality": 8,
+  "critical_errors": [
+   "The notes state in the Risks section that the customer is 'still evaluating that tradeoff' regarding the 24-month commitment, which contradicts the clear decision recorded elsewhere that the 24-month term was agreed upon."
+  ],
+  "missing_important_information": [
+   "The overage cost of $0.40 per gigabyte.",
+   "The alternative 12-month term offer at a 12% discount.",
+   "The alternative quarterly billing option at a 15% discount and finance's hard line against quarterly billing at 18%.",
+   "Daniel's argument that Harrow would pay Cartograph overage from day one."
+  ],
+  "hallucinated_information": [
+   "The follow-up draft includes a request for the customer to confirm Cartograph's ingest limits, which Daniel did not ask for in the meeting."
+  ],
+  "superseded_values_reported": [],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [
+   "The mainframe connector is not relevant because the customer retired its mainframe two years ago."
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "partial"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "partial"
+   },
+   {
+    "id": "F06",
+    "status": "partial"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "partial"
+   },
+   {
+    "id": "F13",
+    "status": "partial"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "missing"
+   }
+  ],
+  "rationale": "The notes capture the vast majority of the critical deal terms, action items, and next steps accurately. However, they omit several alternative negotiation points (the 12-month term offer, the 15% quarterly billing option, and the $0.40 overage fee). Additionally, there is a contradiction where the notes correctly record the 24-month term as a decision, but later list it as a risk because the customer is 'still evaluating that tradeoff', which undermines conclusion accuracy."
+ }
+}

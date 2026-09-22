@@ -8,7 +8,10 @@ import { VectorStore, ScoredChunk } from '../../rag/VectorStore';
 import { EmbeddingPipeline } from '../../rag/EmbeddingPipeline';
 import Database from 'better-sqlite3';
 import { buildDocumentMap, resolveTargetSections, sectionAwareChunksFromMap, selectTableOfContentsEntries, sentenceAwareWindows, tabularChunks } from './DocumentMap';
-import { wordsOf } from './lexicalTokens';
+import { wordsOf, buildLexicalStats, queryWeights, weightedOverlapScore, anchorTerms, anchorCoverage, corpusAnchorsQuestion, isProbeFunctionWord, type LexicalStats } from './lexicalTokens';
+import { CHUNKER_VERSION, semanticChunks, normalizeLineEndings } from './semanticChunker';
+import { resolveRerankBudgetMs, rerankBudgetFitsDeadline, type RerankSurface } from '../reranking/rerankBudget';
+import { buildRerankPool, RERANK_CANDIDATE_POOL, resolveRerankPoolSize } from './rerankPool';
 // Round-8 (seminar-fix-2): use the SHARED 6-clause evidence rule so the hybrid
 // (live) path gives the model the SAME completeness + off-topic-redirect guidance
 // as the lexical path. Previously formatContext had a stale 1-sentence copy.
@@ -33,6 +36,21 @@ export interface ModeRetrievedChunk {
     ftsScore: number;
     vectorScore: number;
     trustLevel: 'untrusted_reference';
+    /**
+     * Cross-encoder score when this pool was reranked; absent otherwise.
+     *
+     * CARRIED THROUGH SINCE 2026-09-07. It was computed, used to SELECT the
+     * pool, and dropped at this boundary — so every consumer that sorts
+     * evidence (the V3 legacy port, the context packer) re-ordered the
+     * reranker's picks by the hybrid score, and the debug event reported
+     * `rerankScore: null` on a turn whose telemetry showed a billed, HTTP 200
+     * rerank. Measured on a 23-turn live session with Voyage rerank-2.5-lite.
+     */
+    rerankScore?: number;
+    /** ANCHOR_BOOST × anchor coverage² when the question named this chunk's distinctive terms; included in `score`. */
+    anchorScore?: number;
+    /** Structural/property answerability boost, same story as above. */
+    answerabilityScore?: number;
 }
 
 /**
@@ -81,6 +99,17 @@ export interface ModeReferenceIndexState {
     status: ModeReferenceIndexStatus;
     /** Composite embedding-space key the stored vectors were produced in. */
     embeddingSpace: string | null;
+    /**
+     * How many of `chunkCount` actually carry a vector.
+     *
+     * A partially embedded file is still `ready` — retrieval over an embedded
+     * prefix plus a lexical tail beats an all-lexical file, so serving it is
+     * correct. What was NOT correct was having no way to tell the two apart:
+     * `ready` alone made a half-indexed file look finished, so nothing ever
+     * completed it. This is the field that makes the difference visible, and
+     * therefore resumable.
+     */
+    embeddedChunkCount: number;
 }
 
 export type ModeReferenceIndexStatus = 'pending' | 'indexing' | 'ready' | 'failed' | 'lexical_only' | 'ocr_required';
@@ -110,6 +139,13 @@ const CHUNK_OVERLAP = 30;
 // per-call embed timeout and lose all progress. 100 aligns with the Gemini
 // batchEmbedContents request cap.
 const MODE_INDEX_EMBED_BATCH = Number(process.env.NATIVELY_MODE_INDEX_EMBED_BATCH) || 100;
+/**
+ * Most chunks a single live query may embed ephemerally (chunks with no vector
+ * in the active space). Sized for "a file was uploaded a moment ago and its
+ * background index has not landed" — never for "the whole corpus changed
+ * space". See performHybridRetrieval for the crash this bounds.
+ */
+export const QUERY_EPHEMERAL_EMBED_MAX = Number(process.env.NATIVELY_QUERY_EPHEMERAL_EMBED_MAX) || 24;
 
 /**
  * F22 — the LOCAL ONNX embedder needs a much smaller indexing batch.
@@ -132,9 +168,110 @@ const MODE_INDEX_EMBED_BATCH = Number(process.env.NATIVELY_MODE_INDEX_EMBED_BATC
  */
 const MODE_INDEX_EMBED_BATCH_LOCAL =
   Number(process.env.NATIVELY_MODE_INDEX_EMBED_BATCH_LOCAL) || 16;
+
+/**
+ * Character budget for ONE embedding request (GAP-3).
+ *
+ * A count alone describes the wrong thing: 32 chunks of a dense PDF and 32
+ * chunks of a sparse changelog are the same batch size and an order of magnitude
+ * apart in real work. The server bills tokens and the provider rate-limits
+ * tokens, so a batch bounded only by item count can be small and slow or huge
+ * and rate-limiting, unpredictably.
+ *
+ * SIZED SO IT NEVER SPLITS A NORMAL BATCH. semanticChunker targets ~350 tokens
+ * (~1,400 characters), so a full 32-item batch is ~45,000 characters. An earlier
+ * value of 24,000 was chosen to "keep requests small" and instead became the
+ * binding constraint on every ordinary document — it cut cloud batches from 100
+ * to 15, multiplying request count for no benefit and breaking the measured
+ * property LocalEmbedBatchF22 exists to protect ("a CLOUD provider keeps the
+ * large batch").
+ *
+ * 120,000 characters is roughly 30,000 tokens: comfortably above any batch the
+ * chunker can produce, while still bounding the pathological case a caller could
+ * construct by hand (32 inputs at the server's 32,000-char cap would otherwise be
+ * over a million characters in one request).
+ */
+const MODE_INDEX_EMBED_BATCH_CHARS =
+  Number(process.env.NATIVELY_MODE_INDEX_EMBED_BATCH_CHARS) || 120_000;
+
+/**
+ * How many files may be embedding at once, process-wide (GAP-4).
+ *
+ * Each file's index loop was independent, so uploading five files started five
+ * concurrent batch loops against a single API key that allows 120 requests per
+ * minute. Nothing bounded the total; ForegroundGate throttles by USER ACTIVITY,
+ * which is a different question from how many requests are in flight.
+ *
+ * Two is deliberate rather than tuned-for-throughput: indexing is background
+ * work whose competitor is the same app's interactive query embedding, and the
+ * measured server p50 for a 32-chunk batch is ~1.2s. Two concurrent loops keep
+ * the key comfortably under its limit while leaving headroom for the foreground
+ * query path, which is the latency a user actually feels.
+ */
+const MODE_INDEX_MAX_CONCURRENT_FILES =
+  Number(process.env.NATIVELY_MODE_INDEX_MAX_CONCURRENT_FILES) || 2;
+
+/** Bounded retry for a sub-batch the SERVER said is worth retrying. */
+const MODE_INDEX_BATCH_RETRIES =
+  Number(process.env.NATIVELY_MODE_INDEX_BATCH_RETRIES) || 2;
+const MODE_INDEX_RETRY_CAP_MS = 20_000;
+
+/**
+ * Split chunks into requests bounded by BOTH item count and characters.
+ *
+ * Exported for tests: the boundary rule is the thing that regresses, and it is
+ * pure, so it should be verifiable without a database or a provider.
+ */
+export function planEmbedBatches(chunks: string[], maxItems: number, maxChars: number): string[][] {
+  const batches: string[][] = [];
+  let current: string[] = [];
+  let chars = 0;
+  for (const c of chunks) {
+    const len = c.length;
+    // A single chunk over the budget still goes out ALONE rather than being cut:
+    // the server truncates at its own per-input cap and reports it, and silently
+    // splitting a semantic unit here would undo the chunker's whole purpose.
+    if (current.length > 0 && (current.length >= maxItems || chars + len > maxChars)) {
+      batches.push(current);
+      current = [];
+      chars = 0;
+    }
+    current.push(c);
+    chars += len;
+  }
+  if (current.length > 0) batches.push(current);
+  return batches;
+}
+
+/**
+ * Process-wide gate on concurrent file indexing. A plain counter with a waiter
+ * queue — a semaphore is exactly the primitive needed and pulling in a
+ * dependency for eight lines would be worse.
+ */
+class IndexConcurrencyGate {
+  private active = 0;
+  private waiters: Array<() => void> = [];
+  constructor(private readonly limit: number) {}
+  async acquire(): Promise<void> {
+    if (this.active < this.limit) { this.active++; return; }
+    await new Promise<void>((resolve) => this.waiters.push(resolve));
+    this.active++;
+  }
+  release(): void {
+    this.active = Math.max(0, this.active - 1);
+    const next = this.waiters.shift();
+    if (next) next();
+  }
+}
+const indexGate = new IndexConcurrencyGate(MODE_INDEX_MAX_CONCURRENT_FILES);
 const MIN_COMBINED_SCORE = 0.15;
 
 const FTS_WEIGHT = 0.4;  // alpha for combined score: alpha * fts + (1-alpha) * vector
+// Weight of full anchor coverage in rankScore (lexicalTokens.anchorCoverage).
+// Sized against the measured noise band of the vector arm across same-shaped
+// sibling sections (0.6 × ~0.13 ≈ 0.08) and the answerability boosts it must
+// outrank (shape match +0.35 is shared by every sibling, so it cancels).
+const ANCHOR_BOOST = ((v) => (Number.isFinite(v) && v >= 0 ? v : 0.25))(parseFloat(process.env.NATIVELY_RETRIEVAL_ANCHOR_BOOST ?? ''));   // "=0" switches it off
 
 /**
  * F23 — the lexical fallback must NOT reuse the combined-score floor.
@@ -156,6 +293,9 @@ const FTS_WEIGHT = 0.4;  // alpha for combined score: alpha * fts + (1-alpha) * 
  * (reject noise) on the correct scale.
  */
 const MIN_LEXICAL_SCORE = MIN_COMBINED_SCORE * FTS_WEIGHT;
+/** Below this many hybrid hits, token-overlapping chunks are added for the reranker (2026-09-11). */
+export const THIN_RESULTS_TOPUP_BELOW = 3;
+export const THIN_RESULTS_TOPUP_MAX = 8;
 
 /** Convert a combined-scale threshold to the lexical scale. */
 const toLexicalThreshold = (combinedThreshold: number): number => combinedThreshold * FTS_WEIGHT;
@@ -176,7 +316,8 @@ const CONF_MIN_QUERY_TOKENS = 3;     // ignore trivially short queries for the "
 // the final top-K so it can rescue an answer-bearing chunk that cosine ranked
 // low (the whole point — cosine over 140-word chunks is noisy at 100-page
 // scale). Bounded so the local forward-pass stays in the tens-of-ms range.
-const RERANK_CANDIDATE_POOL = 30;
+// The ceiling itself now lives in rerankPool.ts, so the settings UI can read
+// the same number the retriever clamps to.
 
 // Hard cap on the per-call forward-pass batch. The 2026-07-06 SIGTRAP crash
 // (BFCArena::Extend -> posix_memalign trap in onnxruntime::Add<float>::Compute)
@@ -231,6 +372,31 @@ function hashContent(content: string): string {
     return (hash >>> 0).toString(16).padStart(8, '0');
 }
 
+/**
+ * The hash the index is keyed on: file content AND the chunker that produced
+ * the stored chunks. See CHUNKER_VERSION — a chunker change must invalidate the
+ * index, and content alone cannot express that.
+ */
+function indexHash(content: string): string {
+    // TRIMMED HERE, not at the call sites (2026-08-29). Two of the three callers
+    // hashed `file.content` raw while `indexFileInner` hashed
+    // `file.content.trim()`, so any file with surrounding whitespace produced two
+    // different hashes and `needsReindexing` was PERMANENTLY true — the file
+    // re-chunked and re-embedded on every single launch, forever, with no error
+    // and no visible symptom beyond the bill.
+    //
+    // Observed on a copy of a real user database: `04_competitors.csv` has one
+    // trailing newline (415 chars raw, 414 trimmed) and still reported
+    // needsReindex=true immediately after a successful re-index, while the two
+    // PDFs — whose content happens to have no surrounding whitespace — settled
+    // correctly. Predates the chunker version; `.c2` only made it cost more.
+    //
+    // Normalizing inside the hash rather than at each call site is the point: a
+    // fourth caller cannot reintroduce the drift, and `indexFileInner` passing
+    // already-trimmed content stays correct because trim is idempotent.
+    return `${hashContent((content || '').trim())}.c${CHUNKER_VERSION}`;
+}
+
 interface ChunkCandidate {
     sourceId: string;
     fileName: string;
@@ -246,6 +412,12 @@ interface ChunkCandidate {
      */
     rerankScore?: number;
     answerabilityScore?: number;
+    /**
+     * ANCHOR_BOOST × (coverage of the query's rare terms)² — see
+     * lexicalTokens.anchorCoverage. Part of rankScore and of admission; absent
+     * when the query has no rare term or the pool is too small for idf.
+     */
+    anchorScore?: number;
     answerabilityBoosts?: string[];
     answerabilityPenalties?: string[];
 }
@@ -317,6 +489,12 @@ export class ModeHybridRetriever {
             for (const col of [
                 "ALTER TABLE mode_reference_index_state ADD COLUMN status TEXT NOT NULL DEFAULT 'pending'",
                 'ALTER TABLE mode_reference_index_state ADD COLUMN embedding_space TEXT',
+                // How many of chunk_count actually carry a vector. Without it a
+                // PARTIALLY embedded file is indistinguishable from a complete
+                // one — both are `ready` — so nothing could detect the condition,
+                // let alone resume it. Defaults to 0; a row written before this
+                // column existed is treated as "unknown", see getIndexState.
+                'ALTER TABLE mode_reference_index_state ADD COLUMN embedded_chunk_count INTEGER NOT NULL DEFAULT 0',
             ]) {
                 try { this.db.exec(col); } catch { /* column exists */ }
             }
@@ -331,7 +509,7 @@ export class ModeHybridRetriever {
     private getIndexState(fileId: string): ModeReferenceIndexState | null {
         try {
             const row = this.db.prepare(
-                'SELECT file_id, file_hash, indexed_at, chunk_count, status, embedding_space FROM mode_reference_index_state WHERE file_id = ?'
+                'SELECT file_id, file_hash, indexed_at, chunk_count, status, embedding_space, embedded_chunk_count FROM mode_reference_index_state WHERE file_id = ?'
             ).get(fileId) as any;
             if (!row) return null;
             return {
@@ -341,6 +519,7 @@ export class ModeHybridRetriever {
                 chunkCount: row.chunk_count,
                 status: (row.status as ModeReferenceIndexStatus) || 'pending',
                 embeddingSpace: row.embedding_space ?? null,
+                embeddedChunkCount: typeof row.embedded_chunk_count === 'number' ? row.embedded_chunk_count : 0,
             };
         } catch (e) {
             return null;
@@ -350,12 +529,12 @@ export class ModeHybridRetriever {
     /**
      * Update the index state for a file after embedding its chunks
      */
-    private updateIndexState(fileId: string, contentHash: string, chunkCount: number, status: ModeReferenceIndexStatus = 'ready', embeddingSpace: string | null = null): void {
+    private updateIndexState(fileId: string, contentHash: string, chunkCount: number, status: ModeReferenceIndexStatus = 'ready', embeddingSpace: string | null = null, embeddedChunkCount: number = 0): void {
         try {
             this.db.prepare(`
-                INSERT OR REPLACE INTO mode_reference_index_state (file_id, file_hash, indexed_at, chunk_count, status, embedding_space)
-                VALUES (?, ?, ?, ?, ?, ?)
-            `).run(fileId, contentHash, Date.now(), chunkCount, status, embeddingSpace);
+                INSERT OR REPLACE INTO mode_reference_index_state (file_id, file_hash, indexed_at, chunk_count, status, embedding_space, embedded_chunk_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            `).run(fileId, contentHash, Date.now(), chunkCount, status, embeddingSpace, embeddedChunkCount);
         } catch (e) {
             console.warn('[ModeHybridRetriever] Failed to update index state:', e);
         }
@@ -375,16 +554,25 @@ export class ModeHybridRetriever {
     // ── PI v3 (W3): upload-time indexing ──────────────────────────────────
 
     /** Public view of a file's index status (for the Modes Manager UI badge). */
-    public getFileIndexStatus(fileId: string): { status: ModeReferenceIndexStatus; chunkCount: number } {
+    public getFileIndexStatus(fileId: string): { status: ModeReferenceIndexStatus; chunkCount: number; embeddedChunkCount: number } {
         const state = this.getIndexState(fileId);
-        if (!state) return { status: 'pending', chunkCount: 0 };
+        if (!state) return { status: 'pending', chunkCount: 0, embeddedChunkCount: 0 };
         // A space mismatch means the stored vectors are unusable with the
         // current provider — report as pending so the UI shows re-indexing.
         const activeSpace = this.embeddingPipeline.getActiveSpaceKey?.();
         if (state.status === 'ready' && activeSpace && state.embeddingSpace !== activeSpace) {
-            return { status: 'pending', chunkCount: state.chunkCount };
+            return { status: 'pending', chunkCount: state.chunkCount, embeddedChunkCount: 0 };
         }
-        return { status: state.status, chunkCount: state.chunkCount };
+        // A file whose tail never embedded is reported as pending for exactly the
+        // reason a space-mismatched one is: ModesManager.prewarmModeReferenceIndex
+        // re-indexes everything that is not `ready`, so `ready` is the one answer
+        // that guarantees nobody ever finishes it. Reporting the true state is
+        // what turns "a 429 cost this file its tail forever" into "the next mode
+        // activation completes it".
+        if (state.status === 'ready' && state.chunkCount > 0 && state.embeddedChunkCount < state.chunkCount) {
+            return { status: 'pending', chunkCount: state.chunkCount, embeddedChunkCount: state.embeddedChunkCount };
+        }
+        return { status: state.status, chunkCount: state.chunkCount, embeddedChunkCount: state.embeddedChunkCount };
     }
 
     /**
@@ -400,22 +588,108 @@ export class ModeHybridRetriever {
      */
     private inflightIndex = new Map<string, Promise<void>>();
 
+    // T13 / D4.6 — "at session start, re-embed any file whose vectors sit in a
+    // non-primary space" is ALREADY IMPLEMENTED, and a second implementation was
+    // written here before that was checked. `getFileIndexStatus` reports a
+    // space-mismatched file as `pending` (see above), and
+    // `ModesManager.prewarmModeReferenceIndex` re-indexes every file that is not
+    // `ready` on mode activation. So the repair already runs; adding a parallel
+    // path would have been a documented method with no caller.
+    //
+    // The gap that WAS real is upstream, and is fixed in EmbeddingPipeline:
+    // ingestion used to write vectors into the fallback space on the first
+    // rate-limit burst, which is how a file became permanently MiniLM-indexed.
+    // It now refuses to write to a non-primary space below the promotion
+    // threshold, so there is nothing for a repair pass to find.
+
     public async indexFile(file: ModeReferenceFile): Promise<void> {
         const existing = this.inflightIndex.get(file.id);
         if (existing) return existing;
-        const job = this.indexFileInner(file).finally(() => this.inflightIndex.delete(file.id));
+        // Bounded process-wide (GAP-4). Five simultaneous uploads used to start
+        // five independent batch loops against one API key; the gate makes the
+        // extra ones wait rather than compete, and the single-flight map above
+        // still collapses a double-upload of the SAME file to one job.
+        const job = (async () => {
+            await indexGate.acquire();
+            try { await this.indexFileInner(file); }
+            finally { indexGate.release(); }
+        })().finally(() => this.inflightIndex.delete(file.id));
         this.inflightIndex.set(file.id, job);
         return job;
+    }
+
+    /**
+     * Embed one sub-batch, retrying only what the SERVER says is retryable.
+     *
+     * The index path had no retry at all: any failure abandoned the rest of the
+     * file. That was survivable when a failure was assumed fatal, but the server
+     * now distinguishes a rate limit (retryable, with a Retry-After it got from
+     * the provider) from a permanent rejection — so abandoning a whole document
+     * because the provider was briefly busy is simply wrong.
+     *
+     * Bounded and jittered: at most MODE_INDEX_BATCH_RETRIES attempts, honouring
+     * Retry-After up to a cap, with jitter so N files resuming after the same
+     * rate limit do not retry in lockstep and re-create it.
+     */
+    private async embedSubBatchWithRetry(
+        slice: string[],
+        label: string,
+    ): Promise<{ embeddings: number[][]; space: string | null }> {
+        let lastErr: any = null;
+        for (let attempt = 0; attempt <= MODE_INDEX_BATCH_RETRIES; attempt++) {
+            try {
+                const result = await this.embeddingPipeline.getEmbeddingsWithFallback(slice);
+                if (!Array.isArray(result.embeddings) || result.embeddings.length !== slice.length) {
+                    throw new Error(`returned ${result.embeddings?.length ?? 'none'} vectors for ${slice.length} chunks`);
+                }
+                return { embeddings: result.embeddings, space: result.space };
+            } catch (err: any) {
+                lastErr = err;
+                // `retryable === false` is the server's explicit verdict on a
+                // permanent rejection. Anything undefined is treated as
+                // retryable, which is the pre-existing assumption.
+                if (err?.retryable === false || err?.permanentAuthFailure) throw err;
+                if (attempt >= MODE_INDEX_BATCH_RETRIES) break;
+                const declared = Number(err?.retryAfter) > 0 ? Number(err.retryAfter) * 1000 : null;
+                const backoff = declared ?? Math.min(1000 * Math.pow(2, attempt), MODE_INDEX_RETRY_CAP_MS);
+                const wait = Math.min(backoff, MODE_INDEX_RETRY_CAP_MS) * (0.75 + Math.random() * 0.5);
+                console.warn(`[ModeHybridRetriever] ${label}: embed attempt ${attempt + 1} failed (${err?.message ?? err}); retrying in ${Math.round(wait)}ms`);
+                await new Promise((r) => setTimeout(r, wait));
+            }
+        }
+        throw lastErr;
     }
 
     private async indexFileInner(file: ModeReferenceFile): Promise<void> {
         const content = (file.content || '').trim();
         if (!content) return;
-        const contentHash = hashContent(content);
+        // Versioned (T9): this is the value compared against the stored state, so
+        // it must agree with `needsReindexing`/`markIndexed` or a chunker change
+        // would be detected in one place and ignored in the other.
+        const contentHash = indexHash(content);
         const activeSpace = this.embeddingPipeline.getActiveSpaceKey?.() ?? null;
 
         const state = this.getIndexState(file.id);
-        if (state && state.status === 'ready' && state.fileHash === contentHash && state.embeddingSpace === activeSpace) {
+        // Up to date means fully embedded, not merely `ready`.
+        //
+        // A sub-batch failure (a 429, a timeout) keeps the embedded prefix, stores
+        // the tail as lexical-only and marks the file `ready` — deliberately, since
+        // a partly-vectorised file retrieves better than an all-lexical one. But
+        // `ready` was ALSO the skip condition here, and
+        // ModesManager.prewarmModeReferenceIndex only re-indexes files that are not
+        // `ready`. So the tail this code's own comment promised a later retry would
+        // finish was unreachable by every path that could have finished it: one
+        // rate limit left a large file permanently half-indexed, until its content
+        // or the embedding model changed.
+        //
+        // Requiring embeddedChunkCount to have caught up closes that. Rows written
+        // before the column existed report 0, which reads as "unknown" and costs at
+        // most one re-index of an already-complete file — the safe direction.
+        const fullyEmbedded = !!state
+            && state.embeddedChunkCount >= state.chunkCount
+            && state.chunkCount > 0;
+        if (state && state.status === 'ready' && state.fileHash === contentHash
+            && state.embeddingSpace === activeSpace && fullyEmbedded) {
             return; // up to date
         }
         // OCR_REQUIRED is terminal for this content hash — re-running cannot
@@ -458,8 +732,10 @@ export class ModeHybridRetriever {
         // already grades it unsupporting — but no vectors, no READY, and the
         // ingest event says exactly why the file cannot answer anything.
         if (isPlaceholderOnlyContent(content)) {
-            this.persistChunks(file.id, chunks, null, null);
-            this.updateIndexState(file.id, contentHash, chunks.length, 'ocr_required', null);
+            const wrote = this.persistChunks(file.id, chunks, null, null);
+            // A failed write means the chunk TEXT is absent too, so even lexical
+            // retrieval has nothing. 'failed' is retried; 'ocr_required' is terminal.
+            this.updateIndexState(file.id, contentHash, chunks.length, wrote ? 'ocr_required' : 'failed', null, 0);
             console.warn(`[ModeHybridRetriever] "${file.fileName}": no searchable text extracted (image-only PDF?) — marked OCR_REQUIRED; the file cannot be searched until it has text.`);
             emitIngestDebug('ocr_required', 0, 'no searchable text extracted — image-only or scanned PDF');
             return;
@@ -468,13 +744,26 @@ export class ModeHybridRetriever {
         if (!this.isEmbeddingAvailable() || !activeSpace) {
             // No embedder: persist chunk TEXT (lexical retrieval still wins a
             // re-chunk per query) and mark lexical_only so prewarm retries later.
-            this.persistChunks(file.id, chunks, null, null);
-            this.updateIndexState(file.id, contentHash, chunks.length, 'lexical_only', null);
+            const wrote = this.persistChunks(file.id, chunks, null, null);
+            this.updateIndexState(file.id, contentHash, chunks.length, wrote ? 'lexical_only' : 'failed', null, 0);
             emitIngestDebug('lexical_only', 0);
             return;
         }
 
-        this.updateIndexState(file.id, contentHash, chunks.length, 'indexing', activeSpace);
+        // A re-index under a DIFFERENT hash starts by dropping the old rows (review
+        // finding, reproduced 2026-09-20). This line writes the NEW hash before any
+        // vector exists, so from here on `needsReindexing()` is false — and for as
+        // long as the job ran (or forever, if it then failed) every query paired
+        // the OLD vectors with the NEW chunks again: the stale-index gate protected
+        // exactly one query. With the rows gone there is nothing stale to load;
+        // those chunks are embedded for the turn or scored lexically, as for any
+        // file that is still indexing.
+        const previous = this.getIndexState(file.id);
+        if (previous && previous.fileHash !== contentHash) {
+            try { this.db.prepare('DELETE FROM mode_reference_chunks WHERE file_id = ?').run(file.id); this.chunkCache.delete(file.id); }
+            catch (e) { console.warn('[ModeHybridRetriever] could not clear a stale index before re-indexing:', e); }
+        }
+        this.updateIndexState(file.id, contentHash, chunks.length, 'indexing', activeSpace, 0);
         try {
             // Large files (e.g. a 14k-row CSV → hundreds of chunks) can't be embedded
             // in ONE call: the pipeline wraps a single getEmbeddingsWithFallback in a
@@ -483,18 +772,35 @@ export class ModeHybridRetriever {
             // F22: provider-aware batch. The local ONNX path must stay small or a
             // large document takes the whole process down with a native SIGTRAP.
             const activeProvider = this.embeddingPipeline.getActiveProviderName?.();
-            const INDEX_BATCH = activeProvider === 'local'
+            const configuredBatch = activeProvider === 'local'
                 ? MODE_INDEX_EMBED_BATCH_LOCAL
                 : MODE_INDEX_EMBED_BATCH;
-            if (chunks.length <= INDEX_BATCH) {
-                const result = await this.embeddingPipeline.getEmbeddingsWithFallback(chunks);
+            // Never exceed the provider's own per-request ceiling. The Natively
+            // transport caps at 32 (the server refuses more) and SPLITS anything
+            // larger into sequential round trips — all of which then share the
+            // pipeline's single 30s deadline, and all of which are discarded
+            // together when any one fails. Sizing to the ceiling makes one
+            // sub-batch exactly one upstream request, so a failure costs the 32
+            // chunks that actually failed instead of the 100 that were sent.
+            const providerMax = this.embeddingPipeline.getActiveProviderMaxBatch?.();
+            const INDEX_BATCH = providerMax && providerMax > 0
+                ? Math.min(configuredBatch, providerMax)
+                : configuredBatch;
+            const plan = planEmbedBatches(chunks, INDEX_BATCH, MODE_INDEX_EMBED_BATCH_CHARS);
+            if (plan.length === 1) {
+                const result = await this.embedSubBatchWithRetry(chunks, file.fileName);
                 const embeddings = result.embeddings;
-                if (!Array.isArray(embeddings) || embeddings.length !== chunks.length) {
-                    throw new Error(`batch embed returned ${embeddings?.length ?? 'none'} vectors for ${chunks.length} chunks`);
+                const wrote = this.persistChunks(file.id, chunks, embeddings, result.space);
+                // Derived from the rows, not from what the loop believed it had.
+                const stored = wrote ? this.countPersistedVectors(file.id, result.space) : 0;
+                if (!wrote || stored === 0) {
+                    this.updateIndexState(file.id, contentHash, chunks.length, 'failed', null, 0);
+                    emitIngestDebug('failed', 0, 'chunk persistence failed — nothing was written');
+                    console.warn(`[ModeHybridRetriever] ${file.fileName}: embedding succeeded but persistence did not; marked failed so it is retried rather than reported ready over zero rows.`);
+                } else {
+                    this.updateIndexState(file.id, contentHash, chunks.length, 'ready', result.space, stored);
+                    emitIngestDebug('ready', stored);
                 }
-                this.persistChunks(file.id, chunks, embeddings, result.space);
-                this.updateIndexState(file.id, contentHash, chunks.length, 'ready', result.space);
-                emitIngestDebug('ready', chunks.length);
             } else {
                 // FAULT-TOLERANT batched indexing: a mid-file sub-batch failure (429
                 // rotation exhausted, timeout) must NOT discard the chunks already
@@ -505,19 +811,16 @@ export class ModeHybridRetriever {
                 const embeddedVectors: number[][] = [];
                 let embeddingSpace: string | null = null;
                 let failedOffset = -1;
-                for (let start = 0; start < chunks.length; start += INDEX_BATCH) {
-                    const slice = chunks.slice(start, start + INDEX_BATCH);
+                for (const slice of plan) {
+                    const start = embeddedVectors.length;
                     try {
-                        const result = await this.embeddingPipeline.getEmbeddingsWithFallback(slice);
-                        if (!Array.isArray(result.embeddings) || result.embeddings.length !== slice.length) {
-                            throw new Error(`returned ${result.embeddings?.length ?? 'none'} vectors for ${slice.length} chunks`);
-                        }
+                        const result = await this.embedSubBatchWithRetry(slice, file.fileName);
                         embeddedVectors.push(...result.embeddings);
                         embeddingSpace = result.space;
                         console.log(`[ModeHybridRetriever] ${file.fileName}: embedded ${embeddedVectors.length}/${chunks.length} chunks`);
                     } catch (batchErr) {
                         failedOffset = start;
-                        console.warn(`[ModeHybridRetriever] ${file.fileName}: sub-batch at offset ${start} failed (${batchErr instanceof Error ? batchErr.message : batchErr}); keeping ${embeddedVectors.length} embedded + rest lexical.`);
+                        console.warn(`[ModeHybridRetriever] ${file.fileName}: sub-batch at offset ${start} failed after retries (${batchErr instanceof Error ? batchErr.message : batchErr}); keeping ${embeddedVectors.length} embedded + rest lexical. embedded_chunk_count makes the tail resumable.`);
                         break;
                     }
                 }
@@ -525,36 +828,66 @@ export class ModeHybridRetriever {
                 if (embeddedCount === 0) {
                     // Nothing embedded — lexical only, mark failed so a later prewarm retries.
                     this.persistChunks(file.id, chunks, null, null);
-                    this.updateIndexState(file.id, contentHash, chunks.length, 'failed', null);
+                    // Already 'failed'; a persistence failure on top changes nothing.
+                    this.updateIndexState(file.id, contentHash, chunks.length, 'failed', null, 0);
                     emitIngestDebug('failed', 0, `embedding failed at offset ${failedOffset}`);
                 } else if (embeddedCount === chunks.length) {
-                    this.persistChunks(file.id, chunks, embeddedVectors, embeddingSpace);
-                    this.updateIndexState(file.id, contentHash, chunks.length, 'ready', embeddingSpace);
-                    emitIngestDebug('ready', embeddedCount);
+                    const wroteAll = this.persistChunks(file.id, chunks, embeddedVectors, embeddingSpace);
+                    const storedAll = wroteAll ? this.countPersistedVectors(file.id, embeddingSpace) : 0;
+                    if (storedAll === 0) {
+                        this.updateIndexState(file.id, contentHash, chunks.length, 'failed', null, 0);
+                        emitIngestDebug('failed', 0, 'chunk persistence failed — nothing was written');
+                    } else {
+                        this.updateIndexState(file.id, contentHash, chunks.length, 'ready', embeddingSpace, storedAll);
+                        emitIngestDebug('ready', storedAll);
+                    }
                 } else {
                     // Partial: persist the embedded prefix WITH vectors, and the tail as
                     // lexical-only text. persistChunks reads embeddings[i] per row and
                     // stores a null blob where the vector is absent, so a padded array
                     // (vectors for the prefix, null for the tail) gives a mixed index.
                     const padded = chunks.map((_, i) => (i < embeddedCount ? embeddedVectors[i] : null)) as unknown as number[][];
-                    this.persistChunks(file.id, chunks, padded, embeddingSpace);
-                    // 'ready' — retrieval works over the embedded prefix + lexical tail.
-                    // A follow-up prewarm/retry can complete the tail when quota frees up.
-                    this.updateIndexState(file.id, contentHash, chunks.length, 'ready', embeddingSpace);
-                    console.log(`[ModeHybridRetriever] ${file.fileName}: partial index READY (${embeddedCount}/${chunks.length} vectors, tail lexical; failed@${failedOffset})`);
-                    emitIngestDebug('ready', embeddedCount, `embedding stopped at offset ${failedOffset}; tail lexical-only`);
+                    const wrotePartial = this.persistChunks(file.id, chunks, padded, embeddingSpace);
+                    const storedPartial = wrotePartial ? this.countPersistedVectors(file.id, embeddingSpace) : 0;
+                    // 'ready' — retrieval works over the embedded prefix + lexical
+                    // tail. Recording the DERIVED count is what makes the promised
+                    // follow-up possible: the skip check above and
+                    // prewarmModeReferenceIndex both then see this file as
+                    // unfinished. A failed write records nothing embedded, so the
+                    // file is retried rather than frozen mid-way.
+                    if (storedPartial === 0) {
+                        this.updateIndexState(file.id, contentHash, chunks.length, 'failed', null, 0);
+                        emitIngestDebug('failed', 0, 'chunk persistence failed — nothing was written');
+                    } else {
+                        this.updateIndexState(file.id, contentHash, chunks.length, 'ready', embeddingSpace, storedPartial);
+                        console.log(`[ModeHybridRetriever] ${file.fileName}: partial index READY (${storedPartial}/${chunks.length} vectors, tail lexical; failed@${failedOffset})`);
+                        emitIngestDebug('ready', storedPartial, `embedding stopped at offset ${failedOffset}; tail lexical-only`);
+                    }
                 }
             }
         } catch (e) {
             console.warn(`[ModeHybridRetriever] indexFile failed for ${file.fileName}:`, e instanceof Error ? e.message : e);
             // Keep the chunk text for lexical retrieval; mark failed for retry.
             this.persistChunks(file.id, chunks, null, null);
-            this.updateIndexState(file.id, contentHash, chunks.length, 'failed', null);
+            this.updateIndexState(file.id, contentHash, chunks.length, 'failed', null, 0);
             emitIngestDebug('failed', 0, e instanceof Error ? e.message : String(e));
         }
     }
 
-    private persistChunks(fileId: string, chunks: string[], embeddings: number[][] | null, space: string | null): void {
+    /**
+     * Write a file's chunks (and vectors, where present) in one transaction.
+     *
+     * Returns whether the write actually landed. It used to return void and
+     * swallow the exception, which meant a failed transaction — a locked
+     * database, a full disk — was followed immediately by updateIndexState
+     * marking the file `ready` with a full embedded count over ZERO rows. The
+     * file then reported itself completely indexed and retrieved nothing, and
+     * once the skip condition started checking embeddedChunkCount that lie
+     * satisfied it, so nothing ever revisited the file.
+     *
+     * The caller must not record success it did not get.
+     */
+    private persistChunks(fileId: string, chunks: string[], embeddings: number[][] | null, space: string | null): boolean {
         try {
             const del = this.db.prepare('DELETE FROM mode_reference_chunks WHERE file_id = ?');
             const ins = this.db.prepare(`
@@ -571,12 +904,63 @@ export class ModeHybridRetriever {
                 }
             });
             txn();
+            return true;
         } catch (e) {
             console.warn('[ModeHybridRetriever] persistChunks failed:', e);
+            return false;
+        }
+    }
+
+    /**
+     * How many of this file's chunks actually carry a usable vector, read from
+     * the ROWS rather than from anything we remembered writing.
+     *
+     * embedded_chunk_count is a cache of this query. A cache can drift from the
+     * thing it caches — that is the entire failure this closes — so the number
+     * persisted into the state row is derived here, after the write, instead of
+     * being the count the embedding loop believed it had.
+     *
+     * Filters on the space for the same reason retrieval does: a vector from a
+     * different embedding space is not a usable vector, so counting it would
+     * report a file as indexed for a space in which it cannot be searched.
+     */
+    private countPersistedVectors(fileId: string, space: string | null): number {
+        if (!space) return 0;
+        try {
+            const row = this.db.prepare(
+                'SELECT COUNT(*) AS n FROM mode_reference_chunks WHERE file_id = ? AND embedding IS NOT NULL AND embedding_space = ?'
+            ).get(fileId, space) as { n?: number } | undefined;
+            return typeof row?.n === 'number' ? row.n : 0;
+        } catch (e) {
+            console.warn('[ModeHybridRetriever] countPersistedVectors failed:', e);
+            return 0;
         }
     }
 
     /** Remove a deleted file's chunks + index state. */
+    /**
+     * Drop every index whose file id starts with `prefix` except `keepId`. Profile
+     * documents are indexed under `profile:<kind>:<contentHash>` (they are not mode
+     * reference files and have no row to cascade from), so a re-upload would
+     * otherwise leave the previous version's chunks and vectors behind for good.
+     */
+    public pruneFileIndexesByPrefix(prefix: string, keepId: string): number {
+        try {
+            // BOTH tables: a job interrupted between its two writes leaves chunk
+            // rows with no state row (or the reverse), and either is user text.
+            const like = `${prefix.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+            const ids = [...new Set((this.db.prepare(
+                "SELECT file_id AS id FROM mode_reference_index_state WHERE file_id LIKE ? ESCAPE '\\' "
+                + "UNION SELECT file_id AS id FROM mode_reference_chunks WHERE file_id LIKE ? ESCAPE '\\'",
+            ).all(like, like) as Array<{ id: string }>).map((r) => r.id))].filter((id) => id !== keepId);
+            for (const id of ids) this.removeFileIndex(id);
+            return ids.length;
+        } catch (e) {
+            console.warn('[ModeHybridRetriever] pruneFileIndexesByPrefix failed:', e);
+            return 0;
+        }
+    }
+
     public removeFileIndex(fileId: string): void {
         try {
             this.db.prepare('DELETE FROM mode_reference_chunks WHERE file_id = ?').run(fileId);
@@ -623,7 +1007,7 @@ export class ModeHybridRetriever {
             if (!file.content.trim()) continue;
 
             const content = file.content.trim();
-            const contentHash = hashContent(content);
+            const contentHash = indexHash(content);
 
             // Reuse cached chunks when the content is unchanged; otherwise re-chunk
             // and refresh the cache (audit finding #8 — was re-chunking every query).
@@ -660,6 +1044,11 @@ export class ModeHybridRetriever {
      * ingest are SOFT boundaries — they don't close a section.
      */
     private chunkText(content: string): string[] {
+        // One normalisation for all three branches — the row splitter and the
+        // Document Map split on "\n" exactly as the semantic chunker does, and a
+        // CRLF file (any text file authored on Windows) defeated their line
+        // patterns the same way. See semanticChunker.normalizeLineEndings.
+        content = normalizeLineEndings(content);
         // TABULAR data (CSV/TSV) is chunked by ROWS with the header repeated, so a
         // query for one entity retrieves its row with columns labelled instead of a
         // giant undifferentiated blob (which caused fabricated figures on datasets).
@@ -677,51 +1066,19 @@ export class ModeHybridRetriever {
         const sectionChunks = sectionAwareChunksFromMap(docMap, CHUNK_WORDS, CHUNK_OVERLAP);
         if (sectionChunks) return sectionChunks;
 
-        const lines = content.split('\n');
-        const sections: Array<{ heading: string | null; body: string[] }> = [];
-        let current: { heading: string | null; body: string[] } = { heading: null, body: [] };
-
-        const headingRe = /^\s*(?:#{1,3}\s+|(?:\d+(?:\.\d+){0,2}\s+))/;
-        const pageMarkerRe = /^\s*\[Page\s+\d+\]\s*$/;
-
-        const flush = () => {
-            if (current.heading !== null || current.body.length > 0) sections.push(current);
-            current = { heading: null, body: [] };
-        };
-
-        for (const line of lines) {
-            if (headingRe.test(line)) {
-                flush();
-                current.heading = line.trim();
-            } else if (pageMarkerRe.test(line)) {
-                current.body.push(line);
-            } else {
-                current.body.push(line);
-            }
-        }
-        flush();
-
-        const chunks: string[] = [];
-        for (const section of sections) {
-            const headingLine = section.heading ?? '';
-            const bodyText = section.body.join('\n').replace(/\s+/g, ' ').trim();
-            const fullText = headingLine ? `${headingLine}\n${bodyText}` : bodyText;
-            if (!fullText) continue;
-            const words = fullText.split(/\s+/).filter(Boolean);
-            if (words.length === 0) continue;
-            if (words.length <= CHUNK_WORDS) {
-                chunks.push(fullText);
-                continue;
-            }
-            // Sentence-aware windowing: never split a normative clause across a
-            // chunk boundary (the RFC "MUST NOT add a byte order mark" bug).
-            const bodyForWindows = headingLine ? bodyText : fullText;
-            for (const window of sentenceAwareWindows(bodyForWindows, CHUNK_WORDS, CHUNK_OVERLAP)) {
-                const chunkText = headingLine ? `${headingLine}\n${window}` : window;
-                if (chunkText.trim()) chunks.push(chunkText);
-            }
-        }
-        return chunks;
+        // FLAT PROSE (no ToC): boundary-driven chunking with heading-path
+        // prefixes (T9, 2026-08-28). This replaces a 140-word window with 30-word
+        // overlap that prefixed only the LEAF heading — so a file with five
+        // projects x six identically-named sections produced five "Idempotency"
+        // chunks that were near-neighbours in embedding space with nothing to
+        // tell them apart. Measured: heading paths take top-1-correct-project
+        // from 1/5 to 5/5 when paired with entity anchoring, and anchoring alone
+        // recovers almost nothing without them.
+        //
+        // The reporter's 63k combined markdown has no ToC, so THIS is the path
+        // his file takes. See semanticChunker.ts for the size guardrails and for
+        // why CHUNKER_VERSION must be bumped with any change here.
+        return semanticChunks(content);
     }
 
     /**
@@ -741,6 +1098,60 @@ export class ModeHybridRetriever {
             }
         }
         return matches / Math.sqrt(queryWords.size * Math.max(1, new Set(chunkWords).size));
+    }
+
+    /**
+     * Corpus statistics for the pool being ranked, built once per retrieve().
+     * Every lexical call site in one retrieve() passes the SAME `allCandidates`
+     * array, so array identity is the cache key; a concurrent retrieve over a
+     * different pool just rebuilds. Null below IDF_MIN_POOL chunks — the legacy
+     * unweighted score is used there (see lexicalTokens.ts).
+     */
+    private lexicalStatsCache: { pool: ChunkCandidate[]; stats: LexicalStats | null; index: Map<string, number> } | null = null;
+
+    private lexicalStatsFor(pool: ChunkCandidate[]): { stats: LexicalStats | null; index: Map<string, number> } {
+        if (this.lexicalStatsCache?.pool === pool) return this.lexicalStatsCache;
+        const stats = buildLexicalStats(pool.map((c) => c.text));
+        const index = new Map<string, number>();
+        pool.forEach((c, i) => index.set(`${c.sourceId}:${c.chunkIndex}`, i));
+        this.lexicalStatsCache = { pool, stats, index };
+        return this.lexicalStatsCache;
+    }
+
+    private idfQueryWords = new WeakMap<Set<string>, Set<string>>();
+
+    /**
+     * Corpus arbitration (lexicalTokens.corpusAnchorsQuestion): does some chunk
+     * of these files hold the question's distinctive terms together? Lexical
+     * and synchronous — no embedding, no model — so the orchestrator can ask it
+     * on a turn the classifier sent down the no-retrieval path. False for a
+     * pool too small for document frequencies to mean anything.
+     */
+    public probeAnchors(files: ModeReferenceFile[], question: string): boolean {
+        try {
+            const pool = this.getModeFileChunks(files);
+            const { stats } = this.lexicalStatsFor(pool);
+            return stats ? corpusAnchorsQuestion(question, stats) : false;
+        } catch {
+            return false; // a probe must never break a turn
+        }
+    }
+
+    /** Lexical score (and anchor boost) for every candidate of `pool`, index-aligned. */
+    private lexicalScores(pool: ChunkCandidate[], queryWords: Set<string>): Array<{ fts: number; anchor: number }> {
+        const { stats } = this.lexicalStatsFor(pool);
+        if (!stats) return pool.map((c) => ({ fts: this.computeFtsScore(c.text, queryWords), anchor: 0 }));
+        const idfWords = this.idfQueryWords.get(queryWords) ?? queryWords;
+        const q = queryWeights(idfWords, stats);
+        // Anchors come from CONTENT words (review finding, reproduced): with raw
+        // query words, "how"/"did"/"you" were anchors — rarer in a handbook than
+        // the project's own name — and the true chunk got 0.034 of a 0.25 boost
+        // while two unrelated "interview questions" chunks got 0.099 each.
+        const anchors = anchorTerms(new Set([...idfWords].filter((w) => !isProbeFunctionWord(w))), stats);
+        return pool.map((_, i) => {
+            const cov = anchorCoverage(anchors, stats.sets[i]);
+            return { fts: weightedOverlapScore(q, stats.sets[i], stats.norms[i]), anchor: ANCHOR_BOOST * cov * cov };
+        });
     }
 
     /**
@@ -781,17 +1192,41 @@ export class ModeHybridRetriever {
     }
 
     /**
+     * Is a HOSTED embedding provider answering right now? False for the bundled
+     * local model, for no embedder at all, and while a hosted provider is demoted
+     * to the local fallback. Used to scope the low-confidence query rewrite to the
+     * users it was measured to help (owner decision, 2026-09-21).
+     */
+    public usesHostedEmbeddings(): boolean {
+        try {
+            if (!this.isEmbeddingAvailable()) return false;
+            const provider = this.embeddingPipeline.getActiveProviderName?.();
+            return typeof provider === 'string' && provider !== '' && provider !== 'local';
+        } catch { return false; }
+    }
+
+    /**
      * Hotfix 2026-07-09: in keyless installs the active embedding provider can be
      * the local MiniLM ONNX fallback. Running that query embedding on every typed
      * manual chat turn stacks native ONNX arena pressure with STT/intent/LLM
      * streaming. Use the existing lexical fallback for manual turns unless the
      * env escape hatch disables this mitigation.
      */
-    private shouldUseLexicalForLocalManualQuery(hasTranscript: boolean): boolean {
+    private shouldUseLexicalForLocalManualQuery(hasTranscript: boolean, meetingActive?: boolean): boolean {
         if (hasTranscript) return false;
         if (!keylessManualRetrievalUsesLexical()) return false;
         const provider = this.embeddingPipeline.getActiveProviderName?.();
-        return provider === 'local';
+        if (provider !== 'local') return false;
+        // OUTSIDE A MEETING THE PRESSURE THIS GUARDS AGAINST DOES NOT EXIST
+        // (2026-09-19, owner's decision). The hotfix is about ONNX arena pressure
+        // stacked with local STT and streaming during a live meeting — but under
+        // forceDocumentGrounding `hasTranscript` is always false, so the rule had
+        // swallowed EVERY V3 turn: a key-less user's vectors were built and never
+        // queried. Measured: of 162 questions at 70k tokens the answer chunk
+        // reached the prompt for 149 lexical-only vs 160 with the same MiniLM
+        // vectors. Only an EXPLICIT "no meeting" lifts it; an unknown state keeps
+        // the conservative behaviour.
+        return meetingActive !== false;
     }
 
     /**
@@ -1047,6 +1482,33 @@ export class ModeHybridRetriever {
          * from chunks only.
          */
         forceDocumentGrounding?: boolean;
+        /**
+         * Which deadline this turn is racing, for the rerank budget only.
+         * ABSENT means the tighter live budget — a caller that has not declared
+         * itself must never be handed the manual budget on a live turn.
+         */
+        rerankSurface?: RerankSurface;
+        /**
+         * The CALLER's own deadline for the whole retrieval, when it races
+         * retrieval against a timer (the legacy streamChat path: 1000ms, 2000ms
+         * doc-grounded). A rerank whose budget cannot fit inside it is not
+         * started — see rerankBudgetFitsDeadline for the measured waste.
+         */
+        rerankDeadlineMs?: number;
+        /** Exhaustive request: rerank pool = the user's candidateCount × this,
+         *  capped at 2×RERANK_CANDIDATE_POOL. Absent/1 = the setting exactly. */
+        rerankPoolMultiplier?: number;
+        /**
+         * The caller's retrieval budget for the QUERY EMBEDDING's retries, in ms
+         * (EmbeddingPipeline.getEmbeddingForQuery → retryBudgetMs). The V3
+         * orchestrator plans retrieval at 1200 ms (2400 ms exhaustive) but had
+         * no way to hand that number to this hop, so a slow hosted embed route
+         * ran its full 3-attempt ladder (13 s measured) inside a live turn.
+         * Absent = the historical ladder (legacy/manual callers).
+         */
+        queryEmbedRetryBudgetMs?: number;
+        /** Is a meeting / STT session running? Only an explicit `false` lets the bundled embedder's vectors be queried. */
+        meetingActive?: boolean;
     }): Promise<ModeRetrievedContext> {
         const {
             query,
@@ -1056,6 +1518,10 @@ export class ModeHybridRetriever {
             hasTranscript = false,
             allowRerank = false,
             forceDocumentGrounding = false,
+            rerankSurface,
+            rerankDeadlineMs,
+            rerankPoolMultiplier,
+            queryEmbedRetryBudgetMs,
         } = params;
         // Unsearchable placeholder files (deep-run 2, issue 12): an image-only
         // PDF's "[Page 1] [Page 2]" extraction is not evidence — served as a
@@ -1093,6 +1559,12 @@ export class ModeHybridRetriever {
             ? normalizeDocumentGroundedRetrievalQuery(query)
             : query).trim();
         const queryWords = new Set(wordsOf(queryText));
+        // The idf-weighted scorer also sees the query's short numeric tokens
+        // ("pod 13", "step 6"). Kept OUT of `queryWords` itself: that set sizes
+        // the adaptive threshold and feeds the legacy small-pool scorer, neither
+        // of which can discount a numeral. Keyed by the set's identity so every
+        // lexical call site in this retrieve() finds it without a signature change.
+        this.idfQueryWords.set(queryWords, new Set(wordsOf(queryText, { shortNumerics: true })));
 
         // Zero-token query short-circuit: if the user input collapses to no
         // searchable tokens after stripping <=2-char words / possessives /
@@ -1140,7 +1612,7 @@ export class ModeHybridRetriever {
 
         let candidates: ChunkCandidate[] = [];
 
-        const usingLexicalForLocalManualQuery = this.shouldUseLexicalForLocalManualQuery(hasTranscript);
+        const usingLexicalForLocalManualQuery = this.shouldUseLexicalForLocalManualQuery(hasTranscript, params.meetingActive);
 
         const h4StageTrace = process.env.NATIVELY_E2E === '1'
             && process.env.NATIVELY_H4_STAGE_TRACE === '1';
@@ -1155,8 +1627,40 @@ export class ModeHybridRetriever {
         if (this.isEmbeddingAvailable() && !usingLexicalForLocalManualQuery) {
             try {
                 markH4HybridStage('perform_hybrid_enter', { candidateCount: allCandidates.length });
-                candidates = await this.performHybridRetrieval(allCandidates, queryWords, queryText, adaptiveThreshold, files);
+                candidates = await this.performHybridRetrieval(allCandidates, queryWords, queryText, adaptiveThreshold, files, queryEmbedRetryBudgetMs);
                 markH4HybridStage('perform_hybrid_exit', { candidateCount: candidates.length });
+                // EMPTY-HYBRID FLOOR (2026-09-07, always answer). A paraphrased live
+                // question ("did we get paged or did a customer tell us") against a
+                // two-chunk mode scored every chunk under MIN_COMBINED_SCORE and the
+                // turn went to the model with NO evidence — while the answer sat in
+                // the only chunk that mentioned "pager". When the corpus has
+                // candidates and the threshold kept none, lexical retrieval at a zero
+                // threshold returns the best-overlapping chunks; downstream selection
+                // still caps them and the composer still judges answerability.
+                if (candidates.length === 0 && allCandidates.length > 0) {
+                    candidates = this.performLexicalRetrieval(allCandidates, queryWords, 0);
+                    markH4HybridStage('empty_hybrid_floor', { candidateCount: candidates.length, pool: allCandidates.length });
+                } else if (candidates.length < THIN_RESULTS_TOPUP_BELOW && allCandidates.length > candidates.length) {
+                    // THIN-RESULTS TOP-UP (2026-09-11). A one-content-word lookup
+                    // ("what does the document say the tooling is") cleared the
+                    // combined threshold with ONE chunk — the handbook's title —
+                    // while the on-call section holding "Tooling: PagerDuty…"
+                    // scored under it on both arms, and the turn went out as
+                    // "the exact tools weren't retrieved". When the hybrid arm
+                    // returns fewer than a handful, chunks that share a token
+                    // with the question join the pool; the reranker orders them
+                    // and selection still caps them, so a weak extra costs a
+                    // rerank slot, never an answer.
+                    const seen = new Set(candidates.map((c) => `${c.sourceId}#${c.chunkIndex}`));
+                    const extra = this.performLexicalRetrieval(allCandidates, queryWords, 0)
+                        .filter((c) => c.ftsScore > 0 && !seen.has(`${c.sourceId}#${c.chunkIndex}`))
+                        .sort((a, b) => b.ftsScore - a.ftsScore)
+                        .slice(0, THIN_RESULTS_TOPUP_MAX);
+                    if (extra.length) {
+                        candidates = candidates.concat(extra);
+                        markH4HybridStage('thin_results_topup', { added: extra.length, candidateCount: candidates.length, pool: allCandidates.length });
+                    }
+                }
             } catch (error) {
                 markH4HybridStage('perform_hybrid_error', { message: error instanceof Error ? error.message : String(error) });
                 console.warn('[ModeHybridRetriever] Hybrid retrieval failed, falling back to lexical:', error);
@@ -1182,6 +1686,39 @@ export class ModeHybridRetriever {
                 modeId: params.modeId,
             });
             candidates = this.performLexicalRetrieval(allCandidates, queryWords, toLexicalThreshold(adaptiveThreshold));
+            // EMPTY-LEXICAL FLOOR (2026-09-11). The hybrid branch above already
+            // refuses to hand the model NOTHING while the corpus has chunks; this
+            // branch did not, and it is the branch a network outage lands in.
+            // Measured with the pinned provider demoted at launch: "what was
+            // jonas talking about again" scored one overlapping token against
+            // an incident timeline whose row named Jonas, fell under the
+            // threshold, and the turn went out with zero evidence — "the meeting
+            // notes weren't retrieved for this turn". Same floor, same reasoning:
+            // the best-overlapping chunks at a zero threshold, still capped and
+            // still judged for answerability downstream.
+            // Strictly positive: a query sharing NO token with the corpus keeps
+            // its honest zero (the confidence signal reports no_candidates).
+            if (candidates.length === 0 && allCandidates.length > 0) {
+                candidates = this.performLexicalRetrieval(allCandidates, queryWords, 0).filter((c) => c.ftsScore > 0);
+                markH4HybridStage('empty_lexical_floor', { candidateCount: candidates.length, pool: allCandidates.length });
+            } else if (candidates.length < THIN_RESULTS_TOPUP_BELOW && allCandidates.length > candidates.length) {
+                // THIN-RESULTS TOP-UP, lexical branch (2026-09-19). The hybrid
+                // branch has had this since 2026-09-11; the branch a key-less
+                // user lives in did not. With one or two chunks over the
+                // threshold the evidence budget went out mostly EMPTY — room for
+                // eight chunks, one sent — and a paraphrased question whose
+                // answer sat in the third-best chunk read as "not in the file".
+                // An unused budget buys nothing; a weak extra costs a slot.
+                const seen = new Set(candidates.map((c) => `${c.sourceId}#${c.chunkIndex}`));
+                const extra = this.performLexicalRetrieval(allCandidates, queryWords, 0)
+                    .filter((c) => c.ftsScore > 0 && !seen.has(`${c.sourceId}#${c.chunkIndex}`))
+                    .sort((a, b) => b.ftsScore - a.ftsScore)
+                    .slice(0, THIN_RESULTS_TOPUP_MAX);
+                if (extra.length) {
+                    candidates = candidates.concat(extra);
+                    markH4HybridStage('thin_results_topup_lexical', { added: extra.length, candidateCount: candidates.length, pool: allCandidates.length });
+                }
+            }
         }
 
         markH4HybridStage('ranking_complete', { candidateCount: candidates.length });
@@ -1367,16 +1904,75 @@ export class ModeHybridRetriever {
             const gate = confidence
                 ?? this.computeConfidence(candidates, queryWords.size, allCandidates.length, usedFallback);
             const lowConfidence = gate.lowConfidence === true;
-            markH4HybridStage('rerank_gate', { lowConfidence, candidateCount: candidates.length, hasOverride: Boolean(this.rerankerOverride) });
-            if (lowConfidence) {
+
+            // A reranker the user CHOSE runs on every permitted query; the
+            // bundled default stays a low-confidence escalation.
+            //
+            // The gate alone was far too narrow for a configured reranker.
+            // MEASURED against the running app over 36 doc-grounded retrievals
+            // across 9 queries, several written to be deliberately vague: it
+            // tripped ONCE. Downloading a 400MB model, selecting it, and
+            // watching its Test Connection pass bought re-ordering on 1 query
+            // in 36 — with nothing anywhere reporting that it had not run.
+            //
+            // The bundled model keeps the old behaviour on purpose: a user who
+            // never opened the panel should not start paying rerank latency
+            // because this changed.
+            const explicitlySelected = this.rerankerOverride
+                ? false
+                : (() => {
+                    try {
+                        // eslint-disable-next-line @typescript-eslint/no-var-requires
+                        const { isRerankerExplicitlySelected } = require('../reranking/rerankerConfig') as typeof import('../reranking/rerankerConfig');
+                        return isRerankerExplicitlySelected();
+                    } catch { return false; }
+                })();
+            // A reranker the user CHOSE runs on every permitted query. The
+            // bundled default runs only when retrieval is unsure.
+            //
+            // That split has been through three states, and the middle one is
+            // why the comment is this long. It began as `if (lowConfidence)`
+            // alone, so a chosen reranker ran on 1 query in 36. The escalation
+            // was then kept for the bundled model only — until the bundled
+            // model was measured and turned out to be the WORST reranker in the
+            // benchmark (bge-reranker-base: MRR 0.7558 against a 0.8368
+            // no-reranker baseline), at which point the escalation had no
+            // beneficiary and was removed entirely.
+            //
+            // The bundled model is now ms-marco-MiniLM-L-6-v2, which is +0.0320
+            // against that baseline at 211ms and 24MB. The escalation has a
+            // beneficiary again, so it is back — and it is still an escalation
+            // rather than unconditional, because +0.0320 is a real but modest
+            // gain and a default install should not pay for it on every query.
+            // docs/reranker-benchmark-2026-09-04.md
+            const shouldRerank = explicitlySelected || lowConfidence || Boolean(this.rerankerOverride);
+            // lowConfidence is still traced: it is no longer a trigger, but it
+            // is the signal anyone re-litigating this decision will want.
+            markH4HybridStage('rerank_gate', {
+                lowConfidence, explicitlySelected, shouldRerank,
+                candidateCount: candidates.length, hasOverride: Boolean(this.rerankerOverride),
+            });
+            // The budget follows the CHOICE, not just the surface (rerankBudget.ts).
+            // Resolved BEFORE the gate below so a caller's deadline can be
+            // compared against it.
+            const RERANK_BUDGET_MS = resolveRerankBudgetMs({ explicitlySelected, surface: rerankSurface });
+            if (shouldRerank && !rerankBudgetFitsDeadline({ budgetMs: RERANK_BUDGET_MS, deadlineMs: rerankDeadlineMs })) {
+                // The caller will have stopped waiting before this rerank's own
+                // budget elapses. Starting it anyway bills a hosted reranker for
+                // a result nobody reads (measured: the recap hotkey, 2026-09-07).
+                markH4HybridStage('rerank_skipped_deadline', { budgetMs: RERANK_BUDGET_MS, deadlineMs: rerankDeadlineMs, candidateCount: candidates.length });
+            } else if (shouldRerank) {
                 // A manual-chat answer has a fixed first-useful deadline. The local
                 // cross-encoder is optional ranking refinement, so it must never
                 // consume that whole deadline and prevent a lexical/evidence-pack
                 // answer from reaching the provider. Keep its late result isolated
                 // rather than awaiting it on the critical path.
-                const RERANK_BUDGET_MS = 1200;
+                // The budget follows the CHOICE, not just the surface: a reranker
+                // the user selected gets time to finish, while the bundled
+                // default keeps the 1200ms that protects a first-useful token.
+                // See rerankBudget.ts for the measured case this fixes.
                 markH4HybridStage('rerank_enter', { candidateCount: candidates.length, budgetMs: RERANK_BUDGET_MS });
-                const rerankPromise = this.maybeRerankCandidates(queryText, candidates);
+                const rerankPromise = this.maybeRerankCandidates(queryText, candidates, rerankPoolMultiplier);
                 let rerankTimer: NodeJS.Timeout | undefined;
                 const raced = await Promise.race([
                     rerankPromise.then((value) => ({ value, timedOut: false })),
@@ -1437,7 +2033,19 @@ export class ModeHybridRetriever {
                 });
             }
             const withIdentity = broadQuery;
-            const finalContext = withIdentity ? this.prependIdentityBlock(formattedContext, files) : formattedContext;
+            let finalContext = withIdentity ? this.prependIdentityBlock(formattedContext, files) : formattedContext;
+            // T12: UNCONDITIONAL, unlike the identity block above. The question
+            // that most needs it ("what projects have you worked on?") is not
+            // reliably `broadQuery`, and a specific question about project A is
+            // exactly when the model most needs to know that B..E also exist
+            // before it answers "that's the only one".
+            const projectIndex = this.buildProjectIndex(selected);
+            if (projectIndex) {
+                finalContext = finalContext.replace(
+                    '<active_mode_retrieved_context>',
+                    `<active_mode_retrieved_context>\n${projectIndex}`,
+                );
+            }
             if (retrievalDiagnosticsEnabled()) {
                 const coverage = computeEvidenceCoverage({ question: queryText, retrievedBlock: finalContext, queryShape });
                 diagLog('DOC-RANK coverage', coverage);
@@ -1452,6 +2060,9 @@ export class ModeHybridRetriever {
                     score: this.reportedDocGroundedScore(c),
                     ftsScore: c.ftsScore,
                     vectorScore: c.vectorScore,
+                    ...(typeof c.rerankScore === 'number' ? { rerankScore: c.rerankScore } : {}),
+                ...(typeof c.anchorScore === 'number' ? { anchorScore: c.anchorScore } : {}),
+                    ...(typeof c.answerabilityScore === 'number' ? { answerabilityScore: c.answerabilityScore } : {}),
                     trustLevel: 'untrusted_reference',
                 })),
                 formattedContext: finalContext,
@@ -1470,6 +2081,9 @@ export class ModeHybridRetriever {
                 score: this.combinedScore(c.ftsScore, c.vectorScore, FTS_WEIGHT),
                 ftsScore: c.ftsScore,
                 vectorScore: c.vectorScore,
+                ...(typeof c.rerankScore === 'number' ? { rerankScore: c.rerankScore } : {}),
+                ...(typeof c.anchorScore === 'number' ? { anchorScore: c.anchorScore } : {}),
+                ...(typeof c.answerabilityScore === 'number' ? { answerabilityScore: c.answerabilityScore } : {}),
                 trustLevel: 'untrusted_reference'
             })),
             formattedContext,
@@ -1495,6 +2109,7 @@ export class ModeHybridRetriever {
     private async maybeRerankCandidates(
         queryText: string,
         sorted: ChunkCandidate[],
+        poolMultiplier: number = 1,
     ): Promise<ChunkCandidate[] | null> {
         let enabled = false;
         try {
@@ -1509,9 +2124,28 @@ export class ModeHybridRetriever {
 
         try {
             let reranker = this.rerankerOverride;
+            let usingBuiltInLocalReranker = false;
+
+            // An enabled reranker EXTENSION takes over this seam — it never runs
+            // BESIDE the built-in. That keeps one rerank stage, one budget and
+            // one fallback, and it is what ModeSpeculativeRerank.test.mjs's
+            // source guards require ("no new unbounded await"). Resolution is
+            // synchronous; with no extension owning the seam it returns null and
+            // everything below behaves exactly as before.
+            const extensionPort = this.rerankerOverride ? null : (() => {
+                try {
+                    // eslint-disable-next-line @typescript-eslint/no-var-requires
+                    return require('../reranking/RerankerRegistry').getRerankerRegistry().resolvePort();
+                } catch { return null; }
+            })();
+            if (!reranker && extensionPort) {
+                reranker = extensionPort;
+            }
+
             // Only run telemetry when the production singleton is in use —
-            // the test override lacks isAvailable/isCached.
-            const productionReranker = this.rerankerOverride ? null : (() => {
+            // the test override lacks isAvailable/isCached, and so does the
+            // extension port.
+            const productionReranker = (this.rerankerOverride || extensionPort) ? null : (() => {
                 try {
                     // eslint-disable-next-line @typescript-eslint/no-var-requires
                     return require('../../rag/LocalReranker').getLocalReranker();
@@ -1519,6 +2153,7 @@ export class ModeHybridRetriever {
             })();
             if (!reranker && productionReranker) {
                 reranker = productionReranker;
+                usingBuiltInLocalReranker = true;
             }
 
             // Telemetry: if the reranker was requested (enabled gate) but
@@ -1547,7 +2182,17 @@ export class ModeHybridRetriever {
                 }
             }
 
-            const pool = sorted.slice(0, RERANK_CANDIDATE_POOL);
+            // How many candidates the user chose to rerank. Until now this
+            // setting was written by Settings > Reranker and read by nothing,
+            // so the control looked live and did nothing.
+            // An exhaustive request (RetrievalPlan.exhaustive) widens the pool so
+            // the reranker can SEE the occurrences it is asked to surface; the
+            // 2× ceiling keeps the ONNX arena reasoning above intact.
+            const mult = Number.isFinite(poolMultiplier) && poolMultiplier > 1 ? Math.floor(poolMultiplier) : 1;
+            const poolSize = Math.min(2 * RERANK_CANDIDATE_POOL, resolveRerankPoolSize() * mult);
+            // Per-file floor before the global fill — see rerankPool.ts for the
+            // measured case (a padding file monopolised the whole pool).
+            const pool = buildRerankPool(sorted, poolSize, { balanced: mult > 1 });
             const poolTexts = pool.map((c: ChunkCandidate) => c.text);
             // Chunked inference — see RERANK_BATCH_SIZE for the crash-forensics
             // rationale. Each batch returns results with INDEXES RELATIVE TO THE
@@ -1571,11 +2216,43 @@ export class ModeHybridRetriever {
                 return null;
             }
 
+            // RERANK_BATCH_SIZE exists to bound the ONNX arena (see its comment).
+            // That reasoning is specific to an in-process forward pass. A port
+            // whose cost is a network round trip, or an out-of-process call,
+            // pays that batching five times over for no benefit — ~5x the
+            // latency and, for a hosted reranker, ~5x the spend, which is enough
+            // to push a model that clears RERANK_BUDGET_MS past it. So a port
+            // may declare the batch size it wants; the built-in declares none
+            // and keeps the existing value exactly.
+            const declaredBatch = (reranker as { batchSize?: number }).batchSize;
+            const rerankBatchSize = Number.isFinite(declaredBatch) && (declaredBatch as number) > 0
+                ? Math.min(poolTexts.length, Math.floor(declaredBatch as number))
+                : RERANK_BATCH_SIZE;
+
             const allResults: Array<{ index: number; score: number; originalIndex: number }> = [];
-            for (let i = 0; i < poolTexts.length; i += RERANK_BATCH_SIZE) {
-                const batchTexts = poolTexts.slice(i, i + RERANK_BATCH_SIZE);
+            for (let i = 0; i < poolTexts.length; i += rerankBatchSize) {
+                const batchTexts = poolTexts.slice(i, i + rerankBatchSize);
                 const batchResults = await reranker.rerank(queryText, batchTexts);
-                if (!batchResults || batchResults.length === 0) continue;
+                // A PARTIAL ranking is worse than none. rankScore(c, true)
+                // returns -Infinity for a candidate with no rerankScore, so
+                // survivors of a failed batch sink below every chunk the
+                // reranker never even looked at — silently burying whichever
+                // candidates the failed batch happened to contain.
+                //
+                // This is REACHABLE ON THE BUILT-IN, not only on a hosted port:
+                // LocalReranker.rerank returns null per call on a worker
+                // timeout, on a thrown error, and on a short `scores` array. So
+                // one transient timeout on batch 3 of 5 abandons all five, and
+                // the answer falls back to cosine order. That is the intended
+                // trade — a wholly correct cosine ordering beats a rerank
+                // ordering with a third of the pool pinned at -Infinity — but
+                // it is a real cost on the default local path, not a
+                // theoretical one, so do not "optimise" it back to `continue`.
+                // Abandon the whole rerank and keep the pre-rerank order.
+                if (!batchResults || batchResults.length !== batchTexts.length) {
+                    console.warn('[ModeHybridRetriever] rerank batch incomplete (keeping cosine order)');
+                    return null;
+                }
                 for (const r of batchResults) {
                     allResults.push({ ...r, originalIndex: i + r.index });
                 }
@@ -1591,6 +2268,29 @@ export class ModeHybridRetriever {
             // (defensive) keeps its place after the reranked ones.
             const reordered: ChunkCandidate[] = [];
             const used = new Set<number>();
+            // RANK FUSION FOR THE BUILT-IN CROSS-ENCODER (2026-09-19). The
+            // cross-encoder's order used to REPLACE the first stage's. Measured
+            // with the bundled ms-marco MiniLM over 5k–70k-token fixtures: a
+            // section the first stage ranked 1st on an exact identifier match
+            // ("Project Eyrie-435") was demoted to 6th–9th — a 22M-parameter
+            // model cannot tell same-shaped sibling sections apart — and the
+            // cap-6 cut downstream dropped it. Packed-answer recall, 70k tokens:
+            // no rerank 160/153 (one file / three), replace 156/150, fused
+            // 159/154; at 5k, 159/156 → 159/156 → 160/157. Reciprocal-rank
+            // fusion is scale-free, so it needs no knowledge of what the scores
+            // mean. `pool` is in first-stage order: an index IS a rank.
+            //
+            // ONLY the built-in local model. A hosted reranker (Voyage, Jina,
+            // an extension) is a far stronger judge and was NOT measured —
+            // there are no keys offline — so its order still stands alone.
+            // NATIVELY_RERANK_FUSION=rrf|off forces either way.
+            const fusionEnv = String(process.env.NATIVELY_RERANK_FUSION || '').toLowerCase();
+            const fusion = fusionEnv === 'rrf' || (fusionEnv !== 'off' && usingBuiltInLocalReranker);
+            const RRF_K = Number(process.env.NATIVELY_RERANK_FUSION_K) || 10;
+            if (fusion) {
+                results.forEach((r, rerankRank) => { r.score = 1 / (RRF_K + rerankRank) + 1 / (RRF_K + r.originalIndex); });
+                results.sort((a, b) => b.score - a.score);
+            }
             for (const r of results) {
                 const c = pool[r.originalIndex];
                 if (!c) continue;
@@ -1600,10 +2300,12 @@ export class ModeHybridRetriever {
             for (let i = 0; i < pool.length; i++) {
                 if (!used.has(i)) reordered.push({ ...pool[i] });
             }
-            // Append the un-pooled tail (beyond RERANK_CANDIDATE_POOL) unchanged
-            // so we never DROP candidates the budget step might still want.
-            for (let i = RERANK_CANDIDATE_POOL; i < sorted.length; i++) {
-                reordered.push(sorted[i]);
+            // Append the un-pooled tail unchanged so we never DROP candidates
+            // the budget step might still want. The pool is no longer a prefix
+            // of `sorted` (per-file floor), so membership, not index, decides.
+            const pooled = new Set<ChunkCandidate>(pool);
+            for (const c of sorted) {
+                if (!pooled.has(c)) reordered.push(c);
             }
             return reordered;
         } catch (e) {
@@ -1649,7 +2351,8 @@ export class ModeHybridRetriever {
         queryWords: Set<string>,
         queryText: string,
         minScore: number = MIN_COMBINED_SCORE,
-        files: ModeReferenceFile[] = []
+        files: ModeReferenceFile[] = [],
+        queryEmbedRetryBudgetMs?: number,
     ): Promise<ChunkCandidate[]> {
         // Embed query — the ONLY embedding round-trip on the hot path (PI v3,
         // W3). Chunk vectors are persisted at UPLOAD time (indexFile) and
@@ -1658,7 +2361,10 @@ export class ModeHybridRetriever {
         // that burned the latency budget on every turn.
         let queryEmbedding: number[];
         try {
-            queryEmbedding = await this.embeddingPipeline.getEmbeddingForQuery(queryText);
+            queryEmbedding = await this.embeddingPipeline.getEmbeddingForQuery(
+                queryText,
+                typeof queryEmbedRetryBudgetMs === 'number' ? { retryBudgetMs: queryEmbedRetryBudgetMs } : undefined,
+            );
         } catch (error) {
             // Surface key-pool health in the failure so a 429-burst (vs. a genuine
             // outage) is distinguishable in logs without re-running with tracing on.
@@ -1674,7 +2380,37 @@ export class ModeHybridRetriever {
         // unusable (NEVER cross-compare; cosine across spaces is semantically
         // random). Mismatched/missing vectors fall through to the ephemeral
         // embed below and re-indexing is scheduled in the background.
-        const persisted = activeSpace ? this.loadPersistedEmbeddings(fileIds, activeSpace) : new Map<string, number[]>();
+        // STALE-INDEX GATE (2026-09-19). Stored vectors are keyed (file_id,
+        // chunk_index) and paired with the chunks produced RIGHT NOW. When the
+        // index was built from different chunk boundaries — a chunker version
+        // bump, which is what CHUNKER_VERSION in the index hash exists to catch —
+        // chunk i was being scored with the vector of the OLD chunk i: a silent
+        // misalignment, no error, no log. `needsReindexing` described this trap
+        // in its own docblock and had no caller, and neither prewarm nor the
+        // boot retry can see it (index status is read by file id, without the
+        // content). A stale file's vectors are now never loaded: its chunks fall
+        // to the ephemeral-embed / lexical handling below for this turn, and the
+        // file re-indexes in the background — lazily, only for files a question
+        // actually touches.
+        const staleFileIds = new Set<string>();
+        for (const file of files) {
+            if (!fileIds.includes(file.id) || !file.content?.trim()) continue;
+            const state = this.getIndexState(file.id);
+            if (!state) continue;
+            if (this.needsReindexing(file)) {
+                staleFileIds.add(file.id);
+                this.indexFile(file).catch(() => { /* logged inside */ });
+            } else if (state.status === 'indexing' || state.status === 'failed' || state.status === 'pending') {
+                // Hash current, vectors not: a job is writing them, or died doing
+                // so. Whatever rows exist are not a complete, aligned set.
+                staleFileIds.add(file.id);
+            }
+        }
+        if (staleFileIds.size > 0) {
+            console.warn(`[ModeHybridRetriever] ${staleFileIds.size} file(s) were indexed under an older chunker/content hash — ignoring their stored vectors this turn and re-indexing in the background`);
+        }
+        const freshFileIds = fileIds.filter((id) => !staleFileIds.has(id));
+        const persisted = activeSpace && freshFileIds.length ? this.loadPersistedEmbeddings(freshFileIds, activeSpace) : new Map<string, number[]>();
 
         // Chunks WITHOUT a usable persisted vector (cold DB, brand-new upload,
         // provider/space change) keep the pre-W3 behavior: batch-embed them
@@ -1684,6 +2420,35 @@ export class ModeHybridRetriever {
         const missing = candidates.filter(c => !persisted.has(`${c.sourceId}:${c.chunkIndex}`));
         diagLog('HYBRID performHybrid vectors', { activeSpace, totalCandidates: candidates.length, persistedHits: persisted.size, missingCount: missing.length });
         const ephemeral = new Map<string, number[]>();
+        // NEVER re-embed a corpus on the hot path. When the active space has
+        // just changed (a provider promotion after five hosted failures, or a
+        // Settings switch) NO persisted vector matches, so `missing` is every
+        // chunk of every attached file. Handing all of them to one
+        // getEmbeddingsWithFallback() call sent 629 chunks of a 420 KB reference
+        // pack through the local ONNX worker as ONE batch — the worker runs a
+        // batch as a single session.run — and the process died with SIGTRAP in
+        // onnxruntime::MatMul → CPUAllocator::Alloc (Electron-2026-09-10-215850,
+        // same signature as the user's own Electron-2026-09-08-143050). The
+        // ingest path already bounds its batches for exactly this reason (F22);
+        // this is the one remaining unbounded batch. Above the cap the chunks
+        // score lexically for THIS turn and the fire-and-forget re-index below
+        // persists them in bounded sub-batches for the next one.
+        if (missing.length > QUERY_EPHEMERAL_EMBED_MAX) {
+            console.warn(
+                `[ModeHybridRetriever] ${missing.length} of ${candidates.length} candidates have no vector in `
+                + `${activeSpace ?? 'the active space'}; scoring them lexically this turn (cap ${QUERY_EPHEMERAL_EMBED_MAX}) `
+                + 'and re-indexing in the background',
+            );
+            if (activeSpace) {
+                const missingFileIds = new Set(missing.map(c => c.sourceId));
+                for (const file of files) {
+                    if (missingFileIds.has(file.id) && file.content?.trim()) {
+                        this.indexFile(file).catch(() => { /* logged inside */ });
+                    }
+                }
+            }
+            missing.length = 0;
+        }
         if (missing.length > 0) {
             const missingTexts = missing.map(c => c.text);
             try {
@@ -1745,13 +2510,16 @@ export class ModeHybridRetriever {
         // embed failure) — their score is lexical-only and must be judged on
         // the lexical scale (F23), not against the combined floor.
         const vectorless = new Set<string>();
-        for (const candidate of candidates) {
+        const lexical = this.lexicalScores(candidates, queryWords);
+        for (let ci = 0; ci < candidates.length; ci++) {
+            const candidate = candidates[ci];
             const key = `${candidate.sourceId}:${candidate.chunkIndex}`;
-            const ftsScore = this.computeFtsScore(candidate.text, queryWords);
+            const ftsScore = lexical[ci].fts;
+            const anchorScore = lexical[ci].anchor;
             const vec = persisted.get(key) ?? ephemeral.get(key);
             if (!vec) vectorless.add(key);
             const vectorScore = vec ? this.computeVectorScore(queryEmbedding, vec) : 0;
-            scored.push({ ...candidate, ftsScore, vectorScore });
+            scored.push({ ...candidate, ftsScore, vectorScore, ...(anchorScore > 0 ? { anchorScore } : {}) });
         }
 
         // Filter by minimum combined score (adaptive — see retrieve()).
@@ -1766,11 +2534,14 @@ export class ModeHybridRetriever {
         // the transition turn after an embedding-provider promotion, which is
         // exactly a mid-session "the résumé disappeared" symptom.
         return scored.filter(c => {
+            // A chunk holding the query's rare terms is admitted on that alone:
+            // the combined floor exists to drop chunks with no claim on the
+            // question, and naming its entity is the strongest claim there is.
             if (vectorless.has(`${c.sourceId}:${c.chunkIndex}`)) {
-                return c.ftsScore >= toLexicalThreshold(minScore);
+                return c.ftsScore + (c.anchorScore ?? 0) >= toLexicalThreshold(minScore);
             }
             const combined = this.combinedScore(c.ftsScore, c.vectorScore, FTS_WEIGHT);
-            return combined >= minScore;
+            return combined + (c.anchorScore ?? 0) >= minScore;
         });
     }
 
@@ -1783,13 +2554,15 @@ export class ModeHybridRetriever {
         // Lexical SCALE, not combined scale. See MIN_LEXICAL_SCORE (F23).
         minScore: number = MIN_LEXICAL_SCORE
     ): ChunkCandidate[] {
+        const lexical = this.lexicalScores(candidates, queryWords);
         return candidates
-            .map(c => ({
+            .map((c, i) => ({
                 ...c,
-                ftsScore: this.computeFtsScore(c.text, queryWords),
-                vectorScore: 0
+                ftsScore: lexical[i].fts,
+                vectorScore: 0,
+                ...(lexical[i].anchor > 0 ? { anchorScore: lexical[i].anchor } : {}),
             }))
-            .filter(c => c.ftsScore >= minScore);
+            .filter(c => c.ftsScore + (c.anchorScore ?? 0) >= minScore);
     }
 
     private applyAnswerabilityScores(
@@ -1855,7 +2628,7 @@ export class ModeHybridRetriever {
         if (byRerank) {
             return typeof c.rerankScore === 'number' ? c.rerankScore : Number.NEGATIVE_INFINITY;
         }
-        return this.combinedScore(c.ftsScore, c.vectorScore, FTS_WEIGHT) + (c.answerabilityScore ?? 0);
+        return this.combinedScore(c.ftsScore, c.vectorScore, FTS_WEIGHT) + (c.answerabilityScore ?? 0) + (c.anchorScore ?? 0);
     }
 
     /**
@@ -1881,7 +2654,14 @@ export class ModeHybridRetriever {
      */
     private reportedDocGroundedScore(c: ChunkCandidate): number {
         const base = this.combinedScore(c.ftsScore, c.vectorScore, FTS_WEIGHT);
-        return base + Math.max(0, c.answerabilityScore ?? 0);
+        // The anchor term is part of what SELECTED the chunk (rankScore), so by
+        // the rule above it is part of what is reported. Omitting it repeated
+        // the 2026-09-07 rerank-order bug in miniature: V3 re-sorts evidence by
+        // this value (mode-retrieval-port → finalScore → accepted-slice fill,
+        // packer rank), so the retriever chose the named section and the cap-6
+        // cut downstream then dropped it again (measured 2026-09-19: 3–4
+        // EVIDENCE_DROPs per size on the three-file run with the boost live).
+        return base + Math.max(0, c.answerabilityScore ?? 0) + (c.anchorScore ?? 0);
     }
 
     /**
@@ -2046,6 +2826,68 @@ export class ModeHybridRetriever {
      * buildDocumentIdentityBlock but is self-contained so the hybrid
      * retriever does not have to import private helpers.
      */
+    /**
+     * A compact list of the PROJECTS a reference set describes (T12, 2026-08-28).
+     *
+     * WHAT IT IS FOR. The reporter's file is one 63k markdown describing five
+     * integration projects. Asked "what projects have you worked on?" the model
+     * saw twelve chunks from whichever two or three projects ranked best and
+     * answered as though those were all of them — an answer that is wrong in a
+     * way the user cannot detect, because nothing in the evidence says a project
+     * is missing. He asked for this directly.
+     *
+     * WHY IT IS DERIVED, NOT EXTRACTED. The names come from the heading-ancestor
+     * prefixes T9 already writes into every chunk (`[context: Project: X > ...]`).
+     * The existing `prependIdentityBlock` next to this one indexes FILES and
+     * mines capitalised terms out of the first 4000 characters — a heuristic that
+     * finds nothing useful for a single combined file, which is exactly this
+     * case. Reading structure the chunker already recorded needs no heuristic and
+     * cannot disagree with the chunks.
+     *
+     * NAVIGATION, NOT EVIDENCE. It carries names and nothing else — no facts, no
+     * numbers, no claims — so it can route a broad question without becoming
+     * something the model can answer FROM. On the V3 path it is structurally
+     * excluded anyway: V3 consumes `chunks`, not `formattedContext`.
+     *
+     * Capped at ~200 tokens, and returns '' below two projects: a single-project
+     * file needs no index, and an empty one would be pure prompt overhead.
+     */
+    private buildProjectIndex(chunks: ChunkCandidate[]): string {
+        const names: string[] = [];
+        const seen = new Set<string>();
+        for (const c of chunks) {
+            const m = /\[context:\s*([^\]>]+?)\s*(?:>|\])/.exec(c.text);
+            const name = m?.[1]?.trim();
+            if (!name) continue;
+            const key = name.toLowerCase();
+            if (seen.has(key)) continue;
+            seen.add(key);
+            names.push(name);
+        }
+        if (names.length < 2) return '';
+
+        const MAX_CHARS = 800;   // ~200 tokens
+        const kept: string[] = [];
+        let used = 0;
+        for (const n of names) {
+            if (used + n.length + 2 > MAX_CHARS) break;
+            kept.push(n);
+            used += n.length + 2;
+        }
+        if (kept.length < 2) return '';
+        const truncated = kept.length < names.length ? ` (+${names.length - kept.length} more)` : '';
+        return [
+            '  <project_index purpose="navigation_only">',
+            `    <note>The uploaded material covers these subjects. This list is for ROUTING ONLY — it states no facts and supports no claim. Answer only from the retrieved excerpts below.</note>`,
+            `    <subjects>${this.escapeForXml(kept.join(', ') + truncated)}</subjects>`,
+            '  </project_index>',
+        ].join('\n');
+    }
+
+    private escapeForXml(s: string): string {
+        return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
     private prependIdentityBlock(formattedContext: string, files: ModeReferenceFile[]): string {
         const lines: string[] = [];
         lines.push('<document_identity purpose="broad_query_grounding">');
@@ -2119,17 +2961,21 @@ export class ModeHybridRetriever {
         const state = this.getIndexState(file.id);
         if (!state) return true;  // Never indexed
 
-        const currentHash = hashContent(file.content);
-        return state.fileHash !== currentHash;
+        // CHUNKER_VERSION is folded in (T9, 2026-08-28) so a chunker change
+        // forces exactly one re-index per file. Without it this compares the RAW
+        // SOURCE only: a chunker change leaves old chunk text and old vectors in
+        // the index while the query path produces new chunk text, with no error
+        // and no warning. The same trap `embedding_space` already guards for a
+        // provider flip.
+        return state.fileHash !== indexHash(file.content);
     }
 
     /**
      * Mark a file as indexed (called after embedding)
      */
     markIndexed(file: ModeReferenceFile): void {
-        const contentHash = hashContent(file.content);
         const chunks = this.chunkText(file.content);
-        this.updateIndexState(file.id, contentHash, chunks.length);
+        this.updateIndexState(file.id, indexHash(file.content), chunks.length);
     }
 
     /**
@@ -2147,7 +2993,7 @@ export class ModeHybridRetriever {
         const stats = new Map<string, ModeReferenceIndexState>();
         try {
             const rows = this.db.prepare(
-                'SELECT file_id, file_hash, indexed_at, chunk_count, status, embedding_space FROM mode_reference_index_state'
+                'SELECT file_id, file_hash, indexed_at, chunk_count, status, embedding_space, embedded_chunk_count FROM mode_reference_index_state'
             ).all() as any[];
             for (const row of rows) {
                 stats.set(row.file_id, {
@@ -2157,6 +3003,7 @@ export class ModeHybridRetriever {
                     chunkCount: row.chunk_count,
                     status: (row.status as ModeReferenceIndexStatus) || 'pending',
                     embeddingSpace: row.embedding_space ?? null,
+                    embeddedChunkCount: typeof row.embedded_chunk_count === 'number' ? row.embedded_chunk_count : 0,
                 });
             }
         } catch (e) {

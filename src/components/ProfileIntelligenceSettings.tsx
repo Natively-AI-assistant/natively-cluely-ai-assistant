@@ -9,6 +9,7 @@ import { ThinkingOrb } from 'thinking-orbs';
 import { useToggleInit } from './settings/useToggleInit';
 import { PremiumUpgradeModal, RoleInsightPanel } from '../premium';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
+import { useLensTracking } from '../ui-components/LiquidGlassButton';
 import { truncateResumeSummary } from '../utils/resumeSummary.mjs';
 import { CHECKOUT_URLS } from '../config/urls';
 
@@ -22,7 +23,38 @@ const openExternal = (url: string) => {
 
 // ─── CSS ──────────────────────────────────────────────────────────────────────
 const PI_CSS = `
+    /*
+      Registered so the press-tighten can interpolate the lens size. An
+      unregistered custom property is a token, not a length, and a transition on
+      it is silently a no-op. @property is global by spec, so its own names are
+      prefixed to stay clear of LiquidGlassButton.css's --lg-lens-*.
+    */
+    @property --pi-lens-w { syntax: '<length>'; inherits: true; initial-value: 90px; }
+    @property --pi-lens-h { syntax: '<length>'; inherits: true; initial-value: 40px; }
+
     .pi-root {
+        /*
+          Which face the specular rim lives on. Not a style choice — it falls
+          out of the body and the surround, and the two themes here need
+          opposite answers (see src/ui-components/design.md, and .lg-sky):
+
+            both    a mid-to-dark body on a dark stage. It catches the key light
+                    from above AND a bounce from below, so the rim is symmetric.
+            top     a dark body on a white card. No bounce to catch; the pill
+                    sits ON the card, so the specular stays up top and a contact
+                    shadow does the work the bottom rim used to do.
+            bottom  a LIGHT body, where a bright rim has nothing to do because
+                    the fill already out-shines anything it could catch. The rim
+                    inverts: it becomes the shadow on the underside.
+
+          Percentages of a 36px pill, so the 4%/30% pair is 1.4px/10.8px — the
+          1px ring sits entirely inside the opaque stretch and the fade beyond
+          it is what keeps the mask from clipping the ring's own antialiasing.
+        */
+        --pi-mask-both: linear-gradient(180deg, #000 0%, #000 8%, transparent 30%, transparent 70%, #000 92%, #000 100%);
+        --pi-mask-top: linear-gradient(180deg, #000 0%, #000 4%, transparent 30%, transparent 100%);
+        --pi-mask-bottom: linear-gradient(180deg, transparent 0%, transparent 70%, #000 96%, #000 100%);
+
         --pi-bg: #111111;
         --pi-sidebar-bg: #0a0a0a;
         --pi-border: rgba(255,255,255,0.07);
@@ -30,6 +62,18 @@ const PI_CSS = `
         --pi-primary: rgba(255,255,255,0.85);
         --pi-secondary: rgba(255,255,255,0.55);
         --pi-tertiary: rgba(255,255,255,0.35);
+        /*
+          The sidebar nav has its own four ink tokens rather than borrowing the
+          panel's --pi-secondary / --pi-primary directly. Those two are spent in
+          75 places across body copy, labels and hints, so tuning the nav
+          through them would repaint the whole panel. Here they are the same
+          values the nav has always resolved to; the light theme is where they
+          diverge.
+        */
+        --pi-nav-text: var(--pi-secondary);
+        --pi-nav-text-active: var(--pi-primary);
+        --pi-nav-icon: var(--pi-tertiary);
+        --pi-nav-icon-active: var(--pi-secondary);
         --pi-btn-bg: rgba(255,255,255,0.06);
         --pi-btn-bg-hover: rgba(255,255,255,0.10);
         --pi-btn-border: rgba(255,255,255,0.10);
@@ -64,9 +108,46 @@ const PI_CSS = `
         --pi-ease-expo: cubic-bezier(0.16, 1, 0.3, 1);
         --pi-input-border-focus: color-mix(in srgb, var(--periwinkle-300) 40%, transparent);
         --pi-input-bg-focus: color-mix(in srgb, var(--periwinkle-300) 4%, transparent);
+        /*
+          Liquid Glass on a WHITE pill — the light-body case, which inverts the
+          lighting model everywhere. See .lg-sky in src/ui-components, which is
+          the same inversion for a light blue fill.
+
+          On a light body a white specular has nothing to do: the fill is
+          already brighter than any light it could catch. #ffffff is the
+          extreme of that — there is no headroom left at all, so this pill gets
+          no bright rim, no sheen and no hover lift in luminance. The form comes
+          from the other direction entirely: the UNDERSIDE darkens, the caps sit
+          in shadow, and a real contact shadow separates the pill from the
+          panel. Same four layers as any other body, opposite polarity.
+        */
         --pi-cta-bg: #ffffff;
+        /* Held at the body colour, and it has no choice: #ffffff is the
+           ceiling. The lift, the contact shadow and the lens carry this state,
+           which is what the white pill has always done. */
+        --pi-cta-hover: #ffffff;
         --pi-cta-text: #141414;
         --pi-cta-ring: rgba(0,0,0,0.08);
+        /* A DARK rim, on the bottom face. Inverted from the measured material,
+           because on this body the rim is the shadow rather than the specular.
+           One hairline, not the reference's three rings — see .pi-cta::before. */
+        --pi-cta-rim: rgba(0,0,0,0.17);
+        --pi-cta-rim-mask: var(--pi-mask-bottom);
+        /* No sheen: white over white is invisible, and a DARK sheen would ramp
+           the body, which is the one thing this material never does. */
+        --pi-cta-sheen: none;
+        /* The lens cannot brighten a white body either, so the refraction reads
+           as the dark surround being bent into view — a faint local darkening
+           with a darker rim pickup under the pointer. */
+        --pi-cta-lens-tint: rgba(0,0,0,0.030);
+        --pi-cta-lens-rim: rgba(0,0,0,0.10);
+        --pi-cta-lens-rim-soft: rgba(0,0,0,0.045);
+        /* Visible on white, where it does real work turning the caps. .lg-sky
+           runs .30 on a mid-light fill; pure white needs less or it smudges. */
+        --pi-cta-cap-opacity: 0.22;
+        --pi-cta-shadow: 0 1px 2px rgba(0,0,0,0.22), 0 4px 10px rgba(0,0,0,0.16);
+        --pi-cta-shadow-hover: 0 2px 4px rgba(0,0,0,0.26), 0 8px 18px rgba(0,0,0,0.28);
+        --pi-cta-hc-border: rgba(0,0,0,0.92);
         --pi-close-bg: rgba(255,255,255,0.06);
         --pi-close-hover: rgba(255,255,255,0.12);
         --pi-card-bg: rgba(255,255,255,0.015);
@@ -84,6 +165,26 @@ const PI_CSS = `
         --pi-primary: #374151;
         --pi-secondary: #6b7280;
         --pi-tertiary: #9ca3af;
+        /*
+          The nav rows sit on #f5f5f5, a step off the page rather than a step
+          toward it, and grey-500 text on grey-100 lands at 4.8:1 — legal, but
+          it reads as a disabled list rather than a set of destinations. Each
+          rung moves down one stop: rest grey-500 -> grey-600 (7.6:1), selected
+          grey-700 -> grey-800. The gap between them widens rather than closing,
+          so the selected row is still the darkest thing in the column.
+        */
+        --pi-nav-text: #4b5563;
+        --pi-nav-text-active: #1f2937;
+        /*
+          The glyphs move with their labels. Dark mode runs the icon at 0.35
+          against a 0.55 label — a little under two thirds of the text's weight.
+          Left at grey-400 beside grey-600 text the light nav lands nowhere near
+          that (2.3:1 against the row, versus the label's 6.9:1) and the icons
+          read as washed out rather than as quieter. One stop each restores the
+          dark theme's proportion.
+        */
+        --pi-nav-icon: #6b7280;
+        --pi-nav-icon-active: #4b5563;
         --pi-btn-bg: rgba(0,0,0,0.04);
         --pi-btn-bg-hover: rgba(0,0,0,0.08);
         --pi-btn-border: rgba(0,0,0,0.05);
@@ -108,9 +209,50 @@ const PI_CSS = `
         --pi-cta-accent-border: color-mix(in srgb, var(--periwinkle-600) 24%, transparent);
         --pi-input-border-focus: color-mix(in srgb, var(--periwinkle-600) 40%, transparent);
         --pi-input-bg-focus: color-mix(in srgb, var(--periwinkle-600) 4%, transparent);
-        --pi-cta-bg: #000000;
-        --pi-cta-text: #ffffff;
+        /*
+          Dark grey, not black. This pill was #000000, and black has no headroom
+          BELOW it in the same way white has none above: every gram of specular
+          could only lift it, so the body started reading as dark grey anyway
+          while the rim had to be trimmed away to stop it. Naming the grey is
+          what lets the material work — #222222 takes the measured rim without
+          the body drifting, and it is .lg-neutral's #555555 brought down for a
+          brighter surround (the reference stage was #242424; this card is
+          #f5f5f5, so the pill has to hold its own against white instead of
+          lifting off black). Label #fafafa on it is 11.2:1.
+        */
+        --pi-cta-bg: #222222;
+        /* Achromatic body, so brightness is the only hover lever — a faint cool
+           cast to fake saturation reads as a blue-grey button, not a lit one.
+           x1.32 luminance, the same step .lg-neutral takes (#555 -> #707070). */
+        --pi-cta-hover: #2d2d2d;
+        --pi-cta-text: #fafafa;
         --pi-cta-ring: rgba(255,255,255,0.10);
+        /* Alpha is .lg-neutral's --lg-rim-1. One hairline, not three rings. */
+        --pi-cta-rim: rgba(255,255,255,0.148);
+        /*
+          Top face only. On a dark stage the pill catches a bounce from below
+          and the rim is bright top AND bottom; on a white card there is no
+          bounce — the button sits ON the card, so the specular stays up top,
+          the underside darkens, and a real contact shadow does the work the
+          bottom rim used to do. design.md derives this; it is not measured.
+        */
+        --pi-cta-rim-mask: var(--pi-mask-top);
+        --pi-cta-sheen: linear-gradient(180deg,
+            rgba(255,255,255,0.055) 0%, rgba(255,255,255,0) 14%,
+            rgba(255,255,255,0) 100%);
+        --pi-cta-lens-tint: rgba(255,255,255,0.055);
+        --pi-cta-lens-rim: rgba(255,255,255,0.30);
+        --pi-cta-lens-rim-soft: rgba(255,255,255,0.13);
+        --pi-cta-cap-opacity: 0.5;
+        --pi-cta-shadow:
+            inset 0 -1px 0 rgba(0,0,0,0.28),
+            0 1px 2px rgba(16,24,40,0.16),
+            0 4px 10px rgba(16,24,40,0.10);
+        --pi-cta-shadow-hover:
+            inset 0 -1px 0 rgba(0,0,0,0.28),
+            0 2px 4px rgba(16,24,40,0.18),
+            0 8px 18px rgba(16,24,40,0.16);
+        --pi-cta-hc-border: rgba(255,255,255,0.92);
         --pi-close-bg: rgba(0,0,0,0.05);
         --pi-close-hover: rgba(0,0,0,0.10);
         --pi-card-bg: rgba(0,0,0,0.015);
@@ -252,6 +394,111 @@ const PI_CSS = `
         animation: pi-shimmer-pulse 1.4s ease-in-out infinite;
     }
 
+    /* ── Thinking states (transitions.dev) ──────────────────────────────────
+       The ingest label names the stage it is on and moves through them, rather
+       than sitting on one frozen "Reading your resume…" for the length of a
+       real extraction — a line that never changes is exactly what reads as a
+       hang. Two signals, deliberately separate: the shimmer is liveness and
+       never stops; the label sequence is progress and STOPS on its last state
+       instead of looping, because a loop reads as "it started over". That last
+       state is therefore always the genuinely long-running one (indexing), and
+       no state ever claims a finish the ingest can't confirm.
+
+       Scoped under .pi-root like .t-toggle above: this panel is the only thing
+       that defines t-think, so it must not leak a generic t-* name globally.
+
+       The hidden sizer holds the longest state and is what gives the box its
+       width — lines are absolutely positioned across it, so every state centres
+       in a box that never resizes mid-swap. font-size lives on .t-think, not on
+       the line: the sizer only reports the right width if it is set in the same
+       font as the text it is standing in for.
+
+       The whole widget is aria-hidden; FileUploadIndexing's role="status"
+       announces one stable line instead. See the note there. */
+    .pi-root .t-think {
+        --think-swap: 150ms;
+        --think-gap: 50ms;
+        --think-distance: 8px;
+        --think-blur: 2px;
+        --think-shimmer: 2000ms;
+        --think-base: var(--pi-secondary);
+        --think-highlight: var(--pi-hero);
+        --think-ease: ease-in-out;
+        position: relative;
+        display: inline-block;
+        text-align: center;
+        font-size: 12px;
+        line-height: 1.5;
+    }
+    .pi-root .t-think-sizer { display: block; visibility: hidden; white-space: nowrap; }
+    .pi-root .t-think-text {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        display: block;
+        color: var(--think-base);
+        white-space: nowrap;
+        transform: translateY(0);
+        filter: blur(0);
+        opacity: 1;
+        transition:
+            transform var(--think-swap) var(--think-ease),
+            filter var(--think-swap) var(--think-ease),
+            opacity var(--think-swap) var(--think-ease);
+        will-change: transform, filter, opacity;
+    }
+    /* Shimmer sweeps the glyphs only (background-clip: text). --think-highlight
+       inverts with the theme — white over the 55% white base in dark, near-black
+       over grey-500 in light — so the sweep is a highlight either way rather
+       than a near-white band washing out on a white panel. */
+    .pi-root .t-think-text::before {
+        content: attr(data-text);
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background-image: linear-gradient(90deg,
+            transparent 0%, transparent 40%,
+            var(--think-highlight) 50%,
+            transparent 60%, transparent 100%);
+        background-size: 400% 100%;
+        background-repeat: no-repeat;
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        -webkit-text-fill-color: transparent;
+        animation: t-think-shimmer var(--think-shimmer) linear infinite;
+    }
+    @keyframes t-think-shimmer {
+        0%   { background-position: 100% 0; }
+        100% { background-position: 0% 0; }
+    }
+    /* The outgoing line floats over the box so both halves animate. */
+    .pi-root .t-think-text.is-exit {
+        transform: translateY(calc(var(--think-distance) * -1));
+        filter: blur(var(--think-blur));
+        opacity: 0;
+    }
+    .pi-root .t-think-text.is-enter-start {
+        transition: none;
+        transform: translateY(var(--think-distance));
+        filter: blur(var(--think-blur));
+        opacity: 0;
+    }
+
+    /* Visually hidden, still announced. Used for the one stable line the
+       indexing slot's live region reads out. */
+    .pi-sr-only {
+        position: absolute;
+        width: 1px; height: 1px;
+        margin: -1px; padding: 0;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        clip-path: inset(50%);
+        white-space: nowrap;
+        border: 0;
+    }
+
     /* ── Press feedback ── */
     .pi-press {
         transition: background 180ms var(--pi-ease-out), color 180ms ease,
@@ -291,7 +538,7 @@ const PI_CSS = `
         display: flex; align-items: center; gap: 12px;
         padding: 8px 10px; border-radius: 6px;
         cursor: pointer; font-size: 13px; font-weight: 500;
-        color: var(--pi-secondary); background: transparent;
+        color: var(--pi-nav-text); background: transparent;
         user-select: none; margin-bottom: 2px;
         position: relative; z-index: 1;
         transition: background 180ms cubic-bezier(0.23, 1, 0.32, 1), color 180ms ease, transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
@@ -303,7 +550,7 @@ const PI_CSS = `
         animation: pi-list-in 420ms var(--pi-ease-expo) backwards;
     }
     .pi-nav-item:hover { background: var(--pi-item-hover); }
-    .pi-nav-item.active { color: var(--pi-primary); }
+    .pi-nav-item.active { color: var(--pi-nav-text-active); }
     .pi-nav-item:active { transform: scale(0.97); }
 
     /* Staggered nav entry, on the same 55ms beat as the panel's blocks so the
@@ -320,12 +567,12 @@ const PI_CSS = `
 
     /* Nav icon */
     .pi-nav-item svg {
-        color: var(--pi-tertiary); flex-shrink: 0;
+        color: var(--pi-nav-icon); flex-shrink: 0;
         transition: color 180ms ease, transform 260ms var(--pi-ease-spring);
     }
     /* A hair of scale on the active icon. Nobody will name it; it is the
        difference between the row looking selected and looking alive. */
-    .pi-nav-item.active svg { color: var(--pi-secondary); transform: scale(1.08); }
+    .pi-nav-item.active svg { color: var(--pi-nav-icon-active); transform: scale(1.08); }
 
     /* ── Content boxes ── */
     .pi-content-box {
@@ -377,37 +624,300 @@ const PI_CSS = `
     .pi-root[data-theme='light'] .pi-toggle-card { background: rgba(0,0,0,0.015); }
 
     /* ── CTA pill ── */
+    /*
+      Liquid Glass — the material documented in src/ui-components/design.md,
+      rebuilt at this pill's scale. Four layers, because no single one can be
+      both flat and directional:
+
+        background      the flat tint plus a soft inner sheen
+        ::before        the specular rim, aimed by two composited mask layers
+        ::after         a ring mask that drops the caps into shadow
+        .pi-cta-lens    the pointer-tracked highlight and its local rim pickup
+
+      The instinct is a top-lit vertical gradient, because that is what a glossy
+      button has looked like since Aqua. This material does the opposite: the
+      body does NOT ramp at all, and every gram of depth lives in a rim that is
+      symmetric top and bottom (the pill catches a bounce off the dark stage as
+      well as the key light from above) and dies away across the caps, whose
+      normals turn away from the light. A uniform ring around the whole
+      perimeter is what makes a pill read as a plastic capsule instead of glass.
+
+      Values come from .lg-neutral rather than being re-derived, with two
+      documented departures for scale — see ::before and ::after.
+    */
     .pi-cta {
-        padding: 5px 5px 5px 16px; height: 36px; border-radius: 18px;
-        background: var(--pi-cta-bg); color: var(--pi-cta-text);
+        /*
+          The cap fade, expressed against the cap radius as a LENGTH rather
+          than as a percentage of width. design.md's reference stops are
+          percentages tuned on a 535px pill whose caps were 12.7% of it; on a
+          196px sidebar button the caps are 9% and a percentage fade ends up
+          INSIDE the flat top face, spending the rim's brightest stretch fading
+          across something that is not curved. The ratios below are the
+          reference's own (24/62/142px over a 68px cap radius), so the profile
+          is the measured one and is now width-invariant.
+        */
+        --pi-cta-cap-r: 18px;
+        --pi-cta-cap-mask: linear-gradient(90deg,
+            transparent calc(var(--pi-cta-cap-r) * 0.353),
+            rgba(0,0,0,0.82) calc(var(--pi-cta-cap-r) * 0.912),
+            #000 calc(var(--pi-cta-cap-r) * 2.088),
+            #000 calc(100% - var(--pi-cta-cap-r) * 2.088),
+            rgba(0,0,0,0.82) calc(100% - var(--pi-cta-cap-r) * 0.912),
+            transparent calc(100% - var(--pi-cta-cap-r) * 0.353));
+
+        /* Pointer position, written once per frame by useLensTracking. The
+           names are the shared ones so there is one implementation of the
+           tracking, not two. */
+        --lg-mx: 50%;
+        --lg-my: 50%;
+
+        /*
+          The resting bloom, DECLARED rather than left to the @property initial
+          value. The hero pill's 200x150 covers a 36px button entirely and stops
+          reading as a local highlight; this is .lg-sm's 90x40. Declaring it here
+          rather than on .pi-cta-lens is what gives the press-tighten below a
+          value to return to when the pointer comes up — an initial value is not
+          an author declaration, so the transition would only run one way.
+        */
+        --pi-lens-w: 90px;
+        --pi-lens-h: 40px;
+
+        /*
+          One clock for the whole hover state. The tint and the lens were on
+          separate durations in an earlier build of this material and it read as
+          the surface changing in two overlapping stages. easeInOutSine because
+          velocity starts AND ends at zero, which is what "smooth" means for a
+          cross-fade with no spatial motion — and it is its own mirror, so
+          leaving traces the same path as arriving.
+        */
+        --pi-cta-dur: 300ms;
+        --pi-cta-ease: cubic-bezier(.37, 0, .63, 1);
+
+        /*
+          The label is centred on the PILL, not on the space left over beside
+          the ring. Centring it inside a flex:1 that stops short of the ring
+          puts it (ring + gap) / 2 = 18px left of where the eye expects it, and
+          on a 196px button that is visible. Leading the row with the ring's own
+          footprint makes the flex track symmetric about the pill's centre, so
+          text-align: center is exact — and the label stays in flow, which an
+          absolutely-centred one would not, so a long translation still
+          truncates against the ring instead of running under it.
+        */
+        --pi-cta-pad: 5px;
+        --pi-cta-gap: 10px;
+        --pi-cta-ring-size: 26px;
+        padding: var(--pi-cta-pad);
+        padding-left: calc(var(--pi-cta-pad) + var(--pi-cta-ring-size) + var(--pi-cta-gap));
+        height: 36px; border-radius: 18px;
+        /*
+          Two layers: the inner sheen carries the rim's light a few px inward,
+          and the flat tint sits behind it as background-color, which is what
+          keeps the hover tint animatable. A background shorthand on a hover
+          rule would have to restate the gradient and could not transition.
+        */
+        background: var(--pi-cta-sheen, none), var(--pi-cta-bg);
+        color: var(--pi-cta-text);
         font-size: 13px; font-weight: 600; letter-spacing: -0.01em;
         border: none; cursor: pointer;
-        display: flex; align-items: center; gap: 10px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.12);
-        transition: transform 200ms var(--pi-ease-out), box-shadow 200ms ease;
+        display: flex; align-items: center; gap: var(--pi-cta-gap);
+        /*
+          Two-stage contact shadow, per theme: a 1px seat and a 4px spread. One
+          8px blur alone reads as a glow on a pill this small — the tight stage
+          is what makes it look like it is resting on the panel rather than
+          floating over it. The light theme adds an inset underside here too,
+          which is the half of its rim the mask deliberately does not carry.
+        */
+        box-shadow: var(--pi-cta-shadow);
+        transition:
+            transform 200ms var(--pi-ease-out),
+            box-shadow 200ms ease,
+            background-color var(--pi-cta-dur) var(--pi-cta-ease);
         white-space: nowrap; position: relative; overflow: hidden;
     }
-    .pi-cta:hover { transform: translateY(-1px) scale(1.01); box-shadow: 0 6px 16px rgba(0,0,0,0.28); }
-    .pi-cta:active { transform: scale(0.96); box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
-    .pi-cta-ring {
-        width: 26px; height: 26px; border-radius: 50%;
-        background: var(--pi-cta-ring);
-        display: flex; align-items: center; justify-content: center;
-        transition: transform 280ms var(--pi-ease-out);
-        position: relative; z-index: 1;
-    }
-    .pi-cta:hover .pi-cta-ring { transform: translateX(1px) scale(1.05); }
-    .pi-cta--trial { background: linear-gradient(135deg,#8b5cf6,#7c3aed); color:#fff; box-shadow:0 2px 8px rgba(124,58,237,0.30); }
-    .pi-cta--trial .pi-cta-ring { background: rgba(255,255,255,0.18); }
-    .pi-cta--shimmer::after {
+
+    /*
+      ::before — the specular rim. ONE hairline ring, not the reference's three.
+      The rim does not scale with the pill: at 136px a 3px rim is 2% of the
+      height, at 36px it is 8%, and three stacked rings read as a bevel rather
+      than as light. This is .lg-sm's collapse, for the same reason.
+
+      Two mask layers composited with mask-composite:intersect aim it: the
+      vertical one keeps the light on the top and bottom faces, the horizontal
+      one lets it die away across the caps.
+
+      z-index 0, not -1. .pi-cta is position:relative with z-index:auto, so it
+      does NOT create a stacking context — a -1 pseudo paints BEHIND the
+      element's own background and the opaque fill hides it completely. The
+      content sits at 2 and the lens at 1, so 0 is the slot just above the fill.
+    */
+    .pi-cta::before {
         content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        z-index: 0;
+        pointer-events: none;
+        box-shadow: inset 0 0 0 1px var(--pi-cta-rim);
+        -webkit-mask-image: var(--pi-cta-rim-mask), var(--pi-cta-cap-mask);
+        -webkit-mask-composite: source-in;
+        mask-image: var(--pi-cta-rim-mask), var(--pi-cta-cap-mask);
+        mask-composite: intersect;
+    }
+
+    /*
+      ::after — the caps sit in shadow. The padding-box ring mask confines it to
+      the perimeter and the vertical gradient keeps it clear of the lit faces.
+      1px and half strength, because the side edges of a 36px pill have far less
+      run than the reference's 136px caps.
+    */
+    .pi-cta::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        padding: 1px;
+        background: linear-gradient(180deg,
+            rgba(0,0,0,0) 0%, rgba(0,0,0,0) 6%,
+            rgba(0,0,0,0.90) 50%,
+            rgba(0,0,0,0) 94%, rgba(0,0,0,0) 100%);
+        -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+        -webkit-mask-composite: xor;
+                mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+                mask-composite: exclude;
+        opacity: var(--pi-cta-cap-opacity);
+        pointer-events: none;
+        z-index: 0;
+    }
+
+    /*
+      The lens. Glass does not brighten uniformly when you point at it — it
+      refracts toward whatever is nearest, so the highlight tracks the pointer
+      and the rim picks up light only on the edge closest to it. Both effects
+      come from this one element: a flat tint plus an inset ring, shaped by a
+      radial mask parked under the cursor.
+
+      A real element because ::before and ::after are both spoken for.
+    */
+    .pi-cta-lens {
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        background: var(--pi-cta-lens-tint);
+        box-shadow:
+            inset 0 0 0 1px var(--pi-cta-lens-rim),
+            inset 0 0 0 2px var(--pi-cta-lens-rim-soft);
+        -webkit-mask-image: radial-gradient(var(--pi-lens-w) var(--pi-lens-h) at var(--lg-mx) var(--lg-my),
+            #000 0%, rgba(0,0,0,0.5) 40%, transparent 74%);
+                mask-image: radial-gradient(var(--pi-lens-w) var(--pi-lens-h) at var(--lg-mx) var(--lg-my),
+            #000 0%, rgba(0,0,0,0.5) 40%, transparent 74%);
+        opacity: 0;
+        /* Opacity and the press-tighten may ease; POSITION MAY NOT. Ease
+           --lg-mx/--lg-my and the highlight trails the cursor, which reads as a
+           delayed glow rather than as refraction. */
+        transition:
+            opacity var(--pi-cta-dur) var(--pi-cta-ease),
+            --pi-lens-w 150ms ease,
+            --pi-lens-h 150ms ease;
+        pointer-events: none;
+        z-index: 1;
+    }
+
+    /*
+      The shimmer sweep, which used to be ::after. Both pseudos belong to the
+      material now, so this gets an element of its own — and it is rendered only
+      for the state that uses it, rather than being a pseudo that every state
+      carries and only one fills in.
+    */
+    .pi-cta-shimmer {
         position: absolute; top: 0; bottom: 0; left: 0; width: 45%;
         background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.09) 50%, transparent 100%);
         animation: pi-shimmer 3.2s cubic-bezier(0.4, 0, 0.6, 1) 2.0s infinite;
         pointer-events: none;
+        z-index: 1;
     }
-    .pi-cta--trial::after {
+    .pi-cta--trial .pi-cta-shimmer {
         background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.14) 50%, transparent 100%);
+    }
+
+    /*
+      Hover gated to a real pointer — on touch, :hover sticks after the tap and
+      the lens would stay parked where the finger left it. :not(:disabled)
+      because :hover matches disabled form controls in Chrome, which would tint
+      a dead button while the lens correctly stayed off.
+    */
+    @media (hover: hover) and (pointer: fine) {
+        .pi-cta:not(:disabled):hover { background-color: var(--pi-cta-hover); }
+        .pi-cta:not(:disabled):hover .pi-cta-lens { opacity: 1; }
+    }
+    /* The lift grows the contact shadow; the press puts it back on the panel.
+       Both read the theme's own shadow so a white pill and a grey one are not
+       sharing one value tuned for the other's surround. */
+    .pi-cta:hover { transform: translateY(-1px) scale(1.01); box-shadow: var(--pi-cta-shadow-hover); }
+    /* :active fires on pointer-down, so the feedback lands on the press rather
+       than the release, and the lens tightens — the material compressing. */
+    .pi-cta:active { transform: scale(0.96); box-shadow: var(--pi-cta-shadow); }
+    .pi-cta:active .pi-cta-lens { --pi-lens-w: 66px; --pi-lens-h: 30px; }
+    /* A keyboard focus has no pointer position, so useLensTracking clears the
+       last hover and the bloom opens from the centre. */
+    .pi-cta:focus-visible .pi-cta-lens { opacity: 1; }
+    /* min-width: 0 is what lets the ellipsis engage inside a flex row — without
+       it the label refuses to shrink below its content and overflows instead. */
+    .pi-cta-label {
+        flex: 1; min-width: 0; text-align: center;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        position: relative; z-index: 2;
+    }
+    .pi-cta-ring {
+        width: var(--pi-cta-ring-size); height: var(--pi-cta-ring-size); border-radius: 50%;
+        flex-shrink: 0;
+        background: var(--pi-cta-ring);
+        display: flex; align-items: center; justify-content: center;
+        transition: transform 280ms var(--pi-ease-out);
+        position: relative; z-index: 2;
+    }
+    .pi-cta:hover .pi-cta-ring { transform: translateX(1px) scale(1.05); }
+    /*
+      The trial pill keeps its own body, and needs its own hover tint: the
+      neutral rule above is (0,3,0) and .pi-cta--trial is (0,1,0), so without
+      this the purple would cross-fade to grey under the pointer. The tint gains
+      saturation and a little luminance while HOLDING its hue (262), so it reads
+      as the same colour lit better rather than as a different colour.
+    */
+    .pi-cta--trial {
+        --pi-cta-bg: #8455ef;
+        --pi-cta-hover: #9468ff;
+        color: #fff;
+        --pi-cta-rim: rgba(240,235,255,0.24);
+        --pi-cta-lens-tint: rgba(240,235,255,0.06);
+        --pi-cta-lens-rim: rgba(245,240,255,0.30);
+        --pi-cta-lens-rim-soft: rgba(245,240,255,0.13);
+        /* A mid-dark body, so unlike either neutral pill it takes the measured
+           symmetric rim — and it keeps it in both themes, because the body is
+           its own colour rather than the theme's. */
+        --pi-cta-rim-mask: var(--pi-mask-both);
+        --pi-cta-sheen: linear-gradient(180deg,
+            rgba(255,255,255,0.090) 0%, rgba(255,255,255,0) 11%,
+            rgba(255,255,255,0) 89%, rgba(255,255,255,0.090) 100%);
+        --pi-cta-cap-opacity: 0.5;
+        --pi-cta-shadow: 0 1px 2px rgba(124,58,237,0.26), 0 4px 10px rgba(124,58,237,0.20);
+        --pi-cta-shadow-hover: 0 2px 4px rgba(124,58,237,0.28), 0 8px 18px rgba(124,58,237,0.30);
+    }
+    .pi-cta--trial .pi-cta-ring { background: rgba(255,255,255,0.18); }
+
+    /*
+      prefers-contrast: more — the whole premise of this material is a rim so
+      subtle it reads as light rather than as an edge, which is precisely what a
+      high-contrast user has asked not to depend on. In that mode the design
+      gives up its own premise: a defined border, and the directional layers off.
+    */
+    @media (prefers-contrast: more) {
+        .pi-cta::before {
+            box-shadow: inset 0 0 0 2px var(--pi-cta-hc-border);
+            -webkit-mask-image: none;
+                    mask-image: none;
+        }
+        .pi-cta::after { opacity: 0; }
+        .pi-cta-lens { display: none; }
     }
 
     /* ── Util buttons ── */
@@ -555,7 +1065,19 @@ const PI_CSS = `
         .pi-nav-item { animation: pi-fade-only 160ms ease backwards; animation-delay: 0ms !important; }
         .pi-list-item  { animation: pi-fade-only 160ms ease backwards; animation-delay: 0ms !important; }
         .pi-press:active, .pi-press-soft:active { transform: none; }
-        .pi-cta--shimmer::after { animation: none; }
+        .pi-cta-shimmer { animation: none; }
+        /* The tint still cross-fades — a hue shift is not vestibular — but the
+           lift, the press and the pointer tracking go. The !important is what
+           makes useLensTracking's inline writes inert, so the setting takes
+           effect live instead of needing the listener torn down. */
+        .pi-cta:hover, .pi-cta:active { transform: none; }
+        .pi-cta-lens {
+            transition: opacity var(--pi-cta-dur) var(--pi-cta-ease);
+            --lg-mx: 50% !important;
+            --lg-my: 50% !important;
+            --pi-lens-w: 150px;
+            --pi-lens-h: 65px;
+        }
         .pi-skeleton { animation: none; opacity: 0.5; }
         /* The handoff keeps its crossfade — that opacity change is the only
            signal that indexing finished — but loses the travel, the scale and
@@ -564,6 +1086,16 @@ const PI_CSS = `
         .pi-handoff-in-self,
         .pi-handoff-in > * { animation: pi-fade-only 200ms ease backwards; }
         .pi-handoff-in > *:nth-child(2) { animation-delay: 0ms; }
+        /* The ingest label still CHANGES — which stage the ingest is on is
+           information, not decoration, and it is the whole reason the line
+           exists. What goes is the travel, the blur and the shimmer sweep, so
+           the states hard-cut instead of sliding. */
+        .pi-root .t-think-text {
+            transition: none !important;
+            transform: none !important;
+            filter: none !important;
+        }
+        .pi-root .t-think-text::before { display: none !important; }
     }
 `;
 
@@ -674,7 +1206,15 @@ const HANDOFF_OUT_MS = 240;
 const HANDOFF_IN_MS = 670;
 function useIndexHandoff(indexing: boolean): { settling: boolean; arriving: boolean } {
     const [phase, setPhase] = useState<'idle' | 'settling' | 'arriving'>('idle');
-    const prevIndexingRef = useRef(indexing);
+    // The previous value is STATE, not a ref, and that distinction is load-
+    // bearing under React 19 + StrictMode (see src/main.tsx): a render can be
+    // double-invoked or thrown away, and React rolls back the state updates of
+    // a discarded render but NOT a ref written during one. With a ref, a
+    // discarded pass could record `indexing` and the committed pass would then
+    // see no edge and skip the handoff entirely — the orb snapping straight to
+    // the result, which is the exact glitch this hook exists to remove. This is
+    // React's documented "adjusting state when a prop changes" form.
+    const [prevIndexing, setPrevIndexing] = useState(indexing);
 
     // The falling edge is handled DURING render, not in an effect. Effects run
     // after paint, so reacting there lets the browser paint one frame of the
@@ -684,8 +1224,8 @@ function useIndexHandoff(indexing: boolean): { settling: boolean; arriving: bool
     // before paint, so that frame never reaches the screen. A fresh upload
     // landing mid-handoff resets to idle: the orb is coming back, and finishing
     // the previous exit would fight the new entrance.
-    if (prevIndexingRef.current !== indexing) {
-        prevIndexingRef.current = indexing;
+    if (prevIndexing !== indexing) {
+        setPrevIndexing(indexing);
         setPhase(indexing ? 'idle' : 'settling');
     }
 
@@ -763,6 +1303,182 @@ const FileUploadEmpty = ({ hint, hasAccess, onBrowse, onNeedUpgrade, enterClass 
     </div>
 );
 
+// ─── ThinkingStates — cycling shimmer label ───────────────────────────────────
+// transitions.dev's thinking-states recipe. Two copies of the line live in the
+// box during a swap: the outgoing one exits upward while the incoming one rises
+// from below, held back by --think-gap so the two halves read as one motion
+// instead of a crossfade.
+//
+// Both copies are driven imperatively (classList in a layout effect) rather than
+// through className, because the class has to be applied, forced through a
+// reflow and released within a single frame — React cannot express that. The
+// price is that `className` on those two nodes MUST stay a constant string:
+// this panel re-renders from unrelated state constantly (the adopt-poll, status
+// polling, adoptTick), and a state-derived className would let reconciliation
+// wipe .is-enter-start / .is-exit mid-transition. That failure only shows up
+// under load, so keep the props constant.
+const THINK_SWAP_MS  = 150;   // keep in sync with --think-swap
+const THINK_GAP_MS   = 50;    // keep in sync with --think-gap
+
+/** One stage of a sequence. `hold` is how long this line stays before the swap
+ *  to the next one starts; the LAST stage's hold is never read. */
+interface ThinkStage { text: string; hold: number }
+
+const ThinkingStates = ({ stages, sizer, paused }: { stages: ThinkStage[]; sizer?: string; paused?: boolean }) => {
+    const [index, setIndex] = useState(0);
+    const [outgoing, setOutgoing] = useState<{ id: number; text: string } | null>(null);
+    const lineRef = useRef<HTMLSpanElement | null>(null);
+    const outRef = useRef<HTMLSpanElement | null>(null);
+    const seqRef = useRef(0);
+    const last = stages.length - 1;
+
+    // Advance one state at a time, and STOP on the last one — see the CSS note.
+    // `paused` is the handoff: a label swap firing during the 240ms
+    // pi-handoff-out fade reads as a glitch on the way out.
+    useEffect(() => {
+        if (paused || index >= last) return;
+        const t = setTimeout(() => {
+            setOutgoing({ id: seqRef.current++, text: stages[index].text });
+            setIndex(i => i + 1);
+        }, stages[index].hold);
+        return () => clearTimeout(t);
+    }, [index, last, paused, stages]);
+
+    // Incoming copy: React has already swapped this node's text, so jump it
+    // below the line with no transition, reflow, then release it after the gap.
+    useLayoutEffect(() => {
+        const el = lineRef.current;
+        if (!el || index === 0) return;
+        el.classList.add('is-enter-start');
+        void el.offsetHeight; // force reflow so removing the class transitions
+        const t = setTimeout(() => el.classList.remove('is-enter-start'), THINK_GAP_MS);
+        return () => { clearTimeout(t); el.classList.remove('is-enter-start'); };
+    }, [index]);
+
+    // Outgoing copy: mounted at rest this commit, so read layout to lock the
+    // from-state in before adding .is-exit — mounting it with the class already
+    // on would land it at the end state with nothing to transition from. Keyed
+    // by id so a swap that arrives before the previous exit finishes gets a
+    // fresh node instead of reusing one that already carries .is-exit.
+    useLayoutEffect(() => {
+        if (!outgoing) return;
+        const el = outRef.current;
+        if (!el) return;
+        void el.offsetHeight;
+        el.classList.add('is-exit');
+        const t = setTimeout(() => setOutgoing(null), THINK_SWAP_MS + 60);
+        return () => clearTimeout(t);
+    }, [outgoing]);
+
+    // `sizer` overrides the widest line of THIS list. The JD slot passes one so
+    // the two JD variants report the same width: which variant renders is keyed
+    // on profileStatus.hasProfile, which can flip mid-ingest when a resume and a
+    // JD are uploaded together, and the two lists' own longest lines differ by
+    // ~43px — a visible box jump long after the entrance animation could hide
+    // it. Not reproduced live (the flip window is narrow and profileDelete hung
+    // the harness), so this removes the dependency rather than fixing a seen bug.
+    const widest = sizer ?? stages.reduce((a, b) => (b.text.length > a.length ? b.text : a), '');
+    const current = stages[Math.min(index, last)].text;
+
+    return (
+        <span className="t-think" aria-hidden="true">
+            <span className="t-think-sizer">{widest}</span>
+            {/* textContent and data-text must stay in sync — data-text is what
+                the shimmer ::before copy paints. */}
+            <span ref={lineRef} className="t-think-text" data-text={current}>{current}</span>
+            {outgoing && (
+                <span key={outgoing.id} ref={outRef} className="t-think-text" data-text={outgoing.text}>
+                    {outgoing.text}
+                </span>
+            )}
+        </span>
+    );
+};
+
+// ─── Ingest stages ────────────────────────────────────────────────────────────
+// Timed, not wired to real progress: 'uploading' and 'processing' are both set
+// back-to-back by the renderer before it even invokes main (doResumeUpload), so
+// neither carries stage information. What keeps these honest is that every line
+// names work KnowledgeOrchestrator.ingestDocument actually performs, in the
+// order it performs it. Don't add a state for work the pipeline doesn't do, and
+// don't add a terminal "Almost done" — nothing here knows that.
+//
+// ── Where the hold values come from ──────────────────────────────────────────
+// Measured, not guessed. 20 real ingests (10 résumés + 10 JDs, the
+// test-fixtures/profiles corpus, driven through the live app; 0 failures, 0
+// heuristic-extractor fallbacks, company research healthy):
+//
+//   résumé  min 4.5s · p25 7.2s · median 23.9s · mean 23.5s · p75 25.0s · max 64.5s
+//   JD      min 28.9s · p25 63.9s · median 69.3s · mean 64.8s · p75 70.6s · max 92.7s
+//
+// A JD is ~3x a résumé because `atomicJdProfilePackGeneration` (shipped ON,
+// 2026-08-30) makes ingestDocument AWAIT the whole AOT pipeline — company
+// research, then gap analysis + negotiation + intro, then mock questions, then
+// culture mapping — all real LLM calls in the critical path. So the two types
+// get different sequences AND different pacing; one schedule cannot serve both.
+//
+// The holds RAMP rather than sitting flat. The two failure modes are
+// asymmetric: parking on the last line is visible and is exactly the "is it
+// stuck?" complaint, while running out of lines early is invisible. A ramp
+// spans a wide duration range with one schedule — a fast ingest still shows the
+// early lines, a slow one keeps receiving new ones deep into the tail — and it
+// matches how waiting is perceived, since a longer gap is tolerable later on.
+// Each sequence is paced to reach its LAST line at roughly its measured median,
+// so the typical upload parks for a second or two rather than a minute.
+//
+// If ingest latency moves (a faster extraction model, an AOT phase dropped),
+// re-measure and re-pace — don't leave these at numbers the pipeline outgrew.
+
+// Sums to 22.7s at the last line vs a 23.9s median — parks ~1s typically.
+// Step 8 of the ingest generates STAR stories (an LLM call) and is the résumé
+// tail, so it gets the terminal line rather than indexing.
+const RESUME_INGEST_STAGES: ThinkStage[] = [
+    { text: 'Reading your resume…',           hold: 1200 },
+    { text: 'Pulling out your experience…',   hold: 2500 },
+    { text: 'Mapping your skills…',           hold: 4000 },
+    { text: 'Noting projects and education…', hold: 6000 },
+    { text: 'Indexing it for recall…',        hold: 9000 },
+    { text: 'Writing up your best stories…',  hold: 0 },
+];
+
+// Sums to 65.7s at the last line vs a 69.3s median. Lines 6-10 are the AOT
+// pipeline's four awaited phases in the order AOTPipeline.runForJD runs them.
+// Phase 2 (gap analysis / negotiation / intro) is internally parallel — naming
+// two of its outputs in sequence describes work that IS running in that window,
+// which is what a progress line is for.
+const JD_INGEST_STAGES: ThinkStage[] = [
+    { text: 'Reading the job description…',        hold: 1200 },
+    { text: 'Pulling out the requirements…',       hold: 2500 },
+    { text: 'Noting the responsibilities…',        hold: 4000 },
+    { text: 'Picking up the tech stack…',          hold: 6000 },
+    { text: 'Indexing it for recall…',             hold: 8000 },
+    { text: 'Researching the company…',            hold: 12000 },
+    { text: 'Matching it against your resume…',    hold: 11000 },
+    { text: 'Sketching your negotiation angle…',   hold: 11000 },
+    { text: 'Drafting the questions they’ll ask…', hold: 10000 },
+    { text: 'Mapping your stories to their values…', hold: 0 },
+];
+
+// AOT phases 2-4 are all gated on `resumeDoc` — with no résumé on file the JD
+// ingest stops after company research, so promising gap analysis and talking
+// points would be describing work that will not run. That also makes this path
+// an order of magnitude faster, so it needs its own (much tighter) pacing, not
+// a prefix of the schedule above: measured over 5 ingests with the profile
+// wiped between each, on both a warm and a fresh user-data dir —
+// min 6.1s · median 6.8s · mean 7.4s · max 8.8s. Four lines summing to 6.8s
+// rather than six, so the swaps don't strobe inside a seven-second wait.
+// Both JD variants size to the longest line of the LONGER list, so the box is
+// the same width whichever one is showing — see the `sizer` note in
+// ThinkingStates for why that matters.
+const JD_SIZER = JD_INGEST_STAGES.reduce((a, b) => (b.text.length > a.length ? b.text : a), '');
+
+const JD_INGEST_STAGES_NO_RESUME: ThinkStage[] = [
+    { text: 'Reading the job description…',  hold: 1200 },
+    { text: 'Pulling out the requirements…', hold: 2000 },
+    { text: 'Indexing it for recall…',       hold: 3600 },
+    { text: 'Researching the company…',      hold: 0 },
+];
+
 // ─── FileUploadIndexing — in-flight ingest ────────────────────────────────────
 // Reuses the empty slot's container so the empty → indexing → filled sequence
 // keeps one silhouette and the panel doesn't jump as the state advances.
@@ -771,14 +1487,22 @@ const FileUploadEmpty = ({ hint, hasAccess, onBrowse, onNeedUpgrade, enterClass 
 // block the empty slot was already occupying. `theme` stays on its default
 // `auto` — it walks up to .pi-root's data-theme, which is the same signal the
 // panel's own light/dark tokens key off.
-// The orb is aria-hidden and the <p> carries the announcement: labelling both
-// makes a screen reader read the state twice. role="status" (implicitly polite)
-// is the whole announcement contract here — the badge no longer has an
-// in-progress branch to carry it.
-const FileUploadIndexing = ({ label, settling }: { label: string; settling?: boolean }) => (
+// The orb is aria-hidden and one hidden line carries the announcement:
+// labelling more than one makes a screen reader read the state twice.
+// role="status" (implicitly polite) is the whole announcement contract here —
+// the badge no longer has an in-progress branch to carry it.
+//
+// That announcement is deliberately NOT the cycling line. Pushing six-to-ten
+// states through a live region — times the two copies that overlap during every
+// swap — makes a screen reader read the entire sequence out. The rotation exists to
+// stop a sighted user concluding the panel has hung; it carries no information
+// a non-sighted user is otherwise missing. So the visible widget is aria-hidden
+// and the sr-only line states the work once and never changes.
+const FileUploadIndexing = ({ stages, sizer, settling }: { stages: ThinkStage[]; sizer?: string; settling?: boolean }) => (
     <div className={`pi-file-empty${settling ? ' pi-handoff-out' : ''}`} style={{ gap: 14 }} role="status">
         <ThinkingOrb state="composing" size={64} speed={1.10} aria-hidden="true" />
-        <p style={{ fontSize: 12, color: 'var(--pi-secondary)', margin: 0 }}>{label}</p>
+        <span className="pi-sr-only">{stages[0].text}</span>
+        <ThinkingStates stages={stages} sizer={sizer} paused={settling} />
     </div>
 );
 
@@ -1209,6 +1933,9 @@ export function ProfileIntelligenceSettings({
     const [licenseLoaded, setLicenseLoaded] = useState(false);
     const hasProfileAccess = isPremium || isTrialActive;
     const theme = useResolvedTheme();
+    /* The CTA's Liquid Glass lens. Shared with LiquidGlassButton so the rAF
+       gate and the focus-clears-the-pointer rule have one implementation. */
+    const ctaLens = useLensTracking<HTMLButtonElement>();
 
     const [activeSection, setActiveSection] = useState('identity');
     // Which way the user just travelled through the nav. The incoming panel
@@ -1260,6 +1987,23 @@ export function ProfileIntelligenceSettings({
     // false at that moment. This makes adoption an explicit render signal.
     const [adoptTick, setAdoptTick] = useState(0);
 
+    // Every finished upload schedules a 3s "clear the ready/failed badge" timer.
+    // It deliberately OUTLIVES the effect that armed it — clearing `uploading`
+    // re-runs the adopt-poll effect below and tears it down, so cancelling on
+    // that teardown would pin the badge on ready/failed forever. Unmount is a
+    // different matter: nothing cancelled these, so closing the panel inside the
+    // 3s window left a timer running to setState on a dead component. They are
+    // collected here and cleared once, on unmount only.
+    const statusResetTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+    const scheduleStatusReset = (clear: () => void) => {
+        const t = setTimeout(() => { statusResetTimersRef.current.delete(t); clear(); }, 3000);
+        statusResetTimersRef.current.add(t);
+    };
+    useEffect(() => () => {
+        statusResetTimersRef.current.forEach(clearTimeout);
+        statusResetTimersRef.current.clear();
+    }, []);
+
     // ── Hero stat (static rounded value, no count-up) ────────────────────────
     const heroYearsRounded = (profileStatus.totalExperienceYears != null && Number.isFinite(profileStatus.totalExperienceYears))
         ? Math.round(profileStatus.totalExperienceYears)
@@ -1298,6 +2042,16 @@ export function ProfileIntelligenceSettings({
     const [companyResearching, setCompanyResearching] = useState(false);
     const [companyDossier, setCompanyDossier] = useState<any>(null);
     const [companySearchQuotaExhausted, setCompanySearchQuotaExhausted] = useState(false);
+
+    // Apply the dossier carried by a getProfileData() payload (2026-09-21).
+    // getProfileData returns the wrapper { dossier, sources, last_checked } from
+    // some paths and the inner dossier from others, so unwrap once here instead
+    // of at each call site. Setting null is CORRECT and load-bearing: a new JD
+    // means a new company, and the previous company's dossier must not linger.
+    const applyCompanyDossier = (data: any) => {
+        const cd = data?.companyDossier;
+        setCompanyDossier(cd ? (cd.dossier ?? cd) : null);
+    };
 
     // Cover Letter
     const [coverLetter, setCoverLetter] = useState<any>(null);
@@ -1367,8 +2121,7 @@ export function ProfileIntelligenceSettings({
             // dossier directly. Unwrap so the Company Intel panel always sees the
             // inner dossier shape — required by the live-search vs LLM-only branch.
             if (data?.companyDossier) {
-                const cd = data.companyDossier;
-                setCompanyDossier(cd?.dossier ?? cd);
+                applyCompanyDossier(data);
             }
             // Fallback path — if the full profile payload's companyDossier is
             // missing for any reason (cache race, schema mismatch), fetch it
@@ -1388,9 +2141,15 @@ export function ProfileIntelligenceSettings({
     // when doResumeUpload/doJdUpload own the request their awaited promise
     // already reports the outcome, so polling would double-handle it.
     useEffect(() => {
-        if (!profileDetachedRef.current && !jdDetachedRef.current) return;
         let stopped = false;
         let timer: ReturnType<typeof setTimeout> | undefined;
+        // One cleanup, returned on EVERY path including the nothing-to-adopt
+        // guard below. The guard used to `return` bare, which left a path out of
+        // an effect that arms a polling timer — safe only for as long as the
+        // guard stays above every schedule site, which is not an invariant worth
+        // trusting to a future edit.
+        const cleanup = () => { stopped = true; if (timer) clearTimeout(timer); };
+        if (!profileDetachedRef.current && !jdDetachedRef.current) return cleanup;
         const finish = (
             setUploading: (v: boolean) => void,
             setStatus: (v: string | undefined) => void,
@@ -1401,8 +2160,9 @@ export function ProfileIntelligenceSettings({
             // NOT guarded by `stopped`: clearing `uploading` re-runs this effect
             // and tears it down, so a stopped-guard here would leave the badge
             // pinned on ready/failed forever. Matches the local-upload path,
-            // which fires the same unguarded reset.
-            setTimeout(() => setStatus(undefined), 3000);
+            // which fires the same unguarded reset. Registered so the ONE
+            // thing that must cancel it — unmount — still can.
+            scheduleStatusReset(() => setStatus(undefined));
         };
         const tick = async () => {
             try {
@@ -1423,6 +2183,10 @@ export function ProfileIntelligenceSettings({
                 if (stopped) return;
                 if (data) setProfileData(data);
                 setProfileStatus(st);
+                // An ADOPTED JD ingest lands here instead of in doJdUpload, so it
+                // needs the same dossier hydration — otherwise a JD uploaded just
+                // before this panel mounted keeps showing the CTA.
+                if (data && jdSettled) applyCompanyDossier(data);
 
                 if (resumeSettled) {
                     profileDetachedRef.current = false;
@@ -1446,8 +2210,58 @@ export function ProfileIntelligenceSettings({
             }
         };
         timer = setTimeout(tick, 1500);
-        return () => { stopped = true; if (timer) clearTimeout(timer); };
+        return cleanup;
     }, [profileUploading, jdUploading, adoptTick]);
+
+    // Wait out the fire-and-forget AOT run (2026-09-21).
+    //
+    // Uploading a JD automatically researches the company — ingest step 9 calls
+    // aotPipeline.runForJD(), whose Phase 1 spends 7-10 Tavily queries and writes
+    // the dossier to company_dossiers. But runForJD is NOT awaited in production,
+    // so profileUploadJD acks long before the dossier exists, and ingest pushes no
+    // event when it lands. The panel therefore sat on null and offered to research
+    // a company it had just researched — and that CTA used to force-refresh, so
+    // accepting the offer bought the same dossier a second time.
+    //
+    // getProfileData already publishes aotStatus.companyResearch; runForJD sets it
+    // to 'running' synchronously, before its first await, so it is reliably visible
+    // by the time the upload ack returns. Poll until it settles, then hydrate.
+    // Keyed on the status value itself, so this also covers mounting mid-research.
+    useEffect(() => {
+        let stopped = false;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        // Declared ABOVE the guard and returned on every path, for the reason
+        // spelled out on the adopted-ingest effect above: a bare `return` out of
+        // an effect that arms a polling timer is safe only while the guard stays
+        // above every schedule site, which is not an invariant to leave to a
+        // future edit.
+        const cleanup = () => { stopped = true; if (timer) clearTimeout(timer); };
+        if (profileData?.aotStatus?.companyResearch !== 'running') return cleanup;
+        // Bound the poll. Company research is ~10 sequential queries behind a 2s
+        // rate limiter plus an LLM summarise, so it can legitimately run past a
+        // minute — but a pipeline that died without setting 'done' or 'failed'
+        // must not leave a timer ticking for the life of the window.
+        let remaining = 90; // 90 x 2s = 3 minutes
+        const tick = async () => {
+            try {
+                const data: any = await window.electronAPI?.profileGetProfile?.();
+                if (stopped) return;
+                if (data) {
+                    setProfileData(data);
+                    if (data.aotStatus?.companyResearch !== 'running') {
+                        // Settled — 'done' hydrates the dossier, 'failed' clears to
+                        // null and the CTA legitimately reappears (and is now free
+                        // to click, since nothing was cached).
+                        applyCompanyDossier(data);
+                        return;
+                    }
+                }
+            } catch { /* transient IPC failure — keep polling */ }
+            if (!stopped && --remaining > 0) timer = setTimeout(tick, 2000);
+        };
+        timer = setTimeout(tick, 2000);
+        return cleanup;
+    }, [profileData?.aotStatus?.companyResearch]);
 
     const handleRemoveTavilyKey = async () => {
         if (!confirm('Remove your Tavily API key?')) return;
@@ -1489,7 +2303,7 @@ export function ProfileIntelligenceSettings({
         } finally {
             if (!token.cancelled) {
                 setProfileUploading(false);
-                setTimeout(() => setProfileUploadStatus(undefined), 3000);
+                scheduleStatusReset(() => setProfileUploadStatus(undefined));
             }
         }
     };
@@ -1507,6 +2321,12 @@ export function ProfileIntelligenceSettings({
                 const data = await window.electronAPI?.profileGetProfile?.();
                 if (token.cancelled) return;
                 if (data) setProfileData(data);
+                // Clear the previous company's dossier and pick up the new one if
+                // it somehow already exists (cached from an earlier session at the
+                // same company). Usually it does NOT: ingest fires the AOT pipeline
+                // fire-and-forget, so this ack lands ~20-60s before company research
+                // finishes. The aotStatus poll below is what catches that.
+                applyCompanyDossier(data);
                 setJdUploadStatus('ready');
             } else {
                 setJdError(result?.error || 'JD upload failed');
@@ -1519,7 +2339,7 @@ export function ProfileIntelligenceSettings({
         } finally {
             if (!token.cancelled) {
                 setJdUploading(false);
-                setTimeout(() => setJdUploadStatus(undefined), 3000);
+                scheduleStatusReset(() => setJdUploadStatus(undefined));
             }
         }
     };
@@ -1550,12 +2370,16 @@ export function ProfileIntelligenceSettings({
         await doJdUpload(fileResult.filePath);
     };
 
-    const doCompanyResearch = async () => {
+    // forceRefresh MUST be passed explicitly by each call site. Never wire this
+    // as onClick={doCompanyResearch} — React hands the MouseEvent to the first
+    // parameter, and a truthy object would silently force-refresh every click,
+    // re-buying 14-20 Tavily credits of dossier that is already cached.
+    const doCompanyResearch = async (forceRefresh: boolean) => {
         const company = profileData?.activeJD?.company;
         if (!company) return;
         setCompanyResearching(true); setCompanySearchQuotaExhausted(false);
         try {
-            const result = await window.electronAPI?.profileResearchCompany?.(company);
+            const result = await window.electronAPI?.profileResearchCompany?.(company, forceRefresh);
             if (result?.success && result.dossier) setCompanyDossier(result.dossier);
             if (result?.searchQuotaExhausted) setCompanySearchQuotaExhausted(true);
         } catch { /**/ }
@@ -1641,7 +2465,7 @@ export function ProfileIntelligenceSettings({
                 </p>
             </div>
             {profileIndexing || profileHandoff.settling ? (
-                <FileUploadIndexing label="Reading your resume…" settling={profileHandoff.settling} />
+                <FileUploadIndexing stages={RESUME_INGEST_STAGES} settling={profileHandoff.settling} />
             ) : !profileStatus.hasProfile ? (
                 <FileUploadEmpty
                     hint="Add your resume as real-time context."
@@ -1753,7 +2577,7 @@ export function ProfileIntelligenceSettings({
                 </p>
             </div>
             {jdIndexing || jdHandoff.settling ? (
-                <FileUploadIndexing label="Reading the job description…" settling={jdHandoff.settling} />
+                <FileUploadIndexing stages={profileStatus.hasProfile ? JD_INGEST_STAGES : JD_INGEST_STAGES_NO_RESUME} sizer={JD_SIZER} settling={jdHandoff.settling} />
             ) : !profileData?.hasActiveJD ? (
                 <FileUploadEmpty
                     hint="Add a job description as real-time context."
@@ -2228,6 +3052,15 @@ export function ProfileIntelligenceSettings({
         // render below it instead of replacing it. Company research keys off
         // the active JD's company, not the resume.
         const loaded = !!companyDossier;
+        // The JD upload's automatic research is ALREADY spending (2026-09-21).
+        // Without this, the 20-60s AOT window renders "Ready to research →
+        // Research Now" — the exact screen that trained the habit of clicking it
+        // — and a click there fires a SECOND query set concurrently with the run
+        // in flight. It also re-resolves the provider on the shared singleton
+        // engine mid-run, minting a new session UUID, so the server bills the
+        // remainder of the AOT run as another research run too. Show the skeleton
+        // that already exists instead: the work is genuinely underway.
+        const aotResearching = profileData?.aotStatus?.companyResearch === 'running';
         return (
             <>
                 {/* Header — Refresh pill sits next to the title once the dossier is
@@ -2243,7 +3076,7 @@ export function ProfileIntelligenceSettings({
                         </p>
                     </div>
                     {loaded && (
-                        <button className="pi-pill-btn pi-press" disabled={companyResearching} onClick={doCompanyResearch}>
+                        <button className="pi-pill-btn pi-press" disabled={companyResearching} onClick={() => doCompanyResearch(true)}>
                             <RefreshCw size={12} className={companyResearching ? 'pi-spinner' : ''} />
                             {companyResearching ? 'Refreshing' : 'Refresh'}
                         </button>
@@ -2288,7 +3121,7 @@ export function ProfileIntelligenceSettings({
                         Web search credits exhausted — showing AI-only research.
                     </div>
                 )}
-                {!companyDossier && !companyResearching && companyName && (
+                {!companyDossier && !companyResearching && !aotResearching && companyName && (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
                         <div style={{ width: 40, height: 40, borderRadius: 20, background: 'var(--pi-accent-subtle)', border: '1px solid var(--pi-badge-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             <Building2 size={18} style={{ color: 'var(--pi-accent-icon)' }} />
@@ -2302,13 +3135,13 @@ export function ProfileIntelligenceSettings({
                         <button
                             className="pi-pill-btn pi-press"
                             style={{ color: 'var(--pi-cta-accent-text)', borderColor: 'var(--pi-cta-accent-border)', background: 'var(--pi-accent-subtle)', fontWeight: 600, padding: '8px 20px' }}
-                            onClick={doCompanyResearch}
+                            onClick={() => doCompanyResearch(false)}
                         >
                             Research Now
                         </button>
                     </div>
                 )}
-                {companyResearching && companyName && (
+                {(companyResearching || aotResearching) && companyName && (
                     <div className="pi-cascade" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                         {/* Work Culture skeleton — overall rating + 4 sub-ratings grid.
                             Card shell is solid (no pulse); only the inner text placeholders breathe. */}
@@ -2977,12 +3810,21 @@ export function ProfileIntelligenceSettings({
                 {/* CTA footer */}
                 <div style={{ padding: '12px', borderTop: '1px solid var(--pi-border)', flexShrink: 0 }}>
                     <button
+                        ref={ctaLens.ref}
                         onClick={() => setIsPremiumModalOpen(true)}
+                        onPointerMove={ctaLens.onPointerMove}
+                        onFocus={ctaLens.onFocus}
                         className={ctaClass}
                         style={{ width: '100%' }}
                         aria-label={isPremium ? 'Manage Pro' : 'Unlock Pro'}
                     >
-                        <span style={{ flex: 1, textAlign: 'left', position: 'relative', zIndex: 1 }}>
+                        {/* Painted above the flat fill and the rim, below the
+                            content. Both pseudos are the material's already. */}
+                        <span className="pi-cta-lens" aria-hidden="true" />
+                        {!isPremium && !isTrialActive
+                            ? <span className="pi-cta-shimmer" aria-hidden="true" />
+                            : null}
+                        <span className="pi-cta-label">
                             {isPremium ? 'Manage Pro' : isTrialActive ? 'Upgrade' : 'Unlock Pro'}
                         </span>
                         <div className="pi-cta-ring">

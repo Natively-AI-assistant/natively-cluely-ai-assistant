@@ -10,7 +10,7 @@ export interface ProviderModel {
     label: string;
 }
 
-type Provider = 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim';
+type Provider = 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion';
 
 /**
  * Fetch available models from a provider's API.
@@ -33,9 +33,160 @@ export async function fetchProviderModels(
             return fetchDeepSeekModels(apiKey);
         case 'nvidia_nim':
             return fetchNvidiaNimModels(apiKey);
+        case 'openrouter':
+            return fetchOpenRouterModels(apiKey);
+        case 'fluxion':
+            return fetchFluxionModels(apiKey);
         default:
             throw new Error(`Unknown provider: ${provider}`);
     }
+}
+
+/**
+ * OpenRouter's catalogue — the authoritative list for an account, and the reason
+ * OpenRouter is an opt-in provider (isOptInModelProvider in modelUtils.ts): the
+ * endpoint answered with 444 models on 2026-09-17.
+ *
+ * Unauthenticated on OpenRouter's side — GET /models is public — but the key is
+ * still sent, because this is reached from "Refresh" on a card whose key the
+ * user just saved and an eventual per-account catalogue should Just Work.
+ *
+ * `:batch` ids are dropped. They are not distinct models: every one is a
+ * duplicate of the base id exposed on OpenRouter's asynchronous batch endpoint
+ * (`anthropic/claude-sonnet-5:batch` carries the same description as
+ * `anthropic/claude-sonnet-5`), and Natively only ever issues streaming or
+ * blocking chat calls. Keeping them would have put 74 look-alike rows in the
+ * picker, each one a way to pick a model that cannot answer this app.
+ * `:free` variants are NOT dropped — those are real, callable routes.
+ *
+ * The label is OpenRouter's own `name` ("Anthropic: Claude Sonnet 5"), not the
+ * raw id: unlike NVIDIA's catalogue this one ships display names, and a
+ * vendor-prefixed name is what makes a 400-row list scannable.
+ */
+async function fetchOpenRouterModels(apiKey: string): Promise<ProviderModel[]> {
+    const response = await axios.get('https://openrouter.ai/api/v1/models', {
+        headers: { Authorization: `Bearer ${apiKey}` }, timeout: 15000,
+    });
+    return (response.data?.data || [])
+        .filter((m: any) => m?.id && !String(m.id).endsWith(':batch'))
+        // `openrouter/` is Natively's own routing prefix and is NOT optional:
+        // OpenRouter ids are vendor-namespaced (`openai/gpt-oss-120b`), which
+        // collides head-on with Groq's catalogue and with providerFamily()'s
+        // `includes('openai')` catch-all in ipcHandlers.ts. Without the prefix
+        // an OpenRouter model would be billed to the wrong provider's key.
+        .map((m: any) => ({ id: `openrouter/${m.id}`, label: m.name || m.id }))
+        .sort((a: ProviderModel, b: ProviderModel) => a.label.localeCompare(b.label));
+}
+
+/**
+ * Fluxion AI's catalogue. GET /v1/models is UNDOCUMENTED — the published docs
+ * tell users to copy model names out of the console's Model Marketplace by hand
+ * — but it exists and is group-scoped, which is what makes it the right source:
+ * it returns the models THIS key can actually reach, so the picker cannot offer
+ * one that answers `model_not_found`.
+ *
+ * Group scoping CONFIRMED on two keys: a Claude-group key saw exactly its own
+ * 11 models of the 36 in the public catalogue (2026-09-18), and a GLM-group key
+ * saw exactly 1 (2026-09-19). Out-of-group ids are a clean HTTP 404
+ * `model_not_found` on both. That is why Fluxion is not an opt-in provider — a
+ * fetched catalogue contains no unreachable rows.
+ *
+ * Non-chat ids are dropped. Fluxion's image models answer on
+ * /v1/images/generations, NOT chat/completions (its Help Center §5 says so
+ * explicitly and warns that channel monitoring only probes text endpoints), so
+ * leaving them in would put rows in the picker that cannot answer this app.
+ * `codex-auto-review` is an internal review route, not a chat model.
+ *
+ * The `fluxion/` prefix is NOT optional and NOT cosmetic. Fluxion resells the
+ * real vendors, so its ids are byte-identical to Natively's own defaults —
+ * `claude-sonnet-4-6` and `gpt-5.4` are literally this app's fallback-ladder
+ * entries. Unprefixed, providerFamily() would classify a Fluxion model as
+ * Anthropic/OpenAI/Gemini and the request would be billed to the user's own
+ * key for that vendor, succeed, and look completely normal.
+ */
+const FLUXION_NON_CHAT_MODEL_IDS = new Set([
+    'gpt-image-2',
+    'nano-banana-2',
+    'grok-imagine',
+    'codex-auto-review',
+]);
+
+async function fetchFluxionModels(apiKey: string): Promise<ProviderModel[]> {
+    const response = await axios.get('https://fluxionai.world/v1/models', {
+        headers: { Authorization: `Bearer ${apiKey}` }, timeout: 15000,
+    });
+    return (response.data?.data || [])
+        .filter((m: any) => m?.id && !FLUXION_NON_CHAT_MODEL_IDS.has(String(m.id)))
+        .map((m: any) => ({ id: `fluxion/${m.id}`, label: String(m.id) }))
+        .sort((a: ProviderModel, b: ProviderModel) => a.label.localeCompare(b.label));
+}
+
+/**
+ * Which wire protocol does THIS Fluxion key's group accept?
+ *
+ * Replaces a manual toggle the user had to get right from information they did
+ * not have: the group is a property of the key, the console does not surface it
+ * in the key string, and picking wrong produced a 403 that reads like a dead
+ * key. Probing is deterministic, so there is nothing to guess.
+ *
+ * Measured rule (two real keys, 2026-09-19): `/v1/chat/completions` is
+ * UNIVERSAL — a Claude-group key and a GLM-group key both answered 200 — while
+ * `/v1/messages` is the restricted one (Claude group 200, GLM group 403
+ * "This group does not allow /v1/messages dispatch"). So the OpenAI endpoint is
+ * tried FIRST and the common case costs exactly one probe.
+ *
+ * The probes send `max_tokens: 1`, and a permission refusal is rejected BEFORE
+ * forwarding (Fluxion's own terms: no model-usage fee for a platform rejection),
+ * so the cost of a detection is at most one 1-token completion.
+ */
+export async function detectFluxionProtocol(apiKey: string): Promise<'openai' | 'anthropic'> {
+    // `stream: true` is NOT incidental. Measured 2026-09-19: Fluxion's
+    // NON-streaming /v1/chat/completions hangs on the GLM group (1 of 5 requests
+    // completed; the rest were still open at 45s) while the streaming endpoint
+    // answered 5/5 in ~4s. A non-streaming probe therefore burned its full
+    // timeout on exactly the group it was meant to identify, turning a key save
+    // into a 21s stall. Streaming also surfaces the accept/refuse decision in
+    // the response STATUS, which is all this needs.
+    const probeBody = (model: string) => ({
+        model, max_tokens: 1, stream: true, messages: [{ role: 'user', content: 'hi' }],
+    });
+    let model = '';
+    try {
+        const models = await fetchFluxionModels(apiKey);
+        // Already `fluxion/`-prefixed and already filtered of non-chat ids.
+        model = (models[0]?.id || '').replace(/^fluxion\//, '');
+    } catch { /* fall through to the default below */ }
+    // No reachable model means no probe is possible — not that a protocol failed.
+    if (!model) return 'openai';
+
+    // `responseType: 'stream'` resolves as soon as the RESPONSE HEADERS arrive,
+    // which is the whole answer here: an accepted protocol is a 200 and a
+    // refused one is a 403, and both are known before a single token is
+    // generated. Waiting for the body instead meant paying the model's full TTFT
+    // per probe — ~5s on the GLM group — for information already in the status
+    // line. The stream is destroyed immediately, so nothing is generated and
+    // nothing is billed.
+    const probe = async (url: string, headers: Record<string, string>) => {
+        const res = await axios.post(url, probeBody(model), {
+            headers, timeout: 12000, responseType: 'stream',
+        });
+        try { (res.data as any)?.destroy?.(); } catch { /* already closed */ }
+    };
+
+    try {
+        await probe('https://fluxionai.world/v1/chat/completions', { Authorization: `Bearer ${apiKey}` });
+        return 'openai';
+    } catch { /* fall through and try the Anthropic endpoint */ }
+
+    try {
+        await probe('https://fluxionai.world/v1/messages', { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' });
+        return 'anthropic';
+    } catch { /* neither probe succeeded */ }
+
+    // Both failed: the key, the plan or the network is the problem, not the
+    // protocol. Return the universal one so a transient failure cannot strand
+    // the user on the restricted endpoint.
+    return 'openai';
 }
 
 async function fetchNvidiaNimModels(apiKey: string): Promise<ProviderModel[]> {

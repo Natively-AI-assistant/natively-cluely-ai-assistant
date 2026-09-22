@@ -124,14 +124,22 @@ export class StreamingDashReducer {
 // letter prose connector (never a code/math/numeric minus).
 function reduceProseDashes(segment: string): string {
     const inline: string[] = [];
-    let s = segment.replace(/`[^`\n]+`/g, (m) => { inline.push(m); return ` INL${inline.length - 1} `; });
+    // NO space padding around the placeholders (2026-09-07). They used to be
+    // padded so the prose-connector rule could not see the letters around a
+    // code span — but that rule needs a LETTER on each side, and the control
+    // byte that frames the placeholder is not one, so the pads bought nothing
+    // and cost a live defect: `\s*[—–]\s*` → ", " ate a pad whenever a span
+    // was followed by a dash ("`03_debugging_scenarios.md` — Section"), the
+    // exact-string restore no longer matched, and the raw placeholder reached
+    // the user ("**Source:** \u0001INL0\u0001, Section DEBUG-201").
+    let s = segment.replace(/`[^`\n]+`/g, (m) => { inline.push(m); return `INL${inline.length - 1}`; });
     const math: string[] = [];
-    s = s.replace(/\$[^$\n]+\$/g, (m) => { math.push(m); return ` MATH${math.length - 1} `; });
+    s = s.replace(/\$[^$\n]+\$/g, (m) => { math.push(m); return `MATH${math.length - 1}`; });
     s = s
         .replace(/\s*[—–]\s*/g, ", ")
         .replace(/(?<=[A-Za-z]) - (?=[A-Za-z])/g, ", ");
-    math.forEach((m, i) => { s = s.replace(` MATH${i} `, () => m); });
-    inline.forEach((c, i) => { s = s.replace(` INL${i} `, () => c); });
+    math.forEach((m, i) => { s = s.replace(`MATH${i}`, () => m); });
+    inline.forEach((c, i) => { s = s.replace(`INL${i}`, () => c); });
     return s;
 }
 

@@ -1,0 +1,508 @@
+[
+ {
+  "text": "build got it cool um well let's um maybe",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "features that that we're trying to"
+   }
+  ],
+  "lastAnswered": null,
+  "modeName": "Technical Interview",
+  "expect": "silent"
+ },
+ {
+  "text": "build got it cool um well let's um maybe transition over into kind of the coding portion of this call so I think maybe um you could go ahead and share",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "features that that we're trying to"
+   }
+  ],
+  "lastAnswered": null,
+  "modeName": "Technical Interview",
+  "expect": "silent",
+  "note": "KNOWN FALSE FIRE, and now an ACCEPTED one. \"let's transition into the coding portion ... go ahead and share\" is session logistics before any problem exists. The offer card used to catch exactly this shape; the card was removed on the user's instruction (2026-08-25) \u2014 \"if it has a doubt always answer\" \u2014 so borderline logistics now produces an answer the user can ignore instead of a card asking permission. That is the deliberate trade, not a regression to chase."
+ },
+ {
+  "text": "up on the screen yep cool awesome um so",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "features that that we're trying to"
+   },
+   {
+    "role": "interviewer",
+    "text": "build got it cool um well let's um maybe"
+   },
+   {
+    "role": "interviewer",
+    "text": "transition over into kind of the coding"
+   },
+   {
+    "role": "interviewer",
+    "text": "portion of this call so I think maybe um"
+   },
+   {
+    "role": "interviewer",
+    "text": "you could go ahead and share"
+   },
+   {
+    "role": "user",
+    "text": "screen um cool I believe that should be"
+   }
+  ],
+  "lastAnswered": null,
+  "modeName": "Technical Interview",
+  "expect": "silent"
+ },
+ {
+  "text": "up on the screen yep cool awesome um so the problem that we're going to work on today um uh uh it involves uh strings so um what",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "features that that we're trying to"
+   },
+   {
+    "role": "interviewer",
+    "text": "build got it cool um well let's um maybe"
+   },
+   {
+    "role": "interviewer",
+    "text": "transition over into kind of the coding"
+   },
+   {
+    "role": "interviewer",
+    "text": "portion of this call so I think maybe um"
+   },
+   {
+    "role": "interviewer",
+    "text": "you could go ahead and share"
+   },
+   {
+    "role": "user",
+    "text": "screen um cool I believe that should be"
+   }
+  ],
+  "lastAnswered": null,
+  "modeName": "Technical Interview",
+  "expect": "silent"
+ },
+ {
+  "text": "up on the screen yep cool awesome um so the problem that we're going to work on today um uh uh it involves uh strings so um what you're going to be provided as input is um a dictionary of words but it really just as an array of words I guess um and what we want to do is um fill in two functions so one function is going to be called um setup and it will take this input dictionary of words um and a second function called is in dict and it will take a word and um",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "features that that we're trying to"
+   },
+   {
+    "role": "interviewer",
+    "text": "build got it cool um well let's um maybe"
+   },
+   {
+    "role": "interviewer",
+    "text": "transition over into kind of the coding"
+   },
+   {
+    "role": "interviewer",
+    "text": "portion of this call so I think maybe um"
+   },
+   {
+    "role": "interviewer",
+    "text": "you could go ahead and share"
+   },
+   {
+    "role": "user",
+    "text": "screen um cool I believe that should be"
+   }
+  ],
+  "lastAnswered": null,
+  "modeName": "Technical Interview",
+  "expect": "silent"
+ },
+ {
+  "text": "up on the screen yep cool awesome um so the problem that we're going to work on today um uh uh it involves uh strings so um what you're going to be provided as input is um a dictionary of words but it really just as an array of words I guess um and what we want to do is um fill in two functions so one function is going to be called um setup and it will take this input dictionary of words um and a second function called is in dict and it will take a word and um yeah uh it Bas this will basically return true if it was originally in the input dictionary and it will return false otherwise and the goal is to um is to do",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "features that that we're trying to"
+   },
+   {
+    "role": "interviewer",
+    "text": "build got it cool um well let's um maybe"
+   },
+   {
+    "role": "interviewer",
+    "text": "transition over into kind of the coding"
+   },
+   {
+    "role": "interviewer",
+    "text": "portion of this call so I think maybe um"
+   },
+   {
+    "role": "interviewer",
+    "text": "you could go ahead and share"
+   },
+   {
+    "role": "user",
+    "text": "screen um cool I believe that should be"
+   }
+  ],
+  "lastAnswered": null,
+  "modeName": "Technical Interview",
+  "expect": "silent"
+ },
+ {
+  "text": "up on the screen yep cool awesome um so the problem that we're going to work on today um uh uh it involves uh strings so um what you're going to be provided as input is um a dictionary of words but it really just as an array of words I guess um and what we want to do is um fill in two functions so one function is going to be called um setup and it will take this input dictionary of words um and a second function called is in dict and it will take a word and um yeah uh it Bas this will basically return true if it was originally in the input dictionary and it will return false otherwise and the goal is to um is to do as much work as possible in the setup uh function to optimize um our is indict function",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "features that that we're trying to"
+   },
+   {
+    "role": "interviewer",
+    "text": "build got it cool um well let's um maybe"
+   },
+   {
+    "role": "interviewer",
+    "text": "transition over into kind of the coding"
+   },
+   {
+    "role": "interviewer",
+    "text": "portion of this call so I think maybe um"
+   },
+   {
+    "role": "interviewer",
+    "text": "you could go ahead and share"
+   },
+   {
+    "role": "user",
+    "text": "screen um cool I believe that should be"
+   }
+  ],
+  "lastAnswered": null,
+  "modeName": "Technical Interview",
+  "expect": "ask"
+ },
+ {
+  "text": "it's going to basically give you the list of words um so let's say we call setup and then we call is in afterwards um if we did this this would return true um if we did this it would return false cool so you either do you can either store some stuff in like a global variable you can you can create a class if you prefer um but essentially the setup function consumes a dictionary and remembers it in some format and um your isn't dick should reference that",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "okay so I think I understand is"
+   },
+   {
+    "role": "user",
+    "text": "indict uh because essentially that's you"
+   },
+   {
+    "role": "user",
+    "text": "know given a"
+   },
+   {
+    "role": "user",
+    "text": "word it's going to return true or false"
+   },
+   {
+    "role": "user",
+    "text": "whether or not that's going to be in one"
+   },
+   {
+    "role": "user",
+    "text": "of the original input words um so could"
+   },
+   {
+    "role": "user",
+    "text": "you explain setup a little more like um"
+   },
+   {
+    "role": "user",
+    "text": "yeah what like why do I need setup so"
+   }
+  ],
+  "lastAnswered": "what you're going to be provided as input is um a dictionary of words but it really just as an array of words I guess um and what we want to do is um fill in two functions so one function is going to be called um setup and it will take this input dictionary of words um and a second function called is in dict and it will take a word and um yeah uh it Bas this will basically return true if it was originally in the input dictionary and it will return false otherwise and the goal is to um is to do as much work as possible in the setup um function to optimize um our is indict function",
+  "modeName": "Technical Interview",
+  "expect": "silent"
+ },
+ {
+  "text": "dictionary that way that sounds fine",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "like um reinitialize the the dictionary"
+   },
+   {
+    "role": "user",
+    "text": "or or is something like that like not"
+   },
+   {
+    "role": "user",
+    "text": "necessary and the reason I ask I guess"
+   },
+   {
+    "role": "user",
+    "text": "is because if we set it up as a class"
+   },
+   {
+    "role": "user",
+    "text": "then um you know we could just pass"
+   },
+   {
+    "role": "user",
+    "text": "instead of having a setup we could just"
+   },
+   {
+    "role": "user",
+    "text": "pass the input uh to the class uh"
+   },
+   {
+    "role": "user",
+    "text": "Constructor and initialize the"
+   }
+  ],
+  "lastAnswered": "what you're going to be provided as input is um a dictionary of words but it really just as an array of words I guess um and what we want to do is um fill in two functions so one function is going to be called um setup and it will take this input dictionary of words um and a second function called is in dict and it will take a word and um yeah uh it Bas this will basically return true if it was originally in the input dictionary and it will return false otherwise and the goal is to um is to do as much work as possible in the setup um function to optimize um our is indict function",
+  "modeName": "Technical Interview",
+  "expect": "silent"
+ },
+ {
+  "text": "essentially a set yeah cool so I'm going to um kind of change up the problem a little bit so um now let's say that um were given this",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "yeah cool so we can remove the console"
+   },
+   {
+    "role": "user",
+    "text": "log and"
+   },
+   {
+    "role": "user",
+    "text": "then yeah so cat is in the dictionary"
+   },
+   {
+    "role": "user",
+    "text": "Don is"
+   },
+   {
+    "role": "user",
+    "text": "not um I will say that I do feel like"
+   },
+   {
+    "role": "user",
+    "text": "using a set is kind of like cheating"
+   },
+   {
+    "role": "user",
+    "text": "since it includes like isn't dict is"
+   },
+   {
+    "role": "user",
+    "text": "essentially has and the dictionary is"
+   }
+  ],
+  "lastAnswered": "what you're going to be provided as input is um a dictionary of words but it really just as an array of words I guess um and what we want to do is um fill in two functions so one function is going to be called um setup and it will take this input dictionary of words um and a second function called is in dict and it will take a word and um yeah uh it Bas this will basically return true if it was originally in the input dictionary and it will return false otherwise and the goal is to um is to do as much work as possible in the setup um function to optimize um our is indict function",
+  "modeName": "Technical Interview",
+  "expect": "silent"
+ },
+ {
+  "text": "essentially a set yeah cool so I'm going to um kind of change up the problem a little bit so um now let's say that um were given this um original um uh dictionary Asis but now when we're calling is indict we might have a wild card character so um uh as an example um",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "yeah cool so we can remove the console"
+   },
+   {
+    "role": "user",
+    "text": "log and"
+   },
+   {
+    "role": "user",
+    "text": "then yeah so cat is in the dictionary"
+   },
+   {
+    "role": "user",
+    "text": "Don is"
+   },
+   {
+    "role": "user",
+    "text": "not um I will say that I do feel like"
+   },
+   {
+    "role": "user",
+    "text": "using a set is kind of like cheating"
+   },
+   {
+    "role": "user",
+    "text": "since it includes like isn't dict is"
+   },
+   {
+    "role": "user",
+    "text": "essentially has and the dictionary is"
+   }
+  ],
+  "lastAnswered": "what you're going to be provided as input is um a dictionary of words but it really just as an array of words I guess um and what we want to do is um fill in two functions so one function is going to be called um setup and it will take this input dictionary of words um and a second function called is in dict and it will take a word and um yeah uh it Bas this will basically return true if it was originally in the input dictionary and it will return false otherwise and the goal is to um is to do as much work as possible in the setup um function to optimize um our is indict function",
+  "modeName": "Technical Interview",
+  "expect": "silent"
+ },
+ {
+  "text": "essentially a set yeah cool so I'm going to um kind of change up the problem a little bit so um now let's say that um were given this um original um uh dictionary Asis but now when we're calling is indict we might have a wild card character so um uh as an example um you might have and this isn't regx so it's just the star just maps to one of an existing character um so this would return true um and I guess",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "yeah cool so we can remove the console"
+   },
+   {
+    "role": "user",
+    "text": "log and"
+   },
+   {
+    "role": "user",
+    "text": "then yeah so cat is in the dictionary"
+   },
+   {
+    "role": "user",
+    "text": "Don is"
+   },
+   {
+    "role": "user",
+    "text": "not um I will say that I do feel like"
+   },
+   {
+    "role": "user",
+    "text": "using a set is kind of like cheating"
+   },
+   {
+    "role": "user",
+    "text": "since it includes like isn't dict is"
+   },
+   {
+    "role": "user",
+    "text": "essentially has and the dictionary is"
+   }
+  ],
+  "lastAnswered": "what you're going to be provided as input is um a dictionary of words but it really just as an array of words I guess um and what we want to do is um fill in two functions so one function is going to be called um setup and it will take this input dictionary of words um and a second function called is in dict and it will take a word and um yeah uh it Bas this will basically return true if it was originally in the input dictionary and it will return false otherwise and the goal is to um is to do as much work as possible in the setup um function to optimize um our is indict function",
+  "modeName": "Technical Interview",
+  "expect": "ask"
+ },
+ {
+  "text": "uh this would return",
+  "ctx": [
+   {
+    "role": "interviewer",
+    "text": "card character so"
+   },
+   {
+    "role": "interviewer",
+    "text": "um uh as an example um"
+   },
+   {
+    "role": "interviewer",
+    "text": "you might have and this isn't regx so"
+   },
+   {
+    "role": "interviewer",
+    "text": "it's just the star just maps to one of"
+   },
+   {
+    "role": "interviewer",
+    "text": "an existing character um so this would"
+   },
+   {
+    "role": "interviewer",
+    "text": "return"
+   },
+   {
+    "role": "interviewer",
+    "text": "true"
+   },
+   {
+    "role": "interviewer",
+    "text": "um and I guess"
+   }
+  ],
+  "lastAnswered": "now let's say that um were given this um original um uh dictionary Asis but now when we're calling is indict we might have a wild card character so um uh as an example um you might have and this isn't regx so it's just the star just maps to one of an existing character um so this would return true",
+  "modeName": "Technical Interview",
+  "expect": "silent"
+ },
+ {
+  "text": "set has um you can totally look up totally okay to look up Syntax for anything that you need cool I mean let's",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "string right yep"
+   },
+   {
+    "role": "user",
+    "text": "cool"
+   },
+   {
+    "role": "user",
+    "text": "so"
+   },
+   {
+    "role": "user",
+    "text": "um my first so I kind of want to reach"
+   },
+   {
+    "role": "user",
+    "text": "for"
+   },
+   {
+    "role": "user",
+    "text": "sum um sum being like array. sum and"
+   },
+   {
+    "role": "user",
+    "text": "like now I'm like cool why did I use a"
+   },
+   {
+    "role": "user",
+    "text": "set because I don't know what methods a"
+   }
+  ],
+  "lastAnswered": "now let's say that um were given this um original um uh dictionary Asis but now when we're calling is indict we might have a wild card character so um uh as an example um you might have and this isn't regx so it's just the star just maps to one of an existing character um so this would return true",
+  "modeName": "Technical Interview",
+  "expect": "silent"
+ },
+ {
+  "text": "do do you want to try to do this without using like a a dynamic",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "do um"
+   },
+   {
+    "role": "user",
+    "text": "wow can we use replace all I didn't know"
+   },
+   {
+    "role": "user",
+    "text": "that that was a"
+   },
+   {
+    "role": "user",
+    "text": "thing oh my gosh that works okay cool"
+   },
+   {
+    "role": "user",
+    "text": "but kind of like uh kind of like this"
+   },
+   {
+    "role": "user",
+    "text": "set it's like oh you know like the"
+   },
+   {
+    "role": "user",
+    "text": "question is clearly asking if we can do"
+   },
+   {
+    "role": "user",
+    "text": "this without a regx so the yeah I mean"
+   }
+  ],
+  "lastAnswered": "now let's say that um were given this um original um uh dictionary Asis but now when we're calling is indict we might have a wild card character so um uh as an example um you might have and this isn't regx so it's just the star just maps to one of an existing character um so this would return true",
+  "modeName": "Technical Interview",
+  "expect": "ask",
+  "note": "Borderline: the audio cuts one word short (\"without using like a a dynamic [programming]\"), but unlike an announced-yet-unstated task the meaning is already complete and answerable, so firing is correct."
+ }
+]

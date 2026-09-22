@@ -68,10 +68,13 @@ test('surface flag off → null even with umbrella on', () => {
 });
 
 test('enforcement mode follows contextOsEnforceSourceCapabilities', () => {
-  assert.equal(co.contextOsEnforcementMode(), 'observe');
-  process.env.NATIVELY_CONTEXT_OS_ENFORCE_CAPABILITIES = '1';
+  // contextOsEnforceSourceCapabilities was promoted to unconditional `true`
+  // (2026-08-30, user-directed override) — default is now 'enforce', not
+  // 'observe'. An explicit OFF override must still force 'observe'.
+  assert.equal(co.contextOsEnforcementMode(), 'enforce');
+  process.env.NATIVELY_CONTEXT_OS_ENFORCE_CAPABILITIES = '0';
   try {
-    assert.equal(co.contextOsEnforcementMode(), 'enforce');
+    assert.equal(co.contextOsEnforcementMode(), 'observe');
   } finally {
     delete process.env.NATIVELY_CONTEXT_OS_ENFORCE_CAPABILITIES;
   }

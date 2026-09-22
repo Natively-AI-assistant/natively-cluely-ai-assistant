@@ -1,5 +1,6 @@
 import { Mode, ModeReferenceFile } from './ModesManager';
 import { wordsOf } from './modes/lexicalTokens';
+import { normalizeLineEndings } from './modes/semanticChunker';
 import { ModeHybridRetriever, ModeRetrievedContext as HybridContext } from './modes/ModeHybridRetriever';
 import { VectorStore } from '../rag/VectorStore';
 import { EmbeddingPipeline } from '../rag/EmbeddingPipeline';
@@ -60,6 +61,33 @@ export interface ModeRetrievalOptions {
      * document-identity block and expands broad queries with file identity terms.
      */
     forceDocumentGrounding?: boolean;
+    /**
+     * Which deadline the calling turn is racing, for the rerank budget only.
+     * Absent means the tighter live budget — see rerankBudget.ts.
+     */
+    rerankSurface?: 'live' | 'manual';
+    /** See ModeHybridRetriever.shouldUseLexicalForLocalManualQuery. */
+    meetingActive?: boolean;
+    /**
+     * The caller's own race deadline for the whole retrieval, in ms. A rerank
+     * whose budget cannot fit inside it is skipped rather than started and
+     * discarded (rerankBudget.ts → rerankBudgetFitsDeadline). Absent = not raced.
+     */
+    rerankDeadlineMs?: number;
+    /**
+     * Widen the rerank pool for an exhaustive request (RetrievalPlan.exhaustive):
+     * the user's candidateCount × this, capped by the retriever. 1/absent =
+     * the user's setting exactly.
+     */
+    rerankPoolMultiplier?: number;
+    /**
+     * The caller's retrieval budget for query-embedding RETRIES, in ms. The V3
+     * mode port passes its RetrievalPlan.timeoutMs (1200 / 2400 exhaustive) so
+     * a slow hosted embed route degrades this turn to lexical after one attempt
+     * instead of running a 13 s retry ladder inside a live answer. Absent = the
+     * historical ladder.
+     */
+    queryEmbedRetryBudgetMs?: number;
     /**
      * Follow-up referent hint (round-7 Failure-2). A short/anaphoric follow-up
      * ("What processor controls it?", "What throughput does that give?") loses
@@ -219,6 +247,8 @@ function levenshtein1(a: string, b: string): boolean {
 }
 
 function chunkText(content: string, fineChunk: boolean = false): string[] {
+    // CRLF → LF before any line pattern runs (semanticChunker.normalizeLineEndings).
+    content = normalizeLineEndings(content);
     // TABULAR data (CSV/TSV) → row-aware chunks with the header repeated, so a
     // query for one entity retrieves its labelled row instead of a giant blob
     // (prose chunkers made the model fabricate dataset figures). Mirror of
@@ -242,21 +272,42 @@ function chunkText(content: string, fineChunk: boolean = false): string[] {
     //     boundaries: we never split mid-page, but we DO start a new chunk
     //     at each [Page N] marker.
     const lines = content.split('\n');
-    const sections: Array<{ heading: string | null; body: string[] }> = [];
-    let current: { heading: string | null; body: string[] } = { heading: null, body: [] };
+    // `path` (T9, 2026-08-28) is the heading ANCESTOR chain, tracked so this
+    // chunker prefixes chunks identically to the vector arm's
+    // `semanticChunker.semanticChunks`. The two must not drift: if the lexical
+    // arm keeps leaf-only headings while the vector arm carries paths, a query
+    // scores against two different texts for the same chunk. Only the PREFIX is
+    // shared — this chunker's own splitting, and in particular its round-7
+    // pathological-document safety nets, are deliberately left alone.
+    const sections: Array<{ heading: string | null; path: string[]; body: string[] }> = [];
+    let current: { heading: string | null; path: string[]; body: string[] } = { heading: null, path: [], body: [] };
+    const stack: Array<{ level: number; text: string }> = [];
 
     const headingRe = /^\s*(?:#{1,3}\s+|(?:\d+(?:\.\d+){0,2}\s+))/;
     const pageMarkerRe = /^\s*\[Page\s+\d+\]\s*$/;
 
+    /** Depth + display text, matching semanticChunker's `headingOf`. */
+    const headingParts = (line: string): { level: number; text: string } => {
+        const atx = /^\s*(#{1,6})\s+(.*)$/.exec(line);
+        if (atx) return { level: atx[1].length, text: atx[2].trim() };
+        const num = /^\s*(\d+(?:\.\d+){0,3})\s+(\S.*)$/.exec(line);
+        if (num) return { level: num[1].split('.').length, text: `${num[1]} ${num[2].trim()}` };
+        return { level: 1, text: line.trim() };
+    };
+
     const flush = () => {
         if (current.heading !== null || current.body.length > 0) sections.push(current);
-        current = { heading: null, body: [] };
+        current = { heading: null, path: [], body: [] };
     };
 
     for (const line of lines) {
         if (headingRe.test(line)) {
             // New heading → close the previous section, start a new one.
             flush();
+            const h = headingParts(line);
+            while (stack.length && stack[stack.length - 1].level >= h.level) stack.pop();
+            stack.push(h);
+            current.path = stack.map((x) => x.text);
             current.heading = line.trim();
         } else if (pageMarkerRe.test(line)) {
             // [Page N] is a SOFT boundary. We do NOT close the section here —
@@ -272,7 +323,14 @@ function chunkText(content: string, fineChunk: boolean = false): string[] {
 
     const chunks: string[] = [];
     for (const section of sections) {
-        const headingLine = section.heading ?? '';
+        // The heading-path prefix rides in FRONT of the heading line, so every
+        // chunk of "Idempotency" says which project's Idempotency it is. The
+        // document-level heading is dropped for the same reason it is in
+        // semanticChunker: identical on every chunk, so it discriminates none.
+        const ctx = section.path.length > 1
+            ? `[context: ${section.path.slice(1).join(' > ')}]`
+            : '';
+        const headingLine = [ctx, section.heading ?? ''].filter(Boolean).join(' ');
         const bodyText = section.body.join('\n').replace(/\s+/g, ' ').trim();
         const fullText = headingLine ? `${headingLine}\n${bodyText}` : bodyText;
         if (!fullText) continue;
@@ -746,6 +804,8 @@ function getCachedDocumentMap(fileId: string, content: string): DocumentMap {
  * then keeps the existing chunkText() path (flat-prose fixtures, slide decks).
  */
 function sectionAwareChunks(fileId: string, content: string): string[] | null {
+    // CRLF → LF before any line pattern runs (semanticChunker.normalizeLineEndings).
+    content = normalizeLineEndings(content);
     const map = getCachedDocumentMap(fileId, content);
     // Delegates to the shared chunker in DocumentMap so the lexical and hybrid
     // retrievers produce identical section-tagged chunks (single source of
@@ -1704,11 +1764,37 @@ export class ModeContextRetriever {
         await retriever.indexFile(file);
     }
 
+    /**
+     * True when the file's index was built from different content or an older
+     * chunker version. Index STATUS is read by file id and cannot see the content,
+     * so such a file reads `ready` forever; prewarm asks this as well, which is
+     * where a chunker bump re-indexes — lazily, one mode at a time, on activation
+     * (owner's choice 2026-09-19), never every file of every mode at boot.
+     */
+    referenceFileNeedsReindex(file: ModeReferenceFile): boolean {
+        try { return this.ensureHybridRetriever()?.needsReindexing(file) ?? false; } catch { return false; }
+    }
+
+    /** Corpus arbitration pass-through — see ModeHybridRetriever.probeAnchors. */
+    probeReferenceAnchors(files: ModeReferenceFile[], question: string): boolean {
+        return this.ensureHybridRetriever()?.probeAnchors(files, question) ?? false;
+    }
+
     /** Index status for the Modes Manager UI badge. */
-    getReferenceFileIndexStatus(fileId: string): { status: string; chunkCount: number } {
+    getReferenceFileIndexStatus(fileId: string): { status: string; chunkCount: number; embeddedChunkCount: number } {
         const retriever = this.ensureHybridRetriever();
-        if (!retriever) return { status: 'pending', chunkCount: 0 };
+        if (!retriever) return { status: 'pending', chunkCount: 0, embeddedChunkCount: 0 };
         return retriever.getFileIndexStatus(fileId);
+    }
+
+    /** See ModeHybridRetriever.pruneFileIndexesByPrefix. */
+    /** See ModeHybridRetriever.usesHostedEmbeddings. */
+    usesHostedEmbeddings(): boolean {
+        try { return this.ensureHybridRetriever()?.usesHostedEmbeddings() === true; } catch { return false; }
+    }
+
+    pruneReferenceFileIndexesByPrefix(prefix: string, keepId: string): number {
+        return this.ensureHybridRetriever()?.pruneFileIndexesByPrefix(prefix, keepId) ?? 0;
     }
 
     /** Drop a deleted file's persisted chunks + index state. */
@@ -1771,6 +1857,14 @@ export class ModeContextRetriever {
             // applies the doc-grounded budget/topK upgrade (3600/12) instead of the
             // default 1800/6 — grounded answers were retrieving too small a window.
             forceDocumentGrounding: options.forceDocumentGrounding,
+            rerankSurface: options.rerankSurface,
+            // The caller's race deadline (rerankBudget.ts → rerankBudgetFitsDeadline).
+            // Measured 2026-09-07: without this hop the recap's 1000ms race still
+            // started an 8000ms-budget hosted rerank and discarded it.
+            rerankDeadlineMs: options.rerankDeadlineMs,
+            rerankPoolMultiplier: options.rerankPoolMultiplier,
+            queryEmbedRetryBudgetMs: options.queryEmbedRetryBudgetMs,
+            meetingActive: options.meetingActive,
         });
 
         diagLog('retrieveHybrid() return', { usedFallback: result.usedFallback, usedHybrid: result.usedHybrid, chunkCount: result.chunks?.length, hasContext: !!result.formattedContext });

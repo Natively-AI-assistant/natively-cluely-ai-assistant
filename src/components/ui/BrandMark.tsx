@@ -1,4 +1,5 @@
 import React from 'react';
+import { WHITE_ON_TRANSPARENT_MARKS } from './aiProviderMarks';
 
 // Official brand marks for the speech providers in Settings → Audio, vendored
 // from pinned packages. See src/assets/provider-logos/README.md for provenance
@@ -140,7 +141,10 @@ export const BrandMark: React.FC<BrandMarkProps> = ({ provider, size = 16, class
                 aria-hidden="true"
                 width={size}
                 height={size}
-                className={`object-contain ${className}`}
+                // `.brand-mark-raster` (index.css) flattens a white-on-transparent
+                // mark to black in the light theme. Natively's own icon is drawn for
+                // the dark theme, so without it the speech-provider tile reads empty.
+                className={`object-contain ${WHITE_ON_TRANSPARENT_MARKS.has(key) ? 'brand-mark-raster' : ''} ${className}`}
             />
         );
     }

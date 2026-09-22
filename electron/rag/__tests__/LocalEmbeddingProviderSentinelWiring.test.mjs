@@ -17,7 +17,12 @@ function readSrc(relPath) {
 test('LocalEmbeddingProvider writes the onnx load sentinel before new Worker(...)', () => {
     const src = readSrc('electron/rag/providers/LocalEmbeddingProvider.ts');
     const write = src.indexOf("writeOnnxLoadSentinel('embeddings',");
-    const spawn = src.indexOf('this.worker = new Worker(this.getWorkerPath());', src.indexOf('private getWorker'));
+    // Match the construction, not one exact assignment spelling. The worker is
+    // now bound to a local first (`const spawned = new Worker(...)`) so the
+    // 'error'/'exit' handlers can compare identity and refuse to act for a
+    // worker that is no longer ours — the ordering invariant this test protects
+    // is unchanged by that.
+    const spawn = src.indexOf('new Worker(this.getWorkerPath())', src.indexOf('private getWorker'));
     assert.ok(write > -1, 'LocalEmbeddingProvider must write the embeddings sentinel');
     assert.ok(spawn > -1, 'getWorker() must construct the Worker');
     assert.ok(write < spawn, 'sentinel write must happen BEFORE new Worker(...)');

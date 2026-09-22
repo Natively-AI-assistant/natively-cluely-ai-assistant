@@ -10,6 +10,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import fs from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import os from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -366,4 +367,47 @@ test('OCR modules are not imported by the vision fallback chain source', async (
   const susSource = await fs.readFile(path.join(screenDir, 'ScreenUnderstandingService.js'), 'utf8');
   assert.ok(!/OcrProvider/.test(susSource), 'ScreenUnderstandingService.js must not reference OcrProvider');
   assert.ok(!/tesseract/i.test(susSource), 'ScreenUnderstandingService.js must not reference tesseract');
+});
+
+// CLAMP_MISS_WINDOW_MS is a judgement call (five cooldowns) and is deliberately
+// not adaptive — the blast radius either way is one 30s cooldown. What is NOT a
+// judgement call is the RELATIONSHIP: if the window is ever tuned to the
+// cooldown or below, the miss counter expires at the exact moment the rung
+// becomes eligible again, the second miss can never land inside it, and the
+// forgiveness becomes permanent. That is the immortality bug the counter exists
+// to prevent, and it would return silently because every other test still
+// passes. So pin the inequality, not the value.
+const chainSrc = () => readFileSync(
+  path.join(root, 'electron/services/screen/VisionProviderFallbackChain.ts'), 'utf8');
+const constMs = (src, name) => {
+  const m = src.match(new RegExp(`const ${name} = ([^;]+);`));
+  assert.ok(m, `${name} not found in VisionProviderFallbackChain.ts`);
+  // Strip underscores only from NUMERIC literals — a blanket replace mangles
+  // RUNG_TRANSIENT_COOLDOWN_MS itself into RUNGTRANSIENTCOOLDOWNMS.
+  const expr = m[1].trim().replace(/\b(\d[\d_]*)\b/g, (d) => d.replace(/_/g, ''));
+  const cd = (src.match(/const RUNG_TRANSIENT_COOLDOWN_MS = ([\d_]+);/) || [])[1];
+  assert.ok(cd, 'RUNG_TRANSIENT_COOLDOWN_MS not found');
+  const RUNG_TRANSIENT_COOLDOWN_MS = Number(cd.replace(/_/g, ''));
+  if (/^\d+$/.test(expr)) return Number(expr);
+  assert.match(expr, /^RUNG_TRANSIENT_COOLDOWN_MS \* \d+$/,
+    `${name} must stay expressed in terms of the cooldown it guards`);
+  return RUNG_TRANSIENT_COOLDOWN_MS * Number(expr.split('*')[1].trim());
+};
+
+test('the clamp-miss window strictly outlives the cooldown it guards', () => {
+  const src = chainSrc();
+  const windowMs = constMs(src, 'CLAMP_MISS_WINDOW_MS');
+  const cooldownMs = constMs(src, 'RUNG_TRANSIENT_COOLDOWN_MS');
+  assert.ok(windowMs > cooldownMs,
+    `clamp-miss window ${windowMs}ms must exceed the ${cooldownMs}ms cooldown, or the second `
+    + 'miss can never land inside it and a hanging rung is forgiven forever');
+  assert.ok(windowMs >= cooldownMs * 2,
+    'a window barely above the cooldown still races it — keep a real multiple');
+});
+
+test('a forgiven clamped miss is timestamped, and the second one cools', () => {
+  const src = chainSrc();
+  assert.match(src, /clampedAt\?: number;/, 'the miss must carry a timestamp or it cannot expire');
+  assert.match(src, /\(nowMs\(\) - prior\.clampedAt\) <= CLAMP_MISS_WINDOW_MS/);
+  assert.match(src, /if \(misses > 1\) noteRungFailure\(/, 'the second miss must cool the rung');
 });

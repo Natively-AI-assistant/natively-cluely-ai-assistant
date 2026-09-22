@@ -1,0 +1,6 @@
+# Third-party caption text, used as a local benchmark fixture only.
+transcripts/
+results.json
+interview-results.json
+mode-results.CONTAMINATED.json
+transcript.txt

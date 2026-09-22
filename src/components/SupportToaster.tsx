@@ -71,7 +71,7 @@ export const SupportToaster: React.FC<SupportToasterProps> = ({ isOpen, onDismis
     return (
         <AnimatePresence>
             {isOpen && (
-                <div className={`fixed inset-0 z-[9999] flex items-center justify-center ${isLight ? 'bg-black/20 backdrop-blur-[4px]' : 'bg-black/60 backdrop-blur-[4px]'}`}>
+                <div className={`fixed inset-0 z-[9999] flex items-center justify-center ${isLight ? 'bg-black/20' : 'bg-black/60'}`}>
                     <style>
                         {`
                             @keyframes support-border-flow {

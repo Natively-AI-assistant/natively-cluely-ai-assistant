@@ -55,9 +55,17 @@
 const fs = require('fs');
 const path = require('path');
 
-/** Decide which credential strategy is configured, if any. Returns null if none. */
-function resolveCredentials() {
-  const env = process.env;
+/**
+ * Decide which credential strategy is configured, if any. Returns null if none.
+ *
+ * `env` is a parameter (defaulting to the real environment, so the call site below
+ * is unchanged) purely so scripts/preflight-notary.cjs can ask THIS function — the
+ * one the build actually obeys — which strategy a build would pick, ~20 minutes
+ * before it gets there. A second copy of this precedence would be free to drift,
+ * and a preflight that validates a strategy the build does not use is worse than
+ * no preflight: it reports green and the build still dies at the notary call.
+ */
+function resolveCredentials(env = process.env) {
 
   // App Store Connect API key. APPLE_API_ISSUER is REQUIRED for Team keys but must be
   // OMITTED for Individual keys (passing it yields a 401), so we only require key+id and
@@ -157,12 +165,22 @@ module.exports = async function notarizeHook(context) {
   // with "Network.NWError error 54 - Connection reset by peer" after the
   // ENTIRE build/sign pipeline had succeeded). One dropped TCP connection
   // must not cost a full rebuild: re-submitting is safe — an aborted upload
-  // never became a submission, it just expires server-side. Bounded and
-  // signature-gated: only network-class failures retry; a genuine
-  // notarization REJECTION or auth failure still fails the build on the
-  // first attempt, loudly, exactly as before.
-  const TRANSIENT_NETWORK_RE =
-    /Connection reset by peer|NWError|abortedUpload|ECONNRESET|ETIMEDOUT|ENETDOWN|EPIPE|socket hang up|network connection was lost|Operation timed out|temporarily unavailable/i;
+  // never became a submission, it just expires server-side.
+  //
+  // The gate FAILS OPEN, and this comment used to say the opposite ("only
+  // network-class failures retry"). shouldRetryNotarizeThrow returns true for any
+  // message it does not recognise, deliberately: wording-matching lost twice, and
+  // `HTTPClientError.connectTimeout` matched no signature on 2026-08-27 so two
+  // builds aborted without a single retry. What still fails on the FIRST attempt
+  // is a message it recognises as decided — a notarization verdict, an auth/usage
+  // failure, or a staple error. Everything else costs up to ~90s of retry before
+  // failing, which is the price of never aborting a release on an unrecognised
+  // blip.
+  // The signature list lives in scripts/lib/notary-transient.cjs so this path and the
+  // DMG path in scripts/afterAllArtifactBuild.cjs cannot drift apart. The `!/staple/`
+  // guard below stays HERE on purpose: @electron/notarize funnels submit AND staple
+  // failures through one throw, so only this call site needs to tell them apart.
+  const { shouldRetryNotarizeThrow } = require('./lib/notary-transient.cjs');
   const MAX_SUBMIT_ATTEMPTS = 3;
 
   let lastErr;
@@ -176,9 +194,10 @@ module.exports = async function notarizeHook(context) {
     } catch (err) {
       lastErr = err;
       const attemptMsg = (err && err.message ? err.message : String(err)) || '';
-      // Staple-race is handled below (it is a SUCCESS of submission) — break
-      // out of the retry loop for it and for any non-transient failure.
-      const isTransient = TRANSIENT_NETWORK_RE.test(attemptMsg) && !/staple/i.test(attemptMsg);
+      // Staple-race is handled below (it is a SUCCESS of submission) — break out
+      // of the retry loop for it, and for any failure the classifier RECOGNISES
+      // as decided. An unrecognised message is retried (fail-open); see above.
+      const isTransient = shouldRetryNotarizeThrow(attemptMsg);
       if (isTransient && attempt < MAX_SUBMIT_ATTEMPTS) {
         const delayS = 30 * attempt;
         console.warn(
@@ -235,3 +254,7 @@ module.exports = async function notarizeHook(context) {
     throw err;
   }
 };
+
+// Exposed for scripts/preflight-notary.cjs (see resolveCredentials above). electron-builder
+// calls module.exports itself, so hanging a property off it changes nothing for the hook.
+module.exports.resolveCredentials = resolveCredentials;

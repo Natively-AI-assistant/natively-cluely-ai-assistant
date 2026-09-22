@@ -134,6 +134,13 @@ function installActiveMode(templateType, modeName = templateType) {
     createdAt: '2026-05-26T00:00:00.000Z',
   } : null;
   manager.getActiveMode = () => mode;
+  // The pinned Real-time prompt follows THIS mode's customContext. It used to be
+  // left untouched here, so the sentinel an earlier installCustomDocumentMode()
+  // stubbed onto the shared singleton leaked into "General" — a mode this very
+  // fixture declares to have NO prompt (customContext: ''). The old blanket
+  // skip hid the inconsistency; 2026-09-20 made the user's instructions reach
+  // built-in modes, which exposed it.
+  manager.getActiveModePinnedInstructions = () => (mode?.customContext || '');
   // Neutralize mode-context injection that runs AFTER the gate so the
   // streaming path doesn't try to retrieve real reference files.
   manager.getActiveModeSystemPromptSuffix = () => '';
@@ -683,6 +690,33 @@ test('streamChat: seeded General mode still skips CHAT_MODE_PROMPT mode injectio
     !dispatched.systemPrompt.includes('PINNED_CUSTOM_MODE_SENTINEL'),
     'default General mode must remain neutral and not get custom-mode injection',
   );
+});
+
+test('streamChat: a built-in mode WITH a Real-time prompt gets the instruction layer — and only that', async () => {
+  // 2026-09-20, found by driving this method against a real ModesManager + DB:
+  // with a universal/v2 base prompt, NO built-in mode (General, Seminar, Call
+  // Centre, Sales) ever received the user's Real-time prompt in typed chat, and
+  // no typed-chat coding turn did in any mode. The skip exists to keep the mode
+  // TEMPLATE and REFERENCE context out — the user's instructions are neither.
+  const helper = buildHelper();
+  const calls = attachDispatchSpy(helper);
+  installActiveMode('general', 'General');
+  const manager = ModesManager.getInstance();
+  manager.getActiveModePinnedInstructions = () => 'Answer in 100 words.';
+  manager.getActiveModeSystemPromptSuffix = () => 'GENERAL_TEMPLATE_SENTINEL';
+  manager.buildRetrievedActiveModeContextBlock = () => 'REFERENCE_SENTINEL';
+  await drainStream(helper.streamChat(
+    'What is the main topic?', undefined, undefined,
+    cjsRequire(path.resolve(distDir, 'electron/llm/prompts.js')).CHAT_MODE_PROMPT,
+    true, false, [], undefined, undefined, { answerType: 'unknown_answer' },
+  ));
+  const dispatched = calls.find(c => c.via === 'streamWithCustom');
+  assert.ok(dispatched, 'streamWithCustom must be reached');
+  assert.match(dispatched.systemPrompt, /<user_instructions[^>]*cannot authorize a source/);
+  assert.match(dispatched.systemPrompt, /LENGTH is set by the user: about 100 words/);
+  assert.ok(!dispatched.systemPrompt.includes('GENERAL_TEMPLATE_SENTINEL'), 'the mode template must still be skipped');
+  assert.ok(!`${dispatched.systemPrompt}${dispatched.context}`.includes('REFERENCE_SENTINEL'), 'reference context must still be skipped');
+  installActiveMode('general', 'General');
 });
 
 test('streamChat: premium context block REACHES dispatch in looking-for-work (positive control)', async () => {

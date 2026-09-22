@@ -1,0 +1,286 @@
+{
+ "blind_id": "S-44b81194",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 85396,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 24770,
+  "candidatesTokenCount": 2095,
+  "totalTokenCount": 38874,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 24770
+   }
+  ],
+  "thoughtsTokenCount": 12009,
+  "serviceTier": "standard"
+ },
+ "fact_count": 51,
+ "evaluation": {
+  "factual_accuracy": 4,
+  "important_information_retention": 9,
+  "hallucination_control": 10,
+  "action_item_retention": 9,
+  "decision_retention": 9,
+  "speaker_attribution": 9,
+  "numeric_accuracy": 4,
+  "entity_retention": 9,
+  "timeline_accuracy": 4,
+  "conclusion_accuracy": 4,
+  "structure": 2,
+  "conciseness": 1,
+  "readability": 3,
+  "overall_summary_quality": 3,
+  "critical_errors": [
+   "Presenting superseded dates (Oct 16-19) as a final decision and action item.",
+   "Presenting the superseded cost split ($285 each) as a final decision.",
+   "Presenting the superseded booker (Priya) as a final decision and action item.",
+   "Presenting the superseded gift budget ($50 each) as a final decision.",
+   "Presenting a superseded action item (Dan checking the pet policy) alongside the final decision that pets are not allowed.",
+   "Presenting a not_decision (Mia doing the card and flowers) as a firm decision."
+  ],
+  "missing_important_information": [],
+  "hallucinated_information": [],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C02",
+    "reported": "Trip dates were set as Friday, October 16th to Monday the 19th"
+   },
+   {
+    "correction_id": "C03",
+    "reported": "The cost is split four ways among Dan, Priya, Tom and (likely) Mia Chen at $285 each"
+   },
+   {
+    "correction_id": "C04",
+    "reported": "Priya was assigned to make the booking"
+   },
+   {
+    "correction_id": "C07",
+    "reported": "Group gift budget is $50 each toward the green Polaroid camera."
+   }
+  ],
+  "not_decisions_reported_as_decided": [
+   "If Mia comes, she is assigned the card and flowers rather than a cash contribution."
+  ],
+  "distractors_included": [
+   "Dan flagged that his work reorg has escalated to Graham scheduling a meeting to plan the meeting, with a 22-slide deck.",
+   "Priya reported she did a twelve and a half hour shift a day earlier because the unit was three nurses short.",
+   "The Wanderers lost six-two on Tuesday with Tom in goal for the second half, conceding four goals.",
+   "Priya spoiled the Harbor Lights finale for Tom...",
+   "Tom's Halvorsen interview was five rounds...",
+   "Dan, Priya and Tom discussed a TV show whose ratings dropped...",
+   "Priya shared a hospital anecdote about a man who glued his hand to a ladder...",
+   "Tom's fleece came up as a packing joke...",
+   "Waffles starts puppy class next Saturday with a trainer named Brenda who formerly trained police dogs."
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "partial"
+   },
+   {
+    "id": "F06",
+    "status": "contradicted"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "contradicted"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "contradicted"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "contradicted"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "present"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "contradicted"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "present"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture almost all the information from the transcript but fail critically in synthesis and structure. They include both the initial, superseded plans and the final, corrected plans side-by-side in the Decisions and Action Items sections, creating direct contradictions (e.g., listing both Oct 16-19 and Oct 23-26 as the trip dates). The notes are also extremely bloated, repeating the same points multiple times across different sections and including nearly every irrelevant distractor from the casual conversation. This lack of filtering and resolution makes the notes highly confusing and unusable as a clear record of the meeting."
+ }
+}

@@ -91,7 +91,12 @@ describe('ModesManager.updateMode — re-seed sourceContract on templateType cha
     assert.equal(afterSwitch.sourceAuthority, 'profile_only',
       'TECHNICAL INTERVIEW REGRESSION: switching templateType must re-seed sourceContract');
     assert.equal(afterSwitch.defaultOwner, 'profile');
-    assert.deepEqual(afterSwitch.allowedExplicitSwitches, ['profile', 'job_description']);
+    // `reference_files` added 2026-08-28 (T8): the interview-prep seed now
+    // PERMITS an explicit reference-file request. The two assertions that carry
+    // this test's incident — sourceAuthority 'profile_only' and defaultOwner
+    // 'profile' — are unchanged, which is the point: the mode's default owner
+    // does not move, only the user's permission set widens.
+    assert.deepEqual(afterSwitch.allowedExplicitSwitches, ['profile', 'job_description', 'reference_files']);
     assert.equal(afterSwitch.seededForTemplateType, 'technical-interview');
     assert.equal(afterSwitch.origin, 'default_new_mode');
   });

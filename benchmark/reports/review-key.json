@@ -1,0 +1,288 @@
+{
+ "SALES-S": {
+  "A": {
+   "config": "ds-flash-prod",
+   "run": "run1"
+  },
+  "B": {
+   "config": "luna-none",
+   "run": "run1"
+  },
+  "C": {
+   "config": "ds-flash-thinking",
+   "run": "run1"
+  },
+  "D": {
+   "config": "luna-low",
+   "run": "run1"
+  },
+  "E": {
+   "config": "luna-max",
+   "run": "run1"
+  },
+  "F": {
+   "config": "luna-medium",
+   "run": "run1"
+  }
+ },
+ "TEAM-S": {
+  "A": {
+   "config": "luna-none",
+   "run": "run1"
+  },
+  "B": {
+   "config": "ds-flash-prod",
+   "run": "run1"
+  },
+  "C": {
+   "config": "luna-max",
+   "run": "run2"
+  },
+  "D": {
+   "config": "luna-low",
+   "run": "run1"
+  },
+  "E": {
+   "config": "luna-medium",
+   "run": "run1"
+  },
+  "F": {
+   "config": "ds-flash-thinking",
+   "run": "run1"
+  }
+ },
+ "INT-M": {
+  "A": {
+   "config": "luna-low",
+   "run": "run1"
+  },
+  "B": {
+   "config": "ds-flash-prod",
+   "run": "run1"
+  },
+  "C": {
+   "config": "luna-max",
+   "run": "run1"
+  },
+  "D": {
+   "config": "ds-flash-thinking",
+   "run": "run1"
+  },
+  "E": {
+   "config": "luna-medium",
+   "run": "run1"
+  },
+  "F": {
+   "config": "luna-none",
+   "run": "run1"
+  }
+ },
+ "CASUAL-M": {
+  "A": {
+   "config": "luna-max",
+   "run": "run2"
+  },
+  "B": {
+   "config": "luna-medium",
+   "run": "run1"
+  },
+  "C": {
+   "config": "luna-low",
+   "run": "run1"
+  },
+  "D": {
+   "config": "ds-flash-thinking",
+   "run": "run1"
+  },
+  "E": {
+   "config": "ds-flash-prod",
+   "run": "run1"
+  },
+  "F": {
+   "config": "luna-none",
+   "run": "run1"
+  }
+ },
+ "TEAM-M": {
+  "A": {
+   "config": "luna-max",
+   "run": null
+  },
+  "B": {
+   "config": "luna-none",
+   "run": "run1"
+  },
+  "C": {
+   "config": "luna-low",
+   "run": "run1"
+  },
+  "D": {
+   "config": "ds-flash-prod",
+   "run": "run1"
+  },
+  "E": {
+   "config": "luna-medium",
+   "run": "run1"
+  },
+  "F": {
+   "config": "ds-flash-thinking",
+   "run": "run1"
+  }
+ },
+ "INT-TECH-L": {
+  "A": {
+   "config": "ds-flash-thinking",
+   "run": "run1"
+  },
+  "B": {
+   "config": "luna-low",
+   "run": "run1"
+  },
+  "C": {
+   "config": "luna-medium",
+   "run": "run1"
+  },
+  "D": {
+   "config": "ds-flash-prod",
+   "run": "run1"
+  },
+  "E": {
+   "config": "luna-none",
+   "run": "run1"
+  },
+  "F": {
+   "config": "luna-max",
+   "run": "run1"
+  }
+ },
+ "SALES-DISC-L": {
+  "A": {
+   "config": "luna-medium",
+   "run": "run1"
+  },
+  "B": {
+   "config": "ds-flash-prod",
+   "run": "run1"
+  },
+  "C": {
+   "config": "luna-low",
+   "run": "run1"
+  },
+  "D": {
+   "config": "luna-max",
+   "run": "run1"
+  },
+  "E": {
+   "config": "luna-none",
+   "run": "run1"
+  },
+  "F": {
+   "config": "ds-flash-thinking",
+   "run": "run1"
+  }
+ },
+ "TECH-DISC-L": {
+  "A": {
+   "config": "luna-none",
+   "run": "run1"
+  },
+  "B": {
+   "config": "ds-flash-thinking",
+   "run": "run1"
+  },
+  "C": {
+   "config": "luna-max",
+   "run": "run2"
+  },
+  "D": {
+   "config": "luna-medium",
+   "run": "run1"
+  },
+  "E": {
+   "config": "ds-flash-prod",
+   "run": "run1"
+  },
+  "F": {
+   "config": "luna-low",
+   "run": "run1"
+  }
+ },
+ "REAL-LECT-L": {
+  "A": {
+   "config": "luna-medium",
+   "run": "run1"
+  },
+  "B": {
+   "config": "ds-flash-thinking",
+   "run": "run1"
+  },
+  "C": {
+   "config": "ds-flash-prod",
+   "run": "run1"
+  },
+  "D": {
+   "config": "luna-max",
+   "run": "run2"
+  },
+  "E": {
+   "config": "luna-low",
+   "run": "run1"
+  },
+  "F": {
+   "config": "luna-none",
+   "run": "run1"
+  }
+ },
+ "LECT-VL": {
+  "A": {
+   "config": "luna-none",
+   "run": "run1"
+  },
+  "B": {
+   "config": "luna-low",
+   "run": "run1"
+  },
+  "C": {
+   "config": "ds-flash-thinking",
+   "run": "run1"
+  },
+  "D": {
+   "config": "luna-medium",
+   "run": "run1"
+  },
+  "E": {
+   "config": "ds-flash-prod",
+   "run": "run1"
+  },
+  "F": {
+   "config": "luna-max",
+   "run": "run1"
+  }
+ },
+ "REAL-LECT-VL": {
+  "A": {
+   "config": "luna-none",
+   "run": "run1"
+  },
+  "B": {
+   "config": "ds-flash-thinking",
+   "run": "run1"
+  },
+  "C": {
+   "config": "luna-low",
+   "run": "run1"
+  },
+  "D": {
+   "config": "ds-flash-prod",
+   "run": "run1"
+  },
+  "E": {
+   "config": "luna-medium",
+   "run": "run1"
+  },
+  "F": {
+   "config": "luna-max",
+   "run": "run2"
+  }
+ }
+}

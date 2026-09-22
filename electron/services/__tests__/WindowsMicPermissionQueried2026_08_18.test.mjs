@@ -13,7 +13,7 @@
 // branch, not a platform limitation.
 //
 // Cannot be executed on macOS, so this pins the SOURCE contract; physical
-// verification on Windows is still required and is recorded in AUDIT_REPORT.md.
+// verification on Windows is still required.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

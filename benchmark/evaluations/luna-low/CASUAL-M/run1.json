@@ -1,0 +1,274 @@
+{
+ "blind_id": "S-e3788398",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 44106,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 21954,
+  "candidatesTokenCount": 1906,
+  "totalTokenCount": 28676,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 21954
+   }
+  ],
+  "thoughtsTokenCount": 4816,
+  "serviceTier": "standard"
+ },
+ "fact_count": 51,
+ "evaluation": {
+  "factual_accuracy": 4,
+  "important_information_retention": 8,
+  "hallucination_control": 8,
+  "action_item_retention": 7,
+  "decision_retention": 6,
+  "speaker_attribution": 8,
+  "numeric_accuracy": 6,
+  "entity_retention": 8,
+  "timeline_accuracy": 4,
+  "conclusion_accuracy": 4,
+  "structure": 3,
+  "conciseness": 2,
+  "readability": 3,
+  "overall_summary_quality": 4,
+  "critical_errors": [
+   "Reports superseded trip dates (Oct 16-19) as a decision.",
+   "Reports a superseded action item (Priya booking the cabin with her Hearthstay credit) as a current action item, contradicting the correct decision that Dan will book it.",
+   "Reports resolved questions (whether Waffles can come, Friday departure time, Priya's rota for Oct 16) as open questions.",
+   "Reports the superseded cost split ($285) as a definitive decision without the context that it only applies if Mia attends."
+  ],
+  "missing_important_information": [
+   "Birchwater Lake is about a 3-hour drive."
+  ],
+  "hallucinated_information": [],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C02",
+    "reported": "The group will use October 16th–19th as the proposed trip dates."
+   },
+   {
+    "correction_id": "C04",
+    "reported": "Priya will book the selected cabin. / Priya will book Heron Point Cabin using her Hearthstay credit."
+   },
+   {
+    "correction_id": "C06",
+    "reported": "What time will the group leave on Friday? (Listed as an open question)"
+   },
+   {
+    "correction_id": "C03",
+    "reported": "The four paying attendees will each contribute $285. (Listed as a definitive decision)"
+   }
+  ],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "missing"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "missing"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "partial"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "contradicted"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "missing"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "present"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "missing"
+   },
+   {
+    "id": "F40",
+    "status": "missing"
+   },
+   {
+    "id": "F41",
+    "status": "missing"
+   },
+   {
+    "id": "F42",
+    "status": "partial"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "missing"
+   }
+  ],
+  "rationale": "The notes capture most of the important information but suffer from severe structural and factual issues due to a failure to synthesize the conversation. The model repeatedly lists superseded proposals as final decisions or action items alongside the actual final decisions. For example, it states both that Dan will book the cabin and that Priya will book it with her credit; it lists both Oct 16-19 and Oct 23-26 as the trip dates; and it lists resolved issues (like whether Waffles can come or the departure time) as open questions. This creates a highly contradictory, repetitive, and confusing document, severely impacting factual accuracy, conclusion accuracy, conciseness, and readability."
+ }
+}

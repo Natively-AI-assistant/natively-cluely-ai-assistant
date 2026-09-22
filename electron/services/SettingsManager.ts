@@ -9,11 +9,20 @@ export interface AppSettings {
     isUndetectable?: boolean;
     disguiseMode?: 'terminal' | 'settings' | 'activity' | 'none';
     verboseLogging?: boolean;
+    // Windows only, default on (explicit false opts out). A WH_KEYBOARD_LL hook
+    // swallows + self-dispatches the app's own global shortcuts even when stealth
+    // typing is OFF, closing the residual leak where a dropped RegisterHotKey
+    // registration lets a chord's modifier/completing key reach the foreground.
+    stealthShortcutGuard?: boolean;
     // Context Intelligence debug logging level (Developer settings). The env
     // var NATIVELY_CONTEXT_DEBUG overrides this — precedence is owned by
     // context-intelligence/debug/debug-config.ts, which reads this value
     // through the bound reader; this store only persists the UI choice.
     contextDebugLevel?: 'off' | 'standard' | 'verbose';
+    // What contextDebugLevel was before verbose logging raised it to
+    // 'verbose'. Persisted so the restore survives a restart — see
+    // AppState.setVerboseLogging.
+    contextDebugLevelBeforeVerbose?: 'off' | 'standard' | 'verbose';
     // Lets the user summon the overlay as a standalone AI chatbox (no audio
     // capture, no STT, no meeting record) via the toggle-visibility hotkey
     // while idle. Off by default — the hotkey's existing behavior is unchanged
@@ -24,6 +33,17 @@ export interface AppSettings {
     // produced only by the What-to-Answer hotkey, exactly as before. The
     // trigger itself lives in AppState.scheduleAutoAnswer().
     autoAnswerEnabled?: boolean;
+    // Direct Assist is the opt-in, single-provider answer path. It deliberately
+    // bypasses meeting retrieval and the legacy answer-orchestration pipeline.
+    // Keep the persisted default OFF during rollout; the operator kill switch
+    // (NATIVELY_DIRECT_ASSIST_KILL_SWITCH) always wins over this preference.
+    directAssistEnabled?: boolean;
+    /**
+     * Whether a failed Direct Assist provider may fall back to another
+     * configured provider. Unlike directAssistEnabled the persisted default is
+     * ON: it only ever converts a failure into an answer, and every switch is
+     * announced in the UI, so it can never route silently.
+     */
     actionButtonMode?: 'recap' | 'brainstorm';
     groqFastTextMode?: boolean;
     codexCliEnabled?: boolean;
@@ -109,6 +129,88 @@ export interface AppSettings {
     // documented in docs/engineering/LOCAL_DB_ENCRYPTION_DESIGN.md.
     // 'forever' (default), '7d', '30d', or 'never' (do not store transcripts).
     meetingRetention?: 'forever' | '7d' | '30d' | 'never';
+    /**
+     * Embedding configuration, independent of the generation model.
+     *
+     * 'auto' (the default) keeps the existing priority chain, so an upgrading
+     * user's active embedding SPACE is unchanged and nothing is re-indexed.
+     * 'manual' pins an explicit provider/model.
+     *
+     * `dimensions` is the MEASURED width for the chosen model, never a guess —
+     * see electron/rag/ollamaEmbeddingModels.ts. It is cached here so a probe is
+     * not repeated on every launch.
+     */
+    embedding?: {
+        mode?: 'auto' | 'manual';
+        provider?: 'natively' | 'ollama' | 'custom' | 'openrouter' | 'voyage' | 'openai' | 'gemini' | 'local';
+        model?: string;
+        dimensions?: number;
+        localModelId?: string;
+    };
+    /**
+     * Reranker configuration, independent of BOTH the generation model and the
+     * embedding model. Embedding retrieval finds the candidate set; reranking
+     * decides the order of those candidates, and a user may reasonably want a
+     * local embedder with a hosted reranker, or the reverse.
+     *
+     * Absent means provider 'local' — the bundled cross-encoder — so an
+     * upgrading user's reranker cannot change because a new setting appeared. See electron/services/reranking/rerankerConfig.ts.
+     *
+     * The OpenRouter API key is NOT here: it lives in CredentialsManager, and it
+     * is the SAME `openrouterApiKey` the embedding and generation paths use.
+     * This file is plaintext on disk.
+     */
+    reranker?: {
+        provider?: 'local' | 'natively' | 'openrouter' | 'jina' | 'voyage' | 'custom';
+        /**
+         * A catalogue id from rag/rerankerModelCatalog.ts, or absent for the
+         * bundled model (ms-marco-MiniLM-L-6-v2 as of 2026-09-04 — see
+         * BUILT_IN_RERANKER, and do not re-hardcode a name here). Only ONNX
+         * entries are valid: a GGUF model is executed by its extension.
+         */
+        localModelId?: string;
+        openrouterModel?: string;
+        /** Model id for the Jina AI hosted reranker (jina-reranker-v3.5 and friends). */
+        jinaModel?: string;
+        voyageModel?: string;
+        /**
+         * Model id for the Natively-managed reranker. Absent means the one model
+         * the API serves — unlike the BYOK providers there is nothing to choose,
+         * so this exists only so a second managed model needs no migration.
+         */
+        nativelyModel?: string;
+        candidateCount?: number;
+        fallbackToLocal?: boolean;
+        lastTest?: {
+            at: string;
+            model: string;
+            latencyMs: number;
+            ok: boolean;
+            failure?: string;
+        };
+    };
+    /**
+     * A user-hosted OpenAI-compatible embedding endpoint — LM Studio
+     * (http://localhost:1234/v1), llama.cpp's llama-server (:8080/v1), vLLM,
+     * text-embeddings-inference, a LiteLLM proxy.
+     *
+     * The optional bearer token is NOT here: it lives in CredentialsManager,
+     * because this file is plaintext on disk.
+     */
+    customEmbeddingEndpoint?: string;
+    /**
+     * A user-hosted OpenAI/Cohere-compatible reranking endpoint (LM Studio,
+     * TEI, llama.cpp's llama-server, vLLM, Infinity, or local proxy).
+     */
+    customRerankerEndpoint?: string;
+    customRerankerModel?: string;
+    localEmbeddingModelId?: string;
+    /**
+     * The user chose "Keep MiniLM". Suppresses the lightweight-embedding
+     * warning permanently — an unstoppable warning is worse than none, and this
+     * one must not become something to click past.
+     */
+    embeddingLightweightAcknowledged?: boolean;
     providerDataScopes?: {
         transcript?: boolean;
         screenshots?: boolean;
@@ -166,6 +268,21 @@ export interface AppSettings {
     sttMaxSampleRate?: number;
     sttMaxChannels?: number;
     sttAllowDualStream?: boolean;
+    // ── Provider Performance Profile ─────────────────────────────────────
+    // Persisted opt-ins for the intelligenceFlags entries of the same name.
+    // The flag registry documents each one's default and precedence; these keys
+    // exist so the Settings UI has somewhere to write, exactly as
+    // `hindsightMemoryEnabled` does for the `hindsightMemory` flag.
+    providerPerformanceProfileEnabled?: boolean;
+    adaptiveStreamIdleEnabled?: boolean;
+    adaptiveTtftEnabled?: boolean;
+    providerPerformanceDiagnosticsEnabled?: boolean;
+    // The two billable opt-ins. Default OFF in the flag registry; these exist so
+    // a user who turns calibration on in Settings keeps it on across restarts.
+    providerCalibrationEnabled?: boolean;
+    capabilityProbeEnabled?: boolean;
+    adaptiveConnectTimeoutEnabled?: boolean;
+    adaptiveImageQualityEnabled?: boolean;
 }
 
 export const VALID_CONTEXT_DEBUG_LEVELS = ['off', 'standard', 'verbose'] as const;
@@ -301,6 +418,25 @@ export class SettingsManager {
 
     public getTechnicalInterviewVisionFirst(): boolean {
         return this.settings.technicalInterviewVisionFirst !== false;
+    }
+
+    /**
+     * Emergency operator stop for Direct Assist. This is intentionally a
+     * hard-off switch: renderer settings can never override it. The value is
+     * read on every call so a test harness or a managed launch environment can
+     * establish the effective state before any request is dispatched.
+     */
+    public isDirectAssistKilledByOperator(): boolean {
+        const raw = String(process.env.NATIVELY_DIRECT_ASSIST_KILL_SWITCH ?? '')
+            .trim()
+            .toLowerCase();
+        return raw === '1' || raw === 'true' || raw === 'on' || raw === 'yes';
+    }
+
+    /** Effective Direct Assist state. Persisted default is false. */
+    public getDirectAssistEnabled(): boolean {
+        if (this.isDirectAssistKilledByOperator()) return false;
+        return this.settings.directAssistEnabled === true;
     }
 
     // ── Smart Browser Context v2 — resolved settings (single default source) ──

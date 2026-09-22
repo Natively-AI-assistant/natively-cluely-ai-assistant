@@ -1,0 +1,169 @@
+{
+ "blind_id": "S-f6dc8f17",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 53892,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 10575,
+  "candidatesTokenCount": 871,
+  "totalTokenCount": 18556,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 10575
+   }
+  ],
+  "thoughtsTokenCount": 7110,
+  "serviceTier": "standard"
+ },
+ "fact_count": 29,
+ "evaluation": {
+  "factual_accuracy": 8,
+  "important_information_retention": 10,
+  "hallucination_control": 8,
+  "action_item_retention": 10,
+  "decision_retention": 10,
+  "speaker_attribution": 8,
+  "numeric_accuracy": 10,
+  "entity_retention": 10,
+  "timeline_accuracy": 10,
+  "conclusion_accuracy": 9,
+  "structure": 6,
+  "conciseness": 5,
+  "readability": 7,
+  "overall_summary_quality": 7,
+  "critical_errors": [],
+  "missing_important_information": [],
+  "hallucinated_information": [
+   "Theo assigned an action item to load test the workout history endpoint",
+   "Katya listed as the owner of the decision to reject cherry-picking"
+  ],
+  "superseded_values_reported": [],
+  "not_decisions_reported_as_decided": [
+   "Load testing the workout history endpoint before prod (reported as an action item)"
+  ],
+  "distractors_included": [
+   "Cherry-picking lost the analytics fix in 4.10"
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "partial"
+   },
+   {
+    "id": "F26",
+    "status": "missing"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes are highly comprehensive, successfully capturing all critical and important information, including correct numbers and timelines. However, they suffer from significant repetition across the overview, summary, and structured sections, and include a broken, cut-off sentence in the summary. Additionally, Theo's desire to load test the workout history endpoint is incorrectly elevated to an action item, and the decision to reject cherry-picking is misattributed to Katya as the owner."
+ }
+}

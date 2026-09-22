@@ -104,6 +104,12 @@
   /* User Spec: Icons & Input Backgrounds */
   --bg-item-active: #2C2C2C;
   /* Selected state */
+  /* Beta pill — SOLID fill, Apple style. systemYellow is brighter in the dark
+     appearance and slightly deeper in light, so it is a token pair rather than
+     one hex. The foreground is near-black in both: white on yellow is roughly
+     1.6:1 and unreadable, #1C1C1E is ~12:1. */
+  --badge-beta-bg: #FFD60A;
+  --badge-beta-fg: #1C1C1E;
   --bg-row-hover: #2E2E32;
   /* Neutral hover fill for full-width list rows sitting on --bg-item-surface.
      Needed because --bg-item-active is blue-tinted in the light theme, and a
@@ -126,6 +132,15 @@
   --text-secondary: #A0A0A0;
   --text-tertiary: #606060;
 
+  /* ── Meeting-notes generation placeholder ──
+     Three tones so the skeleton carries the SAME typographic hierarchy as the
+     note it stands in for: the title and section headings read heavier than
+     body lines, and the follow-up draft (12.5px) reads lighter than both. One
+     flat grey for everything is the tell that a skeleton was bolted on. */
+  --mn-skel-strong: rgba(255, 255, 255, 0.13);   /* title, section headings */
+  --mn-skel-base:   rgba(255, 255, 255, 0.085);  /* body and bullet lines   */
+  --mn-skel-soft:   rgba(255, 255, 255, 0.065);  /* follow-up draft prose   */
+
   --border-subtle: transparent;
   --border-muted: #333333;
 
@@ -141,6 +156,10 @@
   --overlay-opacity: 0.65;
   --overlay-border: rgba(255, 255, 255, 0.12);
   --overlay-border-soft: rgba(255, 255, 255, 0.1);
+  /* Undetectable-mode ring. Deliberately far brighter than --overlay-border:
+     it is a MODE indicator, not chrome, and must read at a glance against any
+     desktop showing through the panel. See the [data-undetectable] rule below. */
+  --overlay-undetectable-ring: rgba(255, 255, 255, 0.55);
   --overlay-panel-bg: rgb(30 30 30 / calc(0.05 + (var(--overlay-opacity) * 0.55)));
   --overlay-pill-bg: rgb(30 30 30 / calc(0.04 + (var(--overlay-opacity) * 0.48)));
   --overlay-transcript-bg: rgb(30 30 30 / calc(0.02 + (var(--overlay-opacity) * 0.24)));
@@ -268,6 +287,8 @@
   --bg-component:      #F3F4F6;   /* Secondary button fill (gray-100)             */
   --bg-item-surface:   #EAECEF;   /* Row hover — clearly visible against canvas   */
   --bg-item-active:    rgba(37, 99, 235, 0.09); /* Blue-tinted selection (Linear/Notion style) */
+  --badge-beta-bg:     #FFCC00;   /* systemYellow (light appearance)              */
+  --badge-beta-fg:     #1C1C1E;   /* near-black — ~11:1 on the yellow             */
   --bg-row-hover:      #E1E4E8;   /* Neutral list-row hover (see dark-theme note) */
   --text-danger:       #B91C1C;   /* Destructive label — red-700 for contrast on light fills */
   --bg-toggle-switch:  #D1D5DB;   /* Toggle off-state track (gray-300)            */
@@ -276,6 +297,11 @@
   --text-primary:      #111827;   /* gray-900 — near-black, warm                  */
   --text-secondary:    #6B7280;   /* gray-500 — comfortable secondary             */
   --text-tertiary:     #9CA3AF;   /* gray-400 — soft hints and labels             */
+
+  /* ── Meeting-notes generation placeholder (see :root for the rationale) ── */
+  --mn-skel-strong:    rgba(0, 0, 0, 0.12);
+  --mn-skel-base:      rgba(0, 0, 0, 0.075);
+  --mn-skel-soft:      rgba(0, 0, 0, 0.055);
 
   /* ── Borders — barely-there structural lines ── */
   --border-subtle:     rgba(0, 0, 0, 0.07);   /* card outlines, dividers          */
@@ -292,6 +318,7 @@
   --overlay-bg:              rgba(255, 255, 255, 0.82);
   --overlay-border:          rgba(0, 0, 0, 0.09);
   --overlay-border-soft:     rgba(0, 0, 0, 0.06);
+  --overlay-undetectable-ring: rgba(0, 0, 0, 0.42);
   --overlay-panel-bg:        rgb(255 255 255 / calc(0.22 + (var(--overlay-opacity) * 0.50)));
   --overlay-pill-bg:         rgb(255 255 255 / calc(0.18 + (var(--overlay-opacity) * 0.42)));
   --overlay-transcript-bg:   rgb(0 0 0 / calc(0.003 + (var(--overlay-opacity) * 0.016)));
@@ -407,6 +434,30 @@
   filter: brightness(0) invert(1) !important;
 }
 
+/* The Natively raster mark (assets/icon-512.png), as rendered by <img> in the
+   two provider tiles that carry it: Settings > Audio's speech-provider selector
+   (via <BrandMark>) and Settings > Retrieval's Embeddings + Reranker rows (via
+   <AipProviderMark>). Note that AI Providers itself never renders this mark —
+   CLOUD_PROVIDERS has no `natively` entry, and the sidebar's Natively API item
+   uses the <NativelyLogoMark> SVG. The app icon is a WHITE monochrome glyph on
+   transparency, drawn for the dark theme, and an <img> cannot take the tile's
+   own ink the way `.natively-key-mark` does with a mask. On the pale light
+   tile it was therefore an invisible ghost. Light theme flattens it to black;
+   dark theme leaves the artwork untouched.
+
+   Deliberately NOT `.force-black-icon`: that class carries
+   [data-interface-theme="liquid-glass"|"modern"] overrides that force white in
+   BOTH themes, and NativelyApiSettings/NativelyProSettings each set that
+   attribute on a settings subtree — reusing it would reinstate the bug
+   wherever a provider tile renders inside one. */
+.brand-mark-raster {
+  filter: none;
+}
+
+[data-theme='light'] .brand-mark-raster {
+  filter: brightness(0);
+}
+
 /* Light mode: liquid-glass — clean frosted white panel */
 [data-theme='light'] .liquid-glass {
   background: rgba(255, 255, 255, 0.80);
@@ -443,6 +494,10 @@
   --overlay-panel-bg:           rgba(255, 255, 255, 0.055);
   --overlay-border:             rgba(255, 255, 255, 0.18);
   --overlay-border-soft:        rgba(255, 255, 255, 0.10);
+  /* Re-declared here (and in the modern block) because both interface themes
+     paint a DARK panel even under [data-theme='light'] — inheriting the light
+     theme's near-black ring would make it vanish. */
+  --overlay-undetectable-ring:  rgba(255, 255, 255, 0.58);
   --overlay-chip-bg:            rgba(255, 255, 255, 0.10);
   --overlay-chip-hover-bg:      rgba(255, 255, 255, 0.18);
   --overlay-input-bg:           rgba(255, 255, 255, 0.07);
@@ -1372,6 +1427,7 @@
   --overlay-pill-bg:            linear-gradient(160deg, rgba(90, 90, 108, 0.68) 0%, rgba(55, 55, 70, 0.72) 50%, rgba(36, 36, 50, 0.76) 100%);
   --overlay-border:             rgba(255, 255, 255, 0.20);
   --overlay-border-soft:        rgba(255, 255, 255, 0.10);
+  --overlay-undetectable-ring:  rgba(255, 255, 255, 0.58);
   --overlay-chip-bg:            linear-gradient(160deg, rgba(90, 90, 108, 0.88) 0%, rgba(55, 55, 70, 0.93) 50%, rgba(36, 36, 50, 0.97) 100%);
   --overlay-chip-hover-bg:      linear-gradient(160deg, rgba(108, 108, 128, 0.92) 0%, rgba(70, 70, 88, 0.95) 50%, rgba(46, 46, 64, 0.98) 100%);
   --overlay-input-bg:           rgba(255, 255, 255, 0.05);
@@ -2327,36 +2383,79 @@ body {
     border-color: rgba(202, 138, 4, 0.22);
 }
 
-/* ─── "Waiting for answer" indicator — soft breathing pulse ──────────────
-   Replaces Tailwind's default .animate-bounce (a large springy translateY
-   keyframe that reads as generic/childish) with a calmer opacity+scale pulse,
-   matching the iMessage/Slack-style typing indicator: the dot barely moves,
-   it breathes. Mounted in two places (see NativelyInterface.tsx) — a single
-   dot, no stagger — that must stay visually identical. */
-@keyframes natively-thinking-pulse {
-  0%, 100% { opacity: 0.35; transform: scale(0.8); }
-  45% { opacity: 1; transform: scale(1); }
+/* @thinking-label:start */
+/* ─── "Waiting for answer" indicator — shimmering "Thinking..." label ─────
+   Replaced the single breathing dot (2026-09-21). A word says what the dot
+   only implied, and a highlight sweeping through the letters carries the
+   "in progress" signal that the dot's pulse used to.
+
+   Colours live in CSS rather than in the component. The dot they replaced
+   picked its colour from the `isLightTheme` prop, which only ever meant
+   `documentElement[data-theme] === 'light'` (useResolvedTheme.ts) and so could
+   not see the INTERFACE theme at all — the axis that actually decides whether
+   the panel under the text is light or dark. Reading the tokens below fixes
+   that, and it keeps the markup class string CONSTANT, which matters at the
+   imperative streaming site: queueToken overwrites that subtree's children out
+   of band, and its own comment forbids any isThinking-conditional class on the
+   node, since it would freeze at whatever value was present on first paint.
+
+   Mounted in three places (see NativelyInterface.tsx) — only ever one at a
+   time, so all three must stay visually identical. */
+.natively-thinking-label {
+  /* Derived from the overlay text tokens, NOT from a hand-picked light/dark
+     pair. liquid-glass and modern paint a DARK panel even under
+     [data-theme='light'] and therefore force WHITE text in both colour themes
+     (see their token blocks) — so a `[data-theme='light']` override keyed on
+     the colour theme alone is wrong in four of the six combinations. It was:
+     an earlier draft of this rule used dark slate on light, and the harness
+     showed it washing out on light+liquid-glass and light+modern. The tokens
+     already encode the right answer for all six, so defer to them. */
+  --natively-thinking-base: var(--overlay-text-muted, rgba(255, 255, 255, 0.7));
+  --natively-thinking-sweep: var(--overlay-text-strong, #ffffff);
+  display: inline-block;
+  /* The highlight occupies the 40%–60% band of an image 2.5x the element's
+     width, so the visible slice (1 / 2.5 = 40% of the image) contains only
+     base colour at both ends of the travel. The loop therefore wraps
+     base → base with no visible jump, and needs no alternate direction. */
+  background-image: linear-gradient(
+    90deg,
+    var(--natively-thinking-base) 0%,
+    var(--natively-thinking-base) 40%,
+    var(--natively-thinking-sweep) 50%,
+    var(--natively-thinking-base) 60%,
+    var(--natively-thinking-base) 100%
+  );
+  background-size: 250% 100%;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  /* ease-in-out reads as a deliberate pass rather than a metronome: the slow
+     ends of the curve happen while the highlight is off the letters, so what
+     you see is a sweep followed by a short rest. */
+  animation: natively-thinking-sweep 1.6s ease-in-out infinite;
+  will-change: background-position;
 }
 
-.natively-thinking-dot {
-  animation: natively-thinking-pulse 0.9s ease-in-out infinite;
-  will-change: opacity, transform;
+@keyframes natively-thinking-sweep {
+  0% { background-position: 0% 0; }
+  100% { background-position: 100% 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  /* A fully static dot reads as a stray artifact rather than "in progress"
-     with only one dot (no siblings to imply motion by contrast), so keep a
-     gentle opacity-only cycle instead of freezing it — no transform/scale,
-     which is the part reduced-motion users actually want suppressed. */
-  .natively-thinking-dot {
-    animation: natively-thinking-pulse-reduced 1.8s ease-in-out infinite;
+  /* The dot kept a gentle opacity cycle here, because one motionless dot with
+     no siblings reads as a stray artifact rather than as progress. A word does
+     not have that problem — "Thinking..." says so on its own — so this branch
+     drops the gradient entirely and paints flat base colour. */
+  .natively-thinking-label {
+    animation: none;
+    background-image: none;
+    color: var(--natively-thinking-base);
+    -webkit-text-fill-color: var(--natively-thinking-base);
   }
 }
-
-@keyframes natively-thinking-pulse-reduced {
-  0%, 100% { opacity: 0.5; }
-  50% { opacity: 0.9; }
-}
+/* @thinking-label:end */
 
 /* ─── Word-level reveal entrance (premium "typing" feel) ──────────────────
    Each newly-revealed word — the imperative reveal-tail path
@@ -2754,6 +2853,63 @@ body {
   cursor: default;
 }
 
+/* Container query root for the overlay chat shell.
+   Scoped to its OWN class rather than .overlay-shell-surface: that class is
+   also on the settings popup, the model-selector panel and the settings
+   overlay, and `container-type: inline-size` brings layout + style containment
+   with it (a new stacking context, a new containing block for fixed-position
+   descendants, a new BFC). Only the chat shell needs to be queryable, so only
+   the chat shell becomes a container. */
+.overlay-shell-container {
+  container-type: inline-size;
+  container-name: overlay-shell;
+}
+
+.overlay-input-placeholder-compact { display: none; }
+
+@container overlay-shell (max-width: 560px) {
+  .overlay-input-placeholder-full { display: none; }
+  .overlay-input-placeholder-compact { display: inline; }
+}
+
+/* Resize handles. The hit strips are invisible; the cursor is the entire
+   affordance, so without these rules the feature is undiscoverable. `se` gets a
+   faint corner chevron on hover — the one handle worth advertising. */
+.resize-handle {
+  -webkit-app-region: no-drag;
+  touch-action: none;
+  /* Replaces preventDefault() on pointerdown, which would have suppressed the
+     compatibility mouse events that `dblclick` (the reset gesture) needs. */
+  user-select: none;
+  -webkit-user-select: none;
+}
+/* The cursors themselves cannot live here: the global cursor lock further down
+   this file is `!important` on universal selectors, so it wins from anywhere
+   above it. They are declared as its one documented exception — search
+   `@cursor-lock-exception`. */
+
+.resize-handle-se::after {
+  content: '';
+  position: absolute;
+  /* Kept inside the 12px strip below the footer controls, which now sit above
+     the handles (z-60) — so the chevron is never painted over. */
+  right: 3px;
+  bottom: 3px;
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  border-bottom-right-radius: 3px;
+  opacity: 0;
+  transition: opacity 140ms ease;
+  pointer-events: none;
+}
+.resize-handle-se:hover::after { opacity: 0.35; }
+
+@media (prefers-reduced-motion: reduce) {
+  .resize-handle-se::after { transition: none; }
+}
+
 .drag-region {
   -webkit-app-region: drag;
 }
@@ -2786,8 +2942,9 @@ a {
 
 /* ─── Global cursor lock ─────────────────────────────────────────────────
    This is a desktop Electron app — the only cursor we ever show is the
-   default arrow. No I-beam on inputs, no pointer on buttons, no resize
-   handles, no text-select carets. This rule overrides:
+   default arrow. No I-beam on inputs, no pointer on buttons, no text-select
+   carets. The overlay's resize handles are the ONE exception, carved out
+   immediately below. This rule overrides:
      - Browser UA defaults (input → text, button → pointer, link → pointer)
      - Tailwind `cursor-*` utility classes used throughout the codebase
      - Any inline `style="cursor: …"` set by libraries/components
@@ -2811,6 +2968,145 @@ a,
 [contenteditable="true"] {
   cursor: default !important;
 }
+
+/* @cursor-lock-exception:start */
+/* The overlay's resize handles — the single exception to the lock above.
+   These strips are invisible (see the .resize-handle block earlier in this
+   file); the cursor is their entire affordance, so a handle that resolves to
+   `default` is a handle no user can find.
+
+   Both details here are load-bearing, and one of them is why the handles
+   shipped dead in PR #499:
+
+   · TWO classes, not one. `.resize-handle-e` is (0,1,0) and so is `*:hover`
+     above — an equal-specificity tie that the lock wins on source order, even
+     with `!important` added. `.resize-handle.resize-handle-e` is (0,2,0) and
+     clears every selector in the lock outright.
+   · `!important`, because the lock has it, and an important declaration beats
+     a normal one no matter how specific the normal one is. PR #499 declared
+     `.resize-handle-e { cursor: ew-resize }` with neither, five months after
+     this lock landed, so it never once took effect in a shipped build.
+
+   Pinned in both directions by tests/css/resize-handle-cursor.check.mjs, which
+   resolves the real cascade in Electron rather than grepping for `!important`
+   — reading the rule is what missed this the first time. */
+/* Gated on undetectable mode (NativelyInterface mirrors it onto the root as
+   data-undetectable). Content protection keeps the window's PIXELS out of a
+   capture, but the pointer is drawn by the OS and captured regardless — a
+   resize cursor over apparently empty desktop is a tell. With the mode on the
+   handles keep the arrow; they still work, they just don't advertise.
+   `:root:not([data-undetectable="true"])` also lifts specificity to (0,4,0),
+   comfortably above every selector in the lock. */
+:root:not([data-undetectable="true"]) .resize-handle.resize-handle-e { cursor: ew-resize !important; }
+:root:not([data-undetectable="true"]) .resize-handle.resize-handle-s { cursor: ns-resize !important; }
+:root:not([data-undetectable="true"]) .resize-handle.resize-handle-se { cursor: nwse-resize !important; }
+/* @cursor-lock-exception:end */
+
+/* @undetectable-ring:start */
+/* ── Undetectable-mode ring ───────────────────────────────────────────────
+   Undetectable mode is otherwise INVISIBLE from the overlay itself: it flips
+   setContentProtection on the overlay/pill/toggle windows, hides the Dock
+   entry (macOS) and the taskbar button (Windows) — all things you can only
+   confirm by looking somewhere other than the panel you are using. This
+   dashed ring is the in-panel tell.
+
+   OUTLINE, not the border, for three independent reasons:
+     1. Both interface themes set border-color with !important on
+        .overlay-shell-surface (liquid-glass forces `transparent`), and
+        appearance.shellStyle sets borderColor INLINE. A border-color rule
+        here would lose to both — dead CSS, exactly the failure mode
+        documented for PR #499 in the cursor lock above.
+     2. The card is border-box with its width bound to the live `shellWidth`
+        motion value, so changing border-WIDTH would shrink the content box
+        and perturb text re-wrap on every frame of the 600↔732 spring.
+     3. The controlled-resize floors are MEASURED from offsetHeight. Outline
+        is outside the box model entirely and cannot move that number.
+
+   The offset is POSITIVE: the ring paints in the transparent gutter OUTSIDE
+   the card, not over it. That gutter is OVERLAY_PANEL_INSET (6px), applied as
+   padding on the overlay's contentRef — the element whose offsetHeight is sent
+   to the main process as the window height. It had to be created for this:
+   before it, the card was flush to the window on both axes (measured live at
+   y=0, h=153.625 in a 154px window), so a positive offset was clipped away
+   entirely on the vertical axis, and on the horizontal one survived only while
+   the panel sat narrower than its window. Both facts were established by
+   pixel-sampling a forced outward ring, not by reading the rules.
+
+   3px offset + 2px width = 5px, which fits inside the 6px gutter with a pixel
+   to spare. Raising either past 6 silently clips again — the failure has no
+   error and no visual warning beyond the ring simply missing an edge, which is
+   why undetectable-ring.check.mjs asserts the gutter exists as well as the
+   offset.
+
+   Scoped to [data-shell-card] alone: the pill and the resize toggle live in
+   their OWN BrowserWindows (OverlayAuxWindows), whose roots never receive the
+   data-undetectable mirror. It rides inside [data-shell-root], which animates
+   to opacity 0 on Cmd+B, so it fades out with the panel rather than leaking.
+
+   The width is a WHOLE 2px, and that is load-bearing. Chromium resolves the
+   USED outline-width per device-pixel-ratio: a specified 1.5px comes back as
+   1.5px on a Retina display but is floored to 1px at DPR 1, where the dashes
+   collapse into a hairline you cannot see (measured live under
+   --force-device-scale-factor=1). DPR 1 is the DEFAULT on most Windows
+   displays, so the first draft would have shipped an invisible indicator to
+   most Windows users while looking correct on the Mac it was written on. An
+   integer width resolves identically at every scale. The width also sets the
+   DASH geometry — Chromium derives dash length and gap from it — so changing
+   it re-proportions the ring, it does not just thicken it.
+
+   Not a border-STYLE swap, and not an opacity animation on a wrapper: the ring
+   is always present as `2px dashed transparent` and only its COLOUR moves.
+   outline-style is not an animatable property, so the dashes cannot fade in —
+   but outline-color is, and a dashed ring whose colour is transparent is
+   exactly as invisible as no ring at all, at zero layout cost. That is what
+   makes the appear/disappear a smooth fade rather than a cut.
+
+   `transparent` is safe as the off-colour: CSS interpolates colour in
+   PREMULTIPLIED space, so transparent (rgba(0,0,0,0)) → rgba(255,255,255,.55)
+   does not ghost through grey on the way. Verified live by sampling the
+   computed outline-color mid-transition; if that ever changes, the fix is a
+   per-theme off-colour at alpha 0 rather than the keyword.
+
+   Timing is the shell's own vocabulary, asymmetric in the same direction:
+   ENTER is the longer, pure ease-out `cubic-bezier(0.23, 1, 0.32, 1)` used
+   throughout this file, so the moment you are watching decelerates; EXIT is
+   faster with an ease-in so it accelerates away instead of lingering. The two
+   directions are expressed by putting the exit transition on the base rule and
+   overriding it in the [data-undetectable="true"] rule — the standard CSS
+   idiom for direction-dependent timing.
+
+   Only the colour moves. An offset/size travel was tried and dropped: the ring
+   would be animating position inside a parent that is itself running
+   `y: 6 → 0, scale: 0.98 → 1` on Cmd+B, and two small position animations on
+   nested boxes is the tearing class documented in scripts/overlay-motion/README.
+
+   The ring can never leak into a screenshare: it only paints while content
+   protection is on, which is precisely when the window's pixels are excluded
+   from capture.
+
+   Pinned by tests/css/undetectable-ring.check.mjs, which resolves the REAL
+   cascade in Electron across every interface theme — reading the rule is what
+   missed the border !important the first time. */
+[data-shell-card] {
+  outline: 2px dashed transparent;
+  outline-offset: 3px;
+  /* EXIT: faster, ease-in — accelerates away rather than lingering. */
+  transition: outline-color 220ms cubic-bezier(0.32, 0, 0.67, 0);
+}
+
+:root[data-undetectable="true"] [data-shell-card] {
+  outline-color: var(--overlay-undetectable-ring);
+  /* ENTER: longer, pure ease-out — the arrival is the moment being watched. */
+  transition: outline-color 340ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-shell-card],
+  :root[data-undetectable="true"] [data-shell-card] {
+    transition: none;
+  }
+}
+/* @undetectable-ring:end */
 
 /* Restore keyboard focus rings that Tailwind preflight removes */
 *:focus-visible {
@@ -3911,6 +4207,118 @@ html[data-platform="linux"] body {
   transform: translateY(0) scale(0.97) !important;
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+   PRICING CTA — rebuilt on the Liquid Glass material.
+   (src/ui-components/design.md)
+
+   Anchored as `[data-interface-theme] .cta.cta-<tier>` (0,3,0) so it outranks
+   the two per-interface-theme blocks above (0,2,0) on specificity rather than
+   source order — the same pattern the selector pills use. Both interface
+   themes carried identical fills, so one block covers them.
+
+   The old paint was a full-body gloss: white 0.35 at the top, black 0.24 at
+   the bottom, over the tier fill. That gloss was also a contrast problem —
+   lightening the top band by 35% white put white ink at 3.42 / 3.73 / 4.27:1
+   for pro / max / ultra, all UNDER the 4.5:1 AA floor for 13px text. A flat
+   fill with the depth moved into the rim takes the same three to
+   7.95 / 9.73 / 11.74:1. The colours are untouched; only the material moved.
+   ───────────────────────────────────────────────────────────────────────── */
+[data-interface-theme] .natively-api-pricing-cta {
+  position: relative;
+  isolation: isolate;
+}
+
+/* z-index:-1 — the label and its arrow are bare children and cannot be
+   raised, so the rim sits above the fill and behind them. */
+[data-interface-theme] .natively-api-pricing-cta::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  z-index: -1;
+  pointer-events: none;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.40),
+    inset 0 0 0 2px rgba(255, 255, 255, 0.17),
+    inset 0 0 0 3px rgba(255, 255, 255, 0.09);
+  -webkit-mask-image:
+    linear-gradient(180deg, #000 0%, #000 6%, transparent 27%, transparent 73%, #000 94%, #000 100%),
+    linear-gradient(90deg, transparent 4px, rgba(0, 0, 0, 0.82) 14px, #000 34px, #000 calc(100% - 34px), rgba(0, 0, 0, 0.82) calc(100% - 14px), transparent calc(100% - 4px));
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(180deg, #000 0%, #000 6%, transparent 27%, transparent 73%, #000 94%, #000 100%),
+    linear-gradient(90deg, transparent 4px, rgba(0, 0, 0, 0.82) 14px, #000 34px, #000 calc(100% - 34px), rgba(0, 0, 0, 0.82) calc(100% - 14px), transparent calc(100% - 4px));
+  mask-composite: intersect;
+}
+
+[data-interface-theme] .natively-api-pricing-cta.natively-api-pricing-cta-pro {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.08) 0%, rgba(255,255,255,0) 14%,
+                            rgba(255,255,255,0) 86%, rgba(255,255,255,.08) 100%),
+    #12538c !important;
+  box-shadow: 0 6px 18px rgba(17, 89, 153, 0.34) !important;
+}
+[data-interface-theme] .natively-api-pricing-cta.natively-api-pricing-cta-max {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.08) 0%, rgba(255,255,255,0) 14%,
+                            rgba(255,255,255,0) 86%, rgba(255,255,255,.08) 100%),
+    #5d365f !important;
+  box-shadow: 0 6px 18px rgba(93, 54, 95, 0.34) !important;
+}
+[data-interface-theme] .natively-api-pricing-cta.natively-api-pricing-cta-ultra {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.08) 0%, rgba(255,255,255,0) 14%,
+                            rgba(255,255,255,0) 86%, rgba(255,255,255,.08) 100%),
+    #61213b !important;
+  box-shadow: 0 6px 18px rgba(97, 33, 59, 0.34) !important;
+}
+
+/* NEUTRAL is a light body, so the model inverts exactly as .lg-sky does: the
+   specular stays on the top face, the underside darkens, and a contact shadow
+   does the work a bottom rim cannot do on a fill this bright. */
+[data-interface-theme] .natively-api-pricing-cta.natively-api-pricing-cta-neutral {
+  background: #f8fafc !important;
+  box-shadow:
+    inset 0 -1px 0 rgba(15, 23, 42, 0.16),
+    0 4px 12px rgba(0, 0, 0, 0.15) !important;
+}
+[data-interface-theme] .natively-api-pricing-cta.natively-api-pricing-cta-neutral::before {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.95),
+    inset 0 0 0 2px rgba(255, 255, 255, 0.45);
+  -webkit-mask-image:
+    linear-gradient(180deg, #000 0%, #000 6%, transparent 30%, transparent 100%),
+    linear-gradient(90deg, transparent 4px, rgba(0, 0, 0, 0.82) 14px, #000 34px, #000 calc(100% - 34px), rgba(0, 0, 0, 0.82) calc(100% - 14px), transparent calc(100% - 4px));
+  mask-image:
+    linear-gradient(180deg, #000 0%, #000 6%, transparent 30%, transparent 100%),
+    linear-gradient(90deg, transparent 4px, rgba(0, 0, 0, 0.82) 14px, #000 34px, #000 calc(100% - 34px), rgba(0, 0, 0, 0.82) calc(100% - 14px), transparent calc(100% - 4px));
+}
+
+/* Hover keeps each tier's existing destination colour and its lift; only the
+   body gradient it used to carry is gone. */
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme] .natively-api-pricing-cta:hover { transform: translateY(-1px) !important; }
+  [data-interface-theme] .natively-api-pricing-cta.natively-api-pricing-cta-pro:hover {
+    background-color: #1D4959 !important;
+    box-shadow: 0 10px 22px rgba(36, 94, 114, 0.50) !important;
+  }
+  [data-interface-theme] .natively-api-pricing-cta.natively-api-pricing-cta-max:hover {
+    background-color: #123B4A !important;
+    box-shadow: 0 10px 22px rgba(18, 59, 74, 0.50) !important;
+  }
+  [data-interface-theme] .natively-api-pricing-cta.natively-api-pricing-cta-ultra:hover {
+    background-color: #0A303E !important;
+    box-shadow: 0 10px 22px rgba(10, 48, 62, 0.50) !important;
+  }
+  [data-interface-theme] .natively-api-pricing-cta.natively-api-pricing-cta-neutral:hover {
+    background-color: #eef2f6 !important;
+    box-shadow:
+      inset 0 -1px 0 rgba(15, 23, 42, 0.18),
+      0 6px 16px rgba(0, 0, 0, 0.20) !important;
+  }
+}
+
+
 /* Premium micro-pills (Modern) */
 [data-interface-theme="modern"] .natively-api-pricing-badge {
   display: inline-flex;
@@ -4151,7 +4559,7 @@ html[data-platform="linux"] body {
    │ changes this card's outline is [data-active="true"].                    │
    └─────────────────────────────────────────────────────────────────────────┘ */
 [data-interface-theme] .natively-api-detail-card-standard {
-  background: linear-gradient(180deg, #325957 0%, #3C6B69 100%) !important;
+  background: #376260 !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.16),
     inset 0 -3px 8px rgba(0, 0, 0, 0.28),
@@ -4163,7 +4571,7 @@ html[data-platform="linux"] body {
 }
 
 [data-interface-theme] .natively-api-detail-card-pro {
-  background: linear-gradient(180deg, #0E487C 0%, #115999 100%) !important;
+  background: #10508a !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.17),
     inset 0 -3px 8px rgba(0, 0, 0, 0.28),
@@ -4172,7 +4580,7 @@ html[data-platform="linux"] body {
 }
 
 [data-interface-theme] .natively-api-detail-card-max {
-  background: linear-gradient(180deg, #512F52 0%, #663C68 100%) !important;
+  background: #5c365d !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.18),
     inset 0 -3px 8px rgba(0, 0, 0, 0.28),
@@ -4181,7 +4589,7 @@ html[data-platform="linux"] body {
 }
 
 [data-interface-theme] .natively-api-detail-card-ultra {
-  background: linear-gradient(180deg, #551C33 0%, #6F2542 100%) !important;
+  background: #62203a !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.20),
     inset 0 -3px 8px rgba(0, 0, 0, 0.28),
@@ -4195,7 +4603,7 @@ html[data-platform="linux"] body {
    so #10162b at the dim-ink 0.72 alpha still clears 4.5 on the deepest tier
    (that caps Ultra at about L* 70; it sits at 73). */
 [data-theme='light'] [data-interface-theme] .natively-api-detail-card-standard {
-  background: linear-gradient(180deg, #DEF0EF 0%, #CAE7E6 100%) !important;
+  background: #d4ecea !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.55),
     inset 0 -2.5px 6px rgba(0, 0, 0, 0.04),
@@ -4204,7 +4612,7 @@ html[data-platform="linux"] body {
 }
 
 [data-theme='light'] [data-interface-theme] .natively-api-detail-card-pro {
-  background: linear-gradient(180deg, #C4E2FD 0%, #ACD7FC 100%) !important;
+  background: #b8dcfc !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.60),
     inset 0 -2.5px 6px rgba(0, 0, 0, 0.04),
@@ -4213,7 +4621,7 @@ html[data-platform="linux"] body {
 }
 
 [data-theme='light'] [data-interface-theme] .natively-api-detail-card-max {
-  background: linear-gradient(180deg, #DFCAE0 0%, #D5BAD6 100%) !important;
+  background: #dac2db !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.65),
     inset 0 -2.5px 6px rgba(0, 0, 0, 0.04),
@@ -4222,7 +4630,7 @@ html[data-platform="linux"] body {
 }
 
 [data-theme='light'] [data-interface-theme] .natively-api-detail-card-ultra {
-  background: linear-gradient(180deg, #DEB8C7 0%, #D6A7BA 100%) !important;
+  background: #dab0c0 !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.70),
     inset 0 -2.5px 6px rgba(0, 0, 0, 0.04),
@@ -4265,16 +4673,47 @@ html[data-platform="linux"] body {
   color: #10162b !important;
 }
 
+/* The badge is the one control-sized pill left on the card, so it takes the
+   same rim the CTAs do: the uniform 1px border is replaced by a specular that
+   sits on the top and bottom faces and dies away across the caps. At 18px tall
+   that is a single hairline ring — three would swallow it, exactly as on
+   .lg-sm. The fill is unchanged, so the white label's contrast is too. */
 [data-interface-theme] .natively-api-detail-card .natively-api-fill-pill {
+  position: relative;
+  isolation: isolate;
   background: rgba(255, 255, 255, 0.13) !important;
-  border: 1px solid rgba(255, 255, 255, 0.36) !important;
+  border: 1px solid transparent !important;
   color: #ffffff !important;
+}
+
+[data-interface-theme] .natively-api-detail-card .natively-api-fill-pill::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  z-index: -1;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.52);
+  -webkit-mask-image:
+    linear-gradient(180deg, #000 0%, #000 12%, transparent 40%, transparent 60%, #000 88%, #000 100%),
+    linear-gradient(90deg, transparent 1px, rgba(0, 0, 0, 0.82) 4px, #000 10px, #000 calc(100% - 10px), rgba(0, 0, 0, 0.82) calc(100% - 4px), transparent calc(100% - 1px));
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(180deg, #000 0%, #000 12%, transparent 40%, transparent 60%, #000 88%, #000 100%),
+    linear-gradient(90deg, transparent 1px, rgba(0, 0, 0, 0.82) 4px, #000 10px, #000 calc(100% - 10px), rgba(0, 0, 0, 0.82) calc(100% - 4px), transparent calc(100% - 1px));
+  mask-composite: intersect;
 }
 
 [data-theme='light'] [data-interface-theme] .natively-api-detail-card .natively-api-fill-pill {
   background: rgba(16, 22, 43, 0.10) !important;
-  border: 1px solid rgba(16, 22, 43, 0.18) !important;
+  border: 1px solid transparent !important;
   color: #10162b !important;
+}
+
+/* on a pale card the badge is a light body, so the rim inverts: the edge that
+   reads is the shadowed one, not a specular that would vanish into the fill */
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card .natively-api-fill-pill::before {
+  box-shadow: inset 0 0 0 1px rgba(16, 22, 43, 0.30);
 }
 
 [data-interface-theme] .natively-api-detail-card .natively-api-body-rule {
@@ -4358,10 +4797,9 @@ html[data-platform="linux"] body {
    instantly in a side-by-side comparison. It is also the highest-contrast
    thing on the card after the CTA (17.92:1 in both themes).
 
-   The CTA keeps the shared white / near-black fill — flipping its colour would
-   be a colour signal — and gains a soft outer ring in the ink's own colour, so
-   it sits a little more forward than the identical button on the other three
-   tiers without becoming a different button.
+   The CTA is left exactly as the other three tiers draw it. It briefly gained
+   a soft outer ring here to sit "a little more forward"; that ring is removed
+   (see below), so the badge carries the signal alone.
 
    ORDER, NOT SPECIFICITY, DECIDES THE DARK RULES. Each is (0,3,0), the same as
    the tier-agnostic rule it overrides, and both carry `!important`; they win
@@ -4384,12 +4822,16 @@ html[data-platform="linux"] body {
   box-shadow: 0 1px 4px rgba(16, 22, 43, 0.18) !important;
 }
 
-[data-interface-theme] .natively-api-detail-card-pro .natively-api-pricing-cta {
-  box-shadow:
-    inset 0 -1px 0 rgba(16, 22, 43, 0.10),
-    0 0 0 3px rgba(255, 255, 255, 0.16),
-    0 4px 14px rgba(0, 0, 0, 0.26) !important;
-}
+/* Pro's CTA ring is GONE — it was `0 0 0 3px`, spread-only, which the note
+   below described as "visually indistinguishable from a border". It was the
+   last hard uniform ring on this screen after the card, the badges and the
+   switcher pill moved to masked rims, and it sat on the most prominent
+   control, so it stopped reading as emphasis and started reading as an
+   artefact. "Recommended" is now carried entirely by the opaque badge above —
+   the highest-contrast small element on the card at 17.92:1, and the only
+   fully committed one on any tier. Pro's CTA is deliberately pixel-identical
+   to the other three now; the tier-agnostic rule above is the whole
+   treatment. */
 
 /* ENTER half for the CTA. `transition` only, so it never competes with any
    tier's box-shadow values. */
@@ -4401,41 +4843,8 @@ html[data-platform="linux"] body {
   }
 }
 
-/* THE RING IS FROZEN, for the same reason the card's rim is.
-   `0 0 0 Npx` is spread-only: it has no offset and no blur, so it paints a
-   hard-edged ring that is visually indistinguishable from a border. This one
-   grew 3px -> 4px AND brightened 0.16 -> 0.22 on hover, i.e. an animated
-   border-width plus an animated border-colour, on a white pill sitting on a
-   saturated blue field — the highest-contrast edge event in the panel. It only
-   exists on `-pro`, the tier selected by default, so it is on screen the
-   instant the section opens. Freezing the card's outline while leaving this
-   animating is why "border highlighting" survived that fix.
-   Hover now lives entirely in the ambient shadow (slot 3). */
-@media (hover: hover) and (pointer: fine) {
-  [data-interface-theme] .natively-api-detail-card-pro .natively-api-pricing-cta:hover {
-    box-shadow:
-      inset 0 -1px 0 rgba(16, 22, 43, 0.10),
-      0 0 0 3px rgba(255, 255, 255, 0.16),
-      0 8px 22px rgba(0, 0, 0, 0.32) !important;
-  }
-}
 
-[data-theme='light'] [data-interface-theme] .natively-api-detail-card-pro .natively-api-pricing-cta {
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    0 0 0 3px rgba(16, 22, 43, 0.14),
-    0 4px 14px rgba(0, 0, 0, 0.20) !important;
-}
 
-@media (hover: hover) and (pointer: fine) {
-  /* Ring frozen — see the dark rule above. */
-  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-pro .natively-api-pricing-cta:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.14),
-      0 0 0 3px rgba(16, 22, 43, 0.14),
-      0 8px 22px rgba(0, 0, 0, 0.26) !important;
-  }
-}
 
 /* The gloss veil and blueprint grid both read as film over a committed colour
    surface. Suppressed in both themes (light restyles ::after further down the
@@ -4448,6 +4857,45 @@ html[data-platform="linux"] body {
 [data-theme='light'] [data-interface-theme] .natively-api-detail-card::before {
   opacity: 0 !important;
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   CARD BODY — Liquid Glass. (src/ui-components/design.md)
+
+   Two changes. The 24px crosshatch ::after used to lay over the whole surface
+   is gone — this material's depth IS the rim, and a texture grid fights it.
+   That frees ::after to BE the rim.
+
+   The fill is each gradient's midpoint, so the tier ladder keeps its spacing
+   and white text gains contrast rather than losing any: 6.82 / 8.28 / 9.81 /
+   11.75 against a previous worst case of 6.00 / 7.21 / 8.71 / 10.40.
+
+   The rim is deliberately quieter than a button's — one hairline ring, not
+   three. On a 640px surface a control-weight specular reads as "press me" and
+   would compete with the CTA the card contains.
+   ───────────────────────────────────────────────────────────────────────── */
+[data-interface-theme] .natively-api-detail-card::after,
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card::after {
+  background-image: none !important;
+  background-color: transparent !important;
+  opacity: 1 !important;
+  border-radius: inherit !important;
+  pointer-events: none !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22) !important;
+  -webkit-mask-image:
+    linear-gradient(180deg, #000 0%, #000 2%, transparent 13%, transparent 87%, #000 98%, #000 100%),
+    linear-gradient(90deg, transparent 6px, rgba(0, 0, 0, 0.82) 22px, #000 70px, #000 calc(100% - 70px), rgba(0, 0, 0, 0.82) calc(100% - 22px), transparent calc(100% - 6px)) !important;
+  -webkit-mask-composite: source-in !important;
+  mask-image:
+    linear-gradient(180deg, #000 0%, #000 2%, transparent 13%, transparent 87%, #000 98%, #000 100%),
+    linear-gradient(90deg, transparent 6px, rgba(0, 0, 0, 0.82) 22px, #000 70px, #000 calc(100% - 70px), rgba(0, 0, 0, 0.82) calc(100% - 22px), transparent calc(100% - 6px)) !important;
+  mask-composite: intersect !important;
+}
+
+/* a pale card is a light body: the edge that reads is the shadowed one */
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card::after {
+  box-shadow: inset 0 0 0 1px rgba(16, 22, 43, 0.16) !important;
+}
+
 
 /* Layout Stabilization — Enforce Identical Sizing for All Plans.
    The card can't size to its content: the AnimatePresence child that holds the
@@ -6423,8 +6871,11 @@ html[data-platform="linux"] body {
 
      Ref A — iridescent holographic mesh header band + huge price + solid
              black pill CTA                        → .plan-tier-* below
-     Ref B — soft blurred colour bleeding in from the card edges, no hard
-             gradient block                        → .trial-bleed-card
+     Ref B — soft blurred colour bleeding in from the card edges — built as
+             .trial-bleed-card for the active-trial box and REMOVED with it:
+             that box now wears .natively-key-card, the same plaque as the
+             key card and the offer card it sits between. Ref B's haze was
+             the only weather in that column and read as a foreign part.
      Ref C — saturated periwinkle fill / frosted smoky glass, strikethrough
              pricing, circular icon badges         → .pro-license-*
 
@@ -6691,33 +7142,6 @@ html[data-platform="linux"] body {
   color: #10162e;
 }
 
-/* ── Ref B: soft colour bleed card (trial) ──────────────────────────── */
-.trial-bleed-card {
-  position: relative;
-  border-radius: 22px;
-  overflow: hidden;
-  background: var(--bg-item-surface);
-  border: 1px solid var(--border-subtle);
-}
-/* Diffuse cool haze at the top edge and warm amber haze at bottom-middle,
-   bleeding into the card surface — light behind frosted glass, per Ref B.
-   No hard gradient block. */
-.trial-bleed-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(90% 55% at 22% -8%, rgba(96, 165, 250, 0.32) 0%, rgba(96, 165, 250, 0) 70%),
-    radial-gradient(80% 55% at 62% 112%, rgba(251, 146, 60, 0.28) 0%, rgba(251, 146, 60, 0) 70%);
-  filter: blur(6px);
-}
-[data-theme='light'] .trial-bleed-card::before {
-  background:
-    radial-gradient(90% 55% at 22% -8%, rgba(59, 130, 246, 0.2) 0%, rgba(59, 130, 246, 0) 70%),
-    radial-gradient(80% 55% at 62% 112%, rgba(249, 115, 22, 0.16) 0%, rgba(249, 115, 22, 0) 70%);
-}
-.trial-bleed-content { position: relative; z-index: 1; }
 
 /* ── Reduced motion ─────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
@@ -6800,68 +7224,121 @@ html[data-platform="linux"] body {
    tier left, which is why the old `[data-selected-tier="pro"]` dark-ink
    override that used to sit further down is gone. */
 [data-interface-theme] .natively-api-selector-bar .natively-api-selector-pill-standard {
-  background: linear-gradient(180deg, #2D504F 0%, #376260 100%) !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.16),
-    0 1px 2px rgba(0, 0, 0, 0.35) !important;
+  background:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0) 15%,
+      rgba(255, 255, 255, 0) 85%, rgba(255, 255, 255, 0.07) 100%),
+    #325958 !important;
+  border: 1px solid transparent !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35) !important;
 }
 
 [data-interface-theme] .natively-api-selector-bar .natively-api-selector-pill-pro {
-  background: linear-gradient(180deg, #0C416F 0%, #0F518A 100%) !important;
-  border: 1px solid rgba(255, 255, 255, 0.09) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.17),
-    0 1px 2px rgba(0, 0, 0, 0.35) !important;
+  background:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0) 15%,
+      rgba(255, 255, 255, 0) 85%, rgba(255, 255, 255, 0.07) 100%),
+    #0e497c !important;
+  border: 1px solid transparent !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35) !important;
 }
 
 [data-interface-theme] .natively-api-selector-bar .natively-api-selector-pill-max {
-  background: linear-gradient(180deg, #472948 0%, #5C365D 100%) !important;
-  border: 1px solid rgba(255, 255, 255, 0.10) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 1px 2px rgba(0, 0, 0, 0.35) !important;
+  background:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0) 15%,
+      rgba(255, 255, 255, 0) 85%, rgba(255, 255, 255, 0.07) 100%),
+    #523052 !important;
+  border: 1px solid transparent !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35) !important;
 }
 
 [data-interface-theme] .natively-api-selector-bar .natively-api-selector-pill-ultra {
-  background: linear-gradient(180deg, #48182B 0%, #62213B 100%) !important;
-  border: 1px solid rgba(255, 255, 255, 0.11) !important;
+  background:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0) 15%,
+      rgba(255, 255, 255, 0) 85%, rgba(255, 255, 255, 0.07) 100%),
+    #551c33 !important;
+  border: 1px solid transparent !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35) !important;
+}
+
+/* The rim, shared by all four tiers — the Liquid Glass construction from
+   src/ui-components/design.md. The pills used to be two-stop gradients; they
+   are now a FLAT fill with the depth carried entirely by a graduated rim,
+   masked so it sits on the top and bottom faces and dies away across the
+   corners. The fill is each gradient's own midpoint, which keeps the ladder's
+   5 L* spacing intact and RAISES the measured white-ink contrast on every
+   tier (7.76 / 9.28 / 11.03 / 13.12 against the documented worst-case
+   6.83 / 7.95 / 9.68 / 11.70), because there is no longer a lighter bottom
+   stop to be the worst case. */
+[data-interface-theme] .natively-api-selector-bar .natively-api-selector-pill {
+  position: relative;
+  isolation: isolate;
+}
+[data-interface-theme] .natively-api-selector-bar .natively-api-selector-pill::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.20),
-    0 1px 2px rgba(0, 0, 0, 0.35) !important;
+    inset 0 0 0 1px rgba(255, 255, 255, 0.20),
+    inset 0 0 0 2px rgba(255, 255, 255, 0.09);
+  -webkit-mask-image:
+    linear-gradient(180deg, #000 0%, #000 7%, transparent 30%, transparent 70%, #000 93%, #000 100%),
+    linear-gradient(90deg, transparent 2px, rgba(0, 0, 0, 0.82) 9px, #000 22px, #000 calc(100% - 22px), rgba(0, 0, 0, 0.82) calc(100% - 9px), transparent calc(100% - 2px));
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(180deg, #000 0%, #000 7%, transparent 30%, transparent 70%, #000 93%, #000 100%),
+    linear-gradient(90deg, transparent 2px, rgba(0, 0, 0, 0.82) 9px, #000 22px, #000 calc(100% - 22px), rgba(0, 0, 0, 0.82) calc(100% - 9px), transparent calc(100% - 2px));
+  mask-composite: intersect;
+}
+[data-theme='light'] [data-interface-theme] .natively-api-selector-bar .natively-api-selector-pill::before {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.70),
+    inset 0 0 0 2px rgba(255, 255, 255, 0.30);
 }
 
 /* ── Pill: light theme (card fill, unchanged) ────────────────────────── */
 [data-theme='light'] [data-interface-theme] .natively-api-selector-bar .natively-api-selector-pill-standard {
-  background: linear-gradient(180deg, #DEF0EF 0%, #CAE7E6 100%) !important;
-  border: 1px solid rgba(16, 22, 43, 0.08) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.55),
-    0 1px 2px rgba(15, 23, 42, 0.10) !important;
+  background:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0) 15%,
+      rgba(255, 255, 255, 0) 85%, rgba(255, 255, 255, 0.22) 100%),
+    #d4ecea !important;
+  border: 1px solid transparent !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.10) !important;
 }
 
 [data-theme='light'] [data-interface-theme] .natively-api-selector-bar .natively-api-selector-pill-pro {
-  background: linear-gradient(180deg, #C4E2FD 0%, #ACD7FC 100%) !important;
-  border: 1px solid rgba(16, 22, 43, 0.09) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.60),
-    0 1px 2px rgba(15, 23, 42, 0.10) !important;
+  background:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0) 15%,
+      rgba(255, 255, 255, 0) 85%, rgba(255, 255, 255, 0.22) 100%),
+    #b8dcfc !important;
+  border: 1px solid transparent !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.10) !important;
 }
 
 [data-theme='light'] [data-interface-theme] .natively-api-selector-bar .natively-api-selector-pill-max {
-  background: linear-gradient(180deg, #DFCAE0 0%, #D5BAD6 100%) !important;
-  border: 1px solid rgba(16, 22, 43, 0.10) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.65),
-    0 1px 2px rgba(15, 23, 42, 0.10) !important;
+  background:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0) 15%,
+      rgba(255, 255, 255, 0) 85%, rgba(255, 255, 255, 0.22) 100%),
+    #dac2db !important;
+  border: 1px solid transparent !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.10) !important;
 }
 
 [data-theme='light'] [data-interface-theme] .natively-api-selector-bar .natively-api-selector-pill-ultra {
-  background: linear-gradient(180deg, #DEB8C7 0%, #D6A7BA 100%) !important;
-  border: 1px solid rgba(16, 22, 43, 0.11) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.70),
-    0 1px 2px rgba(15, 23, 42, 0.10) !important;
+  background:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0) 15%,
+      rgba(255, 255, 255, 0) 85%, rgba(255, 255, 255, 0.22) 100%),
+    #dab0c0 !important;
+  border: 1px solid transparent !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.10) !important;
 }
 
 /* ── Ink on the tabs ─────────────────────────────────────────────────────
@@ -7508,10 +7985,28 @@ html[data-platform="linux"] body {
    periwinkle instead: same family as the surface it sits on, at full
    saturation while the surface stays tinted, so it wins without a fight.
 
-   Two luminances of one hue, inverted per theme, exactly as the tier cards
-   do it: on the DARK plaque the button is the brighter thing (#5C65DB); on
-   the pale LIGHT plaque it is the darker thing (#454FB8, the tier Pro fill's
-   own top stop). Both carry white ink above AA.
+   One hue, two materials, one per theme — the same split the tier cards
+   make. On the DARK plaque the button is the brighter thing: a solid
+   saturated #5C65DB body carrying white ink.
+
+   LIGHT does NOT simply take a darker step of that body. It used to (#454FB8,
+   the tier Pro fill's own top stop) and the result was a navy slab — the
+   heaviest object on a pale card, reading as a modal's confirm button rather
+   than as this card's action. Light now does what the light TIER CARDS do
+   (see `[data-theme='light'] .natively-api-detail-card-pro`): a LIGHTER step
+   of the same hue, a tinted edge, and deep indigo ink. Per the
+   light-body inversion in src/ui-components/design.md, a light body moves the
+   specular onto the TOP face only, darkens the underside, and hands the
+   bottom rim's job to a contact shadow.
+   How light was picked off a rendered ladder, not reasoned: a near-white tint
+   (#F6F7FF → #DFE2F9) was rejected as too light, and the #BFC5F7 → #9EA6EE
+   body below is the step chosen. One step deeper (#8C93EA → #737BE2) is where
+   white ink would start to look right, and it measures only 3.07:1 — so the
+   ink stays dark.
+   Ink is #1F2678. Figures are composited pixels sampled in Electron
+   (capturePage, device scale 2), not stops read off the declaration: the 13px
+   label's band measures 6.05:1 at its darkest at rest and 5.23:1 on hover,
+   both over the 4.5:1 floor.
 
    `data-state` mirrors the four states the button already had (idle / ready /
    saving / done) — it is derived from the existing booleans in the JSX and
@@ -7534,62 +8029,139 @@ html[data-platform="linux"] body {
    fill colour instead of a washed-out white blend, which is exactly where
    white-on-periwinkle quietly drops under 4.5:1. The darkening gradient
    starts at 55% for the same reason — below the label, not through it. */
+/* Rebuilt on the Liquid Glass material (see src/ui-components/design.md).
+   Same periwinkle, same white ink, same five states — only the depth model
+   changes: a FLAT fill with the specular confined to a thin rim, instead of a
+   body gradient. The old inset pair was already edge-local for the contrast
+   reason documented above; this takes the idea further, giving the rim a
+   graduated falloff and masking it so it sits on the top and bottom faces and
+   dies away across the caps, which is what stops a pill reading as a capsule.
+   The label band is untouched by any of it, so the measured white-on-#5C65DB
+   contrast is unchanged. */
 .natively-key-cta[data-state='ready'] {
+  position: relative;
+  isolation: isolate;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0) 55%, rgba(0, 0, 0, 0.16) 100%),
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.085) 0%, rgba(255, 255, 255, 0) 13%,
+      rgba(255, 255, 255, 0) 87%, rgba(255, 255, 255, 0.085) 100%),
     #5C65DB !important;
   color: #FFFFFF !important;
-  border-color: rgba(255, 255, 255, 0.22) !important;
+  border-color: transparent !important;
+  box-shadow: 0 4px 14px rgba(69, 79, 184, 0.42) !important;
+}
+
+/* z-index:-1 keeps the rim above the fill but behind the button's own text,
+   which is a bare child here and cannot be raised the way the component's
+   content span is. */
+.natively-key-cta[data-state='ready']::before,
+.natively-key-cta[data-state='done']::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  z-index: -1;
+  pointer-events: none;
   box-shadow:
-    inset 0 2px 3px rgba(255, 255, 255, 0.42),
-    inset 0 -2px 5px rgba(10, 12, 40, 0.30),
-    0 4px 14px rgba(69, 79, 184, 0.42) !important;
+    inset 0 0 0 1px rgba(236, 238, 255, 0.44),
+    inset 0 0 0 2px rgba(236, 238, 255, 0.19),
+    inset 0 0 0 3px rgba(236, 238, 255, 0.10);
+  -webkit-mask-image:
+    linear-gradient(180deg, #000 0%, #000 6%, transparent 26%, transparent 74%, #000 94%, #000 100%),
+    linear-gradient(90deg, transparent 1.5%, rgba(0, 0, 0, 0.82) 4%, #000 10%, #000 90%, rgba(0, 0, 0, 0.82) 96%, transparent 98.5%);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(180deg, #000 0%, #000 6%, transparent 26%, transparent 74%, #000 94%, #000 100%),
+    linear-gradient(90deg, transparent 1.5%, rgba(0, 0, 0, 0.82) 4%, #000 10%, #000 90%, rgba(0, 0, 0, 0.82) 96%, transparent 98.5%);
+  mask-composite: intersect;
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .natively-key-cta[data-state='ready']:hover {
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0) 55%, rgba(0, 0, 0, 0.10) 100%),
-      #656EE4 !important;
+  /* `secondary` shares this hover paint by SELECTOR rather than by a copy of
+     the declarations — see the SECONDARY block below for what it rests as. */
+  .natively-key-cta[data-state='ready']:hover,
+  .natively-key-cta[data-state='secondary']:hover {
+    background-color: #656EE4 !important;
     transform: translateY(-1px) !important;
-    box-shadow:
-      inset 0 2.5px 3px rgba(255, 255, 255, 0.52),
-      inset 0 -2px 5px rgba(10, 12, 40, 0.28),
-      0 7px 20px rgba(69, 79, 184, 0.55) !important;
+    box-shadow: 0 7px 20px rgba(69, 79, 184, 0.55) !important;
   }
 }
 
-.natively-key-cta[data-state='ready']:active {
-  transform: translateY(0) scale(0.97) !important;
-  box-shadow:
-    inset 0 2px 5px rgba(6, 8, 28, 0.38),
-    0 2px 6px rgba(69, 79, 184, 0.24) !important;
+.natively-key-cta[data-state='ready']:active,
+.natively-key-cta[data-state='secondary']:active {
+  transform: translateZ(var(--lgc-z)) scale(0.985) !important;
+  box-shadow: 0 2px 6px rgba(69, 79, 184, 0.24) !important;
 }
 
-/* Light: the darker end of the same hue, so it is the darkest thing on a pale
-   plaque the way the dark-theme button is the brightest thing on a dark one. */
+/* Light: a LIGHT periwinkle body of the same hue, built the way the light
+   tier cards are — a hue wash from the top, a lighter-to-mid periwinkle
+   body, a tinted 1px edge — with the ink flipped to the deep end of the ramp.
+   Against `idle` (rgba(0,0,0,0.05) with 0.45 grey ink, further down) it wins
+   on colour, not darkness: a clearly periwinkle body, indigo ink, an edge that
+   is the accent at 0.50, and the only coloured contact shadow on the card. */
 [data-theme='light'] .natively-key-cta[data-state='ready'] {
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0) 55%, rgba(0, 0, 0, 0.16) 100%),
-    #454FB8 !important;
-  color: #FFFFFF !important;
-  border-color: rgba(255, 255, 255, 0.26) !important;
+    radial-gradient(circle at 50% 0%, rgba(92, 101, 219, 0.26) 0%, transparent 68%),
+    linear-gradient(180deg, #BFC5F7 0%, #9EA6EE 100%) !important;
+  color: #1F2678 !important;
+  border-color: rgba(69, 79, 184, 0.50) !important;
   box-shadow:
-    inset 0 2px 3px rgba(255, 255, 255, 0.40),
-    inset 0 -2px 5px rgba(10, 12, 40, 0.28),
-    0 4px 14px rgba(69, 79, 184, 0.32) !important;
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.75),
+    inset 0 -2px 5px rgba(69, 79, 184, 0.14),
+    0 4px 14px rgba(69, 79, 184, 0.28) !important;
+}
+
+/* The shared rim above is three near-white rings tuned for the saturated
+   dark-theme body, where they sit top AND bottom; on this lighter body the
+   bottom ring reads as a washed-out lower edge. Scoped to `ready` ONLY: `done` stays the emerald slab in both
+   themes and keeps the shared rim.
+   Top face only, same construction as `.natively-api-pricing-cta-neutral`'s
+   rim: on a light body there is no bounce to pick up underneath, so the
+   bottom half of the vertical mask is dropped and the underside darkening in
+   the rule above does that work instead. */
+[data-theme='light'] .natively-key-cta[data-state='ready']::before {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.70),
+    inset 0 0 0 2px rgba(255, 255, 255, 0.28);
+  -webkit-mask-image:
+    linear-gradient(180deg, #000 0%, #000 6%, transparent 30%, transparent 100%),
+    linear-gradient(90deg, transparent 1.5%, rgba(0, 0, 0, 0.82) 4%, #000 10%, #000 90%, rgba(0, 0, 0, 0.82) 96%, transparent 98.5%);
+  mask-image:
+    linear-gradient(180deg, #000 0%, #000 6%, transparent 30%, transparent 100%),
+    linear-gradient(90deg, transparent 1.5%, rgba(0, 0, 0, 0.82) 4%, #000 10%, #000 90%, rgba(0, 0, 0, 0.82) 96%, transparent 98.5%);
 }
 
 @media (hover: hover) and (pointer: fine) {
+  /* Split from `secondary`, which keeps the deep #3E47AC hover it has always
+     had — it rests as an achromatic ghost and needs the saturated arrival to
+     register at all, while `ready` is already coloured at rest and only has
+     to deepen one step. Restating the WHOLE `background`, not a `background-color`: this
+     body is a fully opaque gradient stack, so a base-colour swap would paint
+     under it and show nothing. */
   [data-theme='light'] .natively-key-cta[data-state='ready']:hover {
     background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0) 55%, rgba(0, 0, 0, 0.10) 100%),
-      #3E47AC !important;
+      radial-gradient(circle at 50% 0%, rgba(92, 101, 219, 0.30) 0%, transparent 70%),
+      linear-gradient(180deg, #B3BAF5 0%, #9099EA 100%) !important;
+    border-color: rgba(69, 79, 184, 0.60) !important;
     box-shadow:
-      inset 0 2.5px 3px rgba(255, 255, 255, 0.48),
-      inset 0 -2px 5px rgba(10, 12, 40, 0.26),
-      0 7px 20px rgba(69, 79, 184, 0.42) !important;
+      inset 0 1.5px 0 rgba(255, 255, 255, 0.80),
+      inset 0 -2px 6px rgba(69, 79, 184, 0.16),
+      0 8px 20px rgba(69, 79, 184, 0.34) !important;
   }
+
+  [data-theme='light'] .natively-key-cta[data-state='secondary']:hover {
+    background-color: #3E47AC !important;
+    box-shadow: 0 7px 20px rgba(69, 79, 184, 0.42) !important;
+  }
+}
+
+/* The active press shares the dark rule's scale, but not its glow — a
+   coloured drop shadow that deep under a pale body reads as a smudge. */
+[data-theme='light'] .natively-key-cta[data-state='ready']:active {
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.75),
+    inset 0 -1px 3px rgba(69, 79, 184, 0.14),
+    0 2px 6px rgba(69, 79, 184, 0.20) !important;
 }
 
 /* IDLE / SAVING — an unpressable control must not be the loudest element on
@@ -7613,6 +8185,41 @@ html[data-platform="linux"] body {
   color: rgba(255, 255, 255, 0.78) !important;
 }
 
+/* SECONDARY — a pressable action that is NOT the primary on its card.
+   ("See your options", on the active-trial card.)
+   At rest it is the same achromatic ghost as `idle`, but with a readable
+   label, because unlike `idle` it can actually be pressed. On hover it takes
+   the READY material outright: same gradient, same lift, same specular inset,
+   same glow. That paint is inherited by adding this state to the `ready:hover`
+   selector lists above rather than by restating the declarations, so the two
+   cannot drift apart the way a copied gradient always eventually does.
+   The colour and edge live here because those hover rules only carry
+   background, transform and box-shadow — `ready` gets its white ink from its
+   own rest rule, which `secondary` deliberately does not share. */
+.natively-key-cta[data-state='secondary'] {
+  background: rgba(255, 255, 255, 0.07) !important;
+  border-color: rgba(255, 255, 255, 0.13) !important;
+  color: rgba(255, 255, 255, 0.86) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07) !important;
+}
+
+[data-theme='light'] .natively-key-cta[data-state='secondary'] {
+  background: rgba(0, 0, 0, 0.05) !important;
+  border-color: rgba(0, 0, 0, 0.14) !important;
+  color: rgba(0, 0, 0, 0.78) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .natively-key-cta[data-state='secondary']:hover {
+    color: #FFFFFF !important;
+    border-color: rgba(255, 255, 255, 0.22) !important;
+  }
+  [data-theme='light'] .natively-key-cta[data-state='secondary']:hover {
+    border-color: rgba(255, 255, 255, 0.26) !important;
+  }
+}
+
 /* DONE — "Saved" / "Pro activated". The SAME jelly clay as `ready` above, just
    in emerald: this is one control changing state, so it should not also change
    material. It used to be a 0.14-alpha frosted chip, which made the moment of
@@ -7623,15 +8230,16 @@ html[data-platform="linux"] body {
    needs no light-theme counterpart — the override that used to sit further
    down was deleted with this change. */
 .natively-key-cta[data-state='done'] {
+  position: relative;
+  isolation: isolate;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0) 55%, rgba(0, 0, 0, 0.16) 100%),
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.075) 0%, rgba(255, 255, 255, 0) 13%,
+      rgba(255, 255, 255, 0) 87%, rgba(255, 255, 255, 0.075) 100%),
     #047857 !important;
   color: #FFFFFF !important;
-  border-color: rgba(255, 255, 255, 0.22) !important;
-  box-shadow:
-    inset 0 2px 3px rgba(255, 255, 255, 0.38),
-    inset 0 -2px 5px rgba(0, 30, 20, 0.30),
-    0 4px 14px rgba(4, 120, 87, 0.40) !important;
+  border-color: transparent !important;
+  box-shadow: 0 4px 14px rgba(4, 120, 87, 0.40) !important;
 }
 
 [data-theme='light'] .natively-key-cta[data-state='idle'],
@@ -8370,4 +8978,1323 @@ html[data-platform="linux"] body {
 
 @media (prefers-reduced-motion: reduce) {
   .t-tabs-pill, .t-tab { transition: none !important; }
+}
+
+/* ── Meeting-notes generation placeholder ─────────────────────────────────────
+   One page, one breath. Every placeholder line shares a single slow, shallow
+   pulse, so the column reads as one surface settling rather than as nineteen
+   rectangles blinking out of step.
+
+   Tailwind's `animate-pulse` swings opacity 1 → 0.5 over 2s; at this density
+   that reads as a blink. 0.62 → 1 over 2.4s is 0.42Hz — calm, and clear of the
+   ~0.2Hz band that provokes motion discomfort. Opacity only: it composites, and
+   it is the one property that can carry this without a repaint. */
+@keyframes mn-skeleton-breathe {
+  0%, 100% { opacity: 0.62; }
+  50%      { opacity: 1; }
+}
+
+.mn-skel {
+  flex-shrink: 0;
+  animation: mn-skeleton-breathe 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Reduced motion does not mean invisible — the placeholder keeps its full
+     legibility, it just stops moving. */
+  .mn-skel { animation: none; opacity: 0.85; }
+}
+
+/* Reduced-motion equivalent of the text reveal below: one short cross-fade on
+   the note instead of a per-word cascade. */
+@keyframes mn-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Meeting-notes text reveal ────────────────────────────────────────────────
+   The note materialises the way a generated answer does on the live surface:
+   the same two keyframes and the same two curves as `.reveal-word` above, so a
+   meeting note and a streamed answer read as one piece of software.
+
+   The UNIT here is a visual line, not a word. Every word still carries its own
+   span — that is how the measurement in MeetingDetails.tsx can see where the
+   text wrapped — but words that landed on the same line are handed the same
+   delay, so a line arrives as a line and the sweep travels down the note.
+
+   It cannot reuse `.reveal-word`. That class is `forwards` with an `opacity: 1`
+   guard because the streaming pacer hands it a NEGATIVE animation-delay — the
+   animation is already mid-flight on the first frame the span exists. Give that
+   class a POSITIVE delay and each word paints fully opaque for the length of its
+   delay and then snaps back to `from { opacity: 0 }` to begin fading: a visible
+   flash-and-restart on every word. `both` holds the from-state through the
+   delay, which is what a cascade needs.
+
+   No `display` change, for the reason the streaming class documents: a transform
+   would need inline-block, which alters line-breaking and can shift text by a
+   pixel as each word settles. Opacity and filter only — `filter` applies to
+   inline elements and costs no layout, and neither property affects layout, so
+   the line grouping can be measured while every unit is still invisible.
+
+   Opacity runs 300ms against the 320ms blur — very nearly together, rather than
+   the 0.56 "presence first, sharpness after" split the streaming reveal uses.
+   That split is right for words materialising under a reader who is ALREADY
+   reading them; here the whole note arrives before reading starts, and holding
+   the two legs together is what makes the sweep read as one continuous gradient
+   instead of a two-stage arrival. 3px is the block-unit radius; a line is a
+   block-sized thing.
+
+   The opacity curve is deliberately NOT the strong `cubic-bezier(0.23, 1, 0.32, 1)`
+   ease-out used elsewhere. That curve is ~75% done at 20% of its duration, so it
+   front-loads almost all of the visible change into the first ~60ms: lengthening
+   the duration under it barely changes how fast the text LOOKS like it appears.
+   `cubic-bezier(0.4, 0, 0.2, 1)` is ~29% at the same point, so the 300ms is
+   actually felt. Blur keeps its own curve — it is not the leg being slowed.
+
+   These are longer than the sub-300ms ceiling for UI motion, deliberately. That
+   ceiling governs feedback to an INPUT, where any delay reads as lag; this is a
+   one-shot arrival of content the reader has not started reading yet, so the
+   nearer bracket is a drawer or sheet (200-500ms). The length is also what widens
+   the band — see the STEP comment in MeetingDetails.tsx — so it is buying
+   seamlessness, not just slowness.
+
+   REVEAL_LINE_FADE_MS tracks the LONGER leg, which is still the 320ms blur.
+   That 320ms MUST stay in step with REVEAL_LINE_FADE_MS in MeetingDetails.tsx:
+   the teardown timer is derived from it, and a timer that fires early snaps the
+   un-revealed tail to full opacity mid-sweep. */
+@keyframes mn-line-opacity {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes mn-line-blur {
+  from { filter: blur(3px); }
+  to   { filter: blur(0); }
+}
+
+.mn-line-cascade {
+  animation-name: mn-line-opacity, mn-line-blur;
+  animation-duration: 300ms, 320ms;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1), cubic-bezier(0.32, 0.72, 0, 1);
+  animation-fill-mode: both, none;
+}
+
+/* Pass one of two. The cadence is measured from real layout, so it cannot exist
+   until the units have been laid out — they are rendered holding this class,
+   measured in a layout effect, then re-rendered with their delays. Both passes
+   happen before the browser paints, so this state is never seen; it exists so
+   that the frame it would have been seen in is blank rather than a fully-opaque
+   note that then restarts as a cascade. */
+.mn-line-hold {
+  opacity: 0;
+}
+
+/* An opacity-only floor under a subtree whose text is wrapped word by word (the
+   markdown overview). Deliberately without blur: it nests over spans that carry
+   their own blur, and two nested filters compound into a much heavier blur than
+   either declares. */
+@keyframes mn-line-guard-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.mn-line-guard {
+  animation: mn-line-guard-in 320ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+/* Reduced motion: the per-word spans are never rendered (the component returns
+   plain strings) and the measurement effect never runs, mirroring how the
+   streaming path skips its own wrapping — hundreds of neutralised spans is the
+   wrong shape. One short opacity fade on the note replaces the whole cascade.
+   The rules below only guard the case where the OS setting changes while a
+   cascade is already in flight. */
+.mn-reveal-reduced {
+  animation: mn-fade-in 200ms ease both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mn-line-cascade,
+  .mn-line-guard { animation: none; }
+  .mn-line-hold { opacity: 1; }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   PRO PLAN CARDS (Yearly / Lifetime) — Liquid Glass.
+   (src/ui-components/design.md)
+
+   These carried the same three things the API detail card did, so they get the
+   same treatment:
+
+     ::after   was the 24px crosshatch. Gone — the depth here is the rim, and
+               a texture grid fights it. ::after becomes the rim.
+     ::before  was a 45%-tall top gloss sitting straight through the price and
+               the plan name. Gone; that band now stays the measured fill.
+     background  the 135deg diagonal flattens to its own midpoint. The radial
+               corner glow STAYS — it is the card's accent, not its body, and
+               it is what tells Yearly from Lifetime at a glance.
+
+   Anchored on [data-interface-theme] (presence) so one block covers both
+   interface themes, matching the pattern used by the selector pills and the
+   pricing CTAs. Declared after them, so it wins the (0,2)/(0,3) ties on order.
+   ───────────────────────────────────────────────────────────────────────── */
+[data-interface-theme] .pricing-card-yearly {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.28) 0%, transparent 60%),
+    rgba(22, 35, 61, 0.575) !important;
+  border: 1px solid transparent !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.20) !important;
+}
+[data-interface-theme] .pricing-card-lifetime {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(139, 92, 246, 0.35) 0%, transparent 60%),
+    rgba(37, 20, 65, 0.575) !important;
+  border: 1px solid transparent !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.20) !important;
+}
+[data-theme='light'] [data-interface-theme] .pricing-card-yearly {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.14) 0%, transparent 60%),
+    rgba(229, 240, 254, 0.875) !important;
+  border: 1px solid transparent !important;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.10) !important;
+}
+[data-theme='light'] [data-interface-theme] .pricing-card-lifetime {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(139, 92, 246, 0.16) 0%, transparent 60%),
+    rgba(241, 238, 254, 0.875) !important;
+  border: 1px solid transparent !important;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.10) !important;
+}
+
+/* the 45% top gloss is what used to wash the price band — retired */
+[data-interface-theme] .pricing-card-yearly::before,
+[data-interface-theme] .pricing-card-lifetime::before {
+  display: none !important;
+}
+
+/* ::after: crosshatch out, rim in. One hairline ring, as on the API detail
+   card — a 28px-radius card is a surface, not a control. */
+[data-interface-theme] .pricing-card-yearly::after,
+[data-interface-theme] .pricing-card-lifetime::after {
+  background-image: none !important;
+  background-color: transparent !important;
+  opacity: 1 !important;
+  border-radius: inherit !important;
+  z-index: 1 !important;
+  pointer-events: none !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.26) !important;
+  -webkit-mask-image:
+    linear-gradient(180deg, #000 0%, #000 2%, transparent 14%, transparent 86%, #000 98%, #000 100%),
+    linear-gradient(90deg, transparent 6px, rgba(0, 0, 0, 0.82) 24px, #000 72px, #000 calc(100% - 72px), rgba(0, 0, 0, 0.82) calc(100% - 24px), transparent calc(100% - 6px)) !important;
+  -webkit-mask-composite: source-in !important;
+  mask-image:
+    linear-gradient(180deg, #000 0%, #000 2%, transparent 14%, transparent 86%, #000 98%, #000 100%),
+    linear-gradient(90deg, transparent 6px, rgba(0, 0, 0, 0.82) 24px, #000 72px, #000 calc(100% - 72px), rgba(0, 0, 0, 0.82) calc(100% - 24px), transparent calc(100% - 6px)) !important;
+  mask-composite: intersect !important;
+}
+[data-theme='light'] [data-interface-theme] .pricing-card-yearly::after,
+[data-theme='light'] [data-interface-theme] .pricing-card-lifetime::after {
+  box-shadow: inset 0 0 0 1px rgba(16, 22, 43, 0.14) !important;
+}
+/* hover used to brighten the grid; it now lifts the rim instead */
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme] .pricing-card-yearly:hover::after,
+  [data-interface-theme] .pricing-card-lifetime:hover::after {
+    opacity: 1 !important;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.40) !important;
+  }
+}
+
+
+/* ═════════════════════════════════════════════════════════════════════════
+   REAL GLASS — translucency, backdrop blur and frosted noise.
+
+   The rim work above came from a reference screenshot of an OPAQUE pill on a
+   flat background, so there was no translucency in it to measure. Flat fill +
+   specular rim is a faithful button, but it is only half of what Liquid Glass
+   is on a large surface: the defining property is that you SEE THROUGH it.
+
+   This reuses the recipe this app already runs on .overlay-shell-surface
+   rather than inventing one — translucent fill, blur + saturate behind it,
+   and the same feTurbulence noise, whose own comment says it "is what gives
+   the panel its ground glass tactile feel".
+
+   That noise is also the honest replacement for the 24px crosshatch removed
+   earlier: the card did want texture, just not a synthetic grid.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+/* ── API tier detail card ─────────────────────────────────────────────── */
+[data-interface-theme] .natively-api-detail-card {
+  backdrop-filter: blur(22px) saturate(165%) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(165%) !important;
+}
+[data-interface-theme] .natively-api-detail-card-standard { background: rgba(55, 98, 96, 0.72) !important; }
+[data-interface-theme] .natively-api-detail-card-pro      { background: rgba(16, 80, 138, 0.72) !important; }
+[data-interface-theme] .natively-api-detail-card-max      { background: rgba(92, 54, 93, 0.72) !important; }
+[data-interface-theme] .natively-api-detail-card-ultra    { background: rgba(98, 32, 58, 0.72) !important; }
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card-standard { background: rgba(212, 236, 234, 0.72) !important; }
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card-pro      { background: rgba(184, 220, 252, 0.72) !important; }
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card-max      { background: rgba(218, 194, 219, 0.72) !important; }
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card-ultra    { background: rgba(218, 176, 192, 0.72) !important; }
+
+/* ── Pro plan cards ───────────────────────────────────────────────────── */
+[data-interface-theme] .pricing-card-yearly,
+[data-interface-theme] .pricing-card-lifetime {
+  backdrop-filter: blur(22px) saturate(165%) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(165%) !important;
+}
+
+/* ── The frosted noise, on the element's own ::before ──────────────────
+   ::after is the rim, so the texture goes on ::before — which the card body
+   block above had already retired. mix-blend-mode: overlay lets it modulate
+   the fill without dominating it. */
+[data-interface-theme] .natively-api-detail-card::before,
+[data-interface-theme] .pricing-card-yearly::before,
+[data-interface-theme] .pricing-card-lifetime::before {
+  content: '' !important;
+  display: block !important;
+  position: absolute !important;
+  inset: 0 !important;
+  height: auto !important;
+  z-index: 0 !important;
+  pointer-events: none !important;
+  border-radius: inherit !important;
+  opacity: 0.30 !important;
+  mix-blend-mode: overlay !important;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.6 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>") !important;
+  background-size: 200px 200px !important;
+}
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card::before,
+[data-theme='light'] [data-interface-theme] .pricing-card-yearly::before,
+[data-theme='light'] [data-interface-theme] .pricing-card-lifetime::before {
+  opacity: 0.16 !important;
+}
+
+
+/* ═════════════════════════════════════════════════════════════════════════
+   Plans & Billing — finishing the Liquid Glass migration
+   (src/ui-components/design.md is the material; this is its adoption here.)
+
+   The block above moved the two Pro cards and the API tier card onto the
+   measured material — flat fill, depth in a masked rim — but it moved only
+   the PAINT. Three things were left behind, and all three were reproduced in
+   Electron against the built stylesheet before anything here was written:
+
+     1. THE GEOMETRY NEVER CAME WITH IT. `border-radius` lives only in the
+        [data-interface-theme="liquid-glass"] and ="modern" blocks, and the
+        shipping default is `default` (src/lib/meetingInterfaceTheme.ts:17),
+        which matches presence-only selectors and neither of those. Measured:
+        every one of these cards renders at `border-radius: 0px` today. The
+        rim work above is drawn on square corners.
+
+     2. THE PRO CARD BUTTONS WERE NEVER MIGRATED, and on the default theme
+        they have no material at all. Measured on .pricing-cta-yearly,
+        .pricing-cta-lifetime and .pro-teaser: `background: rgba(0, 0, 0, 0)`,
+        `box-shadow: none`. Where they DO paint (the two named themes) it is
+        the retired gloss — `inset 0 2px 3px rgba(255,255,255,.9)` over
+        `inset 0 -2.5px 3px` — i.e. light at the top, dark at the bottom,
+        which is the exact construction design.md opens by rejecting.
+        Contrast .natively-api-pricing-cta, which was migrated and is anchored
+        on presence; these three are the half of that job that was missed.
+
+     3. THE LIGHT RIM IS SYMMETRIC WHEN IT MUST NOT BE. The light override on
+        ::after changes `box-shadow` and inherits the dark mask, so the
+        underside stays lit. design.md derives the opposite — on a light
+        ground there is no bounce to catch, the specular stays on the top
+        face, the underside darkens and a contact shadow does the rest — and
+        tests/css/cta-liquid-glass.check.mjs fails a light rim that ends
+        opaque by name.
+
+   ON "MEASURED". Items 1 and 2 are reproductions. Items 3 and the cap fade
+   below are DERIVED, in the sense design.md means when it says light mode was
+   "reasoned through" rather than sampled: the reference is a 1206x410 shot of
+   OPAQUE pills, and there is nothing in it to sample for a 300px translucent
+   card over a blurred backdrop. A slice through one of these measures the
+   backdrop, not the material. No mean-absolute-error claim is made here, and
+   none should be read into it.
+
+   Anchored on [data-interface-theme] presence and declared last, so it wins
+   the (0,2,0)/(0,3,0) ties against the two value-anchored blocks on order —
+   the same mechanism, and the same reason, as the block above.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+/* ── The corner, and the cap fade derived from it ──────────────────────────
+   design.md's cap stops are 4.486% / 11.589% / 26.542% of pill width, which
+   on the 535x136 reference is 24 / 62 / 142px. That pill's cap radius is
+   136/2 = 68px, so the measured stops sit at 0.353 / 0.912 / 2.088 times the
+   radius the specular is dying across. Re-expressing them that way is what
+   lets ONE rule serve a 300px card, a 640px card and a 44px pill: the fade
+   tracks the curve, not the width the surface happens to have.
+
+   They must be LENGTHS. A percentage tuned on one card lands inside the flat
+   top face of a wider one, and the rim then spends its brightest stretch
+   fading across something that is not curved — failure mode 2 in
+   tests/css/cta-liquid-glass.check.mjs, which has already shipped twice in
+   this codebase. Being lengths, they are also width-invariant, so a narrower
+   settings panel cannot re-open it.
+
+   The mirrored halves cannot cross: the widest stop here is 2.088 x 28px =
+   58.5px, against a narrowest surface of ~300px (the Pro cards sit two-up in
+   a ~640px panel). The check asserts this rather than trusting the note. */
+[data-interface-theme] .pricing-card-yearly,
+[data-interface-theme] .pricing-card-lifetime,
+[data-interface-theme] .natively-api-detail-card,
+[data-interface-theme] .pro-teaser,
+[data-interface-theme] .pricing-cta-yearly,
+[data-interface-theme] .pricing-cta-lifetime,
+[data-interface-theme] .pro-teaser .pro-teaser-cta {
+  --lgc-cap-0: calc(var(--lgc-r) * 0.353);
+  --lgc-cap-1: calc(var(--lgc-r) * 0.912);
+  --lgc-cap-2: calc(var(--lgc-r) * 2.088);
+
+  /* Horizontal: let the rim die away across the corners. */
+  --lgc-cap-mask: linear-gradient(90deg,
+      transparent var(--lgc-cap-0),
+      rgba(0, 0, 0, 0.82) var(--lgc-cap-1),
+      #000 var(--lgc-cap-2),
+      #000 calc(100% - var(--lgc-cap-2)),
+      rgba(0, 0, 0, 0.82) calc(100% - var(--lgc-cap-1)),
+      transparent calc(100% - var(--lgc-cap-0)));
+
+  /* Vertical: keep the ring on the top and bottom faces and delete its left
+     and right runs. Held opaque for 2px — the ring is 1px, so 2px is the
+     smallest hold that cannot clip it — then faded out across exactly one
+     corner radius, which is the distance over which the surface normal turns
+     away from the light. Lengths again, for the same reason: a percentage
+     here is a function of HEIGHT, and these surfaces run from a 36px pill to
+     a 220px card. */
+  --lgc-face-mask: linear-gradient(180deg,
+      #000 0, #000 2px,
+      transparent var(--lgc-r),
+      transparent calc(100% - var(--lgc-r)),
+      #000 calc(100% - 2px), #000 100%);
+
+  /* The inverted model: specular on the top face only. Used on a light
+     GROUND (light theme) and on a light BODY (a near-white pill in dark
+     theme, as .lg-sky and .natively-api-pricing-cta-neutral already do).
+     In both cases there is no bounce from below for a bottom rim to be, and
+     lighting the underside anyway is what makes the surface read as grey
+     plastic instead of glass. */
+  --lgc-face-mask-top: linear-gradient(180deg,
+      #000 0, #000 2px,
+      transparent var(--lgc-r),
+      transparent 100%);
+}
+
+/* ── 1. Geometry, moved onto presence ─────────────────────────────────────
+   `overflow: hidden` comes along because the rim, the noise and the corner
+   glow are all `border-radius: inherit` children — an unclipped card leaks
+   all three past the corner it no longer has. */
+[data-interface-theme] .pricing-card-yearly,
+[data-interface-theme] .pricing-card-lifetime {
+  --lgc-r: 28px;
+  border-radius: 28px !important;
+  overflow: hidden !important;
+}
+[data-interface-theme] .natively-api-detail-card {
+  --lgc-r: 26px;
+  border-radius: 26px !important;
+  overflow: hidden !important;
+}
+/* 20px against the cards' 28px. The plaque is deliberately a smaller sibling
+   of the two pricing cards, not a third one — see the block that introduces
+   it above; only its construction changes here, never its rank. */
+[data-interface-theme] .pro-teaser {
+  --lgc-r: 20px;
+  border-radius: 20px !important;
+  overflow: hidden !important;
+}
+
+/* ── 2. The card rim, on the derived stops ────────────────────────────────
+   Same layer (::after), same single hairline ring — a 28px-radius card is a
+   surface, not a control, and design.md's three stacked rings read as a bevel
+   at anything under ~44px. Only the two aiming layers change. */
+[data-interface-theme] .pricing-card-yearly::after,
+[data-interface-theme] .pricing-card-lifetime::after,
+[data-interface-theme] .natively-api-detail-card::after {
+  -webkit-mask-image: var(--lgc-face-mask), var(--lgc-cap-mask) !important;
+  -webkit-mask-composite: source-in !important;
+  mask-image: var(--lgc-face-mask), var(--lgc-cap-mask) !important;
+  mask-composite: intersect !important;
+}
+
+/* Light: the underside stops being lit, and the card gets the contact shadow
+   that does the work the bottom rim used to. design.md, "Light mode is
+   derived, not measured" — only the vertical mask and one box-shadow move;
+   the layer structure is untouched. */
+[data-theme='light'] [data-interface-theme] .pricing-card-yearly::after,
+[data-theme='light'] [data-interface-theme] .pricing-card-lifetime::after,
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card::after {
+  -webkit-mask-image: var(--lgc-face-mask-top), var(--lgc-cap-mask) !important;
+  mask-image: var(--lgc-face-mask-top), var(--lgc-cap-mask) !important;
+}
+[data-theme='light'] [data-interface-theme] .pricing-card-yearly {
+  box-shadow:
+    inset 0 -1px 0 rgba(15, 23, 42, 0.10),
+    0 6px 18px rgba(15, 23, 42, 0.12) !important;
+}
+[data-theme='light'] [data-interface-theme] .pricing-card-lifetime {
+  box-shadow:
+    inset 0 -1px 0 rgba(15, 23, 42, 0.10),
+    0 6px 18px rgba(15, 23, 42, 0.12) !important;
+}
+
+/* ── 3. The purchase buttons ──────────────────────────────────────────────
+   .pricing-cta-yearly, .pricing-cta-lifetime and the .pro-teaser plaque with
+   its pill. Same four-part anatomy as .natively-api-pricing-cta, which is the
+   in-repo precedent at this scale: flat fill, a sheen carrying the rim a few
+   px inward, and the rim itself on ::before under the label.
+
+   ONE hairline ring, not the reference's three. design.md: a 3px rim is 2% of
+   the 136px hero and 9% of a 32px control, "visibly chunky by 44px", which is
+   exactly the height of these two pills — .lg-sm collapses it for this reason
+   and the CTA check fails three rings by name. (.natively-api-pricing-cta
+   still carries three at ~40px. It is already migrated and out of scope here;
+   noted as a follow-up rather than changed under cover of this work.)
+
+   z-index: -1 on ::before because the label and its icon are bare children
+   that cannot be raised — the rim has to sit above the fill and below them,
+   and `isolation: isolate` keeps that -1 inside the button. */
+[data-interface-theme] .pricing-cta-yearly,
+[data-interface-theme] .pricing-cta-lifetime,
+[data-interface-theme] .pro-teaser .pro-teaser-cta {
+  position: relative;
+  isolation: isolate;
+  border: 0 !important;
+  /* The depth the MARKUP already applies. Both card CTAs carry an inline
+     `transform: translateZ(28px)` (NativelyProSettings.tsx:1070, :1165) inside
+     a `preserve-3d` card under `.perspective-1000`, which magnifies them by
+     1000/(1000-28) = 1.0288. An author `!important` transform outranks a
+     style-attribute one, so ANY `transform:` rule below that does not carry
+     the Z silently flattens the button to z=0 — it shrinks ~2.9% and drops out
+     of the card's 3D stack at the exact moment the pointer arrives. Composing
+     it back through a variable is what lets hover, press and reduced-motion
+     each set a transform without knowing about the other one. The fallback is
+     0px, so the teaser's pill — which has no inline Z — is unaffected. */
+  --lgc-z: 0px;
+  /* One clock for the whole state change, and easeInOutSine for design.md's
+     reason: velocity starts AND ends at zero, which is what "smooth" means
+     for a cross-fade with no spatial motion, and it is its own mirror, so
+     leaving traces the same path as arriving. 180ms rather than the hero's
+     300ms to sit on the same clock as the card it lives in. */
+  transition:
+    background-color 180ms cubic-bezier(.37, 0, .63, 1),
+    box-shadow 180ms cubic-bezier(.37, 0, .63, 1),
+    transform 180ms cubic-bezier(.37, 0, .63, 1) !important;
+}
+[data-interface-theme] .pricing-cta-yearly::before,
+[data-interface-theme] .pricing-cta-lifetime::before,
+[data-interface-theme] .pro-teaser .pro-teaser-cta::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  z-index: -1;
+  pointer-events: none;
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+}
+
+/* Yearly — a LIGHT body, so the model inverts exactly as .lg-sky and
+   .natively-api-pricing-cta-neutral do: the specular stays on the top face,
+   the underside darkens, and a contact shadow does what a bottom rim cannot
+   on a fill this bright. Two rings rather than one here only because a white
+   rim on a near-white body is most of the way to invisible at one. */
+[data-interface-theme] .pricing-cta-yearly {
+  --lgc-r: 22px;
+  --lgc-z: 28px;
+  background: #f8fafc !important;
+  color: #0f172a !important;
+  box-shadow:
+    inset 0 -1px 0 rgba(15, 23, 42, 0.16),
+    0 4px 12px rgba(0, 0, 0, 0.15) !important;
+}
+[data-interface-theme] .pricing-cta-yearly::before {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.95),
+    inset 0 0 0 2px rgba(255, 255, 255, 0.45);
+  -webkit-mask-image: var(--lgc-face-mask-top), var(--lgc-cap-mask);
+  mask-image: var(--lgc-face-mask-top), var(--lgc-cap-mask);
+}
+
+/* Lifetime — a dark body on a dark ground, so the rim is symmetric: it
+   catches a bounce from below as well as the key light. The fill is the flat
+   brand violet the old radial ran to; white on it is 6.31:1, clear of the
+   4.5:1 AA floor for 13px text that the gloss it replaces did not meet. */
+[data-interface-theme] .pricing-cta-lifetime {
+  --lgc-r: 22px;
+  --lgc-z: 28px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .08) 0%, rgba(255, 255, 255, 0) 14%,
+                            rgba(255, 255, 255, 0) 86%, rgba(255, 255, 255, .08) 100%),
+    #4f46e5 !important;
+  color: #ffffff !important;
+  box-shadow: 0 6px 18px rgba(79, 70, 229, 0.34) !important;
+}
+[data-interface-theme] .pricing-cta-lifetime::before {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.40);
+  -webkit-mask-image: var(--lgc-face-mask), var(--lgc-cap-mask);
+  mask-image: var(--lgc-face-mask), var(--lgc-cap-mask);
+}
+
+/* The teaser's pill. Light body, 36px tall, so the same inversion as Yearly
+   at its own corner. Its colours are unchanged — the near-black light-mode
+   flip below is a deliberate contrast decision recorded where it was made. */
+[data-interface-theme] .pro-teaser .pro-teaser-cta {
+  --lgc-r: 18px;
+  background: #f8fafc !important;
+  color: #0f172a !important;
+  box-shadow:
+    inset 0 -1px 0 rgba(15, 23, 42, 0.16),
+    0 3px 8px rgba(0, 0, 0, 0.18) !important;
+}
+[data-interface-theme] .pro-teaser .pro-teaser-cta::before {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.95),
+    inset 0 0 0 2px rgba(255, 255, 255, 0.45);
+  -webkit-mask-image: var(--lgc-face-mask-top), var(--lgc-cap-mask);
+  mask-image: var(--lgc-face-mask-top), var(--lgc-cap-mask);
+}
+
+/* ── 4. The teaser plaque itself ──────────────────────────────────────────
+   Built from the Lifetime card's recipe at the plaque's own scale, because
+   that is what it already claimed to be — "the same jelly construction" as
+   the cards, per the block that introduces it. The construction moved; the
+   claim should follow it rather than be left describing a material nothing
+   else on the surface still uses. ::before becomes the frosted noise and
+   ::after the rim, exactly as on the cards. */
+[data-interface-theme] .pro-teaser {
+  background:
+    radial-gradient(circle at 22% 0%, rgba(167, 139, 250, 0.30) 0%, transparent 60%),
+    rgba(37, 20, 65, 0.575) !important;
+  border: 1px solid transparent !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.20) !important;
+  backdrop-filter: blur(22px) saturate(165%) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(165%) !important;
+  transition:
+    box-shadow 180ms cubic-bezier(.37, 0, .63, 1),
+    transform 180ms cubic-bezier(.37, 0, .63, 1) !important;
+}
+/* was a 52%-tall top gloss straight through the title — now the noise */
+[data-interface-theme] .pro-teaser::before {
+  content: '' !important;
+  display: block !important;
+  position: absolute !important;
+  inset: 0 !important;
+  height: auto !important;
+  z-index: 0 !important;
+  pointer-events: none !important;
+  border-radius: inherit !important;
+  background: none !important;
+  opacity: 0.30 !important;
+  mix-blend-mode: overlay !important;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.6 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>") !important;
+  background-size: 200px 200px !important;
+}
+[data-interface-theme] .pro-teaser::after {
+  content: '' !important;
+  display: block !important;
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 1 !important;
+  pointer-events: none !important;
+  border-radius: inherit !important;
+  background: none !important;
+  opacity: 1 !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.26) !important;
+  -webkit-mask-image: var(--lgc-face-mask), var(--lgc-cap-mask) !important;
+  -webkit-mask-composite: source-in !important;
+  mask-image: var(--lgc-face-mask), var(--lgc-cap-mask) !important;
+  mask-composite: intersect !important;
+}
+
+/* ── 5. Light theme ───────────────────────────────────────────────────────
+   Colours are carried over untouched from the rules this supersedes — the
+   near-black Yearly pill in particular is a deliberate contrast decision
+   ("a white pill on the pale ice-blue Yearly card was the lowest-contrast
+   element on the whole surface"), and it is not this change's to revisit.
+   The radials flatten to the solid they ran to, and every rim inverts to the
+   top face, because on a light ground nothing bounces back up. */
+[data-theme='light'] [data-interface-theme] .pricing-cta-yearly {
+  background: #10162b !important;
+  color: #ffffff !important;
+  box-shadow:
+    inset 0 -1px 0 rgba(0, 0, 0, 0.35),
+    0 4px 12px rgba(15, 23, 42, 0.18) !important;
+}
+[data-theme='light'] [data-interface-theme] .pricing-cta-yearly::before {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+  -webkit-mask-image: var(--lgc-face-mask-top), var(--lgc-cap-mask);
+  mask-image: var(--lgc-face-mask-top), var(--lgc-cap-mask);
+}
+[data-theme='light'] [data-interface-theme] .pricing-cta-lifetime {
+  background: #6d28d9 !important;
+  color: #ffffff !important;
+  box-shadow:
+    inset 0 -1px 0 rgba(0, 0, 0, 0.28),
+    0 6px 18px rgba(109, 40, 217, 0.28) !important;
+}
+[data-theme='light'] [data-interface-theme] .pricing-cta-lifetime::before {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.34);
+  -webkit-mask-image: var(--lgc-face-mask-top), var(--lgc-cap-mask);
+  mask-image: var(--lgc-face-mask-top), var(--lgc-cap-mask);
+}
+[data-theme='light'] [data-interface-theme] .pro-teaser .pro-teaser-cta {
+  background: #10162b !important;
+  color: #ffffff !important;
+  box-shadow:
+    inset 0 -1px 0 rgba(0, 0, 0, 0.35),
+    0 3px 8px rgba(15, 23, 42, 0.18) !important;
+}
+[data-theme='light'] [data-interface-theme] .pro-teaser .pro-teaser-cta::before {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+  -webkit-mask-image: var(--lgc-face-mask-top), var(--lgc-cap-mask);
+  mask-image: var(--lgc-face-mask-top), var(--lgc-cap-mask);
+}
+[data-theme='light'] [data-interface-theme] .pro-teaser {
+  background:
+    radial-gradient(circle at 22% 0%, rgba(139, 92, 246, 0.14) 0%, transparent 60%),
+    rgba(241, 238, 254, 0.875) !important;
+  box-shadow:
+    inset 0 -1px 0 rgba(15, 23, 42, 0.10),
+    0 6px 18px rgba(15, 23, 42, 0.12) !important;
+}
+[data-theme='light'] [data-interface-theme] .pro-teaser::before {
+  opacity: 0.16 !important;
+}
+[data-theme='light'] [data-interface-theme] .pro-teaser::after {
+  box-shadow: inset 0 0 0 1px rgba(16, 22, 43, 0.14) !important;
+  -webkit-mask-image: var(--lgc-face-mask-top), var(--lgc-cap-mask) !important;
+  mask-image: var(--lgc-face-mask-top), var(--lgc-cap-mask) !important;
+}
+
+/* ── 6. Hover and press ───────────────────────────────────────────────────
+   The tint gains luminance while HOLDING its hue, so it reads as the same
+   colour lit better rather than a different colour (design.md). Violet
+   243.4° -> 243.6° dark, 263.4° -> 262.1° light; the near-white and
+   near-black bodies are achromatic and have brightness as their only lever.
+   Every destination clears 4.5:1 against its own label.
+
+   Press is design.md's scale(.985) on :active — pointer-DOWN, so the
+   feedback lands on the press rather than the release. */
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme] .pricing-cta-yearly:hover {
+    background-color: #eef2f6 !important;
+    transform: translateZ(var(--lgc-z)) translateY(-1px) !important;
+    box-shadow:
+      inset 0 -1px 0 rgba(15, 23, 42, 0.18),
+      0 6px 16px rgba(0, 0, 0, 0.20) !important;
+  }
+  [data-interface-theme] .pricing-cta-lifetime:hover {
+    background-color: #5b52ea !important;
+    transform: translateZ(var(--lgc-z)) translateY(-1px) !important;
+    box-shadow: 0 10px 22px rgba(79, 70, 229, 0.50) !important;
+  }
+  [data-interface-theme] .pro-teaser:hover .pro-teaser-cta {
+    background-color: #eef2f6 !important;
+    transform: translateZ(var(--lgc-z)) translateY(-1px) !important;
+    box-shadow:
+      inset 0 -1px 0 rgba(15, 23, 42, 0.18),
+      0 5px 14px rgba(0, 0, 0, 0.24) !important;
+  }
+  [data-interface-theme] .pro-teaser:hover {
+    box-shadow: 0 10px 26px rgba(139, 92, 246, 0.18), 0 4px 12px rgba(0, 0, 0, 0.26) !important;
+  }
+  [data-interface-theme] .pro-teaser:hover::after {
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.40) !important;
+  }
+  [data-theme='light'] [data-interface-theme] .pricing-cta-yearly:hover {
+    background-color: #1c2440 !important;
+  }
+  [data-theme='light'] [data-interface-theme] .pricing-cta-lifetime:hover {
+    background-color: #7c3aed !important;
+  }
+  [data-theme='light'] [data-interface-theme] .pro-teaser:hover .pro-teaser-cta {
+    background-color: #1c2440 !important;
+  }
+  [data-theme='light'] [data-interface-theme] .pro-teaser:hover::after {
+    box-shadow: inset 0 0 0 1px rgba(16, 22, 43, 0.22) !important;
+  }
+}
+
+[data-interface-theme] .pricing-cta-yearly:active,
+[data-interface-theme] .pricing-cta-lifetime:active {
+  transform: translateZ(var(--lgc-z)) scale(0.985) !important;
+}
+
+/* Reduced motion means gentler, not absent: the tint still cross-fades — a
+   hue shift is not vestibular — and only the movement is dropped. */
+@media (prefers-reduced-motion: reduce) {
+  [data-interface-theme] .pricing-cta-yearly,
+  [data-interface-theme] .pricing-cta-lifetime,
+  [data-interface-theme] .pro-teaser,
+  [data-interface-theme] .pro-teaser .pro-teaser-cta {
+    transition: background-color 180ms cubic-bezier(.37, 0, .63, 1),
+                box-shadow 180ms cubic-bezier(.37, 0, .63, 1) !important;
+  }
+  [data-interface-theme] .pricing-cta-yearly:hover,
+  [data-interface-theme] .pricing-cta-lifetime:hover,
+  [data-interface-theme] .pro-teaser:hover .pro-teaser-cta,
+  [data-interface-theme] .pricing-cta-yearly:active,
+  [data-interface-theme] .pricing-cta-lifetime:active {
+    transform: translateZ(var(--lgc-z)) !important;
+  }
+}
+
+
+/* ═════════════════════════════════════════════════════════════════════════
+   The API tier card: the hue moves from the border into the rim
+
+   This card was the one pricing surface the block above barely touched, and
+   it showed: measured on the Max tier it carried
+   `border: 1.5px solid rgba(136,77,138,0.42)` (index.css:6458) — a UNIFORM
+   ring around the whole perimeter. design.md names that construction
+   explicitly: "A uniform ring around the perimeter is what makes a pill read
+   as a plastic capsule instead of glass." The correctly-masked hairline rim
+   was already there on ::after; it was simply sitting underneath a solid
+   outline and was invisible against it.
+
+   So the border is retired and its hue is moved onto the rim. Nothing is
+   invented: all sixteen values below are the EXISTING per-tier border colours,
+   carried over verbatim — four tiers x resting/active x dark/light. That
+   preserves the "FOUR HUES ON ONE LUMINANCE LADDER" ladder those values encode
+   (alpha climbing 0.28/0.34/0.40/0.46 with tier weight) rather than re-deriving
+   a ladder that was already tuned. What changes is not the colour, it is
+   WHERE the colour is: a full perimeter becomes a rim that is bright across
+   the top and bottom faces and dies away over the corners.
+
+   `border: 0`, not a transparent border. An absolutely-positioned ::after with
+   `inset: 0` resolves against the PADDING box, so a transparent 1.5px border
+   would hold the rim 1.5px inside the visual edge with a mismatched radius —
+   a visible gap all the way round. Removing the border makes the padding box
+   and the border box the same, so the rim lands exactly on the edge. It also
+   retires a 1.5px length that floors to 1px at DPR 1 (the Windows default).
+   ═════════════════════════════════════════════════════════════════════════ */
+
+[data-interface-theme] .natively-api-detail-card {
+  border: 0 !important;
+}
+
+/* Light: the border was also the card's only perimeter definition, so the
+   contact shadow takes that job over — the same substitution design.md
+   describes for a light ground, where there is no bounce for a bottom rim to
+   catch and the surface sits ON the page rather than floating in it. */
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card {
+  box-shadow:
+    inset 0 -1px 0 rgba(15, 23, 42, 0.10),
+    0 6px 18px rgba(15, 23, 42, 0.12) !important;
+}
+
+
+/* ── The tier hue, now on the rim (dark) ─────────────────────────────── */
+[data-interface-theme] .natively-api-detail-card-standard::after {
+  box-shadow: inset 0 0 0 1px rgba(145, 197, 195, 0.28) !important;
+}
+[data-interface-theme] .natively-api-detail-card-standard[data-active="true"]::after {
+  box-shadow: inset 0 0 0 1px rgba(165, 209, 207, 0.60) !important;
+}
+[data-interface-theme] .natively-api-detail-card-pro::after {
+  box-shadow: inset 0 0 0 1px rgba(140, 193, 239, 0.34) !important;
+}
+[data-interface-theme] .natively-api-detail-card-pro[data-active="true"]::after {
+  box-shadow: inset 0 0 0 1px rgba(151, 199, 241, 0.66) !important;
+}
+[data-interface-theme] .natively-api-detail-card-max::after {
+  box-shadow: inset 0 0 0 1px rgba(196, 165, 197, 0.40) !important;
+}
+[data-interface-theme] .natively-api-detail-card-max[data-active="true"]::after {
+  box-shadow: inset 0 0 0 1px rgba(203, 175, 204, 0.72) !important;
+}
+[data-interface-theme] .natively-api-detail-card-ultra::after {
+  box-shadow: inset 0 0 0 1px rgba(199, 149, 169, 0.46) !important;
+}
+[data-interface-theme] .natively-api-detail-card-ultra[data-active="true"]::after {
+  box-shadow: inset 0 0 0 1px rgba(207, 160, 179, 0.78) !important;
+}
+
+/* ── and light ───────────────────────────────────────────────────────── */
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card-standard::after {
+  box-shadow: inset 0 0 0 1px rgba(85, 147, 145, 0.30) !important;
+}
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card-standard[data-active="true"]::after {
+  box-shadow: inset 0 0 0 1px rgba(71, 109, 108, 0.70) !important;
+}
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card-pro::after {
+  box-shadow: inset 0 0 0 1px rgba(22, 119, 205, 0.36) !important;
+}
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card-pro[data-active="true"]::after {
+  box-shadow: inset 0 0 0 1px rgba(31, 96, 152, 0.75) !important;
+}
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card-max::after {
+  box-shadow: inset 0 0 0 1px rgba(136, 77, 138, 0.42) !important;
+}
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card-max[data-active="true"]::after {
+  box-shadow: inset 0 0 0 1px rgba(105, 65, 106, 0.80) !important;
+}
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card-ultra::after {
+  box-shadow: inset 0 0 0 1px rgba(141, 47, 84, 0.48) !important;
+}
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card-ultra[data-active="true"]::after {
+  box-shadow: inset 0 0 0 1px rgba(108, 40, 67, 0.85) !important;
+}
+
+/* ── The tier CTA: three rings collapse to one ──────────────────────────────
+   design.md sizes the rim to the control: 3px is 2% of the 136px hero and 9%
+   of a 32px button, "visibly chunky by 44px", and `.lg-sm` collapses it to a
+   single hairline for exactly that reason. This pill is 40px, and the three
+   stacked rings read as a raised plastic bezel beside the flat pills on the
+   Pro cards — which is what made the two halves of one screen look like two
+   different products. The outermost ring's alpha is kept as the survivor so
+   the rim does not also get dimmer as it gets thinner. */
+[data-interface-theme] .natively-api-pricing-cta::before {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.40);
+}
+[data-interface-theme] .natively-api-pricing-cta.natively-api-pricing-cta-neutral::before {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.95);
+}
+
+/* ── The plan switcher's buttons ────────────────────────────────────────────
+   Every `.natively-api-selector-tab` rule in this file is anchored on
+   ="liquid-glass" or ="modern". The bar around them is Tailwind, and the pill
+   and the tab TEXT are both presence-anchored further up — but the button
+   reset never was, so on the shipping `default` theme these four tabs render
+   as raw native OS buttons: measured `background: rgb(239,239,239)`,
+   `border: 2px outset`, `border-radius: 0`. Same class of defect as the Pro
+   card CTAs, in the one control that has to be pressed before any of this
+   pricing can be read. Carried over verbatim from the liquid-glass block. */
+[data-interface-theme] .natively-api-selector-tab {
+  position: relative;
+  background: transparent !important;
+  border: none !important;
+  color: var(--text-secondary) !important;
+  padding: 6px 10px !important;
+  font-size: 11.5px !important;
+  font-weight: 500 !important;
+  text-align: center !important;
+  cursor: pointer !important;
+  transition: color 0.2s ease-out, transform 0.15s cubic-bezier(0.23, 1, 0.32, 1) !important;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+[data-interface-theme] .natively-api-selector-tab:hover {
+  color: var(--text-primary) !important;
+}
+[data-interface-theme] .natively-api-selector-tab:active {
+  transform: scale(0.96) !important;
+}
+[data-interface-theme] .natively-api-selector-tab.active {
+  color: #ffffff !important;
+  font-weight: 600 !important;
+}
+
+/* ── and the tier CTA's box ────────────────────────────────────────────────
+   Same defect again, one level down: `border-radius`, `padding`, the flex
+   centring and `width` are all anchored on ="liquid-glass" / ="modern", so on
+   the shipping `default` theme this button is a native OS control — measured
+   `border: 2px outset`, no pill radius, no padding, no flex. Carried over
+   verbatim from the liquid-glass block with ONE change.
+
+   `border: 0`, not the `1.5px solid transparent` it had. The rim lives on
+   ::before with `inset: 0`, which resolves against the PADDING box, so a
+   transparent border holds the rim 1.5px inside the pill's real edge — the
+   same gap the card had. It also drops a 1.5px length that floors to 1px at
+   DPR 1 (the Windows default). The button ends up 3px shorter than it was on
+   the two named themes; that is the border it was never drawing. */
+[data-interface-theme] .natively-api-pricing-cta {
+  border: 0 !important;
+  border-radius: 9999px !important;
+  padding: 12px 24px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  text-align: center !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  width: 100% !important;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+   The crosshatch comes back
+
+   The migration above removed the 24px blueprint grid from these cards and
+   introduced the feTurbulence noise in its place — its own comment says the
+   noise "is the honest replacement for the 24px crosshatch removed earlier".
+   It is not: the grid is structural and reads as drafting paper, the noise is
+   stochastic and reads as frosting, and the rest of this app never stopped
+   drawing the grid (`.natively-key-card::before` and `.about-jelly-card::after`
+   still carry it at 0.020 and 0.009). Removing it from the pricing cards alone
+   made them the odd surface out in their own Settings tab.
+
+   So ::before goes back to being the grid, at the EXACT values it had before
+   (7bde124a): rgba(255,255,255,0.012) on the Pro cards and 0.05 on the API
+   tier card, both at 24px, both behind the pseudo's own `opacity: 0.55`.
+
+   The opacity is kept as its own lever rather than folded into the alphas,
+   because hover raises it to 0.8 — a 1.45x lift. Folded, that hover would have
+   to be `opacity: 1.45`, which clamps to 1 and silently does nothing.
+
+   The noise is what steps aside, because it was only ever standing in for
+   this. If both are wanted, the noise layers back in here as extra
+   `background-image` entries — but it needs `mix-blend-mode: overlay` to read
+   as frosting rather than as a white film, and that blend would take the grid
+   with it, so the two want separate layers rather than a shared one.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+[data-interface-theme] .pricing-card-yearly::before,
+[data-interface-theme] .pricing-card-lifetime::before {
+  content: '' !important;
+  display: block !important;
+  position: absolute !important;
+  inset: 0 !important;
+  height: auto !important;
+  z-index: 1 !important;
+  pointer-events: none !important;
+  border-radius: inherit !important;
+  opacity: 0.55 !important;
+  mix-blend-mode: normal !important;
+  background-color: transparent !important;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.012) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.012) 1px, transparent 1px) !important;
+  background-size: 24px 24px !important;
+  transition: opacity 180ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+
+[data-interface-theme] .natively-api-detail-card::before {
+  content: '' !important;
+  display: block !important;
+  position: absolute !important;
+  inset: 0 !important;
+  height: auto !important;
+  z-index: 1 !important;
+  pointer-events: none !important;
+  border-radius: inherit !important;
+  opacity: 0.55 !important;
+  mix-blend-mode: normal !important;
+  background-color: transparent !important;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px) !important;
+  background-size: 24px 24px !important;
+  transition: opacity 180ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+
+/* On a light ground a white grid is invisible, so it inverts to ink — the same
+   substitution the light rim makes. The original only ever ran in dark mode
+   (both crosshatch rules were inside the two dark interface-theme blocks), so
+   this half is derived rather than restored. */
+[data-theme='light'] [data-interface-theme] .pricing-card-yearly::before,
+[data-theme='light'] [data-interface-theme] .pricing-card-lifetime::before {
+  background-image:
+    linear-gradient(rgba(16, 22, 43, 0.030) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(16, 22, 43, 0.030) 1px, transparent 1px) !important;
+}
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card::before {
+  background-image:
+    linear-gradient(rgba(16, 22, 43, 0.090) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(16, 22, 43, 0.090) 1px, transparent 1px) !important;
+}
+
+/* hover brightened the grid before; it still does */
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme] .pricing-card-yearly:hover::before,
+  [data-interface-theme] .pricing-card-lifetime:hover::before,
+  [data-interface-theme] .natively-api-detail-card:hover::before {
+    opacity: 0.8 !important;
+  }
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+   One border language
+
+   Three different constructions were coexisting on this one screen, which is
+   what made the surfaces read as belonging to different products even after
+   the cards themselves were correct:
+
+     1. MIGRATED — flat fill, depth in a masked rim. Cards, CTAs, and the
+        switcher pill's DARK branch.
+     2. GLOSSY — the switcher pill's LIGHT branch: a `rgba(255,255,255,0.55)`
+        band across the top 15% (the dark branch uses 0.07 — eight times less)
+        and a symmetric white `0.70 / 0.30` rim whose mask ends opaque. On a
+        pale fill that is a bright halo, and it is the single loudest thing in
+        the plan switcher.
+     3. OLD JELLY — `.badge-tier-label` and `.badge-best-value`: a uniform 1px
+        border, an `inset 0 1.5px 0` top-lit sheen and an `inset 0 -2px 4px`
+        dark underside. Untouched by either migration, and unscoped, so they
+        paint identically on every interface theme.
+
+   All three become (1). No hue moves: every fill below is the midpoint of the
+   gradient it replaces, and every rim is that same hue. What changes is the
+   construction, not the colour.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+/* ── The switcher pill, light branch ────────────────────────────────────────
+   The sheen drops to the dark branch's 0.07 so the two themes are the same
+   material, and the bottom band becomes an underside darkening — on a light
+   ground there is no bounce to catch, so a lit underside is exactly backwards
+   (design.md, "A light body inverts the whole model"). The rim follows: ink
+   rather than white, and top face only. */
+[data-theme='light'] [data-interface-theme] .natively-api-selector-bar .natively-api-selector-pill-standard,
+[data-theme='light'] [data-interface-theme] .natively-api-selector-bar .natively-api-selector-pill-pro,
+[data-theme='light'] [data-interface-theme] .natively-api-selector-bar .natively-api-selector-pill-max,
+[data-theme='light'] [data-interface-theme] .natively-api-selector-bar .natively-api-selector-pill-ultra {
+  background-image: linear-gradient(180deg,
+    rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0) 15%,
+    rgba(255, 255, 255, 0) 85%, rgba(255, 255, 255, 0.07) 100%) !important;
+  box-shadow:
+    inset 0 -1px 0 rgba(15, 23, 42, 0.12),
+    0 1px 2px rgba(15, 23, 42, 0.10) !important;
+}
+[data-theme='light'] [data-interface-theme] .natively-api-selector-bar .natively-api-selector-pill::before {
+  box-shadow: inset 0 0 0 1px rgba(16, 22, 43, 0.16);
+  -webkit-mask-image:
+    linear-gradient(180deg, #000 0%, #000 7%, transparent 30%, transparent 100%),
+    linear-gradient(90deg, transparent 2px, rgba(0, 0, 0, 0.82) 9px, #000 22px, #000 calc(100% - 22px), rgba(0, 0, 0, 0.82) calc(100% - 9px), transparent calc(100% - 2px));
+  mask-image:
+    linear-gradient(180deg, #000 0%, #000 7%, transparent 30%, transparent 100%),
+    linear-gradient(90deg, transparent 2px, rgba(0, 0, 0, 0.82) 9px, #000 22px, #000 calc(100% - 22px), rgba(0, 0, 0, 0.82) calc(100% - 9px), transparent calc(100% - 2px));
+}
+
+/* ── The two card badges, at tag scale ──────────────────────────────────────
+   `.lg-badge` is the in-repo precedent for this size: flat background-colour,
+   ONE hairline on ::before, and nothing else — "the material at TAG scale, and
+   NOT a control". A 16px pill cannot carry a border, a top sheen and a dark
+   underside without the three of them being most of the pill.
+
+   --lgc-r is 9px: on a pill the cap radius is half the height, and these run
+   16-18px. The cap stops derive from it exactly as everywhere else. */
+[data-interface-theme] .badge-tier-label,
+[data-interface-theme] .badge-best-value {
+  --lgc-r: 9px;
+  --lgc-cap-0: calc(var(--lgc-r) * 0.353);
+  --lgc-cap-1: calc(var(--lgc-r) * 0.912);
+  --lgc-cap-2: calc(var(--lgc-r) * 2.088);
+  --lgc-cap-mask: linear-gradient(90deg,
+      transparent var(--lgc-cap-0),
+      rgba(0, 0, 0, 0.82) var(--lgc-cap-1),
+      #000 var(--lgc-cap-2),
+      #000 calc(100% - var(--lgc-cap-2)),
+      rgba(0, 0, 0, 0.82) calc(100% - var(--lgc-cap-1)),
+      transparent calc(100% - var(--lgc-cap-0)));
+  --lgc-face-mask: linear-gradient(180deg,
+      #000 0, #000 2px, transparent var(--lgc-r),
+      transparent calc(100% - var(--lgc-r)), #000 calc(100% - 2px), #000 100%);
+  --lgc-face-mask-top: linear-gradient(180deg,
+      #000 0, #000 2px, transparent var(--lgc-r), transparent 100%);
+  position: relative;
+  isolation: isolate;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+[data-interface-theme] .badge-tier-label::before,
+[data-interface-theme] .badge-best-value::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  z-index: -1;
+  pointer-events: none;
+  -webkit-mask-image: var(--lgc-face-mask), var(--lgc-cap-mask);
+  -webkit-mask-composite: source-in;
+  mask-image: var(--lgc-face-mask), var(--lgc-cap-mask);
+  mask-composite: intersect;
+}
+[data-theme='light'] [data-interface-theme] .badge-tier-label::before,
+[data-theme='light'] [data-interface-theme] .badge-best-value::before {
+  -webkit-mask-image: var(--lgc-face-mask-top), var(--lgc-cap-mask);
+  mask-image: var(--lgc-face-mask-top), var(--lgc-cap-mask);
+}
+
+/* Fills: each is the midpoint of the two-stop gradient it replaces. */
+[data-interface-theme] .pricing-card-yearly .badge-tier-label {
+  background: rgba(48, 115, 241, 0.20) !important;
+  color: #93c5fd !important;
+}
+[data-interface-theme] .pricing-card-yearly .badge-tier-label::before {
+  box-shadow: inset 0 0 0 1px rgba(147, 197, 253, 0.45);
+}
+[data-interface-theme] .pricing-card-lifetime .badge-tier-label {
+  background: rgba(124, 66, 232, 0.23) !important;
+  color: #c4b5fd !important;
+}
+[data-interface-theme] .pricing-card-lifetime .badge-tier-label::before {
+  box-shadow: inset 0 0 0 1px rgba(196, 181, 253, 0.45);
+}
+[data-interface-theme] .pricing-card-lifetime .badge-best-value {
+  background: rgba(139, 92, 246, 0.15) !important;
+  color: #e9e2ff !important;
+}
+[data-interface-theme] .pricing-card-lifetime .badge-best-value::before {
+  box-shadow: inset 0 0 0 1px rgba(196, 181, 253, 0.42);
+}
+
+[data-theme='light'] [data-interface-theme] .pricing-card-yearly .badge-tier-label {
+  background: rgba(48, 115, 241, 0.12) !important;
+  color: #1d4ed8 !important;
+}
+[data-theme='light'] [data-interface-theme] .pricing-card-yearly .badge-tier-label::before {
+  box-shadow: inset 0 0 0 1px rgba(29, 78, 216, 0.30);
+}
+[data-theme='light'] [data-interface-theme] .pricing-card-lifetime .badge-tier-label {
+  background: rgba(124, 66, 232, 0.14) !important;
+  color: #6d28d9 !important;
+}
+[data-theme='light'] [data-interface-theme] .pricing-card-lifetime .badge-tier-label::before {
+  box-shadow: inset 0 0 0 1px rgba(109, 40, 217, 0.30);
+}
+[data-theme='light'] [data-interface-theme] .pricing-card-lifetime .badge-best-value {
+  background: rgba(124, 66, 232, 0.16) !important;
+  color: #5b21b6 !important;
+}
+[data-theme='light'] [data-interface-theme] .pricing-card-lifetime .badge-best-value::before {
+  box-shadow: inset 0 0 0 1px rgba(91, 33, 182, 0.32);
+}
+
+/* The teaser plaque is a smaller sibling of the two pricing cards, so it takes
+   their texture too. It was given the noise in the round that rebuilt it, and
+   leaving it there would make it the one surface in this tab still wearing the
+   substitute after the grid came back — the same odd-one-out the grid's
+   removal created in the first place. Same 0.012 as the cards it sits with. */
+[data-interface-theme] .pro-teaser::before {
+  opacity: 0.55 !important;
+  mix-blend-mode: normal !important;
+  background-color: transparent !important;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.012) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.012) 1px, transparent 1px) !important;
+  background-size: 24px 24px !important;
+  z-index: 1 !important;
+  transition: opacity 180ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+[data-theme='light'] [data-interface-theme] .pro-teaser::before {
+  opacity: 0.55 !important;
+  background-image:
+    linear-gradient(rgba(16, 22, 43, 0.030) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(16, 22, 43, 0.030) 1px, transparent 1px) !important;
+}
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme] .pro-teaser:hover::before { opacity: 0.8 !important; }
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+   Usage meters — the material at bar scale
+
+   The four "Usage this month" bars were a flat 3px Tailwind track
+   (`bg-bg-input`) with a flat fill. On the dark page `--bg-input` is #1A1A1A
+   against a #101114 ground, so the unfilled part was very nearly invisible and
+   the bar read as a floating line rather than as a meter with a remainder.
+
+   A 3px bar cannot carry the rim: design.md's own scaling note says a 3px rim
+   is 2% of the 136px hero and 9% of a 32px control, and here it would be 33%
+   of the whole element. So this takes the two parts of the material that DO
+   survive at this size, which is the same reduction `.lg-badge` makes one step
+   further up ("the material at TAG scale, and NOT a control"):
+
+     the track is a RECESS — light from above means the upper inner wall is in
+     shadow and the lower lip catches it. That is the groove
+     `.natively-api-selector-bar` already uses (inset 0 1px 2px rgba(0,0,0,.4)),
+     so the meter and the plan switcher read as the same material.
+
+     the fill is a LIT BODY — flat colour, specular on the top face only, and a
+     soft bloom in its own hue so a filled bar reads as illuminated rather than
+     painted. Top face only is not a small-scale compromise; it is the rule,
+     since a 3px rod has no underside to catch a bounce.
+
+   Rendered at 3 / 4 / 6 / 8px at device scale 1 before choosing: 3px is where
+   the specular still reads as a highlight, and by 6px it separates into a
+   visible band and the bar starts reading as a capsule. The heights are
+   therefore UNCHANGED (3px, 2px for the Knowledge sub-rows) — this is the
+   material fitted to the existing rhythm, not a resize.
+
+   NO `[data-interface-theme]` PREFIX, deliberately. Every other pricing rule in
+   this file is anchored on that attribute, and half of them on a specific VALUE
+   — which is why the plan switcher, the tier CTA and the Pro card buttons all
+   shipped as native OS controls on the default theme. A meter has no business
+   depending on which interface theme is selected, so it is anchored on nothing.
+
+   The bloom needs the track NOT to clip: an outer box-shadow inside
+   `overflow: hidden` is simply deleted. The fill is `border-radius: 999px` in
+   its own right, so the clip was never what rounded its leading edge.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+.natively-meter-track {
+  position: relative;
+  width: 100%;
+  border-radius: 999px;
+  overflow: visible;
+  background: rgba(0, 0, 0, 0.42);
+  box-shadow:
+    inset 0 1px 1.5px rgba(0, 0, 0, 0.55),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.055);
+}
+
+.natively-meter-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--meter-hue);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    0 0 6px -1px var(--meter-hue);
+}
+
+/* Colour means exactly one thing on this surface — running low — so the hue is
+   one token the two shadows both read, and a state change moves all three
+   together. Values are Tailwind's amber-500 / red-500, the same two the markup
+   used before.
+
+   THE RESTING FILL IS SLATE CARRYING A PERIWINKLE TINT. It was
+   `--accent-primary` (full periwinkle), which put a third hue on a surface
+   whose own rule is that colour means "running low" — amber had to compete
+   with a violet of equal weight instead of being the only colour event.
+
+   Slate alone fixed that but read as a different product's grey, so the hue
+   walks part of the way back. Both endpoints in HSL:
+
+     slate-400  hsl(215 20% 65%)   ->  periwinkle-300  hsl(257 82% 80%)
+     slate-600  hsl(215 19% 35%)   ->  periwinkle-600  hsl(262 61% 57%)
+
+   The values below sit 45% along that walk on hue and saturation, and only 40%
+   of that on lightness — the lightness is what makes periwinkle shout, so it is
+   deliberately the slowest of the three. Rendered at 0 / 18 / 30 / 45% and
+   against full periwinkle at DPR 1, each with the amber state directly beneath
+   it, because what the tint costs is amber's ability to be the loudest thing
+   on the bar.
+
+   45% IS THE CEILING, not a midpoint. Measured relative luminance: the fill
+   lands at 0.292 against amber's 0.437, so amber is still half again brighter
+   and keeps the eye. Push the walk further and the two converge — at which
+   point the surface is back to the problem this whole rule exists to prevent,
+   a resting colour competing with the one that means something.
+
+   Written as hsl() so the walk stays legible: these are positions on a line
+   between two named tokens, not two colours someone picked.
+
+   Deliberately NOT `--accent-primary` itself: that token is contrast-guarded
+   (PeriwinkleContrastGuard.test.mjs) and used across the app, and nothing about
+   a usage meter should move if the app's accent is ever retuned. */
+.natively-meter-fill { --meter-hue: hsl(234 48% 68%); }
+[data-theme='light'] .natively-meter-fill { --meter-hue: hsl(236 38% 39%); }
+.natively-meter-fill--high { --meter-hue: #f59e0b; }
+.natively-meter-fill--over { --meter-hue: #ef4444; }
+
+/* Light: the recess inverts — the shadow stays on the upper wall, but the lip
+   that catches the light is white rather than a dim grey, and the bloom goes
+   because a coloured glow on a white page reads as a blur rather than as
+   light. The fill gains the underside it lacks in dark, where the page is
+   darker than the bar and there is nothing to darken against. */
+[data-theme='light'] .natively-meter-track {
+  background: rgba(16, 22, 43, 0.10);
+  box-shadow:
+    inset 0 1px 1.5px rgba(16, 22, 43, 0.18),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.65);
+}
+[data-theme='light'] .natively-meter-fill {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.40),
+    inset 0 -1px 0 rgba(16, 22, 43, 0.14);
 }

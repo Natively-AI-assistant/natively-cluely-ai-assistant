@@ -1,8 +1,9 @@
-import type { IntentResult } from './IntentClassifier';
+import type { IntentResult } from './PlannerDecision';
 import type { ExtractedQuestion } from './transcriptQuestionExtractor';
 import { CODING_CONTRACT, CODING_CONTRACT_IMPL, CODING_VERIFICATION_INSTRUCTION } from './codingContract';
 import { detectAnswerStyle, type AnswerStyle } from './answerStyle';
 import { classifyTargetSpeakability, classifyShortBand, shortBandTargetWords, HARD_MAX_WORDS, SPOKEN_FULL_MAX_WORDS } from './speakability';
+import { analyzeUserInstructions, getRegisteredUserInstructions, userInstructionsOverrideAppLength } from './userInstructionContract';
 import { applyModeFallback, type ActiveModeInfo } from './modeProfiles';
 import { classifyDocumentQuestionShape } from './documentGroundedPrompt';
 import { includesPlannerTerm } from '../services/modes/retrievalTextMatch';
@@ -475,7 +476,7 @@ const GENERAL_TEMPLATE = `Answer naturally and directly. Use only relevant conte
 const DOCUMENT_DEFINITION_TEMPLATE = `Answer from the uploaded document evidence only. Give a concise definition in 1-3 sentences. Prefer text that explicitly defines the term ("is", "are", "refers to", "represents") and do not drift into procedures or training details unless the question asks for them.`;
 const DOCUMENT_LIST_TEMPLATE = `Answer from the uploaded document evidence only. Return the complete list the question asks for. Scan every retrieved excerpt before answering; include all listed items, phases, questions, models, objects, or components that are literally present. Do not stop at the first matching excerpt and do not invent missing list items.`;
 const DOCUMENT_NUMERIC_TEMPLATE = `Answer from the uploaded document evidence only. Report exact values with units and the entity they belong to. If multiple related values are present (training/peak/inference, control/sampling, per-model rates), include all of them. Do not infer numbers that are not written in the evidence.`;
-const DOCUMENT_ABSENT_FACT_TEMPLATE = `Answer from the uploaded document evidence only. If the requested fact is not supported by the selected evidence after retrieval, say exactly and briefly that it is not directly mentioned in the uploaded seminar material. Do not provide a plausible estimate or use general knowledge.`;
+const DOCUMENT_ABSENT_FACT_TEMPLATE = `Answer from the uploaded document evidence first. If the requested fact is not supported by the selected evidence after retrieval, say briefly that it is not directly mentioned in the uploaded material, then still answer from general knowledge, clearly marked as general knowledge and never presented as coming from the material.`;
 const DOCUMENT_STRUCTURE_TEMPLATE = `Answer from the uploaded document's table-of-contents / heading evidence only. These are navigation questions — a chapter or section title, the page a section begins on, or how many chapters/sections/pages there are. Report the exact title or number as written in the evidence. Do not summarize the section's content and do not infer a title or page that is not literally present.`;
 const DOCUMENT_FOLLOWUP_TEMPLATE = `Answer the follow-up from the uploaded document evidence only. Resolve pronouns like "it", "that", and "they" using the immediately previous topic, but treat the prior answer only as a referent hint — facts must come from the retrieved document excerpts.`;
 
@@ -2345,7 +2346,20 @@ export const formatAnswerPlanForPrompt = (plan: AnswerPlan, includeVerificationS
   // cue — SPOKEN_FULL / STRUCTURED_FULL and explicit styles own their own length, so emit
   // nothing for them (additive, non-conflicting). Prompt-guidance only; the deterministic
   // trimmer is unchanged.
-  const _lengthLine = renderLengthDirectiveForPlan(plan);
+  // The app's length target is a DEFAULT, here exactly as on the V3 composer
+  // (ComposeInput.defaultLengthDirective). Found 2026-09-20 by the real-wiring
+  // E2E with V3 switched OFF: the first fix split the length channel only on
+  // the V3 path, so this legacy <answer_contract> — V3's fallback, and every
+  // surface that assembles through here — still sent "roughly 40 to 60 words
+  // ... Hard ceiling: never go past 75" beside the user's own "Answer in 100
+  // words.". Same registry the coding-format resolver asks; no provider (every
+  // unit test) or a throwing one ⇒ unchanged behaviour.
+  const _userSetsLength = (() => {
+    try {
+      return userInstructionsOverrideAppLength(analyzeUserInstructions(getRegisteredUserInstructions()));
+    } catch { return false; }
+  })();
+  const _lengthLine = _userSetsLength ? '' : renderLengthDirectiveForPlan(plan);
   const lengthDirective = _lengthLine ? `\n\n${_lengthLine}` : '';
   // Speakable-by-default (manual regression 2026-06-12): scaffolded profile
   // templates become internal thinking structure; the rendered answer is

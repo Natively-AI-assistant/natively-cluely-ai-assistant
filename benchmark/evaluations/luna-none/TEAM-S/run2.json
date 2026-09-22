@@ -1,0 +1,165 @@
+{
+ "blind_id": "S-038dd06d",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 41988,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 9943,
+  "candidatesTokenCount": 851,
+  "totalTokenCount": 15882,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 9943
+   }
+  ],
+  "thoughtsTokenCount": 5088,
+  "serviceTier": "standard"
+ },
+ "fact_count": 29,
+ "evaluation": {
+  "factual_accuracy": 9,
+  "important_information_retention": 8,
+  "hallucination_control": 10,
+  "action_item_retention": 9,
+  "decision_retention": 10,
+  "speaker_attribution": 9,
+  "numeric_accuracy": 9,
+  "entity_retention": 8,
+  "timeline_accuracy": 9,
+  "conclusion_accuracy": 9,
+  "structure": 3,
+  "conciseness": 2,
+  "readability": 4,
+  "overall_summary_quality": 5,
+  "critical_errors": [],
+  "missing_important_information": [
+   "The description of MOB-1431 (push notification deep link opening the wrong screen)",
+   "The specific details of the 2 real bugs found in regression (MOB-1431 and Android offline mode not syncing saved routes)"
+  ],
+  "hallucinated_information": [],
+  "superseded_values_reported": [],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "partial"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "partial"
+   },
+   {
+    "id": "F13",
+    "status": "partial"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "partial"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "partial"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "partial"
+   },
+   {
+    "id": "F24",
+    "status": "partial"
+   },
+   {
+    "id": "F25",
+    "status": "missing"
+   },
+   {
+    "id": "F26",
+    "status": "missing"
+   },
+   {
+    "id": "F27",
+    "status": "partial"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "partial"
+   }
+  ],
+  "rationale": "The notes capture the vast majority of the facts, decisions, and action items accurately without hallucinations. However, the notes suffer from severe structural and conciseness issues. Entire sentences are copy-pasted verbatim across the Overview, Summary, Progress, Decisions, and Structured sections. Furthermore, the Action Items section contains bizarre '[inferred]' duplicates of decisions and already-listed action items. While factually sound, the extreme repetition makes the notes tedious to read and poorly organized."
+ }
+}

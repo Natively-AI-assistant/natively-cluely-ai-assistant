@@ -1,0 +1,362 @@
+{
+ "blind_id": "S-0c6ce36f",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 78806,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 37663,
+  "candidatesTokenCount": 2513,
+  "totalTokenCount": 49204,
+  "cachedContentTokenCount": 24515,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 37663
+   }
+  ],
+  "cacheTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 24515
+   }
+  ],
+  "thoughtsTokenCount": 9028,
+  "serviceTier": "standard"
+ },
+ "fact_count": 72,
+ "evaluation": {
+  "factual_accuracy": 6,
+  "important_information_retention": 8,
+  "hallucination_control": 8,
+  "action_item_retention": 9,
+  "decision_retention": 8,
+  "speaker_attribution": 9,
+  "numeric_accuracy": 9,
+  "entity_retention": 8,
+  "timeline_accuracy": 6,
+  "conclusion_accuracy": 4,
+  "structure": 3,
+  "conciseness": 2,
+  "readability": 3,
+  "overall_summary_quality": 4,
+  "critical_errors": [
+   "The notes contradict themselves on the launch date, stating it was decided as Oct 14 in the Decisions section, but listing it as unresolved and 'still needs to be discussed properly' in the Open Questions and Follow-up sections.",
+   "Extreme repetition: the notes contain duplicate sections (e.g., 'Decisions' and 'Decisions (structured)') and repeat the same facts across 8+ different sections, making the document bloated and unusable."
+  ],
+  "missing_important_information": [
+   "Four of the P1 bugs are customer-visible.",
+   "Kestrel Health is a separate, unrelated beta account that is happy with the dashboard."
+  ],
+  "hallucinated_information": [
+   "The notes claim the launch date is unresolved at the end of the meeting, which is a hallucination of the meeting's conclusion."
+  ],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C05",
+    "reported": "The rollout draft was October 14th at 10%, then 25%, 50%, and 100% by the end of October."
+   }
+  ],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [
+   "Speaker 4 said their headset died during the meeting but they still made it through.",
+   "Speaker 3 asked someone to save them a spot near the espresso machine on the 6th floor.",
+   "Speaker 1 reaffirmed for the record that they are still 'team A'.",
+   "Move logistics are known: crates arrive Monday, the team packs its own desks, crates must be sealed by October 1st, and the move is on the 2nd.",
+   "The espresso machine does exist on the new campus but is on the 6th floor while the team sits on the 4th.",
+   "Ask Facilities whether the monitors move with the team or new ones are provided in the Harlow building.",
+   "Rohan's 'I don't take stairs, I take stakeholders' line is going into the retro doc."
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "missing"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "partial"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "missing"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "present"
+   },
+   {
+    "id": "F31",
+    "status": "partial"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "partial"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "partial"
+   },
+   {
+    "id": "F43",
+    "status": "missing"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "partial"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "partial"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "present"
+   },
+   {
+    "id": "F57",
+    "status": "present"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "partial"
+   },
+   {
+    "id": "F60",
+    "status": "present"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   },
+   {
+    "id": "F62",
+    "status": "present"
+   },
+   {
+    "id": "F63",
+    "status": "present"
+   },
+   {
+    "id": "F64",
+    "status": "present"
+   },
+   {
+    "id": "F65",
+    "status": "present"
+   },
+   {
+    "id": "F66",
+    "status": "present"
+   },
+   {
+    "id": "F67",
+    "status": "present"
+   },
+   {
+    "id": "F68",
+    "status": "present"
+   },
+   {
+    "id": "F69",
+    "status": "present"
+   },
+   {
+    "id": "F70",
+    "status": "partial"
+   },
+   {
+    "id": "F71",
+    "status": "partial"
+   },
+   {
+    "id": "F72",
+    "status": "present"
+   }
+  ],
+  "rationale": "The candidate notes capture a high volume of facts but suffer from severe structural and conciseness issues. The notes repeat the same information across multiple duplicate sections (e.g., 'Decisions' and 'Decisions (structured)'), making the document bloated and difficult to read. Furthermore, there is a critical contradiction regarding the launch date: it is correctly reported as decided for October 14th in the Decisions section, but the Open Questions and Follow-up sections claim the date is still unresolved. This failure to synthesize the meeting's conclusion severely impacts the conclusion accuracy and factual accuracy scores. The inclusion of numerous irrelevant distractors about the office move further degrades the quality."
+ }
+}

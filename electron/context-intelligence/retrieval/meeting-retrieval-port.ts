@@ -28,11 +28,18 @@
 import type { EvidenceScope, SourceType } from '../contracts/types';
 import type { RetrievalPort } from '../orchestration/orchestrator';
 import { createLegacyRetrievalPort } from './legacy-retrieval-port';
+import { isRetrievalFixEnabled } from '../contracts/retrieval-flags';
 
 /** The slice of RAGRetriever this port uses. Structural — no legacy import. */
+// `object`, not `Record<string, unknown>`: the real retriever returns an
+// interface type, `ScoredChunk`, and TS never assigns an interface to an
+// index-signature type — so `RAGManager` can satisfy this port structurally
+// without a cast. Every field is still read defensively below via
+// `(c as Record<string, unknown>)`, so this loosens only the declared shape,
+// not what the port actually trusts at runtime.
 export interface MeetingRetrieverLike {
   retrieve?: (query: string, options: { meetingId?: string; topK?: number; maxTokens?: number }) => Promise<{
-    chunks?: Array<Record<string, unknown>>;
+    chunks?: ReadonlyArray<object>;
   } | null | undefined>;
 }
 
@@ -136,6 +143,15 @@ export function createMeetingRetrievalPort(input: MeetingPortInput): RetrievalPo
  */
 export function combineRetrievalPorts(ports: RetrievalPort[]): RetrievalPort {
   return {
+    probeAnchorSources(question: string) {
+      const out = new Set<import('../contracts/types').SourceType>();
+      for (const p of ports) { try { for (const s of p.probeAnchorSources?.(question) ?? []) out.add(s); } catch { /* skip */ } }
+      return [...out];
+    },
+    // Corpus arbitration: anchored when ANY port's documents hold the terms.
+    probeAnchors(question: string): boolean {
+      return ports.some((p) => { try { return p.probeAnchors?.(question) === true; } catch { return false; } });
+    },
     async retrieve(args) {
       const results = await Promise.all(ports.map(async (p) => {
         try {
@@ -184,11 +200,72 @@ export function combineRetrievalPorts(ports: RetrievalPort[]): RetrievalPort {
       }
       const evidence = [...byContent.values()];
 
-      // Re-rank across sources, then apply the turn's own accepted-evidence cap
-      // — otherwise two ports each returning their maximum would double it.
+      // The turn's own accepted-evidence cap — otherwise two ports each
+      // returning their maximum would double it.
       const max = args.decision.retrievalPlan.maximumAcceptedEvidence;
-      evidence.sort((a, b) => b.finalScore - a.finalScore);
-      return { evidence: evidence.slice(0, max), attempts };
+
+      if (!isRetrievalFixEnabled('portCombinationPreservesSlots')) {
+        // Pre-2026-08-28 behaviour, kept verbatim behind the kill switch.
+        evidence.sort((a, b) => b.finalScore - a.finalScore);
+        return { evidence: evidence.slice(0, max), attempts };
+      }
+
+      // ── T6: merge by RANK, never by raw score ──────────────────────────────
+      //
+      // The global `sort(b.finalScore - a.finalScore).slice(max)` this replaces
+      // discarded everything each port had just guaranteed. Each port's output
+      // is not a bag of scored items — it is an ORDER, produced by the
+      // ACCEPTED-SLICE FILL in legacy-retrieval-port.ts:305-393, which encodes
+      // three separate policies: the status partition (a retired document's
+      // chunk must never outrank a current one), a per-type round-robin
+      // reserving a slot for each planned source type, and a per-document
+      // interleave. Re-sorting the union by score throws all three away.
+      //
+      // Worse, it compared INCOMPARABLE SCALES. The profile port emits squashed
+      // BM25 plus fixed 0.6 policy admits (profile-retrieval-port.ts:497,
+      // :607-613); the mode port passes the raw hybrid score straight through
+      // (mode-retrieval-port.ts:236). With a resume and a reference file both in
+      // play, one pool took every accepted slot on magnitude alone — the exact
+      // outcome the per-type round-robin exists to prevent, undone one layer up.
+      //
+      // So: take each port's Nth-ranked item in turn. Rank is the only quantity
+      // that means the same thing in both pools. Each port's internal order is
+      // preserved exactly, so its three guarantees survive; and every port that
+      // returned anything is represented before any port contributes a second
+      // item.
+      const keyOf = (e: (typeof merged)[number]) => e.content.trim().toLowerCase().replace(/\s+/g, ' ');
+      const perPort = results.map((r) => {
+        const seenHere = new Set<string>();
+        return r.evidence
+          .map((e) => byContent.get(keyOf(e)))
+          // The dedup winner may have come from ANOTHER port; it is emitted at
+          // whichever port reaches its rank first, and skipped thereafter.
+          .filter((e): e is (typeof merged)[number] => {
+            if (!e) return false;
+            const k = keyOf(e);
+            if (seenHere.has(k)) return false;
+            seenHere.add(k);
+            return true;
+          });
+      });
+
+      const emitted = new Set<string>();
+      const out: typeof evidence = [];
+      for (let rank = 0; out.length < max; rank++) {
+        let progressed = false;
+        for (const list of perPort) {
+          if (rank >= list.length) continue;
+          progressed = true;
+          const item = list[rank];
+          const k = keyOf(item);
+          if (emitted.has(k)) continue;
+          emitted.add(k);
+          out.push(item);
+          if (out.length >= max) break;
+        }
+        if (!progressed) break;
+      }
+      return { evidence: out, attempts };
     },
   };
 }

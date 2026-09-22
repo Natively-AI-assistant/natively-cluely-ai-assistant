@@ -38,6 +38,51 @@ const KNOWN_OLLAMA_NATIVE_CTX: Array<[RegExp, number]> = [
   [/^deepseek-coder/i, 16_000],
 ];
 
+/**
+ * Strip Natively's own routing prefix, and then the upstream segment a gateway
+ * puts in front of the real model name.
+ *
+ * WHY (2026-09-03): every predicate below matches a BARE id with `startsWith`,
+ * but `getCurrentModel()` hands them the routed id. `litellm/gpt-4o` therefore
+ * failed isCloudIdentifier, fell through to the "unknown" branch, and came back
+ * `supportsImages: false` — so Code Hint refused every LiteLLM model with
+ * "The current local model (litellm/anthropic/claude-sonnet-5) doesn't support
+ * image input… e.g. llava", reproduced in a live session. `nvidia_nim/*` was
+ * identical.
+ *
+ * Two segments come off because a real LiteLLM config names models
+ * `<upstream>/<model>` (`litellm/openai/gpt-4o`, `litellm/vertex_ai/gemini-2.5-pro`),
+ * which is exactly the shape litellmModelLabel() documents. OpenRouter is the
+ * same shape and is here for the same reason — `openrouter/anthropic/claude-sonnet-5`
+ * has to reach the predicates below as `claude-sonnet-5` or every OpenRouter
+ * model would be classified as an unknown text-only route. Only the known
+ * routing prefixes are stripped — an arbitrary id keeps its slashes, so an
+ * Ollama name like `qwen2.5-vl:7b` and a Groq id like `openai/gpt-oss-20b` are
+ * untouched.
+ */
+// Fluxion is the opposite shape to OpenRouter and the strip is load-bearing for
+// the opposite reason. Its ids are BARE vendor ids (`fluxion/claude-opus-5`),
+// so after the prefix comes off there is no vendor segment left to lose and the
+// result — `claude-opus-5` — is already exactly the id the predicates below
+// know. Do NOT "fix" this to match openrouter's two-segment handling: that
+// would eat the model name itself.
+// 9Router is OpenRouter's shape, not Fluxion's: its catalogue is namespaced by
+// upstream (`ninerouter/openai/gpt-5`, `ninerouter/gemini/gemini-3.6-flash`),
+// so both segments come off and the predicates below see `gpt-5`. Leaving it
+// out of this list is silent: every lookup misses, the id falls to the unknown
+// branch, and 30 of the 47 models a stock instance serves — all vision-capable
+// by their own catalogue — come back supportsImages:false.
+const ROUTING_PREFIX_RE = /^(?:litellm|nvidia_nim|openrouter|fluxion|ninerouter)\//i;
+export function stripProviderRoutingPrefix(id: string): string {
+  if (!ROUTING_PREFIX_RE.test(id)) return id;
+  const withoutProvider = id.replace(ROUTING_PREFIX_RE, '');
+  // `openai/gpt-4o` → `gpt-4o`. A model name that legitimately contains a slash
+  // (`meta/llama-3.2-90b-vision-instruct`) loses only the vendor segment, which
+  // is what every predicate below wants to see.
+  const slash = withoutProvider.indexOf('/');
+  return slash === -1 ? withoutProvider : withoutProvider.slice(slash + 1);
+}
+
 // Models ids we treat as cloud regardless of provider hint.
 function isCloudIdentifier(id: string): boolean {
   const s = id.toLowerCase();
@@ -83,6 +128,7 @@ function isLargeGroqModel(id: string): boolean {
 // encoded in four uncoordinated places; a vision-model swap that missed one
 // silently re-armed the "Groq vision refused" bug).
 import { groqSupportsImages } from './groqModels';
+import { modelNameSuggestsVision } from './visionCapability';
 
 // Parse parameter size from an Ollama model id like "llama3.1:8b" or "qwen2.5-coder:14b".
 // Returns the size in billions of parameters, or null if not detected.
@@ -105,8 +151,26 @@ function ollamaSupportsImages(id: string): boolean {
 }
 
 export function getModelCapabilities(modelId: string, isOllama: boolean): ModelCapabilities {
-  const id = modelId || '';
+  // The routed id (`litellm/openai/gpt-4o`) is what the caller has; every
+  // predicate below is written against the bare one. Resolve once, here, so a
+  // gateway-proxied model is classified as the model it actually is.
+  // `name` keeps the original so UI and log lines still say which route it came
+  // from. Ollama ids are never prefixed, so this is a no-op on that branch.
+  const id = stripProviderRoutingPrefix(modelId || '');
   const lower = id.toLowerCase();
+  const displayId = modelId || '';
+  // A gateway fronts an arbitrary upstream, so the family lists below can only
+  // recognise the subset whose bare name happens to be a known cloud model. For
+  // everything else the model NAME is the only signal available, and refusing on
+  // no signal is what made Code Hint reject `litellm/mistral/pixtral-12b` and
+  // `nvidia_nim/meta/llama-3.2-90b-vision-instruct` while the vision chain and
+  // the provider registry were both willing to call them.
+  //
+  // Only ever widens: a name with no vision marker still resolves to false, so a
+  // genuinely text-only route (`litellm/deepseek-v4-chat`) keeps its clean early
+  // refusal instead of a 400 from the upstream.
+  const isGatewayRouted = id !== (modelId || '');
+  const gatewayVisionHint = isGatewayRouted && modelNameSuggestsVision(id);
 
   if (isOllama) {
     const size = parseOllamaSize(id);
@@ -131,7 +195,7 @@ export function getModelCapabilities(modelId: string, isOllama: boolean): ModelC
       outputBudgetTokens: b.output,
       supportsXmlTags: tier === 'local-large',
       supportsImages: ollamaSupportsImages(id),
-      name: id || 'ollama',
+      name: displayId || 'ollama',
     };
   }
 
@@ -139,7 +203,8 @@ export function getModelCapabilities(modelId: string, isOllama: boolean): ModelC
     const b = TIER_BUDGETS['cloud'];
     const supportsImages = lower.startsWith('gemini-') || lower.startsWith('claude-')
       || lower.startsWith('gpt-4o') || lower.startsWith('gpt-4.1') || lower.startsWith('gpt-5')
-      || lower === 'natively' || lower.startsWith('natively-');
+      || lower === 'natively' || lower.startsWith('natively-')
+      || gatewayVisionHint;
     return {
       tier: 'cloud',
       maxContextTokens: b.max,
@@ -147,12 +212,17 @@ export function getModelCapabilities(modelId: string, isOllama: boolean): ModelC
       outputBudgetTokens: b.output,
       supportsXmlTags: true,
       supportsImages,
-      name: id || 'cloud',
+      name: displayId || 'cloud',
     };
   }
 
-  // Groq-hosted: split by size.
-  if (isLargeGroqModel(id)) {
+  // Groq-hosted: split by size. Skipped for a gateway-routed id — a model reached
+  // through a LiteLLM/NIM proxy is NOT Groq-hosted, and Groq's tables are
+  // authoritative only for what Groq itself serves. Without this guard
+  // `litellm/qwen/qwen2.5-vl-72b` was claimed by isLargeGroqModel (any "qwen" +
+  // a 72b size) and answered with groqSupportsImages(), which is false for it —
+  // so a vision model came back supportsImages:false even with the hint above.
+  if (!isGatewayRouted && isLargeGroqModel(id)) {
     const b = TIER_BUDGETS['cloud'];
     return {
       tier: 'cloud',
@@ -161,12 +231,15 @@ export function getModelCapabilities(modelId: string, isOllama: boolean): ModelC
       outputBudgetTokens: b.output,
       supportsXmlTags: true,
       supportsImages: groqSupportsImages(id),
-      name: id,
+      name: displayId,
     };
   }
 
-  // Small Groq models (llama-3.1-8b-instant, gemma-7b, etc.)
-  if (/\b(0\.5|1|2|3|4|7|8)b\b|\binstant\b/i.test(lower)) {
+  // Small Groq models (llama-3.1-8b-instant, gemma-7b, etc.). Gateway-routed ids
+  // are excluded for the same reason, and because this branch also drops the
+  // model to the 'tiny' prompt tier and an 8k context — a downgrade that should
+  // follow from where the model RUNS, not from a size in its name.
+  if (!isGatewayRouted && /\b(0\.5|1|2|3|4|7|8)b\b|\binstant\b/i.test(lower)) {
     const b = TIER_BUDGETS['local-small'];
     return {
       tier: 'local-small',
@@ -175,7 +248,7 @@ export function getModelCapabilities(modelId: string, isOllama: boolean): ModelC
       outputBudgetTokens: b.output,
       supportsXmlTags: false,
       supportsImages: false,
-      name: id,
+      name: displayId,
     };
   }
 
@@ -187,8 +260,8 @@ export function getModelCapabilities(modelId: string, isOllama: boolean): ModelC
     promptBudgetTokens: b.system,
     outputBudgetTokens: b.output,
     supportsXmlTags: true,
-    supportsImages: false,
-    name: id || 'unknown',
+    supportsImages: gatewayVisionHint,
+    name: displayId || 'unknown',
   };
 }
 

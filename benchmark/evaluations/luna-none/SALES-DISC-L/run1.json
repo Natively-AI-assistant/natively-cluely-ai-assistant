@@ -1,0 +1,342 @@
+{
+ "blind_id": "S-ba1de9cc",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 69914,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 37004,
+  "candidatesTokenCount": 2325,
+  "totalTokenCount": 47627,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 37004
+   }
+  ],
+  "thoughtsTokenCount": 8298,
+  "serviceTier": "standard"
+ },
+ "fact_count": 67,
+ "evaluation": {
+  "factual_accuracy": 6,
+  "important_information_retention": 8,
+  "hallucination_control": 7,
+  "action_item_retention": 7,
+  "decision_retention": 9,
+  "speaker_attribution": 8,
+  "numeric_accuracy": 7,
+  "entity_retention": 9,
+  "timeline_accuracy": 7,
+  "conclusion_accuracy": 8,
+  "structure": 6,
+  "conciseness": 2,
+  "readability": 4,
+  "overall_summary_quality": 5,
+  "critical_errors": [
+   "Reported multiple superseded values as current facts or action items (e.g., 120 agents, October 15 go-live, December 31 Queuewise expiration, 3-week POC)."
+  ],
+  "missing_important_information": [
+   "Joan checking with procurement on Queuewise notice terms (format, signatory, short extension).",
+   "Dana committing to return the completed security questionnaire within five business days of receiving it."
+  ],
+  "hallucinated_information": [
+   "Jon: Take the integration plan to the manager for review. [inferred] (Jon only mentioned wanting something he could take to his manager, not a formal action item to review it with them.)"
+  ],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C01",
+    "reported": "Harbourline has about 120 agents split between Columbus and Rotterdam"
+   },
+   {
+    "correction_id": "C03",
+    "reported": "Target go-live is around October 15. [inferred]"
+   },
+   {
+    "correction_id": "C04",
+    "reported": "Queuewise is believed to expire December 31. [inferred]"
+   },
+   {
+    "correction_id": "C06",
+    "reported": "The vendor will scope the historical-data proof of concept for approximately three weeks after receiving the data. [inferred]"
+   },
+   {
+    "correction_id": "C08",
+    "reported": "Speaker 1's legal team: Speaker 1's legal team will send the mutual NDA template."
+   }
+  ],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "partial"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "partial"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "partial"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "partial"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "missing"
+   },
+   {
+    "id": "F29",
+    "status": "missing"
+   },
+   {
+    "id": "F30",
+    "status": "present"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "partial"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "partial"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "partial"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "partial"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "present"
+   },
+   {
+    "id": "F57",
+    "status": "partial"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "partial"
+   },
+   {
+    "id": "F60",
+    "status": "partial"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   },
+   {
+    "id": "F62",
+    "status": "present"
+   },
+   {
+    "id": "F63",
+    "status": "present"
+   },
+   {
+    "id": "F64",
+    "status": "present"
+   },
+   {
+    "id": "F65",
+    "status": "partial"
+   },
+   {
+    "id": "F66",
+    "status": "present"
+   },
+   {
+    "id": "F67",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture a large amount of the transcript's information but suffer from severe repetition and structural bloat. The same action items are listed three or four times in the action items block, and pain points/buying signals are heavily duplicated. Furthermore, the notes report several superseded values as current facts or action items (e.g., the 120 agent count, the October 15 go-live, the December 31 Queuewise expiration, and the 3-week POC), which negatively impacts factual and timeline accuracy. Conciseness and readability scores are very low due to the extreme repetition."
+ }
+}

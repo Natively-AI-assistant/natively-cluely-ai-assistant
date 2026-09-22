@@ -1,0 +1,171 @@
+{
+ "blind_id": "S-6e6f9d5b",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 12393,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 7754,
+  "candidatesTokenCount": 1204,
+  "totalTokenCount": 9395,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 7754
+   }
+  ],
+  "thoughtsTokenCount": 437,
+  "serviceTier": "standard"
+ },
+ "fact_count": 29,
+ "evaluation": {
+  "factual_accuracy": 1,
+  "important_information_retention": 1,
+  "hallucination_control": 10,
+  "action_item_retention": 1,
+  "decision_retention": 1,
+  "speaker_attribution": 1,
+  "numeric_accuracy": 1,
+  "entity_retention": 1,
+  "timeline_accuracy": 1,
+  "conclusion_accuracy": 1,
+  "structure": 1,
+  "conciseness": 1,
+  "readability": 1,
+  "overall_summary_quality": 1,
+  "critical_errors": [],
+  "missing_important_information": [
+   "Release 4.12.0 branch cut moved to Thursday 2pm, store submission still Monday",
+   "Joan: full regression on build 321, results by Wednesday 5pm",
+   "Theo blocked on platform team adding Apple sign-in client secret to the production vault; Dana escalating to Jon by noon today",
+   "Android 4.11.2 crash rate 0.8%, mostly MOB-1440 on Samsung Android 14; fix goes into 4.12 if it lands, no hotfix decided",
+   "MOB-1431 reassigned from Ravi to Katya; Ravi on App Store screenshots and release notes",
+   "Workout history endpoint on staging, p95 4s to 1.9s",
+   "Regression on build 318: 142 cases, 9 failures, 2 real bugs",
+   "Android 9 support question taken offline and unresolved"
+  ],
+  "hallucinated_information": [],
+  "superseded_values_reported": [],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "missing"
+   },
+   {
+    "id": "F02",
+    "status": "missing"
+   },
+   {
+    "id": "F03",
+    "status": "missing"
+   },
+   {
+    "id": "F04",
+    "status": "missing"
+   },
+   {
+    "id": "F05",
+    "status": "missing"
+   },
+   {
+    "id": "F06",
+    "status": "missing"
+   },
+   {
+    "id": "F07",
+    "status": "missing"
+   },
+   {
+    "id": "F08",
+    "status": "missing"
+   },
+   {
+    "id": "F09",
+    "status": "missing"
+   },
+   {
+    "id": "F10",
+    "status": "missing"
+   },
+   {
+    "id": "F11",
+    "status": "missing"
+   },
+   {
+    "id": "F12",
+    "status": "missing"
+   },
+   {
+    "id": "F13",
+    "status": "missing"
+   },
+   {
+    "id": "F14",
+    "status": "missing"
+   },
+   {
+    "id": "F15",
+    "status": "missing"
+   },
+   {
+    "id": "F16",
+    "status": "missing"
+   },
+   {
+    "id": "F17",
+    "status": "missing"
+   },
+   {
+    "id": "F18",
+    "status": "missing"
+   },
+   {
+    "id": "F19",
+    "status": "missing"
+   },
+   {
+    "id": "F20",
+    "status": "missing"
+   },
+   {
+    "id": "F21",
+    "status": "missing"
+   },
+   {
+    "id": "F22",
+    "status": "missing"
+   },
+   {
+    "id": "F23",
+    "status": "missing"
+   },
+   {
+    "id": "F24",
+    "status": "missing"
+   },
+   {
+    "id": "F25",
+    "status": "missing"
+   },
+   {
+    "id": "F26",
+    "status": "missing"
+   },
+   {
+    "id": "F27",
+    "status": "missing"
+   },
+   {
+    "id": "F28",
+    "status": "missing"
+   },
+   {
+    "id": "F29",
+    "status": "missing"
+   }
+  ],
+  "rationale": "The candidate notes are completely empty. No summary or structured blocks were produced. As a result, all facts, decisions, and action items are missing, leading to a score of 1 across all retention and quality metrics. Hallucination control is scored 10 as no false information was generated."
+ }
+}

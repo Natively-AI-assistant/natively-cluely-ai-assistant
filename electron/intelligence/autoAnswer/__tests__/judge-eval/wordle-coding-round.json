@@ -1,0 +1,1746 @@
+[
+  {
+    "text": "Yes, I'm ready. Okay, have you heard of the popular word game called \"wordle\"?",
+    "ctx": [],
+    "lastAnswered": null,
+    "mode": "db",
+    "expect": "ask",
+    "asks": [
+      "wordle_q"
+    ]
+  },
+  {
+    "text": "Yeah, yeah, I've played it a few times.",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Yes, I'm ready."
+      },
+      {
+        "role": "interviewer",
+        "text": "Okay, have you heard of the popular word game called \"wordle\"?"
+      }
+    ],
+    "lastAnswered": "have you heard of the popular word game called \"wordle\"?",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "Yeah, yeah, I've played it a few times. You've played it, okay, perfect,",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Yes, I'm ready."
+      },
+      {
+        "role": "interviewer",
+        "text": "Okay, have you heard of the popular word game called \"wordle\"?"
+      }
+    ],
+    "lastAnswered": "have you heard of the popular word game called \"wordle\"?",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "Yeah, yeah, I've played it a few times. You've played it, okay, perfect, so this is going to be very easy for you to understand",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Yes, I'm ready."
+      },
+      {
+        "role": "interviewer",
+        "text": "Okay, have you heard of the popular word game called \"wordle\"?"
+      }
+    ],
+    "lastAnswered": "have you heard of the popular word game called \"wordle\"?",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "Yeah, yeah, I've played it a few times. You've played it, okay, perfect, so this is going to be very easy for you to understand . I'm going to give you a link right now to the",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Yes, I'm ready."
+      },
+      {
+        "role": "interviewer",
+        "text": "Okay, have you heard of the popular word game called \"wordle\"?"
+      }
+    ],
+    "lastAnswered": "have you heard of the popular word game called \"wordle\"?",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "Yeah, yeah, I've played it a few times. You've played it, okay, perfect, so this is going to be very easy for you to understand . I'm going to give you a link right now to the world game, let me give it to you here.",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Yes, I'm ready."
+      },
+      {
+        "role": "interviewer",
+        "text": "Okay, have you heard of the popular word game called \"wordle\"?"
+      }
+    ],
+    "lastAnswered": "have you heard of the popular word game called \"wordle\"?",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "Yeah, yeah, I've played it a few times. You've played it, okay, perfect, so this is going to be very easy for you to understand . I'm going to give you a link right now to the world game, let me give it to you here. So this is on the New York Times webs",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Yes, I'm ready."
+      },
+      {
+        "role": "interviewer",
+        "text": "Okay, have you heard of the popular word game called \"wordle\"?"
+      }
+    ],
+    "lastAnswered": "have you heard of the popular word game called \"wordle\"?",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "Yeah, yeah, I've played it a few times. You've played it, okay, perfect, so this is going to be very easy for you to understand . I'm going to give you a link right now to the world game, let me give it to you here. So this is on the New York Times webs ite, and you can play around with it a little bit while",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Yes, I'm ready."
+      },
+      {
+        "role": "interviewer",
+        "text": "Okay, have you heard of the popular word game called \"wordle\"?"
+      }
+    ],
+    "lastAnswered": "have you heard of the popular word game called \"wordle\"?",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "Yeah, yeah, I've played it a few times. You've played it, okay, perfect, so this is going to be very easy for you to understand . I'm going to give you a link right now to the world game, let me give it to you here. So this is on the New York Times webs ite, and you can play around with it a little bit while I explain to the viewers at home who might not",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Yes, I'm ready."
+      },
+      {
+        "role": "interviewer",
+        "text": "Okay, have you heard of the popular word game called \"wordle\"?"
+      }
+    ],
+    "lastAnswered": "have you heard of the popular word game called \"wordle\"?",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "Yeah, yeah, I've played it a few times. You've played it, okay, perfect, so this is going to be very easy for you to understand . I'm going to give you a link right now to the world game, let me give it to you here. So this is on the New York Times webs ite, and you can play around with it a little bit while I explain to the viewers at home who might not be familiar with the game what it's about",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Yes, I'm ready."
+      },
+      {
+        "role": "interviewer",
+        "text": "Okay, have you heard of the popular word game called \"wordle\"?"
+      }
+    ],
+    "lastAnswered": "have you heard of the popular word game called \"wordle\"?",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "Yeah, yeah, I've played it a few times. You've played it, okay, perfect, so this is going to be very easy for you to understand . I'm going to give you a link right now to the world game, let me give it to you here. So this is on the New York Times webs ite, and you can play around with it a little bit while I explain to the viewers at home who might not be familiar with the game what it's about . Basically, every day a",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Yes, I'm ready."
+      },
+      {
+        "role": "interviewer",
+        "text": "Okay, have you heard of the popular word game called \"wordle\"?"
+      }
+    ],
+    "lastAnswered": "have you heard of the popular word game called \"wordle\"?",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "Yeah, yeah, I've played it a few times. You've played it, okay, perfect, so this is going to be very easy for you to understand . I'm going to give you a link right now to the world game, let me give it to you here. So this is on the New York Times webs ite, and you can play around with it a little bit while I explain to the viewers at home who might not be familiar with the game what it's about . Basically, every day a five-letter word is picked",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Yes, I'm ready."
+      },
+      {
+        "role": "interviewer",
+        "text": "Okay, have you heard of the popular word game called \"wordle\"?"
+      }
+    ],
+    "lastAnswered": "have you heard of the popular word game called \"wordle\"?",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "Yeah, yeah, I've played it a few times. You've played it, okay, perfect, so this is going to be very easy for you to understand . I'm going to give you a link right now to the world game, let me give it to you here. So this is on the New York Times webs ite, and you can play around with it a little bit while I explain to the viewers at home who might not be familiar with the game what it's about . Basically, every day a five-letter word is picked at random from some word bank",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Yes, I'm ready."
+      },
+      {
+        "role": "interviewer",
+        "text": "Okay, have you heard of the popular word game called \"wordle\"?"
+      }
+    ],
+    "lastAnswered": "have you heard of the popular word game called \"wordle\"?",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "Yeah, yeah, I've played it a few times. You've played it, okay, perfect, so this is going to be very easy for you to understand . I'm going to give you a link right now to the world game, let me give it to you here. So this is on the New York Times webs ite, and you can play around with it a little bit while I explain to the viewers at home who might not be familiar with the game what it's about . Basically, every day a five-letter word is picked at random from some word bank , and you, the player, have",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Yes, I'm ready."
+      },
+      {
+        "role": "interviewer",
+        "text": "Okay, have you heard of the popular word game called \"wordle\"?"
+      }
+    ],
+    "lastAnswered": "have you heard of the popular word game called \"wordle\"?",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "You've played it, okay, perfect, so this is going to be very easy for you to understand . I'm going to give you a link right now to the world game, let me give it to you here. So this is on the New York Times webs ite, and you can play around with it a little bit while I explain to the viewers at home who might not be familiar with the game what it's about . Basically, every day a five-letter word is picked at random from some word bank , and you, the player, have to guess what that five-letter word is.",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Yes, I'm ready."
+      },
+      {
+        "role": "interviewer",
+        "text": "Okay, have you heard of the popular word game called \"wordle\"?"
+      },
+      {
+        "role": "interviewer",
+        "text": "Yeah, yeah, I've played it a few times."
+      }
+    ],
+    "lastAnswered": "have you heard of the popular word game called \"wordle\"?",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "You've played it, okay, perfect, so this is going to be very easy for you to understand . I'm going to give you a link right now to the world game, let me give it to you here. So this is on the New York Times webs ite, and you can play around with it a little bit while I explain to the viewers at home who might not be familiar with the game what it's about . Basically, every day a five-letter word is picked at random from some word bank , and you, the player, have to guess what that five-letter word is. The way that you guess it is you",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Yes, I'm ready."
+      },
+      {
+        "role": "interviewer",
+        "text": "Okay, have you heard of the popular word game called \"wordle\"?"
+      },
+      {
+        "role": "interviewer",
+        "text": "Yeah, yeah, I've played it a few times."
+      }
+    ],
+    "lastAnswered": "have you heard of the popular word game called \"wordle\"?",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "You've played it, okay, perfect, so this is going to be very easy for you to understand . I'm going to give you a link right now to the world game, let me give it to you here. So this is on the New York Times webs ite, and you can play around with it a little bit while I explain to the viewers at home who might not be familiar with the game what it's about . Basically, every day a five-letter word is picked at random from some word bank , and you, the player, have to guess what that five-letter word is. The way that you guess it is you have 6 tries, where you",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Yes, I'm ready."
+      },
+      {
+        "role": "interviewer",
+        "text": "Okay, have you heard of the popular word game called \"wordle\"?"
+      },
+      {
+        "role": "interviewer",
+        "text": "Yeah, yeah, I've played it a few times."
+      }
+    ],
+    "lastAnswered": "have you heard of the popular word game called \"wordle\"?",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "so this is going to be very easy for you to understand . I'm going to give you a link right now to the world game, let me give it to you here. So this is on the New York Times webs ite, and you can play around with it a little bit while I explain to the viewers at home who might not be familiar with the game what it's about . Basically, every day a five-letter word is picked at random from some word bank , and you, the player, have to guess what that five-letter word is. The way that you guess it is you have 6 tries, where you basically type in a five-letter word",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Yes, I'm ready."
+      },
+      {
+        "role": "interviewer",
+        "text": "Okay, have you heard of the popular word game called \"wordle\"?"
+      },
+      {
+        "role": "interviewer",
+        "text": "Yeah, yeah, I've played it a few times."
+      },
+      {
+        "role": "interviewer",
+        "text": "You've played it, okay, perfect,"
+      }
+    ],
+    "lastAnswered": "have you heard of the popular word game called \"wordle\"?",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": ". I'm going to give you a link right now to the world game, let me give it to you here. So this is on the New York Times webs ite, and you can play around with it a little bit while I explain to the viewers at home who might not be familiar with the game what it's about . Basically, every day a five-letter word is picked at random from some word bank , and you, the player, have to guess what that five-letter word is. The way that you guess it is you have 6 tries, where you basically type in a five-letter word . And at every try, the",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Yes, I'm ready."
+      },
+      {
+        "role": "interviewer",
+        "text": "Okay, have you heard of the popular word game called \"wordle\"?"
+      },
+      {
+        "role": "interviewer",
+        "text": "Yeah, yeah, I've played it a few times."
+      },
+      {
+        "role": "interviewer",
+        "text": "You've played it, okay, perfect,"
+      },
+      {
+        "role": "interviewer",
+        "text": "so this is going to be very easy for you to understand"
+      }
+    ],
+    "lastAnswered": "have you heard of the popular word game called \"wordle\"?",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "world game, let me give it to you here. So this is on the New York Times webs ite, and you can play around with it a little bit while I explain to the viewers at home who might not be familiar with the game what it's about . Basically, every day a five-letter word is picked at random from some word bank , and you, the player, have to guess what that five-letter word is. The way that you guess it is you have 6 tries, where you basically type in a five-letter word . And at every try, the game is going to show, based on,",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Yes, I'm ready."
+      },
+      {
+        "role": "interviewer",
+        "text": "Okay, have you heard of the popular word game called \"wordle\"?"
+      },
+      {
+        "role": "interviewer",
+        "text": "Yeah, yeah, I've played it a few times."
+      },
+      {
+        "role": "interviewer",
+        "text": "You've played it, okay, perfect,"
+      },
+      {
+        "role": "interviewer",
+        "text": "so this is going to be very easy for you to understand"
+      },
+      {
+        "role": "interviewer",
+        "text": ". I'm going to give you a link right now to the"
+      }
+    ],
+    "lastAnswered": "have you heard of the popular word game called \"wordle\"?",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "So this is on the New York Times webs ite, and you can play around with it a little bit while I explain to the viewers at home who might not be familiar with the game what it's about . Basically, every day a five-letter word is picked at random from some word bank , and you, the player, have to guess what that five-letter word is. The way that you guess it is you have 6 tries, where you basically type in a five-letter word . And at every try, the game is going to show, based on, like, different colors, which letters of the guess that you attempt. Which.",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Yes, I'm ready."
+      },
+      {
+        "role": "interviewer",
+        "text": "Okay, have you heard of the popular word game called \"wordle\"?"
+      },
+      {
+        "role": "interviewer",
+        "text": "Yeah, yeah, I've played it a few times."
+      },
+      {
+        "role": "interviewer",
+        "text": "You've played it, okay, perfect,"
+      },
+      {
+        "role": "interviewer",
+        "text": "so this is going to be very easy for you to understand"
+      },
+      {
+        "role": "interviewer",
+        "text": ". I'm going to give you a link right now to the"
+      },
+      {
+        "role": "interviewer",
+        "text": "world game, let me give it to you here."
+      }
+    ],
+    "lastAnswered": "have you heard of the popular word game called \"wordle\"?",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "be familiar with the game what it's about . Basically, every day a five-letter word is picked at random from some word bank , and you, the player, have to guess what that five-letter word is. The way that you guess it is you have 6 tries, where you basically type in a five-letter word . And at every try, the game is going to show, based on, like, different colors, which letters of the guess that you attempt. Which. Letters are actually found in the word that you have to find .",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Yeah, yeah, I've played it a few times."
+      },
+      {
+        "role": "interviewer",
+        "text": "You've played it, okay, perfect,"
+      },
+      {
+        "role": "interviewer",
+        "text": "so this is going to be very easy for you to understand"
+      },
+      {
+        "role": "interviewer",
+        "text": ". I'm going to give you a link right now to the"
+      },
+      {
+        "role": "interviewer",
+        "text": "world game, let me give it to you here."
+      },
+      {
+        "role": "interviewer",
+        "text": "So this is on the New York Times webs"
+      },
+      {
+        "role": "interviewer",
+        "text": "ite, and you can play around with it a little bit while"
+      },
+      {
+        "role": "interviewer",
+        "text": "I explain to the viewers at home who might not"
+      }
+    ],
+    "lastAnswered": "have you heard of the popular word game called \"wordle\"?",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "at random from some word bank , and you, the player, have to guess what that five-letter word is. The way that you guess it is you have 6 tries, where you basically type in a five-letter word . And at every try, the game is going to show, based on, like, different colors, which letters of the guess that you attempt. Which. Letters are actually found in the word that you have to find . Which letters are not in that",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": ". I'm going to give you a link right now to the"
+      },
+      {
+        "role": "interviewer",
+        "text": "world game, let me give it to you here."
+      },
+      {
+        "role": "interviewer",
+        "text": "So this is on the New York Times webs"
+      },
+      {
+        "role": "interviewer",
+        "text": "ite, and you can play around with it a little bit while"
+      },
+      {
+        "role": "interviewer",
+        "text": "I explain to the viewers at home who might not"
+      },
+      {
+        "role": "interviewer",
+        "text": "be familiar with the game what it's about"
+      },
+      {
+        "role": "interviewer",
+        "text": ". Basically, every day a"
+      },
+      {
+        "role": "interviewer",
+        "text": "five-letter word is picked"
+      }
+    ],
+    "lastAnswered": "have you heard of the popular word game called \"wordle\"?",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": ", and you, the player, have to guess what that five-letter word is. The way that you guess it is you have 6 tries, where you basically type in a five-letter word . And at every try, the game is going to show, based on, like, different colors, which letters of the guess that you attempt. Which. Letters are actually found in the word that you have to find . Which letters are not in that word, and which letters are not",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "world game, let me give it to you here."
+      },
+      {
+        "role": "interviewer",
+        "text": "So this is on the New York Times webs"
+      },
+      {
+        "role": "interviewer",
+        "text": "ite, and you can play around with it a little bit while"
+      },
+      {
+        "role": "interviewer",
+        "text": "I explain to the viewers at home who might not"
+      },
+      {
+        "role": "interviewer",
+        "text": "be familiar with the game what it's about"
+      },
+      {
+        "role": "interviewer",
+        "text": ". Basically, every day a"
+      },
+      {
+        "role": "interviewer",
+        "text": "five-letter word is picked"
+      },
+      {
+        "role": "interviewer",
+        "text": "at random from some word bank"
+      }
+    ],
+    "lastAnswered": "have you heard of the popular word game called \"wordle\"?",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "to guess what that five-letter word is. The way that you guess it is you have 6 tries, where you basically type in a five-letter word . And at every try, the game is going to show, based on, like, different colors, which letters of the guess that you attempt. Which. Letters are actually found in the word that you have to find . Which letters are not in that word, and which letters are not only found in that word but are at the",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "So this is on the New York Times webs"
+      },
+      {
+        "role": "interviewer",
+        "text": "ite, and you can play around with it a little bit while"
+      },
+      {
+        "role": "interviewer",
+        "text": "I explain to the viewers at home who might not"
+      },
+      {
+        "role": "interviewer",
+        "text": "be familiar with the game what it's about"
+      },
+      {
+        "role": "interviewer",
+        "text": ". Basically, every day a"
+      },
+      {
+        "role": "interviewer",
+        "text": "five-letter word is picked"
+      },
+      {
+        "role": "interviewer",
+        "text": "at random from some word bank"
+      },
+      {
+        "role": "interviewer",
+        "text": ", and you, the player, have"
+      }
+    ],
+    "lastAnswered": "have you heard of the popular word game called \"wordle\"?",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "The way that you guess it is you have 6 tries, where you basically type in a five-letter word . And at every try, the game is going to show, based on, like, different colors, which letters of the guess that you attempt. Which. Letters are actually found in the word that you have to find . Which letters are not in that word, and which letters are not only found in that word but are at the correct position, right?",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "ite, and you can play around with it a little bit while"
+      },
+      {
+        "role": "interviewer",
+        "text": "I explain to the viewers at home who might not"
+      },
+      {
+        "role": "interviewer",
+        "text": "be familiar with the game what it's about"
+      },
+      {
+        "role": "interviewer",
+        "text": ". Basically, every day a"
+      },
+      {
+        "role": "interviewer",
+        "text": "five-letter word is picked"
+      },
+      {
+        "role": "interviewer",
+        "text": "at random from some word bank"
+      },
+      {
+        "role": "interviewer",
+        "text": ", and you, the player, have"
+      },
+      {
+        "role": "interviewer",
+        "text": "to guess what that five-letter word is."
+      }
+    ],
+    "lastAnswered": "have you heard of the popular word game called \"wordle\"?",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "So for example, if there's a W in position",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "attempt."
+      },
+      {
+        "role": "interviewer",
+        "text": "Which."
+      },
+      {
+        "role": "interviewer",
+        "text": "Letters are actually found in the word that you have to find"
+      },
+      {
+        "role": "interviewer",
+        "text": "."
+      },
+      {
+        "role": "interviewer",
+        "text": "Which letters are not in that"
+      },
+      {
+        "role": "interviewer",
+        "text": "word, and which letters are not"
+      },
+      {
+        "role": "interviewer",
+        "text": "only found in that word but are at the"
+      },
+      {
+        "role": "interviewer",
+        "text": "correct position, right?"
+      }
+    ],
+    "lastAnswered": "have you heard of the popular word game called \"wordle\"?",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "So for example, if there's a W in position 1 of both the word",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "attempt."
+      },
+      {
+        "role": "interviewer",
+        "text": "Which."
+      },
+      {
+        "role": "interviewer",
+        "text": "Letters are actually found in the word that you have to find"
+      },
+      {
+        "role": "interviewer",
+        "text": "."
+      },
+      {
+        "role": "interviewer",
+        "text": "Which letters are not in that"
+      },
+      {
+        "role": "interviewer",
+        "text": "word, and which letters are not"
+      },
+      {
+        "role": "interviewer",
+        "text": "only found in that word but are at the"
+      },
+      {
+        "role": "interviewer",
+        "text": "correct position, right?"
+      }
+    ],
+    "lastAnswered": "have you heard of the popular word game called \"wordle\"?",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "So for example, if there's a W in position 1 of both the word that you tried and the final",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "attempt."
+      },
+      {
+        "role": "interviewer",
+        "text": "Which."
+      },
+      {
+        "role": "interviewer",
+        "text": "Letters are actually found in the word that you have to find"
+      },
+      {
+        "role": "interviewer",
+        "text": "."
+      },
+      {
+        "role": "interviewer",
+        "text": "Which letters are not in that"
+      },
+      {
+        "role": "interviewer",
+        "text": "word, and which letters are not"
+      },
+      {
+        "role": "interviewer",
+        "text": "only found in that word but are at the"
+      },
+      {
+        "role": "interviewer",
+        "text": "correct position, right?"
+      }
+    ],
+    "lastAnswered": "have you heard of the popular word game called \"wordle\"?",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "So for example, if there's a W in position 1 of both the word that you tried and the final word, then it would tell you you have a cor",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "attempt."
+      },
+      {
+        "role": "interviewer",
+        "text": "Which."
+      },
+      {
+        "role": "interviewer",
+        "text": "Letters are actually found in the word that you have to find"
+      },
+      {
+        "role": "interviewer",
+        "text": "."
+      },
+      {
+        "role": "interviewer",
+        "text": "Which letters are not in that"
+      },
+      {
+        "role": "interviewer",
+        "text": "word, and which letters are not"
+      },
+      {
+        "role": "interviewer",
+        "text": "only found in that word but are at the"
+      },
+      {
+        "role": "interviewer",
+        "text": "correct position, right?"
+      }
+    ],
+    "lastAnswered": "have you heard of the popular word game called \"wordle\"?",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "So for example, if there's a W in position 1 of both the word that you tried and the final word, then it would tell you you have a cor rect letter in the correct position.",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "attempt."
+      },
+      {
+        "role": "interviewer",
+        "text": "Which."
+      },
+      {
+        "role": "interviewer",
+        "text": "Letters are actually found in the word that you have to find"
+      },
+      {
+        "role": "interviewer",
+        "text": "."
+      },
+      {
+        "role": "interviewer",
+        "text": "Which letters are not in that"
+      },
+      {
+        "role": "interviewer",
+        "text": "word, and which letters are not"
+      },
+      {
+        "role": "interviewer",
+        "text": "only found in that word but are at the"
+      },
+      {
+        "role": "interviewer",
+        "text": "correct position, right?"
+      }
+    ],
+    "lastAnswered": "have you heard of the popular word game called \"wordle\"?",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "So for example, if there's a W in position 1 of both the word that you tried and the final word, then it would tell you you have a cor rect letter in the correct position. And so you have 6 tries to get the final",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "attempt."
+      },
+      {
+        "role": "interviewer",
+        "text": "Which."
+      },
+      {
+        "role": "interviewer",
+        "text": "Letters are actually found in the word that you have to find"
+      },
+      {
+        "role": "interviewer",
+        "text": "."
+      },
+      {
+        "role": "interviewer",
+        "text": "Which letters are not in that"
+      },
+      {
+        "role": "interviewer",
+        "text": "word, and which letters are not"
+      },
+      {
+        "role": "interviewer",
+        "text": "only found in that word but are at the"
+      },
+      {
+        "role": "interviewer",
+        "text": "correct position, right?"
+      }
+    ],
+    "lastAnswered": "have you heard of the popular word game called \"wordle\"?",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "So for example, if there's a W in position 1 of both the word that you tried and the final word, then it would tell you you have a cor rect letter in the correct position. And so you have 6 tries to get the final word, and that's the game. It",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "attempt."
+      },
+      {
+        "role": "interviewer",
+        "text": "Which."
+      },
+      {
+        "role": "interviewer",
+        "text": "Letters are actually found in the word that you have to find"
+      },
+      {
+        "role": "interviewer",
+        "text": "."
+      },
+      {
+        "role": "interviewer",
+        "text": "Which letters are not in that"
+      },
+      {
+        "role": "interviewer",
+        "text": "word, and which letters are not"
+      },
+      {
+        "role": "interviewer",
+        "text": "only found in that word but are at the"
+      },
+      {
+        "role": "interviewer",
+        "text": "correct position, right?"
+      }
+    ],
+    "lastAnswered": "have you heard of the popular word game called \"wordle\"?",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "So for example, if there's a W in position 1 of both the word that you tried and the final word, then it would tell you you have a cor rect letter in the correct position. And so you have 6 tries to get the final word, and that's the game. It became super popular over the last few months, it",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "attempt."
+      },
+      {
+        "role": "interviewer",
+        "text": "Which."
+      },
+      {
+        "role": "interviewer",
+        "text": "Letters are actually found in the word that you have to find"
+      },
+      {
+        "role": "interviewer",
+        "text": "."
+      },
+      {
+        "role": "interviewer",
+        "text": "Which letters are not in that"
+      },
+      {
+        "role": "interviewer",
+        "text": "word, and which letters are not"
+      },
+      {
+        "role": "interviewer",
+        "text": "only found in that word but are at the"
+      },
+      {
+        "role": "interviewer",
+        "text": "correct position, right?"
+      }
+    ],
+    "lastAnswered": "have you heard of the popular word game called \"wordle\"?",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "So for example, if there's a W in position 1 of both the word that you tried and the final word, then it would tell you you have a cor rect letter in the correct position. And so you have 6 tries to get the final word, and that's the game. It became super popular over the last few months, it got acquired by the New York Times from the developer,",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "attempt."
+      },
+      {
+        "role": "interviewer",
+        "text": "Which."
+      },
+      {
+        "role": "interviewer",
+        "text": "Letters are actually found in the word that you have to find"
+      },
+      {
+        "role": "interviewer",
+        "text": "."
+      },
+      {
+        "role": "interviewer",
+        "text": "Which letters are not in that"
+      },
+      {
+        "role": "interviewer",
+        "text": "word, and which letters are not"
+      },
+      {
+        "role": "interviewer",
+        "text": "only found in that word but are at the"
+      },
+      {
+        "role": "interviewer",
+        "text": "correct position, right?"
+      }
+    ],
+    "lastAnswered": "have you heard of the popular word game called \"wordle\"?",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "So for example, if there's a W in position 1 of both the word that you tried and the final word, then it would tell you you have a cor rect letter in the correct position. And so you have 6 tries to get the final word, and that's the game. It became super popular over the last few months, it got acquired by the New York Times from the developer, and your task Connor is",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "attempt."
+      },
+      {
+        "role": "interviewer",
+        "text": "Which."
+      },
+      {
+        "role": "interviewer",
+        "text": "Letters are actually found in the word that you have to find"
+      },
+      {
+        "role": "interviewer",
+        "text": "."
+      },
+      {
+        "role": "interviewer",
+        "text": "Which letters are not in that"
+      },
+      {
+        "role": "interviewer",
+        "text": "word, and which letters are not"
+      },
+      {
+        "role": "interviewer",
+        "text": "only found in that word but are at the"
+      },
+      {
+        "role": "interviewer",
+        "text": "correct position, right?"
+      }
+    ],
+    "lastAnswered": "have you heard of the popular word game called \"wordle\"?",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "So for example, if there's a W in position 1 of both the word that you tried and the final word, then it would tell you you have a cor rect letter in the correct position. And so you have 6 tries to get the final word, and that's the game. It became super popular over the last few months, it got acquired by the New York Times from the developer, and your task Connor is to recreate this game in Reac",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "attempt."
+      },
+      {
+        "role": "interviewer",
+        "text": "Which."
+      },
+      {
+        "role": "interviewer",
+        "text": "Letters are actually found in the word that you have to find"
+      },
+      {
+        "role": "interviewer",
+        "text": "."
+      },
+      {
+        "role": "interviewer",
+        "text": "Which letters are not in that"
+      },
+      {
+        "role": "interviewer",
+        "text": "word, and which letters are not"
+      },
+      {
+        "role": "interviewer",
+        "text": "only found in that word but are at the"
+      },
+      {
+        "role": "interviewer",
+        "text": "correct position, right?"
+      }
+    ],
+    "lastAnswered": "have you heard of the popular word game called \"wordle\"?",
+    "mode": "db",
+    "expect": "ask",
+    "asks": [
+      "task"
+    ]
+  },
+  {
+    "text": "So for example, if there's a W in position 1 of both the word that you tried and the final word, then it would tell you you have a cor rect letter in the correct position. And so you have 6 tries to get the final word, and that's the game. It became super popular over the last few months, it got acquired by the New York Times from the developer, and your task Connor is to recreate this game in Reac t, and all that I'm going to be giving you is an API endpoint, so I'm going to actually give it to you right now. Here you go. Okay.",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "attempt."
+      },
+      {
+        "role": "interviewer",
+        "text": "Which."
+      },
+      {
+        "role": "interviewer",
+        "text": "Letters are actually found in the word that you have to find"
+      },
+      {
+        "role": "interviewer",
+        "text": "."
+      },
+      {
+        "role": "interviewer",
+        "text": "Which letters are not in that"
+      },
+      {
+        "role": "interviewer",
+        "text": "word, and which letters are not"
+      },
+      {
+        "role": "interviewer",
+        "text": "only found in that word but are at the"
+      },
+      {
+        "role": "interviewer",
+        "text": "correct position, right?"
+      }
+    ],
+    "lastAnswered": "your task Connor is to recreate this game in React",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "So for example, if there's a W in position 1 of both the word that you tried and the final word, then it would tell you you have a cor rect letter in the correct position. And so you have 6 tries to get the final word, and that's the game. It became super popular over the last few months, it got acquired by the New York Times from the developer, and your task Connor is to recreate this game in Reac t, and all that I'm going to be giving you is an API endpoint, so I'm going to actually give it to you right now. Here you go. Okay. It's hosted on the frontend expert web",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "attempt."
+      },
+      {
+        "role": "interviewer",
+        "text": "Which."
+      },
+      {
+        "role": "interviewer",
+        "text": "Letters are actually found in the word that you have to find"
+      },
+      {
+        "role": "interviewer",
+        "text": "."
+      },
+      {
+        "role": "interviewer",
+        "text": "Which letters are not in that"
+      },
+      {
+        "role": "interviewer",
+        "text": "word, and which letters are not"
+      },
+      {
+        "role": "interviewer",
+        "text": "only found in that word but are at the"
+      },
+      {
+        "role": "interviewer",
+        "text": "correct position, right?"
+      }
+    ],
+    "lastAnswered": "your task Connor is to recreate this game in React",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "1 of both the word that you tried and the final word, then it would tell you you have a cor rect letter in the correct position. And so you have 6 tries to get the final word, and that's the game. It became super popular over the last few months, it got acquired by the New York Times from the developer, and your task Connor is to recreate this game in Reac t, and all that I'm going to be giving you is an API endpoint, so I'm going to actually give it to you right now. Here you go. Okay. It's hosted on the frontend expert web site, and that API endpoint",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Which."
+      },
+      {
+        "role": "interviewer",
+        "text": "Letters are actually found in the word that you have to find"
+      },
+      {
+        "role": "interviewer",
+        "text": "."
+      },
+      {
+        "role": "interviewer",
+        "text": "Which letters are not in that"
+      },
+      {
+        "role": "interviewer",
+        "text": "word, and which letters are not"
+      },
+      {
+        "role": "interviewer",
+        "text": "only found in that word but are at the"
+      },
+      {
+        "role": "interviewer",
+        "text": "correct position, right?"
+      },
+      {
+        "role": "interviewer",
+        "text": "So for example, if there's a W in position"
+      }
+    ],
+    "lastAnswered": "your task Connor is to recreate this game in React",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "that you tried and the final word, then it would tell you you have a cor rect letter in the correct position. And so you have 6 tries to get the final word, and that's the game. It became super popular over the last few months, it got acquired by the New York Times from the developer, and your task Connor is to recreate this game in Reac t, and all that I'm going to be giving you is an API endpoint, so I'm going to actually give it to you right now. Here you go. Okay. It's hosted on the frontend expert web site, and that API endpoint is very simple: you hit it and you get",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Letters are actually found in the word that you have to find"
+      },
+      {
+        "role": "interviewer",
+        "text": "."
+      },
+      {
+        "role": "interviewer",
+        "text": "Which letters are not in that"
+      },
+      {
+        "role": "interviewer",
+        "text": "word, and which letters are not"
+      },
+      {
+        "role": "interviewer",
+        "text": "only found in that word but are at the"
+      },
+      {
+        "role": "interviewer",
+        "text": "correct position, right?"
+      },
+      {
+        "role": "interviewer",
+        "text": "So for example, if there's a W in position"
+      },
+      {
+        "role": "interviewer",
+        "text": "1 of both the word"
+      }
+    ],
+    "lastAnswered": "your task Connor is to recreate this game in React",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "word, then it would tell you you have a cor rect letter in the correct position. And so you have 6 tries to get the final word, and that's the game. It became super popular over the last few months, it got acquired by the New York Times from the developer, and your task Connor is to recreate this game in Reac t, and all that I'm going to be giving you is an API endpoint, so I'm going to actually give it to you right now. Here you go. Okay. It's hosted on the frontend expert web site, and that API endpoint is very simple: you hit it and you get a list of five-letter",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "."
+      },
+      {
+        "role": "interviewer",
+        "text": "Which letters are not in that"
+      },
+      {
+        "role": "interviewer",
+        "text": "word, and which letters are not"
+      },
+      {
+        "role": "interviewer",
+        "text": "only found in that word but are at the"
+      },
+      {
+        "role": "interviewer",
+        "text": "correct position, right?"
+      },
+      {
+        "role": "interviewer",
+        "text": "So for example, if there's a W in position"
+      },
+      {
+        "role": "interviewer",
+        "text": "1 of both the word"
+      },
+      {
+        "role": "interviewer",
+        "text": "that you tried and the final"
+      }
+    ],
+    "lastAnswered": "your task Connor is to recreate this game in React",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "rect letter in the correct position. And so you have 6 tries to get the final word, and that's the game. It became super popular over the last few months, it got acquired by the New York Times from the developer, and your task Connor is to recreate this game in Reac t, and all that I'm going to be giving you is an API endpoint, so I'm going to actually give it to you right now. Here you go. Okay. It's hosted on the frontend expert web site, and that API endpoint is very simple: you hit it and you get a list of five-letter words back. That is going to be the list from which you pick a random word to serve.",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Which letters are not in that"
+      },
+      {
+        "role": "interviewer",
+        "text": "word, and which letters are not"
+      },
+      {
+        "role": "interviewer",
+        "text": "only found in that word but are at the"
+      },
+      {
+        "role": "interviewer",
+        "text": "correct position, right?"
+      },
+      {
+        "role": "interviewer",
+        "text": "So for example, if there's a W in position"
+      },
+      {
+        "role": "interviewer",
+        "text": "1 of both the word"
+      },
+      {
+        "role": "interviewer",
+        "text": "that you tried and the final"
+      },
+      {
+        "role": "interviewer",
+        "text": "word, then it would tell you you have a cor"
+      }
+    ],
+    "lastAnswered": "your task Connor is to recreate this game in React",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "became super popular over the last few months, it got acquired by the New York Times from the developer, and your task Connor is to recreate this game in Reac t, and all that I'm going to be giving you is an API endpoint, so I'm going to actually give it to you right now. Here you go. Okay. It's hosted on the frontend expert web site, and that API endpoint is very simple: you hit it and you get a list of five-letter words back. That is going to be the list from which you pick a random word to serve. The user as the word of the",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "correct position, right?"
+      },
+      {
+        "role": "interviewer",
+        "text": "So for example, if there's a W in position"
+      },
+      {
+        "role": "interviewer",
+        "text": "1 of both the word"
+      },
+      {
+        "role": "interviewer",
+        "text": "that you tried and the final"
+      },
+      {
+        "role": "interviewer",
+        "text": "word, then it would tell you you have a cor"
+      },
+      {
+        "role": "interviewer",
+        "text": "rect letter in the correct position."
+      },
+      {
+        "role": "interviewer",
+        "text": "And so you have 6 tries to get the final"
+      },
+      {
+        "role": "interviewer",
+        "text": "word, and that's the game. It"
+      }
+    ],
+    "lastAnswered": "your task Connor is to recreate this game in React",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "got acquired by the New York Times from the developer, and your task Connor is to recreate this game in Reac t, and all that I'm going to be giving you is an API endpoint, so I'm going to actually give it to you right now. Here you go. Okay. It's hosted on the frontend expert web site, and that API endpoint is very simple: you hit it and you get a list of five-letter words back. That is going to be the list from which you pick a random word to serve. The user as the word of the game. And you have to recreate",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "So for example, if there's a W in position"
+      },
+      {
+        "role": "interviewer",
+        "text": "1 of both the word"
+      },
+      {
+        "role": "interviewer",
+        "text": "that you tried and the final"
+      },
+      {
+        "role": "interviewer",
+        "text": "word, then it would tell you you have a cor"
+      },
+      {
+        "role": "interviewer",
+        "text": "rect letter in the correct position."
+      },
+      {
+        "role": "interviewer",
+        "text": "And so you have 6 tries to get the final"
+      },
+      {
+        "role": "interviewer",
+        "text": "word, and that's the game. It"
+      },
+      {
+        "role": "interviewer",
+        "text": "became super popular over the last few months, it"
+      }
+    ],
+    "lastAnswered": "your task Connor is to recreate this game in React",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "and your task Connor is to recreate this game in Reac t, and all that I'm going to be giving you is an API endpoint, so I'm going to actually give it to you right now. Here you go. Okay. It's hosted on the frontend expert web site, and that API endpoint is very simple: you hit it and you get a list of five-letter words back. That is going to be the list from which you pick a random word to serve. The user as the word of the game. And you have to recreate \"wordle,\" you have the freed",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "1 of both the word"
+      },
+      {
+        "role": "interviewer",
+        "text": "that you tried and the final"
+      },
+      {
+        "role": "interviewer",
+        "text": "word, then it would tell you you have a cor"
+      },
+      {
+        "role": "interviewer",
+        "text": "rect letter in the correct position."
+      },
+      {
+        "role": "interviewer",
+        "text": "And so you have 6 tries to get the final"
+      },
+      {
+        "role": "interviewer",
+        "text": "word, and that's the game. It"
+      },
+      {
+        "role": "interviewer",
+        "text": "became super popular over the last few months, it"
+      },
+      {
+        "role": "interviewer",
+        "text": "got acquired by the New York Times from the developer,"
+      }
+    ],
+    "lastAnswered": "your task Connor is to recreate this game in React",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "to recreate this game in Reac t, and all that I'm going to be giving you is an API endpoint, so I'm going to actually give it to you right now. Here you go. Okay. It's hosted on the frontend expert web site, and that API endpoint is very simple: you hit it and you get a list of five-letter words back. That is going to be the list from which you pick a random word to serve. The user as the word of the game. And you have to recreate \"wordle,\" you have the freed om to, you know, kind of add your own creative",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "that you tried and the final"
+      },
+      {
+        "role": "interviewer",
+        "text": "word, then it would tell you you have a cor"
+      },
+      {
+        "role": "interviewer",
+        "text": "rect letter in the correct position."
+      },
+      {
+        "role": "interviewer",
+        "text": "And so you have 6 tries to get the final"
+      },
+      {
+        "role": "interviewer",
+        "text": "word, and that's the game. It"
+      },
+      {
+        "role": "interviewer",
+        "text": "became super popular over the last few months, it"
+      },
+      {
+        "role": "interviewer",
+        "text": "got acquired by the New York Times from the developer,"
+      },
+      {
+        "role": "interviewer",
+        "text": "and your task Connor is"
+      }
+    ],
+    "lastAnswered": "your task Connor is to recreate this game in React",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "t, and all that I'm going to be giving you is an API endpoint, so I'm going to actually give it to you right now. Here you go. Okay. It's hosted on the frontend expert web site, and that API endpoint is very simple: you hit it and you get a list of five-letter words back. That is going to be the list from which you pick a random word to serve. The user as the word of the game. And you have to recreate \"wordle,\" you have the freed om to, you know, kind of add your own creative twist to it, not as far as the way",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "word, then it would tell you you have a cor"
+      },
+      {
+        "role": "interviewer",
+        "text": "rect letter in the correct position."
+      },
+      {
+        "role": "interviewer",
+        "text": "And so you have 6 tries to get the final"
+      },
+      {
+        "role": "interviewer",
+        "text": "word, and that's the game. It"
+      },
+      {
+        "role": "interviewer",
+        "text": "became super popular over the last few months, it"
+      },
+      {
+        "role": "interviewer",
+        "text": "got acquired by the New York Times from the developer,"
+      },
+      {
+        "role": "interviewer",
+        "text": "and your task Connor is"
+      },
+      {
+        "role": "interviewer",
+        "text": "to recreate this game in Reac"
+      }
+    ],
+    "lastAnswered": "your task Connor is to recreate this game in React",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "It's hosted on the frontend expert web site, and that API endpoint is very simple: you hit it and you get a list of five-letter words back. That is going to be the list from which you pick a random word to serve. The user as the word of the game. And you have to recreate \"wordle,\" you have the freed om to, you know, kind of add your own creative twist to it, not as far as the way the game works, but more as far as, like, the lo",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "And so you have 6 tries to get the final"
+      },
+      {
+        "role": "interviewer",
+        "text": "word, and that's the game. It"
+      },
+      {
+        "role": "interviewer",
+        "text": "became super popular over the last few months, it"
+      },
+      {
+        "role": "interviewer",
+        "text": "got acquired by the New York Times from the developer,"
+      },
+      {
+        "role": "interviewer",
+        "text": "and your task Connor is"
+      },
+      {
+        "role": "interviewer",
+        "text": "to recreate this game in Reac"
+      },
+      {
+        "role": "interviewer",
+        "text": "t, and all that I'm going to be giving you is an API endpoint, so I'm going to actually give it to you right now. Here you go."
+      },
+      {
+        "role": "interviewer",
+        "text": "Okay."
+      }
+    ],
+    "lastAnswered": "your task Connor is to recreate this game in React",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "It's hosted on the frontend expert web site, and that API endpoint is very simple: you hit it and you get a list of five-letter words back. That is going to be the list from which you pick a random word to serve. The user as the word of the game. And you have to recreate \"wordle,\" you have the freed om to, you know, kind of add your own creative twist to it, not as far as the way the game works, but more as far as, like, the lo ok of it, you know, how users select letters or select words. I'll leave that up to you.",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "And so you have 6 tries to get the final"
+      },
+      {
+        "role": "interviewer",
+        "text": "word, and that's the game. It"
+      },
+      {
+        "role": "interviewer",
+        "text": "became super popular over the last few months, it"
+      },
+      {
+        "role": "interviewer",
+        "text": "got acquired by the New York Times from the developer,"
+      },
+      {
+        "role": "interviewer",
+        "text": "and your task Connor is"
+      },
+      {
+        "role": "interviewer",
+        "text": "to recreate this game in Reac"
+      },
+      {
+        "role": "interviewer",
+        "text": "t, and all that I'm going to be giving you is an API endpoint, so I'm going to actually give it to you right now. Here you go."
+      },
+      {
+        "role": "interviewer",
+        "text": "Okay."
+      }
+    ],
+    "lastAnswered": "your task Connor is to recreate this game in React",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "It's hosted on the frontend expert web site, and that API endpoint is very simple: you hit it and you get a list of five-letter words back. That is going to be the list from which you pick a random word to serve. The user as the word of the game. And you have to recreate \"wordle,\" you have the freed om to, you know, kind of add your own creative twist to it, not as far as the way the game works, but more as far as, like, the lo ok of it, you know, how users select letters or select words. I'll leave that up to you. Okay, sounds good.",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "And so you have 6 tries to get the final"
+      },
+      {
+        "role": "interviewer",
+        "text": "word, and that's the game. It"
+      },
+      {
+        "role": "interviewer",
+        "text": "became super popular over the last few months, it"
+      },
+      {
+        "role": "interviewer",
+        "text": "got acquired by the New York Times from the developer,"
+      },
+      {
+        "role": "interviewer",
+        "text": "and your task Connor is"
+      },
+      {
+        "role": "interviewer",
+        "text": "to recreate this game in Reac"
+      },
+      {
+        "role": "interviewer",
+        "text": "t, and all that I'm going to be giving you is an API endpoint, so I'm going to actually give it to you right now. Here you go."
+      },
+      {
+        "role": "interviewer",
+        "text": "Okay."
+      }
+    ],
+    "lastAnswered": "your task Connor is to recreate this game in React",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "is very simple: you hit it and you get a list of five-letter words back. That is going to be the list from which you pick a random word to serve. The user as the word of the game. And you have to recreate \"wordle,\" you have the freed om to, you know, kind of add your own creative twist to it, not as far as the way the game works, but more as far as, like, the lo ok of it, you know, how users select letters or select words. I'll leave that up to you. Okay, sounds good. Cool, so this is just an array five-letter words, yep.",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "became super popular over the last few months, it"
+      },
+      {
+        "role": "interviewer",
+        "text": "got acquired by the New York Times from the developer,"
+      },
+      {
+        "role": "interviewer",
+        "text": "and your task Connor is"
+      },
+      {
+        "role": "interviewer",
+        "text": "to recreate this game in Reac"
+      },
+      {
+        "role": "interviewer",
+        "text": "t, and all that I'm going to be giving you is an API endpoint, so I'm going to actually give it to you right now. Here you go."
+      },
+      {
+        "role": "interviewer",
+        "text": "Okay."
+      },
+      {
+        "role": "interviewer",
+        "text": "It's hosted on the frontend expert web"
+      },
+      {
+        "role": "interviewer",
+        "text": "site, and that API endpoint"
+      }
+    ],
+    "lastAnswered": "your task Connor is to recreate this game in React",
+    "mode": "db",
+    "expect": "silent",
+    "asks": []
+  },
+  {
+    "text": "Yes, I'm ready. Okay, have you heard of the popular word game called \"wordle\"? Yeah, yeah, I've played it a few times.",
+    "ctx": [],
+    "lastAnswered": null,
+    "mode": "live",
+    "expect": "ask",
+    "asks": [
+      "wordle_q"
+    ]
+  },
+  {
+    "text": "word, and which letters are not only found in that word but are at the correct position, right? So for example, if there's a W in position 1 of both the word that you tried and the final word, then it would tell you you have a cor rect letter in the correct position. And so you have 6 tries to get the final word, and that's the game. It became super popular over the last few months, it got acquired by the New York Times from the developer, and your task Connor is to recreate this game in Reac t, and all that I'm going to be giving you is an API endpoint, so I'm going to actually give it to you right now. Here you go. Okay.",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": ". And at every try, the"
+      },
+      {
+        "role": "interviewer",
+        "text": "game is going to show, based on,"
+      },
+      {
+        "role": "interviewer",
+        "text": "like, different colors, which letters of the guess that you"
+      },
+      {
+        "role": "interviewer",
+        "text": "attempt."
+      },
+      {
+        "role": "interviewer",
+        "text": "Which."
+      },
+      {
+        "role": "interviewer",
+        "text": "Letters are actually found in the word that you have to find"
+      },
+      {
+        "role": "interviewer",
+        "text": "."
+      },
+      {
+        "role": "interviewer",
+        "text": "Which letters are not in that"
+      }
+    ],
+    "lastAnswered": "have you heard of the popular word game called \"wordle\"?",
+    "mode": "live",
+    "expect": "ask",
+    "asks": [
+      "task"
+    ]
+  }
+]

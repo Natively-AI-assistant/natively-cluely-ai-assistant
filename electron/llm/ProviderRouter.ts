@@ -401,7 +401,7 @@ const LOCAL_PROVIDERS = ['ollama', 'custom'];
  * Deliberately left unwired by the audit rather than switched on: enabling it
  * changes which provider serves live traffic, and that cannot be validated
  * without exercising real provider failures. Wiring it (or deleting it) is a
- * product decision — see AUDIT_REPORT.md.
+ * product decision.
  *
  * Known issues inside the class, listed so nobody wires it as-is:
  *   - half-open admits unbounded calls (halfOpenCalls is only incremented in
@@ -513,7 +513,7 @@ export class ProviderRouter {
             // All providers down, return lowest priority
             return {
                 provider: 'gemini',
-                model: 'gemini-3.7-flash',
+                model: 'gemini-3.8-flash',
                 reason: 'all providers unhealthy, using Gemini as last resort'
             };
         }
@@ -597,7 +597,7 @@ export class ProviderRouter {
 
     private getDefaultModel(provider: string): string {
         const models: Record<string, string> = {
-            'gemini': 'gemini-3.7-flash',
+            'gemini': 'gemini-3.8-flash',
             'groq': 'qwen/qwen3.6-27b',
             'openai': 'gpt-5.4',
             'claude': 'claude-sonnet-4-6',

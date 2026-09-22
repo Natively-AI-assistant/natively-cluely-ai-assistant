@@ -10,8 +10,6 @@ FIXES.md
 python-installer.pkg
 Sales20260405-60-494j8t.csv
 /Sales20260405-60-494j8t.csv
-natively-api
-/natively-api
 /natively
 natively/
 .natively
@@ -90,6 +88,10 @@ node_modules/
 jspm_packages/
 dist-electron/
 dist/
+
+# Compiled Apple Speech helper. Built explicitly for local development and
+# injected per target architecture during electron-builder afterPack.
+/resources/apple-speech/natively-apple-speech
 
 # husky auto-generated machinery — only the user-facing hook files
 # (e.g. .husky/pre-commit) are committed.
@@ -433,6 +435,12 @@ scripts/combine_*_single_file.py
 # Autopilot campaign prompts — internal docs, not source
 /HANDOFF*.md
 /NATIVELY_CONTEXT_SYSTEM_SIMPLIFICATION_PROMPT.md
+# Evidence/data-access briefing for investigation agents. Carries no secret
+# VALUES, but in a PUBLIC repo it is still a map of the admin surface: which
+# /admin/* endpoints exist, that x-admin-secret gates them, the prod API and
+# Dodo base URLs, the Supabase table names, and which .env variable unlocks
+# each one. That is reconnaissance, so it stays local.
+/NATIVELY-EVIDENCE-ACCESS-REFERENCE.md
 # Generated Vite build output that mirrors src/**/*.{tsx,ts}
 /src/**/*.js
 
@@ -495,6 +503,9 @@ tools/
 !docs/
 docs/*
 !docs/VISION_MODEL_BENCHMARK.md
+# Per-release notes are published artifacts (linked from the README), not scratch notes.
+!docs/releases/
+!docs/releases/**
 # Usage ledger — the progress file is the mandated handoff contract across three
 # campaigns (16 architectural decisions, 5 open findings, the full forensics
 # record), the architecture doc is the system's specification, and the privacy
@@ -505,8 +516,6 @@ docs/*
 !docs/usage-ledger-privacy-diff.md
 # TypeScript 7 upgrade — audit + report are deliverables, not scratch notes,
 # so they are allowlisted out of the blanket `docs/*` ignore above.
-!docs/ts7-upgrade-audit.md
-!docs/ts7-upgrade-report.md
 # Auto Answer V3 campaign — the progress file is the resume contract for the
 # autopilot (a fresh session must be able to continue from it alone) and the
 # two specs govern every phase. Same reasoning as the usage-ledger entries.
@@ -515,6 +524,12 @@ docs/*
 !docs/specs/
 !docs/specs/auto-answer-v2-spec.md.md
 !docs/specs/auto-answer-v3-amendments.md
+# Reference-retrieval investigation + fix plan (2026-08-28 beta report). These
+# are the handover contract for the next agent — a fresh session must be able to
+# pick the work up from these four files alone, and a worktree agent cannot see
+# an ignored path at all. Same reasoning as the autopilot entries above.
+!docs/retrieval-handoff/
+!docs/retrieval-handoff/**
 benchmark-results/
 
 
@@ -533,7 +548,73 @@ benchmark-results/
 #   undefined/           written by a bug that resolved a path to the literal
 #                        string "undefined" — if this reappears, fix the caller
 #   natively_debug.size* one-off debug dumps
+#   pitch/               investor pitch deck + DPIIT notes (business material,
+#                        and this repo is public — a deck does not belong in it)
+#   researc              a personal chat transcript, saved by a shell redirect
+#                        that lost its filename. Kept locally, never committed.
 /natively-control/
 /chargeback_evidence/
 /undefined/
 /natively_debug.size*
+/pitch/
+/researc
+
+benchmarks/reranker-eval/results/
+
+# Reranker/embedding evaluation artefacts and non-shipped weights.
+# bge-reranker-large is NOT in scripts/download-models.js's manifest — it is a
+# benchmark-only model (~553MB) and must never enter the repo or a build.
+resources/models/Xenova/bge-reranker-large/
+embedding-benchmark/
+
+# Dev-mode model cache. transformers.js is given `env.cacheDir = <cwd>/models`
+# when the app is unpackaged, so running a local reranker or embedder in dev
+# downloads weights here — 125MB appeared during one benchmark run. The three
+# tracked JSON files under models/Xenova/bge-reranker-base are force-added and
+# stay; everything else is a redownloadable cache that must never be committed.
+models/*
+!models/Xenova/
+models/Xenova/*
+!models/Xenova/bge-reranker-base/
+models/Xenova/bge-reranker-base/*
+!models/Xenova/bge-reranker-base/*.json
+
+# Router benchmark training checkpoints (PyTorch .pt, up to 570 MB each). Artifacts, never source.
+scripts/intent-benchmark/trained/
+
+# Router benchmark SLM baseline: Qwen3-0.6B Q4_0, 409 MB in ONE file — well over
+# GitHub's 100 MB blob limit, so a stray `git add -A` here does not just bloat the
+# repo, it produces a history that cannot be pushed at all. Downloaded for the
+# `slm-qwen3-06b` provider in scripts/intent-benchmark/run.mjs and measured at p95
+# 939ms (66x the leading encoder), i.e. evidence for a rejected approach, never a
+# shipped dependency. Nothing under this directory is tracked.
+resources/models/gguf/
+
+# Router benchmark model downloads (NLI, GLiClass, potion, bge-small). Weights, never source.
+resources/models/MoritzLaurer/
+resources/models/Xenova/nli-deberta-v3-base/
+resources/models/Xenova/nli-deberta-v3-small/
+resources/models/Xenova/bge-small-en-v1.5/
+resources/models/knowledgator/
+resources/models/minishlab/
+
+# Local scratch: CDP/Playwright session drivers and a campaign's reference-doc pack.
+/cdp-*.mjs
+/live-*.mjs
+/cluely_reference_pack_fresh/
+
+# Local intent-benchmark reports that were never committed (the classifier was removed 2026-09-05).
+# Exact names only: the rest of reports/ is tracked.
+scripts/intent-benchmark/reports/head-deberta-cs.json
+scripts/intent-benchmark/reports/head-deberta-fixed.json
+scripts/intent-benchmark/reports/head-deberta-q8.json
+scripts/intent-benchmark/reports/hybrid-rules-proto-head-cs.json
+scripts/intent-benchmark/reports/hybrid-tight-cs.json
+scripts/intent-benchmark/reports/hybrid-wide-cs.json
+scripts/intent-benchmark/reports/none-always-answer-cs.json
+
+# 9Router provider — the design records endpoint behaviour verified against a
+# live instance (auth split by HTTP verb, capabilities carried on /v1/models)
+# that is not recoverable from the vendor's docs, plus the reasoning behind the
+# `ninerouter` internal id. A later session changing this provider needs it.
+!docs/ninerouter-provider-design-2026-09-20.md

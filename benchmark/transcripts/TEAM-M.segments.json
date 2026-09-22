@@ -1,0 +1,3784 @@
+{
+ "id": "TEAM-M",
+ "segments": [
+  {
+   "speaker": "user",
+   "text": "Okay, I think we have most people. Rohan, Viktor, Maya. Ines, are you on?",
+   "timestamp": 1789480806200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Yeah, I'm here. Sorry, I'm on the train wifi, so if I cut out just, um, yell at me.",
+   "timestamp": 1789480814400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Train wifi for a launch readiness meeting. Bold choice.",
+   "timestamp": 1789480818600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "It's the only forty-five minutes I have free today, so you get what you get.",
+   "timestamp": 1789480825200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Morning everyone.",
+   "timestamp": 1789480826600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Hey. Dana, can you hear me? My headset's been doing a weird thing all morning.",
+   "timestamp": 1789480833200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "I can hear you, Maya. A little quiet but fine.",
+   "timestamp": 1789480837800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Okay, good. It keeps switching over to the laptop mic whenever I move my head.",
+   "timestamp": 1789480844400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Just don't move your head for forty-five minutes. Easy.",
+   "timestamp": 1789480848600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Thank you, Viktor, very helpful.",
+   "timestamp": 1789480851200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Did everyone survive the all-hands yesterday? That Q and A went on forever.",
+   "timestamp": 1789480857000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "I left after the part about the new expense tool. I've accepted that I'll never understand the expense tool.",
+   "timestamp": 1789480865200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, let's get going, because we have a lot. This is the weekly readiness check for usage-based billing v2.",
+   "timestamp": 1789480873400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "It's Thursday the 17th, and we're, what, a little under three weeks out from the date on the roadmap.",
+   "timestamp": 1789480881600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Nineteen days to October 6th. Not that I'm counting.",
+   "timestamp": 1789480885800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "He's counting.",
+   "timestamp": 1789480887200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I have a countdown widget. It's fine. It's healthy.",
+   "timestamp": 1789480891400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Let me set the agenda first so we don't spend the whole thing on the date, because I know that's where this ends up.",
+   "timestamp": 1789480901600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "One, status per workstream. Viktor on backend, Maya on QA and release, Ines on the dashboard and design side.",
+   "timestamp": 1789480909800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Two, the launch date itself. Rohan, you and Viktor both messaged me about it last night, so we'll have that out properly.",
+   "timestamp": 1789480919200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Three, Joel from customer success is joining around the half hour for a customer escalation. He has a hard stop, so we'll pull him in whenever he arrives.",
+   "timestamp": 1789480931000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Four, the staged rollout plan. Five, legal and enablement. And then actions and wrap.",
+   "timestamp": 1789480937200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Can we do the date before status? Because honestly the status kind of... no, actually, status informs the date. Ignore me.",
+   "timestamp": 1789480946200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Yeah, status first. Viktor, go ahead.",
+   "timestamp": 1789480949200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Okay. Backend. The short version is the metering pipeline is in good shape, the rating engine is mostly in good shape, and invoice preview is the problem child.",
+   "timestamp": 1789480961000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "On metering, we ran the load test on Tuesday against the staging cluster. Sustained ingestion was 42,000 events per second for two hours.",
+   "timestamp": 1789480970800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "The target we committed to in the design doc was 30,000 events per second, so we're comfortably over.",
+   "timestamp": 1789480978600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That's great.",
+   "timestamp": 1789480980000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "It is great. Consumer lag in Cafca never went above about 9 seconds during the test, which, uh, I'll take.",
+   "timestamp": 1789480988600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And that's with the new partition count?",
+   "timestamp": 1789480992000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "That's with 48 partitions, yeah. We bumped it from 24 last sprint.",
+   "timestamp": 1789480997400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Any cost impact from that?",
+   "timestamp": 1789481000000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Not really. The brokers were already over-provisioned. Infra said it's maybe a couple hundred dollars a month, rounding error.",
+   "timestamp": 1789481008200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Rating engine, unit test coverage is at 81%. The metering service is lower, it's at 67%, and that's mostly because the replay tooling has basically no tests.",
+   "timestamp": 1789481019600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Which I will be bringing up in my section, just so everyone knows.",
+   "timestamp": 1789481025400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "I know. I know you will.",
+   "timestamp": 1789481028400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Also on rating, we settled the rounding question with finance. We round at the invoice line item, half-even, not per event. Priyanka in finance signed off on that on Monday.",
+   "timestamp": 1789481041000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Is that going to change anybody's numbers versus v1?",
+   "timestamp": 1789481045200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "By cents, on a handful of accounts. v1 was rounding per event, which was actually slightly wrong in our favor. So if anything customers pay a few cents less.",
+   "timestamp": 1789481057400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I'll take customers paying a few cents less over a support ticket about rounding.",
+   "timestamp": 1789481063600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Okay, invoice preview. So p95 latency for generating the preview on a large account is 1.4 seconds right now. Our target is 800 milliseconds.",
+   "timestamp": 1789481073800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "What counts as a large account here?",
+   "timestamp": 1789481077200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Anything over about 2 million metered events in the billing period. There's around 60 accounts like that today.",
+   "timestamp": 1789481085000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "The problem is the preview aggregates on read. It walks every event in the period. We could pre-aggregate hourly, but that's a real chunk of work, probably a week and a half for me.",
+   "timestamp": 1789481099200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Can we just... not show the preview for those 60 accounts at launch?",
+   "timestamp": 1789481105000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "I mean, we could. I floated that in the channel last week, actually I floated dropping preview from GA entirely, and people hated it.",
+   "timestamp": 1789481115200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I hated it. The preview is literally the thing on slide three of the pitch deck.",
+   "timestamp": 1789481122200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "I also hated it, for the record. The whole dashboard layout assumes it's there.",
+   "timestamp": 1789481128400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, let's park the preview question for the date discussion, because it's really a date question. What else, Viktor?",
+   "timestamp": 1789481136600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Two more things. One is the dedup bug, which I think is what Joel's coming for, so I'll keep it short.",
+   "timestamp": 1789481145600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Our dedup window on incoming usage events is 5 minutes. If a customer's client retries a request after that window, we count the event twice.",
+   "timestamp": 1789481156200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "The fix is to use client-supplied idempotency keys and keep them for 24 hours, instead of relying on a time window. I've got a PR up, it's maybe 70% done.",
+   "timestamp": 1789481168800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Wait, client-supplied means the customer has to send the key. Do our SDKs even do that?",
+   "timestamp": 1789481175800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Good question. The Node and Python SDKs already send one, as of the release two weeks ago. The Go SDK gets it next week.",
+   "timestamp": 1789481186000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "The Java SDK hasn't been started. And a lot of customers just call the raw HTTP API with no SDK at all.",
+   "timestamp": 1789481195400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "So what happens for a request with no key?",
+   "timestamp": 1789481199600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Right now, it falls back to the 5-minute window. I floated hashing the payload server-side as a fallback key, but that breaks for customers who legitimately send identical events, like two identical page views in the same second.",
+   "timestamp": 1789481215400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "That's going to be a fun one to test.",
+   "timestamp": 1789481219600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "So I don't want to decide the no-key fallback today. I'd like to look at the beta traffic first and see how many requests actually arrive without a key.",
+   "timestamp": 1789481231800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, that's fine. When is the main fix done done? Merged, not \"works on my machine\".",
+   "timestamp": 1789481238800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "I can have it merged by next Friday, the 25th.",
+   "timestamp": 1789481243400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay. And the second thing?",
+   "timestamp": 1789481246000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "The second thing is the blocker. We need the Payments Platform team to ship idempotency support on the ledger write API. That's their version 3.4.",
+   "timestamp": 1789481256600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Without that, even if our side dedups properly, a retry from our posting worker into the ledger can still double-post an invoice line item.",
+   "timestamp": 1789481266800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I thought that was already in 3.3.",
+   "timestamp": 1789481270200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "3.3 has it for payments, not for invoice line items. It's a separate endpoint, and it's the one we use.",
+   "timestamp": 1789481278800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Who are we talking to over there?",
+   "timestamp": 1789481282200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Sunil Varghese. He's been really responsive, to be fair to him. He told me on Monday they're targeting September 29th.",
+   "timestamp": 1789481290800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Targeting or committed?",
+   "timestamp": 1789481292600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "He said targeting. Which, you know, in Payments Platform language...",
+   "timestamp": 1789481297200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Means October.",
+   "timestamp": 1789481298600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "I did not say that. Please nobody quote me to Sunil.",
+   "timestamp": 1789481303600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, I'll come back to that at the end, because I want a clear owner on chasing it. Maya, QA and release.",
+   "timestamp": 1789481313000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Okay. So bug counts as of this morning. We have 2 Sev-1s open, 9 P1s, 23 P2s, and 41 P3s.",
+   "timestamp": 1789481321600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "What are the two Sev-1s?",
+   "timestamp": 1789481324200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "One is the dedup double count Viktor just described. The other one is proration.",
+   "timestamp": 1789481330400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "If a customer switches plans mid-cycle, the usage from before the switch gets rated at the new plan's price instead of the old plan's price.",
+   "timestamp": 1789481341000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "That one's mine too. The fix is basically one line. It's the testing around it that's annoying.",
+   "timestamp": 1789481348400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Oh, sorry, I need to correct myself. It's 7 P1s, not 9. Two got closed this morning, I was reading from yesterday's export.",
+   "timestamp": 1789481358200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Seven P1s. Okay, that's better.",
+   "timestamp": 1789481360800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Yeah. So, 2 Sev-1, 7 P1, 23 P2, 41 P3.",
+   "timestamp": 1789481365400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Are any of the P1s customer-visible?",
+   "timestamp": 1789481368400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Four of them are. Mostly CSV export formatting and one where the usage chart shows UTC dates for customers in other time zones.",
+   "timestamp": 1789481378200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "The time zone one is on my list too. The front end team has it.",
+   "timestamp": 1789481384800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "We decided the chart should use the account's billing time zone, not the viewer's browser, because the invoice uses the billing time zone. Otherwise the chart and the invoice disagree at the month boundary.",
+   "timestamp": 1789481399000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Yeah, that one bit a beta customer in Sydney. Their August chart had a day of September in it.",
+   "timestamp": 1789481407200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "It's a P1 because it makes the numbers look wrong, even though the invoice itself is right.",
+   "timestamp": 1789481414600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Regression suite is at 1,312 tests. We added about 140 this sprint. The pass rate on last night's run was 96.4%.",
+   "timestamp": 1789481423600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "The failures are mostly the proration cases, plus three flaky ones in currency rounding.",
+   "timestamp": 1789481429800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Are the flaky ones real, or flaky flaky?",
+   "timestamp": 1789481433600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Flaky flaky, I think. They only fail on JPY, which has zero decimal places, and only when the test runs right after the EUR suite. So probably a shared fixture.",
+   "timestamp": 1789481446200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "That's a shared fixture. I'd bet lunch on it.",
+   "timestamp": 1789481450400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "I'll take that bet, because if it's a real bug I'm getting a very nice lunch.",
+   "timestamp": 1789481457400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "The other thing that hurt us this sprint is staging-eu was down for two days last week. The disk filled up on the event store, so the EU currency suites didn't run Wednesday or Thursday.",
+   "timestamp": 1789481472000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Is that fixed properly, or just cleaned up?",
+   "timestamp": 1789481475800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Cleaned up. Infra added an alert at 80% disk, but the retention job that's supposed to trim it still isn't running. So, you know, it'll fill up again in about three weeks.",
+   "timestamp": 1789481489200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Which is right around launch. Great.",
+   "timestamp": 1789481492200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "I've got a ticket open with infra. I'll keep chasing it.",
+   "timestamp": 1789481497200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Then the migration dry run. We have to move existing subscriptions from the v1 rating tables to v2. We've done the dry run on 3 of 12 shards.",
+   "timestamp": 1789481509000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "The three went fine. Average of 38 minutes per shard, and zero mismatches on the reconciliation check.",
+   "timestamp": 1789481516400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And the other nine?",
+   "timestamp": 1789481518600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "That's the thing. The dry run is really manual right now. There's no runbook. It's all in Viktor's head and a Slack thread.",
+   "timestamp": 1789481528400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "It's in a Slack thread and a Google doc, for the record.",
+   "timestamp": 1789481533800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "A Google doc where step 4 says, and I'm reading it, \"do the thing from Tuesday\".",
+   "timestamp": 1789481540800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Okay. That's fair. That's a fair hit.",
+   "timestamp": 1789481544200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Alright, we need a real runbook for the migration before anyone touches the other nine shards. Viktor, can you own that? You know it best.",
+   "timestamp": 1789481554800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Yeah, I can own it. When do we need it by?",
+   "timestamp": 1789481559800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Let's say Monday the 28th, so there's time to do the remaining shards before any go/no-go.",
+   "timestamp": 1789481566800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Okay. Runbook by the 28th.",
+   "timestamp": 1789481569400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "And just to finish my section, the replay tooling. That's what I'm most worried about, because replay is our recovery story if we rate something wrong.",
+   "timestamp": 1789481580400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "If we rate a batch wrong in production, replay is how we re-rate it. And it has, Viktor, what, like, nothing?",
+   "timestamp": 1789481589400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "It has 12 tests. They're good tests.",
+   "timestamp": 1789481592800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Twelve tests, for the thing we'd be running during an incident.",
+   "timestamp": 1789481597800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Twelve very good tests.",
+   "timestamp": 1789481600000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, noted as a risk. I don't want to solve it right now. Ines, you're up. Ines?",
+   "timestamp": 1789481607400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Can you- can you hear- I think it's-",
+   "timestamp": 1789481611200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "You're cutting out, Ines. You sound very robotic.",
+   "timestamp": 1789481615000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "She's become one with the train.",
+   "timestamp": 1789481618000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Sorry, we went through a tunnel. Is this any better?",
+   "timestamp": 1789481622600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Much better. Go ahead.",
+   "timestamp": 1789481624800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Okay, design. The usage dashboard is done in Figma and it's about 90% built. The front end team says what's left is the export button and the drill-down by meter.",
+   "timestamp": 1789481637400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "The drill-down is the thing where you click on, say, API calls, and it breaks it down by endpoint or by sub-account.",
+   "timestamp": 1789481646800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "On export, a couple of beta customers asked for Excel instead of CSV. I'd rather not add XLSX for launch, it's another library and another set of formatting bugs.",
+   "timestamp": 1789481659000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Two customers asked, or two customers asked loudly?",
+   "timestamp": 1789481662800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "One loudly, one politely. I'd say CSV only at launch, and we revisit if more people ask.",
+   "timestamp": 1789481670200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, CSV only for launch. Excel goes on the later list.",
+   "timestamp": 1789481675200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "We ran the accessibility audit last week. There were 2 issues, both color contrast on the chart legend, and both are already fixed.",
+   "timestamp": 1789481685000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Nice. Did the audit look at the invoice PDF too, or just the dashboard?",
+   "timestamp": 1789481691200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Just the dashboard. The PDF is generated by the billing service, so I'm not sure who'd even own that audit.",
+   "timestamp": 1789481699800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "The PDF template is ours, technically, but nobody's touched it in two years.",
+   "timestamp": 1789481705600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Okay, that's probably a separate conversation. The thing I actually want to talk about today is the empty state, because I don't think we agree on it.",
+   "timestamp": 1789481717000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "We don't.",
+   "timestamp": 1789481718400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "So when a new customer first turns on usage billing, they have zero events. The dashboard is just empty. Blank charts.",
+   "timestamp": 1789481727400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Option A is we show sample data, greyed out, with a banner that says \"this is what your dashboard will look like once you start sending usage\".",
+   "timestamp": 1789481738800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Option B is no fake data at all, just a setup checklist. Connect your SDK, send a test event, set your price per unit.",
+   "timestamp": 1789481749000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I like A, because it sells the feature. You see the charts, you get it immediately.",
+   "timestamp": 1789481756000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "But in the beta, 3 of the 14 customers screenshotted the dashboard and sent it to their finance team. If it's sample data, somebody is going to screenshot fake numbers.",
+   "timestamp": 1789481768600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Oh, that's a good point. Finance people will absolutely think it's real.",
+   "timestamp": 1789481774000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That's what the banner is for.",
+   "timestamp": 1789481777000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Nobody reads banners, Rohan.",
+   "timestamp": 1789481779200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I read banners.",
+   "timestamp": 1789481781000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "You wrote the banner copy. That doesn't count.",
+   "timestamp": 1789481784800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Is there a middle option? Like the checklist, with a small preview thumbnail of a populated dashboard?",
+   "timestamp": 1789481792200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Maybe. I honestly think that ends up being a worse version of both, but I could mock it up.",
+   "timestamp": 1789481800400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I don't want to hold anything up on this. Can we just ship A and see what happens?",
+   "timestamp": 1789481808200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "I'd rather not ship something that we already suspect will generate support tickets.",
+   "timestamp": 1789481814000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "From a testing side, B is less work, for what it's worth. Sample data has to be kept in sync with every chart change.",
+   "timestamp": 1789481824200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That's an argument for B from the person who doesn't have to sell it.",
+   "timestamp": 1789481830400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, we're not going to solve this in the meeting. Ines, can you put both in front of real customers?",
+   "timestamp": 1789481839000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Yeah. I have usability sessions with 5 customers next week anyway. I can show both variants, A and B, and see which one people understand.",
+   "timestamp": 1789481849600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "When would you have results?",
+   "timestamp": 1789481852200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "The sessions are Tuesday and Wednesday, so Thursday the 24th I could share something.",
+   "timestamp": 1789481858400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Good. So the empty state is still open, and we look at the session results on the 24th.",
+   "timestamp": 1789481866200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Fine. Still team A.",
+   "timestamp": 1789481868400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Noted. Very noted.",
+   "timestamp": 1789481870200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Unrelated, but is everyone's desk getting packed by the movers, or are we doing our own?",
+   "timestamp": 1789481877200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Oh, the move. I think we pack our own stuff. Facilities said the crates arrive Monday.",
+   "timestamp": 1789481884200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "We pack our own, and the crates have to be sealed by October 1st, because the actual move is the 2nd.",
+   "timestamp": 1789481893200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Is it true there's no espresso machine on the new floor?",
+   "timestamp": 1789481898200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "There is an espresso machine. It's just on the 6th floor, and we're on the 4th.",
+   "timestamp": 1789481905200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So, basically, there's no espresso machine.",
+   "timestamp": 1789481908200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "You could take the stairs, Rohan. It's two floors.",
+   "timestamp": 1789481912400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I'm a product manager. I don't take stairs, I take stakeholders.",
+   "timestamp": 1789481917400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "That's terrible.",
+   "timestamp": 1789481918800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, that one's going in the retro doc.",
+   "timestamp": 1789481922600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Are the monitors moving with us, or are we getting new ones in the Harlow building?",
+   "timestamp": 1789481929600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "I genuinely don't know. Someone should ask facilities. Not a launch thing, though.",
+   "timestamp": 1789481935400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "The Harlow building has better parking, at least.",
+   "timestamp": 1789481939200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Only if you get a permit, and the waitlist is something like 40 people.",
+   "timestamp": 1789481945400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "I'm on the waitlist. I'm number 31. I'll get a spot sometime in 2028.",
+   "timestamp": 1789481951600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay. Back to the launch, before we lose another ten minutes to parking.",
+   "timestamp": 1789481957400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "So, the date. Rohan, make your case.",
+   "timestamp": 1789481960800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay. October 6th has been the date on the roadmap since June. Marketing built the launch webinar around it, and the webinar is October 7th.",
+   "timestamp": 1789481971400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Sales has been telling prospects that usage billing is live in early October. Some of that is in writing, in proposals.",
+   "timestamp": 1789481980400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And there's the Q4 pricing change. New contracts from October 1st are being written with usage tiers. If v2 isn't live, those customers get invoiced on v1 with manual adjustments.",
+   "timestamp": 1789481993000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "How many contracts are we talking about?",
+   "timestamp": 1789481996400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Sales thinks about 25 new contracts in October. Maybe 30.",
+   "timestamp": 1789482001000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And finance ops says a manual adjustment is about 4 hours per contract per month. So that's a hundred hours of spreadsheet work, every month we're late.",
+   "timestamp": 1789482012400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Can I respond?",
+   "timestamp": 1789482014200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Go ahead.",
+   "timestamp": 1789482015600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "So, we have 2 Sev-1s, and one of them is literally customers getting overbilled. We have nine shards of migration that haven't been dry run.",
+   "timestamp": 1789482026200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "And we depend on Payments Platform shipping on the 29th, which leaves us one week of buffer before the 6th, and that's if they're on time.",
+   "timestamp": 1789482037200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "I want October 20th. That gives us two full weeks after Sunil's release to test the ledger integration end to end.",
+   "timestamp": 1789482046200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Two weeks is a lot of buffer.",
+   "timestamp": 1789482049600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "It's not buffer if they slip. At that point it's just the schedule.",
+   "timestamp": 1789482055400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "But October 20th means the webinar is announcing something that isn't live yet. That's awkward in front of 400 registered people.",
+   "timestamp": 1789482064400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "A hundred hours of spreadsheet work is less awkward than re-rating a month of bad invoices. That's way more than a hundred hours.",
+   "timestamp": 1789482074200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I get that. I'm just also looking at the market. Meterbase launched their usage analytics thing in August, and two of the deals Sales lost last quarter mentioned them.",
+   "timestamp": 1789482086400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Meterbase also had a billing outage in their first week. I read the postmortem. I'd rather not write one of those.",
+   "timestamp": 1789482095400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay, that's a decent point.",
+   "timestamp": 1789482098000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Let me ask it differently. Rohan, what's the actual cost if we're a week late, not two? Is there a cliff somewhere?",
+   "timestamp": 1789482107400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Not a cliff, really. The webinar is the only fixed thing. The contracts are painful but they're linear, it's hours per week.",
+   "timestamp": 1789482116800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And Viktor, what's the actual risk if we launch on the 6th and Payments is on time?",
+   "timestamp": 1789482124200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Then we'd have five working days to test the ledger integration, and Maya just said she needs ten. So we'd be cutting the rollback drill or the migration dry runs. Probably both.",
+   "timestamp": 1789482137600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Can I add the QA view?",
+   "timestamp": 1789482140600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Please.",
+   "timestamp": 1789482141600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "From my side, the minimum is: both Sev-1s closed, the full regression green except the known flakes, all 12 shards dry run, and one rollback drill.",
+   "timestamp": 1789482152600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "If the ledger change lands on the 29th, I need about ten working days after that to do all of it properly.",
+   "timestamp": 1789482162000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Ten working days from the 29th is...",
+   "timestamp": 1789482165400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Tuesday, October 13th.",
+   "timestamp": 1789482167200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay, so why not the 13th?",
+   "timestamp": 1789482170200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Because that's zero days of slack. Anything goes sideways and we're launching untested.",
+   "timestamp": 1789482176000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "What about the preview latency? Viktor, if we launch before the pre-aggregation work, where do we land?",
+   "timestamp": 1789482183400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "At 1.4 seconds p95 on the big accounts. Same as today.",
+   "timestamp": 1789482188400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Honestly, the preview loads async. It's a spinner in a side panel. Is 800 milliseconds even the right target? I'm pretty sure I copied that number from the invoice list page spec.",
+   "timestamp": 1789482201800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "From a UX standpoint, anything under about a second and a quarter feels fine for a side panel that fills in after the page loads. 1.4 is borderline.",
+   "timestamp": 1789482213600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "If I do a smaller fix, just caching the per-meter subtotals, I think I can get it to about 1.1, maybe 1.2. That's two or three days, not a week and a half.",
+   "timestamp": 1789482227400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "So 1.2 seconds p95 on the big accounts. Everyone okay with that as the bar for launch?",
+   "timestamp": 1789482234800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Yes.",
+   "timestamp": 1789482235800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Yes.",
+   "timestamp": 1789482236800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "As long as it's written down somewhere, yes. I'll update the perf test threshold to 1.2 seconds.",
+   "timestamp": 1789482244200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Fine by me. I'd much rather do three days than ten.",
+   "timestamp": 1789482249200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And the full hourly pre-aggregation, we put that in the backlog. I'm not committing to when, just that it's not a launch requirement.",
+   "timestamp": 1789482259000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Works for me.",
+   "timestamp": 1789482260800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay. So here's where I'm landing on the date.",
+   "timestamp": 1789482265000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "October 6th isn't realistic. We have two open Sev-1s and a dependency that hasn't shipped. I'm not launching billing on \"targeting\".",
+   "timestamp": 1789482274000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I hear that. I don't like it, but I hear it.",
+   "timestamp": 1789482279000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "But I also don't think October 20th is necessary, if the dependency lands on time.",
+   "timestamp": 1789482285600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "So the new launch date is Wednesday, October 14th. Not the 13th, because I don't want to launch on the same day Maya finishes testing.",
+   "timestamp": 1789482296200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "I can live with the 14th, if there's a rule for what happens when Payments slips.",
+   "timestamp": 1789482303200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Yes. If Payments Platform hasn't shipped ledger 3.4 to production by Friday, October 2nd, the launch automatically moves to October 20th. No second meeting about it.",
+   "timestamp": 1789482314200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay. I don't love it, but okay. October 14th, with the October 2nd tripwire.",
+   "timestamp": 1789482320400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "I like the tripwire. It means I don't have to be the bad guy on October 5th.",
+   "timestamp": 1789482327800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So what do I do about the webinar on the 7th?",
+   "timestamp": 1789482332800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "What are the options?",
+   "timestamp": 1789482335000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I could ask marketing to move it to the 15th. Or keep it on the 7th and pitch it as a preview.",
+   "timestamp": 1789482344400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Or keep the 7th and turn on early access for the beta customers that day, as, like, a soft launch.",
+   "timestamp": 1789482353000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I actually floated that to Carla already. She liked it. But it's basically launching on the 7th with extra steps.",
+   "timestamp": 1789482361600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Yeah, I don't want an early access launch on the 7th. That's the same risk with a different name. We're not doing that.",
+   "timestamp": 1789482371400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Fine. I'll talk to Carla about whether the webinar moves or stays on the 7th as a preview. I'll let you know by tomorrow.",
+   "timestamp": 1789482381600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And the October contracts. Between the 1st and the 14th, they go on v1 with manual adjustments, and they get migrated during the rollout like everybody else?",
+   "timestamp": 1789482393000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That's the only option, really. I'll give finance ops a heads-up so they can plan the hours. It's about two weeks of contracts, so maybe a dozen of them.",
+   "timestamp": 1789482405200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Can we at least make those accounts part of the first cohort? They're new, they're small, and they're the ones costing finance ops time.",
+   "timestamp": 1789482415400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "They'd have almost no usage history, so reconciliation would be meaningless for them. I'd rather they go in at 25%.",
+   "timestamp": 1789482424000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Let's not decide cohort membership for those yet. Maya, look at it when you write the plan.",
+   "timestamp": 1789482431400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay. And on the rollout, since we're already here, we'll do the usual staged approach. First stage is 10% of eligible accounts on the 14th.",
+   "timestamp": 1789482442000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "10% on day one. Okay, I'll build the rollout plan around that.",
+   "timestamp": 1789482447400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "We'll go through the rest of the rollout plan after Joel's item.",
+   "timestamp": 1789482452800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Dana, one thing before Joel gets here. If I'm doing the dedup fix, the proration fix, the latency caching, and working with Sunil on the ledger integration, I can't also write the runbook by the 28th.",
+   "timestamp": 1789482467800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Something has to give, and I'd rather it not be the Sev-1s.",
+   "timestamp": 1789482473200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Yeah, that's fair. Maya, can you take the migration runbook? Viktor pairs with you for an hour to do a brain dump.",
+   "timestamp": 1789482482600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Yeah, I can take it. Honestly, I'd rather, because I'm the one who has to follow it at 2 a.m.",
+   "timestamp": 1789482491200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay. The migration runbook moves to Maya, still due the 28th. Viktor does a brain dump session with her.",
+   "timestamp": 1789482499400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Can I ask what \"Sev-1s closed\" means for the launch criteria? Closed as in merged, or closed as in verified in staging?",
+   "timestamp": 1789482508800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Verified in staging, with a regression test that fails on the old code. Merged doesn't count.",
+   "timestamp": 1789482515800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Agreed. Verified with a failing-first test. Let's write that into the go/no-go checklist.",
+   "timestamp": 1789482521600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Let's do the brain dump tomorrow at 2.",
+   "timestamp": 1789482525400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Works for me. Bring the Google doc. And the Slack thread. And whatever Tuesday was.",
+   "timestamp": 1789482532000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "I'll bring Tuesday.",
+   "timestamp": 1789482533800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_5",
+   "text": "Hey, sorry, is this the billing v2 meeting? I think I'm a few minutes late.",
+   "timestamp": 1789482540400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "You're right on time, Joel. We just finished the date discussion. Go ahead.",
+   "timestamp": 1789482546200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_5",
+   "text": "Thanks. I'll be quick, I have a QBR at twenty past. This is about Kestrel Logistics.",
+   "timestamp": 1789482553200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Kestrel, the one that's been in the beta since August? They've been really positive, right?",
+   "timestamp": 1789482559800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_5",
+   "text": "No, that's Kestrel Health. Different account. Kestrel Health is the happy one. They're about a $95,000 account and they love the dashboard.",
+   "timestamp": 1789482569200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_5",
+   "text": "Kestrel Logistics is the freight company. $410,000 ARR, one of our top ten accounts. They're in the beta too, but they joined later, mid August.",
+   "timestamp": 1789482579800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Sorry, yes. Too many Kestrels.",
+   "timestamp": 1789482582400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_5",
+   "text": "Everyone does it. Their own CFO mixed them up on a call once, and they're not even related companies.",
+   "timestamp": 1789482590600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_5",
+   "text": "So. Kestrel Logistics got their first v2 usage invoice for the August period, and they were overbilled. Their controller caught it.",
+   "timestamp": 1789482599600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Let me guess. Retries.",
+   "timestamp": 1789482601800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_5",
+   "text": "Yeah. Their shipment tracking service retries API calls after about 8 minutes when a carrier times out, and every one of those got counted twice. Mostly August 28th through the 31st.",
+   "timestamp": 1789482614800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "That's exactly the 5-minute window bug. 8 minutes is outside the window, so every retry is a new event.",
+   "timestamp": 1789482623000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_5",
+   "text": "The overbilling is $18,240. Finance confirmed that number yesterday.",
+   "timestamp": 1789482627200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Ouch.",
+   "timestamp": 1789482628200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_5",
+   "text": "For context, their total usage invoice for August was about $61,000. So it's not a rounding error, it's almost a third of the bill.",
+   "timestamp": 1789482638400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Did it affect all their meters, or just API calls?",
+   "timestamp": 1789482643000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_5",
+   "text": "Just API calls. They have three subsidiaries with separate meters, and it's all in the one that does shipment tracking. The warehouse and the fleet subsidiaries were fine.",
+   "timestamp": 1789482654800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "That fits. The tracking service is the only one with the long retry.",
+   "timestamp": 1789482660600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Has the invoice actually been paid, or is it still open?",
+   "timestamp": 1789482665600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_5",
+   "text": "Still open. They put it on hold, which honestly is the best case. We don't need to issue a refund, just a credit against the open invoice.",
+   "timestamp": 1789482677000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_5",
+   "text": "And the context is, their renewal is November 1st. Their VP of finance, Oksana Reyes, emailed their account exec and me.",
+   "timestamp": 1789482686000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_5",
+   "text": "And she said, I'm quoting, \"we cannot move our full account to usage billing until we trust the meter\".",
+   "timestamp": 1789482694200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "That's fair, honestly. I wouldn't either.",
+   "timestamp": 1789482697200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_5",
+   "text": "It is fair. So what I need from this group is three things. A credit, a root cause they can actually read, and confidence the fix is in before they're migrated for real.",
+   "timestamp": 1789482711000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "The fix, Viktor has in progress, merged by September 25th.",
+   "timestamp": 1789482715600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Yeah, the idempotency keys. It fixes exactly this pattern, retries at any delay up to 24 hours.",
+   "timestamp": 1789482723000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_5",
+   "text": "Okay, good. Can someone write up the root cause? Customer-readable. Not a postmortem with stack traces in it.",
+   "timestamp": 1789482730800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "I can write the technical part, but I really shouldn't be the one writing a letter to a customer.",
+   "timestamp": 1789482739000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Agreed. Nobody wants Viktor writing to customers.",
+   "timestamp": 1789482742400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Rude, but correct.",
+   "timestamp": 1789482744200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Viktor drafts the technical explanation, and I'll turn it into the customer version. Joel, when do you need it?",
+   "timestamp": 1789482752400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_5",
+   "text": "I'm on a call with them on Wednesday the 23rd. So by Tuesday the 22nd, ideally in the morning.",
+   "timestamp": 1789482760600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, I'll have it to you by the 22nd, and I'll join the call on the 23rd if that helps.",
+   "timestamp": 1789482769200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_5",
+   "text": "That would help a lot. They'll want to hear from an engineering person, not just me.",
+   "timestamp": 1789482776200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_5",
+   "text": "On the credit, I'll draft the credit memo for the $18,240 and get it through finance. I think I can get approval by Monday the 21st.",
+   "timestamp": 1789482787200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Should we throw in a free month on top? Like a goodwill gesture, before the renewal?",
+   "timestamp": 1789482794200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_5",
+   "text": "I thought about that. A month on a $410,000 account is over thirty thousand dollars, and finance will push back hard. I'd rather not decide that today.",
+   "timestamp": 1789482805600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Yeah, let's not decide that here. Joel, raise it with your director if you think it's needed.",
+   "timestamp": 1789482813000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_5",
+   "text": "Yeah, I'll think about it. It might depend on how the call goes.",
+   "timestamp": 1789482818800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_5",
+   "text": "Last thing. They asked if they can pick their own migration date, instead of being in a random rollout group.",
+   "timestamp": 1789482827400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "We can exclude an account from the flag cohorts and turn it on manually. That's easy on our side.",
+   "timestamp": 1789482835600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Then yes. Kestrel Logistics is excluded from the automatic rollout, and we migrate them on a date they choose, after the fix is verified on their data.",
+   "timestamp": 1789482847000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_5",
+   "text": "Perfect. That's the part that'll actually land with Oksana.",
+   "timestamp": 1789482851200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Joel, quick one. Is Kestrel Health okay being in my usability sessions next week? They're on the list.",
+   "timestamp": 1789482859000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_5",
+   "text": "Kestrel Health, yes, totally fine. Just please don't put Kestrel Logistics in a usability session right now.",
+   "timestamp": 1789482866400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Wasn't planning to.",
+   "timestamp": 1789482868200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_5",
+   "text": "Okay, I have to jump. Thank you, this was way faster than I expected.",
+   "timestamp": 1789482874400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Thanks, Joel. Tell them we'll see them on the 23rd.",
+   "timestamp": 1789482879000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_5",
+   "text": "Will do. Bye all.",
+   "timestamp": 1789482881200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Poor Joel. That's a rough week for him.",
+   "timestamp": 1789482885000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "It's a rough week for us too. Honestly, that invoice is the exact scenario I'm worried about at scale.",
+   "timestamp": 1789482893200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, rollout plan. Maya, you had a draft?",
+   "timestamp": 1789482897000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Yeah. So right now, production is at 0% on the new flag, except our own internal Tallyport account, which has been dogfooding at 100% for three weeks, and the 14 beta accounts.",
+   "timestamp": 1789482910400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Which is about 1.8% of the 780 eligible accounts.",
+   "timestamp": 1789482914600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Right. And then the plan was October 14th, 10% of eligible accounts, like Dana said. Then 25%, 50%, and 100% by the end of October.",
+   "timestamp": 1789482925200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "But I want to push back on the 10%, now that I've heard the Kestrel thing.",
+   "timestamp": 1789482932200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Go on.",
+   "timestamp": 1789482933600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "10% of 780 is 78 accounts. If there's another metering bug like the retry one, we're sending bad invoices to 78 customers.",
+   "timestamp": 1789482943000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "And the invoice doesn't generate until the first bill run after they're flipped, so we wouldn't see it on day one.",
+   "timestamp": 1789482952000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Well, we'd see it earlier than that in the preview totals, if anyone looks. But I take the point.",
+   "timestamp": 1789482960200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "I'd rather start at 5% and hold for 48 hours, and in those 48 hours we reconcile every account in that cohort against v1 shadow rating before we go any wider.",
+   "timestamp": 1789482973200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "5% is 39 accounts. That's a pretty small launch.",
+   "timestamp": 1789482977400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "It's a staged rollout, Rohan. It's supposed to be small.",
+   "timestamp": 1789482982000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Viktor, can we actually reconcile against shadow rating?",
+   "timestamp": 1789482985800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Yeah. v1 keeps rating in shadow mode for 30 days after an account moves over. We can diff the totals per account. That's a script, maybe half a day.",
+   "timestamp": 1789482998000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay. I'm reversing what I said earlier. We're not starting at 10%.",
+   "timestamp": 1789483003400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "The first stage is 5% of eligible accounts for the first 48 hours, with a reconciliation against v1 shadow rating before we expand.",
+   "timestamp": 1789483013200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And after the 48 hours?",
+   "timestamp": 1789483015800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "If reconciliation is clean, 25% on Monday, October 19th. I don't want to expand on a Friday.",
+   "timestamp": 1789483023200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Then 50% on the 21st, and 100% on Monday, October 26th.",
+   "timestamp": 1789483028200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Should the 5% include any of the 60 big accounts? Because that's where the preview latency risk is.",
+   "timestamp": 1789483036000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I'd include a couple. Otherwise we don't learn anything about the big ones until 25%.",
+   "timestamp": 1789483042600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "I'd rather the first cohort be boring. Small and mid-size accounts on monthly billing.",
+   "timestamp": 1789483048800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "I'm with Maya. The first 5% excludes accounts over 2 million events. The big accounts come in at the 25% stage.",
+   "timestamp": 1789483057800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay.",
+   "timestamp": 1789483058800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "What's the pause trigger?",
+   "timestamp": 1789483061000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Any account where the v2 total differs from the shadow v1 total by more than 0.5%, excluding the known rounding differences, we pause the rollout. We don't roll back automatically. We pause and look.",
+   "timestamp": 1789483075200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "And rolling back itself is just flipping the flag. v1 still has everything for those 30 days.",
+   "timestamp": 1789483082600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Right, which is why I want a rollback drill before launch. I'd like to do that on Thursday, October 8th, in staging, with the full migration on all 12 shards.",
+   "timestamp": 1789483095200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay. Rollback drill on October 8th, Maya owns it.",
+   "timestamp": 1789483099400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Yep.",
+   "timestamp": 1789483100400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And the go/no-go meeting. Let's put that on Monday, October 12th. Same group, plus Joel.",
+   "timestamp": 1789483107000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I'll send the invite.",
+   "timestamp": 1789483109200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Two more rollout things. First, I want a change freeze on the billing services from October 12th through the 16th. Nothing else ships to billing that week unless it's a fix for v2.",
+   "timestamp": 1789483123000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "The tax team has a small change queued for the 13th. Something about Canadian GST on credits.",
+   "timestamp": 1789483130400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Then they move it to the 19th, or they convince me it can't wait.",
+   "timestamp": 1789483136600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Agreed. Change freeze on billing, October 12th to 16th. Maya, you'll tell the tax team?",
+   "timestamp": 1789483143200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "I'll tell them today.",
+   "timestamp": 1789483145400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Second, launch-week on-call. I want a backend engineer and a billing support person on call together for the 48-hour window, not just the normal rotation.",
+   "timestamp": 1789483156000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "I'll take the first 24 hours. I'd rather be on call for my own bugs.",
+   "timestamp": 1789483162600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And we'll find someone for the second 24. I'll ask Lukas, he did the v1 migration.",
+   "timestamp": 1789483169600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Lukas on the payments side or Lucas on the data team?",
+   "timestamp": 1789483174600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Lukas Brandt, backend. Not Lucas from data. Good catch.",
+   "timestamp": 1789483178800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Sorry, can you hear me? My headset just died, I'm on my phone now.",
+   "timestamp": 1789483185000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "We can hear you. You sound like you're in a bathroom, but we can hear you.",
+   "timestamp": 1789483192000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "I'm in a phone booth. Close enough.",
+   "timestamp": 1789483195400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, legal and enablement. Rohan?",
+   "timestamp": 1789483198000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So, legal is done, which is nice. We got the sign-off last week.",
+   "timestamp": 1789483203800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Wait, which sign-off? I thought what came back last week was the privacy review.",
+   "timestamp": 1789483210000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "It was the... legal review. The one Joelle's team does.",
+   "timestamp": 1789483214600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "No, I'm pretty sure what came back was the privacy review from the security team. The DPIA for storing raw usage events. That one's approved.",
+   "timestamp": 1789483225200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Joelle is legal, Joel is customer success. Maybe that's the mix-up?",
+   "timestamp": 1789483230200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Ha. No, that's not it. Hang on, let me check my email.",
+   "timestamp": 1789483235600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay. Yeah, Maya's right. The email from last Thursday is the privacy review, and it's approved.",
+   "timestamp": 1789483242600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The legal review of the order form addendum is still open with Joelle Park. It's in her queue.",
+   "timestamp": 1789483250400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "So legal isn't done. What's the addendum actually for?",
+   "timestamp": 1789483254600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The new usage terms. How overage billing works, how disputes on metered usage work, and the 30-day window to contest a usage charge. Any contract signed on usage tiers needs it attached.",
+   "timestamp": 1789483268000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Then that's launch-blocking. When does Joelle think she'll finish?",
+   "timestamp": 1789483272200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Her team's SLA is ten business days, and it went in on the 16th, so September 30th at the latest.",
+   "timestamp": 1789483280800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Rohan, can you follow up with Joelle and make sure it's done by the 30th? If it isn't, I want to know on October 1st, not October 13th.",
+   "timestamp": 1789483292600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Yes. I'll ping her today and then again on the 28th.",
+   "timestamp": 1789483297600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "And can we add legal sign-off to the go/no-go checklist? Explicitly, the legal review, not the privacy one.",
+   "timestamp": 1789483305400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Yes. Add it.",
+   "timestamp": 1789483307200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "On enablement. The sales deck is updated. The pricing page copy is with marketing, and it goes live on launch day.",
+   "timestamp": 1789483316200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I'm also running a sales training session on October 9th, an hour, recorded, for the reps who have usage-tier deals in flight.",
+   "timestamp": 1789483325600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Does the pricing page mention the preview?",
+   "timestamp": 1789483329000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "It does. Which is why I was so twitchy about dropping it.",
+   "timestamp": 1789483334400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "We're not dropping it. It's staying, at 1.2 seconds.",
+   "timestamp": 1789483338600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I know. I'm just saying. I have trauma.",
+   "timestamp": 1789483342400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "What about the beta customers? They've all been told October 6th, right?",
+   "timestamp": 1789483347800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "All 14 of them, yeah. It was in the August beta newsletter.",
+   "timestamp": 1789483353200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Then they need to hear about the 14th from us before they hear it from a sales rep. Can you email them?",
+   "timestamp": 1789483362600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Yes. I'll send the beta group an update by Tuesday the 22nd. Except Kestrel Logistics, Joel should handle that one.",
+   "timestamp": 1789483371200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Agreed, Joel's call on the 23rd covers them.",
+   "timestamp": 1789483375000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Should we also put a notice on the status page about the invoice format change?",
+   "timestamp": 1789483381600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "The status page is for incidents. I'd really rather not put product announcements on it.",
+   "timestamp": 1789483388200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Fair. Forget I said it. In-app banner maybe.",
+   "timestamp": 1789483392000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Nobody reads banners.",
+   "timestamp": 1789483393800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I walked into that one.",
+   "timestamp": 1789483396400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "What about the help center? The invoice PDF format changes. Line items are grouped by meter now instead of by date. Customers are going to open tickets.",
+   "timestamp": 1789483407800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Yeah, someone should update the help center articles on reading your invoice. There are like six of them.",
+   "timestamp": 1789483415600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Is that support or docs?",
+   "timestamp": 1789483418200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I think docs, but docs is two people, and they're both on the API reference for v2 right now.",
+   "timestamp": 1789483426400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay. That needs to happen before the 14th. I'm not going to assign it in this meeting, but it needs a name by next week.",
+   "timestamp": 1789483437000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "And someone should check whether the Salesforce sync handles fractional quantities. Usage can be 12.5 units now, and I'm pretty sure the sync casts to integers.",
+   "timestamp": 1789483448000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Oh. That could be bad for sales reporting. Commissions run off that sync.",
+   "timestamp": 1789483453800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Does anybody know who owns the Salesforce sync these days?",
+   "timestamp": 1789483458400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "It used to be the integrations team, but I think it got orphaned in the re-org.",
+   "timestamp": 1789483465400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay. Then that's an open question for now.",
+   "timestamp": 1789483469200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Sorry, I lost the last minute or so. Did I miss anything for design?",
+   "timestamp": 1789483475400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "No, you're fine. Mostly help center and Salesforce. Nothing for you.",
+   "timestamp": 1789483480400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Great.",
+   "timestamp": 1789483481400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, let me run through actions, since we're almost at time.",
+   "timestamp": 1789483486400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Viktor. The dedup fix with the idempotency keys, merged by Friday, September 25th. The proration Sev-1 as well, same date?",
+   "timestamp": 1789483495000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Proration by the 25th, yes. And the caching for the preview latency by the 30th.",
+   "timestamp": 1789483501600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Plus the shadow reconciliation script for the rollout. And the technical root cause for Kestrel Logistics to me by Monday the 21st, so I can turn it around for Joel by the 22nd.",
+   "timestamp": 1789483515400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Monday, yep. The script I'll have by October 7th, before the drill.",
+   "timestamp": 1789483520800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Maya. The migration runbook by the 28th, which you took over from Viktor. The perf threshold change to 1.2 seconds. The rollout plan with 5% for the first 48 hours. And the rollback drill on October 8th.",
+   "timestamp": 1789483536200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Got it. And I'll exclude Kestrel Logistics from the rollout cohorts.",
+   "timestamp": 1789483541200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Right, thank you. Ines, both empty-state variants in the usability sessions, results on the 24th.",
+   "timestamp": 1789483547800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Yes.",
+   "timestamp": 1789483548800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Rohan. The webinar decision with Carla by tomorrow. Follow up with Joelle Park so the legal review is done by September 30th. The go/no-go invite for October 12th. And the sales training on the 9th.",
+   "timestamp": 1789483563400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Yep, got all of those. Plus the beta customer email by the 22nd.",
+   "timestamp": 1789483569200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Right, the beta email. And Maya, the change freeze note to the tax team.",
+   "timestamp": 1789483575400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Already typing it.",
+   "timestamp": 1789483577200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And me. The customer version of the root cause to Joel by the 22nd, and the Kestrel Logistics call on the 23rd.",
+   "timestamp": 1789483586600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And I'll escalate the ledger 3.4 dependency with Sunil and his manager. What's her name...",
+   "timestamp": 1789483593200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Grace Obi.",
+   "timestamp": 1789483594600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Grace. I'll get a committed date out of them by Monday.",
+   "timestamp": 1789483599600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Wait, wasn't the ledger thing Viktor's?",
+   "timestamp": 1789483602600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Viktor's doing the technical integration with Sunil. The schedule chase is mine. I want Viktor writing code, not sending status emails.",
+   "timestamp": 1789483611600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Thank you. Genuinely.",
+   "timestamp": 1789483613400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, open questions, so they're in one place.",
+   "timestamp": 1789483617200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Whether Payments Platform actually ships ledger 3.4 by the 29th, and remember the October 2nd tripwire.",
+   "timestamp": 1789483624200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Empty state, A or B. Whether the webinar moves off the 7th. Who owns the help center update. And who owns the Salesforce sync question.",
+   "timestamp": 1789483634800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And whether Kestrel Logistics renews, I guess. That's not really ours, but it kind of is.",
+   "timestamp": 1789483641800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "It kind of is. And whether we give them anything beyond the credit.",
+   "timestamp": 1789483647600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Also, not to be that person, but we never said what happens with the replay tooling coverage.",
+   "timestamp": 1789483655000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "You're right. That's open too. Viktor and I will talk about it Monday, but I don't have an answer today.",
+   "timestamp": 1789483663600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "I'll bring a list of what the 12 tests don't cover. It's a long list.",
+   "timestamp": 1789483670200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Same with the no-key fallback for the dedup. I still need to see how much beta traffic comes in without an idempotency key before I pick an approach.",
+   "timestamp": 1789483682000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Also, small thing, but the October 2nd tripwire is the same day as the office move. Just saying, nobody's going to be at a desk that day.",
+   "timestamp": 1789483693400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "I'll have my laptop on a moving crate. It'll be fine.",
+   "timestamp": 1789483698400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "The tripwire doesn't need a desk. Either Sunil's release is in production that day or it isn't. I'll check it from wherever my crates are.",
+   "timestamp": 1789483709000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "From the 6th floor, next to the espresso machine.",
+   "timestamp": 1789483713200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Next checkpoint is same time next Thursday, September 24th, at 10.",
+   "timestamp": 1789483718200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Ines brings the usability results, Viktor brings the dedup fix status, and Maya brings the runbook draft.",
+   "timestamp": 1789483725600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Can we make it 10:30 instead of 10? I have a wrap-up with the research team right before.",
+   "timestamp": 1789483733400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Sure. 10:30 on the 24th.",
+   "timestamp": 1789483736000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay. And for the record, I'm still team A.",
+   "timestamp": 1789483740200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Bye, Rohan.",
+   "timestamp": 1789483741600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Thanks all. Someone please save me a spot near the espresso machine on the 6th floor.",
+   "timestamp": 1789483748600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Bye. My headset died but I survived, so that's a win.",
+   "timestamp": 1789483753600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Thanks, everyone.",
+   "timestamp": 1789483755000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  }
+ ],
+ "words": 6738,
+ "speakerCount": 6,
+ "durationMs": 2955000,
+ "startEpochMs": 1789480800000
+}

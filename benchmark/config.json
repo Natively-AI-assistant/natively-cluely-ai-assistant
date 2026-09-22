@@ -1,0 +1,101 @@
+{
+  "benchmark_id": "natively-summary-models-2026-09-17",
+  "runs_per_pair": 3,
+  "configs": [
+    {
+      "id": "ds-flash-prod",
+      "label": "DeepSeek V4.1 Flash - current Natively config (thinking disabled)",
+      "provider": "deepseek",
+      "model": "deepseek-v4-flash",
+      "thinking": "production",
+      "thinking_mode": "disabled (explicit thinking:{type:'disabled'} from buildDeepSeekBody)",
+      "reasoning_effort": null,
+      "port": 18701,
+      "primary": true
+    },
+    {
+      "id": "ds-flash-thinking",
+      "label": "DeepSeek V4.1 Flash - thinking ENABLED (API default; diagnostic)",
+      "provider": "deepseek",
+      "model": "deepseek-v4-flash",
+      "thinking": "api_default",
+      "thinking_mode": "enabled (thinking param removed -> API default enabled, default effort)",
+      "reasoning_effort": null,
+      "port": 18702,
+      "primary": false
+    },
+    {
+      "id": "luna-max",
+      "label": "GPT-5.6 Luna - reasoning effort max",
+      "provider": "openai",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "max",
+      "thinking_mode": "reasoning",
+      "max_output_tokens_cap": 128000,
+      "port": 18703
+    },
+    {
+      "id": "luna-medium",
+      "label": "GPT-5.6 Luna - reasoning effort medium",
+      "provider": "openai",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "medium",
+      "thinking_mode": "reasoning",
+      "max_output_tokens_cap": 128000,
+      "port": 18704
+    },
+    {
+      "id": "luna-low",
+      "label": "GPT-5.6 Luna - reasoning effort low",
+      "provider": "openai",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "low",
+      "thinking_mode": "reasoning",
+      "max_output_tokens_cap": 128000,
+      "port": 18705
+    },
+    {
+      "id": "luna-none",
+      "label": "GPT-5.6 Luna - reasoning effort none",
+      "provider": "openai",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "none",
+      "thinking_mode": "none",
+      "max_output_tokens_cap": 128000,
+      "port": 18706
+    }
+  ],
+  "pricing_usd_per_million": {
+    "source_checked": "2026-09-17",
+    "deepseek-flash": {
+      "source": "https://api-docs.deepseek.com/quick_start/pricing/",
+      "peak": { "input_cache_miss": 0.30, "input_cache_hit": 0.006, "output": 1.20 },
+      "off_peak": { "input_cache_miss": 0.15, "input_cache_hit": 0.003, "output": 0.60 },
+      "peak_windows_utc": "Mon-Fri 01:00-04:00 and 06:00-10:00",
+      "reasoning_billing": "reasoning tokens are part of completion_tokens (billed as output)"
+    },
+    "gpt-5.6-luna": {
+      "source": "https://developers.openai.com/api/docs/models/gpt-5.6-luna",
+      "input": 0.20, "cached_input": 0.02, "output": 1.20,
+      "reasoning_billing": "reasoning tokens billed as output (included in output_tokens)"
+    }
+  },
+  "production_deadlines_ms": {
+    "server_undici_headers_timeout": 30000,
+    "server_extraction_deepseek_cap": 45000,
+    "server_general_deepseek_cap": 10000,
+    "electron_extraction_fetch_timeout": 60000,
+    "electron_note_call_fetch_timeout": 30000
+  },
+  "benchmark_deadline_overrides": {
+    "why": "Deadlines are lifted so every configuration's output is measured instead of being replaced by a production fallback model. Compliance with the real production deadlines is computed per call and reported separately.",
+    "server_env": {
+      "DEEPSEEK_TIMEOUT_MS": "1800000",
+      "DEEPSEEK_TTFT_CAP_MS": "1800000",
+      "AI_ROUTE_BUDGET_MS": "3600000",
+      "EXTRACTION_DEEPSEEK_TIMEOUT_MS": "1800000",
+      "EXTRACTION_ROUTE_BUDGET_MS": "3600000"
+    },
+    "electron_timeout_ms": 1800000
+  }
+}

@@ -1,0 +1,168 @@
+{
+ "blind_id": "S-272f92cc",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 35682,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 9728,
+  "candidatesTokenCount": 864,
+  "totalTokenCount": 14906,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 9728
+   }
+  ],
+  "thoughtsTokenCount": 4314,
+  "serviceTier": "standard"
+ },
+ "fact_count": 29,
+ "evaluation": {
+  "factual_accuracy": 7,
+  "important_information_retention": 9,
+  "hallucination_control": 8,
+  "action_item_retention": 10,
+  "decision_retention": 10,
+  "speaker_attribution": 10,
+  "numeric_accuracy": 9,
+  "entity_retention": 9,
+  "timeline_accuracy": 8,
+  "conclusion_accuracy": 9,
+  "structure": 7,
+  "conciseness": 2,
+  "readability": 4,
+  "overall_summary_quality": 5,
+  "critical_errors": [
+   "Reported Theo's wish to load test the workout history endpoint as an assigned action item, when it was explicitly not assigned."
+  ],
+  "missing_important_information": [],
+  "hallucinated_information": [
+   "Inferred an action item for Theo to load test the workout history endpoint, which was not committed to."
+  ],
+  "superseded_values_reported": [],
+  "not_decisions_reported_as_decided": [
+   "Load testing the workout history endpoint before prod (Theo's wish, not assigned)"
+  ],
+  "distractors_included": [],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "partial"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "partial"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "contradicted"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "partial"
+   },
+   {
+    "id": "F24",
+    "status": "missing"
+   },
+   {
+    "id": "F25",
+    "status": "missing"
+   },
+   {
+    "id": "F26",
+    "status": "missing"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "partial"
+   }
+  ],
+  "rationale": "The notes capture almost all important information accurately, successfully avoiding superseded values and distractors. However, they commit a critical error by listing Theo's unassigned wish to load test the endpoint as a formal action item. Furthermore, the notes suffer from extreme repetition, with several sentences copy-pasted verbatim across the Overview, Summary, Progress, and Decisions sections, severely impacting conciseness and readability."
+ }
+}

@@ -1,0 +1,4654 @@
+{
+ "id": "LECT-VL",
+ "segments": [
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay, is this mic on? Can the back row hear me? Wave if you can't hear me. Which, I realize, doesn't work.",
+   "timestamp": 1789480809400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "We can hear you.",
+   "timestamp": 1789480811600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Good. Thank you. Let's give people another minute, it's raining and half the class is still, uh, still finding umbrellas.",
+   "timestamp": 1789480820200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Is the recording going up on the course page again?",
+   "timestamp": 1789480824800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The lecture capture should go up by tonight, but it's been flaky, so if you're recording on your own laptop, keep doing that.",
+   "timestamp": 1789480834600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "I'm recording, I can share it if the official one breaks again.",
+   "timestamp": 1789480840000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Perfect, that's a replicated recording. We'll talk about why that's a good idea in about forty minutes.",
+   "timestamp": 1789480847400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay, before I start, Kofi has some announcements. Kofi, come on up.",
+   "timestamp": 1789480852800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Hi everyone. For those who haven't come to office hours yet, I'm Kofi, I'm the head TA.",
+   "timestamp": 1789480860200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "A few logistics things, so please, please actually listen to these, because I get the same email about fifty times otherwise.",
+   "timestamp": 1789480869200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "First, homework 4, the Raft leader election assignment, is due this Friday, October 9th, at 11:59pm.",
+   "timestamp": 1789480876200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "That's the one where you implement leader election and heartbeats in the Go skeleton. It is not the log replication part.",
+   "timestamp": 1789480885200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "So we don't need AppendEntries with actual entries in it for homework 4?",
+   "timestamp": 1789480891000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Right, for homework 4 AppendEntries is only used as a heartbeat, empty entries. Log replication and persistence are homework 5.",
+   "timestamp": 1789480899600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Okay, cool, thanks.",
+   "timestamp": 1789480901400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Second thing, reminder that you have 5 late days for the whole semester, and you can use at most 2 on any single assignment.",
+   "timestamp": 1789480911600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Third, my office hours are moving. I used to do Wednesdays 2 to 4pm. Starting this week, they're Thursdays 3 to 5pm, in Whitaker 214, the lab room.",
+   "timestamp": 1789480923400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "So not Wednesday anymore. Thursday, 3 to 5, Whitaker 214. I'll put it on Ed as well.",
+   "timestamp": 1789480930800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Fourth, the midterm. The midterm is Thursday, October 22nd, during our normal class time.",
+   "timestamp": 1789480937000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "It is not in this room. It's in Larkin Hall, room 150, because we need the bigger room to space people out.",
+   "timestamp": 1789480946400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "And it covers lectures 1 through 8. So everything up through primary-backup replication.",
+   "timestamp": 1789480952200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "I'm going to post a practice midterm on Ed by Friday, so you'll have something to work through over the weekend.",
+   "timestamp": 1789480961200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Is there going to be a review session?",
+   "timestamp": 1789480965000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "We're planning one, I'll announce the time at the end of class once I've confirmed the room.",
+   "timestamp": 1789480972400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Thank you, Kofi. And one thing from me on logistics.",
+   "timestamp": 1789480977000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "My office hours this Thursday are cancelled, because I'm flying out Wednesday night for a program committee meeting.",
+   "timestamp": 1789480984800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "To make up for it, I'm holding extra office hours tomorrow, Wednesday October 7th, from 3 to 4:30pm, in my office, Whitaker 318.",
+   "timestamp": 1789480994600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And Thursday's lecture, lecture 10, will be given by Dr. Joanne Whitfield, who's a postdoc in my group. She's excellent, she's going to cover Byzantine fault tolerance.",
+   "timestamp": 1789481006000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Please be nice to her. Please show up. Attendance on guest lecture days is always, um, it's always a little embarrassing.",
+   "timestamp": 1789481015000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Is the guest lecture on the midterm?",
+   "timestamp": 1789481018400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "We'll talk about exactly what's on the midterm at the end of today. Let's not get ahead of ourselves.",
+   "timestamp": 1789481026600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay. Also, before we start, a public service announcement. The espresso machine on the second floor is broken again.",
+   "timestamp": 1789481034800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "It is a single node. No replicas. No failover. And when it goes down, the entire faculty loses liveness.",
+   "timestamp": 1789481043000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So if I seem slower than usual today, that is the reason, and I am blaming facilities.",
+   "timestamp": 1789481050400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "There's a coffee cart outside Larkin.",
+   "timestamp": 1789481053400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The Larkin cart is, and I say this with love, a Byzantine failure. It claims to be coffee and it is not coffee.",
+   "timestamp": 1789481063200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay. Alright. Lecture 9. Consensus, and the Raft algorithm. This is, honestly, one of my favorite lectures of the semester, so bear with my enthusiasm.",
+   "timestamp": 1789481073800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Let me start with where we left off, because today builds directly on last Thursday.",
+   "timestamp": 1789481080400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Lecture 8 was primary-backup replication. We read the VMware fault tolerance paper, the one where they replicate an entire virtual machine.",
+   "timestamp": 1789481089400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And the idea there, just to recap, is you have a primary that handles all the client requests, and a backup that receives a log of everything the primary does, and replays it.",
+   "timestamp": 1789481103200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "If the primary dies, the backup takes over. And the client, in the ideal case, doesn't notice anything.",
+   "timestamp": 1789481111000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And we spent the last twenty minutes on the question I want to start from today. Who decides that the primary is dead?",
+   "timestamp": 1789481120800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Because from the backup's point of view, the primary not responding looks exactly the same whether the primary crashed, or the network between them is broken, or the primary is just really, really slow.",
+   "timestamp": 1789481135000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And if the backup guesses wrong, and promotes itself while the primary is actually still alive and still talking to clients, what do we get? Someone remind me.",
+   "timestamp": 1789481146800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Split brain.",
+   "timestamp": 1789481148200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Split brain. Two primaries, both accepting writes, both thinking they're in charge, and now your data diverges and you can't put it back together.",
+   "timestamp": 1789481158400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And the VMware paper's answer to that was, they had an external arbiter, this test-and-set service on shared storage. Whoever wins the test-and-set gets to be primary.",
+   "timestamp": 1789481169800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Which works! But then I asked you, what's the problem with that? And somebody in the front said, the test-and-set server is itself a single point of failure.",
+   "timestamp": 1789481181600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Exactly right. We've just moved the problem. If that arbiter dies, nobody can become primary, and if we replicate the arbiter, well, now the arbiter replicas need to agree on who won.",
+   "timestamp": 1789481195000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So we need a way for a group of machines to agree on something, where no single machine is special, and the group keeps working even if some of them fail.",
+   "timestamp": 1789481208000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That's consensus. That's the whole lecture today.",
+   "timestamp": 1789481211400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Can I ask something? Why can't we just use two-phase commit for that? We did two-phase commit in lecture 6.",
+   "timestamp": 1789481220000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Good question, and I was hoping someone would ask it. Devon, right? Yes.",
+   "timestamp": 1789481225800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Two-phase commit solves a different problem. Two-phase commit is about atomic commitment. Every participant has to vote yes, and then everyone commits.",
+   "timestamp": 1789481235200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So it needs all of the participants, not most of them. If one participant is down, the transaction can't commit. That's the opposite of fault tolerance.",
+   "timestamp": 1789481246200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And the worse problem, remember, is that if the coordinator crashes after participants voted yes but before it sent the decision, the participants are stuck. They're blocked holding locks.",
+   "timestamp": 1789481258400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "They can't unilaterally commit and they can't unilaterally abort. That's the blocking problem with 2PC.",
+   "timestamp": 1789481265000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So two-phase commit tolerates zero coordinator failures without blocking. What we want today is a protocol that makes progress as long as a majority of servers are up.",
+   "timestamp": 1789481276800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Okay, so 2PC is all-or-nothing on participants, and consensus is majority.",
+   "timestamp": 1789481281800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That's a great one-line summary. Write that down.",
+   "timestamp": 1789481285600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay. So let me motivate this properly, because consensus by itself sounds abstract. Agree on a value. Who cares.",
+   "timestamp": 1789481293800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The way we actually use consensus in real systems is something called a replicated state machine. I'm going to write that on the board. Replicated state machine.",
+   "timestamp": 1789481305200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The idea is, take any service you want to make fault tolerant. A key-value store, a lock service, a configuration database, whatever. Model it as a state machine.",
+   "timestamp": 1789481317000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "It has some state, and it takes commands, and each command deterministically changes the state and produces an output.",
+   "timestamp": 1789481325200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Deterministically is the key word. If you start from the same state and apply the same commands in the same order, you get the same state at the end. Every time.",
+   "timestamp": 1789481338200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So now, if I have, say, five servers, and each of them runs a copy of this state machine, and I can guarantee that they all apply the exact same sequence of commands, in the same order, then they all end up in the same state.",
+   "timestamp": 1789481357200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And then any of them can answer a client, and if some of them crash, the others still have the state. That's the replicated state machine approach.",
+   "timestamp": 1789481368600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So the whole problem reduces to one thing. Keeping a replicated log identical across servers. The log is the sequence of commands.",
+   "timestamp": 1789481378000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And the consensus algorithm is the part that makes sure everyone agrees on what's in slot 1 of the log, and slot 2, and slot 3, and so on, forever.",
+   "timestamp": 1789481390600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "What happens if the state machine isn't deterministic? Like if a command calls random or reads the clock?",
+   "timestamp": 1789481398400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Then you're in trouble, and it's a real bug people hit. The standard fix is, the leader evaluates the nondeterministic part once, like it picks the random number or reads the time, and puts the actual value into the log entry.",
+   "timestamp": 1789481415400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So the command in the log is not \"set x to the current time\", it's \"set x to 10:42 and 17 seconds\". Now every replica applies the same thing. Consensus doesn't save you from a nondeterministic state machine. That's on you.",
+   "timestamp": 1789481432400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay. So why is this hard? Let's list what can go wrong. And I want you to notice that every one of these is normal. None of these are exotic.",
+   "timestamp": 1789481445000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Servers crash. And they might come back later, having lost whatever was in memory but not what was on disk.",
+   "timestamp": 1789481453600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Messages can be delayed, arbitrarily. Messages can be dropped. Messages can be duplicated. Messages can arrive out of order.",
+   "timestamp": 1789481461800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The network can partition, so some servers can talk to each other but not to the rest.",
+   "timestamp": 1789481469200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And the killer is the one I mentioned with primary-backup. You cannot tell the difference between a server that crashed and a server that's just slow.",
+   "timestamp": 1789481480200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Because the only way you learn anything about another machine is by getting a message from it, and \"no message yet\" is consistent with both.",
+   "timestamp": 1789481490800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And there's a famous result that says this is not just an engineering difficulty, it's fundamental. The FLP impossibility result.",
+   "timestamp": 1789481499400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "FLP is Fischer, Lynch, and Paterson, from 1985. And I want to state it carefully, because people misquote it all the time.",
+   "timestamp": 1789481508800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "FLP says, in a fully asynchronous system, meaning there's no bound on message delays and no bound on how slow a process can be, no deterministic consensus algorithm can guarantee that it always terminates, if even one process can crash.",
+   "timestamp": 1789481525400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Even one. Not a majority. One crash failure, and you cannot guarantee both that you'll always reach a decision and that the decision is always consistent.",
+   "timestamp": 1789481536400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Now, what FLP does not say. It does not say consensus is impossible in practice. It says you can't guarantee termination in every possible execution of a purely asynchronous model.",
+   "timestamp": 1789481549000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The adversary in the proof has to schedule messages in exactly the most annoying way, forever. Real networks aren't that adversarial forever.",
+   "timestamp": 1789481558400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So practical algorithms, Paxos, Raft, all of them, make a choice. They always guarantee that nothing bad happens, and they only guarantee progress when the network is behaving reasonably, when messages eventually arrive within some timeout.",
+   "timestamp": 1789481573400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "For the exam, you should be able to state what FLP says, in one or two sentences, and say how practical systems get around it. That's fair game.",
+   "timestamp": 1789481585200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The proof of FLP itself will NOT be on the exam. I'm not going to ask you to reproduce the bivalent configuration argument. I'll put a link to the paper if you're curious, it's beautiful, but it is not on the exam.",
+   "timestamp": 1789481602600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "So only the statement, not the proof.",
+   "timestamp": 1789481606000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Only the statement and what it implies. Not the proof. Good.",
+   "timestamp": 1789481611000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Now, I just used two words that I need to define precisely, because they're going to come up constantly. Nothing bad happens, and something good eventually happens. Those are safety and liveness.",
+   "timestamp": 1789481624400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Safety. A safety property says nothing bad ever happens. Formally, if a safety property is violated, you can point to a finite moment in the execution where it went wrong.",
+   "timestamp": 1789481637000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "For consensus, safety means, two servers never decide different values for the same log slot. Nobody ever applies a command that wasn't agreed on.",
+   "timestamp": 1789481647200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Liveness. A liveness property says something good eventually happens. You can never point to a finite moment and say \"liveness was violated here\", because it might still happen later.",
+   "timestamp": 1789481659400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "For consensus, liveness means, eventually a value gets decided. Eventually the client gets a response.",
+   "timestamp": 1789481666000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And the way I like to remember it, a system that does nothing at all is perfectly safe. It never decides anything wrong because it never decides anything. It just has zero liveness.",
+   "timestamp": 1789481679800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And a system that immediately decides whatever it feels like is very live, and completely unsafe.",
+   "timestamp": 1789481686800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Raft, like Paxos, never gives up safety. Under partitions, under crazy message delays, it will never have two servers apply different commands at the same index. What it gives up, when the network is bad, is liveness. It might stall.",
+   "timestamp": 1789481703400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Safety versus liveness, the definitions, and which one Raft guarantees unconditionally, that will be on the exam. I am telling you that directly. Put a star next to it.",
+   "timestamp": 1789481715600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Is \"at most one leader\" a safety property then?",
+   "timestamp": 1789481719800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Yes. \"At most one leader per term\" is a safety property. If it's violated, there's a specific moment where the second leader got elected. We'll see it in a second, it's called election safety.",
+   "timestamp": 1789481734000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay, before Raft, I need one more building block, which is the idea that makes all of this work. Quorums.",
+   "timestamp": 1789481742600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "A quorum is a subset of servers that's big enough that any two quorums must overlap in at least one server.",
+   "timestamp": 1789481751600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The quorum we use in Raft is a majority quorum. Just a majority of the servers in the cluster.",
+   "timestamp": 1789481759800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And the reason majorities are magical is this. Take any two majorities of the same set of servers. They have to share at least one server.",
+   "timestamp": 1789481770800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Because if they didn't overlap, you'd have two disjoint groups each with more than half the servers, and that adds up to more than all the servers. Can't happen.",
+   "timestamp": 1789481783000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So if a decision was made by one majority, and later another majority gets together to make a decision, at least one member of the second group was in the first group, and it remembers what was decided.",
+   "timestamp": 1789481798800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That overlap server is the one that carries the information forward. That's the whole trick. Every safety argument in Raft is going to come back to \"these two majorities overlap\".",
+   "timestamp": 1789481811400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So the formula. For a cluster of n servers, a majority quorum is floor of n over 2, plus 1. I'll write it. Floor of n divided by 2, plus 1.",
+   "timestamp": 1789481824400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So n equals 5, floor of 5 over 2 is 2, plus 1 is 3. You need 3 out of 5.",
+   "timestamp": 1789481833400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "n equals 3, floor of 1.5 is 1, plus 1 is 2. You need 2 out of 3.",
+   "timestamp": 1789481841200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And the flip side is how many failures you can tolerate. If you need a majority to be up, then the number of servers that can fail is n minus the quorum size.",
+   "timestamp": 1789481855000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So 5 servers, quorum of 3, you can lose 2. 3 servers, quorum of 2, you can lose 1.",
+   "timestamp": 1789481863200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And written the other way around, which is how people usually state it, to tolerate f failures, you need 2f plus 1 servers. f equals 1, 3 servers. f equals 2, 5 servers. f equals 3, 7 servers.",
+   "timestamp": 1789481879000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And then 4 servers, the majority of 4 is 3, so with 4 nodes you can tolerate 2 failures. So adding that fourth node buys you something.",
+   "timestamp": 1789481890400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The quorum formula and the 2f plus 1 relationship will absolutely be on the exam. You should be able to do this in your sleep.",
+   "timestamp": 1789481901000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Why does everyone use odd numbers then? Is it just convention?",
+   "timestamp": 1789481906000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Mostly because the numbers work out nicely, and, um, we'll come back to that. Hold that thought, I have a story about it later.",
+   "timestamp": 1789481916200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Actually, you know what majority quorums always remind me of? Juries. Which is a terrible analogy, but let me go with it for a minute.",
+   "timestamp": 1789481926800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I watched Twelve Angry Men with my daughter last weekend. The 1957 one, with Henry Fonda. Not the remake. She's fourteen, so she was on her phone for the first twenty minutes, but then she got into it.",
+   "timestamp": 1789481942600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And, um, if you haven't seen it, it's twelve jurors in one hot room, and the verdict has to be unanimous, and at the start it's 11 to 1, and Fonda's the one.",
+   "timestamp": 1789481956400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And the whole movie is him slowly, you know, flipping people one at a time. And the room has no air conditioning, the fan doesn't work, everyone's sweating, there's a thunderstorm. It's a very sweaty movie.",
+   "timestamp": 1789481971400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And I kept thinking, and my daughter was so annoyed with me for pausing it to say this, a jury is a consensus protocol with a quorum of 12 out of 12.",
+   "timestamp": 1789481984800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "n out of n. Which means one stubborn juror, or one juror who just gets sick and goes home, and you've lost liveness completely. Hung jury.",
+   "timestamp": 1789481995800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Very safe, though. Nobody gets convicted by accident. Anyway. The remake from 1997 is fine too, Jack Lemmon is in it, but the original's better, the lighting in the original is, um, anyway. Where was I.",
+   "timestamp": 1789482010800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Quorums.",
+   "timestamp": 1789482011800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Quorums. Right. Thank you. So unanimity is the extreme, n out of n, zero fault tolerance. Majority is the smallest quorum where any two quorums still overlap. That's why majority is the sweet spot.",
+   "timestamp": 1789482026000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay. Now let's get to Raft. Raft is from a 2014 paper by Diego Ongaro and John Ousterhout at Stanford. \"In Search of an Understandable Consensus Algorithm\". It won best paper at USENIX ATC that year.",
+   "timestamp": 1789482041000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And the title tells you the motivation. For about twenty-five years, the answer to \"how do I do consensus\" was Paxos, and Paxos is famously hard to understand, and even harder to turn into a real system.",
+   "timestamp": 1789482056400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So Ongaro and Oyster house, sorry, Ousterhout, set out to design an algorithm where the primary goal was understandability. Same fault tolerance, same basic performance as Paxos, but something a normal engineer could implement correctly.",
+   "timestamp": 1789482071000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "They even ran a user study, with students at Stanford and Berkeley, where they taught both algorithms and gave quizzes, and students did better on the Raft quiz. Don't quote me on the exact numbers, look at section 9 of the paper if you care.",
+   "timestamp": 1789482089600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The main design move for understandability is decomposition. They split consensus into relatively independent pieces.",
+   "timestamp": 1789482096200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Piece one, leader election. Piece two, log replication. Piece three, safety, which is the set of restrictions that makes the first two correct together.",
+   "timestamp": 1789482106400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And then there's membership changes, and log compaction, which are sort of add-ons.",
+   "timestamp": 1789482112200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Just so you calibrate, the plan for today is election, replication, safety, a worked example, partitions, a little bit on membership changes, and a comparison to Paxos and real systems.",
+   "timestamp": 1789482124800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "We'll skip snapshots and log compaction today. That's homework 6 territory, we'll get to it in a later lecture.",
+   "timestamp": 1789482133000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay. The other big design choice in Raft is a strong leader. At any given time, there's at most one leader, and all client requests go through the leader, and log entries only ever flow from the leader to the followers.",
+   "timestamp": 1789482150000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Never the other direction. Followers don't send entries to the leader. That one-directional flow is a big part of why Raft is easier to reason about than Paxos.",
+   "timestamp": 1789482161800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Every server in Raft is in exactly one of three states. Follower, candidate, or leader.",
+   "timestamp": 1789482168400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Followers are passive. They just respond to requests from leaders and candidates. They don't initiate anything.",
+   "timestamp": 1789482175400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "A candidate is a server that's trying to become leader. It's in the middle of running an election.",
+   "timestamp": 1789482183200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And the leader handles all client requests and replicates the log. If a client talks to a follower, the follower redirects it to the leader.",
+   "timestamp": 1789482193800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "In normal operation, you have exactly one leader and all the other servers are followers.",
+   "timestamp": 1789482200400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Now the concept that ties all of this together, and I want you to really internalize this one, is the term.",
+   "timestamp": 1789482209400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Raft divides time into terms. Terms are numbered with consecutive integers. Term 1, term 2, term 3.",
+   "timestamp": 1789482216800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Each term begins with an election. One or more candidates try to become leader. If a candidate wins, it's the leader for the rest of that term.",
+   "timestamp": 1789482228200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "If nobody wins, which can happen, it's called a split vote, then that term ends with no leader, and a new term with a new election starts shortly after.",
+   "timestamp": 1789482240400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And the guarantee is, there is at most one leader in any given term. That's election safety.",
+   "timestamp": 1789482247800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So the definition, for your notes. A term is a monotonically increasing number that acts as a logical clock. Each term has at most one leader. Some terms have no leader.",
+   "timestamp": 1789482260800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And every server stores its current term number, and it includes that term in every message it sends.",
+   "timestamp": 1789482268600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And here's the rule that's going to do a lot of work for us. If a server ever sees a message with a term bigger than its own current term, it immediately updates its term to the bigger one, and if it was a leader or a candidate, it steps down and becomes a follower.",
+   "timestamp": 1789482291200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And if a server receives a request with a term smaller than its own, it rejects the request. Stale term, you're out of date, go away.",
+   "timestamp": 1789482302200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "So the term is kind of like a Lamport clock?",
+   "timestamp": 1789482306800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "It's very much in that spirit, yes. It lets servers detect stale information, like a leader from an old term that doesn't know it's been replaced. We'll see exactly that in the partition scenario.",
+   "timestamp": 1789482321000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "One more thing, the paper's term for this: servers communicate using remote procedure calls, and the basic algorithm needs only two kinds of RPC. Two. That's it.",
+   "timestamp": 1789482332400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "RequestVote, which candidates send during elections. And AppendEntries, which leaders send to replicate log entries, and which also doubles as a heartbeat when it's empty.",
+   "timestamp": 1789482343000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "There's a third one, InstallSnapshot, but that's for log compaction, and we're not doing that today.",
+   "timestamp": 1789482350000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay, leader election. Let's go.",
+   "timestamp": 1789482352600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Raft uses a heartbeat mechanism. The leader periodically sends empty AppendEntries messages to all followers. That's the heartbeat. It says, I'm still here, I'm still the leader.",
+   "timestamp": 1789482364000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "As long as a follower keeps receiving valid heartbeats from a current leader, it stays a follower.",
+   "timestamp": 1789482371400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Every follower has a timer called the election timeout. If a follower goes a whole election timeout without hearing from a leader, or granting a vote to a candidate, it assumes there's no viable leader and starts an election.",
+   "timestamp": 1789482387600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "To start an election, the follower does four things. It increments its current term. It transitions to the candidate state. It votes for itself. And it sends RequestVote RPCs, in parallel, to every other server.",
+   "timestamp": 1789482402200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Then one of three things happens. One, it wins the election. Two, some other server establishes itself as leader. Or three, a timeout goes by with no winner.",
+   "timestamp": 1789482414000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Case one. The candidate wins if it gets votes from a majority of the full cluster, for the same term. Majority of the whole cluster, including itself. Not a majority of the servers that happen to respond.",
+   "timestamp": 1789482429400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So in a 5 server cluster, it needs 3 votes, its own plus 2 more.",
+   "timestamp": 1789482436000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And each server votes for at most one candidate per term, on a first-come, first-served basis. There's one more restriction on voting that we'll add in the safety section, but for now, first-come, first-served.",
+   "timestamp": 1789482450200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And that one-vote-per-term rule plus majority is exactly why you get at most one leader per term. Two candidates would both need a majority in the same term, the two majorities overlap, and the overlap server can't have voted twice.",
+   "timestamp": 1789482466800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Same argument as before. It's always the overlap.",
+   "timestamp": 1789482470600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Important implementation detail. The vote has to be persisted to disk before the server responds. The field is called votedFor, and it's stored along with currentTerm.",
+   "timestamp": 1789482481600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Because if a server votes for A, crashes, reboots, and forgot that it voted, it could vote for B in the same term, and now you could have two leaders. So currentTerm and votedFor are persistent state.",
+   "timestamp": 1789482497000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Case two. While a candidate is waiting for votes, it might get an AppendEntries from some other server claiming to be leader. If that leader's term is at least as large as the candidate's term, the candidate accepts it as legitimate and goes back to being a follower.",
+   "timestamp": 1789482516800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "If the term in that AppendEntries is smaller, the candidate rejects it and keeps campaigning.",
+   "timestamp": 1789482523400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Case three. Split vote. Suppose several followers time out at the same moment, they all become candidates, and they split the votes, so nobody gets a majority. Then everyone times out again, bumps the term, and tries again.",
+   "timestamp": 1789482539200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And without something extra, this could repeat forever. Everybody times out together, splits the vote, times out together again. That's a liveness problem.",
+   "timestamp": 1789482549000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So Raft's fix is really simple. Randomized election timeouts.",
+   "timestamp": 1789482553200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Instead of every server using the same election timeout, each server picks its timeout randomly from a fixed interval. In the paper they use 150 to 300 milliseconds.",
+   "timestamp": 1789482565000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "150 to 300 milliseconds. And every time the timer is reset, you pick a fresh random value from that range.",
+   "timestamp": 1789482573600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So in most cases, one server times out noticeably before everyone else. It becomes candidate, sends out RequestVotes, wins the election, and starts sending heartbeats before anyone else's timer even fires.",
+   "timestamp": 1789482586600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And when there is a split vote, each candidate restarts its randomized timer at the start of the next election, so it's very unlikely they collide twice in a row.",
+   "timestamp": 1789482599200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The paper reports that with a range of 150 to 300 milliseconds, elections complete quickly, typically in a few hundred milliseconds, and if you make the range too narrow, like 150 to 151, split votes pile up and elections can take seconds.",
+   "timestamp": 1789482616600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Let me write out what's actually in a RequestVote. The arguments are: term, which is the candidate's term. candidateId. lastLogIndex, the index of the candidate's last log entry. And lastLogTerm, the term of the candidate's last log entry.",
+   "timestamp": 1789482632400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And the reply has two fields. term, the voter's current term, so the candidate can update itself if it's behind. And voteGranted, true or false.",
+   "timestamp": 1789482643000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "You're going to wonder right now why lastLogIndex and lastLogTerm are in there, since so far I've said voting is first-come, first-served. Hold on to that. It's the restriction I promised, it comes in the safety section.",
+   "timestamp": 1789482658400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Can I ask a question about the timeouts?",
+   "timestamp": 1789482662200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Yes, go ahead. Jordan, right?",
+   "timestamp": 1789482664800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Yeah. Why randomize at all? Why not just give each server a fixed priority, like lowest ID always times out first, so there's never a tie?",
+   "timestamp": 1789482675800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That's a really good question, and it's actually exactly what the Raft authors tried first.",
+   "timestamp": 1789482682400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "They say in the paper that they initially planned a ranking system, where each candidate had a rank and a lower-ranked candidate would defer to a higher-ranked one.",
+   "timestamp": 1789482694200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And they found it had subtle availability issues. For example, if the high-priority server is the one that's flaky, or it's the one that's partitioned, or its log is behind so it can't actually win, then everyone keeps waiting for it.",
+   "timestamp": 1789482711200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So a lower-ranked server has to time out again and try, and then you need rules for when the higher-ranked server comes back, and they made several adjustments and each fix created a new corner case.",
+   "timestamp": 1789482726200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Randomization has none of that. There's no special server. The analysis is just probability. And that fits the understandability goal. So they went with randomized timeouts.",
+   "timestamp": 1789482737200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "So it's not that ranking can't work, it's that it's harder to get right.",
+   "timestamp": 1789482743400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Exactly. Ranking can work, people have built things like it, but it's harder to reason about. And, bonus, with randomization a server that's permanently slow just naturally tends not to win.",
+   "timestamp": 1789482756400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay. Now, timing. Raft's safety doesn't depend on timing at all. But its liveness does. And the paper gives you a timing requirement, which I want on your notes.",
+   "timestamp": 1789482768600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "broadcastTime, much less than, electionTimeout, much less than, MTBF.",
+   "timestamp": 1789482772800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "broadcastTime is the average time for a server to send RPCs to every server and get replies. MTBF is the mean time between failures for a single server.",
+   "timestamp": 1789482784600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So broadcast time should be an order of magnitude less than the election timeout, so leaders can reliably send heartbeats before followers give up on them.",
+   "timestamp": 1789482795600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And the election timeout should be a few orders of magnitude less than MTBF, so the system spends almost all of its time with a working leader.",
+   "timestamp": 1789482807000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Typically broadcast time is somewhere around half a millisecond to 20 milliseconds, depending on whether you're writing to disk. Election timeout is maybe 10 to 500 milliseconds. MTBF is months.",
+   "timestamp": 1789482819600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Now, a very practical note for homework 4, and Kofi, jump in if I get this wrong.",
+   "timestamp": 1789482827000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The homework tester limits you to at most 10 heartbeats per second per server. So you cannot send heartbeats every 10 milliseconds like a production system might.",
+   "timestamp": 1789482838400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Which means if you use the paper's 150 to 300 millisecond election timeout, with heartbeats every 100 milliseconds, you'll get spurious elections all over the place.",
+   "timestamp": 1789482849400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So for the homework, use a bigger election timeout. Something like 400 to 800 milliseconds works well. But the tester also requires that a new leader is elected within 5 seconds of the old leader failing, so don't go crazy either.",
+   "timestamp": 1789482866400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Yeah, that's right. 10 heartbeats a second max, new leader within 5 seconds. And please use randomized timeouts, we see a lot of people hardcode 500 and then wonder why the split vote test hangs.",
+   "timestamp": 1789482881000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Thank you. So there are two different numbers in play. The paper's 150 to 300 milliseconds is the paper. 400 to 800 is our recommendation for the homework because of the tester's heartbeat limit. Don't mix those up.",
+   "timestamp": 1789482896800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Do we reset the election timer when we receive a RequestVote?",
+   "timestamp": 1789482901800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Only if you grant the vote. If you reset your timer every time you hear any RequestVote, including ones you reject, a server with a bad log can keep everyone from timing out and block progress. Reset when you get a valid AppendEntries from the current leader, or when you grant a vote.",
+   "timestamp": 1789482923600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That exact bug is maybe the number one homework 4 bug, according to Kofi's spreadsheet.",
+   "timestamp": 1789482930200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "It's number two. Number one is holding a lock while sending an RPC.",
+   "timestamp": 1789482936000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Number one is holding a lock while sending an RPC. Don't do that either.",
+   "timestamp": 1789482942200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay, let me do a quick split vote example so you see terms moving.",
+   "timestamp": 1789482948400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Five servers. I'll call them A, B, C, D, and E, so we don't confuse them with lecture numbers. Everybody's in term 6. The leader, say A, crashes.",
+   "timestamp": 1789482960200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "By bad luck, B's timer fires at 212 milliseconds and D's fires at 213 milliseconds. Basically simultaneously.",
+   "timestamp": 1789482967600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "B goes to term 7, votes for itself, sends RequestVote. D goes to term 7, votes for itself, sends RequestVote.",
+   "timestamp": 1789482976200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "C gets B's request first, grants it. E gets D's request first, grants it. So B has 2 votes, B and C. D has 2 votes, D and E. A is dead.",
+   "timestamp": 1789482989600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Nobody has 3. Split vote. Term 7 has no leader.",
+   "timestamp": 1789482994200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Now B and D each pick new random timeouts. Say B picks 290 milliseconds, D picks 160. D times out first, goes to term 8, and now B, C, and E all see a higher term, update to term 8, and C and E grant their votes. D wins term 8 with 3 votes.",
+   "timestamp": 1789483016400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And B also grants, assuming D's log is up to date, but D already had enough without it. So term 7, no leader, term 8, leader D. Terms can be skipped without a leader, and that's totally fine.",
+   "timestamp": 1789483032200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "What if all five pick really close numbers again?",
+   "timestamp": 1789483036400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Then you get another split vote and try again. It's probabilistic, so it's not guaranteed to terminate, which, remember, FLP says we can't guarantee anyway. But the probability of colliding over and over drops off extremely fast.",
+   "timestamp": 1789483051800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay. Now, I promised a story about odd numbers. This is the war story portion of the lecture. The recording people can skip ahead.",
+   "timestamp": 1789483062000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Before I was an academic, I spent about four years at a payments startup called Ledgerline. This was 2017.",
+   "timestamp": 1789483070200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And we had a configuration and coordination service, it was built on etcd, that stored, among other things, which payment processor each merchant was routed to. So if that store was unavailable, we couldn't route payments.",
+   "timestamp": 1789483085200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And we had it running on 3 nodes, all in one data center. And somebody, in a design review, and it may have been me, I'm not going to confirm or deny, said, three nodes in one data center is a risk, let's make it more robust.",
+   "timestamp": 1789483104600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So the plan was, add a fourth node, put two nodes in our Virginia data center and two nodes in our Ohio data center. More nodes, two sites, more robust. Everyone nodded.",
+   "timestamp": 1789483118000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And then, maybe two months later, the link between Virginia and Ohio started flapping. Up, down, up, down.",
+   "timestamp": 1789483125800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And every time it went down, we had 2 nodes on one side and 2 nodes on the other side. And a majority of 4 is 3. Neither side had 3.",
+   "timestamp": 1789483138800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So neither side could elect a leader, neither side could commit anything, and the whole config store was unavailable. Not degraded. Unavailable. For 47 minutes.",
+   "timestamp": 1789483149400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "About 38,000 payment authorizations got queued during that window. Nothing was lost, safety held, Raft did exactly what it was supposed to do, but for 47 minutes we could not route payments.",
+   "timestamp": 1789483162800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And we had made it strictly worse. With 3 nodes in one site, a link flap between sites wouldn't have mattered at all.",
+   "timestamp": 1789483172600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And, oh, actually, this is the perfect moment, because I have to correct something I told you earlier. Maybe fifteen, twenty minutes ago I said 4 nodes can tolerate 2 failures. That is wrong. I misspoke.",
+   "timestamp": 1789483187600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Let's redo it with the formula. n equals 4. Floor of 4 over 2 is 2, plus 1 is 3. The majority is 3. So you can lose 4 minus 3, which is 1 server. 4 nodes tolerate 1 failure. Not 2.",
+   "timestamp": 1789483205000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Which is exactly the same fault tolerance as 3 nodes. So going from 3 to 4 buys you zero additional fault tolerance, and it makes the quorum bigger, so you actually need more servers up and responding. Please fix that in your notes.",
+   "timestamp": 1789483222800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "So 4 nodes tolerate 1 failure, and 3 nodes also tolerate 1.",
+   "timestamp": 1789483228200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Right. 3 tolerates 1, 4 tolerates 1, 5 tolerates 2, 6 tolerates 2, 7 tolerates 3. Even numbers never help you. That's the answer to Devin's question from earlier about why everyone uses odd numbers.",
+   "timestamp": 1789483242800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "So why would anyone ever run 4?",
+   "timestamp": 1789483246200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Mostly by accident, like us. Or temporarily, while you're in the middle of adding or removing a server. There's no steady-state reason to run an even-sized cluster.",
+   "timestamp": 1789483257600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And the real fix for us was, if you want to survive losing a whole data center, you need three sites. Put 2 nodes in Virginia, 2 in Ohio, and 1 in a third region, so 5 nodes total. Now losing any one site still leaves 3 of 5.",
+   "timestamp": 1789483277800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That's 2f plus 1 applied to data centers instead of machines. We did that the following quarter, and it cost us a bit more latency on writes, because commits now sometimes wait on a cross-region round trip. Everything's a tradeoff.",
+   "timestamp": 1789483294400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Did you get in trouble for the fourth node?",
+   "timestamp": 1789483298600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I got a very long postmortem to write. Which, honestly, is how I ended up teaching this lecture, so, you know. Silver linings.",
+   "timestamp": 1789483308400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay. Back to the algorithm. We have a leader. Now what does the leader actually do? Log replication.",
+   "timestamp": 1789483316200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "A client sends a command to the leader. Say, set x to 5. The leader appends that command to its own log as a new entry.",
+   "timestamp": 1789483327200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Each log entry has three things. The command itself, the term in which the leader received it, and its index, which is its position in the log. Index starts at 1.",
+   "timestamp": 1789483340200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So entry at index 7 might be, term 3, command \"set x to 5\".",
+   "timestamp": 1789483346400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Then the leader sends AppendEntries RPCs in parallel to all the followers, to replicate that entry.",
+   "timestamp": 1789483353400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "When the entry has been safely replicated, and I'll define that carefully in a minute, the leader applies it to its state machine and returns the result to the client. That entry is now committed.",
+   "timestamp": 1789483368000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "If followers crash or run slowly or packets get dropped, the leader just retries AppendEntries indefinitely until eventually all followers store all the entries.",
+   "timestamp": 1789483378200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Let me write the AppendEntries arguments, because you'll implement every one of these in homework 5.",
+   "timestamp": 1789483385200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "term, the leader's term. leaderId, so followers can redirect clients. prevLogIndex, the index of the log entry immediately before the new ones. prevLogTerm, the term of that prevLogIndex entry.",
+   "timestamp": 1789483397400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "entries, the list of log entries to store, which is empty for a heartbeat. And leaderCommit, the leader's commit index.",
+   "timestamp": 1789483406000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The reply has term, again so the leader can find out if it's stale, and success, which is true if the follower had an entry matching prevLogIndex and prevLogTerm.",
+   "timestamp": 1789483418200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Those two fields, prevLogIndex and prevLogTerm, are the heart of it. That's the consistency check.",
+   "timestamp": 1789483424800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "When a follower gets an AppendEntries, it looks at its own log at position prevLogIndex. If it doesn't have an entry there, or it has one but the term is different from prevLogTerm, it refuses. It replies success equals false.",
+   "timestamp": 1789483441400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "If it does have a matching entry, it accepts. And if any existing entries after that point conflict with the new ones, same index but different term, it deletes the conflicting entry and everything after it, and appends the leader's entries.",
+   "timestamp": 1789483458400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And this simple check gives us a really important property. The log matching property. This is one of the definitions I want written down word for word.",
+   "timestamp": 1789483469800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Log matching property. If two logs contain an entry with the same index and the same term, then the logs are identical in all entries up through that index.",
+   "timestamp": 1789483482000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Let me say that again, because people get this subtly wrong. Same index and same term at one position means everything before that position is identical too. Not just that entry. The entire prefix.",
+   "timestamp": 1789483496200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Why is it true? Two facts. First, a leader creates at most one entry with a given index in a given term, and entries never change their position in the log. So same index and same term means same command.",
+   "timestamp": 1789483512800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Second, by induction, using the consistency check. Every time a follower accepts new entries, it checked that the entry right before them matches the leader. So if the prefix matched before, it still matches after. Each append extends a matching prefix by induction.",
+   "timestamp": 1789483530600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "So the consistency check is basically an induction step.",
+   "timestamp": 1789483534800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That's exactly the right way to think about it. The empty log trivially matches, and every successful AppendEntries preserves the property.",
+   "timestamp": 1789483543800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay. Now what happens when logs are inconsistent? This happens after crashes. An old leader might have crashed before replicating everything, so followers could be missing entries, or have extra uncommitted entries from some old term that nobody else has.",
+   "timestamp": 1789483560400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "In Raft, the leader handles inconsistencies by forcing the followers' logs to duplicate its own. Conflicting entries in follower logs get overwritten with entries from the leader's log.",
+   "timestamp": 1789483572200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That sounds dangerous, right? Overwriting stuff. It's safe because of the election restriction, which is coming. The leader will never overwrite a committed entry. Hold on to that.",
+   "timestamp": 1789483584000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Mechanically, the leader keeps, for each follower, a number called nextIndex. That's the index of the next log entry the leader will send to that follower.",
+   "timestamp": 1789483595000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "When a leader first comes to power, it initializes nextIndex for every follower to one past the end of its own log. Optimistic. Assume everyone's caught up.",
+   "timestamp": 1789483606400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "If a follower's log is inconsistent, the AppendEntries consistency check fails, the follower says false, and the leader decrements nextIndex for that follower and retries.",
+   "timestamp": 1789483617000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Eventually nextIndex reaches a point where the leader and follower logs match. Then AppendEntries succeeds, the follower deletes any conflicting entries after that point, and appends the leader's entries. Now that follower's log is consistent with the leader's, and it'll stay that way for the rest of the term.",
+   "timestamp": 1789483637200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The leader also keeps matchIndex for each follower, which is the highest index known to be replicated on that follower. That's what the leader uses to decide commitment.",
+   "timestamp": 1789483649000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And a note for homework 5. Backing up one index at a time can be really slow if a follower is way behind. The paper sketches an optimization where the follower returns the conflicting term and the first index it stores for that term, so the leader can skip a whole term at a time. The tester has a test that will time out if you don't do something like that.",
+   "timestamp": 1789483678000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "The \"backup\" test. Yes. Everyone fails the backup test the first time.",
+   "timestamp": 1789483683400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Everyone fails the backup test. It's a rite of passage.",
+   "timestamp": 1789483688000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay, commitment. When is an entry committed? First approximation. An entry is committed once the leader that created it has replicated it on a majority of the servers.",
+   "timestamp": 1789483699800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I'll give you the precise rule in a few minutes, because there's a subtle catch involving old terms, but start with that intuition. Majority replicated, committed.",
+   "timestamp": 1789483710800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And now I can define commit index. Another definition for your notes.",
+   "timestamp": 1789483716200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The commit index is the highest log index that a server knows to be committed. Every server tracks it. It starts at 0 and only increases.",
+   "timestamp": 1789483727200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The leader figures out its commit index from matchIndex. And then it tells followers its commit index in the leaderCommit field of every AppendEntries, including heartbeats.",
+   "timestamp": 1789483738200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "When a follower learns the leader's commit index, it sets its own commit index to the minimum of leaderCommit and the index of its last new entry. The minimum, because it might not have all those entries yet.",
+   "timestamp": 1789483754000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And separately, each server has lastApplied, the highest index it has actually applied to its state machine. Whenever commitIndex is greater than lastApplied, you increment lastApplied and apply that entry. In order. One at a time.",
+   "timestamp": 1789483769000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "What's the difference between committed and applied? Like, isn't committed enough?",
+   "timestamp": 1789483774000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Committed is a fact about the cluster. It means this entry is durable, it will never be lost or changed. Applied is a fact about one server. It means this particular server has executed it against its local state machine.",
+   "timestamp": 1789483790600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "A server can know something is committed and not have applied it yet, because applying takes time. The client gets its response once the leader has applied it.",
+   "timestamp": 1789483802400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay, now I want to do a worked example with actual logs, because this is where it clicks for most people. Get your pens out. Or your laptops, whatever.",
+   "timestamp": 1789483814600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Five servers. A, B, C, D, E again. We're in term 3, and A is the leader.",
+   "timestamp": 1789483822000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I'm going to write each log as a list of terms, one per index. So \"1, 1, 2\" means index 1 has term 1, index 2 has term 1, index 3 has term 2.",
+   "timestamp": 1789483836200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "A's log: 1, 1, 2, 3, 3, 3. So six entries, the last three from term 3.",
+   "timestamp": 1789483843600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "B's log is identical to A's: 1, 1, 2, 3, 3, 3.",
+   "timestamp": 1789483849000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "C's log: 1, 1, 2, 3, 3. Five entries. It's missing index 6.",
+   "timestamp": 1789483854800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "D's log: 1, 1, 2. Only three entries. D was, let's say, rebooting for a while.",
+   "timestamp": 1789483861800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "E's log: 1, 1, 2, 3, 3. Same as C. Five entries.",
+   "timestamp": 1789483867200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "First question. What's A's commit index? Look at each index and count how many servers have it.",
+   "timestamp": 1789483874600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Index 5, term 3. A has it, B has it, C has it, E has it. That's 4 out of 5, which is at least a majority of 3. And it's from the leader's current term, term 3. So index 5 is committed.",
+   "timestamp": 1789483892400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Index 6, term 3. Only A and B. That's 2 out of 5. Not a majority. Not committed.",
+   "timestamp": 1789483900200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So A's commit index is 5. Everyone got that? Commit index 5.",
+   "timestamp": 1789483905600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "And indexes 1 through 4 are committed too, because they're before 5?",
+   "timestamp": 1789483911000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Yes. Once index 5 is committed, everything before it is committed as well, by log matching. Good.",
+   "timestamp": 1789483918400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Now. A crashes. Right after sending that last entry to B. Boom. A is gone.",
+   "timestamp": 1789483925000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The remaining servers are B, C, D, E. Their timers are running. Let's say the random timeouts that got picked are, B 280 milliseconds, C 170, D 155, E 240.",
+   "timestamp": 1789483937600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So who times out first?",
+   "timestamp": 1789483940200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "D, at 155.",
+   "timestamp": 1789483942000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "D, at 155. So D increments its term to 4, votes for itself, and sends RequestVote to everyone, with lastLogIndex 3 and lastLogTerm 2.",
+   "timestamp": 1789483952200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Now, should D win? D is missing the committed entries at 4 and 5. If D becomes leader, and forces everyone's logs to match its own, it would erase committed entries. That would be a disaster. A safety violation.",
+   "timestamp": 1789483968400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Wait, but isn't that solved by just, like, the server with the longest log always wins the election? D has the shortest log, so D just loses.",
+   "timestamp": 1789483979800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That's a very natural guess, and it's a really common misconception, so I'm glad you said it out loud, Devin. But no. It's not the longest log that wins. Length alone is not the rule.",
+   "timestamp": 1789483994400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The actual rule is called the election restriction, and it's the extra voting rule I kept promising. A voter denies its vote if its own log is more up-to-date than the candidate's log.",
+   "timestamp": 1789484008200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That's what lastLogIndex and lastLogTerm in RequestVote are for. The voter compares the candidate's last entry with its own last entry.",
+   "timestamp": 1789484017200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And \"more up-to-date\" is defined in a specific order. First, compare the terms of the last entries. The log whose last entry has the higher term is more up-to-date. Period. Length doesn't matter at that point.",
+   "timestamp": 1789484032200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Only if the last entries have the same term do you compare length. Then whichever log is longer is more up-to-date.",
+   "timestamp": 1789484041200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So the candidate gets a vote only if its log is at least as up-to-date as the voter's. Last term first, then length.",
+   "timestamp": 1789484051000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Let me give you a quick example where the longest log loses, so you believe me. Log X has 7 entries, and its last entry is from term 2. Log Y has only 5 entries, and its last entry is from term 3.",
+   "timestamp": 1789484068800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Which is more up-to-date?",
+   "timestamp": 1789484071000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Y, because term 3 beats term 2, even though X is longer.",
+   "timestamp": 1789484076400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Y. Exactly. Y is more up-to-date even though it's shorter. X probably has a bunch of entries from an old leader in term 2 that never got committed. So \"longest log wins\" is just wrong, Devin, but you just corrected yourself, which is the best possible outcome.",
+   "timestamp": 1789484095800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And the other half of the misconception. Even with the right comparison, it's not that the most up-to-date server always wins. Any server whose log is at least as up-to-date as a majority of voters can win. Whoever times out first among the eligible ones usually wins. We'll see that right now.",
+   "timestamp": 1789484117200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Back to our example. D sends RequestVote in term 4 with lastLogTerm 2, lastLogIndex 3.",
+   "timestamp": 1789484123800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "B's last entry is term 3. 3 is bigger than 2. B's log is more up-to-date, so B rejects. C's last term is 3, rejects. E's last term is 3, rejects.",
+   "timestamp": 1789484136800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "D gets exactly one vote. Its own. D can't win. And note, B, C, and E all saw term 4 in that request, so they bump their current term to 4, but they don't reset their election timers, because they didn't grant a vote.",
+   "timestamp": 1789484155000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Next, C's timer fires at 170 milliseconds. C goes to term 5. Votes for itself. Sends RequestVote with lastLogTerm 3, lastLogIndex 5.",
+   "timestamp": 1789484164400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "B looks at that. B's last term is 3, C's last term is 3. Same term, so compare length. B has 6 entries, C has 5. B is more up-to-date. B rejects C.",
+   "timestamp": 1789484178200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "D looks at it. D's last term is 2, C's is 3. C is more up-to-date. D grants.",
+   "timestamp": 1789484186000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "E looks at it. E's last term is 3, index 5. C's last term is 3, index 5. Identical. C is at least as up-to-date, so E grants.",
+   "timestamp": 1789484197800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So C has C, D, and E. Three votes out of five. C becomes leader in term 5.",
+   "timestamp": 1789484205600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Notice B had the longest log in the whole cluster and B did not win. B could have won if its timer had fired first, B would have gotten votes from C, D, and E. But it wasn't guaranteed. The rule is at least as up-to-date as the voter, not longest wins.",
+   "timestamp": 1789484227000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "So what happens to B's entry at index 6? The term 3 one that only A and B had?",
+   "timestamp": 1789484235200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Great question. That entry was never committed. Remember, index 6 was only on 2 of 5 servers.",
+   "timestamp": 1789484242600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "C is now leader in term 5. A client sends C a new command. C appends it at index 6, with term 5. So C's log is now 1, 1, 2, 3, 3, 5.",
+   "timestamp": 1789484256800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "C sends AppendEntries to B with prevLogIndex 5 and prevLogTerm 3. B has index 5 with term 3. Match. So B accepts, sees its existing index 6 has term 3 but the new entry at index 6 has term 5, that's a conflict, so B deletes its old index 6 and replaces it with C's.",
+   "timestamp": 1789484279400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "B's uncommitted term 3 entry is gone. And that's fine, because it was never committed, so no client was ever told it succeeded.",
+   "timestamp": 1789484289200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "But index 5, which was committed, is on C. It had to be. That's the point.",
+   "timestamp": 1789484296200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Now let me state the property this guarantees, and this is another one for your definitions list. Leader completeness.",
+   "timestamp": 1789484304400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Leader completeness property. If a log entry is committed in a given term, then that entry will be present in the logs of the leaders for all higher-numbered terms.",
+   "timestamp": 1789484316600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Committed entries are never lost when leadership changes. Any future leader already has them.",
+   "timestamp": 1789484322800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And why? Same argument. Always the overlap. Let me do it slowly, and then I'll do it again faster.",
+   "timestamp": 1789484331000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Index 5 was committed, which means it was stored on a majority. A, B, C, and E.",
+   "timestamp": 1789484338400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "To win an election, a candidate needs votes from a majority. Any majority of five servers overlaps with the majority that stored index 5. So at least one voter has index 5.",
+   "timestamp": 1789484351800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And that voter only grants its vote if the candidate's log is at least as up-to-date as its own. Which, it turns out, and the paper proves this in section 5.4, means the candidate must also contain index 5.",
+   "timestamp": 1789484368000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So D, which didn't have index 5, could only get votes from servers that also didn't have it. And there's only one of those. D itself. Not a majority. D can never win while index 5 is committed and D lacks it.",
+   "timestamp": 1789484385400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Faster version. Committed means on a majority. Winning means votes from a majority. The two majorities overlap. The overlap voter won't vote for a candidate that's missing its committed entries. So every new leader has every committed entry.",
+   "timestamp": 1789484401200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The election restriction, the up-to-date comparison, last term first then length, and leader completeness, those will be on the exam. I would bet money there's a question where I give you five logs and ask which servers can become leader. So practice that.",
+   "timestamp": 1789484419000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Like the exact example you just did.",
+   "timestamp": 1789484422400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Like that example, with different numbers. I'm not going to put the exact example from lecture on the exam. I'm mean, but I'm not that mean. Or that lazy.",
+   "timestamp": 1789484434600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay. Now, the catch I mentioned. The precise commitment rule. This is the part of Raft that trips up basically everyone, including people who've implemented it.",
+   "timestamp": 1789484445600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Can I ask something first? You said an entry is committed once it's on a majority. So if a new leader sees that an old entry, from an earlier term, is already on a majority, can't it just mark it committed?",
+   "timestamp": 1789484462600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That is exactly the right question to set this up, Devon. And the answer is no. Surprisingly, no. Let me show you why. This is Figure 8 in the paper, and I'm going to walk it with A through E again.",
+   "timestamp": 1789484479600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Step one. Term 2. A is leader. A appends an entry at index 2, and manages to replicate it to B only, before crashing. So A and B have index 2 with term 2. C, D, and E only have index 1.",
+   "timestamp": 1789484497000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Step two. A has crashed. E times out, and gets elected leader for term 3, with votes from C, D, and itself. That's legal, E's log is as up-to-date as theirs, they all end at index 1.",
+   "timestamp": 1789484512400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "E accepts a client command and puts a different entry at index 2, with term 3. But only on E's own log. And then E crashes too, before replicating it.",
+   "timestamp": 1789484525000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Step three. A comes back. A times out, gets elected leader for term 4, with votes from B, C, and itself. That's legal, A's last term is 2, and B and C's last terms are 2 and 1.",
+   "timestamp": 1789484540800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "A, as leader in term 4, continues replicating its old entry, index 2 term 2, and gets it onto C. Now index 2, term 2, is on A, B, and C. Three out of five. A majority.",
+   "timestamp": 1789484556200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So, per Devon's question, is it committed? Let's see. Suppose A crashes again right now.",
+   "timestamp": 1789484562800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Step four. E comes back. E's log is index 1, and index 2 with term 3. E times out, becomes a candidate for term 5.",
+   "timestamp": 1789484573400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "E asks B, C, and D. B's last entry is term 2. C's last entry is term 2. D's last entry is term 1. E's last entry is term 3. Term 3 beats term 2. So B, C, and D all think E is more up-to-date, and all grant.",
+   "timestamp": 1789484593600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "E wins term 5. And E forces its log onto everyone. E's index 2 has term 3, so it overwrites index 2 term 2 on B and C.",
+   "timestamp": 1789484605400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So the entry that was sitting on a majority, index 2 term 2, just got erased. If A had marked it committed and applied it and told a client \"success\", we just violated safety.",
+   "timestamp": 1789484619600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Oh. So being on a majority isn't enough if it's from an old term.",
+   "timestamp": 1789484625800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Right. So here's the rule, precisely. And I want this written word for word.",
+   "timestamp": 1789484632000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "A leader only commits log entries from its current term by counting replicas. It never commits an entry from a previous term just because that entry is on a majority.",
+   "timestamp": 1789484644600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Entries from earlier terms get committed indirectly. Once an entry from the current term is committed, then by the log matching property, all the entries before it are committed too.",
+   "timestamp": 1789484657200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So in our scenario, what should A have done in term 4? A appends a new entry at index 3 with term 4, and replicates index 2 and index 3 to B and C.",
+   "timestamp": 1789484671400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Now index 3, term 4, is on A, B, and C. That's a majority, and it's from A's current term. So A can commit index 3, and index 2 comes along with it.",
+   "timestamp": 1789484685200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And now check. Can E still win? E's last term is 3. A, B, and C have last term 4. Term 4 beats term 3. None of them will vote for E. E can get at most D and itself. Two votes. E can't win. The overwrite can't happen anymore.",
+   "timestamp": 1789484705800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Let me say the rule one more time, differently. Majority plus current term means committed. Majority plus old term means nothing yet, wait until something from your own term lands on top of it.",
+   "timestamp": 1789484720000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "This commitment rule, current term only, and the Figure 8 scenario that explains why, will be on the exam. I promise you. It's on the exam every year and every year a third of the class writes \"committed once it's on a majority\" and loses the points.",
+   "timestamp": 1789484739400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Is that why a new leader usually commits a no-op entry right away?",
+   "timestamp": 1789484745200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Yes, exactly, good connection. A new leader appends a blank no-op entry at the start of its term. That gets an entry from the current term committed as soon as possible, which also commits everything before it, and lets the leader find out what's committed. Section 8 of the paper.",
+   "timestamp": 1789484765800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay, since we're talking about crashes, let me pin down exactly what has to be on disk, because this is the other big source of homework 5 bugs.",
+   "timestamp": 1789484777600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Persistent state on every server is three things. currentTerm. votedFor. And the log itself. Those have to be written to stable storage before the server responds to any RPC.",
+   "timestamp": 1789484789800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Everything else is volatile and can be rebuilt after a restart. commitIndex and lastApplied on every server, and nextIndex and matchIndex on the leader. Those start over at their initial values when a server reboots.",
+   "timestamp": 1789484804400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Wait, commitIndex isn't persisted? Doesn't the server forget what's committed?",
+   "timestamp": 1789484809000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "It does forget, briefly. But the leader will tell it again with the next AppendEntries, in leaderCommit. And a restarted leader figures it out again by committing an entry from its new term. Committed is a property of the cluster, so the cluster can always rediscover it.",
+   "timestamp": 1789484828400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The state machine is volatile too, in the basic version. On restart, you replay the log from the beginning. Which is slow, and that's part of the motivation for snapshots, which, again, not today.",
+   "timestamp": 1789484842600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "And for homework 5, the tester crashes and restarts your servers constantly, so if you forget to persist votedFor, you'll see two leaders in the same term and fail the \"figure 8 unreliable\" test.",
+   "timestamp": 1789484856800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Which is a test named after exactly the scenario we just did. Okay, let's all stand up for sixty seconds. Stretch. You've been sitting for fifty minutes and I can see people fading.",
+   "timestamp": 1789484870600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Is the coffee machine still broken, or was that a joke?",
+   "timestamp": 1789484875600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Sadly not a joke. I checked at 9:15. There's a handwritten sign on it that says \"out of order, again\", with \"again\" underlined twice. Somebody in facilities has feelings about it.",
+   "timestamp": 1789484888600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Someone should just buy a second machine for the third floor.",
+   "timestamp": 1789484893600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Someone should. I've suggested it at two faculty meetings. It turns out the one thing harder than consensus is getting a department to agree on a purchase order. Okay, sit down, sit down, let's keep going.",
+   "timestamp": 1789484908600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay. Let's take a breath. We've done election, replication, and safety. Let me check the time. Good, we're doing okay.",
+   "timestamp": 1789484917200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Now I want to do the scenario everybody actually worries about in production, which is a network partition. Because this is where the term numbers really earn their keep.",
+   "timestamp": 1789484929400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Fresh setup. Five servers, A through E. The leader is B, in term 7. The commit index everywhere is 20. All logs are identical up through index 20.",
+   "timestamp": 1789484941200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Now the network partitions. A and B end up on one side. C, D, and E end up on the other side. A and B can talk to each other, C, D, E can talk to each other, but nothing crosses.",
+   "timestamp": 1789484958200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So we have a minority side, A and B, with 2 servers, and that side has the old leader. And a majority side, C, D, and E, with 3 servers, and no leader.",
+   "timestamp": 1789484972000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "What happens on the minority side first. B has no idea anything is wrong, from its point of view some followers just stopped answering. It still thinks it's the leader of term 7.",
+   "timestamp": 1789484985800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And A is still getting heartbeats from B, so A never times out. A stays a happy follower of B.",
+   "timestamp": 1789484994400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Now a client, call it client 1, sends a command to B. \"set x to 7\". B appends it to its log at index 21, term 7. B sends AppendEntries to everyone. A accepts. C, D, E never get it.",
+   "timestamp": 1789485011000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So index 21 on B's side is on 2 servers out of 5. B can't count a majority. B cannot commit it. B does not apply it, and B does not reply to client 1. Client 1 just waits.",
+   "timestamp": 1789485027200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Meanwhile on the majority side. C, D, and E stop getting heartbeats. Somebody's election timer fires first. Let's say E, at 210 milliseconds.",
+   "timestamp": 1789485037000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "E goes to term 8, votes for itself, asks C and D. Their logs match E's, all end at index 20, term 7. They grant. E has 3 votes. E is leader of term 8.",
+   "timestamp": 1789485051600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Now a different client, client 2, sends \"set y to 3\" to E. E appends it at index 21, term 8. Replicates to C and D. That's 3 out of 5, a majority, and it's from E's current term. Committed. E applies it and tells client 2 \"success\".",
+   "timestamp": 1789485071400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So at this moment there are two servers that both believe they're leaders. B in term 7 and E in term 8. And they have different entries at index 21.",
+   "timestamp": 1789485084000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Is that split brain? Is that a safety violation?",
+   "timestamp": 1789485088200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "No, because B can't commit anything.",
+   "timestamp": 1789485091200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Exactly. Two leaders can exist at the same time, but only in different terms, and the one in the older term can't commit anything, because it can't reach a majority. Only one of them can make progress. Safety holds.",
+   "timestamp": 1789485107400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And I'll say the same thing a third way, because the overlap argument is the whole lecture. B needs 3 acks for anything. The only servers B can reach are A and itself. So nothing B does can ever become committed.",
+   "timestamp": 1789485124400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Now the partition heals. B sends its next heartbeat, term 7, to E. E looks at it and says, term 7 is less than my term 8, reject. And the reply carries term 8.",
+   "timestamp": 1789485138600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "B sees term 8 in the reply. Higher than its own term. B immediately steps down, becomes a follower, updates its term to 8.",
+   "timestamp": 1789485148800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Then E sends AppendEntries to B and A. The consistency check backs up until index 20, which matches. Then at index 21, B and A have \"set x to 7\" with term 7, and E is sending \"set y to 3\" with term 8. Conflict. B and A delete their index 21 and take E's.",
+   "timestamp": 1789485171400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So \"set x to 7\" is gone from every log. And it was never committed, never applied, never acknowledged. So the system is consistent.",
+   "timestamp": 1789485181600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Wait, so what happens to client 1's write, the x equals 7 one? Does it just get silently lost? Because from the client's side they sent a write and it disappeared.",
+   "timestamp": 1789485194600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Great question, Jordan, and this is exactly where a lot of real systems get it wrong. From Raft's perspective, nothing was lost, because nothing was ever promised. Client 1 never got a success response.",
+   "timestamp": 1789485208800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So what a correct client does is, it times out waiting on B, and then it retries. It finds the new leader, E, maybe because a follower redirects it, and it resends \"set x to 7\". That goes through the normal path, and gets committed in term 8.",
+   "timestamp": 1789485228600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "But here's the subtle part. What if B's entry had actually been committed, and it was only the response that got lost? Then the client retries, and now the command executes twice.",
+   "timestamp": 1789485242000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "For \"set x to 7\" that's harmless, it's idempotent. For \"withdraw 100 dollars\" that is very much not harmless.",
+   "timestamp": 1789485250200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So the Raft paper's answer, section 8, is that clients assign a unique ID to themselves and a serial number to every command. The state machine tracks the latest serial number it has executed for each client, along with the response.",
+   "timestamp": 1789485267200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "If it sees a command with a serial number it's already executed, it doesn't run it again. It just returns the saved response. That gives you linearizable semantics, each command takes effect exactly once.",
+   "timestamp": 1789485281400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, so the client has to retry, and the dedup table is what makes the retry safe.",
+   "timestamp": 1789485288800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Right. Retry plus deduplication. The retry gives you liveness from the client's point of view, the dedup keeps it safe. You'll implement exactly that dedup table in homework 5's key-value part.",
+   "timestamp": 1789485301800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And there's a second problem in this same scenario that I want to flag, which is reads.",
+   "timestamp": 1789485309200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Suppose, during the partition, a client asks B, \"what is y?\" B thinks it's the leader. If B just answers from its local state machine, it says y is whatever it was before, but on the majority side y was already set to 3 and committed. So B returns a stale read.",
+   "timestamp": 1789485330600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That breaks linearizability, even though B never wrote anything wrong. Reads are sneaky.",
+   "timestamp": 1789485336400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The paper's fix is, before answering a read-only request, the leader must check that it's still the leader, by exchanging heartbeats with a majority of the cluster. B can't reach a majority, so B can't serve the read.",
+   "timestamp": 1789485352200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Alternatively, leaders can use a lease. If a majority acknowledged a heartbeat recently, the leader assumes no one else could have been elected in the last, say, election timeout, and serves reads locally. But that depends on bounded clock drift, so it's giving up some of that \"safety never depends on timing\" purity.",
+   "timestamp": 1789485374000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "etcd does the first approach, it's called ReadIndex. Some other systems use leases. We'll talk about the tradeoff more next week.",
+   "timestamp": 1789485383000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay, one more partition variant, and then we'll move on. What if a single server gets isolated by itself? Say D is cut off from everyone.",
+   "timestamp": 1789485394000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "D stops hearing heartbeats. D times out, goes to term 9, asks for votes, nobody answers. Times out again, term 10. Term 11. Term 12. D's term keeps climbing, while the real cluster happily stays in term 8.",
+   "timestamp": 1789485409800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Then D's network comes back. D sends a RequestVote with term 12. Every other server sees term 12, bigger than 8, so the leader, E, steps down. Even though D's log is behind and D can't actually win.",
+   "timestamp": 1789485425600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So a flaky server can disrupt a perfectly healthy cluster and cause an unnecessary election. Nothing unsafe happens, it's a liveness hiccup.",
+   "timestamp": 1789485435000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The fix most production implementations use is called pre-vote. Before a server increments its term, it asks, \"would you vote for me if I ran?\" And only if a majority says yes does it actually bump its term and run. D would get told no, so D never inflates its term.",
+   "timestamp": 1789485456000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That's in Ongaro's PhD dissertation, not the original conference paper. etcd and a few others implement it.",
+   "timestamp": 1789485463400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Does pre-vote fully fix the disruption thing, or are there still cases where a node can cause a pointless election?",
+   "timestamp": 1789485472000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Mostly fixes it, but not completely, there are some interactions with check-quorum and with membership changes that get subtle. I'd rather not rush that today, Devin. Come to office hours tomorrow, or remind me and we'll pick it up next week.",
+   "timestamp": 1789485489000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay. Membership changes, briefly. In real life you don't run the same five machines forever. Machines die permanently, you want to replace them, or grow from 3 servers to 5.",
+   "timestamp": 1789485501600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The naive approach is, just update the config file on every server and restart. But you can't switch every server at exactly the same instant. And during the transition, bad things can happen.",
+   "timestamp": 1789485515400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Example. Going from 3 servers, A, B, C, to 5 servers, A, B, C, D, E. Suppose A and B still have the old config, where a majority is 2 of 3. And C, D, and E have already switched to the new config, where a majority is 3 of 5.",
+   "timestamp": 1789485536400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Now A could get elected with votes from A and B. That's a majority of the old config. And at the same moment, E could get elected with votes from C, D, and E. That's a majority of the new config.",
+   "timestamp": 1789485553400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Two leaders. In the same term. Those two majorities don't overlap, because they're majorities of different configurations. The overlap argument breaks. That's the one-sentence reason you can't switch directly.",
+   "timestamp": 1789485565600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So Raft's original answer is a two-phase approach called joint consensus.",
+   "timestamp": 1789485570600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The leader first commits a special configuration entry that represents both configurations together, C old comma new. While in that joint configuration, any decision, electing a leader or committing an entry, requires a separate majority from the old configuration and a separate majority from the new configuration.",
+   "timestamp": 1789485590000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Once C old comma new is committed, the leader then commits an entry with just C new. After that commits, the old configuration is irrelevant, and servers that aren't in the new configuration can be shut down.",
+   "timestamp": 1789485605400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And at no point can the old and new configurations make independent decisions, because in the middle, you need both.",
+   "timestamp": 1789485614000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "A couple of practical details. New servers usually join first as non-voting members, sometimes called learners, so they can catch up on the log without slowing down commits. And if the leader isn't part of the new configuration, it steps down once C new is committed.",
+   "timestamp": 1789485633000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Also, a lot of real implementations don't do full joint consensus. They do single-server changes, add or remove one server at a time, which is simpler, because any majority of the old config and any majority of the new config still overlap when you only change by one.",
+   "timestamp": 1789485652800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That's in Ongaro's dissertation too. And fun fact, a bug was found in the single-server version a year or so after it was published, and the fix is that the new leader has to commit an entry in its own term before it's allowed to change membership. Which, notice, is the same flavor as the commitment rule.",
+   "timestamp": 1789485676200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "For the exam, know why you can't switch configurations directly, the two disjoint majorities problem. I won't ask you to reproduce the joint consensus protocol step by step.",
+   "timestamp": 1789485688000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay. Let me zoom out and compare Raft with Paxos, and then talk about real systems, because I don't want you leaving here thinking Raft is the only game in town.",
+   "timestamp": 1789485701000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Paxos is Leslie Lamport's algorithm. The original paper is \"The Part-Time Parliament\". He wrote it around 1990, it was published in 1998, and it's written as an allegory about a fictional parliament on a Greek island, which did not help anyone understand it.",
+   "timestamp": 1789485718800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So in 2001 he wrote \"Paxos Made Simple\", which starts with, and I'm paraphrasing, \"the Paxos algorithm, when presented in plain English, is very simple\". People have opinions about that sentence.",
+   "timestamp": 1789485731800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Basic Paxos, sometimes called single-decree Paxos, agrees on one single value. There are proposers, acceptors, and learners.",
+   "timestamp": 1789485739200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "It runs in two phases. Phase 1, prepare and promise. A proposer picks a proposal number and asks a majority of acceptors to promise not to accept anything with a lower number, and to tell it about any value they've already accepted.",
+   "timestamp": 1789485756600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Phase 2, accept and accepted. The proposer asks the acceptors to accept a value, and it has to use the value from the highest-numbered proposal that any of them already accepted, if there was one. If a majority accepts, the value is chosen.",
+   "timestamp": 1789485774400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Notice what's doing the work there. Majorities, and the overlap between the prepare majority and any earlier accept majority. Same core idea as Raft. It's always the overlap.",
+   "timestamp": 1789485786200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "To replicate a whole log you run many instances of Paxos, one per log slot, and in practice you elect a stable leader so you can skip phase 1 most of the time. That's called Multi-Paxos.",
+   "timestamp": 1789485801200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And the problem historically was that Multi-Paxos was never fully specified in one place. Everyone who built it filled in the gaps differently. There's a well-known Google paper, \"Paxos Made Live\", about building Chubby, where they basically say the gap between the paper and a real system is enormous.",
+   "timestamp": 1789485821400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So how does Raft relate? The honest answer is, Raft is very close to a particular, well-specified flavor of Multi-Paxos with a strong leader.",
+   "timestamp": 1789485831600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The main differences. One, in Raft, the log has no holes. Entries are committed in order, and a follower's log is always a prefix-matching copy of the leader's. In Multi-Paxos, different slots can be decided independently and out of order, so you can have gaps.",
+   "timestamp": 1789485850200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Two, Raft's election restriction means a new leader already has all committed entries, so log entries only flow from leader to followers. In many Paxos variants a new leader has to learn missing entries from other servers during its first phase.",
+   "timestamp": 1789485867200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Three, Raft bundles leader election, log management, and membership into one specification with a reference to exactly which state is persistent. That completeness is honestly the biggest practical difference.",
+   "timestamp": 1789485879400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "What's not different. Fault tolerance. Both need 2f plus 1 servers to tolerate f crash failures. Both are safe under asynchrony and live only under partial synchrony. Neither handles malicious servers. Performance in the normal case is basically the same, one round of messages to a majority per command.",
+   "timestamp": 1789485899600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "So is Raft strictly better then? Like, why would anyone still use Paxos?",
+   "timestamp": 1789485905400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Not strictly better. Raft's strong leader is also a bottleneck, every write goes through one machine. There are leaderless or multi-leader variants in the Paxos family, like EPaxos, that can do better for geo-distributed workloads with low conflict rates. And a lot of existing systems are built on Paxos and work fine.",
+   "timestamp": 1789485926800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Raft's win is that you can teach it in 90 minutes and a team can implement it correctly. That matters a lot. But \"easier to understand\" is not the same as \"faster\" or \"more available\". Keep those separate.",
+   "timestamp": 1789485942600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay, real systems. Three that use Raft, with caveats on each, because I don't want anyone putting \"Raft makes everything linearizable\" on the midterm.",
+   "timestamp": 1789485952800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "First, etcd. Key-value store, originally from CoreOS, now part of the CNCF. It's the backing store for Kubernetes. All the cluster state for Kubernetes lives in etcd, which is a Raft cluster.",
+   "timestamp": 1789485966200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "etcd recommends clusters of 3 or 5 members, and really discourages going much beyond 7, because every write has to reach a majority, so more members means slower writes, not faster.",
+   "timestamp": 1789485979200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And a fun numbers comparison. etcd's defaults are a heartbeat interval of 100 milliseconds and an election timeout of 1000 milliseconds. That's quite a bit longer than the paper's 150 to 300. Because real networks across real data centers are messier than a lab. So now we have three different election timeout numbers floating around today, and they're all right for their context.",
+   "timestamp": 1789486005000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Caveat on etcd. People sometimes use etcd's lock API as a distributed lock and assume that makes their critical section safe. It doesn't automatically. If a client pauses, like a long garbage collection pause, its lease can expire while it still thinks it holds the lock. You need fencing tokens. The Raft log is fine. The client using it is wrong.",
+   "timestamp": 1789486030000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Second, Consul, from HashiCorp. Service discovery and config. Consul's server nodes run Raft, using HashiCorp's own Raft library. Again, 3 or 5 servers is the recommendation.",
+   "timestamp": 1789486041000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Caveat on Consul. Only the servers participate in Raft. The many client agents running on every machine are not voting members, and cluster membership for those agents is handled by a separate gossip protocol. So \"Consul uses Raft\" is true of the servers, not the whole system.",
+   "timestamp": 1789486060400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And Consul lets you choose read consistency modes. There's a stale mode that any server can answer, and a default mode that relies on leader leasing and can, in a narrow window, return stale data. The strictly consistent mode costs an extra round trip. So what you get depends on what you ask for.",
+   "timestamp": 1789486082600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Third, CockroachDB. Distributed SQL database. It doesn't run one Raft group for the whole database. It splits data into ranges, and each range is its own Raft group, usually with 3 replicas.",
+   "timestamp": 1789486096000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So a big cluster runs thousands of Raft groups at once, sometimes called Multi-Raft. And that creates engineering problems the paper never talks about, like thousands of heartbeats per second, which they deal with by coalescing heartbeats between the same pair of nodes.",
+   "timestamp": 1789486113800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Caveat on CockroachDB. Reads are usually served by a leaseholder for the range, not by going through the Raft log every time, and transactions spanning multiple ranges need their own commit protocol on top of Raft. Raft handles replication within a range, it doesn't give you cross-range transactions for free.",
+   "timestamp": 1789486134400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And the default range size has changed across versions, it's 512 megabytes these days I believe, but check the docs, don't quote a lecture slide for that.",
+   "timestamp": 1789486145800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "For what it's worth, the slides say 64 megabytes.",
+   "timestamp": 1789486150000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Ha, then the slides are out of date, which proves my point. Older versions used 64 megabytes. Newer ones are bigger. I'll fix the slide. Honestly, don't bother memorizing that number.",
+   "timestamp": 1789486163000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And for completeness, not everything is Raft. Google's Chubby lock service and Spanner use Paxos. ZooKeeper uses its own protocol called Zab, which is similar in spirit but not the same.",
+   "timestamp": 1789486176000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The general caveat, and I really mean this one. \"Uses Raft\" tells you the replication core is probably sound. It does not tell you the whole system is correct.",
+   "timestamp": 1789486188200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Real implementations add pre-vote, check-quorum, leader leases, batching, pipelining, snapshots, and every one of those is a place for bugs. The Jepsen analyses by Kyle Kingsbury have found real consistency bugs in systems that use Raft or Paxos, and the bug is almost always in the stuff around the algorithm, not in the algorithm.",
+   "timestamp": 1789486210400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Is Jepsen something we'll use in the homework?",
+   "timestamp": 1789486214200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "No, but your homework tester is basically a baby Jepsen. It partitions your servers, drops messages, reorders them, and checks the results. Which is why it's so mean.",
+   "timestamp": 1789486226000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay. I have a few minutes before logistics, and we're actually ahead of where I expected, so let me do a quick version of log compaction now, because it'll make homework 6 less scary.",
+   "timestamp": 1789486240200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The problem. The log grows forever. Every command ever issued is in there. That takes more and more disk space, and when a server restarts, replaying millions of entries to rebuild the state machine takes forever.",
+   "timestamp": 1789486255200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The simplest fix is snapshotting. Each server, independently, takes a snapshot of its current state machine state, writes it to stable storage, and then throws away all the log entries up through the last entry included in that snapshot.",
+   "timestamp": 1789486271400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Note, independently. Servers don't coordinate their snapshots. Each server snapshots its own committed state whenever it wants, usually when the log hits some size threshold. Only committed, applied entries can go into a snapshot.",
+   "timestamp": 1789486285600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And the snapshot has to include a little metadata. The last included index, which is the index of the last entry the snapshot replaces. And the last included term, the term of that entry.",
+   "timestamp": 1789486299800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Why do we need those two? Because of the AppendEntries consistency check. The first entry after the snapshot needs a prevLogIndex and prevLogTerm to check against, and those entries are gone. So the snapshot remembers them.",
+   "timestamp": 1789486314800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And the snapshot also includes the latest configuration, for membership changes.",
+   "timestamp": 1789486319800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Now, a complication. Sometimes the leader has already discarded the entries it needs to send to a slow follower. Like a follower that's been down for an hour, or a brand new server.",
+   "timestamp": 1789486333600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Then the leader sends its snapshot instead, using the third RPC, InstallSnapshot. When the follower gets it, if the snapshot covers everything in its log, it discards its whole log and replaces its state with the snapshot. If the snapshot only covers a prefix of its log, it deletes that prefix and keeps the entries after it.",
+   "timestamp": 1789486357000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And that's a slight departure from the strong leader principle, since followers can snapshot on their own. But the data still only flows from the leader. Followers just reorganize what they already have.",
+   "timestamp": 1789486370800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Practically, the tricky part is that writing a snapshot of a big state machine takes time, and you don't want to stop serving requests while you do it. A common trick is copy-on-write, like forking the process on Linux so the child writes the snapshot while the parent keeps going.",
+   "timestamp": 1789486391400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Snapshots and InstallSnapshot are homework 6. That's all I'll say about them today.",
+   "timestamp": 1789486397200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay. Logistics, and then I'll let you go. Please don't pack up yet, because some of this changes what Kofi told you at the start.",
+   "timestamp": 1789486407800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "First, homework 4. Kofi told you it's due this Friday. As some of you know, the autograder was down for most of the weekend, and Kofi tells me it's still flaky this morning.",
+   "timestamp": 1789486421600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Yeah, it's up now, but the queue backed up, some submissions were taking forty minutes to get graded yesterday.",
+   "timestamp": 1789486429800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So we're moving it. Homework 4 is now due Monday, October 12th, at 11:59pm. Not Friday. Monday, 11:59pm.",
+   "timestamp": 1789486437600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And the late-day clock starts from the new deadline. So if you use a late day, it's counted from Monday night, not Friday.",
+   "timestamp": 1789486447400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Does that push homework 5 back too?",
+   "timestamp": 1789486450800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Homework 5 is still scheduled to be released Tuesday October 13th. The due date for 5 I'm not changing today.",
+   "timestamp": 1789486459400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Could homework 5 be due after the midterm instead of right before it? It's going to be really tight with studying.",
+   "timestamp": 1789486468400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I hear you. I'm not going to decide that standing here. Kofi and I will talk about it, and if it moves, it'll be on Ed. No promises.",
+   "timestamp": 1789486480200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Second, the midterm. Same date, Thursday October 22nd, during class time, Larkin Hall 150, not this room. That hasn't changed.",
+   "timestamp": 1789486488800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "But I'm changing what it covers. Kofi said lectures 1 through 8. I've decided to include today. So the midterm covers lectures 1 through 9.",
+   "timestamp": 1789486499400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Everything from today is in, election, replication, the election restriction, the commitment rule, partitions, and why direct membership changes are unsafe. Except the log compaction part at the end. Snapshots are not on the midterm.",
+   "timestamp": 1789486514000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And Thursday's guest lecture on Byzantine fault tolerance, lecture 10, is not on the midterm either. That'll be on the final.",
+   "timestamp": 1789486523000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "So Raft is in, except snapshots, and BFT is out.",
+   "timestamp": 1789486527600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Exactly right. Raft in, snapshots out, BFT out.",
+   "timestamp": 1789486531400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Third, notes. You can bring one letter-size sheet of notes to the midterm, both sides, handwritten or typed, your choice. No laptops, no phones.",
+   "timestamp": 1789486541600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Could we get two sheets? There's a lot of Raft.",
+   "timestamp": 1789486546200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "No. One sheet. The act of deciding what goes on the sheet is half the studying. Nice try though, Devin.",
+   "timestamp": 1789486554800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Kofi, you said you'd announce the review session at the end?",
+   "timestamp": 1789486559800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "Yes. The midterm review session is Sunday, October 18th, from 4 to 6pm, here in this room, Whitaker 120.",
+   "timestamp": 1789486568000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_3",
+   "text": "Will it be recorded? I have a shift on Sundays.",
+   "timestamp": 1789486572600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "We'll try to record it. I can't promise, it depends on whether the room capture is working that day, and it's been, uh, you know. We'll see.",
+   "timestamp": 1789486584000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "And one change on my end. I said I'd post the practice midterm. Ana is going to post it instead of me, because she wrote most of the questions. Still by this Friday, on Ed.",
+   "timestamp": 1789486598600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Thank you, Ana is great. Solutions will go up a few days after that, so actually try the problems before you look.",
+   "timestamp": 1789486608000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Fourth, reminders on office hours, because I know nobody listened at the start. My extra office hours are tomorrow, Wednesday, 3 to 4:30, Whitaker 318. And no office hours from me on Thursday.",
+   "timestamp": 1789486621800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_4",
+   "text": "And mine are now Thursdays 3 to 5 in Whitaker 214. Not Wednesdays.",
+   "timestamp": 1789486627600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Fifth, the reading for Thursday. Castro and Liskov, \"Practical Byzantine Fault Tolerance\", from 1999. Read sections 1 through 4 before Thursday's lecture. Dr. Whitfield is going to assume you've read it.",
+   "timestamp": 1789486640600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And here's a question I want you to think about for Thursday, and I'm deliberately not answering it today. Raft needs 2f plus 1 servers to tolerate f crash failures. Byzantine fault tolerance, where servers can lie, needs 3f plus 1. Why the extra f? Come in with a guess.",
+   "timestamp": 1789486661200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Optional, if you want more Raft. Section 6 of the Raft paper on membership changes, and section 7 on log compaction. And chapter 4 of Ongaro's dissertation if you're really into single-server membership changes.",
+   "timestamp": 1789486675400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And somebody remind me to post today's slides, because I always forget. Also I owe you the link to the FLP paper, I'll put that on Ed tonight.",
+   "timestamp": 1789486687200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "And the range size slide.",
+   "timestamp": 1789486689800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And the range size slide, yes. Thank you. Okay, the stuff I said we'd pick up next week. Leases versus ReadIndex for reads, and Devin's question about whether pre-vote fully fixes disruptive servers. We'll pick both of those up next Tuesday.",
+   "timestamp": 1789486706800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay, that's it. Good luck on homework 4, don't hold locks while sending RPCs, and be nice to Dr. Whitfield on Thursday.",
+   "timestamp": 1789486716200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Thanks, Professor Castellanos. I'll post my recording in the class Discord in case the official capture didn't work.",
+   "timestamp": 1789486724000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Thank you, Jordan. See, replication. It's everywhere. Okay, go, go get coffee. Not from the Larkin cart.",
+   "timestamp": 1789486731400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  }
+ ],
+ "words": 14053,
+ "speakerCount": 5,
+ "durationMs": 5931400,
+ "startEpochMs": 1789480800000
+}

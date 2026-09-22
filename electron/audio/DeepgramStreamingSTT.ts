@@ -205,7 +205,19 @@ export class DeepgramStreamingSTT extends EventEmitter {
                         const transcript = alt?.transcript;
                         const isFinal = data.is_final ?? false;
                         console.log(`[DeepgramStreaming] Transcript event`, { final: isFinal, length: transcript?.length ?? 0 });
-                        if (!transcript) return;
+                        // Auto Answer V3 endpoint normalization (additive):
+                        // live-verified (2026-08-24) that Deepgram delivers
+                        // speech_final=true on trailing EMPTY-transcript results
+                        // after endpointing silence — the endpoint must be
+                        // surfaced BEFORE the empty-transcript return below.
+                        // For a text-carrying final, the transcript is emitted
+                        // first (further down) and this fires after it, keeping
+                        // endpoint-after-final ordering for consumers.
+                        const speechFinal = isFinal && data.speech_final === true;
+                        if (!transcript) {
+                            if (speechFinal) this.emit('endpoint', { type: 'speech_final' });
+                            return;
+                        }
                         // Opt-in diarization: derive the dominant speaker index across the words
                         // in this result and surface it as a canonical id (speaker_<n+1>). Only
                         // emitted when diarize is on AND a numeric speaker index is present, so
@@ -223,7 +235,7 @@ export class DeepgramStreamingSTT extends EventEmitter {
                         });
                         // Auto Answer V3 endpoint normalization (additive): Deepgram
                         // distinguishes is_final (segment) from speech_final (utterance).
-                        if (isFinal && data.speech_final === true) {
+                        if (speechFinal) {
                             this.emit('endpoint', { type: 'speech_final' });
                         }
                     } catch (err) {

@@ -31,8 +31,12 @@ function makeDbStub() {
 
 const FILES_LONG = (() => {
   // Produce a single file long enough to force chunking — CHUNK_WORDS=140,
-  // so >280 words yields ≥2 overlapping chunks.
-  const words = Array(700).fill('lorem ipsum dolor sit amet consectetur adipiscing elit').join(' ');
+  // so >280 words yields ≥2 overlapping chunks — but SMALL enough to stay
+  // under QUERY_EPHEMERAL_EMBED_MAX (24, 2026-09-10): above that cap the
+  // query path deliberately does not embed the missing chunks at all (a
+  // corpus-sized ephemeral batch is what SIGTRAP'd the process), so a 5,600-
+  // word document would exercise the cap, not the batching this file pins.
+  const words = Array(300).fill('lorem ipsum dolor sit amet consectetur adipiscing elit').join(' ');
   return [
     {
       id: 'big-file',

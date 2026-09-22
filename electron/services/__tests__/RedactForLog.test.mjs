@@ -129,10 +129,13 @@ test('redactForLog is registered as a real module loaded by main.ts', () => {
   assert.match(src, /require\('\.\/utils\/redactForLog'\)\.redactForLog/);
 });
 
-test('redactForLog source defines the sensitive-key regex and value patterns', () => {
+test('redactForLog source defines the two-axis key regexes and value patterns', () => {
   const src = read('electron/utils/redactForLog.ts');
 
-  assert.match(src, /SENSITIVE_KEY_RE\s*=\s*\/\(/);
+  // Split from the single SENSITIVE_KEY_RE on 2026-09-03: credentials are
+  // always redacted, user content only at 'standard'. Both must exist.
+  assert.match(src, /CREDENTIAL_KEY_RE\s*=\s*\/\(/);
+  assert.match(src, /CONTENT_KEY_RE\s*=\s*\/\(/);
   assert.match(src, /REMOVE_VALUE_KEY_RE\s*=\s*\/\(/);
   assert.match(src, /VALUE_PATTERNS/);
   assert.match(src, /export function redactForLog\(/);

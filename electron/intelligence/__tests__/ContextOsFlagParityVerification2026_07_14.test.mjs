@@ -78,12 +78,12 @@ describe('flag-parity verification (2026-07-14)', () => {
     assert.equal(isIntelligenceFlagEnabled('jitFinalAnswerEnforced'), true);
   });
 
-  test('outside a dev/test/benchmark context, core Context OS flags are production-on while costly retrieval augmentation stays off', () => {
+  test('outside a dev/test/benchmark context (2026-08-30 update, two batches): ragConfidenceGate/ragLocalRerank/okfKnowledgePacks/okfHybridRetrieval/contextOsEnforceSourceCapabilities/contextOsPropertyValidation/contextOsMultiFamilyEvidenceEnabled are ALL production-on (user-directed override, no packaged-build validation)', () => {
     // No NODE_ENV, no BENCHMARK_MODEL, no NATIVELY_INTERNAL/DEV → production-like.
-    assert.equal(isIntelligenceFlagEnabled('ragConfidenceGate'), false);
-    assert.equal(isIntelligenceFlagEnabled('ragLocalRerank'), false);
-    assert.equal(isIntelligenceFlagEnabled('okfKnowledgePacks'), false);
-    assert.equal(isIntelligenceFlagEnabled('okfHybridRetrieval'), false);
+    assert.equal(isIntelligenceFlagEnabled('ragConfidenceGate'), true);
+    assert.equal(isIntelligenceFlagEnabled('ragLocalRerank'), true);
+    assert.equal(isIntelligenceFlagEnabled('okfKnowledgePacks'), true);
+    assert.equal(isIntelligenceFlagEnabled('okfHybridRetrieval'), true);
     assert.equal(isIntelligenceFlagEnabled('jitFinalAnswerEnforced'), true,
       'jitFinalAnswerEnforced is the intended production policy, not a dev/test experiment');
     for (const key of [
@@ -93,15 +93,15 @@ describe('flag-parity verification (2026-07-14)', () => {
       'contextOsRecapFollowupEnabled',
       'contextOsEvidencePackEnabled',
       'contextOsMemorySafetyEnabled',
-    ]) {
-      assert.equal(isIntelligenceFlagEnabled(key), true, `${key} is production-default-on`);
-    }
-    for (const key of [
+      // Promoted 2026-08-30 (user-directed override, two separate batches) —
+      // see intelligenceFlags.ts's FLAGS registry comment for the risk each
+      // one carries. As of the second batch, NONE of the Context OS flags
+      // this repo tracks remain production-default-off.
       'contextOsEnforceSourceCapabilities',
       'contextOsPropertyValidation',
       'contextOsMultiFamilyEvidenceEnabled',
     ]) {
-      assert.equal(isIntelligenceFlagEnabled(key), false, `${key} remains production-default-off`);
+      assert.equal(isIntelligenceFlagEnabled(key), true, `${key} is production-default-on`);
     }
   });
 

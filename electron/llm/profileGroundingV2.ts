@@ -54,8 +54,7 @@ export const isProfileGroundingV2Enabled = (): boolean => {
 export const __resetProfileGroundingV2Cache = (): void => { cachedEnv = null; };
 
 /**
- * Phase 0.5 of the semantic-retrieval repair (2026-08-13, audit
- * reports/cosine-similarity-relevance-audit-2026-08-13.md): extend V2's
+ * Phase 0.5 of the semantic-retrieval repair (2026-08-13): extend V2's
  * "grounding covers this answer type" set with the fit family
  * (`jd_fit_answer` + `resume_jd_fit_answer`, both required-layers
  * [resume, jd]), skipping the redundant vector retrieval for JD-fit turns.

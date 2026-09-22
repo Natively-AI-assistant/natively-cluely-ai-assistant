@@ -165,11 +165,20 @@ function build(input: LegacyTraceInput): AnswerTrace {
     fallbackUsed: input.fallbackUsed ?? 'NONE',
 
     promptTokenEstimate: 0,
+    // LATENCY ON THIS PATH IS NOT MEASURED, except whatever `totalMs` the caller
+    // chose to pass. orchestrate() now times its phases for real (2026-08-27),
+    // so a shadow diff of legacy-vs-v3 LATENCY compares real numbers against
+    // these zeros and is meaningless — the engine comparison this trace exists
+    // for is about decisions (path, answerability, fallback, contamination),
+    // which are populated on both sides. Instrumenting the three legacy call
+    // sites is the prerequisite for a timing diff; nobody has needed one.
     latency: {
       normalizationMs: 0, questionResolutionMs: 0, policyResolutionMs: 0, classificationMs: 0,
       retrievalMs: 0, rerankingMs: 0, evidenceEvaluationMs: 0, promptCompositionMs: 0,
       providerTtfbMs: 0, totalMs: input.totalMs ?? 0,
     },
+    // Same reason as orchestrate(): this trace is built before the provider
+    // call, so there is nothing to attribute. See orchestrator.ts.
     providerAttempts: [],
     status: input.status ?? 'COMPLETED',
     errorCodes: input.errorCodes ?? [],

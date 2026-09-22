@@ -30,9 +30,14 @@ const shellExecAsync = util.promisify(execShell);
  */
 function assertScreenRecordingPermission(): void {
   if (process.platform !== 'darwin') return;
-  // In development mode, bypass the permission check so screenshots work without
-  // needing the app to be in the TCC whitelist (same policy as the startup check in main.ts).
-  if (!app.isPackaged) return;
+  // Opt-in dev bypass ONLY — matches main.ts's isDevTccBypassEnabled() (see its
+  // B5 comment: an unconditional !app.isPackaged bypass here meant screenshot
+  // capture in every dev build silently skipped the real TCC check, so a dev
+  // could never observe the "permission denied" failure a packaged,
+  // unauthorized user actually hits). Requires BOTH !app.isPackaged and the
+  // explicit env var — set NATIVELY_DEV_BYPASS_SCREEN_TCC=1 to restore the
+  // legacy bypass for local screenshot testing.
+  if (!app.isPackaged && process.env.NATIVELY_DEV_BYPASS_SCREEN_TCC === '1') return;
   const status = systemPreferences.getMediaAccessStatus('screen');
   switch (status) {
     case 'granted':

@@ -5,6 +5,8 @@ import { useT } from '../../i18n';
 import { Disclosure, DisclosureChevron } from '../ui/AccordionSection';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { SettingsToggle } from './SettingsToggle';
+import { ProviderPerformanceSettings } from './ProviderPerformanceSettings';
+import { LiquidGlassBadge } from '../../ui-components/LiquidGlassBadge';
 
 // Label + one-line description + group + TIER for each USER-FACING Intelligence OS flag.
 // Keyed by flag key.
@@ -36,15 +38,33 @@ import { SettingsToggle } from './SettingsToggle';
 type FlagTier = 'core' | 'advanced' | 'dev';
 const FLAG_META: Record<string, { label: string; desc: string; group: string; tier: FlagTier }> = {
   // ── Core: on-device, default-ON, live-wired → governed by the master switch ──────────
-  meetingSummaryV3: { label: 'Better meeting notes', desc: 'Pulls decisions, action items, open questions, and risks into clean notes after a meeting ends.', group: 'Meeting notes', tier: 'core' },
+  // meetingSummaryV3 removed (2026-08-25): V3 notes are now the unconditional default with
+  // no user-facing toggle — see electron/intelligence/intelligenceFlags.ts's
+  // `settingIgnored` on that flag's spec. Do not re-add an entry here without also
+  // removing `settingIgnored` from the registry (otherwise the toggle would render but
+  // silently do nothing).
   meetingModeAutoDetect: { label: 'Auto-detect meeting type', desc: 'Detects whether a meeting was a sales call, interview, standup, or lecture, and uses the best notes template.', group: 'Meeting notes', tier: 'core' },
-  followUpDraftV2: { label: 'Smart follow-up drafts', desc: 'Writes a short, copy-ready follow-up message from the meeting’s decisions and action items.', group: 'Meeting notes', tier: 'core' },
+  // followUpDraftV2 removed (2026-08-25): the LLM-written follow-up draft is now the
+  // unconditional default with no user-facing toggle — see
+  // electron/intelligence/intelligenceFlags.ts's `settingIgnored` on that flag's spec. Do
+  // not re-add an entry here without also removing `settingIgnored` from the registry
+  // (otherwise the toggle would render but silently do nothing).
   speakerLabelsV1: { label: 'Speaker labels', desc: 'Lets you rename speakers (e.g. “John from Client”) and uses those names in notes and action items.', group: 'Meeting notes', tier: 'core' },
+  // ── Provider performance (2026-09-08) ────────────────────────────────────────────────
+  // Only the three a user can meaningfully DECIDE appear here. The rest of the set
+  // (providerPerformanceProfile, adaptiveStreamIdle, adaptiveTtft,
+  // adaptiveConnectTimeout) are deliberately absent: they are bounded so that ON is
+  // safer than or equal to today's behaviour, so a switch whose best outcome is
+  // "no visible change" would be noise — exactly what this map's header rules out.
+  calibration: { label: 'Measure provider speed directly', desc: 'Lets the "Run calibration" button send a few small test requests to measure large-context speed. These use your API key. Off, Natively still learns from your normal answers — this only adds direct measurement.', group: 'Provider performance', tier: 'advanced' },
+  capabilityProbe: { label: 'Check image support directly', desc: 'Lets calibration send one tiny image to confirm your model accepts images, instead of relying on its published capabilities. Uses your API key once.', group: 'Provider performance', tier: 'advanced' },
+  adaptiveImageQuality: { label: 'Shrink screenshots when the provider is slow', desc: 'Sends screenshots at a lower resolution when your provider is measured to be too slow to answer in time. Trades image detail for a usable answer. Code screenshots are never shrunk.', group: 'Provider performance', tier: 'advanced' },
   // ── Advanced: real opt-in tradeoffs (cost / scope / niche) → inside "Customize" ──────
   // Descriptions corrected 2026-08-05 (settings-surface audit): each now states what the
   // toggle ADDS on top of what already ships unconditionally, rather than describing the
   // whole subsystem. Three of these previously advertised behavior that runs flag or not.
   meetingMemoryV2: { label: 'Capture key points', desc: 'Extracts each meeting’s topics, decisions, and action items and carries "still open from last time" into the next one. To search them, also turn on "Search past meetings".', group: 'Memory', tier: 'advanced' },
+  chatHistoryMultiTurn: { label: 'Chat history', desc: 'Lets the chat remember earlier turns, so follow-ups work and a screenshot you shared a few messages ago can still be asked about. Off keeps only the single previous turn.', group: 'Memory', tier: 'advanced' },
   conversationMemoryV2: { label: 'Conversation follow-ups', desc: 'Adds short follow-up handling ("make that shorter") to the typed chat panel. Live spoken answers already resolve follow-ups without this.', group: 'Memory', tier: 'advanced' },
   profileTreeV2: { label: 'Extra candidate-voice check', desc: 'Adds one more check that catches assistant-voice slips the standard first-person cleanup misses. Candidate-voice answers are already cleaned without this.', group: 'Answer quality', tier: 'advanced' },
   answerDiversityGuard: { label: 'Repetition guard', desc: 'Stops live answers repeating themselves across different questions in one meeting, and applies the full layout cleanup. Basic cleanup already runs without this.', group: 'Answer quality', tier: 'advanced' },
@@ -67,7 +87,11 @@ const FLAG_META: Record<string, { label: string; desc: string; group: string; ti
 const HINDSIGHT_FLAG_KEYS = new Set(['hindsightMemory', 'hindsightPostMeetingRetain', 'hindsightLiveRecall']);
 
 // Order for the per-group rendering inside the "Customize" disclosure (advanced tier).
-const ADVANCED_GROUP_ORDER = ['Memory', 'Answer quality', 'Search', 'Lecture & diagrams'];
+// NOTE: this list is a FILTER, not just an order — line ~1070 renders only the
+// groups named here, so a FLAG_META entry whose group is missing from it is
+// silently dropped and its toggle never appears. Adding a group to FLAG_META
+// without adding it here is a no-op that typechecks.
+const ADVANCED_GROUP_ORDER = ['Memory', 'Answer quality', 'Search', 'Lecture & diagrams', 'Provider performance'];
 
 // Single source of truth for what the master "Smart features" switch controls: every
 // core-tier flag. Derived from FLAG_META so it can't drift.
@@ -340,11 +364,11 @@ const StatusChip: React.FC<{ status: ConnStatus; testing: boolean; onRetry: () =
 
   let body: React.ReactNode;
   if (visual === 'connected') {
-    body = (
-      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-green-500/30 bg-green-500/15 px-2.5 py-0.5 text-[11px] font-medium text-green-400">
-        <Wifi size={12} /> {t('Connected')}
-      </span>
-    );
+    // Same Liquid Glass tag as the "Beta" badge beside the section title, so the
+    // two read as one family. The green tint is the only cue that this one is a
+    // status rather than a label; the other states keep their own chips because
+    // the unreachable one carries a Retry control and the tag is pointer-inert.
+    body = <LiquidGlassBadge variant="green" icon={<Wifi size={10} strokeWidth={2.5} />}>{t('Connected')}</LiquidGlassBadge>;
   } else if (visual === 'checking') {
     body = (
       <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border-subtle bg-bg-input px-2.5 py-0.5 text-[11px] font-medium text-text-secondary">
@@ -735,7 +759,7 @@ export const IntelligenceSettings: React.FC = () => {
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-semibold text-text-primary">{t('Long-term memory')}</h3>
-              <span className="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-amber-400">{t('Beta')}</span>
+              <LiquidGlassBadge variant="sky">{t('Beta')}</LiquidGlassBadge>
             </div>
             <p className="mt-1 text-xs leading-relaxed text-text-secondary">{t('Remember what was discussed in past meetings and surface it automatically. Needs a free companion app — about 5 minutes to set up.')}</p>
           </div>
@@ -1126,6 +1150,13 @@ export const IntelligenceSettings: React.FC = () => {
           </button>
         </div>
         <TryResult out={tryOut} />
+      </section>
+
+      {/* What Natively has learned about each provider's speed, and what it does
+          with it. Lives here rather than in AI Providers because it is a
+          DIAGNOSTIC read-out, not configuration — there is nothing to set. */}
+      <section className="space-y-3 border-t border-border-subtle pt-6">
+        <ProviderPerformanceSettings />
       </section>
     </div>
   );

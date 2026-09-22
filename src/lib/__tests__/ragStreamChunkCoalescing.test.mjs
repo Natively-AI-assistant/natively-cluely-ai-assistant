@@ -136,15 +136,20 @@ test('onRAGStreamError stays instant (never deferred) and resets ragDoneRef so a
   assert.match(flushBody, /ragDoneRef\.current = false/, 'flushRagChunkBuffer must reset ragDoneRef so the NEXT RAG answer never inherits a stale done flag');
 });
 
-test('forceFinalizeStaleRagStream exists and is called before both ragQueryLive invocations, so a new RAG query never collides with a previous one still deferred-draining', () => {
+test('forceFinalizeStaleRagStream exists and is called before every ragQueryLive invocation AND before the typed-chat placeholder, so a new answer never collides with a previous RAG answer still deferred-draining', () => {
   const fnStart = source.indexOf('const forceFinalizeStaleRagStream = useCallback(() => {');
   assert.ok(fnStart >= 0, 'forceFinalizeStaleRagStream must exist');
   const body = source.slice(fnStart, fnStart + 900);
   assert.match(body, /isStreaming: false/, 'must instantly finalize whatever stale RAG row was left mid-drain');
   assert.match(body, /ragDoneRef\.current = false/, 'must reset ragDoneRef for the upcoming new stream');
 
+  // Issue #552 removed the typed-chat ragQueryLive pre-flight; the voice path
+  // still queries RAG, and typed chat still needs the finalize because a
+  // voice RAG answer can be draining when the user types.
+  const ragCalls = [...source.matchAll(/ragQueryLive\?\.\(/g)];
+  assert.equal(ragCalls.length, 1, `expected exactly one ragQueryLive invocation (voice path), found ${ragCalls.length}`);
   const callSites = [...source.matchAll(/forceFinalizeStaleRagStream\(\);/g)];
-  assert.ok(callSites.length >= 2, `expected at least 2 call sites (one per ragQueryLive invocation), found ${callSites.length}`);
+  assert.ok(callSites.length >= 2, `expected a finalize before the voice RAG query and before the typed-chat placeholder, found ${callSites.length}`);
 });
 
 test('the effect cleanup cancels the RAF and clears the accumulated text', () => {

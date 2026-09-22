@@ -1,7 +1,7 @@
 import { app, BrowserWindow, Menu, screen, systemPreferences } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
-import { AppState } from './main';
+import type { AppState } from './main';
 import { KeybindManager } from './services/KeybindManager';
 import {
   LAUNCHER_ASPECT_RATIO,
@@ -19,6 +19,8 @@ import {
   interpolateBounds,
 } from './utils/launcherResizeAnimation';
 import { attachNoActivate, isNoActivateManaged } from './utils/windowsFocusPolicy';
+import { resizeEnvelopeFor, OVERLAY_PANEL_INSET } from '../src/lib/overlayCustomSize.mjs';
+import { decideLauncherClose } from '../src/lib/launcherCloseDecision.mjs';
 
 const isEnvDev = process.env.NODE_ENV === 'development';
 const isPackaged = app.isPackaged;
@@ -46,7 +48,7 @@ function traceOverlayResize(event: string, data: Record<string, unknown>): void 
 }
 
 const startUrl = isDev
-  ? 'http://localhost:5180'
+  ? 'http://127.0.0.1:5180'
   : `file://${path.join(__dirname, '../../dist/index.html')}`;
 
 export class WindowHelper {
@@ -158,6 +160,12 @@ export class WindowHelper {
   // behavior, where a MotionValue did the riding inside one window). Default
   // = collapsed panel right edge inside the fixed window: (732 + 600) / 2.
   private togglePanelRight = 666;
+  // The panel's LIVE left edge, streamed alongside the right one. Together
+  // they are the panel's true extent inside the window — which the window's
+  // own width stops describing while a resize drag renders inside a wider
+  // envelope. null until the renderer has streamed once (window-centred
+  // fallback).
+  private togglePanelLeft: number | null = null;
   // Hover gate for the fixed window's transparent side margins (collapsed
   // state): true (default, safe) = window interactive; false = pointer is
   // over a transparent margin → click-through. See syncOverlayInteractionPolicy.
@@ -217,6 +225,18 @@ export class WindowHelper {
   // that killed the earlier hover-gate attempt — it defaulted to ignore).
   private static readonly OVERLAY_DEFAULT_WIDTH = 732;
   private static readonly OVERLAY_MIN_HEIGHT = 216;
+  /**
+   * The height the overlay window is BORN at, before the renderer has measured
+   * anything (see overlaySettings). Named because the show path has to tell
+   * "the renderer has not reported yet" apart from "the renderer reported a
+   * legitimately short window" — the overlay's default state is 154 tall, well
+   * below OVERLAY_MIN_HEIGHT.
+   */
+  private static readonly OVERLAY_BIRTH_HEIGHT = 1;
+  // Live while a resize drag is rendered inside a pre-grown transparent
+  // window (see beginOverlayResizeEnvelope). Remembers the size to return to
+  // if the drag turns out to be a click.
+  private overlayResizeEnvelope: { before: { width: number; height: number } } | null = null;
   // Gap between the pill window's bottom edge and the shell window's top edge
   // — matches the old in-window `gap-2` (8px) spacing.
   private static readonly PILL_GAP = 8;
@@ -269,6 +289,23 @@ export class WindowHelper {
   }
 
   private applyContentProtection(enable: boolean): void {
+    // EVERY window — overlay chrome included — follows the undetectable-mode
+    // toggle. This is a product decision, not an oversight: screen-capture
+    // invisibility is what the user is buying when they turn undetectable mode
+    // ON, and in normal (detectable) mode the overlay is meant to be visible in
+    // a shared screen / recording, e.g. for demos and support captures.
+    //
+    // PR #509 decoupled the overlay/pill/toggle from `enable` and forced them
+    // permanently protected; that made the overlay invisible to captures even
+    // with undetectable mode off, which is not the intended behaviour. Reverted
+    // deliberately — do not re-gate this on a literal `true` without a product
+    // decision. (Trade-off: with undetectable mode off the overlay can appear in
+    // a shared screen — the issue #500 class. That is the mode's contract.)
+    //
+    // Note this method must keep pushing the value unconditionally (it is what
+    // reassertContentProtection routes through): app.dock.hide()/show() flips the
+    // macOS activation policy and WindowServer silently resets sharingType, so
+    // the in-memory value alone is not enough.
     const windows = [
       this.launcherWindow,
       this.overlayWindow,
@@ -403,8 +440,21 @@ export class WindowHelper {
   // EDGE CASE: if the grown window would overflow the work area's right edge,
   // the X clamp below shifts the window left — that one case can show a
   // one-frame shift, same as any clamped move always could.
-  public setOverlayDimensionsAnchored(width: number, height: number): void {
-    if (!this.overlayWindow || this.overlayWindow.isDestroyed()) return;
+  //
+  // RETURNS the size actually APPLIED after clamping. The renderer needs this:
+  // it mirrors the same floor(workArea * 0.9) clamp locally, but the display it
+  // measures (window.screen.availWidth) and the one this method measures
+  // (the work area of the display the window sits on) can disagree — on a
+  // multi-monitor setup they routinely do. Adopting the echoed value keeps the
+  // renderer's panel width, the toggle anchor and the hover-gate margin locked
+  // to the window that actually exists, instead of the one it asked for.
+  public setOverlayDimensionsAnchored(
+    width: number,
+    height: number,
+  ): { width: number; height: number } {
+    if (!this.overlayWindow || this.overlayWindow.isDestroyed()) {
+      return { width, height };
+    }
 
     const currentBounds = this.overlayWindow.getBounds();
     const currentContentSize = this.overlayWindow.getContentSize();
@@ -443,7 +493,7 @@ export class WindowHelper {
         currentContentSize,
         computed: { x: newX, y: newY, width: newWidth, height: newHeight },
       });
-      return;
+      return { width: currentContentSize[0], height: currentContentSize[1] };
     }
 
     // Atomic frame change: a single setBounds avoids the 1-frame split where
@@ -451,19 +501,25 @@ export class WindowHelper {
     // is what causes the shell to visibly slide and snap during code-expansion.
     this.overlayWindow.setBounds({ x: newX, y: newY, width: newWidth, height: newHeight });
     this.overlayBounds = this.overlayWindow.getBounds();
+    const appliedContentSize = this.overlayWindow.getContentSize();
     traceOverlayResize('setOverlayDimensionsAnchored:applied', {
       requested: { width, height },
       appliedBounds: this.overlayBounds,
-      contentSizeAfter: this.overlayWindow.getContentSize(),
+      contentSizeAfter: appliedContentSize,
     });
+    return { width: appliedContentSize[0], height: appliedContentSize[1] };
   }
 
-  // NOTE: the overlay window is a FIXED WIDTH (OVERLAY_DEFAULT_WIDTH = 732)
-  // for its entire visible lifetime; the renderer always reports that fixed
-  // width, so every report here is height-only (width delta 0) — top-anchored,
-  // X never moves, no width setBounds ever. The expand/contract animation is
-  // CSS-only in the renderer (panel tweens 600↔732 centered inside the fixed
-  // window). See NativelyInterface.startTransition for the renderer side.
+  // NOTE: the overlay window's width is FIXED FOR THE WHOLE LIFETIME OF AN
+  // ANIMATION. It is born at OVERLAY_DEFAULT_WIDTH (732) and only ever changes
+  // when the USER drags a resize handle (or on restore of a previously dragged
+  // size) — never during the expand/contract spring, which stays CSS-only in
+  // the renderer (the panel tweens collapsed↔expanded centered inside the
+  // window). So every report arriving here DURING an animation is still
+  // height-only (width delta 0): top-anchored, X never moves, no width
+  // setBounds. See NativelyInterface.startTransition for the renderer side and
+  // src/lib/overlayCustomSize.mjs for why the invariant is per-animation
+  // rather than per-lifetime.
 
   public createWindow(): void {
     if (this.launcherWindow !== null) return; // Already created
@@ -500,6 +556,27 @@ export class WindowHelper {
         preload: path.join(__dirname, 'preload.js'),
         scrollBounce: true,
         webSecurity: !isDev, // DEBUG: Disable web security only in dev
+        // The launcher's boot reveal (the black logo splash handing over to the
+        // launcher UI) is driven by Framer Motion, which advances only on
+        // requestAnimationFrame. Chromium STOPS rAF outright — not throttles it,
+        // stops it — for any window whose document is hidden, which on both
+        // macOS and Windows includes a window merely covered by another app's
+        // window, an app hidden with Cmd+H, and a window on an inactive Space or
+        // virtual desktop. Timers are only throttled (~1Hz), so the splash's
+        // dismissal timer still fires and React state still advances — but the
+        // AnimatePresence exit never completes, so the full-screen black splash
+        // is never unmounted, and the launcher underneath never leaves its
+        // `initial` opacity 0. The window stays painted on the black logo until
+        // the user brings it forward, which is the "the app only finishes
+        // starting up if it has focus" report. Opting the launcher out of
+        // background throttling keeps rAF running so the boot sequence completes
+        // wherever the window happens to be. Same flag, same reason, as
+        // SettingsWindowHelper and ModelSelectorWindowHelper.
+        //
+        // NOTE: this ALSO makes the Page Visibility API report this window as
+        // 'visible' while it is hidden. See the usage-tick gate in
+        // src/components/Launcher.tsx, which had to stop relying on it.
+        backgroundThrottling: false,
       },
       show: false, // DEBUG: Force show -> Fixed white screen, now relies on ready-to-show
       // Platform-specific frame settings
@@ -654,19 +731,42 @@ export class WindowHelper {
 
     const launcherUrl = `${startUrl}?window=launcher${noOrchSuffix}${isolationSuffix}${reviewOffSuffix}`;
 
-    this.launcherWindow
-      .loadURL(launcherUrl)
-      .then(() => console.log('[WindowHelper] loadURL success'))
-      .catch((e) => {
-        console.error('[WindowHelper] Failed to load URL:', e);
-      });
-
     let launcherLoadRetries = 0;
     const MAX_LAUNCHER_LOAD_RETRIES = 10;
+
+    // Reset the retry budget only when a load ACTUALLY succeeds, so a LATER
+    // transient failure (e.g. an HMR blip mid-session) gets its own fresh
+    // budget instead of being starved by earlier retries.
+    //
+    // This MUST NOT hang off `did-finish-load` (2026-09-03): when a load fails,
+    // Chromium commits its own error page, and that error page fires
+    // `did-finish-load` too. Resetting there made every failure go
+    // 0 -> 1 -> (error page finishes) -> 0, so the counter never passed 1 and
+    // MAX_LAUNCHER_LOAD_RETRIES was unreachable — an unbounded 1 Hz navigation
+    // loop for as long as the dev server stayed down (measured 2026-09-03:
+    // 39 retries in 40s, and 1447 over 29min in a prior session log, every one
+    // of them logged "1/10"). `loadURL()`'s promise rejects on a failed load,
+    // so its resolution is the only trustworthy success signal here.
+    const loadLauncher = (): void => {
+      const win = this.launcherWindow;
+      if (!win || win.isDestroyed()) return;
+      win
+        .loadURL(launcherUrl)
+        .then(() => {
+          launcherLoadRetries = 0;
+          console.log('[WindowHelper] loadURL success');
+        })
+        .catch((e) => {
+          console.error('[WindowHelper] Failed to load URL:', e);
+        });
+    };
+
+    loadLauncher();
+
     this.launcherWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
       console.error(`[WindowHelper] did-fail-load: ${errorCode} ${errorDescription}`);
       // DEV SELF-HEAL (2026-07-10): in dev, the renderer loads from the Vite
-      // server at http://localhost:5180. If that server is momentarily
+      // server at http://127.0.0.1:5180. If that server is momentarily
       // unavailable (a slow first `npm start`, an HMR reconnect, or a stale
       // server from a prior run being replaced), the load fails and — with no
       // retry — the window stays permanently black (its native backgroundColor).
@@ -679,18 +779,14 @@ export class WindowHelper {
         launcherLoadRetries += 1;
         console.warn(`[WindowHelper] dev: retrying launcher load (${launcherLoadRetries}/${MAX_LAUNCHER_LOAD_RETRIES}) in 1s…`);
         setTimeout(() => {
-          if (this.launcherWindow && !this.launcherWindow.isDestroyed()) {
-            this.launcherWindow.loadURL(launcherUrl).catch(() => { /* next did-fail-load retries */ });
-          }
+          // Retries route through loadLauncher() so a successful retry resets
+          // the budget; a failed one falls back into this handler.
+          loadLauncher();
         }, 1000);
       }
     });
 
-    // Reset the retry counter once a load actually succeeds, so a LATER
-    // transient failure (e.g. an HMR blip mid-session) gets its own fresh
-    // retry budget instead of being starved by earlier retries.
     this.launcherWindow.webContents.on('did-finish-load', () => {
-      launcherLoadRetries = 0;
       const launcher = this.launcherWindow;
       if (!launcher || launcher.isDestroyed()) return;
       const rendererPid = launcher.webContents.getOSProcessId();
@@ -746,7 +842,7 @@ export class WindowHelper {
 
     const overlaySettings: Electron.BrowserWindowConstructorOptions = {
       width: WindowHelper.OVERLAY_DEFAULT_WIDTH,
-      height: 1,
+      height: WindowHelper.OVERLAY_BIRTH_HEIGHT,
       x: overlayDefaultX,
       y: overlayDefaultY,
       minWidth: 300,
@@ -788,6 +884,10 @@ export class WindowHelper {
       // "still steals focus" reports — the bundle is only read at launch).
       console.log('[WindowHelper] Windows no-activate policy applied to overlay');
     }
+    // Follows undetectable mode (see applyContentProtection): protected from
+    // screen capture only while that mode is ON. Note the native stealth module
+    // force-applies NSWindowSharingNone on 'ready-to-show' regardless of mode;
+    // this JS push is what restores NSWindowSharingReadOnly in normal mode.
     this.overlayWindow.setContentProtection(this.contentProtection);
     // Apply the current mouse-interaction policy to the NEW window. Without
     // this, a window (re)created while stealth passthrough is ON would start
@@ -1050,6 +1150,22 @@ export class WindowHelper {
           }
         }
 
+        // Same staleness problem as launcherZoomed above, but for a fill: if the
+        // window leaves its filled bounds by any route other than the maximize
+        // button (a drag, a display change), launcherFilled was previously never
+        // cleared — which permanently disables enforceLauncherAspectRatio()'s
+        // `if (this.launcherFilled) return` guard for the rest of the session.
+        if (this.launcherFilled && !this.launcherRatioCorrecting) {
+          const workArea = this.getDisplayWorkArea(bounds);
+          if (
+            Math.abs(bounds.width - workArea.width) > 2 ||
+            Math.abs(bounds.height - workArea.height) > 2
+          ) {
+            this.launcherFilled = false;
+            this.emitLauncherMaximizedState(false);
+          }
+        }
+
         this.rememberLauncherNormalBounds();
       }
     });
@@ -1065,18 +1181,33 @@ export class WindowHelper {
     // then either self-exits on the lost lock or loads a dead dev server →
     // "loads once, then stuck at logo/black forever." In dev we therefore let a
     // window close actually quit the app, so no zombie survives between runs.
+    //
+    // NO-TRAY RULE (2026-09-12, three Windows reviews "closing the app doesn't
+    // work / only in Task Manager"): undetectable mode destroys the tray and
+    // removes the taskbar button, so hide-to-tray left the user with no way
+    // to bring the window back or quit. Hide only while a tray exists;
+    // otherwise X quits. Decision table: src/lib/launcherCloseDecision.mjs.
     if (process.platform !== 'darwin') {
       this.launcherWindow.on('close', (e) => {
-        if (isDev) {
-          // Let the close proceed and quit — no hide-to-tray in dev.
+        const decision = decideLauncherClose({
+          platform: process.platform,
+          isDev,
+          quitting: this.appState.isQuitting(),
+          hasTray: this.appState.hasTray(),
+        });
+        if (decision === 'close') return;
+        if (decision === 'quit') {
+          // Let this close proceed and quit the app. app.quit() drives the
+          // same before-quit path the tray "Quit" item uses, so the overlay
+          // windows (which would otherwise keep window-all-closed from firing)
+          // are torn down with it.
           this.appState.setQuitting(true);
+          app.quit();
           return;
         }
-        if (!this.appState.isQuitting()) {
-          e.preventDefault();
-          this.launcherWindow?.hide();
-          this.isWindowVisible = false;
-        }
+        e.preventDefault();
+        this.launcherWindow?.hide();
+        this.isWindowVisible = false;
       });
 
       // Sync maximize state to renderer so WindowControls stays in sync (Windows/Linux only).
@@ -1362,24 +1493,47 @@ export class WindowHelper {
   // Renderer-streamed live panel right edge (px from the overlay window's
   // left edge) — repositions the toggle window so it rides the panel's
   // top-right corner during the width spring.
-  public setOverlayToggleAnchor(panelRight: number): void {
+  public setOverlayToggleAnchor(panelRight: number, panelLeft?: number): void {
     if (!Number.isFinite(panelRight)) return;
     const clamped = Math.max(0, Math.min(Math.round(panelRight), 10_000));
-    if (clamped === this.togglePanelRight) return;
+    const left =
+      typeof panelLeft === 'number' && Number.isFinite(panelLeft)
+        ? Math.max(0, Math.min(Math.round(panelLeft), clamped))
+        : this.togglePanelLeft;
+    if (clamped === this.togglePanelRight && left === this.togglePanelLeft) return;
     this.togglePanelRight = clamped;
+    this.togglePanelLeft = left;
     this.positionToggleWindow();
+    // The pill is centred on the PANEL, so it moves in the same frame as the
+    // edge the user is dragging — part of the motion, not a chaser that
+    // catches up after release. Compositor-only surface move; costs nothing.
+    this.positionPillWindow();
     // The panel's left margin moved too (symmetric growth) — any open
     // settings/model-selector dropdown is anchored to the PANEL, so it rides
     // the width spring exactly like the toggle does.
     this.repositionOverlayPopovers();
   }
 
-  // The panel's live LEFT margin inside the fixed window: (732 - panelW)/2,
-  // derived from the streamed togglePanelRight = (732 + panelW)/2. Popover
+  // The panel's live LEFT margin inside the window: (windowW - panelW)/2,
+  // derived from the streamed togglePanelRight = (windowW + panelW)/2. Popover
   // anchors are stored relative to the panel, not the window, so they follow
   // the symmetric width spring.
+  //
+  // Reads the window's LIVE width rather than OVERLAY_DEFAULT_WIDTH: the user
+  // can now resize the overlay, and the renderer streams togglePanelRight
+  // against whatever width the window actually has. Using the constant here
+  // while the renderer used the live width would offset every popover by
+  // (732 - actualWidth) / 2.
   public getOverlayPanelLeftMargin(): number {
-    return Math.max(0, WindowHelper.OVERLAY_DEFAULT_WIDTH - this.togglePanelRight);
+    // Streamed directly when known: during a resize drag the panel is
+    // left-anchored inside a wider envelope and the symmetric derivation below
+    // is wrong by the whole envelope slack.
+    if (this.togglePanelLeft !== null) return this.togglePanelLeft;
+    const windowWidth =
+      this.overlayWindow && !this.overlayWindow.isDestroyed()
+        ? this.overlayWindow.getContentSize()[0]
+        : WindowHelper.OVERLAY_DEFAULT_WIDTH;
+    return Math.max(0, windowWidth - this.togglePanelRight);
   }
 
   // Re-anchor any open overlay popovers (settings / model-selector) to the
@@ -1593,6 +1747,8 @@ export class WindowHelper {
       [this.toggleWindow, 'overlay-toggle'],
     ];
     for (const [win, name] of auxPairs) {
+      // Follows undetectable mode, like the overlay body (see
+      // applyContentProtection).
       win.setContentProtection(this.contentProtection);
       if (process.platform === 'darwin') {
         win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
@@ -1722,43 +1878,111 @@ export class WindowHelper {
 
   // Place the pill (centered above the shell) and the toggle (outside the
   // shell's top-right corner) around the overlay's current bounds.
-  private positionOverlayAuxWindows(): void {
+  // ── Smooth free-form resize envelope ─────────────────────────────────────
+  // A drag is rendered ENTIRELY in the renderer's CSS: ONE native resize here
+  // on grab (grow to the largest window that fits without moving the origin),
+  // ONE on release (fit the result), none in between. Every setBounds on this
+  // transparent, backdrop-blurred window re-rasters it — the old per-33ms
+  // resize stepped the visible edge in 40–150px lurches.
+  public beginOverlayResizeEnvelope(
+    drag?: Record<string, unknown>,
+  ): { width: number; height: number } {
     const overlay = this.overlayWindow;
-    if (!overlay || overlay.isDestroyed()) return;
+    if (!overlay || overlay.isDestroyed()) return { width: 0, height: 0 };
+    const o = overlay.getBounds();
+    const [contentW, contentH] = overlay.getContentSize();
+    if (!this.overlayResizeEnvelope) {
+      this.overlayResizeEnvelope = { before: { width: contentW, height: contentH } };
+    }
+    const envelope = resizeEnvelopeFor({
+      x: o.x,
+      y: o.y,
+      width: o.width,
+      height: o.height,
+      workArea: this.getDisplayWorkArea(o),
+    });
+    traceOverlayResize('envelope:begin', { bounds: o, envelope, drag: drag ?? null });
+    if (envelope.width !== o.width || envelope.height !== o.height) {
+      // Origin untouched by construction (resizeEnvelopeFor stops at the work
+      // area edge), so this only ever touches transparent, unpainted region.
+      overlay.setBounds({ x: o.x, y: o.y, width: envelope.width, height: envelope.height });
+      this.overlayBounds = overlay.getBounds();
+    }
+    const [w, h] = overlay.getContentSize();
+    return { width: w, height: h };
+  }
+
+  // `final` absent means the drag was a click: return to the pre-envelope size.
+  public endOverlayResizeEnvelope(
+    final?: { width: number; height: number },
+  ): { width: number; height: number } {
+    const overlay = this.overlayWindow;
+    if (!overlay || overlay.isDestroyed()) {
+      this.overlayResizeEnvelope = null;
+      return { width: final?.width ?? 0, height: final?.height ?? 0 };
+    }
+    const target = final ?? this.overlayResizeEnvelope?.before;
+    this.overlayResizeEnvelope = null;
+    const [curW, curH] = overlay.getContentSize();
+    const applied = target
+      ? this.setOverlayDimensionsAnchored(target.width, target.height)
+      : { width: curW, height: curH };
+    traceOverlayResize('envelope:end', { final: final ?? null, applied });
+    return applied;
+  }
+
+  private positionOverlayAuxWindows(): void {
+    this.positionPillWindow();
+    this.positionToggleWindow();
+  }
+
+  // The pill sits PILL_GAP above the shell, centred on the PANEL — the streamed
+  // left/right edges when the renderer has sent them, else the window's centre
+  // (identical while the panel is centred, which is every state but a drag).
+  // Centring on the panel rather than the window is what lets it move in the
+  // same frame as a resize drag instead of jumping after it.
+  private positionPillWindow(): void {
+    const overlay = this.overlayWindow;
+    const pill = this.pillWindow;
+    if (!overlay || overlay.isDestroyed() || !pill || pill.isDestroyed()) return;
     const o = overlay.getBounds();
     const workArea = this.getDisplayWorkArea(o);
-    const pill = this.pillWindow;
-    if (pill && !pill.isDestroyed()) {
-      const { width: pw, height: ph } = this.pillSize;
-      // Clamp into the work area: the old single-window layout could never
-      // lose the pill (it lived inside the OS-constrained window), but as a
-      // separate window above the shell it would slide under the menu bar
-      // when the user drags the shell to the top of the screen. Clamping
-      // keeps the End-meeting/Show buttons reachable (the pill then overlaps
-      // the shell's top edge instead of vanishing).
-      // Do NOT clamp the pill independently while welded, or while a managed
-      // group drag is in flight: displacing it relative to the shell is
-      // precisely the "group came apart" artifact those modes remove. The same
-      // constraint is enforced on the whole group instead — continuously by
-      // AppKit when welded, and at drag release by
-      // clampOverlayGroupIntoWorkArea(). Outside those cases (the legacy
-      // mirroring path) the independent clamp still applies, since there the
-      // pill genuinely can outlive the shell's work area.
-      const rigidToShell = this.overlayGroupWelded || this.overlayGroupDragging;
-      const idealX = Math.round(o.x + (o.width - pw) / 2);
-      const idealY = o.y - WindowHelper.PILL_GAP - ph;
-      const px = rigidToShell
-        ? idealX
-        : Math.min(Math.max(idealX, workArea.x), workArea.x + workArea.width - pw);
-      const py = rigidToShell ? idealY : Math.max(idealY, workArea.y);
-      this.auxSyncing = true;
-      try {
-        pill.setBounds({ x: px, y: py, width: pw, height: ph });
-      } finally {
-        this.auxSyncing = false;
-      }
+    const { width: pw, height: ph } = this.pillSize;
+    const panelCentre =
+      this.togglePanelLeft !== null
+        ? (this.togglePanelLeft + this.togglePanelRight) / 2
+        : o.width / 2;
+    // Clamp into the work area: the old single-window layout could never lose
+    // the pill (it lived inside the OS-constrained window), but as a separate
+    // window above the shell it would slide under the menu bar when the user
+    // drags the shell to the top of the screen. Clamping keeps the
+    // End-meeting/Show buttons reachable (the pill then overlaps the shell's
+    // top edge instead of vanishing).
+    // Do NOT clamp the pill independently while welded, or while a managed
+    // group drag is in flight: displacing it relative to the shell is precisely
+    // the "group came apart" artifact those modes remove. The same constraint
+    // is enforced on the whole group instead — continuously by AppKit when
+    // welded, and at drag release by clampOverlayGroupIntoWorkArea(). Outside
+    // those cases (the legacy mirroring path) the independent clamp still
+    // applies, since there the pill genuinely can outlive the shell's work area.
+    const rigidToShell = this.overlayGroupWelded || this.overlayGroupDragging;
+    const idealX = Math.round(o.x + panelCentre - pw / 2);
+    // Measured from the PANEL's top, not the window's: the window carries a
+    // gutter on every side (see OVERLAY_PANEL_INSET), so anchoring to o.y would
+    // silently widen the visible pill gap by the inset.
+    const idealY = o.y + OVERLAY_PANEL_INSET - WindowHelper.PILL_GAP - ph;
+    const px = rigidToShell
+      ? idealX
+      : Math.min(Math.max(idealX, workArea.x), workArea.x + workArea.width - pw);
+    const py = rigidToShell ? idealY : Math.max(idealY, workArea.y);
+    const current = pill.getBounds();
+    if (current.x === px && current.y === py && current.width === pw && current.height === ph) return;
+    this.auxSyncing = true;
+    try {
+      pill.setBounds({ x: px, y: py, width: pw, height: ph });
+    } finally {
+      this.auxSyncing = false;
     }
-    this.positionToggleWindow();
   }
 
   private positionToggleWindow(): void {
@@ -1782,7 +2006,12 @@ export class WindowHelper {
       Math.max(Math.round(o.x + this.togglePanelRight + d - S / 2), workArea.x),
       workArea.x + workArea.width - S,
     );
-    const y = Math.max(Math.round(o.y - d - S / 2), workArea.y);
+    // o.y is the WINDOW's top; the panel's is one gutter below it (the panel is
+    // inset from the window on every side so undetectable mode's ring has room
+    // to paint outside the card). Without this the button rides a corner the
+    // panel does not have and sits OVERLAY_PANEL_INSET px too high — the x half
+    // was always right because it comes from the renderer-streamed panel edge.
+    const y = Math.max(Math.round(o.y + OVERLAY_PANEL_INSET - d - S / 2), workArea.y);
     toggle.setBounds({ x, y, width: S, height: S });
   }
 
@@ -2188,10 +2417,23 @@ export class WindowHelper {
     // Show Overlay FIRST
     if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
       const currentBounds = this.overlayWindow.getBounds();
+      // The saved height is RENDERER-AUTHORED — it is whatever the last applied
+      // setBounds produced, and the renderer owns the floor (see
+      // naturalWindowHeightFor in src/lib/overlayCustomSize.mjs): the overlay's
+      // default state is 154 tall, below OVERLAY_MIN_HEIGHT. Clamping up to 216
+      // here would silently undo a size the user dragged to — and it would
+      // STICK, because the renderer's ResizeObserver watches CONTENT size, which
+      // this bump does not change, so nothing would ever re-report and correct
+      // it. The only case the old clamp was really protecting against is a show
+      // that raced the renderer's first measurement, when the window still has
+      // its birth height; that one still gets the floor.
       const savedBounds = this.overlayBounds
         ? {
             ...this.overlayBounds,
-            height: Math.max(this.overlayBounds.height, WindowHelper.OVERLAY_MIN_HEIGHT),
+            height:
+              this.overlayBounds.height > WindowHelper.OVERLAY_BIRTH_HEIGHT
+                ? this.overlayBounds.height
+                : WindowHelper.OVERLAY_MIN_HEIGHT,
           }
         : null;
       const workArea = this.getDisplayWorkArea(savedBounds ?? currentBounds);
@@ -2243,6 +2485,10 @@ export class WindowHelper {
       });
 
       // Restore opacity before showing (it may have been zeroed by hideMainWindow).
+      // The opacity shield only matters when the overlay is actually going to be
+      // capture-excluded, i.e. in undetectable mode — that is the only case where
+      // a pre-flag frame could leak. In normal mode the overlay is meant to be
+      // visible to captures anyway, so it takes the plain branch below.
       if (process.platform === 'win32' && this.contentProtection) {
         // Opacity Shield: Show at 0 opacity first to prevent frame leak.
         // The aux windows (pill/toggle) show via the overlay's 'show' event,
@@ -2259,10 +2505,20 @@ export class WindowHelper {
         // after the timer would flash the pill through content protection.
         this.applyOverlayAuxVisibility(true);
         this.overlayWindow.setContentProtection(true);
+        // The pill/toggle are the same chrome as the body and must share its
+        // capture visibility. Their creation-time push is overridden by the
+        // native applyStealthToWindow (it runs later, on 'ready-to-show', and
+        // force-sets NSWindowSharingNone regardless of mode), so without a push
+        // here they stay protected on the default path even in normal mode —
+        // measured on macOS: body ReadOnly, pill/toggle None. Same value as the
+        // body above (this branch only runs while contentProtection is true).
+        this.pillWindow?.setContentProtection(this.contentProtection);
+        this.toggleWindow?.setContentProtection(this.contentProtection);
         // Small delay to ensure Windows DWM processes the flag before making it opaque
 
         if (this.opacityTimeout) clearTimeout(this.opacityTimeout);
         this.opacityTimeout = setTimeout(() => {
+          this.opacityTimeout = null;
           if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
             this.overlayWindow.setOpacity(1);
             this.pillWindow?.setOpacity(1);
@@ -2273,11 +2529,19 @@ export class WindowHelper {
           }
         }, 60);
       } else {
+        // macOS/Linux, and win32 with undetectable mode OFF (the shield above is
+        // gated on it), so the win32 z-order push below is reachable again.
         // Restore opacity (may have been zeroed pre-screenshot by hideMainWindow)
         this.overlayWindow.setOpacity(1);
         this.pillWindow?.setOpacity(1);
         this.toggleWindow?.setOpacity(1);
+        // Follows undetectable mode (see applyContentProtection). The pill/toggle
+        // get the same value for the same reason as the win32 branch above: the
+        // native applyStealthToWindow force-protects them after creation, so this
+        // show-path push is the only thing that lets them follow the mode.
         this.overlayWindow.setContentProtection(this.contentProtection);
+        this.pillWindow?.setContentProtection(this.contentProtection);
+        this.toggleWindow?.setContentProtection(this.contentProtection);
         // Re-assert z-order BEFORE show on Windows — DWM processes setAlwaysOnTop
         // synchronously, so calling it before show() ensures the window lands at the
         // correct z-level on first paint. Calling it after focus() would leave a brief
@@ -2363,6 +2627,7 @@ export class WindowHelper {
 
         if (this.opacityTimeout) clearTimeout(this.opacityTimeout);
         this.opacityTimeout = setTimeout(() => {
+          this.opacityTimeout = null;
           if (this.launcherWindow && !this.launcherWindow.isDestroyed()) {
             this.launcherWindow.setOpacity(1);
             if (!inactive) this.launcherWindow.focus();
@@ -2486,10 +2751,85 @@ export class WindowHelper {
     menu.popup({ window: win, x: point.x, y: point.y });
   }
 
+  /**
+   * Flush the win32 opacity shield instead of discarding it.
+   *
+   * switchToOverlay / switchToLauncher show a window at opacity 0, call
+   * setContentProtection(true), and restore opacity 60ms later once DWM has
+   * applied the capture-exclusion flag. That restore lives in ONE shared
+   * this.opacityTimeout. minimizeWindow() / closeWindow() used to cancel it with
+   * a bare clearTimeout, so a minimize or a close-to-tray landing inside those
+   * 60ms dropped the pending setOpacity(1) and left the window shown-but-fully-
+   * transparent. The overlay chrome is skipTaskbar:true and the launcher joins it
+   * under undetectable mode, so there is no taskbar button to bring it back — the
+   * app is alive and unreachable. That is issue #529, reported on Windows 2.8.8,
+   * where #509 widened the shield from undetectable-only to the default Windows
+   * path.
+   *
+   * Flushing early does NOT narrow the capture guarantee, which was the standing
+   * worry about this method. Measured on windows-latest: after
+   * setContentProtection(true), restoring opacity at t=0ms put 0 pixels of the
+   * window into a live getDisplayMedia capture, against a control that saw 81248
+   * pixels of the same window unprotected. DWM applies the exclusion before an
+   * opacity restore can matter, so the 60ms is not what is buying capture safety.
+   *
+   * The opacity restore is NOT gated on isVisible(), and that is load-bearing.
+   * It used to be, on the theory that skipping hidden windows kept the flush off
+   * the screenshot path. Two measurements on a real Windows kernel killed that:
+   *
+   *  - hideMainWindow() zeroes opacity BEFORE hide() on win32, but it is fully
+   *    synchronous, so at every yield point (including the 40ms await in
+   *    withScreenshotCaptureSession) those windows are already hidden. Setting
+   *    opacity 1 on a hidden window changes nothing anyone can capture, and every
+   *    show path re-sets opacity on the way in — measured, all four of them.
+   *  - The skip actively CAUSED a bug. applyOverlayAuxVisibility() re-shows the
+   *    pill and toggle but never touches their opacity, so a pill hidden inside
+   *    the shield window was skipped here at opacity 0 and then re-shown at
+   *    opacity 0 — an invisible gap in the overlay chrome that nothing repaired
+   *    until the next full switchToOverlay.
+   *
+   * The z-order re-assert below keeps its isVisible() guard: unlike opacity, it
+   * is not repairing state that a later show would otherwise inherit.
+   *
+   * NOT for the shield's own arm sites: they call setOpacity(0) and then cancel
+   * the previous timer, so routing them through here would un-zero the shield
+   * they just applied. They keep their bare clearTimeout.
+   */
+  private finishOpacityShield(): void {
+    if (!this.opacityTimeout) return;
+    clearTimeout(this.opacityTimeout);
+    this.opacityTimeout = null;
+
+    for (const win of [
+      this.launcherWindow,
+      this.overlayWindow,
+      this.pillWindow,
+      this.toggleWindow,
+    ]) {
+      if (win && !win.isDestroyed()) win.setOpacity(1);
+    }
+
+    // The overlay's timer re-asserts z-order alongside the opacity restore,
+    // because DWM can silently demote the HWND across a hide/show. That timer
+    // will never run now, so the flush owes the same re-assert — otherwise an
+    // interrupted switch trades "invisible" for "visible but behind everything".
+    //
+    // Still guarded on isVisible(), unlike the opacity restore above. Z-order is
+    // not state a later show inherits — switchToOverlay re-asserts it on the way
+    // in — so there is nothing to repair on a hidden window.
+    //
+    // The timer's focus() is NOT mirrored. We are on the way into a minimize or
+    // a close-to-tray; stealing focus there is the opposite of what was asked.
+    const overlay = this.overlayWindow;
+    if (overlay && !overlay.isDestroyed() && overlay.isVisible()) {
+      overlay.setAlwaysOnTop(true, 'screen-saver');
+    }
+  }
+
   public minimizeWindow(): void {
     const win = this.launcherWindow;
     if (!win || win.isDestroyed()) return;
-    if (this.opacityTimeout) clearTimeout(this.opacityTimeout);
+    this.finishOpacityShield();
     win.minimize();
   }
 
@@ -2510,6 +2850,12 @@ export class WindowHelper {
     if (!win || win.isDestroyed()) return;
 
     if (this.launcherFilled) {
+      // Flip the flag BEFORE animating, not after: animateLauncherBounds's
+      // reduced-motion path is a synchronous setBounds(), which fires 'resize'
+      // in the same tick. enforceLauncherAspectRatio()'s very first guard is
+      // `if (this.launcherFilled) return`, and that guard has to see the new
+      // state or it clamps the just-restored window as an off-ratio resize.
+      this.launcherFilled = false;
       // ONE frame change, nothing else. Note isMaximized() reports true while
       // filled — Electron treats a transparent frameless window whose bounds
       // equal the work area as maximized — so an isMaximized() check here would
@@ -2519,7 +2865,6 @@ export class WindowHelper {
         this.launcherNormalBounds ?? this.defaultLauncherBounds(win),
         LAUNCHER_CONTRACT_DURATION_MS,
       );
-      this.launcherFilled = false;
     } else {
       // A genuine OS maximize (Win+Up, snap) may be in effect — unwind it so the
       // window is never both natively maximized and filled.
@@ -2537,11 +2882,14 @@ export class WindowHelper {
         // to a default box instead of returning where the window actually was.
         this.launcherNormalBounds = win.getBounds();
       }
+      // Same ordering reason as the branch above, mirrored: set the flag first
+      // so a synchronous reduced-motion setBounds() sees launcherFilled already
+      // true when its 'resize' event reaches enforceLauncherAspectRatio().
+      this.launcherFilled = true;
       this.animateLauncherBounds(
         this.getDisplayWorkArea(win.getBounds()),
         LAUNCHER_EXPAND_DURATION_MS,
       );
-      this.launcherFilled = true;
     }
 
     this.emitLauncherMaximizedState(this.launcherFilled);
@@ -2745,7 +3093,7 @@ export class WindowHelper {
   public closeWindow(): void {
     const win = this.launcherWindow;
     if (!win || win.isDestroyed()) return;
-    if (this.opacityTimeout) clearTimeout(this.opacityTimeout);
+    this.finishOpacityShield();
     // On Windows/Linux the 'close' event listener intercepts this
     // and hides to tray unless the app is actually quitting.
     win.close();

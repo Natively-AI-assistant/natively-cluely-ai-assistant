@@ -1,0 +1,370 @@
+{
+ "blind_id": "S-cb7843a6",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 82663,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 33319,
+  "candidatesTokenCount": 2538,
+  "totalTokenCount": 44527,
+  "cachedContentTokenCount": 24507,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 33319
+   }
+  ],
+  "cacheTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 24507
+   }
+  ],
+  "thoughtsTokenCount": 8670,
+  "serviceTier": "standard"
+ },
+ "fact_count": 72,
+ "evaluation": {
+  "factual_accuracy": 4,
+  "important_information_retention": 7,
+  "hallucination_control": 4,
+  "action_item_retention": 5,
+  "decision_retention": 7,
+  "speaker_attribution": 3,
+  "numeric_accuracy": 5,
+  "entity_retention": 7,
+  "timeline_accuracy": 5,
+  "conclusion_accuracy": 4,
+  "structure": 4,
+  "conciseness": 2,
+  "readability": 3,
+  "overall_summary_quality": 3,
+  "critical_errors": [
+   "Included an LLM chunking artifact ('unresolved in this chunk') which led to contradicting the resolved October 14 launch date.",
+   "Reported superseded action items as active (Viktor writing the migration runbook, Maya creating a 10% rollout plan).",
+   "Failed to resolve speaker labels (Speaker 1, Speaker 3, Speaker 4, Speaker 5, Me) to their actual names for most action items.",
+   "Contradicted the number of completed dry runs, stating 'one completed dry run' in one section and '3 of 12' in another."
+  ],
+  "missing_important_information": [
+   "Dana escalating the ledger dependency with Grace Obi.",
+   "Kestrel Health being a separate, happy beta customer.",
+   "Viktor writing the shadow-rating reconciliation script by October 7.",
+   "Details of the customer-visible P1 bugs.",
+   "Details of what the order form addendum covers."
+  ],
+  "hallucinated_information": [
+   "The migration has one completed dry run (transcript says 3 of 12 shards).",
+   "Whether the launch should occur on October 6, October 13, or October 20 remains unresolved in this chunk."
+  ],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C02",
+    "reported": "Whether the launch should occur on October 6, October 13, or October 20 remains unresolved in this chunk. [open]"
+   },
+   {
+    "correction_id": "C04",
+    "reported": "Viktor: Create a real migration runbook before the other nine shards are migrated."
+   },
+   {
+    "correction_id": "C05",
+    "reported": "Speaker 4: Create the rollout plan around an initial 10% cohort unless the plan is changed after the current discussion."
+   }
+  ],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [
+   "The October 2 tripwire coincides with the office move, so desk availability may be limited."
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "missing"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "partial"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "missing"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "contradicted"
+   },
+   {
+    "id": "F25",
+    "status": "contradicted"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "partial"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "contradicted"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "contradicted"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "partial"
+   },
+   {
+    "id": "F43",
+    "status": "missing"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "contradicted"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "present"
+   },
+   {
+    "id": "F57",
+    "status": "present"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "present"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   },
+   {
+    "id": "F62",
+    "status": "present"
+   },
+   {
+    "id": "F63",
+    "status": "missing"
+   },
+   {
+    "id": "F64",
+    "status": "present"
+   },
+   {
+    "id": "F65",
+    "status": "present"
+   },
+   {
+    "id": "F66",
+    "status": "present"
+   },
+   {
+    "id": "F67",
+    "status": "present"
+   },
+   {
+    "id": "F68",
+    "status": "present"
+   },
+   {
+    "id": "F69",
+    "status": "missing"
+   },
+   {
+    "id": "F70",
+    "status": "present"
+   },
+   {
+    "id": "F71",
+    "status": "missing"
+   },
+   {
+    "id": "F72",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes suffer from severe repetition, duplicating the same information across more than ten sections. There is a major failure in speaker attribution, as the notes frequently use raw transcript labels (Speaker 1, Speaker 4, Me) instead of resolving them to names. The notes also contain an LLM chunking artifact ('unresolved in this chunk') which leads to a critical contradiction, stating the launch date is unresolved despite correctly capturing the October 14 decision elsewhere. Several superseded values are reported as active action items, such as Viktor writing the runbook and Maya creating a 10% rollout plan. Finally, the notes hallucinate that there was 'one completed dry run' instead of three."
+ }
+}

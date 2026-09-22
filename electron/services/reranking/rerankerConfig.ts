@@ -1,0 +1,733 @@
+/**
+ * The reranker's user-facing configuration, and the policy that turns it into a
+ * port the seam may use.
+ *
+ * Everything the registry refuses to know lives here: which provider the user
+ * picked, whether a key exists, whether local-only mode forbids a network call.
+ * The registry only ever sees a port or null, which is what keeps it
+ * synchronous and testable without a network or an Electron app object.
+ *
+ * There is ONE reranker section in Settings. Provider is a choice inside it, not
+ * a second section — a "Local Reranker" panel beside an "OpenRouter Reranker"
+ * panel would let a user configure two things that cannot both be active.
+ */
+
+// A plain constant module — no singletons, so this is safe as a top-level
+// import despite the note above about esbuild inlining a second copy of each.
+import { TRIAL_SENTINEL_KEY } from '../../config/constants';
+
+export type RerankerProvider = 'local' | 'natively' | 'openrouter' | 'jina' | 'voyage' | 'custom';
+
+export interface RerankerSettings {
+  /**
+   * Defaults to 'local'. An upgrading user's reranker must not change because a
+   * new setting appeared, so absent === local === exactly today's behaviour.
+   */
+  provider?: RerankerProvider;
+  /** OpenRouter model id. No default is hard-coded — see defaultRerankModel(). */
+  openrouterModel?: string;
+  /**
+   * Managed Natively rerank model. Absent means the one model the API serves —
+   * unlike the BYOK providers there is nothing for the user to choose, so this
+   * exists only so a future second managed model does not need a settings
+   * migration.
+   */
+  nativelyModel?: string;
+  /** Jina AI model id, e.g. jina-reranker-v3.5. */
+  jinaModel?: string;
+  /** Voyage AI model id, e.g. rerank-2.5. */
+  voyageModel?: string;
+  /** User-hosted custom rerank model id (LM Studio, TEI, etc.). */
+  customModel?: string;
+  /**
+   * A catalogue id from rag/rerankerModelCatalog.ts, or absent for the bundled
+   * bge-reranker-base. ONNX entries are read by LocalReranker; GGUF entries are
+   * run by llama.cpp through buildLocalGgufPort().
+   */
+  localModelId?: string;
+  /** How many candidates to send. Absent keeps ModeHybridRetriever's own pool size. */
+  candidateCount?: number;
+  /**
+   * Opt-in: when the hosted reranker fails, try the built-in one for that
+   * request. Default OFF — a silent substitution reorders evidence with a model
+   * the user did not choose.
+   */
+  fallbackToLocal?: boolean;
+  /** Cached from the last successful "Test connection", for the settings panel. */
+  lastTest?: {
+    at: string;
+    model: string;
+    latencyMs: number;
+    ok: boolean;
+    failure?: string;
+  };
+}
+
+export const DEFAULT_RERANKER_SETTINGS: Required<Pick<RerankerSettings, 'provider' | 'fallbackToLocal'>> = {
+  provider: 'local',
+  fallbackToLocal: false,
+};
+
+/**
+ * Why the hosted reranker may not run. Returned rather than thrown so the
+ * settings panel can explain the state instead of just hiding the option.
+ */
+export type HostedIneligibility =
+  | 'provider-not-selected'
+  | 'local-only-mode'
+  | 'reference-files-scope-denied'
+  | 'no-api-key'
+  | 'no-model';
+
+export interface HostedEligibility {
+  eligible: boolean;
+  reason?: HostedIneligibility;
+}
+
+export interface EligibilityInputs {
+  provider: RerankerProvider;
+  hasApiKey: boolean;
+  model: string | undefined;
+  /** `LLMHelper.isLocalOnly()`. See isLocalOnlyMode() below for what this is worth today. */
+  localOnly: boolean;
+  /**
+   * `providerDataScopes.reference_files`. This is the control that actually
+   * ships, and it describes exactly what hosted rerank sends: retrieved document
+   * snippets. A user who turned it off has said those snippets do not leave this
+   * machine, and a rerank request is a way for them to leave.
+   */
+  referenceFilesScopeAllowed: boolean;
+  /**
+   * Populated only when provider === 'custom'. The URL the user configured,
+   * before any normalisation — used to decide whether the endpoint is truly
+   * loopback / private-network so we can relax the privacy gate for it.
+   */
+  customEndpoint?: string;
+}
+
+/**
+ * Return true iff the given URL resolves to a loopback address or a private
+ * (RFC-1918 / RFC-4193 / link-local) host — i.e. the request never leaves
+ * this machine / LAN.
+ *
+ * This is best-effort and intentionally conservative: any ambiguity (parse
+ * failure, bare hostname that isn't `localhost`) returns false so privacy
+ * always wins.
+ */
+export function isLoopbackOrPrivateHost(urlString: string): boolean {
+  let parsed: URL;
+  try { parsed = new URL(urlString); } catch { return false; }
+  // WHATWG URL keeps IPv6 hosts bracketed.
+  const host = parsed.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  if (host === 'localhost') return true;
+
+  // Only IP LITERALS are classified. A DNS name that merely starts with a
+  // private octet (10.proxy.example.com, 127.0.0.1.nip.io) resolves wherever
+  // its owner points it, so it is public for this purpose.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { isIP } = require('net') as typeof import('net');
+  const family = isIP(host);
+  if (family === 4) {
+    const [a, b] = host.split('.').map(Number);
+    return a === 127                                  // loopback 127/8
+      || a === 10                                     // RFC-1918
+      || (a === 192 && b === 168)                     // RFC-1918
+      || (a === 172 && b >= 16 && b <= 31)            // RFC-1918 172.16/12
+      || (a === 169 && b === 254);                    // link-local
+  }
+  if (family === 6) {
+    return host === '::1'                             // loopback
+      || /^fe[89ab][0-9a-f]?:/.test(host)             // link-local fe80::/10
+      || /^f[cd][0-9a-f]{0,2}:/.test(host);           // unique local fc00::/7
+  }
+  return false;
+}
+
+/**
+ * The privacy verdict for a custom rerank endpoint, shared by retrieval
+ * (evaluateHostedEligibility) and Settings' Test button so the two cannot
+ * drift: a loopback / private-network endpoint is allowed in every mode, any
+ * other endpoint obeys the same rules as a hosted provider.
+ */
+export function customRerankPrivacyBlock(input: {
+  customEndpoint?: string;
+  localOnly: boolean;
+  referenceFilesScopeAllowed: boolean;
+}): 'local-only-mode' | 'reference-files-scope-denied' | null {
+  if (input.customEndpoint && isLoopbackOrPrivateHost(input.customEndpoint)) return null;
+  if (input.localOnly) return 'local-only-mode';
+  if (!input.referenceFilesScopeAllowed) return 'reference-files-scope-denied';
+  return null;
+}
+
+/**
+ * The whole hosted-rerank gate, as a pure function so both the runtime path and
+ * the settings panel reach the same verdict from the same inputs — and so the
+ * local-only guarantee is a test, not an inspection.
+ *
+ * Order matters: local-only is checked BEFORE the key and the model, so a
+ * local-only user is told the truth ("hosted rerankers are unavailable") rather
+ * than being invited to fix a key that would still not be used.
+ */
+export function evaluateHostedEligibility(input: EligibilityInputs): HostedEligibility {
+  if (input.provider === 'custom') {
+    if (!input.model || !input.model.trim()) return { eligible: false, reason: 'no-model' };
+
+    // Custom endpoints pointing at a true loopback / private-network host are
+    // safe in all modes — data never leaves the machine. Public HTTPS custom
+    // endpoints (e.g. a Jina-compatible proxy hosted externally) are subject to
+    // the same privacy rules as other cloud providers.
+    const blocked = customRerankPrivacyBlock(input);
+    return blocked ? { eligible: false, reason: blocked } : { eligible: true };
+  }
+  if (input.provider !== 'natively' && input.provider !== 'openrouter' && input.provider !== 'jina' && input.provider !== 'voyage') {
+    return { eligible: false, reason: 'provider-not-selected' };
+  }
+  if (input.localOnly) return { eligible: false, reason: 'local-only-mode' };
+  if (!input.referenceFilesScopeAllowed) return { eligible: false, reason: 'reference-files-scope-denied' };
+  if (!input.hasApiKey) return { eligible: false, reason: 'no-api-key' };
+  if (!input.model || !input.model.trim()) return { eligible: false, reason: 'no-model' };
+  return { eligible: true };
+}
+
+export function describeIneligibility(reason: HostedIneligibility): string {
+  switch (reason) {
+    case 'provider-not-selected':
+      return 'The reranker provider is set to Local.';
+    case 'local-only-mode':
+      return 'Local-only mode is enabled. Hosted rerankers are unavailable.';
+    case 'reference-files-scope-denied':
+      return 'Reference-file content is not allowed to leave this machine '
+        + '(Settings > Privacy). Hosted reranking would send retrieved document text, '
+        + 'so it is unavailable.';
+    // Provider-neutral: these are reached for Natively and Jina too, and naming
+    // OpenRouter to a user who picked one of the others sends them to fix a
+    // credential they never configured.
+    case 'no-api-key':
+      return 'No API key is configured for the selected rerank provider.';
+    case 'no-model':
+      return 'No rerank model is selected.';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Runtime readers
+//
+// Lazy `require` throughout, and every one wrapped: this module is reached from
+// the retrieval hot path, and a missing or half-initialised singleton must
+// degrade to "local", never throw into retrieval. esbuild gives every electron
+// TS file its own bundle, so a top-level import here would also inline a second
+// copy of each singleton — see services/extensions/singleton.ts.
+// ---------------------------------------------------------------------------
+
+export function readRerankerSettings(): RerankerSettings {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { SettingsManager } = require('../SettingsManager');
+    return (SettingsManager.getInstance().get('reranker') as RerankerSettings) ?? {};
+  } catch {
+    return {};
+  }
+}
+
+/** The key for a hosted provider. One credential per provider, shared app-wide. */
+export function readHostedApiKey(provider: RerankerProvider): string | undefined {
+  if (provider === 'custom') {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { CredentialsManager } = require('../CredentialsManager');
+      const stored = CredentialsManager.getInstance().getCustomRerankerApiKey?.();
+      if (stored && stored.trim()) return stored.trim();
+    } catch { /* fall through */ }
+    return undefined;
+  }
+  if (provider === 'natively') {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { CredentialsManager } = require('../CredentialsManager');
+      const stored = CredentialsManager.getInstance().getNativelyApiKey?.();
+      const key = (stored || '').trim();
+      // The trial sentinel is NOT a credential. A trial authenticates with a
+      // paired x-trial-token header, and the shared hosted client sends only
+      // `Authorization: Bearer`, so sending the sentinel would produce a
+      // guaranteed 401 on every rerank. Reporting 'no-api-key' instead states
+      // the real situation and costs no network call.
+      if (key && key !== TRIAL_SENTINEL_KEY) return key;
+    } catch { /* fall through to env */ }
+    const env = (process.env.NATIVELY_API_KEY || '').trim();
+    return env && env !== TRIAL_SENTINEL_KEY ? env : undefined;
+  }
+  if (provider === 'jina') {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { CredentialsManager } = require('../CredentialsManager');
+      const stored = CredentialsManager.getInstance().getJinaApiKey?.();
+      if (stored && stored.trim()) return stored.trim();
+    } catch { /* fall through to env */ }
+    const env = (process.env.JINA_API_KEY || '').trim();
+    return env || undefined;
+  }
+  if (provider === 'voyage') {
+    // The SAME credential the Voyage embedding provider uses — one vendor, one
+    // key, the way OpenRouter backs chat, embeddings and reranking. Explicit,
+    // because the fall-through below would hand Voyage the OpenRouter key.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { CredentialsManager } = require('../CredentialsManager');
+      const stored = CredentialsManager.getInstance().getVoyageApiKey?.();
+      if (stored && stored.trim()) return stored.trim();
+    } catch { /* no credential store: no key */ }
+    return undefined;
+  }
+  return readOpenRouterApiKey();
+}
+
+/** The model id for whichever hosted provider is selected. */
+export function readHostedModel(settings: RerankerSettings): string | undefined {
+  if (settings.provider === 'custom') {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { SettingsManager } = require('../SettingsManager');
+      return settings.customModel || SettingsManager.getInstance().get('customRerankerModel') || undefined;
+    } catch {
+      return settings.customModel;
+    }
+  }
+  if (settings.provider === 'natively') {
+    // Falls back to the managed model rather than to undefined: with one model
+    // served and nothing to pick, an unset setting must mean "the managed one",
+    // not 'no-model' ineligibility on a provider the user just selected.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { defaultHostedModel } = require('../../rag/hostedRerankProviders') as typeof import('../../rag/hostedRerankProviders');
+    return settings.nativelyModel || defaultHostedModel('natively') || undefined;
+  }
+  if (settings.provider === 'jina') {
+    // Same reasoning as the natively branch: Jina's catalogue is curated and
+    // static, so an unset model means "the recommended one", not 'no-model'
+    // ineligibility on a provider whose key the user just pasted. Without this
+    // a Jina key activated nothing and silently fell back to the local
+    // cross-encoder.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { defaultHostedModel } = require('../../rag/hostedRerankProviders') as typeof import('../../rag/hostedRerankProviders');
+    return settings.jinaModel || defaultHostedModel('jina') || undefined;
+  }
+  if (settings.provider === 'voyage') {
+    // Static catalogue, same as Jina: unset means the recommended model.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { defaultHostedModel } = require('../../rag/hostedRerankProviders') as typeof import('../../rag/hostedRerankProviders');
+    return settings.voyageModel || defaultHostedModel('voyage') || undefined;
+  }
+  // OpenRouter's catalogue is FETCHED (staticCatalogue: false), so there is no
+  // id to fall back to here that we have seen on the live API. It is filled in
+  // by hostedKeyActivation after a successful catalogue fetch instead.
+  return settings.openrouterModel;
+}
+
+export function readOpenRouterApiKey(): string | undefined {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { CredentialsManager } = require('../CredentialsManager');
+    const stored = CredentialsManager.getInstance().getOpenrouterApiKey();
+    if (stored && stored.trim()) return stored.trim();
+  } catch { /* fall through to env */ }
+  // The same OPENROUTER_API_KEY the rest of the app uses. One credential, not two.
+  const env = (process.env.OPENROUTER_API_KEY || '').trim();
+  return env || undefined;
+}
+
+/**
+ * True when the user has turned on local-only mode.
+ *
+ * A caveat worth writing down rather than discovering later: `setLocalOnlyMode()`
+ * has NO production caller in this app — `CodexVisionPayload2026_08_05.test.mjs:341`
+ * says so explicitly — so `LLMHelper.isLocalOnlyMode` is always false in a
+ * shipped build. This check is therefore future-proofing, not the real gate.
+ * The real gate is referenceFilesScopeAllowed() below, which reads a control
+ * that ships and is enforced at every other outbound boundary.
+ */
+export function isLocalOnlyMode(): boolean {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const mod = require('../../LLMHelper');
+    const helper = mod?.getLLMHelper?.() ?? mod?.llmHelper ?? null;
+    if (helper && typeof helper.isLocalOnly === 'function') return Boolean(helper.isLocalOnly());
+  } catch { /* no helper reachable; not evidence of local-only */ }
+  return false;
+}
+
+/**
+ * Whether retrieved reference-file text may leave this machine.
+ *
+ * This is THE privacy gate for hosted reranking, because rerank candidates are
+ * reference-file content — the same bytes `LLMHelper` already refuses to send
+ * when this scope is denied (LLMHelper.ts:581, 6424).
+ *
+ * Matches the repo's existing reading of the flag (`!== false`: allowed unless
+ * explicitly denied) but fails CLOSED when settings cannot be read at all. A
+ * policy reader that fails OPEN is exactly the bug
+ * OutboundBoundaryUniversality2026_08_01.test.mjs was written about.
+ */
+export function referenceFilesScopeAllowed(): boolean {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { SettingsManager } = require('../SettingsManager');
+    const scopes = SettingsManager.getInstance().get('providerDataScopes');
+    return scopes?.reference_files !== false;
+  } catch {
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Port construction
+// ---------------------------------------------------------------------------
+
+import type { RerankSeamPort } from './RerankerRegistry';
+import { peekProcessSingleton, setProcessSingleton } from '../extensions/singleton';
+
+/**
+ * The hosted port, or null when it may not run.
+ *
+ * Called synchronously on the retrieval path, once per query, so it does no I/O
+ * — every input is a cheap local read. It returns null far more often than not,
+ * and null is the cheap path.
+ */
+export function buildHostedRerankPort(): RerankSeamPort | null {
+  const settings = readRerankerSettings();
+  const provider = settings.provider ?? DEFAULT_RERANKER_SETTINGS.provider;
+  const apiKey = readHostedApiKey(provider);
+  const model = readHostedModel(settings);
+
+  // Read custom endpoint early so the privacy guard in evaluateHostedEligibility
+  // can inspect the host and decide whether it is loopback / private-network.
+  let customEndpointUrl: string | undefined;
+  if (provider === 'custom') {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { SettingsManager } = require('../SettingsManager');
+      customEndpointUrl = SettingsManager.getInstance().get('customRerankerEndpoint');
+    } catch { /* ignored */ }
+  }
+
+  const verdict = evaluateHostedEligibility({
+    provider,
+    hasApiKey: Boolean(apiKey),
+    model,
+    localOnly: isLocalOnlyMode(),
+    referenceFilesScopeAllowed: referenceFilesScopeAllowed(),
+    customEndpoint: customEndpointUrl,
+  });
+  if (!verdict.eligible) return null;
+
+  if (provider === 'custom') {
+    const baseUrl = customEndpointUrl;
+    if (!baseUrl) return null;
+
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { OpenRouterReranker } = require('./OpenRouterReranker') as typeof import('./OpenRouterReranker');
+    return new OpenRouterReranker({
+      baseUrl,
+      providerId: 'custom',
+      allowAnonymousApiKey: true,
+      getApiKey: () => readHostedApiKey('custom'),
+      getModel: () => readHostedModel(readRerankerSettings()),
+      onStats: (stats) => {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const { telemetryService } = require('../telemetry/TelemetryService');
+          telemetryService.track({
+            name: 'rerank_request',
+            properties: {
+              provider: 'custom',
+              model: stats.model,
+              requestLatencyMs: stats.requestLatencyMs,
+              candidateCount: stats.candidateCount,
+              ok: stats.ok,
+              failure: stats.failure,
+              costUsd: stats.costUsd,
+              httpStatus: stats.httpStatus,
+            },
+          });
+        } catch { /* telemetry never blocks retrieval */ }
+      },
+      logger: console,
+    });
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { hostedRerankProvider } = require('../../rag/hostedRerankProviders') as typeof import('../../rag/hostedRerankProviders');
+  const descriptor = hostedRerankProvider(provider);
+  if (!descriptor) return null;
+
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { OpenRouterReranker } = require('./OpenRouterReranker') as typeof import('./OpenRouterReranker');
+  // One client for every hosted provider: they all speak the same rerank
+  // request and response. Only the endpoint and the credential differ.
+  return new OpenRouterReranker({
+    baseUrl: descriptor.baseUrl,
+    providerId: descriptor.id,
+    wire: descriptor.wire,
+    // Re-read per call rather than closing over the values: a key or model
+    // changed in Settings must take effect without a restart.
+    getApiKey: () => readHostedApiKey(readRerankerSettings().provider ?? 'local'),
+    getModel: () => readHostedModel(readRerankerSettings()),
+    onStats: (stats) => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { telemetryService } = require('../telemetry/TelemetryService');
+        telemetryService.track({
+          name: 'rerank_request',
+          properties: {
+            provider: descriptor.id,
+            model: stats.model,
+            // Named for what it measures. This includes the network round trip
+            // and is NOT model inference time.
+            requestLatencyMs: stats.requestLatencyMs,
+            candidateCount: stats.candidateCount,
+            ok: stats.ok,
+            failure: stats.failure,
+            costUsd: stats.costUsd,
+            httpStatus: stats.httpStatus,
+          },
+        });
+      } catch { /* telemetry never blocks retrieval */ }
+    },
+    logger: console,
+  });
+}
+
+/**
+ * The built-in reranker as a seam port, for the opt-in hosted fallback.
+ * Null when the user has not opted in, so the default hosted failure stays
+ * "keep the existing order".
+ */
+export function buildHostedFallbackPort(): RerankSeamPort | null {
+  if (readRerankerSettings().fallbackToLocal !== true) return null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { getLocalReranker } = require('../../rag/LocalReranker');
+    const local = getLocalReranker();
+    if (!local) return null;
+    return { rerank: (q: string, p: string[]) => rerankInSafeBatches(local, q, p) };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The built-in reranker's batch ceiling, mirroring `RERANK_BATCH_SIZE` in
+ * ModeHybridRetriever.
+ *
+ * The fallback CANNOT inherit the caller's batch. The hosted port asks the seam
+ * for the whole 30-candidate pool in one call (that is the entire point of its
+ * `batchSize`), so when a hosted rerank fails and this port takes over, it is
+ * handed all 30 passages at once. Passing those straight to `LocalReranker`
+ * would be a 30-pair joint-encoding forward pass — precisely what
+ * RERANK_BATCH_SIZE exists to prevent, and what its comment names as the
+ * ONNX-arena crash trigger. So the fallback re-chunks on its own behalf.
+ */
+const LOCAL_FALLBACK_BATCH_SIZE = 6;
+
+async function rerankInSafeBatches(
+  local: { rerank(q: string, p: string[]): Promise<Array<{ index: number; score: number }> | null> },
+  query: string,
+  passages: string[],
+): Promise<Array<{ index: number; score: number }> | null> {
+  const all: Array<{ index: number; score: number }> = [];
+
+  for (let i = 0; i < passages.length; i += LOCAL_FALLBACK_BATCH_SIZE) {
+    const batch = passages.slice(i, i + LOCAL_FALLBACK_BATCH_SIZE);
+    const scored = await local.rerank(query, batch);
+    // A partial result is worse than none: an unscored candidate sinks to
+    // -Infinity in the host's ordering, below chunks the reranker never saw. If
+    // any batch fails, abandon the whole fallback and keep the existing order.
+    if (!scored || scored.length !== batch.length) return null;
+    for (const r of scored) all.push({ index: i + r.index, score: r.score });
+  }
+
+  all.sort((a, b) => b.score - a.score);
+  return all;
+}
+
+// ---------------------------------------------------------------------------
+// Local GGUF
+// ---------------------------------------------------------------------------
+
+/**
+ * Cached per model path: loading a 400MB GGUF per query would be absurd.
+ *
+ * Held on the PROCESS, not in a module-local — the same rule RerankerRegistry
+ * follows, and the one this file's own header warns about. esbuild gives every
+ * electron entry its own bundle and INLINES this module into each: a
+ * `require('./rerankerConfig')` from ipcHandlers is rewritten to
+ * `(init_rerankerConfig(), __toCommonJS(rerankerConfig_exports))` — its own
+ * copy, not a runtime load of the shared file. Verified 2026-09-03: 30 built
+ * bundles each define `buildLocalGgufPort`, and both ipcHandlers.js and main.js
+ * carry their own `var ggufPort`.
+ *
+ * A module-local therefore meant TWO live llama.cpp contexts: Settings
+ * (`reranker:use-local-model` in ipcHandlers) loaded one into its copy, and the
+ * retrieval path (RerankerRegistry) then saw its own copy still null and loaded
+ * a second — 452 MB apiece at the bounded context size, more before that. Worse,
+ * `resetLocalGgufPort()` from Settings only ever cleared the Settings copy, so
+ * the retrieval one stayed resident for the life of the process with nothing
+ * able to reach it.
+ */
+const GGUF_PORT_KEY = 'natively.reranker.ggufPort';
+
+type GgufPortEntry = { id: string; port: RerankSeamPort } | null;
+
+function getGgufPort(): GgufPortEntry {
+  return peekProcessSingleton<GgufPortEntry>(GGUF_PORT_KEY) ?? null;
+}
+
+function setGgufPort(entry: GgufPortEntry): void {
+  setProcessSingleton(GGUF_PORT_KEY, entry);
+}
+
+/**
+ * Has the user actually CHOSEN a reranker, as opposed to inheriting the default?
+ *
+ * The seam runs reranking as a low-confidence escalation: retrieval computes a
+ * confidence gate and only escalates when it trips. That is right for the
+ * bundled model nobody asked for — it keeps latency off the critical path for
+ * users who never opened the panel.
+ *
+ * It is wrong for a model the user went and picked. MEASURED against the
+ * running app over 36 doc-grounded retrievals across 9 queries, including
+ * deliberately vague ones: the gate tripped ONCE. A configured, downloaded,
+ * tested reranker sat idle on 35 of 36 queries, and nothing anywhere said so.
+ *
+ * So an explicit choice — a hosted provider, an enabled extension, or an
+ * installed catalogue model — makes reranking unconditional on the paths that
+ * permit it. The 1200ms budget still bounds it, and a port that misses the
+ * budget still leaves the existing order untouched.
+ *
+ * "Explicit" deliberately excludes a selection that cannot run: a half-
+ * downloaded or unsupported model falls back to the bundled one at the seam, so
+ * treating it as a choice would spend the escalation on the model the user did
+ * NOT pick.
+ */
+export function isRerankerExplicitlySelected(): boolean {
+  try {
+    const settings = readRerankerSettings();
+
+    // Hosted counts only when it could actually run — key present, model
+    // chosen, privacy scope permitting. evaluateHostedEligibility answers
+    // exactly that, and buildHostedRerankPort() already gates on it.
+    const provider = settings.provider ?? DEFAULT_RERANKER_SETTINGS.provider;
+    if (provider !== 'local') {
+      let customEndpointUrl: string | undefined;
+      if (provider === 'custom') {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const { SettingsManager } = require('../SettingsManager');
+          customEndpointUrl = SettingsManager.getInstance().get('customRerankerEndpoint');
+        } catch { /* ignored */ }
+      }
+      const eligible = evaluateHostedEligibility({
+        provider,
+        hasApiKey: Boolean(readHostedApiKey(provider)),
+        model: readHostedModel(settings),
+        localOnly: isLocalOnlyMode(),
+        referenceFilesScopeAllowed: referenceFilesScopeAllowed(),
+        customEndpoint: customEndpointUrl,
+      }).eligible;
+      if (eligible) return true;
+    }
+
+    // An enabled extension OWNS the seam; installing and enabling one is about
+    // as explicit as a choice gets.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { getRerankerRegistry } = require('./RerankerRegistry') as typeof import('./RerankerRegistry');
+      if (getRerankerRegistry().activeExtensionId()) return true;
+    } catch { /* no registry: fall through to the local check */ }
+
+    const id = (settings as { localModelId?: unknown }).localModelId;
+    if (typeof id !== 'string' || !id) return false;
+
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { findCatalogModel } = require('../../rag/rerankerModelCatalog') as typeof import('../../rag/rerankerModelCatalog');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { statusOf } = require('./localModelInstaller') as typeof import('./localModelInstaller');
+    const entry = findCatalogModel(id);
+    return Boolean(entry && entry.supported && statusOf(entry).state === 'installed');
+  } catch {
+    // Never let this decide anything by throwing: an unreadable setting means
+    // "no explicit choice", which is the previous behaviour exactly.
+    return false;
+  }
+}
+
+/**
+ * The seam port for a selected local GGUF model, or null.
+ *
+ * ONNX selections are handled inside `LocalReranker` (it reads the same setting
+ * and swaps its own modelId), so this covers only the runtime Core cannot
+ * express that way. Returning null lets the chain fall through to the built-in.
+ */
+export function buildLocalGgufPort(): RerankSeamPort | null {
+  const settings = readRerankerSettings();
+  const id = settings.localModelId;
+
+  // Anything that means "a local GGUF is no longer what runs" must release the
+  // worker. Switching to OpenRouter or to an extension goes through
+  // setRerankerConfig / setExtensionEnabled, never useLocalRerankerModel, so
+  // resetLocalGgufPort() is not called on those paths — without this a loaded
+  // 438MB llama.cpp context stayed resident for the life of the process even
+  // though resolvePort() would never reach it again.
+  if (!id || settings.provider === 'openrouter') {
+    if (getGgufPort()) resetLocalGgufPort();
+    return null;
+  }
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { findCatalogModel } = require('../../rag/rerankerModelCatalog') as typeof import('../../rag/rerankerModelCatalog');
+    const model = findCatalogModel(id);
+    if (!model || model.runtime !== 'gguf' || !model.supported) {
+      if (getGgufPort()) resetLocalGgufPort();
+      return null;
+    }
+
+    const cached = getGgufPort();
+    if (cached?.id === id) return cached.port;
+
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { ggufModelFile, companionModelFile } =
+      require('./localModelInstaller') as typeof import('./localModelInstaller');
+    const file = ggufModelFile(id);
+    if (!file) return null;
+
+    // v3.5's scoring MLP ships beside the weights rather than inside them.
+    // Without it the port would load and then score nothing, so refuse here
+    // instead — the catalogue entry declares the file, and the installer
+    // fetched and verified it.
+    let projector: string | null = null;
+    if (model.scoring === 'listwise') {
+      projector = companionModelFile(id, 'projector.safetensors');
+      if (!projector) return null;
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { GgufReranker } = require('../../rag/GgufReranker') as typeof import('../../rag/GgufReranker');
+    // Selection changed: tear the old worker (and its several hundred MB) down.
+    void (cached?.port as { dispose?: () => Promise<void> } | undefined)?.dispose?.();
+    // 'rank' vs 'yes-no' is a property of the model, not a preference: giving a
+    // causal LM to the ranking API is a refusal, and giving a ranking model the
+    // yes/no prompt is a meaningless number.
+    const created = { id, port: new GgufReranker(file, model.scoring ?? 'rank', projector) };
+    setGgufPort(created);
+    return created.port;
+  } catch {
+    return null;
+  }
+}
+
+/** Drop the cached GGUF port. Called when the selection changes. */
+export function resetLocalGgufPort(): void {
+  const current = getGgufPort();
+  void (current?.port as { dispose?: () => Promise<void> } | undefined)?.dispose?.();
+  setGgufPort(null);
+}

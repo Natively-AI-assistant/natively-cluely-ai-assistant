@@ -146,3 +146,51 @@ export function isGroqModelGone(err: any): boolean {
   ].filter(Boolean).join(' ');
   return classifyVisionError({ status, message }, false) === 'model_gone';
 }
+
+// ── Reasoning control ───────────────────────────────────────────────────────
+/**
+ * The per-model reasoning params to send with a Groq chat completion, or `{}`
+ * when the model takes none.
+ *
+ * WHY THIS EXISTS (2026-09-03): `qwen/qwen3.6-27b` is a THINKING model and
+ * Groq's default for it is raw — it streams its whole chain of thought inside
+ * `delta.content`, wrapped in `<think>…</think>`. Every Groq entry point here
+ * forwards `delta.content` verbatim, so from the 2026-08-23 Llama retirement
+ * (which made qwen3.6 the default text model, replacing non-reasoning llama
+ * ids) onward the model's reasoning — quoting the system prompt back at the
+ * user, "The contract says: output these EXACT markdown headings" — was
+ * rendered in the overlay, stored by SessionTracker as conversation history,
+ * and fed into the next turn's prompt.
+ *
+ * Live probe, streaming, 2026-09-03:
+ *   qwen/qwen3.6-27b  {}                          -> <think> in content, 738 chars, ttft 321ms
+ *   qwen/qwen3.6-27b  {reasoning_effort:'none'}   -> clean, 32 chars, ttft 226ms
+ *   openai/gpt-oss-120b {}                        -> clean (reasoning in delta.reasoning)
+ *   openai/gpt-oss-120b {reasoning_effort:'none'} -> HTTP 400 "must be one of low, medium, or high"
+ *
+ * That last row is why this is a FUNCTION of the model and not a constant
+ * spread into the request at the call site: createGroqCompletion rewrites
+ * `request.model` when it ladders down to the production rung, so a param
+ * fixed at the call site would arrive attached to the wrong model and turn a
+ * cosmetic leak into a hard 400 on exactly the fallback path that only fires
+ * after a retirement. Recompute per attempt.
+ *
+ * Deliberately NOT LLMHelper.isThinkingModel: that predicate is anchored
+ * (`/^qwen3/i`) and cannot match a Groq-namespaced `qwen/qwen3.6-27b`, and its
+ * only callers set Ollama's `think:false` where ids look like `qwen3:8b` and do
+ * match. Widening it would change Ollama behaviour as a side effect.
+ *
+ * Note gpt-oss needs nothing: it already returns reasoning out-of-band in
+ * `delta.reasoning`, which none of the content readers here look at.
+ *
+ * Platform note: pure string matching — identical on darwin and win32.
+ */
+export function groqReasoningParams(
+  modelId: string | null | undefined,
+): { reasoning_effort: 'none' } | Record<string, never> {
+  // Qwen3 family only. `none` is documented for Qwen 3.6 27B ("Disable
+  // reasoning. The model will not use any reasoning tokens.") and is rejected
+  // by the GPT-OSS models, which accept only low|medium|high.
+  // https://console.groq.com/docs/reasoning
+  return /(^|\/)qwen3/i.test(modelId || '') ? { reasoning_effort: 'none' } : {};
+}

@@ -85,12 +85,27 @@ describe('the control is only offered where it means something', () => {
     }
   });
 
+  // UPDATED 2026-08-28 (T8). The rule is unchanged — the control is offered
+  // exactly where REFERENCE_FILE is authorized — but technical-interview now
+  // authorizes it, so the control is correctly OFFERED there. That un-hiding was
+  // a stated goal of T8, not a side effect: a user who attaches reference files
+  // to Technical Interview could previously never say "only answer from these",
+  // because the control the setting lives on was hidden.
+  //
+  // The hidden case is asserted against a mode that genuinely has no reference
+  // pool, so the branch still has a real witness rather than being deleted.
+  test('offered in technical-interview now that it authorizes reference files', () => {
+    assert.equal(shouldOfferAnswerPolicyControl('technical-interview'), true);
+  });
+
   test('hidden where the mode has no reference files to be strict about', () => {
     // "Only answer from references" in a mode with no reference files is a
-    // control that can only make the answer worse. technical-interview
-    // authorizes RESUME / JD / project files / coding samples / screen — but
-    // not REFERENCE_FILE — so the control has nothing to bind to there.
-    assert.equal(shouldOfferAnswerPolicyControl('technical-interview'), false);
+    // control that can only make the answer worse — it has nothing to bind to.
+    const withoutReferencePool = MODE_IDS.filter(
+      (m) => !MODE_POLICIES[m].allowedSourceTypes.includes('REFERENCE_FILE'));
+    for (const modeId of withoutReferencePool) {
+      assert.equal(shouldOfferAnswerPolicyControl(modeId), false, modeId);
+    }
   });
 
   test('the offered/hidden split matches the registry exactly', () => {

@@ -1,17 +1,20 @@
 import * as crypto from 'crypto';
 import { DatabaseManager } from '../db/DatabaseManager';
+import { isRetrievalFixEnabled } from '../context-intelligence/contracts/retrieval-flags';
 import type { EmbeddingPipeline } from '../rag/EmbeddingPipeline';
 import { ModeContextRetriever, type ModeRetrievalOptions, type RetrieveOptions } from './ModeContextRetriever';
 import type { ModeRetrievedContext as HybridContext } from './modes/ModeHybridRetriever';
 import type { AnswerType } from '../llm/AnswerPlanner';
 import type { ActiveModeInfo } from '../llm/modeProfiles';
 import { classifyCustomContext, selectCustomContextForAnswer } from '../llm/customContextClassifier';
+import { registerUserInstructionProvider, USER_INSTRUCTIONS_MAX_CHARS } from '../llm/userInstructionContract';
 import { diagLog } from '../llm/documentGroundedPrompt';
 import { planBuiltinAdoption, BUILTIN_MODE_LABELS } from './builtinModes';
 import {
     type ModeSourceContract,
     type ModeSourceOwner,
     CURRENT_MIGRATION_REVISION,
+    CURRENT_SEED_REVISION,
     defaultSourceContractForNewMode,
     migrateSourceContractFromPrompt,
     parseModeSourceContract,
@@ -223,10 +226,10 @@ export const TEMPLATE_NOTE_SECTIONS: Record<ModeTemplateType, Array<{ title: str
     ],
     // Campaign-3 (2026-07-19): 8th built-in mode — file-grounded Q&A.
     seminar: [
-        { title: 'Question', description: 'The question asked (verbatim or paraphrased).' },
-        { title: 'Answer from your files', description: 'The answer grounded in your reference files / slides / paper. Direct quote or close paraphrase.' },
-        { title: 'Source', description: 'Which file + section the answer came from. Cite the filename and section/heading.' },
-        { title: 'If not in your files', description: 'A short, labeled "not from your reference files" note from general knowledge — never fabricated as if from the files.' },
+        { title: 'Question', description: 'Each question the audience or panel asked, one bullet per question (verbatim or closely paraphrased).' },
+        { title: 'Answer from your files', description: 'For each question, the answer grounded in your reference files / slides / paper, one bullet per question. Direct quote or close paraphrase.' },
+        { title: 'Source', description: 'Which file + section each answer came from. Cite the filename and section/heading.' },
+        { title: 'If not in your files', description: 'For each question your files did not cover, a short, labeled "not from your reference files" note from general knowledge — never fabricated as if from the files.' },
         { title: 'Follow-up you might be asked', description: 'Likely follow-up questions on the same topic the audience or panel could ask next.' },
     ],
     'call-center': [
@@ -403,6 +406,15 @@ export class ModesManager {
     public static getInstance(): ModesManager {
         if (!ModesManager.instance) {
             ModesManager.instance = new ModesManager();
+            // The coding-format resolver asks the OWNER for the mode's
+            // instruction text instead of ten call sites each threading it
+            // (userInstructionContract.ts). Registered here — the single
+            // construction point — so it exists before any turn can run. The
+            // text is the coding-scoped view: what a coding turn is actually
+            // given is what may define that turn's format.
+            const instance = ModesManager.instance;
+            registerUserInstructionProvider((pinnedModeId) =>
+                instance.getScopedInstructionText('dsa_question_answer', pinnedModeId));
             // Establish the app defaults ONCE, here rather than at a startup
             // hook: the database opens lazily, and every entry point that can
             // read a mode goes through this accessor. Doing it anywhere else
@@ -821,7 +833,36 @@ export class ModesManager {
         const isInterviewPrep = input.templateType === 'looking-for-work'
             || input.templateType === 'technical-interview';
         const switches = input.switches.filter((s) => s !== 'transcript');
-        const defaultOwner: ModeSourceOwner = isInterviewPrep ? 'profile' : 'reference_files';
+        // Interview-prep modes are profile-first BY DEFAULT — but not when the
+        // user has explicitly said otherwise (2026-08-29).
+        //
+        // THE GAP THIS CLOSES. T8 gave technical-interview a reference pool and
+        // put `reference_files` in its permitted switches, so the "Primary
+        // knowledge source" control offers it and the file is now REACHABLE.
+        // But this function pinned `defaultOwner: 'profile'` for interview-prep
+        // regardless of what the user ticked, so the contract still resolved
+        // `profile_only`, `documentGroundedFromContract` still returned false,
+        // and `forceDocumentGrounding` stayed OFF. Measured: ticking "Reference
+        // files" in Technical Interview produced sourceAuthority=profile_only
+        // and docGrounded=false, while the identical selection in General
+        // produced reference_files_primary / true.
+        //
+        // Everything gated on that switch therefore stayed off in the one mode
+        // whose users are most likely to upload project documents: topK 6 and a
+        // 1800-token budget instead of 12/3600, no per-file floor, no
+        // answerability scoring, no section-target or positional restore, no
+        // identity block, no query normalization. The user could ask for their
+        // reference files and be given a materially weaker retrieval than the
+        // same files in General.
+        //
+        // The upload-is-not-consent rule is untouched: this reads the user's
+        // EXPLICIT switch, not the presence of a file. A mode with no
+        // `reference_files` tick keeps `profile` and behaves exactly as before.
+        const userChoseReferenceFiles = switches.includes('reference_files')
+            && isRetrievalFixEnabled('interviewPrepHonorsReferenceSwitch');
+        const defaultOwner: ModeSourceOwner = (isInterviewPrep && !userChoseReferenceFiles)
+            ? 'profile'
+            : 'reference_files';
         return buildUserSelectedSourceContract({
             defaultOwner,
             allowedExplicitSwitches: switches as any,
@@ -892,6 +933,20 @@ export class ModesManager {
                 || !mode.sourceContract.seededForTemplateType);
         const staleMigration = mode.sourceContract?.origin === 'migrated_from_prompt'
             && (mode.sourceContract.migrationRevision ?? 1) < CURRENT_MIGRATION_REVISION;
+        // Seed revision (T8, 2026-08-28). A SEEDED contract could not previously
+        // pick up a later change to the seed rules at all -- `staleMigration`
+        // above tests `migrated_from_prompt` only -- so an existing Technical
+        // Interview mode would have kept its pre-T8 permission set forever and
+        // the fix would have reached newly-created modes alone.
+        //
+        // Its own counter, NOT a bump of CURRENT_MIGRATION_REVISION: that would
+        // re-run the prompt-heuristic migration over every migrated contract in
+        // every user's database, and break the standing invariant that a
+        // prompt-migrated contract is never overwritten by a template switch.
+        // A seed carries no user intent by definition (see `isTemplateAwareSeed`
+        // above), so re-seeding it loses nothing; `user_selected` is untouched.
+        const staleSeedRevision = mode.sourceContract?.origin === 'default_new_mode'
+            && (mode.sourceContract.seedRevision ?? 1) < CURRENT_SEED_REVISION;
         // Stale-seed detection (Knowledge Source canonical-gate repair, 2026-07-16):
         // a default_new_mode contract whose seededForTemplateType differs from the
         // mode's current templateType was created for the wrong template (someone
@@ -905,6 +960,7 @@ export class ModesManager {
         const needsMigration = !mode.sourceContract
             || (mode.sourceContract.origin === 'default_new_mode' && !isTemplateAwareSeed && (hasCustomPrompt || hasReferenceFiles))
             || staleMigration
+            || staleSeedRevision
             || staleSeedForCurrentTemplate;
         if (!needsMigration) return mode.sourceContract!;
         // Stale-seed path (Knowledge Source canonical-gate repair, 2026-07-16):
@@ -1132,6 +1188,16 @@ export class ModesManager {
     // retriever degrades to lexical for any file that isn't 'ready' yet.
 
     /** Index one reference file (idempotent — re-embeds only on content/space change). */
+    /** See ModeHybridRetriever.usesHostedEmbeddings. */
+    public usesHostedEmbeddings(): boolean {
+        return this.modeContextRetriever.usesHostedEmbeddings();
+    }
+
+    /** See ModeHybridRetriever.pruneFileIndexesByPrefix (profile documents' pseudo-files). */
+    public pruneReferenceFileIndexesByPrefix(prefix: string, keepId: string): number {
+        return this.modeContextRetriever.pruneReferenceFileIndexesByPrefix(prefix, keepId);
+    }
+
     public async indexReferenceFile(file: ModeReferenceFile): Promise<void> {
         await this.modeContextRetriever.indexReferenceFile(file);
     }
@@ -1193,7 +1259,9 @@ export class ModesManager {
         const files = this.getReferenceFiles(modeId);
         for (const file of files) {
             const { status } = this.modeContextRetriever.getReferenceFileIndexStatus(file.id);
-            if (status !== 'ready') {
+            // `status` cannot see the content; the hash check can (chunker bump →
+            // lazy per-mode re-index, see referenceFileNeedsReindex).
+            if (status !== 'ready' || this.modeContextRetriever.referenceFileNeedsReindex(file)) {
                 await this.modeContextRetriever.indexReferenceFile(file).catch(() => { /* logged inside */ });
             }
         }
@@ -1225,24 +1293,11 @@ export class ModesManager {
                         // Not cached — kick off a background download. The
                         // download service handles progress + persistence; we
                         // just attach a one-shot prewarm on completion.
-                        try {
-                            // eslint-disable-next-line @typescript-eslint/no-var-requires
-                            const { LocalModelDownloadService } = require('./LocalModelDownloadService');
-                            // eslint-disable-next-line @typescript-eslint/no-var-requires
-                            const { RERANKER_PROVIDER_NAME } = require('../rag/rerankerDownloadProvider');
-                            // eslint-disable-next-line @typescript-eslint/no-var-requires
-                            const { RERANKER_MODEL_ID, RERANKER_DTYPE } = require('../rag/rerankerDownloadProvider');
-                            void LocalModelDownloadService.getInstance().start(
-                                RERANKER_PROVIDER_NAME,
-                                `${RERANKER_MODEL_ID}#${RERANKER_DTYPE}`,
-                            );
-                        } catch {
-                            // Service unavailable or download failed — fall
-                            // back to the old prewarm path. If the model is
-                            // not on disk, prewarm will fail silently and the
-                            // reranker will return null on first query.
-                            void reranker.prewarm?.();
-                        }
+                        // The bundled reranker needs no download. This used to
+                        // start a lazy fetch of bge-reranker-base, which is gone
+                        // (it measured worse than no reranker); ms-marco ships
+                        // with the app, so prewarming is the whole job now.
+                        void reranker.prewarm?.();
                     } catch { /* prewarm-or-download both non-fatal */ }
                 })();
             }
@@ -1423,7 +1478,12 @@ export class ModesManager {
     // Roughly 300 tokens — enough for real mode instructions, small enough that
     // a pasted document can't crowd out the transcript. Anything longer remains
     // fully available to RETRIEVAL (reference-file path), so nothing is lost.
-    private static readonly PINNED_INSTRUCTIONS_MAX_CHARS = 1_200;
+    // Was 1_200 while the Modes editor's textarea accepts 8,000
+    // (premium/src/ModesSettings.tsx maxLength): everything past 1,200 chars was
+    // cut off with " …[truncated]" and never seen by the model — so the MORE
+    // carefully a user wrote their prompt, the less of it applied. One shared
+    // constant now, equal to what the editor lets them type.
+    private static readonly PINNED_INSTRUCTIONS_MAX_CHARS = USER_INSTRUCTIONS_MAX_CHARS;
 
     /**
      * PI v3 (W2): the active mode's user-authored "Real-time prompt"
@@ -1442,22 +1502,37 @@ export class ModesManager {
     public getActiveModePinnedInstructions(answerType?: AnswerType, pinnedModeId?: string): string {
         const mode = this.resolveMode(pinnedModeId);
         if (!mode) return '';
+        const text = this.getScopedInstructionText(answerType, pinnedModeId);
+        if (!text) return '';
+        // isCustom is a pure function of (templateType, name) on the resolved
+        // mode — derive it directly so a pinned mode reports correctly even when
+        // it differs from the (possibly switched) live active mode.
+        const custom = isCustomMode(mode);
+        return custom ? `Mode: ${mode.name}\n${text}` : text;
+    }
+
+    /**
+     * The mode's instruction text exactly as an answer of `answerType` receives
+     * it — sensitivity/fact-scoped and capped — WITHOUT the "Mode: <name>"
+     * label getActiveModePinnedInstructions adds for custom modes. The label is
+     * presentation; this is the text itself, so it is also what the
+     * coding-format resolver analyses (a mode NAMED "Interview Format" must not
+     * read as the user defining a format).
+     */
+    public getScopedInstructionText(answerType?: AnswerType, pinnedModeId?: string): string {
+        const mode = this.resolveMode(pinnedModeId);
+        if (!mode) return '';
         const raw = (mode.customContext || '').trim();
         if (!raw) return '';
         const grounding = this.getActiveModeDocumentGroundingInfo(pinnedModeId);
         const scoped = (answerType && !grounding.documentGroundedCustomModeActive)
             ? selectCustomContextForAnswer(classifyCustomContext(raw), answerType).included.map(c => c.text).join('\n')
             : raw;
-        if (!scoped.trim()) return '';
         let text = scoped.trim();
         if (text.length > ModesManager.PINNED_INSTRUCTIONS_MAX_CHARS) {
             text = text.slice(0, ModesManager.PINNED_INSTRUCTIONS_MAX_CHARS) + ' …[truncated]';
         }
-        // isCustom is a pure function of (templateType, name) on the resolved
-        // mode — derive it directly so a pinned mode reports correctly even when
-        // it differs from the (possibly switched) live active mode.
-        const custom = isCustomMode(mode);
-        return custom ? `Mode: ${mode.name}\n${text}` : text;
+        return text;
     }
 
     /**
@@ -1598,6 +1673,12 @@ export class ModesManager {
      * mode's files are genuinely indexed and ready, which is exactly the bug
      * this passthrough exists to prevent a future caller from reintroducing.
      */
+    /** Corpus arbitration pass-through — see ModeHybridRetriever.probeAnchors. */
+    public probeReferenceAnchors(_mode: Mode, files: ModeReferenceFile[], question: string): boolean {
+        if (!question?.trim() || !files?.length) return false;
+        return this.modeContextRetriever.probeReferenceAnchors(files, question);
+    }
+
     public async retrieveHybridRaw(mode: Mode, files: ModeReferenceFile[], options: RetrieveOptions): Promise<HybridContext> {
         // Fail-closed on an empty query — same choke-point rule as the
         // buildRetrievedActiveModeContextBlock* twins; see retrievalQueryPolicy.ts.
@@ -1643,6 +1724,9 @@ export class ModesManager {
                         allowRerank,
                         forceDocumentGrounding: true,
                         followUpReferentHint: retrievalOptions?.followUpReferentHint,
+                        rerankSurface: retrievalOptions?.rerankSurface,
+                        rerankDeadlineMs: retrievalOptions?.rerankDeadlineMs,
+                        rerankPoolMultiplier: retrievalOptions?.rerankPoolMultiplier,
                         ...(retrievalOptions?.relaxed ? { topK: retrievalOptions.topK, tokenBudget: tokenBudget ?? 5200 } : {}),
                     },
                 );

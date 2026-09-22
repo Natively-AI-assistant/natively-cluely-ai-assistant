@@ -1,0 +1,3 @@
+Only model and reasoning differ. Every configuration receives the identical production request built by natively-api (the same system prompt, including the language directive; the same `Context:\n…` user message; the same chunk boundaries). The provider-specific translations:
+- **DeepSeek:** the production body is forwarded as-is. The thinking diagnostic removes the `thinking` field only.
+- **Luna:** messages → Responses `input`; `reasoning.effort` set; `max_tokens: 384000` → `max_output_tokens: 128000` (Luna's ceiling); `thinking` dropped because OpenAI has no such field; `store: false`. The Responses API is used because Chat Completions rejects `max` for this model.

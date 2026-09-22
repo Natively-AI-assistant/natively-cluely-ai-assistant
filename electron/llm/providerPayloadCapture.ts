@@ -23,10 +23,33 @@ function enabled(): boolean {
     && process.env.NATIVELY_CONTEXT_OS_PROVIDER_CAPTURE === '1';
 }
 
+/**
+ * Strip binary payloads from ANYWHERE inside a string, not just from a string
+ * that IS one.
+ *
+ * The previous test was anchored (`/^(data:...|...$)/`), which is correct for a
+ * field whose whole value is a data URL — and useless for `serializedPayload`,
+ * the JSON.stringify of the entire request body. That string starts with `{`,
+ * so it never matched, and every custom-provider and Ollama-vision capture
+ * retained the full base64 screenshot: measured at 600 KB per entry, up to 40
+ * entries, directly contradicting this file's own "never retains ... raw image
+ * bytes" header.
+ *
+ * The data-URL prefix is deliberately KEPT. `data:image/png;base64,` over JPEG
+ * bytes was a real shipped defect; a capture that elides the declared mime type
+ * cannot show it.
+ */
+function scrubBinaryFromString(value: string): string {
+  return value
+    // Data URLs: keep `data:<mime>;base64,` and drop the payload.
+    .replace(/(data:[\w.+-]+\/[\w.+-]+;base64,)[A-Za-z0-9+/]{64,}={0,2}/g, '$1[binary omitted]')
+    // Any other long base64 run (a bare `"image": "<b64>"`, an inlineData blob).
+    .replace(/[A-Za-z0-9+/]{512,}={0,2}/g, '[binary omitted]');
+}
+
 function sanitize(value: unknown, key = ''): unknown {
   if (typeof value === 'string') {
-    if (/^(data:.*;base64,|[A-Za-z0-9+/]{512,}={0,2}$)/.test(value)) return '[binary omitted]';
-    return value;
+    return scrubBinaryFromString(value);
   }
   if (Array.isArray(value)) {
     if (/images?|inlineData|data/i.test(key)) return value.map(() => '[binary omitted]');

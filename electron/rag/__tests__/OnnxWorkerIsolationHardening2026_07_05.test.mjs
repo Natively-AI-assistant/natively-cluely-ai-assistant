@@ -107,16 +107,20 @@ describe('worker isolation — source guards', () => {
   test('LocalReranker worker script hosts the AutoModel/AutoTokenizer load with bounded session options', () => {
     const src = read('electron/rag/localRerankerWorker.ts');
     assert.match(src, /parentPort/, 'must run as a Worker (parentPort)');
-    assert.match(src, /AutoModelForSequenceClassification\.from_pretrained/);
+    // Two loaders now: AutoModelForSequenceClassification for an ordinary
+    // cross-encoder, AutoModel for one whose scoring head lives outside the
+    // graph (cross-encoder/ettin-reranker-*). The chosen loader is called ONCE,
+    // so the bounded-session guarantee below covers both.
+    assert.match(src, /AutoModelForSequenceClassification/);
+    assert.match(src, /AutoModel\b/);
+    assert.match(src, /const loader = head \? AutoModel : AutoModelForSequenceClassification/);
+    assert.match(src, /loader\.from_pretrained/);
     assert.match(src, /AutoTokenizer\.from_pretrained/);
     assert.match(src, /getBoundedOnnxSessionOptions/);
     assert.match(src, /session_options:\s*getBoundedOnnxSessionOptions\(\)/);
-  });
-
-  test('IntentClassifier zero-shot worker applies bounded session options', () => {
-    const src = read('electron/llm/intentClassifierWorker.ts');
-    assert.match(src, /getBoundedOnnxSessionOptions/);
-    assert.match(src, /session_options:\s*getBoundedOnnxSessionOptions\(\)/);
+    // Exactly one model load, so neither branch can bypass the bounded options.
+    assert.equal((src.match(/\.from_pretrained\(/g) || []).length, 2,
+      'expected exactly two from_pretrained calls: the tokenizer and the model');
   });
 
   test('Whisper worker applies bounded session options on its ASR pipeline', () => {
@@ -142,7 +146,7 @@ describe('worker isolation — source guards', () => {
     assert.ok(unpack.includes('**/localRerankerWorker.js'), 'localRerankerWorker.js must be asar-unpacked');
     // Existing entries must remain (no regression to the already-shipped workers).
     assert.ok(unpack.includes('**/whisperWorker.js'));
-    assert.ok(unpack.includes('**/intentClassifierWorker.js'));
+    assert.ok(!unpack.includes('**/intentClassifierWorker.js'), 'intent worker removed 2026-09-05; a stale unpack glob would ship nothing but would mislead');
   });
 
   test('packaging: @huggingface/transformers node_modules is asar-unpacked (2026-07-05 fix)', () => {

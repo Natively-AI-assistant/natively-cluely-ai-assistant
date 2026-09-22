@@ -20,7 +20,12 @@ const turn = (over = {}) => ({
   plannedSourceTypes: ['REFERENCE_FILE'],
   acceptedEvidence: [{ sourceType: 'REFERENCE_FILE', evidenceId: 'e1' }],
   retrievalAttempts: [{ rejections: [], failed: undefined }],
-  timings: { providerTtfbMs: 100 },
+  // `latency`, which is the field AnswerTrace actually declares. This fixture
+  // said `timings` — and so did the production read in rollout-metrics — so the
+  // two agreed with each other, the test stayed green, and the latency
+  // percentiles were empty on every turn in production from the day they were
+  // written. A fixture that mirrors the bug cannot detect the bug.
+  latency: { totalMs: 100, providerTtfbMs: 0 },
   ...over,
 });
 
@@ -91,7 +96,7 @@ describe('vacuity and safety', () => {
   test('rates are NULL with no data, never 0 — a green gate from zero turns is the bug', () => {
     const m = getRolloutMetrics();
     assert.equal(m.rates.contamination, null);
-    assert.equal(m.latency.p95, null);
+    assert.equal(m.orchestrationLatency.p95, null);
   });
 
   test('abort evaluation refuses to answer below the turn threshold', () => {
@@ -101,10 +106,23 @@ describe('vacuity and safety', () => {
     assert.deepEqual(a.triggered, [], 'and it reports nothing rather than "all clear"');
   });
 
-  test('p95 regression beyond 20% aborts', () => {
-    for (let i = 0; i < 60; i++) recordTurnMetrics(turn({ timings: { providerTtfbMs: 300 } }));
-    assert.ok(evaluateAbortConditions({ minTurns: 50, baselineP95Ms: 200 }).triggered.includes('p95_regression_over_20pct'));
-    assert.ok(!evaluateAbortConditions({ minTurns: 50, baselineP95Ms: 400 }).triggered.includes('p95_regression_over_20pct'));
+  test('orchestration p95 regression beyond 20% aborts', () => {
+    // totalMs, not providerTtfbMs: the latter is a structural 0 in every trace
+    // this metric ever sees, so a fixture built on it measured nothing.
+    for (let i = 0; i < 60; i++) recordTurnMetrics(turn({ latency: { totalMs: 300 } }));
+    assert.ok(evaluateAbortConditions({ minTurns: 50, baselineOrchestrationP95Ms: 200 })
+      .triggered.includes('orchestration_p95_regression_over_20pct'));
+    assert.ok(!evaluateAbortConditions({ minTurns: 50, baselineOrchestrationP95Ms: 400 })
+      .triggered.includes('orchestration_p95_regression_over_20pct'));
+  });
+
+  test('a genuinely 0 ms turn is SAMPLED, not discarded', () => {
+    // A turn answered from state without retrieving really does round to 0.
+    // Dropping those removes the fastest turns from the sample and biases p50
+    // and p95 upward — a latency gate that quietly ignores fast turns.
+    for (let i = 0; i < 60; i++) recordTurnMetrics(turn({ latency: { totalMs: 0 } }));
+    assert.equal(getRolloutMetrics().orchestrationLatency.samples, 60);
+    assert.equal(getRolloutMetrics().orchestrationLatency.p95, 0);
   });
 
   test('over-refusal: strict refusals up while general fallback flat', () => {
@@ -121,7 +139,7 @@ describe('vacuity and safety', () => {
 
   test('the latency buffer is bounded — a long meeting must not grow it forever', () => {
     for (let i = 0; i < 900; i++) recordTurnMetrics(turn());
-    assert.ok(getRolloutMetrics().latency.samples <= 512);
+    assert.ok(getRolloutMetrics().orchestrationLatency.samples <= 512);
   });
 
   test('no counter field can carry evidence text', () => {

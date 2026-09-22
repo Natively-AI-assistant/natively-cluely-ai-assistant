@@ -9,8 +9,9 @@
 // CanonicalTurnManualChatShadowWiring2026_07_25.test.mjs's approach for the
 // same class of shadow-only wiring). Pins the safety invariants that make
 // this wiring low-risk:
-//   1. gated behind the contextOsImpossibleStateGateShadow flag (dev/test-
-//      only default) AND requires turnContract to already be non-null
+//   1. gated behind the contextOsImpossibleStateGateShadow flag (promoted to
+//      unconditional `true`, 2026-08-30) AND requires turnContract to already
+//      be non-null
 //   2. wrapped in its own try/catch (a failure cannot break the real chat
 //      path, nor the turnContract build it sits right after)
 //   3. the shadow check's result is used ONLY for divergence logging — never

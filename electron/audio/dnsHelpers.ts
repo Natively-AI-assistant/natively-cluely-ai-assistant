@@ -39,7 +39,10 @@ export const ipv4OnlyLookup = (hostname: string, options: any, callback?: any): 
 
     // Serve from cache if still fresh — avoids hitting the resolver entirely.
     if (cached && Date.now() < cached.expires) {
-        return callback(null, cached.addr, 4);
+        // Never call back synchronously: net.connect's happy-eyeballs path
+        // assumes an async lookup (see resilientDnsLookup.ts, 2026-09-11).
+        process.nextTick(() => callback(null, cached.addr, 4));
+        return;
     }
 
     const store = (addr: string) => {

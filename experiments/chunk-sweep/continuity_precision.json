@@ -1,0 +1,146 @@
+{
+  "sweet-300": [
+    {
+      "project": "FieldServe-CRM Sync",
+      "mode": "plain",
+      "precision": 0.17,
+      "top1_right_project": false,
+      "answer_rank": 3
+    },
+    {
+      "project": "FieldServe-CRM Sync",
+      "mode": "anchored",
+      "precision": 0.67,
+      "top1_right_project": true,
+      "answer_rank": 1
+    },
+    {
+      "project": "LedgerLink",
+      "mode": "plain",
+      "precision": 0.17,
+      "top1_right_project": false,
+      "answer_rank": 2
+    },
+    {
+      "project": "LedgerLink",
+      "mode": "anchored",
+      "precision": 0.58,
+      "top1_right_project": true,
+      "answer_rank": 1
+    },
+    {
+      "project": "FleetBridge",
+      "mode": "plain",
+      "precision": 0.25,
+      "top1_right_project": true,
+      "answer_rank": 1
+    },
+    {
+      "project": "FleetBridge",
+      "mode": "anchored",
+      "precision": 0.5,
+      "top1_right_project": true,
+      "answer_rank": 1
+    },
+    {
+      "project": "StockMesh",
+      "mode": "plain",
+      "precision": 0.17,
+      "top1_right_project": false,
+      "answer_rank": 4
+    },
+    {
+      "project": "StockMesh",
+      "mode": "anchored",
+      "precision": 0.58,
+      "top1_right_project": true,
+      "answer_rank": 1
+    },
+    {
+      "project": "CarePoint Connect",
+      "mode": "plain",
+      "precision": 0.25,
+      "top1_right_project": false,
+      "answer_rank": 5
+    },
+    {
+      "project": "CarePoint Connect",
+      "mode": "anchored",
+      "precision": 0.67,
+      "top1_right_project": true,
+      "answer_rank": 1
+    }
+  ],
+  "npfx-300": [
+    {
+      "project": "FieldServe-CRM Sync",
+      "mode": "plain",
+      "precision": 0.0,
+      "top1_right_project": false,
+      "answer_rank": 4
+    },
+    {
+      "project": "FieldServe-CRM Sync",
+      "mode": "anchored",
+      "precision": 0.08,
+      "top1_right_project": true,
+      "answer_rank": 2
+    },
+    {
+      "project": "LedgerLink",
+      "mode": "plain",
+      "precision": 0.0,
+      "top1_right_project": false,
+      "answer_rank": 1
+    },
+    {
+      "project": "LedgerLink",
+      "mode": "anchored",
+      "precision": 0.08,
+      "top1_right_project": false,
+      "answer_rank": 1
+    },
+    {
+      "project": "FleetBridge",
+      "mode": "plain",
+      "precision": 0.0,
+      "top1_right_project": false,
+      "answer_rank": 2
+    },
+    {
+      "project": "FleetBridge",
+      "mode": "anchored",
+      "precision": 0.08,
+      "top1_right_project": false,
+      "answer_rank": 1
+    },
+    {
+      "project": "StockMesh",
+      "mode": "plain",
+      "precision": 0.0,
+      "top1_right_project": false,
+      "answer_rank": 3
+    },
+    {
+      "project": "StockMesh",
+      "mode": "anchored",
+      "precision": 0.08,
+      "top1_right_project": false,
+      "answer_rank": 1
+    },
+    {
+      "project": "CarePoint Connect",
+      "mode": "plain",
+      "precision": 0.0,
+      "top1_right_project": false,
+      "answer_rank": 5
+    },
+    {
+      "project": "CarePoint Connect",
+      "mode": "anchored",
+      "precision": 0.08,
+      "top1_right_project": false,
+      "answer_rank": 1
+    }
+  ]
+}

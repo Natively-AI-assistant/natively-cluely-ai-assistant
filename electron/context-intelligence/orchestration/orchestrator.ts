@@ -20,9 +20,11 @@ import type {
 import { freezeTurnDecision } from '../contracts/types';
 import { resolveModePolicy, generalKnowledgeAllowed, type ModePolicy } from '../policies/mode-policy-registry';
 import { resolveAnswerPolicy, type AnswerPolicy } from '../policies/answer-policy';
-import { CLAIM_AUTHORITY } from '../policies/source-authority-policy';
-import { classifyTurn, isBareFollowUp } from '../question/turn-classifier';
+import { CLAIM_AUTHORITY, claimAuthority } from '../policies/source-authority-policy';
+import { isRetrievalFixEnabled } from '../contracts/retrieval-flags';
+import { classifyTurn, isBareFollowUp, stripSttFillers, isProspectiveJobQuestion } from '../question/turn-classifier';
 import type { AnswerTrace, RetrievalAttemptTrace } from '../observability/answer-trace';
+import { mergeRewrittenEvidence, type QueryRewriter, type QueryRewriteOutcome } from '../retrieval/llm-query-rewrite';
 
 export interface AnswerRequest {
   requestId: string;
@@ -59,6 +61,30 @@ export interface AnswerRequest {
   hasAttachedDocuments?: boolean;
   /** Attached file names — filename-role routing (glossary/formula). */
   attachedFileNames?: readonly string[];
+  /** Set by orchestrate() when a port's probeAnchors() said the attached
+   *  material holds this question's terms. Never set by a caller. */
+  corpusAnchored?: boolean;
+  /** Set by orchestrate() from RetrievalPort.probeAnchorSources(). Never by a caller. */
+  anchoredSourceTypes?: readonly SourceType[];
+  /** No mode attachment; the documents are Profile Intelligence ones only. Set by the engine bridge. */
+  profileOnlyDocuments?: boolean;
+  /** How many files are attached to the MODE. Set by the engine bridge; absent = unknown = no scaling. */
+  attachedSourceCount?: number;
+  /**
+   * One bounded fast-model call that restates the question in the vocabulary a
+   * document would use (see retrieval/llm-query-rewrite.ts). Injected by the engine
+   * bridge; absent = the feature is off for this turn. Used ONLY when the first
+   * retrieval leaves a document claim unsupported, and only as a ranking query.
+   */
+  queryRewriter?: QueryRewriter;
+  /** The turn is inside a live meeting with transcript evidence available
+   *  (issue #552, task 7b) — see ClassificationInput.inLiveMeeting. Passed
+   *  straight through to the classifier; never widens `policy` itself. */
+  inLiveMeeting?: boolean;
+  /** The screen-understanding description for this turn, when a screenshot
+   *  was attached. Lends its terms to the retrieval query when the spoken
+   *  question only points at the screen — see screenEnrichedQuery. */
+  screenText?: string;
 
   /**
    * Source types the TURN adds to the mode's allowlist because of what is
@@ -78,6 +104,18 @@ export interface RetrievalPort {
   retrieve(input: {
     decision: Readonly<TurnDecision>;
   }): Promise<{ evidence: EvidenceItem[]; attempts: RetrievalAttemptTrace[] }>;
+  /**
+   * Corpus arbitration (optional): do this port's documents hold the
+   * question's distinctive terms together? Cheap and lexical. Asked only on a
+   * turn decide() sent down the no-retrieval path with documents attached.
+   */
+  probeAnchors?(question: string): boolean;
+  /**
+   * Corpus arbitration, source-aware (optional): the source TYPES whose own
+   * chunks hold the question's distinctive terms together. Lets a turn that
+   * already retrieves reach a document its grammar did not name.
+   */
+  probeAnchorSources?(question: string): SourceType[];
 }
 
 export interface OrchestratorResult {
@@ -90,7 +128,13 @@ export interface OrchestratorResult {
 /** Manual > transcript. Resolution happens ONCE (§12.2). */
 function resolveQuestion(req: AnswerRequest): { resolved: string; source: 'manual' | 'transcript'; confidence: number } {
   const manual = req.manualQuestion?.trim();
-  if (manual) return { resolved: manual, source: 'manual', confidence: 1 };
+  // Fillers and stutters are transcriber noise, never content (2026-09-07,
+  // measured in a 1,000-turn live campaign): "arh" became an "ARH number" in
+  // the answer, "arh so due" an "ARIS chart", and filler-laden value lookups
+  // routed FAST because the classifier could not see "what is the <noun>".
+  // Stripped here, once, so the classifier, the retrieval query and the
+  // model all see the same clean question. rawQuestion keeps the original.
+  if (manual) return { resolved: stripSttFillers(manual) || manual, source: 'manual', confidence: 1 };
   const t = req.transcriptQuestion?.trim() ?? '';
   if (!t) return { resolved: t, source: 'transcript', confidence: 0 };
   // Honour the extractor's own confidence when the caller supplied it; fall
@@ -98,7 +142,7 @@ function resolveQuestion(req: AnswerRequest): { resolved: string; source: 'manua
   const c = typeof req.questionConfidence === 'number' && Number.isFinite(req.questionConfidence)
     ? Math.max(0, Math.min(1, req.questionConfidence))
     : 0.7;
-  return { resolved: t, source: 'transcript', confidence: c };
+  return { resolved: stripSttFillers(t) || t, source: 'transcript', confidence: c };
 }
 
 function buildClaimRequirements(
@@ -107,7 +151,10 @@ function buildClaimRequirements(
   clauses: Partial<Record<string, string>> = {},
 ): ClaimRequirement[] {
   return claimTypes.map((ct) => {
-    const authority = CLAIM_AUTHORITY[ct as keyof typeof CLAIM_AUTHORITY];
+    // `claimAuthority()`, not the raw table: T1's widening is resolved per
+    // call, and `authoritativeSources` here is what the retrieval plan and
+    // the admission filter both read.
+    const authority = claimAuthority(ct as keyof typeof CLAIM_AUTHORITY);
     const isPrivate = authority.authoritative.length > 0;
     return {
       claimType: ct as ClaimRequirement['claimType'],
@@ -124,7 +171,45 @@ function buildClaimRequirements(
   });
 }
 
+/** See the `queries` note in decide(): a bare fragment borrows the attached file names as its retrieval subject. */
+export function bareFragmentQuery(resolved: string, attachedFileNames: readonly string[] | undefined): string | null {
+  if (!attachedFileNames?.length || !isBareFollowUp(resolved)) return null;
+  const words = attachedFileNames
+    .map((n) => String(n ?? '').replace(/\.[a-z0-9]{1,5}$/i, '').replace(/[^a-z0-9]+/gi, ' ').trim())
+    .filter(Boolean)
+    .join(' ');
+  return words ? `${resolved} ${words}`.trim() : null;
+}
+
+// A question that only POINTS at the screen carries none of the screen's
+// terms (2026-09-11, measured in technical-interview with a spec attached and a
+// Slack thread on screen): "answer what he is asking from our spec" retrieved on
+// "answer / asking / spec" and found a résumé chunk; the screen said "what is
+// our instant refund limit and who owns reconciliation escalations", which the
+// spec answers in two lines. When the question is deictic or short, the
+// screen's own text joins the retrieval query — the QUESTION is unchanged.
+const SCREEN_DEIXIS_RE = /\b(?:this|that|these|those|it|here|on (?:my |the )?screen|what (?:he|she|they)(?:'s| is| are)? (?:asking|saying|showing)|what(?:'s| is) (?:he|she|they) (?:asking|saying)|him|her|them)\b/i;
+export const SCREEN_QUERY_MAX_CHARS = 600;
+export function screenEnrichedQuery(query: string, screenText: string | undefined): string {
+  const screen = String(screenText ?? '').replace(/\s+/g, ' ').trim();
+  if (!screen) return query;
+  const q = String(query ?? '').trim();
+  const words = q.split(/\s+/).filter(Boolean).length;
+  if (q && !SCREEN_DEIXIS_RE.test(q) && words > 10) return query;
+  // Prefer the screen's own question-shaped lines; fall back to its head.
+  const sentences = screen.split(/(?<=[.?!])\s+/);
+  const asks = sentences.filter((t) => /\?$/.test(t) || /^(?:what|how|which|who|when|where|why|can|could|do|does|is|are)\b/i.test(t));
+  const lend = (asks.length ? asks.join(' ') : screen).slice(0, SCREEN_QUERY_MAX_CHARS);
+  return q ? `${q} ${lend}`.trim() : lend;
+}
+
 /** Decide ONCE. The result is deep-frozen; nothing downstream may reinterpret it. */
+/** Evidence capacity floor for a turn with two or more files attached to the mode. */
+export const MULTI_FILE_EVIDENCE = { accepted: 8, tokens: 2400 } as const;
+
+/** Best-evidence score under which a non-FULL first pass counts as low-confidence (see the rewrite trigger). */
+const LOW_CONFIDENCE_TOP_SCORE = 0.3;
+
 export function decide(req: AnswerRequest): Readonly<TurnDecision> {
   const basePolicy = resolveModePolicy(req.modeId);   // THROWS on unknown id — fails closed
 
@@ -159,9 +244,28 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
     hasScreenContext: req.hasScreenContext,
     hasAttachedDocuments: req.hasAttachedDocuments,
     attachedFileNames: req.attachedFileNames,
+    corpusAnchored: req.corpusAnchored === true,
+    anchoredSourceTypes: req.anchoredSourceTypes,
+    profileOnlyDocuments: req.profileOnlyDocuments === true,
+    inLiveMeeting: Boolean(req.inLiveMeeting),
   });
 
   const optional = policy.allowedSourceTypes.filter((s) => !cls.requiredSourceTypes.includes(s));
+
+  // MULTI-FILE EVIDENCE CAPACITY (2026-09-19, owner-approved). The accepted-
+  // slice fill round-robins across source types and documents, so with a
+  // résumé, a job description and a handbook attached each gets two of six
+  // slots whatever the question is about, and the chunk that answers — ranked
+  // 7th–9th — is cut. Measured with experiments/retrieval-scale (chunk reaches
+  // the prompt, of 162, 5k/15k/30k/70k): lexical 143/142/141/141 → 144/144/
+  // 143/143, vectors 154/154/151/151 → 157/155/154/154; ZERO effect with one
+  // file, and 10 items / 3000 tokens added only noise. Confined to turns with
+  // two or more mode files because that is the only case with a measured
+  // benefit, and it costs evidence tokens on every grounded turn it applies to.
+  const multiFile = (req.attachedSourceCount ?? 0) >= 2 && cls.shouldRetrieve;
+  const acceptedBase = multiFile
+    ? Math.max(policy.retrievalPolicy.maximumAcceptedEvidence, MULTI_FILE_EVIDENCE.accepted)
+    : policy.retrievalPolicy.maximumAcceptedEvidence;
 
   const retrievalPlan: RetrievalPlan = {
     path: cls.path,
@@ -175,9 +279,25 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
       ? (cls.requiredSourceTypes.length
         ? cls.requiredSourceTypes
         : policy.allowedSourceTypes.filter((s) =>
-          s === 'REFERENCE_FILE' || s === 'PROJECT_FILE' || s === 'CODING_SAMPLE' || s === 'MEETING_TRANSCRIPT'))
+          s === 'REFERENCE_FILE' || s === 'PROJECT_FILE' || s === 'CODING_SAMPLE' || s === 'MEETING_TRANSCRIPT'
+          // …unless the résumé and job description are the ONLY documents this
+          // turn has (2026-09-20). "Will they help me move countries and pay for
+          // it?" names no claim, so it planned reference-file pools that were
+          // EMPTY and went out with zero evidence — measured at every size, with
+          // the relocation paragraph sitting in the job description. The
+          // issue-5 concern (a coding question retrieving résumé chunks) does
+          // not arise: a coding turn does not retrieve at all, and this branch
+          // is reached only by a turn that decided to.
+          || (req.profileOnlyDocuments === true && (s === 'RESUME' || s === 'JOB_DESCRIPTION'))))
       : [],
-    queries: [q.resolved],
+    // A bare fragment with no referent ("explain", "why?", "more") retrieves
+    // NOTHING on its own text, so the composer had no material to apply it to
+    // and asked "what should I explain?" (2026-09-07, always-answer). When
+    // files are attached, the attachments are the only subject the fragment
+    // can be about: widen the retrieval query with their names so their
+    // chunks surface, and the follow-up guidance applies the fragment to them.
+    // The resolved question itself is unchanged — only the retrieval query.
+    queries: [screenEnrichedQuery(bareFragmentQuery(q.resolved, req.attachedFileNames) ?? q.resolved, req.screenText)],
     entities: [],
     useSemanticSearch: true,
     useKeywordSearch: true,
@@ -186,9 +306,17 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
     usePreviousSourceContinuity: cls.questionTypes.includes('FOLLOW_UP'),
     retrieveAdjacentContext: cls.path === 'VERIFICATION',
     maximumAttempts: 2,
-    maximumCandidates: policy.retrievalPolicy.maximumCandidates,
-    maximumAcceptedEvidence: policy.retrievalPolicy.maximumAcceptedEvidence,
-    timeoutMs: 1200,
+    // An exhaustive request ("find every place…") is widened HERE, once: the
+    // ports read these two numbers, the packer reads the cap, and the composer
+    // reads the flag. ×2 candidates so the rerank pool has something to widen
+    // into; ×3 accepted evidence because the measured miss was 8 of ~20 values
+    // with the cap at 6 (2026-09-07). Latency is still bounded: the rerank
+    // budget is unchanged, only its pool grows.
+    maximumCandidates: policy.retrievalPolicy.maximumCandidates * (cls.exhaustive && cls.shouldRetrieve ? 2 : 1),
+    maximumAcceptedEvidence: acceptedBase * (cls.exhaustive && cls.shouldRetrieve ? 3 : 1),
+    ...(multiFile ? { evidenceTokens: Math.max(policy.contextBudget.evidenceTokens, MULTI_FILE_EVIDENCE.tokens) } : {}),
+    timeoutMs: cls.exhaustive && cls.shouldRetrieve ? 2400 : 1200,
+    ...(cls.exhaustive && cls.shouldRetrieve ? { exhaustive: true } : {}),
   };
 
   return freezeTurnDecision({
@@ -206,6 +334,7 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
 
     questionTypes: cls.questionTypes,
     claimRequirements: buildClaimRequirements(policy, cls.claimTypes, cls.claimClauses),
+    inferredClaimTypes: cls.inferredClaimTypes ?? [],
 
     scope: req.scope,
     authorizedSources: [],            // populated by source authorization at retrieval time
@@ -508,6 +637,37 @@ export function propertyQualifierTerms(clause: string): string[] {
  * wrongly. Similarity was maximal, correctness was zero. So answerability is
  * decided by whether required claims have authoritative evidence — not by score.
  */
+/**
+ * THE EMPLOYER'S DOCUMENT IS NOT EVIDENCE ABOUT THE USER (owner decision, 2026-09-21).
+ *
+ * "Have I ever been on call?" — the résumé says nothing; the corpus rule for
+ * employment questions (also an owner decision) plans the job description, whose
+ * line "hiring-manager CALL" shares the question's head noun; DOCUMENT_FACT is an
+ * ALTERNATIVE route to the same subject, so the turn read FULL on six
+ * job-description chunks. The JD may still be RETRIEVED and shown — the model can
+ * say what the role involves — but it can never SATISFY a claim on a turn whose
+ * own grammar makes a claim about the user. The turn then reads PARTIAL/NONE and
+ * the answer says the résumé does not cover it.
+ *
+ * Only for claims the question MAKES ("have I", "my boss", "did you"). The
+ * classifier also GUESSES a USER_PROJECT claim for any unrecognised factual
+ * question in a job-seeking mode — "How many engineers are in pod 3?" — and
+ * applying this rule to a guess made job-description questions unanswerable (the
+ * first attempt at this, reverted within the hour).
+ */
+export function jobDescriptionCannotSupport(
+  decision: Readonly<TurnDecision>,
+  evidence: { sourceType?: string },
+  claimType: string,
+): boolean {
+  if (evidence.sourceType !== 'JOB_DESCRIPTION' || claimType !== 'DOCUMENT_FACT') return false;
+  // "Who would be my manager?" carries an employment claim by grammar, but it is
+  // about the role being applied for — the job description IS its source.
+  if (isProspectiveJobQuestion(decision.resolvedQuestion)) return false;
+  const guessed = new Set<string>((decision.inferredClaimTypes ?? []).map(String));
+  return decision.claimRequirements.some((c) => String(c.claimType).startsWith('USER_') && !guessed.has(String(c.claimType)));
+}
+
 export function evaluateAnswerability(
   decision: Readonly<TurnDecision>,
   evidence: EvidenceItem[],
@@ -603,7 +763,7 @@ export function evaluateAnswerability(
     // suffix is a bucket label, and letting it into salientTerms would hand
     // every user-side group a free "user" term to match on.
     const ok = reqs.some((req) => evidence.some(
-      (e) => evidenceSupportsClaim(e, req.claimType, req.subject ?? decision.resolvedQuestion),
+      (e) => !jobDescriptionCannotSupport(decision, e, req.claimType) && evidenceSupportsClaim(e, req.claimType, req.subject ?? decision.resolvedQuestion),
     ));
     if (ok) { supported++; continue; }
     // Topically-related-but-property-missing evidence (deep-test D6): the right
@@ -663,7 +823,27 @@ export async function orchestrate(
   req: AnswerRequest,
   retrieval?: RetrievalPort,
 ): Promise<OrchestratorResult> {
-  const t0 = 0;
+  // performance.now(), NOT Date.now(). This is a desktop app that sleeps in the
+  // middle of a turn all the time — a lid closed between here and the trace
+  // literal would otherwise report a four-hour retrieval. A monotonic clock
+  // cannot be dragged by a sleep, an NTP step or a timezone change.
+  const clock = () => (typeof performance !== 'undefined' && typeof performance.now === 'function')
+    ? performance.now()
+    : Date.now();
+  const span = (from: number) => Math.max(0, Math.round(clock() - from));
+  const t0 = clock();
+
+  // Phase spans. Every one of these was a hardcoded 0 from the day the trace
+  // was written (`const t0 = 0` was literally the total), so `latency` looked
+  // like a measurement and was a placeholder — 173 production telemetry rows
+  // reported 0ms for everything before this was noticed. A zero here now means
+  // "measured zero", which is why the two spans that genuinely cannot be timed
+  // from inside this function are documented at the trace literal instead of
+  // being left to look measured.
+  let questionResolutionMs = 0;
+  let classificationMs = 0;
+  let retrievalMs = 0;
+  let evidenceEvaluationMs = 0;
 
   // ── Conversation continuity (§12.3) ───────────────────────────────────────
   // Resolve a bare follow-up against this session's state BEFORE deciding.
@@ -685,13 +865,17 @@ export async function orchestrate(
   // that as "original" hid every resolver decision from the telemetry.
   const originalQuestion = (req.manualQuestion ?? req.transcriptQuestion ?? '').trim();
   let priorDecision: import('../contracts/types').PriorTurnDecision | undefined;
+  const tResolve = clock();
   try {
     const { resolveAgainstSession, getConversationState } = require('../question/conversation-state-store');
     const rawQ = originalQuestion;
     if (rawQ) {
       const priorState = getConversationState(req.sessionId);
       priorDecision = priorState?.previousDecision;
-      const ref = resolveAgainstSession(req.sessionId, rawQ);
+      // T7: pass this turn's scope so a topic from the PREVIOUS meeting/mode
+      // cannot rewrite this question. `advance()` resets on scope change, but it
+      // runs AFTER this line -- resetting on write cannot protect a read.
+      const ref = resolveAgainstSession(req.sessionId, rawQ, req.scope);
       referentResolution = {
         applied: Boolean(ref.usedState && ref.resolved !== rawQ),
         ...(ref.referent ? { referent: ref.referent } : {}),
@@ -708,8 +892,134 @@ export async function orchestrate(
       }
     }
   } catch { /* continuity must never break a turn */ }
+  questionResolutionMs = span(tResolve);
 
+  // decide() resolves the mode policy AND classifies the turn, so this span
+  // covers both. policyResolutionMs is left at 0 rather than being given half
+  // of a number nobody measured — splitting it means instrumenting decide().
+  const tClassify = clock();
   let decision = decide(effectiveReq);
+  // What the CLASSIFIER claimed, before corpus arbitration adds to it (used by the
+  // rewrite trigger on live surfaces).
+  const classifierClaims = new Set(decision.claimRequirements.map((c) => String(c.claimType)));
+
+  // ── Corpus arbitration ────────────────────────────────────────────────────
+  // The classifier decides from grammar whether a question is about the
+  // attached material; it cannot see the material. When it says "no retrieval"
+  // and documents ARE attached, the port is asked whether one of its chunks
+  // holds the question's distinctive terms together — and if so the turn is
+  // decided again as a document lookup. Measured 2026-09-19: "What is
+  // ledger.compaction.window_minutes set to?" and "What is step 6 of the
+  // regional failover runbook?" took the no-retrieval path at every file size
+  // with the handbook attached. Lexical and synchronous; a probe that throws
+  // leaves the first decision standing.
+  if (!decision.retrievalPlan.shouldRetrieve && effectiveReq.hasAttachedDocuments && retrieval?.probeAnchors) {
+    try {
+      const probeQ = (effectiveReq.manualQuestion ?? effectiveReq.transcriptQuestion ?? '').trim();
+      if (probeQ && retrieval.probeAnchors(probeQ)) {
+        const again = decide({ ...effectiveReq, corpusAnchored: true });
+        if (again.retrievalPlan.shouldRetrieve) decision = again;
+      }
+    } catch { /* arbitration must never break a turn */ }
+  }
+
+  // Source-aware arbitration: a turn that DOES retrieve can still be pointed at
+  // the wrong document. Measured 2026-09-19 on the profile path (résumé + job
+  // description, looking-for-work): "How much relocation does the company
+  // cover?", "How often are Settlement Core engineers on call?" and 35 more of
+  // 45 job-description questions planned RESUME + PROFILE_FACT + REFERENCE_FILE
+  // — the job description is planned only when the question happens to say
+  // "role", "position" or "interview" — so the port's planned-type filter
+  // dropped every chunk that could answer them. The port names the source types
+  // whose chunks hold the question's terms; any the plan lacks are offered to
+  // the classifier, which still applies the mode's allowlist.
+  if (decision.retrievalPlan.shouldRetrieve && retrieval?.probeAnchorSources) {
+    try {
+      const probeQ = (effectiveReq.manualQuestion ?? effectiveReq.transcriptQuestion ?? '').trim();
+      const planned = new Set(decision.retrievalPlan.sourceTypes);
+      const anchoredIn = probeQ ? retrieval.probeAnchorSources(probeQ) : [];
+      const missing = anchoredIn.filter((s) => !planned.has(s));
+      // EMPLOYMENT-PHRASED QUESTIONS ABOUT THE JOB (owner's decision 2026-09-20:
+      // "let the corpus decide"). In a job-search mode "Who would be my manager?",
+      // "Can I work from home?", "How senior do I need to be?" are first person, so
+      // they classify as USER_* claims — and those PROHIBIT the job description as
+      // a source, deliberately, so a JD requirement can never be presented as the
+      // user's own history. The prohibition stays. But when the résumé does NOT
+      // hold the question's terms, it cannot be what the question is about; on a
+      // profile-only turn the job description is then planned as well, as a
+      // DOCUMENT lookup (DOCUMENT_FACT has authority over it; the USER_* claim
+      // still cannot be evidenced by JD text).
+      const allowsJd = decision.requiredSourceTypes.includes('JOB_DESCRIPTION') || decision.optionalSourceTypes.includes('JOB_DESCRIPTION');
+      const onlyUserClaims = decision.claimRequirements.length > 0 && decision.claimRequirements.every((c) => /^USER_/.test(c.claimType));
+      if (effectiveReq.profileOnlyDocuments && allowsJd && onlyUserClaims && !planned.has('JOB_DESCRIPTION')
+          && !anchoredIn.includes('RESUME') && !missing.includes('JOB_DESCRIPTION')) {
+        missing.push('JOB_DESCRIPTION');
+      }
+      if (missing.length) {
+        const again = decide({ ...effectiveReq, anchoredSourceTypes: missing });
+        if (again.retrievalPlan.shouldRetrieve) decision = again;
+      }
+    } catch { /* arbitration must never break a turn */ }
+  }
+  classificationMs = span(tClassify);
+
+  // ── T5: a resolved bare follow-up regains its subject's pool ───────────────
+  //
+  // The unclaimed-retrieval fallback in `decide()` consults DOCUMENT pools only
+  // and deliberately excludes identity pools — "Reverse a linked list in Python"
+  // must not retrieve resumes (deep-run 2, issue 5). That exclusion is right for
+  // its own case and wrong for the one it also catches: a bare follow-up
+  // ("Why?", "What did you monitor after that?") has no claims of its own
+  // BECAUSE its subject lives in the previous turn, and the fallback then denies
+  // it the very pool that turn answered from. Measured:
+  //
+  //   looking-for-work  "Why? (referring to: Kubernetes)"  planned [REFERENCE_FILE]
+  //                     -- resume/profile excluded, though the prior turn used them
+  //   recruiting        same                               CANDIDATE_FILE excluded,
+  //                     the mode's PRIORITY-1 source
+  //
+  // That is a second, independent cause of "follow-ups jump to the wrong
+  // project", distinct from the chunking one: even when the referent resolves
+  // correctly, the plan can exclude the pool that owns the subject.
+  //
+  // Four conditions, and each is load-bearing:
+  //   • `usePreviousSourceContinuity` — the plan already declares this a
+  //     continuity turn. The field existed and had no consumer for this.
+  //   • `referentWasResolved` — the subject genuinely came from state. Without
+  //     it a self-contained question with no claims would inherit pools it never
+  //     asked for, which is exactly the deep-run 2 defect.
+  //   • the plan used the FALLBACK (no claim named a source). A follow-up that
+  //     names its own sources keeps them.
+  //   • intersect with the mode allowlist. Continuity can restore a pool the
+  //     mode authorizes; it can never introduce one it does not.
+  if (isRetrievalFixEnabled('followUpSourceContinuity')
+      && referentWasResolved
+      && decision.retrievalPlan.shouldRetrieve
+      && decision.retrievalPlan.usePreviousSourceContinuity
+      && decision.claimRequirements.every((c) => c.authority !== 'PRIVATE_SOURCE_REQUIRED')) {
+    try {
+      const { getConversationState } = require('../question/conversation-state-store');
+      const prior = getConversationState(req.sessionId)?.previousPlannedSourceTypes ?? [];
+      // `optional` is the mode allowlist minus what the claims required (see
+      // where it is computed in decide()), so the two together ARE the
+      // allowlist — including any extraAllowedSourceTypes decide() folded in.
+      const allowed = new Set<SourceType>([
+        ...decision.requiredSourceTypes,
+        ...decision.optionalSourceTypes,
+      ]);
+      const planned = new Set(decision.retrievalPlan.sourceTypes);
+      const restored = prior.filter((s: SourceType) => allowed.has(s) && !planned.has(s));
+      if (restored.length) {
+        decision = freezeTurnDecision({
+          ...decision,
+          retrievalPlan: {
+            ...decision.retrievalPlan,
+            sourceTypes: [...decision.retrievalPlan.sourceTypes, ...restored],
+          },
+        } as never);
+      }
+    } catch { /* continuity must never break a turn */ }
+  }
 
   // Precedence follow-up (live turns 18/92, 2026-08-01): "Why did you ignore
   // the other values?" / "Why are the lower values not current?" ask about the
@@ -728,11 +1038,17 @@ export async function orchestrate(
   let attempts: RetrievalAttemptTrace[] = [];
 
   if (decision.retrievalPlan.shouldRetrieve && retrieval) {
+    // Timed at the call site, not read from `attempts[].durationMs`: only
+    // legacy-retrieval-port populates that field, so trusting it would report
+    // 0ms for every turn served by any other port.
+    const tRetrieve = clock();
     try {
       const r = await retrieval.retrieve({ decision });
       evidence = r.evidence;
       attempts = r.attempts;
+      retrievalMs = span(tRetrieve);
     } catch (e) {
+      retrievalMs = span(tRetrieve);
       // §22.1: a retrieval dependency failure is RECORDED and the turn
       // continues with no evidence — it must NOT abort the turn back to a
       // legacy path that would inject a raw context blob instead. Answerability
@@ -750,7 +1066,105 @@ export async function orchestrate(
     }
   }
 
-  const answerability = evaluateAnswerability(decision, evidence);
+  const tEvaluate = clock();
+  let answerability = evaluateAnswerability(decision, evidence);
+  evidenceEvaluationMs = span(tEvaluate);
+
+  // ── LOW-CONFIDENCE QUERY REWRITE (2026-09-20) ───────────────────────────
+  // The first pass could not support a claim that REQUIRES the user's own
+  // material — the turn is headed for "I couldn't find that in your documents"
+  // (or, measured live, a confidently wrong answer). Before accepting that, ask
+  // a fast model ONCE to restate the question in document vocabulary and
+  // retrieve again. Bounded by the rewriter's own deadline; every failure mode
+  // (timeout, error, empty, no new words, retrieval throwing) leaves the turn
+  // exactly as the first pass left it.
+  //
+  // What the rewrite may NOT do: it replaces `retrievalPlan.queries` only. The
+  // port ranks with that text, but source-type planning, claim authority, scope
+  // and admission all still read `resolvedQuestion` — a model cannot talk its
+  // way into a source the user's question did not authorize. Answerability is
+  // re-evaluated against the ORIGINAL question too.
+  //
+  // TWO triggers, both meaning "the first pass did not find it":
+  //   · answerability NONE — nothing supports the claim;
+  //   · WEAK evidence — the best item scores under LOW_CONFIDENCE_TOP_SCORE.
+  //     Answerability can read PARTIAL off six chunks that each share one
+  //     common word with the question: measured live on the lexical stack,
+  //     "How hard can a single customer hammer the API before throttling?"
+  //     came back PARTIAL with every item at ~0.15, the rewrite stayed out,
+  //     and the turn refused. Offline (mode path, plain text, 644 retrieving
+  //     turns): on the lexical stack every non-NONE miss sits below 0.3 and
+  //     there is not one miss above it (0 of 529); on the vector stack almost
+  //     no turn is below 0.3 at all, so this costs a vector user nothing.
+  //
+  // WHO may trigger it — narrowed after an adversarial review ran 18 ordinary live
+  // interview turns through the first version and the rewrite fired on 8 of them
+  // ("Can I assume the input is sorted?", "How do I handle conflict with a
+  // coworker?"), adding up to 1.5 s and a second retrieval to turns it cannot help:
+  //   · the turn must be a document LOOKUP — a DOCUMENT_FACT or JOB_* claim — not
+  //     merely carry some private claim; a behavioural question about the user has
+  //     one too, and no document vocabulary to be rewritten into;
+  //   · never a coding or system-design turn;
+  //   · "weak evidence" is judged on DOCUMENT evidence only. The transcript port
+  //     normalises its best score to 1.0 and the screen port always scores 1, so
+  //     one unrelated transcript line used to hide a weak document result — in
+  //     exactly the live meetings the trigger was written for.
+  const DOCUMENT_SOURCES: ReadonlySet<string> = new Set(['RESUME', 'JOB_DESCRIPTION', 'PROFILE_FACT', 'REFERENCE_FILE', 'PROJECT_FILE', 'CODING_SAMPLE', 'CANDIDATE_FILE']);
+  const documentEvidence = evidence.filter((e) => DOCUMENT_SOURCES.has(e.sourceType));
+  const topScore = documentEvidence.reduce((m, e) => Math.max(m, e.finalScore ?? 0), 0);
+  const weakEvidence = documentEvidence.length > 0 && answerability !== 'FULL' && topScore < LOW_CONFIDENCE_TOP_SCORE;
+  const documentLookup = decision.claimRequirements.some((c) => c.authority === 'PRIVATE_SOURCE_REQUIRED'
+    && (c.claimType === 'DOCUMENT_FACT' || String(c.claimType).startsWith('JOB_')));
+  const codingTurn = decision.questionTypes.some((t) => t === 'CODING_TASK' || t === 'SYSTEM_DESIGN');
+  // On a LIVE surface the question is an interviewer's utterance and +1.5 s is
+  // felt. There the lookup must be one the classifier itself recognised: a claim
+  // added by corpus arbitration alone also covers "Can I assume the input is
+  // sorted?" (first person → employment → document lookup), which the classifier
+  // does not know is a coding clarification. Typed chat keeps the wider trigger —
+  // it is where "Who would be my manager?" is asked, and the user is waiting anyway.
+  const liveSurface = req.surface === 'what-to-answer' || req.surface === 'meeting-overlay';
+  const classifierLookup = [...classifierClaims].some((c) => c === 'DOCUMENT_FACT' || c.startsWith('JOB_'));
+  const answerabilityBefore = answerability;
+  let queryRewrite: AnswerTrace['queryRewrite'];
+  if (req.queryRewriter && retrieval
+      && decision.retrievalPlan.shouldRetrieve
+      && (answerability === 'NONE' || weakEvidence)
+      && documentLookup && !codingTurn && (!liveSurface || classifierLookup)
+      && isRetrievalFixEnabled('lowConfidenceQueryRewrite')) {
+    let outcome: QueryRewriteOutcome;
+    try { outcome = await req.queryRewriter(decision.resolvedQuestion); }
+    catch { outcome = { query: null, reason: 'ERROR', durationMs: 0 }; }
+    let added = 0;
+    if (outcome.query) {
+      const tRewrite = clock();
+      try {
+        const rewritten = freezeTurnDecision({
+          ...decision,
+          retrievalPlan: { ...decision.retrievalPlan, queries: [outcome.query] },
+        } as never);
+        const r2 = await retrieval.retrieve({ decision: rewritten });
+        // CAPPED before it is judged (review finding): the merge used to hand 12
+        // items to answerability on a turn whose cap is 6, so support was computed
+        // over evidence the packer then dropped. Same order the packer uses.
+        const before = new Set(evidence.map((e) => e.evidenceId));
+        const merged = mergeRewrittenEvidence(evidence, r2.evidence, { maxNew: answerabilityBefore === 'NONE' ? 3 : 2 })
+          .sort((a, b) => b.finalScore - a.finalScore || a.evidenceId.localeCompare(b.evidenceId))
+          .slice(0, Math.max(1, decision.retrievalPlan.maximumAcceptedEvidence));
+        added = merged.filter((e) => !before.has(e.evidenceId)).length;
+        evidence = merged;
+        attempts = [...attempts, ...r2.attempts.map((a) => ({ ...a, strategy: `llm_query_rewrite:${a.strategy}` }))];
+        answerability = evaluateAnswerability(decision, evidence);
+      } catch { /* the first pass stands */ }
+      retrievalMs += span(tRewrite);
+    }
+    queryRewrite = {
+      reason: outcome.reason, durationMs: outcome.durationMs, queryChars: outcome.query?.length ?? 0,
+      addedEvidence: added, answerabilityBefore, answerabilityAfter: answerability,
+    };
+    // One content-free line per firing. Four live runs could not say whether the
+    // rewrite had timed out, errored or worked — the trace field is not logged.
+    console.log(`[V3] query rewrite: ${outcome.reason} in ${outcome.durationMs} ms, +${added} evidence, answerability ${answerabilityBefore} -> ${answerability}`);
+  }
 
   // A question whose required source the MODE forbids is not answerable from
   // model knowledge — that would answer a meeting question out of thin air. It
@@ -804,6 +1218,7 @@ export async function orchestrate(
     prohibitedSources: [],
     retrievalPath: decision.retrievalPlan.path,
     retrievalAttempts: attempts,
+    ...(queryRewrite ? { queryRewrite } : {}),
     acceptedEvidence: evidence.map((e) => ({
       evidenceId: e.evidenceId, sourceType: e.sourceType, sourceId: e.sourceId,
       versionId: e.versionId, scopeId: e.scopeId, finalScore: e.finalScore,
@@ -817,7 +1232,7 @@ export async function orchestrate(
       // Same support definition answerability uses (deep-test D6): the trace
       // used to carry a SECOND, authority-only notion here, so one object could
       // say DIRECT_EVIDENCE and NONE about the same claim.
-      support: evidence.some((e) => evidenceSupportsClaim(e, c.claimType, c.subject ?? decision.resolvedQuestion))
+      support: evidence.some((e) => !jobDescriptionCannotSupport(decision, e, c.claimType) && evidenceSupportsClaim(e, c.claimType, c.subject ?? decision.resolvedQuestion))
         ? 'DIRECT_EVIDENCE'
         : c.authority === 'PRIVATE_SOURCE_REQUIRED' ? 'UNSUPPORTED' : 'GENERAL_KNOWLEDGE',
       evidenceIds: evidence.filter((e) => e.acceptedFor.includes(c.claimType)).map((e) => e.evidenceId),
@@ -826,10 +1241,29 @@ export async function orchestrate(
     fallbackUsed,
     promptTokenEstimate: 0,
     latency: {
-      normalizationMs: 0, questionResolutionMs: 0, policyResolutionMs: 0, classificationMs: 0,
-      retrievalMs: 0, rerankingMs: 0, evidenceEvaluationMs: 0, promptCompositionMs: 0,
-      providerTtfbMs: 0, totalMs: t0,
+      // Measured.
+      questionResolutionMs, classificationMs, retrievalMs, evidenceEvaluationMs,
+      totalMs: span(t0),
+
+      // NOT measured, and deliberately not guessed. Each of these happens
+      // outside this function, so any number here would be invented:
+      //   normalizationMs / policyResolutionMs — inside decide(), which reports
+      //     one span; see classificationMs above.
+      //   rerankingMs      — inside the retrieval port, which does not report it.
+      //   promptCompositionMs — composePrompt runs in engine-bridge AFTER this
+      //     function returns.
+      //   providerTtfbMs   — the provider has not been called yet.
+      normalizationMs: 0, policyResolutionMs: 0, rerankingMs: 0,
+      promptCompositionMs: 0, providerTtfbMs: 0,
     },
+    // Empty, and it must STAY empty here. This trace is finalized before the
+    // prompt is composed and long before a provider is called, so there is no
+    // provider to attribute. Reading LLMHelper.lastProviderModel at this point
+    // would return the PREVIOUS turn's model — and with auto-answer running
+    // overlapping turns it would be wrong in a way that looks entirely
+    // plausible. An empty array is honest; a stale model is telemetry that
+    // lies. Provider attribution belongs to whoever observes the completed
+    // provider call, not here.
     providerAttempts: [],
     status: 'COMPLETED',
     errorCodes: [],
@@ -915,6 +1349,8 @@ export async function orchestrate(
       evidenceIds: evidence.map((e) => e.evidenceId),
       sourceIds: [...new Set(evidence.map((e) => e.sourceId))],
       decision: turnDecision,
+      // T5: what this turn planned, so a bare follow-up can inherit it.
+      plannedSourceTypes: decision.retrievalPlan.sourceTypes,
     });
   } catch { /* continuity must never break a turn */ }
 

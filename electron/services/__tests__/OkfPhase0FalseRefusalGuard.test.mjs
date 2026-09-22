@@ -130,16 +130,21 @@ test('ipcHandlers: regen is attempted at most once regardless of reason (no loop
   assert.ok(!/\bwhile\s*\(/.test(block), 'repair block must not contain a while loop');
 });
 
-test('intelligenceFlags: okfKnowledgePacks/okfMarkdownExport/okfHybridRetrieval default ON in dev/test contexts', () => {
+test('intelligenceFlags: okfKnowledgePacks/okfHybridRetrieval/okfMarkdownExport default ON everywhere', () => {
   // 2026-07-14 flag-parity repair: `default` now takes the THUNK (function
   // reference, no parens) instead of calling isInternalDevTestContext() eagerly
   // in the FLAGS object literal — a plain `default: isInternalDevTestContext()`
   // would freeze the resolved boolean at module-load time (whatever NODE_ENV
   // happened to be set then), never re-evaluating it per call. See
   // resolveFlagDefault() / the FlagSpec.default doc comment.
-  assert.match(flagsSrc, /okfKnowledgePacks: \{[^}]*default: isInternalDevTestContext\b(?!\()/);
-  assert.match(flagsSrc, /okfMarkdownExport: \{[^}]*default: isInternalDevTestContext\b(?!\()/);
-  assert.match(flagsSrc, /okfHybridRetrieval: \{[^}]*default: isInternalDevTestContext\b(?!\()/);
+  //
+  // 2026-08-30 update (user-directed override, two batches): okfKnowledgePacks
+  // and okfHybridRetrieval were promoted first; okfMarkdownExport (cosmetic
+  // export feature, low risk) was promoted in the final batch. No
+  // packaged-build validation was run for any of the three.
+  assert.match(flagsSrc, /okfKnowledgePacks: \{[^}]*default: true\b/);
+  assert.match(flagsSrc, /okfMarkdownExport: \{[^}]*default: true\b/);
+  assert.match(flagsSrc, /okfHybridRetrieval: \{[^}]*default: true\b/);
 });
 
 test('intelligenceFlags: okfGraphExpansion/okfKnowledgeUi/okfUserEditableCards default OFF', () => {

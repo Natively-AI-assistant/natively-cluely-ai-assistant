@@ -8,11 +8,6 @@ import { Disclosure } from '../ui/AccordionSection';
 import { getLicenseSnapshot, setLicenseSnapshot } from '../../lib/licenseCache';
 import { BEAT, EASE_ENTER, EASE_LEAVE, INK, SETTLE } from '../../lib/plansMotion';
 
-interface PricingProduct {
-    formattedPrice: string | null;
-    checkoutUrl: string;
-}
-
 // ─── Strong cubic-bezier easings (per emil-design-eng) ───────
 // Never use the weak default `ease` / `ease-in` for UI motion.
 const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
@@ -445,7 +440,6 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
     // this component still owns (license-key *entry* moved to the unified
     // "Natively key" card in NativelyApiSettings.tsx).
     const [errorMessage, setErrorMessage] = useState('');
-    const [pricingProducts, setPricingProducts] = useState<Record<string, PricingProduct>>({});
     // Whether the Yearly/Lifetime grid is revealed. Only consulted when
     // `collapsePricing` is set; otherwise the grid is always shown.
     const [pricingOpen, setPricingOpen] = useState(false);
@@ -546,12 +540,6 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
 
     useEffect(() => {
         refreshLicense();
-        window.electronAPI?.getNativelyPricing?.()
-            .then((res) => {
-                if (res?.ok && res.products) setPricingProducts(res.products);
-            })
-            .catch(() => {});
-
         // Listen to license status changes if the main process sends them.
         // Always re-fetch full details rather than trusting the event payload:
         // it only carries `isPremium`, not `provider`, so taking the fast path
@@ -636,12 +624,16 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
     };
 
     const openExternal = (url: string) => { (window.electronAPI as any)?.openExternal?.(url); };
-    const lifetimeProduct = pricingProducts.natively_pro_lifetime;
-    const yearlyProduct = pricingProducts.natively_pro_yearly;
-    const lifetimeUrl = lifetimeProduct?.checkoutUrl || 'https://checkout.dodopayments.com/buy/pdt_0NbHo6EnXlNPqNcZ14OTi';
-    const yearlyUrl = yearlyProduct?.checkoutUrl || 'https://checkout.dodopayments.com/buy/pdt_0NcM4QBwy0CDcPV9CXaNP';
-    const yearlyPriceText = yearlyProduct?.formattedPrice || '$30';
-    const lifetimePriceText = lifetimeProduct?.formattedPrice || '$50';
+    // Literals, because they always were. These sat behind a
+    // getNativelyPricing fetch whose /v1/pricing route exists in no version of
+    // natively-api — added 2026-05-29 in a commit named "partial" and never
+    // finished on the server — so the `||` right side won every render for
+    // three months. Both links verified live on 2026-09-08. Changing a price
+    // or a checkout link is an app release; that was already the case.
+    const lifetimeUrl = 'https://checkout.dodopayments.com/buy/pdt_0NbHo6EnXlNPqNcZ14OTi';
+    const yearlyUrl = 'https://checkout.dodopayments.com/buy/pdt_0NcM4QBwy0CDcPV9CXaNP';
+    const yearlyPriceText = '$30';
+    const lifetimePriceText = '$50';
 
     // Parse numeric prices once. Used both for the "Save N%" chip on the
     // toggle and for the live "Save $X over 3 years" copy under the

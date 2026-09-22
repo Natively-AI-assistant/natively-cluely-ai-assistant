@@ -25,7 +25,8 @@ If you're using Natively on behalf of an organisation (under a bulk or team lice
 We've designed Natively to keep as much of your data on your device as possible. In practice that means:
 
 - **Audio you capture, screen content, transcripts, notes, and meeting history are stored locally on your device** in a SQLite database. They are **not** uploaded to a Natively-operated server.
-- When you use AI or speech-to-text features, **the relevant text or audio leaves your device only to be processed by the provider you've chosen** (e.g., OpenAI, Anthropic, Google, Groq, Deepgram, ElevenLabs, Azure, IBM, Soniox, Tavily). The result comes back to your device.
+- When **Apple Speech** is selected, microphone and system audio are transcribed by Apple's on-device speech framework. The audio is not sent to Natively or a cloud speech provider. macOS may contact Apple to download the selected language's speech asset.
+- When you use a cloud AI, speech-to-text, or search feature, **the relevant text or audio leaves your device only to be processed by the provider you've chosen** (e.g., OpenAI, Anthropic, Google, Groq, Deepgram, ElevenLabs, Azure, IBM, Soniox, Tavily). The result comes back to your device.
 - For **paid products** (Natively Pro, Natively API), we **do** store a small amount of operational data on our servers — your license key, hardware identifier, plan, billing email, and quota counters. We need this to make billing and licensing actually work. We do not store the content you generate.
 - For the **Free Trial**, we additionally store anti-abuse signals (rate-limited IP, trial tokens, basic usage counters).
 - We **do not sell** your data. We **do not use your content to train AI models**. We don't use third-party analytics or marketing trackers inside the desktop app.
@@ -120,7 +121,9 @@ The data sent to a provider is **not anonymised** — transcripts and prompts co
 
 ### 4.1 Speech-to-text providers
 
-Depending on your settings, audio chunks may be sent to one of:
+**Apple Speech** and the local Whisper models process captured audio on your device. Apple Speech uses the speech assets managed by macOS; the operating system may contact Apple to download a language asset the first time it is needed, but Natively does not send captured audio to Apple for transcription.
+
+If you select a cloud speech-to-text provider instead, audio chunks may be sent to one of:
 
 - **Natively STT** (operated by us, billed via the Natively API)
 - **Google Cloud Speech-to-Text**
@@ -184,7 +187,7 @@ To function, the desktop app needs the following operating-system permissions. Y
 - **Screen Recording / Screen Capture** — to capture system audio (on macOS, this is bundled into the same permission) and to capture screen content for Vision features.
 - **Accessibility** — required on macOS for global hotkeys, window-management, and certain capture paths.
 - **Notifications** — to alert you when summaries are ready, when a session ends, etc.
-- **Network** — to call AI / STT / search providers and to verify your licence.
+- **Network** — to call AI / STT / search providers, verify your licence, and let macOS download an Apple Speech language asset when one is not already installed.
 
 We request the minimum necessary set for the features you've enabled.
 

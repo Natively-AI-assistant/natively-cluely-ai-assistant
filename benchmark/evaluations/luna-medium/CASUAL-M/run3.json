@@ -1,0 +1,273 @@
+{
+ "blind_id": "S-98ecfa8a",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 45657,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 22367,
+  "candidatesTokenCount": 1921,
+  "totalTokenCount": 30059,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 22367
+   }
+  ],
+  "thoughtsTokenCount": 5771,
+  "serviceTier": "standard"
+ },
+ "fact_count": 51,
+ "evaluation": {
+  "factual_accuracy": 3,
+  "important_information_retention": 8,
+  "hallucination_control": 9,
+  "action_item_retention": 8,
+  "decision_retention": 3,
+  "speaker_attribution": 7,
+  "numeric_accuracy": 4,
+  "entity_retention": 8,
+  "timeline_accuracy": 4,
+  "conclusion_accuracy": 2,
+  "structure": 2,
+  "conciseness": 2,
+  "readability": 2,
+  "overall_summary_quality": 3,
+  "critical_errors": [
+   "Reporting superseded values as final decisions (e.g., the October 16-19 dates, Priya booking the cabin, and the $285 split).",
+   "Listing explicitly resolved issues as open questions (e.g., whether Waffles can stay, whether to hire a private chef, and whether Priya's rota allows the dates).",
+   "Massive internal contradictions caused by listing both the initial incorrect/superseded information and the final corrected information in the same sections."
+  ],
+  "missing_important_information": [
+   "Tom's job change details (leaving Pellmark October 9th, starting at Halvorsen Logistics November 2nd)."
+  ],
+  "hallucinated_information": [],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C02",
+    "reported": "The planned stay is three nights from October 16 through October 19, subject to Priya's rota confirmation."
+   },
+   {
+    "correction_id": "C03",
+    "reported": "The agreed accommodation split is $285 each for Dan, Priya, Tom, and Mia Chen."
+   },
+   {
+    "correction_id": "C04",
+    "reported": "Priya will handle the Hearthstay booking."
+   }
+  ],
+  "not_decisions_reported_as_decided": [
+   "Priya will book the cabin using her available Hearthstay credit, subject to confirming the remaining details.",
+   "The planned stay is three nights from October 16 through October 19, subject to Priya's rota confirmation.",
+   "The agreed accommodation split is $285 each for Dan, Priya, Tom, and Mia Chen."
+  ],
+  "distractors_included": [],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "missing"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "contradicted"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "missing"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "present"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "missing"
+   },
+   {
+    "id": "F38",
+    "status": "missing"
+   },
+   {
+    "id": "F39",
+    "status": "missing"
+   },
+   {
+    "id": "F40",
+    "status": "missing"
+   },
+   {
+    "id": "F41",
+    "status": "missing"
+   },
+   {
+    "id": "F42",
+    "status": "partial"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "missing"
+   }
+  ],
+  "rationale": "The notes capture most of the important information but fail completely at synthesis. The model lists superseded values, rejected ideas, and resolved questions alongside their final, corrected counterparts, leading to massive internal contradictions. For example, the notes state that Priya will book the cabin and that Dan will book it; that the dates are Oct 16-19 and Oct 23-26; and that the chef and pet issues are unresolved open questions despite being explicitly rejected later in the call. This chronological dumping makes the notes highly confusing, repetitive, and factually unreliable."
+ }
+}

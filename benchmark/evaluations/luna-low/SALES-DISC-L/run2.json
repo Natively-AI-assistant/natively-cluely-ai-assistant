@@ -1,0 +1,344 @@
+{
+ "blind_id": "S-48c6e8da",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 79202,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 35692,
+  "candidatesTokenCount": 2275,
+  "totalTokenCount": 47896,
+  "cachedContentTokenCount": 24512,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 35692
+   }
+  ],
+  "cacheTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 24512
+   }
+  ],
+  "thoughtsTokenCount": 9929,
+  "serviceTier": "standard"
+ },
+ "fact_count": 67,
+ "evaluation": {
+  "factual_accuracy": 5,
+  "important_information_retention": 9,
+  "hallucination_control": 8,
+  "action_item_retention": 9,
+  "decision_retention": 6,
+  "speaker_attribution": 8,
+  "numeric_accuracy": 6,
+  "entity_retention": 9,
+  "timeline_accuracy": 6,
+  "conclusion_accuracy": 5,
+  "structure": 4,
+  "conciseness": 2,
+  "readability": 3,
+  "overall_summary_quality": 4,
+  "critical_errors": [
+   "Reports contradictory agent counts (120 vs 140) in the same section.",
+   "Reports contradictory Queuewise contract end dates (Dec 31 vs Aug 31).",
+   "Reports contradictory Zendesk plans (Support Professional vs needs to be confirmed).",
+   "Extreme repetition of facts across 10+ sections makes the notes bloated and difficult to read."
+  ],
+  "missing_important_information": [],
+  "hallucinated_information": [
+   "Listed 'The Queuewise contract is believed to end December 31' as an inferred action item."
+  ],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C01",
+    "reported": "Harbourline has approximately 120 agents split between Columbus and Rotterdam"
+   },
+   {
+    "correction_id": "C04",
+    "reported": "The Queuewise contract is believed to end December 31, allowing a potential overlap period. [inferred]"
+   },
+   {
+    "correction_id": "C02",
+    "reported": "Whether Harbourline is on Zendesk Suite and the exact Zendesk plan still needs to be confirmed. [open]"
+   }
+  ],
+  "not_decisions_reported_as_decided": [
+   "Override reporting may be configured at team level rather than per-agent level as a potential way to address the Dutch works-council concern.",
+   "Initial rollout can use a high confidence threshold so only higher-confidence tickets are auto-routed and lower-confidence tickets go to human triage."
+  ],
+  "distractors_included": [],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "contradicted"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "contradicted"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "partial"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "partial"
+   },
+   {
+    "id": "F18",
+    "status": "contradicted"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "partial"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "present"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "partial"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "partial"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "partial"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "partial"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "partial"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "present"
+   },
+   {
+    "id": "F57",
+    "status": "partial"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "partial"
+   },
+   {
+    "id": "F60",
+    "status": "partial"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   },
+   {
+    "id": "F62",
+    "status": "present"
+   },
+   {
+    "id": "F63",
+    "status": "present"
+   },
+   {
+    "id": "F64",
+    "status": "present"
+   },
+   {
+    "id": "F65",
+    "status": "partial"
+   },
+   {
+    "id": "F66",
+    "status": "present"
+   },
+   {
+    "id": "F67",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture almost all the important information from the transcript, resulting in a high retention score. However, the structure and conciseness are extremely poor, with the same facts repeated across 10+ different sections, making the notes bloated and difficult to read. Furthermore, the notes contain several internal contradictions by reporting both the initial superseded values (120 agents, Dec 31 Queuewise end date, Zendesk plan unconfirmed) and their corrected values as current facts in different sections. A few suggestions were also incorrectly logged as firm decisions."
+ }
+}

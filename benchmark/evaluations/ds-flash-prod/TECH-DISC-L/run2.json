@@ -1,0 +1,349 @@
+{
+ "blind_id": "S-03b4fe6a",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 70375,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 36354,
+  "candidatesTokenCount": 2448,
+  "totalTokenCount": 47106,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 36354
+   }
+  ],
+  "thoughtsTokenCount": 8304,
+  "serviceTier": "standard"
+ },
+ "fact_count": 69,
+ "evaluation": {
+  "factual_accuracy": 6,
+  "important_information_retention": 9,
+  "hallucination_control": 8,
+  "action_item_retention": 8,
+  "decision_retention": 8,
+  "speaker_attribution": 7,
+  "numeric_accuracy": 9,
+  "entity_retention": 9,
+  "timeline_accuracy": 8,
+  "conclusion_accuracy": 7,
+  "structure": 4,
+  "conciseness": 3,
+  "readability": 4,
+  "overall_summary_quality": 4,
+  "critical_errors": [
+   "Reported a cancelled action item (Ravi's Kafka spike plan) as an active action item.",
+   "Reported a reassigned action item (RabbitMQ upgrade) under the original owner (Ravi) as well as the new owner (Pam).",
+   "Reported a superseded tentative decision (migrate to Kafka) as a decision.",
+   "Summary bullets are cut off mid-sentence."
+  ],
+  "missing_important_information": [
+   "The time the backlog peaked (16:40).",
+   "The times the backlog drained (18:35) and the incident was resolved (19:12)."
+  ],
+  "hallucinated_information": [
+   "Assigned ownership of the outbox pattern SELECT FOR UPDATE SKIP LOCKED to Ravi (Ravi suggested it, but Joaquin owns the outbox pattern implementation)."
+  ],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C08",
+    "reported": "Tentatively agreed the direction is to migrate the notification pipeline to Kafka on MSK before the October 23rd code freeze. (owner: Me)"
+   },
+   {
+    "correction_id": "C09",
+    "reported": "Ravi: Take the RabbitMQ upgrade from 3.11.9 to 3.13.7 and migrate notifications.v2 to quorum queues with a delivery limit of 5."
+   },
+   {
+    "correction_id": "C11",
+    "reported": "Ravi: Write up a two-week spike plan for the Kafka consumer — a prototype of notif-worker reading from MSK with the retry topics."
+   }
+  ],
+  "not_decisions_reported_as_decided": [
+   "Tentatively agreed the direction is to migrate the notification pipeline to Kafka on MSK before the October 23rd code freeze."
+  ],
+  "distractors_included": [
+   "Extensive inclusion of the back-and-forth debate that was later resolved, making the notes overly verbose."
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "partial"
+   },
+   {
+    "id": "F08",
+    "status": "partial"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "present"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "missing"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "present"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "contradicted"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "present"
+   },
+   {
+    "id": "F57",
+    "status": "present"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "present"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   },
+   {
+    "id": "F62",
+    "status": "present"
+   },
+   {
+    "id": "F63",
+    "status": "present"
+   },
+   {
+    "id": "F64",
+    "status": "present"
+   },
+   {
+    "id": "F65",
+    "status": "present"
+   },
+   {
+    "id": "F66",
+    "status": "present"
+   },
+   {
+    "id": "F67",
+    "status": "present"
+   },
+   {
+    "id": "F68",
+    "status": "present"
+   },
+   {
+    "id": "F69",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture almost all the important information from the transcript, but they suffer from severe structural and factual issues due to duplication. The model generated duplicate sections (e.g., 'Action items' and 'Action items (structured)'), leading to extreme repetition. Crucially, this duplication caused superseded values to be reported as final: Ravi is listed as owning the RabbitMQ upgrade (which was reassigned to Pam), Ravi's cancelled Kafka spike plan is listed as an active action item, and the tentative decision to migrate to Kafka is listed as a final decision alongside the actual decision to stay on RabbitMQ. The summary bullets are also cut off mid-sentence. These contradictions and structural failures significantly reduce the usability of the notes."
+ }
+}

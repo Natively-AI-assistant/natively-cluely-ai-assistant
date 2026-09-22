@@ -1,0 +1,280 @@
+{
+ "blind_id": "S-ffcbc059",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 56985,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 22281,
+  "candidatesTokenCount": 1957,
+  "totalTokenCount": 30761,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 22281
+   }
+  ],
+  "thoughtsTokenCount": 6523,
+  "serviceTier": "standard"
+ },
+ "fact_count": 51,
+ "evaluation": {
+  "factual_accuracy": 3,
+  "important_information_retention": 8,
+  "hallucination_control": 8,
+  "action_item_retention": 4,
+  "decision_retention": 4,
+  "speaker_attribution": 5,
+  "numeric_accuracy": 4,
+  "entity_retention": 8,
+  "timeline_accuracy": 2,
+  "conclusion_accuracy": 3,
+  "structure": 6,
+  "conciseness": 2,
+  "readability": 4,
+  "overall_summary_quality": 3,
+  "critical_errors": [
+   "Reporting superseded dates (Oct 16-19) as planned decisions.",
+   "Reporting superseded booking owner (Priya) as an action item.",
+   "Reporting superseded cost split ($285 each) as a decision.",
+   "Reporting resolved questions (Waffles allowed, private chef, departure time) as open questions.",
+   "Misattributing the $190 payment at the end of the call (stating Dan pays Priya instead of Priya paying Dan)."
+  ],
+  "missing_important_information": [
+   "Maya's work presentation on the 16th.",
+   "Ridgeway SUVs cost ~$64/day.",
+   "Halvorsen is hybrid and will pay for CFA level 2.",
+   "Dan's rent going up $200/mo, apartment hunting."
+  ],
+  "hallucinated_information": [
+   "A 'separate $190 amount' that Dan must pay Priya (this was a misinterpretation of Priya confirming she will pay Dan)."
+  ],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C02",
+    "reported": "The planned trip dates are Friday, October 16th through Monday, October 19th, for three nights."
+   },
+   {
+    "correction_id": "C03",
+    "reported": "leaving four paying people to split the corrected total of $1,140 at $285 each."
+   },
+   {
+    "correction_id": "C04",
+    "reported": "Priya: Book Heron Point Cabin using the available Hearthstay credit"
+   },
+   {
+    "correction_id": "C06",
+    "reported": "The Friday departure time remains unresolved after Tom suggested 8 a.m."
+   }
+  ],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "contradicted"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "missing"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "partial"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "contradicted"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "contradicted"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "contradicted"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "missing"
+   },
+   {
+    "id": "F24",
+    "status": "contradicted"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "contradicted"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "contradicted"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "missing"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "missing"
+   },
+   {
+    "id": "F42",
+    "status": "partial"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes suffer from a severe failure to synthesize the final state of the meeting. By capturing the discussion chronologically without resolving changes, the notes present superseded values (dates, costs, booking owner) as final decisions and action items, while simultaneously listing the actual final decisions elsewhere. Resolved issues (pets, private chef, departure time) are listed as open questions. Additionally, there is a misattribution where Dan is assigned to pay Priya $190 instead of the reverse. This results in a highly contradictory, repetitive, and confusing document."
+ }
+}

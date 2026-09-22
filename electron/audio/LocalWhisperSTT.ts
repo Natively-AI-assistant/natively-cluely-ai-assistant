@@ -49,7 +49,55 @@ import { clearLoadSentinel, modelPreloader, writeLoadSentinel } from './whisper/
 import { buildWorkerInitMessage } from './whisper/inferenceConfig';
 import { resolveWhisperWorkerPath } from './whisper/workerPathResolver';
 import type { WorkerOutMessage } from './whisper/types';
-import { acquireOnnxSlot, hasEnoughMemoryForOnnxSession, getMinFreeGBForOnnxSession } from '../utils/onnxThreadConfig';
+import { acquireOnnxSlotWithin, hasEnoughMemoryForOnnxSession, getMinFreeGBForOnnxSession } from '../utils/onnxThreadConfig';
+
+/**
+ * Cold-start deadline for the local model worker's `ready`. Live-reproduced
+ * 2026-09-11: the second per-channel parakeet worker on a memory-constrained
+ * Mac logged "Loading …" and then nothing, for minutes — every VAD segment
+ * queued in pendingAudio, the channel transcribed nothing, and the only
+ * symptom was "No speech detected". Env-overridable so tests can shorten it.
+ */
+const WORKER_READY_TIMEOUT_MS = (() => {
+    const n = Number(process.env.NATIVELY_LOCAL_STT_READY_TIMEOUT_MS);
+    return Number.isFinite(n) && n > 0 ? n : 120_000;
+})();
+/** Log once at this point so a slow (but progressing) load is visible in the log. */
+const WORKER_SLOW_LOAD_WARN_MS = 30_000;
+
+/**
+ * Marker main.ts uses to classify a local-STT start failure as TERMINAL
+ * (state 'failed', message shown) instead of a retryable network blip that
+ * leaves the channel on "STT reconnecting" forever — nothing restarts a
+ * LocalWhisperSTT instance mid-meeting.
+ */
+export const LOCAL_STT_UNAVAILABLE_CODE = 'local_stt_unavailable';
+function markLocalSttUnavailable(err: unknown): Error {
+    const e = err instanceof Error ? err : new Error(String(err));
+    (e as any).code = LOCAL_STT_UNAVAILABLE_CODE;
+    return e;
+}
+
+/**
+ * The ONNX memory floor refused this start. TERMINAL, like the other start
+ * failures above: the instance tears itself down and nothing restarts it, so a
+ * bare Error (which main.ts files as retryable) left the overlay on
+ * "STT reconnecting" for the whole meeting with nothing reconnecting
+ * (live-reproduced 2026-09-21 on both channels).
+ *
+ * Wording is deliberately OS-neutral and network-free: this runs identically on
+ * macOS and Windows, and a local engine has no connection to check. It must keep
+ * the phrase "insufficient available memory" (pinned by
+ * LocalWhisperSpawnFailTeardown2026_07_10) and must NOT contain "unavailable",
+ * which sttErrorMapper titles "Service Unavailable ... Trying to reconnect".
+ */
+function localSttMemoryRefusal(): Error {
+    const heapGB = (process.memoryUsage().heapUsed / 1024 ** 3).toFixed(1);
+    return markLocalSttUnavailable(new Error(
+        `Local STT could not start: insufficient available memory (under ${getMinFreeGBForOnnxSession()}GB free, app heap ${heapGB}GB). ` +
+        `Close other apps to free memory, choose a smaller local model, or use a cloud STT provider.`,
+    ));
+}
 import { resolveNemotronLangId } from './whisper/nemotron/languageTable';
 import { acquireSharedNemotronWorker } from './whisper/nemotron/sharedWorkerRegistry';
 // The engine's fixed audio window. Imported rather than duplicated as a local
@@ -99,11 +147,19 @@ export class LocalWhisperSTT extends EventEmitter {
     // when both LocalWhisperSTT instances run the same model.
     private channelLabel = '';
     private worker: Worker | null = null;
+    // Cold-start readiness deadline — see WORKER_READY_TIMEOUT_MS.
+    private workerReadyTimer: NodeJS.Timeout | null = null;
+    // Bumped by every spawn and every stop(): a slot wait that settles after
+    // stop() (or after a restart) must neither spawn an orphan worker nor
+    // tear down the NEXT session with its stale rejection.
+    private spawnGeneration = 0;
+    private workerSlowLoadTimer: NodeJS.Timeout | null = null;
+    private workerSpawnedAt = 0;
     private vad: VadProcessor | null = null;
     private isActive = false;
     // Cross-loader ONNX gate slot. Acquired in spawnWorker() before posting
     // init; released in worker error/exit handlers so other ONNX consumers
-    // (LocalReranker / LocalEmbeddingProvider / IntentClassifier) can take
+    // (LocalReranker / LocalEmbeddingProvider) can take
     // the slot promptly. Whisper uses priority 'high' so its streaming loop
     // acquires before queued normal-priority consumers.
     private slotRelease: (() => void) | null = null;
@@ -115,6 +171,8 @@ export class LocalWhisperSTT extends EventEmitter {
     // streaming partials are never queued (they're best-effort and only fire
     // while a segment is open AND the worker is ready).
     private pendingAudio: Array<{ audio: Float32Array; nemotronReset: boolean }> = [];
+    /** Workers whose termination WE requested — their non-zero exit is not a crash. */
+    private expectedWorkerExits = new WeakSet<Worker>();
 
     // nemotron-rnnt only: how many samples of the CURRENT open VAD segment have
     // already been sent to the (stateful) worker engine. Reset to 0 at every
@@ -198,6 +256,8 @@ export class LocalWhisperSTT extends EventEmitter {
     private readonly skipAgreement: boolean;
     private static readonly STREAMING_INTERVAL_MAX_MS = 12000;
     private static readonly MAX_SEGMENT_MS = 14000;       // soft-commit before VAD's 15s hard-flush
+    /** How long a cold start may wait for a shared ONNX session before failing loudly. */
+    private static readonly ONNX_SLOT_WAIT_MS = 20_000;
     // Backoff: count consecutive ticks where we couldn't dispatch (worker
     // busy or no open segment with enough audio). After 3 in a row, double
     // the next delay; reset to base on a successful dispatch.
@@ -448,6 +508,8 @@ export class LocalWhisperSTT extends EventEmitter {
     stop(): void {
         if (!this.isActive) return;
         this.isActive = false;
+        this.spawnGeneration++;
+        this.clearWorkerReadyDeadline();
 
         this.stopStreamingLoop();
         if (this.gapFlushTimer) {
@@ -547,10 +609,18 @@ export class LocalWhisperSTT extends EventEmitter {
         }, LocalWhisperSTT.GAP_FLUSH_MS);
     }
 
-    finalize(): void {
-        if (!this.isActive || !this.vad) return;
+    /**
+     * Flush the open VAD segment as a final. Returns true when a final is now
+     * IN FLIGHT (flushed here, or still queued behind a loading worker) — the
+     * Answer/Stop tail wait uses it to keep the recording gate open for the
+     * seconds a local model needs, instead of the short grace it gives a
+     * channel with nothing pending.
+     */
+    finalize(): boolean {
+        if (!this.isActive || !this.vad) return false;
         const segs = this.vad.flush();
         segs.forEach(s => this.dispatchFinal(s.samples));
+        return segs.length > 0 || this.pendingAudio.length > 0;
     }
 
     /* ──────────────── Streaming inference loop ──────────────── */
@@ -976,12 +1046,7 @@ export class LocalWhisperSTT extends EventEmitter {
             // warm-worker path is also skipped entirely for Nemotron (see
             // modelPreloader.preload's own Nemotron guard) so there is never
             // a warm worker to take here in the first place.
-            if (!hasEnoughMemoryForOnnxSession()) {
-                const heapGB = (process.memoryUsage().heapUsed / 1024 ** 3).toFixed(1);
-                throw new Error(
-                    `[LocalWhisperSTT] insufficient available memory (<${getMinFreeGBForOnnxSession()}GB) — Whisper init refused (heaped=${heapGB}GB)`,
-                );
-            }
+            if (!hasEnoughMemoryForOnnxSession()) throw localSttMemoryRefusal();
             const channelId = this.channelLabel || `nemotron-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
             this.nemotronChannelId = channelId;
             const initMsg = buildWorkerInitMessage(this.modelId);
@@ -1074,14 +1139,39 @@ export class LocalWhisperSTT extends EventEmitter {
         // Cold path. Acquire the shared ONNX slot at HIGH priority — Whisper
         // is latency-critical (~750ms real-time streaming) and would deadlock
         // behind a queued embedding batch.
-        if (!hasEnoughMemoryForOnnxSession()) {
-            const heapGB = (process.memoryUsage().heapUsed / 1024 ** 3).toFixed(1);
-            throw new Error(
-                `[LocalWhisperSTT] insufficient available memory (<${getMinFreeGBForOnnxSession()}GB) — Whisper init refused (heaped=${heapGB}GB)`,
-            );
-        }
+        if (!hasEnoughMemoryForOnnxSession()) throw localSttMemoryRefusal();
 
-        this.slotRelease = await acquireOnnxSlot('high', 1);
+        // Bounded: an unbounded wait here was a silent dead channel — the local
+        // embedding + reranker workers hold the whole default gate (cap 2) for
+        // the app lifetime, so this never resolved and nothing was logged.
+        // The rejection propagates to start()'s spawnWorker catch, which tears
+        // the instance down and emits 'error' so main shows an STT failure.
+        const generation = ++this.spawnGeneration;
+        // A preload that is still loading (or warm for a model this channel
+        // cannot take) must not hold the slot this LIVE channel needs.
+        modelPreloader.yieldUnclaimedWorkerIfStarving();
+        let slotRelease: () => void;
+        try {
+            slotRelease = await acquireOnnxSlotWithin(
+                'high',
+                1,
+                LocalWhisperSTT.ONNX_SLOT_WAIT_MS,
+                `LocalWhisperSTT/${this.channelLabel}`,
+            );
+        } catch (err) {
+            // A rejection that lands after stop() / a restart belongs to a
+            // session that no longer exists — swallowing it is correct; the
+            // live session has its own wait.
+            if (generation !== this.spawnGeneration || !this.isActive) return;
+            throw markLocalSttUnavailable(err);
+        }
+        if (generation !== this.spawnGeneration || !this.isActive) {
+            // stop() ran while we waited: hand the slot straight back instead
+            // of spawning a worker nothing will ever stop.
+            slotRelease();
+            return;
+        }
+        this.slotRelease = slotRelease;
 
         console.log(`[LocalWhisperSTT] Cold-starting worker for ${this.modelId}`);
         const workerPath = resolveWhisperWorkerPath();
@@ -1089,10 +1179,76 @@ export class LocalWhisperSTT extends EventEmitter {
         this.worker = new Worker(workerPath);
         this.attachWorkerListeners();
         this.worker.postMessage(buildWorkerInitMessage(this.modelId));
+        this.armWorkerReadyDeadline();
+    }
+
+    private armWorkerReadyDeadline(): void {
+        this.workerSpawnedAt = Date.now();
+        this.scheduleWorkerReadyTimers();
+    }
+
+    /** (Re)schedules the deadline without touching workerSpawnedAt — a worker
+     *  'progress' message proves the load is alive, so the deadline restarts. */
+    private scheduleWorkerReadyTimers(): void {
+        this.clearWorkerReadyDeadline();
+        const label = this.channelLabel || 'stt';
+        this.workerSlowLoadTimer = setTimeout(() => {
+            this.workerSlowLoadTimer = null;
+            if (this.workerReady || !this.isActive) return;
+            console.warn(
+                `[LocalWhisperSTT/${label}] worker for ${this.modelId} still loading after ${WORKER_SLOW_LOAD_WARN_MS / 1000}s — ` +
+                `${this.pendingAudio.length} segment(s) queued, nothing transcribed yet on this channel`,
+            );
+        }, WORKER_SLOW_LOAD_WARN_MS);
+        (this.workerSlowLoadTimer as any).unref?.();
+        this.workerReadyTimer = setTimeout(() => {
+            this.workerReadyTimer = null;
+            if (this.workerReady || !this.isActive) return;
+            const waitedMs = Date.now() - this.workerSpawnedAt;
+            const queued = this.pendingAudio.length;
+            console.error(
+                `[LocalWhisperSTT/${label}] worker for ${this.modelId} not ready after ${waitedMs}ms — giving up on this channel ` +
+                `(${queued} queued segment(s) dropped)`,
+            );
+            // Same clean teardown as start()'s spawnWorker catch: no live VAD or
+            // streaming loop may outlive a worker that will never answer.
+            this.stopStreamingLoop();
+            if (this.gapFlushTimer) {
+                clearTimeout(this.gapFlushTimer);
+                this.gapFlushTimer = null;
+            }
+            this.vad = null;
+            this.isActive = false;
+            this.pendingAudio = [];
+            const w = this.worker;
+            if (w) this.beginWorkerTermination(w);
+            // A graceful give-up is not a native crash: leave the sentinel in
+            // place and the next launch would "recover" by silently resetting
+            // the user's model to the fallback.
+            clearLoadSentinel(this.modelId);
+            // It IS a load failure, though: keep the next launch from preloading
+            // a model that just took longer than the whole deadline. This used to
+            // happen by accident (terminate() exits non-zero and every non-zero
+            // exit was recorded); requested exits are no longer recorded, so say
+            // it here on purpose.
+            modelPreloader.recordLoadFailure(this.modelId);
+            this.emit('error', markLocalSttUnavailable(new Error(
+                `Local STT model ${this.modelId} did not finish loading within ${Math.round(WORKER_READY_TIMEOUT_MS / 1000)}s ` +
+                `on the ${label} channel — nothing from this channel was transcribed. ` +
+                `Choose a smaller local model or a cloud STT provider.`,
+            )));
+        }, WORKER_READY_TIMEOUT_MS);
+        (this.workerReadyTimer as any).unref?.();
+    }
+
+    private clearWorkerReadyDeadline(): void {
+        if (this.workerReadyTimer) { clearTimeout(this.workerReadyTimer); this.workerReadyTimer = null; }
+        if (this.workerSlowLoadTimer) { clearTimeout(this.workerSlowLoadTimer); this.workerSlowLoadTimer = null; }
     }
 
     private attachWorkerListeners(): void {
         if (!this.worker) return;
+        const attachedWorker = this.worker;
 
         const messageHandler = (msg: WorkerOutMessage) => {
             // Dual-channel Nemotron: this worker may be SHARED with another
@@ -1112,8 +1268,22 @@ export class LocalWhisperSTT extends EventEmitter {
                     return;
                 }
             }
+            if ((msg as any).type === 'progress') {
+                // The load is alive (per-file download / parse progress) —
+                // a slow but progressing init must not be killed by the deadline.
+                if (!this.workerReady && this.workerReadyTimer) this.scheduleWorkerReadyTimers();
+                return;
+            }
             if (msg.type === 'ready') {
                 clearLoadSentinel(this.modelId);
+                this.clearWorkerReadyDeadline();
+                if (this.workerSpawnedAt > 0) {
+                    console.log(
+                        `[LocalWhisperSTT/${this.channelLabel || 'stt'}] worker ready in ${Date.now() - this.workerSpawnedAt}ms ` +
+                        `(${this.pendingAudio.length} queued segment(s) flushing)`,
+                    );
+                    this.workerSpawnedAt = 0;
+                }
                 this.workerReady = true;
                 this.flushPending();
                 return;
@@ -1232,7 +1402,12 @@ export class LocalWhisperSTT extends EventEmitter {
                         }
                     }
 
-                    this.emit('error', new Error(
+                    // TERMINAL, all three: nothing restarts a LocalWhisperSTT, and each
+                    // message tells the user what to do. Emitted as a bare Error this was
+                    // filed by main under "retryable" and the overlay read "STT
+                    // reconnecting" for the rest of the meeting (reproduced 2026-09-21 with
+                    // a profile whose selected model was missing, then purged).
+                    this.emit('error', markLocalSttUnavailable(new Error(
                         isOnnxSymbolError
                             ? 'Local Whisper is not supported on macOS 12 (Monterey) or earlier. Please upgrade to macOS 13 Ventura or later, or use a cloud STT provider.'
                             // The old copy said "model not found" for this case, which was
@@ -1242,13 +1417,16 @@ export class LocalWhisperSTT extends EventEmitter {
                             : purged
                                 ? 'The local model files were incomplete and have been removed. Please reinstall the model in Settings → Audio.'
                                 : 'Local Whisper model not found. Please download a model in Settings → Audio.'
-                    ));
+                    )));
                 }
             }
         };
         this.worker.on('message', messageHandler);
 
         const errorHandler = (err: Error) => {
+            // A worker that died during load must not also fire the ready
+            // deadline 120s later against a dead handle.
+            this.clearWorkerReadyDeadline();
             // Reset all in-flight streaming state so a dead worker can never
             // permanently pin streamingTaskInFlight=true (which would freeze
             // the loop — symptom: transcription stops after 3-4 questions).
@@ -1297,7 +1475,16 @@ export class LocalWhisperSTT extends EventEmitter {
         // including the 'error' path above. If the worker is gone, the
         // streaming loop must be unblocked — otherwise streamingTaskInFlight
         // stays true and the next tick silently stalls forever.
+        // A termination we asked for is not a crash. node:worker_threads exits with
+        // code 1 for ANY terminate(), so every clean stop() used to be recorded as a
+        // model LOAD FAILURE (persisted 5-minute preload cooldown; live-reproduced
+        // 2026-09-21). It also fires up to 5s late, when `this.slotRelease` /
+        // `workerReady` / the ready deadline may already belong to the session that
+        // REPLACED this worker — so a requested exit touches no instance state at
+        // all; beginWorkerTermination already did this worker's cleanup.
         const exitHandler = (code: number) => {
+            if (this.expectedWorkerExits.has(attachedWorker)) return;
+            this.clearWorkerReadyDeadline();
             if (code === 0) {
                 clearLoadSentinel(this.modelId);
                 return; // clean shutdown
@@ -1316,10 +1503,32 @@ export class LocalWhisperSTT extends EventEmitter {
             // dead worker means dispatched-but-unprocessed audio, and a
             // stale cursor mis-slices the segment's final dispatch.
             if (this.isNemotronModel) this.nemotronSentSamples = 0;
-            if (hadInFlight) {
-                this.emit('error', new Error(
-                    `Local Whisper worker exited unexpectedly (code=${code}) — transcription stream has been unblocked.`
-                ));
+            // A LIVE session just lost its worker, and nothing restarts one. This
+            // used to surface only `if (hadInFlight)`: a worker that died while idle
+            // (between utterances) emitted NOTHING, `worker` kept pointing at the
+            // dead handle with workerReady=false, and every later segment queued in
+            // pendingAudio for a 'ready' that could never come — 0 transcripts and 0
+            // errors for the rest of the meeting (reproduced 2026-09-21: three full
+            // utterances, 110s, silence). Tear down to the same clean inactive no-op
+            // as the other terminal paths and say so, terminally: "reconnecting"
+            // would be a lie here too.
+            if (this.isActive) {
+                const label = this.channelLabel || 'stt';
+                this.stopStreamingLoop();
+                if (this.gapFlushTimer) {
+                    clearTimeout(this.gapFlushTimer);
+                    this.gapFlushTimer = null;
+                }
+                this.vad = null;
+                this.isActive = false;
+                this.pendingAudio = [];
+                this.worker = null;
+                console.error(`[LocalWhisperSTT/${label}] worker exited unexpectedly (code=${code}, inFlight=${hadInFlight}) — channel stopped`);
+                this.emit('error', markLocalSttUnavailable(new Error(
+                    `The local STT engine stopped unexpectedly on the ${label} channel (worker exited unexpectedly, code=${code}) — ` +
+                    `nothing further will be transcribed on it. End and restart the meeting; if it keeps happening, ` +
+                    `choose a smaller local model or use a cloud STT provider.`,
+                )));
             }
         };
         this.worker.on('exit', exitHandler);
@@ -1353,6 +1562,7 @@ export class LocalWhisperSTT extends EventEmitter {
     }
 
     private beginWorkerTermination(w: Worker): void {
+        this.clearWorkerReadyDeadline();
         this.worker = null;
         this.workerReady = false;
         this.isDrainingFinals = false;
@@ -1403,6 +1613,7 @@ export class LocalWhisperSTT extends EventEmitter {
         // LocalWhisperSTT instance or the registry, so indiscriminate
         // removal is correct and simplest here — unchanged from before this
         // fix.
+        this.expectedWorkerExits.add(w);
         w.removeAllListeners('message');
         w.removeAllListeners('error');
         if (this.workerTerminateTimer) clearTimeout(this.workerTerminateTimer);

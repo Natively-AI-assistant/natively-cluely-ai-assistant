@@ -18,7 +18,19 @@
 
 import type { QuestionType, ClaimType, RetrievalPath, SourceType } from '../contracts/types';
 import type { ModePolicy } from '../policies/mode-policy-registry';
-import { CLAIM_AUTHORITY } from '../policies/source-authority-policy';
+import { CLAIM_AUTHORITY, claimAuthority } from '../policies/source-authority-policy';
+import { isRetrievalFixEnabled } from '../contracts/retrieval-flags';
+
+// T2's kill switch, read PER CALL. A module-level `const on = isRetrievalFix…()`
+// would freeze whatever the environment happened to be at import time, which is
+// the exact drift `FlagSpec.default`'s docblock in intelligenceFlags.ts warns
+// about — and it would make the flag untestable from a test that sets the env
+// var after importing this module. This module stays synchronous and
+// deterministic given its inputs; the env var is one of them.
+const tokenFramingOn = (): boolean => isRetrievalFixEnabled('classifierTokenFraming');
+/** Pre-T2 behaviour, kept verbatim so the flag-off path is byte-for-byte legacy. */
+const LEGACY_MEETING_EVENT_NOUN_RE = /\b(standup|sync)\b/;
+const LEGACY_CANDIDATE_PERSON_RE = /\b(the candidate|candidate'?s?)\b/;
 
 export interface ClassificationInput {
   resolvedQuestion: string;
@@ -41,6 +53,29 @@ export interface ClassificationInput {
    * formula lookup. Names only, never content.
    */
   attachedFileNames?: readonly string[];
+  /** Corpus arbitration verdict (orchestrator → RetrievalPort.probeAnchors):
+   *  a chunk of the attached material holds this question's distinctive terms. */
+  corpusAnchored?: boolean;
+  /** Source types whose own chunks hold this question's distinctive terms
+   *  (orchestrator → RetrievalPort.probeAnchorSources). */
+  anchoredSourceTypes?: readonly SourceType[];
+  /** The turn's ONLY documents are Profile Intelligence ones (résumé / job
+   *  description): no file is attached to the mode. A POSITIVE signal, computed
+   *  by the engine bridge from the two source counts. It is deliberately not
+   *  inferred from a missing `attachedFileNames` — callers may omit that field
+   *  while files ARE attached, and the first cut that inferred it broke the
+   *  narrowing for exactly that case (ModeAttachmentAdmission2026_09_07). */
+  profileOnlyDocuments?: boolean;
+  /**
+   * The turn is happening inside a live meeting with transcript evidence
+   * available (issue #552). True when resolveMeetingEvidence() actually built
+   * at least one meeting port for this turn — never merely "the mode allows
+   * MEETING_TRANSCRIPT". Lets an unclassified factual question in a
+   * document-primary mode (General) claim the transcript as an ALTERNATIVE
+   * to its primary source, the way the deleted typed-chat RAG pre-flight
+   * used to.
+   */
+  inLiveMeeting?: boolean;
 }
 
 export interface Classification {
@@ -51,9 +86,14 @@ export interface Classification {
    *  a Kubernetes claim in "tell me about your WebRTC project and your
    *  Kubernetes experience". */
   claimClauses: Partial<Record<ClaimType, string>>;
+  /** Claims guessed from the mode's primary source rather than made by the question's grammar. */
+  inferredClaimTypes?: ClaimType[];
   path: RetrievalPath;
   shouldRetrieve: boolean;
   requiredSourceTypes: SourceType[];
+  /** The question asks for EVERY occurrence across the material — see
+   *  RetrievalPlan.exhaustive. */
+  exhaustive: boolean;
   /**
    * The question needs a source the ACTIVE MODE does not authorize.
    *
@@ -73,7 +113,159 @@ export interface Classification {
   reason: string;
 }
 
-const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+// STT fillers and stutters are stripped BEFORE any rule sees the question
+// (2026-09-07, measured in a 1,000-turn live campaign): "What is erm the erm
+// basically period for churn pct?" went GENERAL_TECHNICAL → FAST while the clean
+// "What is the period for churn pct?" was a document lookup, because the
+// definite-value patterns look for "what is the <noun>". Live transcripts
+// arrive like this on every turn. Only unambiguous fillers are removed ("like",
+// "so", "right" are real words too); an immediately repeated word ("the the",
+// "5 5") collapses to one.
+const FILLER_RE = /\b(?:um+|uh+|uhm|erm+|hmm+|hm+|arh+|ah+|er+|basically|you know|i mean)\b[,]?\s*/g;
+const STUTTER_RE = /\b(\w+)(?:\s+\1\b)+/g;
+// "right", "okay", "so", "like", "you know" are real words, so they are only
+// fillers when WEDGED between a function word and what it governs: "what is
+// right the annual discount pct", "for okay so proposal, what is the acv"
+// (2026-09-08, measured: the first went FAST and the sales persona invented a
+// 20 percent discount over a file that says 12).
+const MID_FILLER_RE = /\b(is|are|was|were|what|which|how|does|did|do|for|about|of|in|on|to|the)\s+(?:(?:right|okay|ok|so|like|you know|i mean)[,\s]+)+(?=[a-z0-9$])/gi;
+// Transcriber spellings of things people SAY as letters or symbols
+// (2026-09-08, measured): "queue two 2026" for Q2 2026, "p ninety five" for
+// p95, "n d c g" for nDCG. The files hold the written form; the model was told
+// "queue two" is not a term in any file. Canonicalised once, here.
+type SttReplacer = string | ((match: string, ...groups: string[]) => string);
+const QUARTER_WORDS: Record<string, string> = { one: '1', two: '2', three: '3', four: '4' };
+const STT_CANON: ReadonlyArray<[RegExp, SttReplacer]> = [
+  [/\bqueue\s+(one|two|three|four|1|2|3|4)\b/gi, (_m: string, n: string) => 'Q' + (QUARTER_WORDS[n.toLowerCase()] ?? n)],
+  [/\bp\s+(?:fifty|50)\b/gi, 'p50'], [/\bp\s+(?:ninety\s+five|95)\b/gi, 'p95'], [/\bp\s+(?:ninety\s+nine|99)\b/gi, 'p99'], [/\bp\s+(?:ninety|90)\b/gi, 'p90'],
+  [/\bn\s+d\s+c\s+g\b/gi, 'nDCG'], [/\bm\s+r\s+r\b/gi, 'MRR'], [/\bs\s+l\s+a\b/gi, 'SLA'], [/\ba\s+p\s+i\b/gi, 'API'], [/\ba\s+r\s+r\b/gi, 'ARR'],
+  [/\bg\s+p\s+u\b/gi, 'GPU'], [/\bo\s+k\s+r\b/gi, 'OKR'], [/\bs\s+o\s+w\b/gi, 'SOW'], [/\bj\s+d\b/gi, 'JD'], [/\bbat\s+na\b/gi, 'BATNA'], [/\bL\s+([3-7])\b/g, 'L$1'],
+];
+// Spoken identifiers (2026-09-10, measured in a live interview simulation):
+// "DEBUG two oh six" for DEBUG-206, "ARCH one oh four" for ARCH-104,
+// "incident twenty six oh one" for INC-2601. The transcript carries the digits
+// as words; the files carry them as digits; neither the lexical arm nor the
+// question ever matched, and the answer opened with "There's no DEBUG 206
+// record in what I have here". Only a digit-word run that FOLLOWS an
+// identifier-shaped token (letters, or the words number/ticket/incident/issue/
+// item/case/question/step/section/version/page/chapter/round/level) is
+// rewritten, so "I have two kids" and "the two of us" are untouched.
+const DIGIT_WORD: Record<string, string> = {
+  oh: '0', zero: '0', one: '1', two: '2', three: '3', four: '4', five: '5', six: '6', seven: '7', eight: '8', nine: '9',
+};
+const TEEN_WORD: Record<string, number> = {
+  ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19,
+};
+const TENS_WORD: Record<string, number> = { twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90 };
+const NUMBER_WORD_RE = /\b(?:oh|zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|and)\b/i;
+const SPOKEN_ID_RE = /\b([A-Za-z][A-Za-z]{1,11}|number|no\.?|ticket|incident|issue|item|case|question|step|section|version|page|chapter|round|level)([\s-]+)((?:(?:oh|zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|and)\b[\s-]*){1,8})/gi;
+const PLAIN_ENGLISH_BEFORE = /^(?:the|a|an|of|for|in|on|at|to|with|and|or|have|has|had|are|is|was|were|be|been|about|than|only|just|these|those|my|our|your|their|his|her|its|all|any|some|last|next|first|other|top|over|under)$/i;
+
+/** "two oh six" → "206"; "twenty six oh one" → "2601"; "one hundred four" → "104". Null when the run is not a clean number. */
+export const spokenDigitsToNumber = (run: string): string | null => {
+  const words = run.toLowerCase().split(/[\s-]+/).filter((w) => w && w !== 'and');
+  if (!words.length) return null;
+  let out = '';
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    if (w in DIGIT_WORD) {
+      if (w !== 'oh' && w !== 'zero' && words[i + 1] === 'hundred') { const rest = words.slice(i + 2); const tail = rest.length ? spokenDigitsToNumber(rest.join(' ')) : '0'; if (tail == null) return null; return out + DIGIT_WORD[w] + tail.padStart(2, '0'); }
+      out += DIGIT_WORD[w];
+    } else if (w in TEEN_WORD) {
+      out += String(TEEN_WORD[w]);
+    } else if (w in TENS_WORD) {
+      const next = words[i + 1];
+      if (next && next in DIGIT_WORD && next !== 'oh' && next !== 'zero') { out += String(TENS_WORD[w] + Number(DIGIT_WORD[next])); i++; }
+      else out += String(TENS_WORD[w]);
+    } else return null;
+  }
+  return out || null;
+};
+
+const FRAGMENT_LEAD_IN_RE = /^(?:(?:yeah|yes|yep|okay|ok|so|and|right|well|hmm|um|uh|no wait|wait|then|now|also|but|anyway|basically|actually)[,\s]+)+/i;
+const FRAGMENT_HEDGE_TAIL_RE = /(?:[,\s]+(?:i think|i guess|if you know|if you can|if possible|if that helps|roughly|approximately|or whatever|or so|please|again|same doc|same file|same document|from the doc|from the file|from the sheet|off the top of your head|you know|right|okay|ok|yeah|if))+[?.!\s]*$/i;
+/** Word count of a fragment with discourse lead-ins and trailing hedges removed. Exported for tests. */
+// A short comma-delimited opening clause is discourse in any language
+// (2026-09-11): "arre bhai, ek min, the team size, kitne log the" opens with
+// two such clauses the English lead-in list cannot name, and the fragment was
+// counted at ten words while its lookup is four. Up to TWO words each ("arre
+// bhai", "ek min", "hang on"); "the team size," is three and is content.
+const FRAGMENT_SHORT_CLAUSE_RE = /^[^,\s]+(?:\s[^,\s]+)?,\s+(?=\S)/;
+export const fragmentCoreWordCount = (q: string): number => {
+  let core = q.trim();
+  for (let i = 0; i < 4; i++) {
+    const next = core.replace(FRAGMENT_LEAD_IN_RE, '').replace(FRAGMENT_HEDGE_TAIL_RE, '').trim();
+    if (next === core) break;
+    core = next;
+  }
+  for (let i = 0; i < 3; i++) {
+    const m = core.match(FRAGMENT_SHORT_CLAUSE_RE);
+    if (!m) break;
+    core = core.slice(m[0].length).trim();
+  }
+  return core.split(/\s+/).filter(Boolean).length;
+};
+
+export const canonicalizeSttSpellings = (s: string): string => {
+  let out = s;
+  for (const [re, rep] of STT_CANON) out = typeof rep === 'string' ? out.replace(re, rep) : out.replace(re, rep);
+  // A possessive on an identifier ("p3's notes", "INC-2601's owner") hides
+  // the token from every lexical match — the file says "P3", the query says
+  // "p3's" (measured 2026-09-11: a support CSV with a P3 row answered "I
+  // don't have a P3 in my notes"). Only identifier-shaped heads (a digit in
+  // them) lose the apostrophe; ordinary nouns and contractions are untouched.
+  out = out.replace(/\b([a-z]*\d[a-z0-9-]*)'s\b(?=\s+\w)/gi, '$1');
+  out = out.replace(SPOKEN_ID_RE, (m: string, head: string, gap: string, run: string, offset: number, whole: string) => {
+    const countWords = (t: string) => t.trim().split(/[\s-]+/).filter((w) => w && w.toLowerCase() !== 'and').length;
+    // "X and seventy one Y" is two quantities joined by a conjunction, not an
+    // identifier after X (measured 2026-09-19: "forty four people and seventy
+    // one tickets" → "forty four people 71 tickets" — the "and" was eaten).
+    if (/^and\b/i.test(run.trim())) return m;
+    // A NUMBER WORD IS NEVER THE HEAD. The head needs two letters, so in "i n c
+    // forty four seventy one" the spelled-out "c" cannot be one and "forty"
+    // became it: "i n c forty 471" — a corrupted identifier, worse than an
+    // unconverted one. The head is part of the number: convert the whole run
+    // when it is long enough to be an identifier rather than a quantity.
+    if (new RegExp(`^(?:${NUMBER_WORD_RE.source.replace(/^\\b\(\?:|\)\\b$/g, '')})$`, 'i').test(head)) {
+      const whole_run = `${head} ${run}`;
+      const d = countWords(whole_run) >= 3 ? spokenDigitsToNumber(whole_run.trim()) : null;
+      return d ? `${d}${run.slice(run.trimEnd().length)}` : m;
+    }
+    if (PLAIN_ENGLISH_BEFORE.test(head)) {
+      // "the forty-four seventy-one OUTAGE": the noun that makes it an
+      // identifier comes AFTER the number, so the head rule cannot see it and
+      // the turn searched for words the incident log never contains (measured
+      // live 2026-09-19 — the one miss on the full natively stack, 19/20).
+      // Only a clean run of three or more number words, and only before a noun
+      // that names a record; "the two options" and "the twenty percent" stay.
+      const after = whole.slice(offset + m.length);
+      const d = countWords(run) >= 3 && /^\s*(?:outage|incident|ticket|issue|case|bug|alert|postmortem|post-mortem|release|build|invoice|order|pr|pull request)\b/i.test(after)
+        ? spokenDigitsToNumber(run.trim()) : null;
+      return d ? `${head} ${d}${run.slice(run.trimEnd().length)}` : m;
+    }
+    if (!NUMBER_WORD_RE.test(run)) return m;
+    const digits = spokenDigitsToNumber(run.trim());
+    // A lone single digit word after an ordinary lowercase word ("mode two",
+    // "take one") is more often prose than an identifier; require either an
+    // identifier-shaped head (has an uppercase letter or a digit, or is one of
+    // the explicit nouns) or a run of at least two number words.
+    const runWords = run.trim().split(/[\s-]+/).filter((w) => w && w.toLowerCase() !== 'and');
+    const identifierHead = /[A-Z0-9]/.test(head) || /^(?:number|no\.?|ticket|incident|issue|item|case|question|step|section|version|page|chapter|round|level)$/i.test(head);
+    if (!digits || (!identifierHead && runWords.length < 2)) return m;
+    const trailing = run.slice(run.trimEnd().length);
+    return `${head} ${digits}${trailing}`;
+  });
+  return out;
+};
+export const normalizeSttQuestion = (s: string): string =>
+  canonicalizeSttSpellings(s).toLowerCase().replace(FILLER_RE, ' ').replace(MID_FILLER_RE, '$1 ').replace(STUTTER_RE, '$1').replace(/\s+([,.?!])/g, '$1').replace(/\s+/g, ' ').trim();
+/** Case-preserving variant for the question the model and the retriever see:
+ *  "What is arh the discount pct?" reached the model verbatim and it answered
+ *  about an "ARH percentage"; "what is arh so due for" became an "ARIS chart".
+ *  Fillers are noise from the transcriber, never content. */
+export const stripSttFillers = (s: string): string =>
+  canonicalizeSttSpellings(s).replace(new RegExp(FILLER_RE.source, 'gi'), ' ').replace(new RegExp(MID_FILLER_RE.source, 'gi'), '$1 ').replace(new RegExp(STUTTER_RE.source, 'gi'), '$1').replace(/\s+([,.?!])/g, '$1').replace(/\s+/g, ' ').trim();
+const norm = (s: string) => normalizeSttQuestion(s);
 
 // ── signals ─────────────────────────────────────────────────────────────────
 // Second person addressed to the candidate ("your project"), or explicit
@@ -93,7 +285,88 @@ const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
 // 2026-08-02: a GraphQL chat produced "I'm a backend engineer…" from nothing).
 // Emphatic uses ("did you build it yourself?") are questions about the user's
 // own work, so the personal claim is correct for them too.
-const PERSONAL_RE = /\b(your|your own|you have|have you|did you|do you|tell me about yourself|yourself|walk me through your|my|the candidate|candidate'?s?|the applicant|applicant'?s?)\b/;
+// `candidate` narrowed 2026-08-28 (T2). It used to appear here as
+// `the candidate|candidate'?s?` — matching the bare noun — which made every
+// ordinary ML / search / database use of the word an IDENTITY question with
+// retrieve=false: "candidate generation", "candidate set size", "candidate
+// key". Candidate generation is a stock system-design interview topic, so the
+// token was breaking technical-interview on its own bread-and-butter material.
+//
+// The discriminator is GRAMMATICAL, not lexical. In the technical sense
+// `candidate` is a MODIFIER — it is followed by the noun it modifies
+// ("candidate pool", "candidate key"). In the person sense it is the HEAD of
+// the noun phrase, so what follows it is a verb, a preposition, punctuation or
+// nothing at all.
+//
+// Two conditions, and the FIRST is what does most of the work:
+//
+//   1. a DETERMINER is required. The technical compound almost never carries
+//      one ("candidate generation", "candidate sampling"), and the sweep's
+//      product-name shape ("How does Candidate handle failures?") carries none
+//      either. `a` is deliberately excluded — "what is a candidate key?" is a
+//      database question.
+//   2. the next word must not be a technical HEAD noun, which catches the
+//      determined compounds "the candidate pool", "the Candidate project".
+//
+// Rule 2 is a blocklist and blocklists are open-ended — "candidate span",
+// "candidate edge", "candidate passage" are all real and a miss here makes a
+// technical turn personal again. A whitelist of what may follow the person
+// sense was tried first and is strictly worse: the person sense is most often
+// followed by an ORDINARY VERB ("has the candidate shipped anything at
+// scale?"), and open-class verbs cannot be enumerated either — but getting one
+// wrong there silently drops a real recruiting question, which is the more
+// damaging direction. So the blocklist stands, and the sweep over 106 product
+// terms is what keeps it honest.
+// `id`/`ids` are deliberately ABSENT from this list: "the decoy candidate ID"
+// is a recruiting field, not an ML term, and the isolation probe in
+// RemainingDefects2026_08_01 depends on it staying personal.
+const CANDIDATE_TECHNICAL_HEAD = 'generation|generator|generators|set|sets|list|lists|key|keys|pool|pools|sampling|sample|samples|ranking|rankings|retrieval|selection|selections|item|items|region|regions|box|boxes|window|windows|phase|phases|stage|stages|model|models|score|scores|vector|vectors|embedding|embeddings|index|indexes|indices|match|matches|pair|pairs|answer|answers|token|tokens|node|nodes|edge|edges|path|paths|solution|solutions|split|splits|label|labels|class|classes|cluster|clusters|document|documents|passage|passages|chunk|chunks|span|spans|entity|entities|point|points|project|projects|service|services|pipeline|pipelines|system|systems|module|modules|feature|features|api|apis|endpoint|endpoints|table|tables|column|columns|field|fields|record|records|row|rows|query|queries|step|steps|threshold|thresholds|filter|filters|queue|queues|buffer|buffers|cache|caches|count|counts|size|sizes|length|limit|limits|algorithm|algorithms|function|functions|method|methods|strategy|strategies|logic|code|repo|repos|branch|branches|build|builds|job|jobs|task|tasks|worker|workers|handler|handlers|graph|graphs|tree|trees|batch|batches';
+// Up to two words may sit between the determiner and the noun — "the decoy
+// candidate ID", "the second strongest candidate". Requiring adjacency dropped
+// the decoy-isolation probe, which is exactly the kind of real recruiting
+// phrasing this pattern must not lose.
+const CANDIDATE_PERSON_RE = new RegExp(
+  `\\b(?:candidates?['’]s?\\b|(?:the|this|that|each|our|both|either)\\s+(?:\\S+\\s+){0,2}candidates?\\b(?!\\s+(?:${CANDIDATE_TECHNICAL_HEAD})\\b))`,
+);
+// Romanised Hindi/Urdu second- and first-person cues (2026-09-11): "toh aap
+// ka current role kya hai" is "so what is your current role" and took the FAST
+// path in technical-interview, answering generically over a hydrated résumé.
+// English homographs ("main", "mere") are deliberately left out.
+// "self-introduction" / "introduce yourself" / "your background" (2026-09-11):
+// "could you give us a quick self-introduction?" carried none of the cues and
+// took the FAST path in looking-for-work — a generic "I'm a software developer"
+// over a hydrated Staff-engineer résumé.
+const PERSONAL_RE = /\b(your|your own|you have|have you|did you|do you|tell me about yourself|yourself|walk me through your|my|the applicant|applicant'?s?|self-?introduction|introduce (?:yourself|myself)|(?:about|on) (?:yourself|myself)|(?:your|my) background|aap ?k[aie]|aap ?ne|tum ?ne|tumhar[aie]|ter[ai]|mer[ai]|apn[aie])\b/;
+// SECOND PERSON WITH A LEXICAL VERB (2026-08-29).
+//
+// PERSONAL_RE above covers second person carried by an AUXILIARY — "did you",
+// "do you", "have you", "your". It does not cover second person carried by the
+// MAIN VERB, and interviewers use that constantly:
+//
+//   "Tell me about the AI agent you BUILT."
+//   "Walk me through one integration you OWNED from requirements to production."
+//   "Tell me about a real production failure, not a hypothetical."
+//
+// All three came from the reporter's own question list. Each produced
+// GENERAL_TECHNICAL — no claim, no required source, shouldRetrieve=FALSE — so
+// the reference file describing that exact work was never queried.
+//
+// Note this is the OPPOSITE failure from RC1 and lands in the same place. RC1 is
+// PERSONAL_RE matching too much, so the turn becomes a USER_* claim no document
+// could evidence. This is PERSONAL_RE matching too little, so the turn becomes
+// general knowledge and retrieval never runs. Both end at "no evidence", which
+// is why one report described a single symptom.
+//
+// PAST TENSE ONLY, and that is the whole guard. Past tense is autobiographical
+// ("the agent you built"); present and conditional are hypothetical ("how would
+// you build a rate limiter?", "how do you test this?") and must keep their
+// general-knowledge route. The distinction is grammatical rather than a keyword
+// list, so it does not need maintaining as vocabulary drifts.
+// got/achieved/reached/hit/measured/reduced/improved/cut/saw/used added
+// 2026-09-07: "what was the latency you got on the FastAPI backend" carried
+// no second-person cue at all and planned document pools only, so the fact —
+// which lived in the profile résumé — was never retrieved.
+const SECOND_PERSON_PAST_RE = /\byou (?:built|owned|designed|led|created|developed|implemented|shipped|wrote|architected|ran|managed|handled|delivered|deployed|migrated|debugged|tested|monitored|scaled|refactored|chose|picked|solved|fixed|added|removed|introduced|maintained|supported|integrated|automated|configured|launched|rolled out|worked on|got|achieved|reached|hit|measured|reduced|improved|increased|cut|saw|used|optimi[sz]ed|did|done|dealt with|faced|encountered|experienced|troubleshot|investigated|diagnosed|resolved|contributed|participated|helped|spent|took|joined)\b/;
 // FIRST person is personal too (2026-07-31): manual chat is the USER asking
 // about THEMSELF — "Do I have Kubernetes experience?", "Which required
 // languages do I not list?" — and a second/third-person-only pattern classified
@@ -161,6 +434,25 @@ const MOTIVATION_RE = /\b(why|reason|motivat\w*|what (led|made)|decided? to|chos
 // The presence-check shape of a skill question — "do I HAVE it", not "tell me
 // about it". Used to widen a personal skill claim into a résumé-vs-JD
 // comparison in modes that carry a JD.
+/**
+ * PROSPECTIVE phrasing about a job the user does not have yet (2026-09-20).
+ * Grammar, not vocabulary: a résumé records the past, so "would I", "I would be
+ * joining", "will they", "comes with the offer" and "the hiring manager" cannot
+ * be answered from it — they are about the role being applied for. Deliberately
+ * excludes a bare "the role" / "the team", which a question about a PAST job
+ * uses just as naturally ("what was the role you played…").
+ */
+// Narrowed after review: the first version also matched a bare "would I / I would /
+// will they", which sent "How would I explain the Tallgrass outbox migration?" and
+// "Would we have hit the rate limit at Oakhaven?" — questions about the user's OWN
+// past — to the job description (PARTIAL instead of FULL). What remains names the
+// job itself: my manager/team WOULD, the hiring manager, the offer, "I would be
+// joining / reporting to", and "this role requires / offers / pays".
+const PROSPECTIVE_JOB_RE = /\b(would be my (manager|boss|team|lead|title|role)\b|my (manager|boss|team|role|title) would\b|(i|we)(d| would| will) be (joining|reporting|working (with|under|for))\b|hiring (manager|team|committee)\b|(with|in|of) the offer\b|the offer (include|come|has|have)\w*\b|(this|the) (role|position|job|opening) (require|offer|pay|report|involve|include|come)\w*\b)/;
+
+/** Is this question about the job being applied for ("Who would be my manager?") rather than the user's past? */
+export function isProspectiveJobQuestion(question: string): boolean { return PROSPECTIVE_JOB_RE.test(String(question).toLowerCase()); }
+
 const SKILL_PRESENCE_RE = /\b(do (i|you) (have|know)|have (i|you) (used|worked)|am i|are you (familiar|experienced|proficient)|(do|does) (i|you) (not )?(list|lack|miss)|missing|lack\w*)\b/;
 const EDUCATION_RE = /\b(degrees?|graduat\w*|universit\w*|college|studied|majors?|majored|alma mater|c?gpa)\b/;
 const EMPLOYMENT_RE = /\b(work(ed)? at|employer|company you|role at|position at|job title|tenure|manage[srd]?|managing|led|leads?|reports?|team of|headcount|salary expectation\w*|compensation expectation\w*)\b/;
@@ -197,8 +489,44 @@ const JOB_RE = /\b(this role|the role|this position|the position|job description
 // transcript only where a transcript can exist — in technical-interview it
 // routed "Who owns the follow-up?" to a source the mode forbids and the
 // attached postmortem was never searched.
-const MEETING_EVENT_RE = /\b(we (decided|agreed|discussed|assigned|concluded)|did (we|anyone)|action items?|(discussion|discussed|said) so far|decisions? (made|recorded|so far)|last (call|meeting)|standup|sync\b)\b/;
-const MEETING_ATTRIBUTION_RE = /\b(who owns|owns the|owner\b|who (agreed|committed|said|is responsible)|assigned to|was (decided|agreed|assigned))\b/;
+const MEETING_EVENT_RE = /\b(we (decided|agreed|discussed|assigned|concluded)|did (we|anyone)|action items?|(discussion|discussed|said) so far|decisions? (made|recorded|so far)|last (call|meeting))\b/;
+// RECURRING-MEETING NOUNS, framed (T2, 2026-08-28). `standup` and `sync` used
+// to sit in MEETING_EVENT_RE above as bare words. Swept over 106 product terms
+// (experiments/mode-audit/collision-sweep.ts) they were two of only three
+// tokens in this file that misrouted on the noun ALONE: "the sync" names half
+// the integration features ever shipped, so "How does the sync handle retries?"
+// claimed the transcript and the attached reference file describing that very
+// feature was dropped from the plan — and in a mode that authorizes no
+// transcript (technical-interview, looking-for-work) shouldRetrieve went FALSE
+// and nothing was retrieved at all. The beta report that opened this
+// investigation is a field-service <-> CRM **sync**.
+//
+// The tokens are kept, but only where the clause FRAMES them as a meeting:
+// a recurrence/team qualifier ("the daily standup"), an explicit meeting head
+// noun ("standup notes", "sync meeting"), the compound "sync-up", or a
+// temporal/locative frame ("in the standup", "at yesterday's standup").
+//
+// `sync` deliberately gets the NARROWEST treatment — a head noun or "sync-up",
+// never a bare determiner and never a temporal frame. "What happens during the
+// nightly sync?" is a data pipeline far more often than it is a meeting, and
+// nothing is lost by the strictness: every verb-shaped phrasing that mentions a
+// real one ("what did we decide in the sync?", "any action items from the
+// sync?") is already caught by MEETING_EVENT_RE, so `sync` was carrying almost
+// no true positives of its own.
+//
+// This stays out of MEETING_EVENT_RE rather than joining it because the
+// distinction is per-clause and worth reading: that pattern is a list of things
+// that ARE meeting events, this one is a list of things that only sometimes are.
+const MEETING_EVENT_NOUN_RE = /\b(?:(?:daily|weekly|nightly|morning|afternoon|team|our|sprint|scrum|monday|tuesday|wednesday|thursday|friday)\s+(?:\S+\s+)?stand-?ups?|stand-?ups?\s+(?:meetings?|calls?|notes?|minutes?|recaps?)|(?:in|at|during|after|before|from)\s+(?:the|our|this|that|last|next|(?:today|yesterday|tomorrow)['’]?s)\s+(?:\S+\s+)?stand-?ups?|sync-?ups?|syncs?\s+(?:meetings?|calls?|notes?|minutes?|recaps?))\b/;
+// Named-speaker attribution ADDED (task 7b, issue #552, live-verified miss):
+// "what did jonas say about the elasticsearch window" matched none of the
+// alternatives above — none of them recognise "what did <name> say" — so a
+// typed question with the right answer sitting in an admitted transcript
+// chunk was classified DOCUMENT_FACT only and planned REFERENCE_FILE alone.
+// Each new alternative excludes a determiner/pronoun subject right after the
+// verb so a DOCUMENT question ("what did the brief say about scope") keeps
+// its document routing instead of being misread as meeting attribution.
+const MEETING_ATTRIBUTION_RE = /\b(who owns|owns the|owner\b|who (agreed|committed|said|is responsible)|assigned to|was (decided|agreed|assigned)|what did (?!the |this |that |our |my |your |it )\S+ (say|mention|suggest|propose|ask|recommend|talk about)|what was (?!the |this |that |our |my |your |it )\S+ (saying|talking about))\b/;
 // DECISION-STATUS — "is it decided whether…" asks whether a decision EXISTS.
 // The brief can state it (pre-made decisions, open questions) and the
 // transcript can contain it, so both sides are claimed.
@@ -245,6 +573,20 @@ export const META_REQUEST_RE = new RegExp([
 ].join('|'), 'i');
 
 const SCREEN_RE = /\b(this (code|function|error|screen|stack ?trace)|on (my|the) screen|highlighted|selected code|what does this)\b/;
+
+// An explicit request for code can be deictic when the problem itself is on
+// screen.  "Give me the code" contains no algorithm noun, so the generic
+// CODING_TASK_RE below cannot classify it without the screen attachment that
+// supplies the missing subject.  Keep this signal screen-gated: without a
+// current capture the same words are an underspecified follow-up and should be
+// resolved from conversation state rather than inventing a problem.
+const SCREEN_CODE_ASK_RE = /\b(?:give|show|provide|send|write|generate)(?: me)?(?: the| a)?(?: full| complete| working)? code\b|\bcode (?:this|it|the solution)\b/;
+
+// Possessives over a currently attached screen/page describe ownership of an
+// artefact, not the user's employment history.  PERSONAL_RE deliberately
+// contains bare "my" for real résumé questions; this narrow screen-aware guard
+// prevents "show the code from my screen" from requesting résumé authority.
+const SCREEN_ARTIFACT_OWNERSHIP_RE = /\b(?:my|your|the|this) (?:screen|page|editor)\b|\b(?:on|from) (?:my|your|the|this) screen\b/;
 
 // General technical/CS concepts. Deliberately conservative: matching a general
 // pattern makes us SKIP retrieval, so a false positive is the expensive
@@ -428,10 +770,24 @@ const RESPONSE_REQUEST_RE =
 // happens to pre-lower before calling while the orchestrator passes the raw
 // resolved question. The first external caller silently never matched "Why?" —
 // capital W — so the referent cap it guarded was dead on arrival.
+// Content-free imperative fragments (2026-09-07, always-answer): "explain",
+// "walk me through it", "elaborate", "summarize that". Measured: "explain" with
+// two files attached took GENERAL_TECH_RE ("explain") → GENERAL_TECHNICAL →
+// FAST → no retrieval, and "walk me through it" → AMBIGUOUS with retrieval
+// off; both surfaces then asked "what would you like me to explain?". A
+// fragment whose whole text is such a verb phrase has no subject of its own —
+// it is a follow-up, and the orchestrator lends it the attachments as subject.
+// Imperative generative asks are not lookups (2026-09-07 fragment rule).
+const GENERATIVE_ASK_RE = /^(?:please\s+)?(?:write|draft|generate|compose|create|make|craft|prepare|suggest|brainstorm|come up with|give me (?:a|an|some|three|five|\d+)|propose|outline|rewrite|rephrase|translate|improve|polish|shorten|expand on)\b/;
+
+const BARE_VERB_FRAGMENT_RE =
+  /^(?:(?:please|ok(?:ay)?|so|and|just),?\s+)*(?:explain|elaborate|expand|continue|go on|keep going|say more|more|tell me more|(?:more|further) details?|details?|next|walk (?:me|us) through (?:it|that|this)|break (?:it|that|this) down|summari[sz]e(?: (?:it|that|this))?|clarify(?: (?:it|that|this))?|show me|(?:can|could) you (?:explain|elaborate|expand|clarify)(?: (?:it|that|this))?)(?:\s+(?:please|again))?$/;
+
 export const isBareFollowUp = (raw: string): boolean => {
   const q = String(raw).toLowerCase();
   if (RESPONSE_REQUEST_RE.test(q)) return true;
   if (isContinuationFragment(q)) return true;
+  if (BARE_VERB_FRAGMENT_RE.test(q.replace(/[?!.,]+$/, '').trim())) return true;
   return FOLLOW_UP_RE.test(q) && q.split(/\s+/).filter(Boolean).length <= FOLLOW_UP_MAX_WORDS;
 };
 
@@ -454,9 +810,11 @@ export const isResponseRequest = (raw: string): boolean => RESPONSE_REQUEST_RE.t
 const splitClauses = (q: string): string[] =>
   q.split(/\band\b|\balso\b|[;.]/).map((c) => c.trim()).filter(Boolean);
 
-function detectTypes(q: string, input: ClassificationInput): { types: QuestionType[]; claims: ClaimType[]; clauses: Partial<Record<ClaimType, string>> } {
+function detectTypes(q: string, input: ClassificationInput): { types: QuestionType[]; claims: ClaimType[]; clauses: Partial<Record<ClaimType, string>>; exhaustive: boolean; inferred: ClaimType[] } {
   const types = new Set<QuestionType>();
   const claims = new Set<ClaimType>();
+  /** Claims GUESSED from the mode's primary source (see the inference block), not made by the question's grammar. */
+  const inferredClaims = new Set<ClaimType>();
   const clauses: Partial<Record<ClaimType, string>> = {};
   const noteClaim = (c: ClaimType, clause: string) => { claims.add(c); if (!clauses[c]) clauses[c] = clause; };
 
@@ -497,6 +855,10 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
     && !hasCapsOrIdentifierEntity(input.resolvedQuestion) && !DOCUMENT_RE.test(q);
 
   for (const clause of splitClauses(q)) {
+    const screenCodeAsk = Boolean(input.hasScreenContext) && SCREEN_CODE_ASK_RE.test(clause);
+    const screenArtifactOwnership = Boolean(input.hasScreenContext)
+      && SCREEN_ARTIFACT_OWNERSHIP_RE.test(clause);
+    const codingTask = CODING_TASK_RE.test(clause) || screenCodeAsk;
     // ── deep-run 2 guards (2026-08-01) ──────────────────────────────────────
     // "Why did YOU refuse?" is about the ASSISTANT's own behaviour, not the
     // user's history — classified personal it claimed USER_MOTIVATION, planned
@@ -541,10 +903,17 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
       types.add('DOCUMENT_FACT'); noteClaim('DOCUMENT_FACT', clause);
     }
 
-    const personal = !aboutAssistant && !salesClaimCue && (PERSONAL_RE.test(clause)
+    const candidateAsPerson = tokenFramingOn()
+      ? CANDIDATE_PERSON_RE.test(clause)
+      : LEGACY_CANDIDATE_PERSON_RE.test(clause);
+    // Second person carried by the main verb rather than an auxiliary.
+    const secondPersonPast = tokenFramingOn() && SECOND_PERSON_PAST_RE.test(clause);
+    const personal = !screenArtifactOwnership && !aboutAssistant && !salesClaimCue && (PERSONAL_RE.test(clause)
+      || candidateAsPerson
+      || secondPersonPast
       || (FIRST_PERSON_RE.test(clause)
         && !TECH_SELF_TALK_RE.test(clause)
-        && !CODING_TASK_RE.test(clause)
+        && !codingTask
         && !SYSTEM_DESIGN_RE.test(clause)));
 
     if (personal && PROJECT_RE.test(clause)) { types.add('PERSONAL_PROJECT'); noteClaim('USER_PROJECT', clause); }
@@ -592,8 +961,16 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
     // exact catch-all is what planned the résumé for a fan question. Whole-
     // question signal, because the artifact and the ask usually sit in
     // different clauses.
+    // The tech-self-talk veto must not fire on the very verb that made the
+    // clause second person (2026-09-07, measured with a teleprompter mode
+    // prompt): "Tell me about a real production failure you debugged" is a
+    // story ask about the candidate's history, but "debugged" matched
+    // TECH_SELF_TALK_RE and the clause went GENERAL_TECHNICAL → FAST, so the
+    // model denied a project the résumé states. Self-talk is FIRST-person
+    // ("why do I get a segfault"); a lexical second-person verb is the
+    // interviewer asking what YOU did, and the tech noun is its object.
     if (personal && !namedAnAspect && !deviceTroubleshoot
-        && !CODING_TASK_RE.test(clause) && !SYSTEM_DESIGN_RE.test(clause) && !TECH_SELF_TALK_RE.test(clause)) {
+        && !codingTask && !SYSTEM_DESIGN_RE.test(clause) && (!TECH_SELF_TALK_RE.test(clause) || secondPersonPast)) {
       types.add('PERSONAL_EXPERIENCE'); noteClaim('USER_EMPLOYMENT', clause);
     }
 
@@ -610,6 +987,19 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
         types.add('DOCUMENT_FACT'); noteClaim('DOCUMENT_FACT', clause);
       } else {
         types.add('JOB_REQUIREMENT'); noteClaim('JOB_REQUIRED_SKILL', clause);
+        // ATTACHED DOCUMENTS hold job vocabulary too (2026-09-11, measured in
+        // the STT corpus): "so the interview loop what is it" in technical-
+        // interview with an ops handbook attached planned JOB_DESCRIPTION alone
+        // — the handbook's "Interview loop: 1 recruiter screen, 1 coding screen
+        // (60 min)…" line was never retrieved and the answer was a generic
+        // definition. Same for "remind me what was the salary talk" over an
+        // attached prep-notes file. The JD claim stays; the document side is
+        // claimed as an ALTERNATIVE, so an absent JD with a present handbook
+        // answers instead of reading PARTIAL.
+        if (input.hasAttachedDocuments === true
+            && input.policy.allowedSourceTypes.includes('REFERENCE_FILE')) {
+          types.add('DOCUMENT_FACT'); noteClaim('DOCUMENT_FACT', clause);
+        }
         // COMPARISON widening (deep-run 2, issue 3): "Does Leena meet every
         // minimum qualification?" / "Which preferred qualifications are
         // missing?" are candidate-vs-JD comparisons, but with no personal-cue
@@ -669,7 +1059,10 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
       // source-contract patch?") stays transcript-only.
       const proposedCue = /\b(proposed|planned|suggested|pre-?meeting|risk register|register|agenda|briefs?)\b/.test(clause);
       const attribution = MEETING_ATTRIBUTION_RE.test(clause);
-      const meetingEvent = MEETING_EVENT_RE.test(clause) || (meetingMode && attribution);
+      const recurringMeetingNoun = tokenFramingOn()
+        ? MEETING_EVENT_NOUN_RE.test(clause)
+        : LEGACY_MEETING_EVENT_NOUN_RE.test(clause);
+      const meetingEvent = MEETING_EVENT_RE.test(clause) || recurringMeetingNoun || (meetingMode && attribution);
       const decisionStatus = DECISION_STATUS_RE.test(clause);
       const meetingContext = MEETING_CONTEXT_RE.test(clause);
       const referenceFact = REFERENCE_FACT_RE.test(clause);
@@ -688,6 +1081,19 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
         types.add('DOCUMENT_FACT'); noteClaim('DOCUMENT_FACT', clause);
       }
       if (refAllowed && meetingMode && attribution && proposedCue) {
+        types.add('DOCUMENT_FACT'); noteClaim('DOCUMENT_FACT', clause);
+      }
+      // TRANSCRIPT-SECONDARY modes (2026-09-11). technical-interview and
+      // looking-for-work now authorize MEETING_TRANSCRIPT — the interview
+      // conversation is a source — but rank it LAST: a postmortem or brief
+      // attached to the mode is the likelier home of "who owns the follow-up".
+      // Where the transcript ranks below the reference pool, an event or
+      // attribution claims the document side as an ALTERNATIVE too, so the
+      // attached material is still read (D3) and the transcript is consulted
+      // rather than reported unsupported. Transcript-first modes are unchanged.
+      const transcriptSecondary = meetingMode && refAllowed
+        && (input.policy.sourcePriorities.MEETING_TRANSCRIPT ?? 0) > (input.policy.sourcePriorities.REFERENCE_FILE ?? 0);
+      if (transcriptSecondary && (meetingEvent || decisionStatus)) {
         types.add('DOCUMENT_FACT'); noteClaim('DOCUMENT_FACT', clause);
       }
       // Context-free reference facts ("What are the current success criteria?")
@@ -716,7 +1122,7 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
     }
     if (SCREEN_RE.test(clause)) { types.add('SCREEN_SPECIFIC'); noteClaim('SCREEN_FACT', clause); }
 
-    if (CODING_TASK_RE.test(clause)) { types.add('CODING_TASK'); noteClaim('GENERAL_TECHNICAL', clause); }
+    if (codingTask) { types.add('CODING_TASK'); noteClaim('GENERAL_TECHNICAL', clause); }
     if (SYSTEM_DESIGN_RE.test(clause)) { types.add('SYSTEM_DESIGN'); noteClaim('GENERAL_TECHNICAL', clause); }
     // Per-clause, so the general half of a mixed question is still recognised.
     // Gated on namesSpecificEntity: without it, an entity lookup acquires a
@@ -751,7 +1157,22 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
     }
   }
 
-  if (input.hasScreenContext) { types.add('SCREEN_SPECIFIC'); claims.add('SCREEN_FACT'); }
+  if (input.hasScreenContext) {
+    types.add('SCREEN_SPECIFIC'); claims.add('SCREEN_FACT');
+    // A screenshot in a mode that HOLDS DOCUMENTS claims the document side too
+    // (2026-09-11). Measured in lecture with the thermo notes attached and an
+    // exam page on screen: "part b, what are the numbers" planned
+    // [SCREEN_CONTEXT] alone, the notes — which carry the worked answer for
+    // that exact exam — never entered the prompt, and the answer explained the
+    // method without a number. What is on screen is very often the QUESTION and
+    // the attached material is where its ANSWER lives; the screen text joins the
+    // retrieval query (orchestrator.screenEnrichedQuery), so the document side
+    // is cheap to plan and the claims stay alternatives for answerability.
+    if (input.hasAttachedDocuments && !claims.has('DOCUMENT_FACT')
+        && DOCUMENT_FACT_RETRIEVAL_SOURCES.some((s) => input.policy.allowedSourceTypes.includes(s))) {
+      claims.add('DOCUMENT_FACT'); types.add('DOCUMENT_FACT');
+    }
+  }
 
   // A question naming a SPECIFIC entity, in a mode whose primary source could
   // hold it, is a claim about that source even when phrased impersonally.
@@ -797,7 +1218,9 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
   // (2026-08-02): both are questions no private source can improve, and both
   // were measured reaching the primary-source fallback — the fan question via
   // "what should I check" and the discount exercise via its own digits.
-  const techTask = TECH_SELF_TALK_RE.test(q) || CODING_TASK_RE.test(q) || SYSTEM_DESIGN_RE.test(q)
+  let exhaustive = false; // set by the exhaustive-request rule below (RetrievalPlan.exhaustive)
+  const techTask = TECH_SELF_TALK_RE.test(q) || CODING_TASK_RE.test(q)
+    || (Boolean(input.hasScreenContext) && SCREEN_CODE_ASK_RE.test(q)) || SYSTEM_DESIGN_RE.test(q)
     || deviceTroubleshoot || selfContainedMath;
 
   // ── Definite value lookup (deep-test D2/D3, 2026-08-01) ────────────────────
@@ -818,8 +1241,16 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
   // conceptual sent it to the FAST path and the model invented the weight.
   // `of/behind/between/to-verb` complements remain conceptual ("the goal of
   // dependency injection", "the difference between TCP and UDP").
+  // `to` counts as a conceptual complement only before a VERB ("the best way to
+  // learn", "the fastest way to scale it"). A compound noun that happens to
+  // contain "to" — "the free to paid conversion", "the end to end latency",
+  // "the peer to peer sync" — is a value lookup (2026-09-08, measured in a
+  // 1,000-turn live campaign: "What is the free to paid conversion?" went FAST
+  // with the metrics file attached and shipped a textbook definition).
   const conceptComplement =
-    /\bthe (?:[\w-]+ ){0,3}[\w-]+ (?:of|behind|between|to [a-z])/.test(q);
+    /\bthe (?:[\w-]+ ){0,3}[\w-]+ (?:of|behind|between)\b/.test(q)
+    || /\bthe (?:[\w-]+ ){0,3}[\w-]+ to (?:a|an|the|my|your|our|their|his|her|someone|anyone|everyone|people|users|customers|me|us|you|them|him|it)\b/.test(q)
+    || /\bthe (?:[\w-]+ ){0,3}[\w-]+ to (?:learn|scale|build|handle|improve|reduce|avoid|achieve|get|make|use|write|run|test|deploy|debug|fix|do|solve|design|implement|measure|manage|start|stop|prevent|migrate|convert|choose|decide|explain|compare|optimi[sz]e|approach|structure|set|configure|ship|grow|hire|sell|pitch|negotiate|answer|respond|deal|say|tell|think|know|find|keep|become|be|go|have|reach|win|close|open|store|cache|index|retrieve|rank|train|evaluate|describe|present|introduce|prepare|estimate|price|discount)\b/.test(q);
   // Grounding a definite lookup only makes sense where documents can hold the
   // value: document-first modes always qualify; an OPEN_KNOWLEDGE mode
   // qualifies only when this turn actually has documents (attachments or a
@@ -861,6 +1292,88 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
       && /\b(threshold\w*|frequenc\w*|rates?|formulas?|calculat\w*|weights?|coefficients?|detect\w*)\b/.test(q)) {
     types.add('DOCUMENT_FACT'); noteWholeQ('DOCUMENT_FACT');
   }
+  // ── Attached-document deixis (2026-09-07) ─────────────────────────────────
+  //
+  // The question NAMES an attached file, or points at a document with a
+  // definite article ("in the error log", "the array problem", "the
+  // postmortem", "the attached spec"), while documents are attached. Measured
+  // in technical-interview with tech_error_log.txt attached: "Which function
+  // threw the uncaught exception in the error log?" — TECH_SELF_TALK_RE
+  // ("error", "exception") made it GENERAL_TECHNICAL → FAST → no retrieval, and
+  // the app answered "I cannot answer that without seeing the log" about a log
+  // it had indexed; on the manual surface it invented a function name.
+  //
+  // Runs BEFORE the claimless-techTask branch so a document-deictic question is
+  // a document question first: retrieval is cheap and the evidence gate still
+  // has the last word, whereas skipping retrieval here is unrecoverable. The
+  // generic-noun list is deliberately document-shaped (log/spec/notes/…); bare
+  // "this problem" stays coding self-talk unless an attached file is named.
+  if (modeHoldsDocuments && !isBareFollowUp(q)
+      && (mentionsAttachedFile(q, input.attachedFileNames) || DOC_DEIXIS_RE.test(q) || namesTitledTask(q))) {
+    types.add('DOCUMENT_FACT'); noteWholeQ('DOCUMENT_FACT');
+  }
+  // ── Corpus arbitration (2026-09-19) ───────────────────────────────────────
+  // Every rule around this one guesses, from grammar, whether the question is
+  // about the attached material. This one is told: the orchestrator asked the
+  // retrieval port, and a chunk of the material holds the question's
+  // distinctive terms together. Retrieval is cheap and the evidence gate keeps
+  // the last word; skipping it here is unrecoverable.
+  if (modeHoldsDocuments && (input.corpusAnchored === true || (input.anchoredSourceTypes?.length ?? 0) > 0) && !isBareFollowUp(q)) {
+    types.add('DOCUMENT_FACT'); noteWholeQ('DOCUMENT_FACT');
+  }
+  // A REMINDER is a lookup in the material, whatever words it contains
+  // (2026-09-08, measured): "Remind me, failures 1 error, what was it?" went
+  // GENERAL_TECHNICAL because "error" is tech self-talk, retrieval never ran,
+  // and the model invented a test failure. "Remind me …", "… what was it
+  // (again)?", "… again?" ask for something ALREADY recorded — with documents
+  // attached that is the documents, and the evidence gate keeps the last word.
+  const reminderAsk = /^(?:(?:so|okay|ok|and|right|um|uh)[,\s]+)*remind (?:me|us)\b|\bwhat (?:was|is) (?:it|that|the \w+(?: \w+){0,3}) again\b|\bwhat was (?:it|that)\s*\??$/i.test(q);
+  if (modeHoldsDocuments && reminderAsk && !isBareFollowUp(q)) {
+    types.add('DOCUMENT_FACT'); noteWholeQ('DOCUMENT_FACT');
+  }
+  // A question about OUR current state, with documents attached, is a
+  // question about the documents (2026-09-10, measured in two live
+  // simulations). "…on the service credits, we want to cap them at fifteen
+  // percent instead of, what is it now" (negotiation, MSA attached) and "what
+  // are you raising and at what valuation" (investor, board update attached)
+  // carried no document pointer and no private claim, took the FAST path, and
+  // the model invented a 10 % cap over a contract that says 30 % and "we're
+  // not raising" over a board ask for a $60–75M Series C. The subject of
+  // "we/you/our/your/it now" in a document mode is the material; retrieval is
+  // cheap and the evidence gate keeps the last word.
+  const currentStateAsk = /\bwhat(?:'s| is| are| was| were)? (?:it|that|this|they|these|those) (?:now|currently|today|at the moment|right now|at present)\b/i.test(q)
+    || /\bwhat(?:'s| is)? the (?:current|existing|present|agreed|signed|standing)\b/i.test(q)
+    || /\b(?:what|which|how much|how many|when|where|who)\b[^.?!]{0,40}\b(?:are|is|do|does|did|were|was|will|would|have|has|can|should)\s+(?:you|we|us)\b/i.test(q)
+    || /\b(?:are|is|do|does|did|were|was|will|would|have|has)\s+(?:you|we)\s+(?:raising|charging|paying|offering|hiring|shipping|launching|scoring|measuring|targeting|planning|asking|proposing|capping)\b/i.test(q)
+    // Topic-first spoken lookups: "the mrr growth percent, what is it",
+    // "step 5 what is it" — the subject comes first and the question word
+    // last, so "what is it" alone reads as a definition and the turn took the
+    // FAST path (measured 2026-09-10, STT corpus).
+    || /^(?:(?:so|okay|ok|and|right|um|uh|yeah|well|then)[,\s]+)*(?:the |our |my |this |that )?[a-z0-9][\w %$.\/-]{2,60}?[,\s]+what(?:'s| is| was| are| were)? (?:it|that|they|those|these)\b/i.test(q);
+  // Only a turn with no PRIVATE claim — a turn that already claims a
+  // meeting/profile/JD source keeps its own authority (and its own honest
+  // "this mode cannot source it" disclosure) rather than being widened into
+  // the document pool. "is your <noun>" is left to T1's second-person rule.
+  const hasPrivateClaimSoFar = [...claims].some((c) => (CLAIM_AUTHORITY[c]?.authoritative ?? []).length > 0);
+  // "the engineering headcount as of july 2026 what is it": the subject reads
+  // as a concept complement ("the X of …") to the definition grammar, but a
+  // subject followed by "what is it" is a lookup of that subject, never a
+  // definition — so the topic-first shape is not gated on conceptComplement.
+  const topicFirstAsk = /^(?:(?:so|okay|ok|and|right|um|uh|yeah|well|then)[,\s]+)*(?:the |our |my |this |that )?[a-z0-9][\w %$.\/-]{2,60}?[,\s]+what(?:'s| is| was| are| were)? (?:it|that|they|those|these)\b/i.test(q);
+  if (modeHoldsDocuments && (topicFirstAsk || (currentStateAsk && !conceptComplement)) && !hasPrivateClaimSoFar && !isBareFollowUp(q) && !techTask) {
+    types.add('DOCUMENT_FACT'); noteWholeQ('DOCUMENT_FACT');
+  }
+  // An exhaustive request over the material (2026-09-07). "Find every place a
+  // latency number appears" listed 8 of ~20 values live: the plan capped
+  // evidence at 6 chunks and the reranker pool at the user's 15. The flag is
+  // only meaningful when there is material to scan; the orchestrator widens
+  // the plan and the ports/composer widen with it.
+  exhaustive = modeHoldsDocuments && !isBareFollowUp(q) && EXHAUSTIVE_RE.test(q);
+  // "Give me every metric for reranker A and B" with documents attached IS a
+  // question about the documents even without a pointer word: an enumeration
+  // over "everything" has nothing to enumerate but the material. Retrieval is
+  // cheap and the evidence gate keeps the last word.
+  if (exhaustive) { types.add('DOCUMENT_FACT'); noteWholeQ('DOCUMENT_FACT'); }
   // A technical/computational turn that produced NO claim at all is a
   // general-knowledge turn, and must SAY so (2026-08-02). Left claimless it
   // classified AMBIGUOUS → grounded-without-retrieval → answerability NONE,
@@ -881,6 +1394,13 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
       .some((s) => input.policy.allowedSourceTypes.includes(s));
     if (docish) { types.add('DOCUMENT_FACT'); noteWholeQ('DOCUMENT_FACT'); }
   }
+  // NOTE (2026-09-20): a question that ALREADY carries an employment claim
+  // ("Who would be my manager?") is deliberately NOT given a job claim here by
+  // grammar. The owner's decision for that class is "let the corpus decide" —
+  // the orchestrator plans the job description for it only when the question's
+  // terms are absent from the résumé (ProfileDocumentReachability pins both
+  // directions). A grammar rule here was written, broke those tests, and was
+  // removed.
   const hasPrivateClaim2 = [...claims].some((c) => (CLAIM_AUTHORITY[c]?.authoritative ?? []).length > 0);
   if (!hasPrivateClaim2 && !techTask && !conceptOnly
       && (namesEntity || primaryClaimsIt || definiteValueLookup)) {
@@ -895,9 +1415,26 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
       CANDIDATE_FILE: 'USER_PROJECT',
       MEETING_TRANSCRIPT: 'MEETING_STATEMENT',
     };
-    const inferred = primary ? claimForSource[primary] : undefined;
+    // THE PRIMARY SOURCE IS A GUESS; THE QUESTION OFTEN SAYS OTHERWISE (2026-09-20).
+    // In a job-seeking mode the primary source is the résumé, so every factual
+    // question no rule recognised was inferred to be about the user's own
+    // project — including "who is the hiring manager", "How large is the group
+    // I would be joining?" and "How much ownership of the company comes with
+    // the offer?". Measured at every document size: the job description WAS
+    // planned, but the project intent boosted résumé project sections into the
+    // slots and the turn came back PARTIAL with the wrong document in front of
+    // the model. What says the question is about the TARGET JOB instead is its
+    // grammar: a résumé records what happened, it cannot answer what "would"
+    // happen or what comes "with the offer". (A corpus-anchor signal was tried
+    // here too and removed: an anchored question already carries DOCUMENT_FACT
+    // by the time this block runs, so the branch could never be reached.)
+    const jobSide = input.policy.allowedSourceTypes.includes('JOB_DESCRIPTION')
+      && (primary === 'RESUME' || primary === 'PROFILE_FACT' || primary === 'CANDIDATE_FILE')
+      && PROSPECTIVE_JOB_RE.test(q);
+    const inferred = jobSide ? 'JOB_REQUIRED_SKILL' : primary ? claimForSource[primary] : undefined;
     if (inferred) {
       claims.add(inferred);
+      inferredClaims.add(inferred);
       types.add(inferred === 'DOCUMENT_FACT' ? 'DOCUMENT_FACT'
         : inferred === 'MEETING_STATEMENT' ? 'MEETING_FACT'
           : inferred === 'JOB_REQUIRED_SKILL' ? 'JOB_REQUIREMENT' : 'PERSONAL_PROJECT');
@@ -911,6 +1448,25 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
           && input.policy.allowedSourceTypes.includes('REFERENCE_FILE')) {
         claims.add('DOCUMENT_FACT'); types.add('DOCUMENT_FACT');
       }
+      // Mirror of Defect A for a LIVE MEETING (task 7b, issue #552,
+      // live-verified): the rule above widens a transcript-PRIMARY mode to
+      // also claim the reference side. General is the opposite shape — its
+      // primary source is REFERENCE_FILE — and a live run showed the exact
+      // failure Defect A was written for, just on the other source: "what did
+      // jonas say about the elasticsearch window" inferred DOCUMENT_FACT
+      // only, both meeting ports admitted the right chunk, and the answer
+      // said nothing was said because MEETING_TRANSCRIPT was never planned.
+      // `inLiveMeeting` is true only when resolveMeetingEvidence() actually
+      // built a port for this turn — not merely "the mode allows it" — so a
+      // meeting-authorized mode with nothing spoken yet still gets its
+      // ordinary primary-source routing. The deleted typed-chat RAG
+      // pre-flight used to cover General in a live meeting; the claim stays
+      // an ALTERNATIVE so answerability grades each side honestly.
+      if (input.inLiveMeeting
+          && input.policy.allowedSourceTypes.includes('MEETING_TRANSCRIPT')
+          && inferred !== 'MEETING_STATEMENT') {
+        types.add('MEETING_FACT'); noteWholeQ('MEETING_STATEMENT');
+      }
       // Deep-test D2/D3 (2026-08-01): a definite value can live in ANY attached
       // document, not only the primary source's pool. In technical-interview
       // the primary is RESUME, but "what is the dead-letter topic?" lives in a
@@ -922,6 +1478,46 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
             .some((s) => input.policy.allowedSourceTypes.includes(s))) {
         claims.add('DOCUMENT_FACT'); types.add('DOCUMENT_FACT');
       }
+    }
+  }
+  // ── STT fragment lookup (2026-09-07, always-answer) ──────────────────────
+  //
+  // Live transcripts hand the engine fragments with no question word: "l four
+  // base", "rate per hour and and the cap", "the sev". In a mode holding
+  // documents those are lookups — measured: both classified GENERAL_TECHNICAL,
+  // took the FAST path with no retrieval, and the answer was a market-rate
+  // guess ("typically $130k–$170k") or "the material does not specify". A short
+  // claimless fragment that is not coding/design self-talk, not arithmetic and
+  // not a bare follow-up retrieves against the documents; the composer's
+  // absence framing still answers from general knowledge when nothing matches.
+  // Runs AFTER the primary-source fallback so an entity question keeps its
+  // résumé claim, and skips generative asks ("write a cover letter").
+  //
+  // The cap counts the CORE of the fragment (2026-09-10, measured in a
+  // 1,199-turn STT-noise corpus): "yeah and period for gross margin percent i
+  // think" and "so the mrr growth percent what is it if you know" are 9-word
+  // lines whose lookup is five words long; the lead-in and the trailing hedge
+  // pushed them past the cap, they fell to the general claim, took the FAST
+  // path, and the model said "I don't have that number" over a sheet that has
+  // it. Discourse lead-ins and hedges are not part of the question.
+  if (modeHoldsDocuments && claims.size === 0 && !isBareFollowUp(q) && !techTask
+      && !GENERATIVE_ASK_RE.test(q)
+      && fragmentCoreWordCount(q) <= 8
+      && !CODING_TASK_RE.test(q) && !SYSTEM_DESIGN_RE.test(q) && !TECH_SELF_TALK_RE.test(q)
+      && !deviceTroubleshoot && !/\d\s*(?:\+|−|-|\*|×|\/|÷|%)\s*\d/.test(q)
+      && !META_REQUEST_RE.test(input.resolvedQuestion)) {
+    types.add('DOCUMENT_FACT'); noteWholeQ('DOCUMENT_FACT');
+    // In a PROFILE mode the fragment is about the user as much as about a
+    // file (2026-09-11): "the team size, kitne log the" in technical-interview
+    // took the FAST path and the persona invented "das log" — a personal fact
+    // stated with no source. Claiming the résumé side as an alternative makes
+    // the turn grounded, so an absent fact is disclosed instead of improvised.
+    // Only a NOUN-PHRASE fragment ("the team size, kitne log the"): a how-to
+    // or wh-question ("how do I rebase onto the main branch") is a task or a
+    // concept, not a fact about the user.
+    if ((primarySource === 'RESUME' || primarySource === 'PROFILE_FACT')
+        && !/^(?:how|what|why|when|where|which|who|whom|can|could|should|would|will|is|are|was|were|do|does|did|explain|describe|tell|give|show|write|implement|design|walk|compare|list)\b/.test(q.replace(FRAGMENT_LEAD_IN_RE, ''))) {
+      types.add('PERSONAL_EXPERIENCE'); noteWholeQ('USER_EMPLOYMENT');
     }
   }
   // LAST-RESORT document claim (deep-run 2, issue 1): a question-shaped input
@@ -940,7 +1536,7 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
   // and needs no retrieval. Returning early keeps prompt-shaped document text
   // out of the candidate pool entirely.
   if (META_REQUEST_RE.test(input.resolvedQuestion)) {
-    return { types: ['META_REQUEST'], claims: [], clauses: {} };
+    return { types: ['META_REQUEST'], claims: [], clauses: {}, exhaustive: false, inferred: [] };
   }
 
   // LAST-RESORT general-knowledge claim (2026-08-02). Every claim branch above
@@ -977,7 +1573,7 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
   if (hasPrivate && hasGeneral) types.add('MIXED');
 
   if (types.size === 0) types.add('AMBIGUOUS');
-  return { types: [...types], claims: [...claims], clauses };
+  return { types: [...types], claims: [...claims], clauses, exhaustive, inferred: [...inferredClaims] };
 }
 
 /** Capitalised tokens that are ordinary technical vocabulary, not references to
@@ -1069,11 +1665,64 @@ function hasCapsOrIdentifierEntity(text: string): boolean {
 // retriever can fetch (conversation state arrives with the turn; it is not a
 // queryable pool).
 const NON_RETRIEVABLE: readonly SourceType[] = ['CONVERSATION_STATE'];
-const CLAIM_TO_SOURCE: Partial<Record<ClaimType, SourceType[]>> = Object.fromEntries(
-  (Object.entries(CLAIM_AUTHORITY) as Array<[ClaimType, { authoritative: SourceType[] }]>)
-    .filter(([, a]) => a.authoritative.length > 0)
-    .map(([claim, a]) => [claim, a.authoritative.filter((s) => !NON_RETRIEVABLE.includes(s))]),
-);
+// Derived PER CALL, not at module load (2026-08-28). It used to be a
+// `Object.fromEntries(...)` const, which was correct while the authority table
+// was a frozen literal — T1 makes it flag-dependent, and a module-load
+// derivation would freeze whatever the environment was at import time, making
+// the flag unobservable to any test that sets it afterwards. Same freezing trap
+// `FlagSpec.default` documents in intelligenceFlags.ts.
+//
+// Still DERIVED, which is the property that matters: the comment above records
+// two separate incidents where this was a hand-maintained second copy of the
+// authority table, drifted from it, and made a claim silently unreachable.
+//
+// `hasDocuments` gates T1's widening HERE and nowhere else, and the asymmetry is
+// deliberate. This map decides REACHABILITY — whether a claim reports
+// `unsupportedInMode`, which is what licenses the composer's "not established by
+// any available source" instruction. Widening it unconditionally would tell a
+// user with no files at all that their employment claim is supported, and the
+// anti-fabrication guards for "what are my strengths?" in a profile-less mode
+// would stop firing. A reference file may evidence the user's own work — but
+// only if there is one.
+//
+// The admission side (`authorityOf` / `claimRequirements.authoritativeSources`)
+// is widened unconditionally, and does not need this gate: it runs against
+// chunks that were actually retrieved, and a retrieved chunk is proof a document
+// exists.
+const claimToSource = (claim: ClaimType, hasDocuments: boolean, anchored: readonly SourceType[] = [], profileOnlyDocuments = false): SourceType[] => {
+  const authoritative = (hasDocuments ? claimAuthority(claim) : CLAIM_AUTHORITY[claim]).authoritative;
+  if (!authoritative.length) return [];
+  // DOCUMENT_FACT narrows rather than derives — see the override note below.
+  // The narrowing keeps identity pools (résumé, job description) OUT of a
+  // document lookup because fanning every lookup across them buried the asked-
+  // for fact. It also made the job description unreachable for any question
+  // that did not say "role"/"position"/"interview" (measured 2026-09-19: 37 of
+  // 45). An identity pool re-enters for ONE turn only when corpus arbitration
+  // found the question's own terms in it — and only if DOCUMENT_FACT's
+  // authority already covers that source.
+  if (claim === 'DOCUMENT_FACT') {
+    // PROFILE-ONLY TURN: documents exist (a résumé / job description in Profile
+    // Intelligence) but NO file is attached to the mode. The narrowing protects
+    // reference-file lookups from being flooded by identity pools; with no
+    // reference file there is nothing to protect, and a plan of
+    // REFERENCE_FILE alone searches nothing. The identity pools ARE the
+    // documents, so a document lookup looks in them (the mode allowlist still
+    // applies downstream).
+    const identityPools = authoritative.filter((src) => !DOCUMENT_FACT_RETRIEVAL_SOURCES.includes(src) && !NON_RETRIEVABLE.includes(src));
+    // NOTE (2026-09-20): excluding the JOB DESCRIPTION here whenever the turn also
+    // carries a USER_* claim was tried (a review found "Have I ever been on call?"
+    // reported FULL on job-description evidence) and reverted the same day: the
+    // classifier gives "How many engineers are in pod 3?" a default USER_PROJECT
+    // claim, so the exclusion made job-description questions unanswerable —
+    // ProfileVectorArm and ProfileDocumentReachability caught it. The reviewed
+    // case reaches the JD through the orchestrator's corpus rule for employment
+    // questions (an owner decision), not through this widening. Left open.
+    if (profileOnlyDocuments) return [...DOCUMENT_FACT_RETRIEVAL_SOURCES, ...identityPools];
+    const widened = anchored.filter((src) => authoritative.includes(src) && !DOCUMENT_FACT_RETRIEVAL_SOURCES.includes(src));
+    return widened.length ? [...DOCUMENT_FACT_RETRIEVAL_SOURCES, ...widened] : DOCUMENT_FACT_RETRIEVAL_SOURCES;
+  }
+  return authoritative.filter((s) => !NON_RETRIEVABLE.includes(s));
+};
 // RETRIEVAL narrowing (deep-run 2, issue 5): a résumé/JD may still EVIDENCE a
 // document-deictic claim (authority stays wide — "the canary written in this
 // résumé"), but DOCUMENT_FACT does not RETRIEVE from identity pools by
@@ -1082,11 +1731,87 @@ const CLAIM_TO_SOURCE: Partial<Record<ClaimType, SourceType[]>> = Object.fromEnt
 // "last-page canary" NONE in technical-interview while the identical question
 // passed in Sales, whose plan held REFERENCE_FILE alone). Questions that point
 // at the résumé/JD claim those sides explicitly (deictic side-claims above).
-CLAIM_TO_SOURCE.DOCUMENT_FACT = ['REFERENCE_FILE', 'PROJECT_FILE', 'CODING_SAMPLE'];
+const DOCUMENT_FACT_RETRIEVAL_SOURCES: SourceType[] = ['REFERENCE_FILE', 'PROJECT_FILE', 'CODING_SAMPLE'];
+
+// Document nouns a definite/possessive determiner turns into a pointer at an
+// attached file. "problem"/"question"/"policy"/"contract" are NOT here on
+// purpose: "this problem" is coding self-talk and "your retry policy" is a
+// question about the user's practice, not a pointer at a document. An attached
+// problem statement, policy or contract is reached by NAME below.
+const DOC_DEIXIS_RE = /\b(?:the|this|that|my|our|your|attached|uploaded)\s+(?:[\w-]+\s+){0,2}(?:logs?|error\s+logs?|documents?|docs?|files?|notes|spec(?:ification)?s?|briefs?|reports?|post-?mortems?|checklists?|playbooks?|battlecards?|syllabus|syllabi|handbooks?|agendas?|sow|pdfs?|decks?|slides?|stack\s*traces?|readme|attachments?|write-?ups?|memos?)\b/i;
+
+const FILE_NAME_STOP = new Set(['the', 'and', 'for', 'with', 'from', 'copy', 'final', 'draft', 'new', 'old', 'sample', 'file', 'doc', 'docs', 'notes', 'tech', 'test', 'v1', 'v2', 'v3']);
+
+// A TITLED task ("the debounce problem", "the two-sum question", "the LRU
+// exercise") is a pointer at an attached question bank even though "problem"
+// and "question" are kept out of DOC_DEIXIS_RE: bare "this problem" is coding
+// self-talk, but a problem that has a NAME is one the user expects the app to
+// look up. Measured 2026-09-07: "Implement the debounce problem and explain…"
+// went FAST with 01_coding_questions.md attached (CODING-ANCHOR-009 was the
+// debounce problem) — right answer, wrong path. Generic modifiers are excluded
+// so "the same problem" / "the main question" stay self-talk.
+const TITLED_TASK_RE = /\b(?:the|this|that)\s+([a-z][\w-]{2,})\s+(?:problem|question|exercise|task|scenario|challenge|puzzle|kata|prompt)s?\b/gi;
+const TITLED_TASK_STOP = new Set([
+  'same', 'main', 'only', 'real', 'first', 'next', 'last', 'other', 'biggest', 'core', 'root', 'whole', 'key',
+  'hard', 'easy', 'new', 'old', 'second', 'third', 'coding', 'technical', 'interview', 'design', 'current',
+  'above', 'below', 'previous', 'following', 'original', 'actual', 'bigger', 'smaller', 'general', 'exact',
+  'specific', 'right', 'wrong', 'entire', 'full', 'simple', 'basic', 'harder', 'easier', 'typical', 'common',
+  'usual', 'obvious', 'underlying', 'central', 'open', 'remaining', 'final', 'initial', 'related', 'broader',
+]);
+export function namesTitledTask(question: string): boolean {
+  TITLED_TASK_RE.lastIndex = 0;
+  for (const m of question.matchAll(TITLED_TASK_RE)) {
+    const mod = m[1].toLowerCase();
+    if (!TITLED_TASK_STOP.has(mod) && !/^\d+$/.test(mod)) return true;
+  }
+  return false;
+}
+
+// The question asks for EVERY occurrence, value or place — an enumeration over
+// the whole material rather than one fact from it. Deliberately narrow: an
+// ordinary "what are all the fallbacks?" matches ("all the … fallbacks"), but a
+// plain value lookup never does.
+const EXHAUSTIVE_RE = new RegExp([
+  '\\b(?:every|all|each)\\s+(?:the\\s+|of\\s+the\\s+)?(?:[\\w-]+\\s+){0,2}(?:places?|times?|occurrences?|instances?|mentions?|sections?|values?|numbers?|figures?|metrics?|items?|entries?|references?|files?|documents?|lines?|spots?|dates?|names?|steps?|milestones?|anchors?|scenarios?|questions?|fallbacks?|thresholds?|limits?|budgets?|timeouts?|rates?|latenc(?:y|ies)|scores?)\\b',
+  '\\b(?:list|find|show|give me|enumerate|collect|gather|extract|pull out|cite)\\s+(?:me\\s+)?(?:all|every|each|everything|everywhere)\\b',
+  // "what are all the benchmarks in the sheet" (2026-09-11, seminar mode):
+  // the noun list above could not name every column a sheet may hold, so an
+  // "all the <anything>s in the <sheet|file|…>" / "what are all the <X>s"
+  // enumeration is exhaustive by shape.
+  '\\b(?:what|which)\\s+(?:are|were)\\s+all\\s+(?:the|our|its|their)\\s+[\\w-]+',
+  '\\b(?:all|every|each)\\s+(?:the\\s+|of\\s+the\\s+)?[\\w-]+s?\\s+(?:in|on|from|across)\\s+(?:the|this|that|our|my)\\s+(?:sheet|file|doc|document|documents|table|list|csv|spreadsheet|notes|material|pack|deck)\\b',
+  '\\bexhaustive(?:ly)?\\b',
+  '\\bcomplete (?:list|inventory|set|table)\\b',
+  '\\beverywhere\\b',
+  '\\bhow many (?:places|times)\\b',
+  '\\bwherever\\b',
+].join('|'), 'i');
+
+/**
+ * Does the question name one of the attached files? A run of two consecutive
+ * filename words ("error log", "array problem", "launch checklist") or one
+ * distinctive word of six+ letters ("postmortem", "battlecard", "syllabus").
+ * Filenames are the user's own labels for what they attached, so a match is a
+ * deterministic routing signal — the same reasoning as the glossary/formula
+ * routing above, generalised. Names only, never content.
+ */
+export function mentionsAttachedFile(question: string, fileNames: readonly string[] | undefined): boolean {
+  if (!fileNames?.length) return false;
+  const q = ` ${question.toLowerCase().replace(/[^a-z0-9]+/g, ' ')} `;
+  for (const name of fileNames) {
+    const stem = String(name ?? '').toLowerCase().replace(/\.[a-z0-9]{1,5}$/i, '');
+    const words = stem.split(/[^a-z0-9]+/).filter((w) => w.length >= 3 && !FILE_NAME_STOP.has(w));
+    for (let i = 0; i < words.length; i++) {
+      if (words[i].length >= 6 && q.includes(` ${words[i]} `)) return true;
+      if (i + 1 < words.length && q.includes(` ${words[i]} ${words[i + 1]} `)) return true;
+    }
+  }
+  return false;
+}
 
 export function classifyTurn(input: ClassificationInput): Classification {
   const q = norm(input.resolvedQuestion);
-  const { types, claims, clauses } = detectTypes(q, input);
+  const { types, claims, clauses, exhaustive, inferred: inferredClaims } = detectTypes(q, input);
 
   // Required sources = union of what the detected claims need, INTERSECTED with
   // what the mode authorizes. A mode never has sources forced into it.
@@ -1099,7 +1824,7 @@ export function classifyTurn(input: ClassificationInput): Classification {
   const wanted = new Set<SourceType>();
   const unreachable = new Set<SourceType>();
   for (const c of claims) {
-    const srcs = CLAIM_TO_SOURCE[c] ?? [];
+    const srcs = claimToSource(c, input.hasAttachedDocuments === true, input.anchoredSourceTypes ?? [], input.profileOnlyDocuments === true);
     if (!srcs.length) continue;
     const allowedSrcs = srcs.filter((s) => input.policy.allowedSourceTypes.includes(s));
     if (allowedSrcs.length) for (const s of allowedSrcs) wanted.add(s);
@@ -1173,7 +1898,17 @@ export function classifyTurn(input: ClassificationInput): Classification {
     path = 'GROUNDED'; shouldRetrieve = false;
     reason = `question requires ${unsupportedInMode.join(',')}, which mode "${input.policy.id}" does not authorize`;
   } else if (types.includes('AMBIGUOUS') || followUp) {
-    path = 'GROUNDED'; shouldRetrieve = requiredSourceTypes.length > 0 || followUp;
+    // "Retrieve conservatively" retrieved NOTHING for an ambiguous question
+    // that named no source — the comment and the code disagreed. Measured
+    // 2026-09-19 with a job description attached: "Will they help me move
+    // countries and pay for it?" is AMBIGUOUS with no claim, so it went out
+    // with zero evidence while "okay" and "hmm right" (short-fragment rule)
+    // both retrieved. With documents attached and a document pool authorized,
+    // the material is the conservative place to look; the unclaimed plan
+    // consults document pools only and the evidence gate keeps the last word.
+    const ambiguousOverDocuments = input.hasAttachedDocuments === true
+      && DOCUMENT_FACT_RETRIEVAL_SOURCES.some((src) => input.policy.allowedSourceTypes.includes(src));
+    path = 'GROUNDED'; shouldRetrieve = requiredSourceTypes.length > 0 || followUp || ambiguousOverDocuments;
     reason = followUp ? 'follow-up may reference grounded content by pronoun' : 'ambiguous question — retrieve conservatively';
   } else {
     path = 'GROUNDED'; shouldRetrieve = true;
@@ -1185,5 +1920,5 @@ export function classifyTurn(input: ClassificationInput): Classification {
     reason = 'mode disables retrieval';
   }
 
-  return { questionTypes: types, claimTypes: claims, claimClauses: clauses, path, shouldRetrieve, requiredSourceTypes, unsupportedInMode, reason };
+  return { questionTypes: types, claimTypes: claims, claimClauses: clauses, inferredClaimTypes: inferredClaims, path, shouldRetrieve, requiredSourceTypes, exhaustive, unsupportedInMode, reason };
 }

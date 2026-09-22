@@ -8,16 +8,18 @@
 // ============================================================================
 import './nativeArchGate';
 
+import { buildEmbeddingConfig } from './rag/embeddingConfigIdentity';
 import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, systemPreferences, screen, desktopCapturer } from "electron"
 import * as crypto from "crypto"
 import path from "path"
 import fs from "fs"
 import os from "os"
-import dns from "dns"
 import { SystemAudioHealthClassifier } from "./audio/systemAudioHealthClassifier.mjs"
 import { FatalMainProcessCoordinator } from "./utils/fatalMainProcess"
+import { installResilientDnsLookup } from "./utils/resilientDnsLookup"
 import { MeetingLifecycleQueue, type MeetingLifecycleState } from "./audio/meetingLifecycleQueue"
 import { autoUpdater } from "electron-updater"
+import { summarizeUpdateDownload } from "./update/updateDownloadSummary"
 
 import {
   classifyServiceAccountFile,
@@ -25,30 +27,16 @@ import {
   type ServiceAccountVerdict,
 } from "./services/googleServiceAccount"
 
-// Override global dns.lookup to resolve macOS system resolver issues with api.natively.software
-const originalLookup = dns.lookup;
-dns.lookup = function(hostname: any, options: any, callback: any) {
-  if (typeof options === 'function') {
-    callback = options;
-    options = {};
-  }
-  if (hostname === 'api.natively.software') {
-    dns.resolve4(hostname, (err, addresses) => {
-      if (err || !addresses.length) {
-        originalLookup(hostname, options, callback);
-      } else {
-        const addr = addresses[0];
-        if (options && (options as any).all) {
-          callback(null, [{ address: addr, family: 4 }] as any);
-        } else {
-          callback(null, addr, 4);
-        }
-      }
-    });
-  } else {
-    originalLookup(hostname, options, callback);
-  }
-} as any;
+// Process-wide resilient DNS (2026-09-10). This used to route
+// api.natively.software through c-ares `resolve4` FIRST, unbounded and
+// uncached, as a workaround for a macOS getaddrinfo ENOTFOUND. Measured on an
+// iPhone-hotspot (IPv6/NAT64) network: resolve4 took 8,009 ms while the
+// system lookup took 11 ms, so every Natively request blew its 4 s connect
+// budget and the user saw "The model did not produce an answer in time" with
+// the server answering curl in 0.45 s. The workaround is kept — as the
+// bounded FALLBACK behind a cached system lookup. See
+// electron/utils/resilientDnsLookup.ts for the contract and its tests.
+installResilientDnsLookup();
 
 if (!app.isPackaged) {
   require('dotenv').config();
@@ -1213,28 +1201,31 @@ import { IntelligenceManager } from "./IntelligenceManager"
 import { SystemAudioCapture } from "./audio/SystemAudioCapture"
 import { MicrophoneCapture } from "./audio/MicrophoneCapture"
 import { AudioDevices } from "./audio/AudioDevices"
+import { resolveRequestedInputDevice } from "./audio/audioDeviceSelection.mjs"
 import { loadNativeModule } from "./audio/nativeModuleLoader"
 import { GoogleSTT } from "./audio/GoogleSTT"
 import { RestSTT } from "./audio/RestSTT"
 import { DeepgramStreamingSTT } from "./audio/DeepgramStreamingSTT"
 import { isIntelligenceFlagEnabled } from "./intelligence/intelligenceFlags"
-import { AutoAnswerController } from "./intelligence/autoAnswer/AutoAnswerController"
-import { createSmartTurnPredictor } from "./intelligence/autoAnswer/AutoAnswerTurnPredictor"
+import { buildJudgePrompt } from "./intelligence/autoAnswer/AutoAnswerJudge"
+import { SimpleAutoAnswerEngine } from "./intelligence/autoAnswer/SimpleAutoAnswer"
+import { resolveAutoAnswerThresholds } from "./context-intelligence/policies/mode-policy-registry"
 import type { SpeechEdge } from "./audio/speechEdge"
 import { SonioxStreamingSTT } from "./audio/SonioxStreamingSTT"
 import { ElevenLabsStreamingSTT } from "./audio/ElevenLabsStreamingSTT"
 import { OpenAIStreamingSTT } from "./audio/OpenAIStreamingSTT"
 import { NativelyProSTT } from "./audio/NativelyProSTT"
 import { NvidiaNimStreamingSTT } from "./audio/NvidiaNimStreamingSTT"
+import { AppleSpeechSTT } from "./audio/AppleSpeechSTT"
 import { punctuationSourceFor } from "./llm/punctuationProvenance"
 import { ThemeManager } from "./ThemeManager"
 import { RAGManager } from "./rag/RAGManager"
 import { DatabaseManager } from "./db/DatabaseManager"
-import { warmupIntentClassifier } from "./llm"
 
 /** Unified type for all STT providers with optional extended capabilities */
-type STTProvider = (GoogleSTT | RestSTT | DeepgramStreamingSTT | SonioxStreamingSTT | ElevenLabsStreamingSTT | OpenAIStreamingSTT | NativelyProSTT | NvidiaNimStreamingSTT) & {
-  finalize?: () => void;
+type STTProvider = (GoogleSTT | RestSTT | DeepgramStreamingSTT | SonioxStreamingSTT | ElevenLabsStreamingSTT | OpenAIStreamingSTT | NativelyProSTT | NvidiaNimStreamingSTT | AppleSpeechSTT) & {
+  /** Local models return whether a trailing final is now in flight; cloud providers return void. */
+  finalize?: () => void | boolean;
   setAudioChannelCount?: (count: number) => void;
   notifySpeechEnded?: () => void;
 };
@@ -1247,7 +1238,7 @@ interface SttStatusPayload {
   // STT WS may be connected but no isFinal transcript has arrived yet, so we
   // cannot honestly claim 'connected' in the UI. Renderers should display this
   // as a neutral "Listening for audio…" indicator, NOT green/active.
-  state: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio';
+  state: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio' | 'preparing';
   provider: string;
   error?: string;
   channel: 'user' | 'interviewer';
@@ -1283,6 +1274,12 @@ interface ScreenshotCaptureSession {
   overlayBounds: Electron.Rectangle | null;
   overlayDisplayId: number | null;
   restoreWithoutFocus: boolean;
+  // Stealth typing is torn down on the way into a capture: hideWindowsForScreenshot
+  // -> hideMainWindow() -> WindowHelper.stopStealthTyping(). Only the WINDOW was
+  // ever restored, so the overlay came back looking identical with the hook gone
+  // and the user's next keystrokes went to the foreground meeting app. Record it
+  // here so restoreWindowsAfterScreenshot can put it back.
+  wasStealthTypingActive: boolean;
 }
 
 // Premium: Knowledge modules loaded conditionally
@@ -1378,6 +1375,8 @@ export class AppState {
   private updateAvailable: boolean = false
   private updateDownloadState: 'idle' | 'available' | 'downloading' | 'downloaded' = 'idle'
   private updateDownloadPromise: Promise<unknown> | null = null
+  // Last `total` from download-progress; smaller than the file when the download was differential.
+  private lastUpdateProgressTotal: number | null = null
   private downloadedUpdateInfo: any = null
   private disguiseMode: 'terminal' | 'settings' | 'activity' | 'none' = 'none'
 
@@ -1436,6 +1435,12 @@ export class AppState {
   private _ragProcessingInFlight: Set<string> = new Set();
   private _isQuitting: boolean = false;
   private _verboseLogging: boolean = false;
+  // NOTE: what contextDebugLevel was before verbose logging raised it lives in
+  // SettingsManager ('contextDebugLevelBeforeVerbose'), NOT in a field here.
+  // An in-memory field is null again after a restart, so
+  // ON -> quit -> relaunch -> OFF would skip the restore branch and pin
+  // contextDebugLevel at 'verbose' forever — exactly the flattening of the
+  // user's Intelligence-settings choice this exists to prevent.
   private _ambientChatEnabled: boolean = false;
   private _autoAnswerEnabled: boolean = false;
   // Tracks whether STT sample-rate has been applied for the current capture
@@ -1490,10 +1495,15 @@ export class AppState {
     const settingsManager = SettingsManager.getInstance();
     this.isUndetectable = settingsManager.get('isUndetectable') ?? false;
     this.disguiseMode = normalizeDisguiseMode(settingsManager.get('disguiseMode'));
-    this._verboseLogging = settingsManager.get('verboseLogging') ?? true;
+    // Default OFF: ON means full content capture (transcripts, questions,
+    // answers in plaintext), which must be opt-in. Crash breadcrumbs do not
+    // depend on this flag — the console patch and logToFile() are
+    // unconditional. See verboseLog.ts.
+    this._verboseLogging = settingsManager.get('verboseLogging') ?? false;
     setVerboseLoggingFlag(this._verboseLogging);
     this._ambientChatEnabled = settingsManager.get('ambientChatEnabled') ?? false;
     this._autoAnswerEnabled = settingsManager.get('autoAnswerEnabled') ?? false;
+    console.log('[AutoAnswer] engine=simple (stoppage + judge)');
     console.log(`[AppState] Initialized with isUndetectable=${this.isUndetectable}, disguiseMode=${this.disguiseMode}, verboseLogging=${this._verboseLogging}, ambientChatEnabled=${this._ambientChatEnabled}, autoAnswerEnabled=${this._autoAnswerEnabled}`);
 
     // Context Intelligence debug logging (Developer settings). Bind the level
@@ -1685,20 +1695,10 @@ export class AppState {
     // experience instead of a crashloop.
     setImmediate(() => {
       try {
-        const { consumeIntentClassifierSentinel } = require('./llm/IntentClassifier');
         const { consumeLocalEmbeddingSentinel } = require('./rag/providers/LocalEmbeddingProvider');
         const { consumeLocalRerankerSentinel } = require('./rag/LocalReranker');
 
-        const intentPoisoned = consumeIntentClassifierSentinel();
-        if (intentPoisoned) {
-          const message = `Recovered from an intent classifier crash. ${intentPoisoned.modelId} is skipped this launch — falling back to regex/heuristic intent.`;
-          console.warn(`[AppState] ${message}`);
-          this.setOnnxRecoveryNotice('intent', {
-            family: 'intent',
-            badModelId: intentPoisoned.modelId,
-            message,
-          });
-        }
+        // Intent-classifier poison sentinel removed 2026-09-05 with the classifier.
 
         const embeddingPoisoned = consumeLocalEmbeddingSentinel();
         if (embeddingPoisoned) {
@@ -2062,14 +2062,17 @@ export class AppState {
         llmHelper.setGroqFastTextMode(true);
         console.log('[AppState] Fast mode restored from settings');
       }
+      // Unset fields are filled by CodexCliService.normalizeConfig from
+      // DEFAULT_CODEX_CLI_CONFIG. No literals here: a second copy of the
+      // defaults is how a ChatGPT-rejected fast model shipped (issue #558).
       llmHelper.setCodexCliConfig({
         enabled: !!settingsManager.get('codexCliEnabled'),
-        path: settingsManager.get('codexCliPath') || 'codex',
-        model: settingsManager.get('codexCliModel') || 'gpt-5.4',
-        fastModel: settingsManager.get('codexCliFastModel') || 'gpt-5.3-codex-spark',
-        timeoutMs: settingsManager.get('codexCliTimeoutMs') || 60_000,
-        sandboxMode: settingsManager.get('codexCliSandboxMode') || 'read-only',
-        serviceTier: settingsManager.get('codexCliServiceTier') || 'default',
+        path: settingsManager.get('codexCliPath'),
+        model: settingsManager.get('codexCliModel'),
+        fastModel: settingsManager.get('codexCliFastModel'),
+        timeoutMs: settingsManager.get('codexCliTimeoutMs'),
+        sandboxMode: settingsManager.get('codexCliSandboxMode'),
+        serviceTier: settingsManager.get('codexCliServiceTier'),
         modelReasoningEffort: settingsManager.get('codexCliModelReasoningEffort'),
       });
     }
@@ -2463,14 +2466,9 @@ export class AppState {
           // Re-resolve the embedding provider given that Ollama might now be available
           if (this.ragManager) {
              console.log('[AppState] Ollama model ready, re-evaluating RAG pipeline provider');
-             const { CredentialsManager } = require('./services/CredentialsManager');
-             const cm = CredentialsManager.getInstance();
-             this.ragManager.initializeEmbeddings({
-                openaiKey: cm.getOpenaiApiKey() || process.env.OPENAI_API_KEY || undefined,
-                geminiKey: cm.getGeminiApiKey() || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || undefined,
-                ollamaUrl: process.env.OLLAMA_URL || "http://localhost:11434",
-                providerDataScopes: (() => { try { const { SettingsManager } = require('./services/SettingsManager'); return SettingsManager.getInstance().get('providerDataScopes'); } catch { return undefined; } })()
-             });
+             // One shared builder — this site used to omit geminiKeys (killing key
+             // rotation) and would have omitted the Natively key the same way.
+             this.ragManager.initializeEmbeddings(buildEmbeddingConfig());
              this.scheduleModeReferenceIndexRetry();
           }
         }
@@ -2486,31 +2484,14 @@ export class AppState {
       const sqliteDb = db.getDb();
 
       if (sqliteDb) {
-        const { CredentialsManager } = require('./services/CredentialsManager');
-        const cm = CredentialsManager.getInstance();
-        const openaiKey = cm.getOpenaiApiKey() || process.env.OPENAI_API_KEY;
-        const geminiKey = cm.getGeminiApiKey() || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
-        // Gemini embedding key POOL: credential key + all GEMINI_API_KEY(_2.._6)/GOOGLE
-        // env keys, de-duped. Lets the embedding provider rotate off a rate-limited
-        // key (429 → per-key cooldown → next key) instead of failing the index.
-        const geminiKeys = (() => {
-          const pool: string[] = [];
-          const add = (k?: string) => { const v = (k || '').trim(); if (v && !pool.includes(v)) pool.push(v); };
-          add(cm.getGeminiApiKey());
-          for (const n of ['GEMINI_API_KEY', 'GEMINI_API_KEY_2', 'GEMINI_API_KEY_3', 'GEMINI_API_KEY_4', 'GEMINI_API_KEY_5', 'GEMINI_API_KEY_6', 'GOOGLE_API_KEY']) add(process.env[n]);
-          return pool;
-        })();
-
-        const providerDataScopes = (() => { try { const { SettingsManager } = require('./services/SettingsManager'); return SettingsManager.getInstance().get('providerDataScopes'); } catch { return undefined; } })();
+        // Credentials, the Gemini rotation pool and the provider-scope policy are
+        // all assembled by buildEmbeddingConfig() now — see the note there about
+        // the four sites that used to hand-roll this and had already drifted.
         this.ragManager = new RAGManager({
             db: sqliteDb,
             dbPath: db.getDbPath(),
             extPath: db.getExtPath(),
-            openaiKey,
-            geminiKey,
-            geminiKeys,
-            ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
-            providerDataScopes
+            ...buildEmbeddingConfig(),
         });
         this.ragManager.setLLMHelper(this.processingHelper.getLLMHelper());
 
@@ -2527,10 +2508,10 @@ export class AppState {
         // provider closure is passed rather than the instance — it also means a
         // later RAGManager re-init is picked up without re-wiring.
         try {
-          this.intelligenceManager?.setRagRetrieverProvider?.(
-            () => this.ragManager?.getRetriever() ?? null,
+          this.intelligenceManager?.setMeetingRagProvider?.(
+            () => this.ragManager ?? null,
           );
-        } catch (e) { console.warn('[AppState] V3 meeting retriever wiring skipped:', e); }
+        } catch (e) { console.warn('[AppState] V3 meeting RAG wiring skipped:', e); }
 
         console.log('[AppState] RAGManager initialized');
       }
@@ -2592,6 +2573,36 @@ export class AppState {
           this.knowledgeOrchestrator.setSearchProviderResolver(resolveCompanySearchProvider);
         }
 
+        // Is company research appropriate in the active mode? (Routing audit,
+        // 2026-09-04.) The orchestrator's dossier gate was mode-blind, so a
+        // Team Meet or Lecture turn containing a bare token like "reviews" or
+        // "funding" could put a query on the wire to an external search
+        // provider whenever a JD was still loaded from an earlier session.
+        //
+        // In exactly those modes the result is discarded: the intercept gate in
+        // LLMHelper runs AFTER processQuestion returns, so the research had
+        // already happened and its output was thrown away. The call could never
+        // change the answer, only leak the query and spend the budget.
+        //
+        // Reuses the SAME predicate as that gate, so the two cannot drift: the
+        // modes that discard the result are exactly the modes that no longer
+        // request it. Resolved per call because the user switches modes
+        // mid-session. Optional-capability guard matches the sibling wiring
+        // above, so an older premium build without the setter is unaffected.
+        if (typeof this.knowledgeOrchestrator.setCompanyResearchAllowedFn === 'function') {
+          this.knowledgeOrchestrator.setCompanyResearchAllowedFn(() => {
+            try {
+              // Local require, matching every other ModesManager use in this
+              // file: the module is not statically imported here.
+              const { ModesManager } = require('./services/ModesManager');
+              return ModesManager.getInstance().isPremiumKnowledgeInterceptAllowed();
+            } catch {
+              // Never let a mode-lookup failure disable a paid capability.
+              return true;
+            }
+          });
+        }
+
         // Embedding function — lazily delegate to the cascaded EmbeddingPipeline
         // (OpenAI → Gemini → Ollama → Local bundled model).
         // We await waitForReady() so uploads during boot wait for the pipeline
@@ -2608,6 +2619,17 @@ export class AppState {
         });
         if (typeof this.knowledgeOrchestrator.setEmbedWithMetadataFn === 'function') {
           this.knowledgeOrchestrator.setEmbedWithMetadataFn(embedWithProducerMetadata);
+        }
+        // Ingest embeds its nodes a BATCH at a time through this (2026-09-19): ten
+        // concurrent single-text requests per batch drew 429s from the embed route
+        // and silently demoted a whole résumé's nodes to the bundled model's space.
+        if (typeof (this.knowledgeOrchestrator as any).setEmbedBatchWithMetadataFn === 'function') {
+          (this.knowledgeOrchestrator as any).setEmbedBatchWithMetadataFn(async (texts: string[]) => {
+            const pipeline = self.ragManager?.getEmbeddingPipeline();
+            if (!pipeline) throw new Error('RAG pipeline not available');
+            await pipeline.waitForReady();
+            return await pipeline.getEmbeddingsWithFallback(texts);
+          });
         }
         // Report the active document-embedder's composite space so the orchestrator
         // can detect knowledge nodes embedded in an OLD space (e.g. after a
@@ -2846,11 +2868,17 @@ export class AppState {
       log_message = log_message + " - Downloaded " + progressObj.percent + "%"
       log_message = log_message + " (" + progressObj.transferred + "/" + progressObj.total + ")"
       console.log("[AutoUpdater] " + log_message)
+      this.lastUpdateProgressTotal = progressObj.total
       this.broadcast("download-progress", progressObj)
     })
 
     autoUpdater.on("update-downloaded", (info) => {
       console.log("[AutoUpdater] Update downloaded:", info.version)
+      let downloadedFileBytes: number | null = null
+      try {
+        downloadedFileBytes = fs.statSync(info.downloadedFile).size
+      } catch { /* summary reports the size as unknown */ }
+      console.log(`[AutoUpdater] ${summarizeUpdateDownload(this.lastUpdateProgressTotal, downloadedFileBytes).message}`)
       this.updateDownloadState = 'downloaded'
       this.updateDownloadPromise = null
       // info.filePath is the public path of the staged update zip from Squirrel.Mac.
@@ -3098,8 +3126,11 @@ export class AppState {
   public async checkForUpdates(): Promise<void> {
     console.log('[AutoUpdater] Manual check for updates requested')
     try {
-      // In development mode, use manual GitHub API check (electron-updater skips in dev)
-      if (process.env.NODE_ENV === "development") {
+      // Use app.isPackaged, not NODE_ENV, matching every other updater gate in
+      // this file (see canAutoInstall()) — a stray NODE_ENV=development in a
+      // packaged build's environment must not silently downgrade the real
+      // electron-updater flow to the manual GitHub-API-only check.
+      if (!app.isPackaged) {
         await this.checkForUpdatesManual()
       } else {
         await autoUpdater.checkForUpdatesAndNotify()
@@ -3133,6 +3164,7 @@ export class AppState {
 
     console.log('[AutoUpdater] Starting download...')
     this.updateDownloadState = 'downloading'
+    this.lastUpdateProgressTotal = null
     try {
       // Errors during download are surfaced via autoUpdater.on("error") which
       // already broadcasts "update-error". Do not broadcast here to avoid duplicates.
@@ -3177,133 +3209,110 @@ export class AppState {
   // against the in-flight speculative run, rejects on the mismatch, bumps
   // currentGenerationId — cancelling the correctly-prefetched answer — and then
   // generates one for the PREVIOUS question.
-  // Auto Answer V3 (Settings > General, default OFF). AppState owns wiring and
-  // lifecycle only; the controller owns turn accumulation, endpoint reasoning,
-  // question identity, answerability, dedup, queueing, the dual-channel gate
-  // and every skip reason (electron/intelligence/autoAnswer/). With the toggle
-  // OFF `ingest` returns before touching any state — hotkey-only, as before.
-  /** Built before the controller (field order) so the controller can subscribe to it. */
-  private readonly smartTurnPredictor = createSmartTurnPredictor((line) => { if (this._verboseLogging) console.log(line); });
-  private readonly autoAnswerController = new AutoAnswerController({
+  /**
+   * The DEFAULT engine (user decision 2026-08-25): "legacy trigger, judge
+   * brain" — interviewer stoppage → one judge call → dispatch/offer/silent.
+   * See SimpleAutoAnswer.ts. V3 stays reachable via
+   * NATIVELY_AUTO_ANSWER_ENGINE=v3 for A/B.
+   */
+  /**
+   * DEV-ONLY transcript trace. Every routine log in this app carries lengths
+   * and reasons, never words (pinned by SensitiveLogRedaction), which makes a
+   * live run hard to read: you can see that a candidate was judged, not WHAT
+   * was judged. This is the one deliberate exception, and it reuses the
+   * Context-Intelligence content gate rather than adding a second concept —
+   * dev build AND NATIVELY_CONTEXT_DEBUG=verbose AND
+   * NATIVELY_CONTEXT_DEBUG_INCLUDE_CONTENT=1, evaluated per call so toggling
+   * the setting needs no restart, and failing CLOSED when unbound or packaged.
+   */
+  private contentTraceEnabled(): boolean {
+    try {
+      const { getContentInclusionEnabled } = require('./context-intelligence/debug/debug-config');
+      return getContentInclusionEnabled() === true;
+    } catch { return false; }
+  }
+
+  private readonly simpleAutoAnswer = new SimpleAutoAnswerEngine({
     isEnabled: () => this._autoAnswerEnabled,
     isMeetingActive: () => this.isMeetingActive,
     meetingGeneration: () => this._meetingGeneration,
     engineAccepting: () => this.intelligenceManager.canAutoAnswer(),
-    manualAnswerActive: () => this.intelligenceManager.isManualAnswerActive(),
-    recentTurns: () => this.intelligenceManager.getLiveTranscriptBrain().getHotWindow(60) as any,
-    speculativeSnapshot: () => this.intelligenceManager.getSpeculativeSnapshot(),
-    noteCandidate: (id, gen) => this.intelligenceManager.noteAutoAnswerCandidate(id, gen),
-    cancelAutomaticAnswer: (reason) => this.intelligenceManager.cancelAutomaticAnswer(reason),
+    answerStreamActive: () => this.intelligenceManager.isAnswerStreaming(),
+    // 180 s — the SAME window the answer itself is written from
+    // (IntelligenceEngine's getContext(180)). At 60 s the judge could not see
+    // the problem statement when ruling on a follow-up two minutes later,
+    // while the answer could; the offline benches all ran on the wider view.
+    recentTurns: () => this.intelligenceManager.getLiveTranscriptBrain().getHotWindow(180) as any,
+    logContent: (label: string, text: string) => {
+      if (!this.contentTraceEnabled()) return;
+      console.log(`[AutoAnswer:text] ${label}\n    “${text}”`);
+    },
     dispatch: (question, { reuseSpeculative }) => {
-      void this.intelligenceManager.runAutoAnswer(question, { reuseSpeculative }).catch((error) => {
+      return this.intelligenceManager.runAutoAnswer(question, { reuseSpeculative }).catch((error) => {
         console.warn('[Main] Automatic interviewer answer failed:', error);
       });
     },
-    // V3 Amendment 4: the ONE offer card, rendered through the existing Dynamic
-    // Action surface (DynamicActionBar/Card). Tab or click commits; the
-    // What-to-Answer hotkey commits through manual_answer_started → retract.
-    offer: (question) => this.showAutoAnswerOffer(question),
-    retractOffer: (questionId, reason) => this.retractAutoAnswerOffer(questionId, reason),
-    log: (line) => { if (this._verboseLogging) console.log(line); },
+    cancelAutomaticAnswer: (reason) => this.intelligenceManager.cancelAutomaticAnswer(reason),
+    // Speculative prefetch (2026-08-25): key the engine's own interim
+    // speculation to this candidate, and let the engine start the answer while
+    // the judge is still deciding.
+    noteCandidate: (id, gen) => this.intelligenceManager.noteAutoAnswerCandidate(id, gen),
+    speculativeSnapshot: () => this.intelligenceManager.getSpeculativeSnapshot(),
+    prefetchAnswer: (id, text) => this.intelligenceManager.prefetchAutoAnswer(id, text),
+    ...((process.env.NATIVELY_AUTO_ANSWER_JUDGE || '').toLowerCase() === 'off' ? {} : {
+      judgeCandidate: async (req) => {
+        const llm = this.processingHelper?.getLLMHelper?.();
+        if (!llm) return null;
+        return await llm.generateJudgeVerdict(buildJudgePrompt(req));
+      },
+    }),
+    modeName: () => {
+      try {
+        const { ModesManager } = require('./services/ModesManager');
+        return ModesManager.getInstance().getActiveMode()?.name ?? null;
+      } catch { return null; }
+    },
     telemetry: (event) => {
-      // Structured, NO transcript text (V2 §29): ids, acts, scores, reasons, timings only.
       try {
         const { telemetryService } = require('./services/telemetry/TelemetryService');
         const { name, meetingGeneration, provider, ...properties } = event;
         telemetryService.track({ name, provider, properties: { meetingGeneration, ...properties } });
       } catch { /* telemetry must never break the pipeline */ }
     },
-  }, {
-    // Tier-2 endpoint evidence: Smart Turn v3.1 on the interviewer audio
-    // (V3 Amendment 2). Asset missing → predict() null → deterministic path.
-    turnPredictor: this.smartTurnPredictor,
-    // Layer-3 dedup / speculative reuse over the bundled local embedder
-    // (Xenova/all-MiniLM-L6-v2). Lazily constructed; any failure → null →
-    // the cheap layers decide (V2 §38: never depend on a model asset).
-    embed: async (text: string) => {
-      try {
-        let embedder = this.autoAnswerEmbedder;
-        if (!embedder) {
-          const { LocalEmbeddingProvider } = require('./rag/providers/LocalEmbeddingProvider');
-          embedder = new LocalEmbeddingProvider();
-          this.autoAnswerEmbedder = embedder;
-        }
-        return await embedder!.embed(text);
-      } catch { return null; }
-    },
-  });
+    log: (line) => { if (this._verboseLogging) console.log(line); },
+    // review#10 parity (2026-08-25): boot on the registry's no-mode default
+    // (the stricter MEETING bar), not the compiled-in interview constants.
+  }, undefined, resolveAutoAnswerThresholds(null));
   private autoAnswerEmbedder: { embed(text: string): Promise<number[]> } | null = null;
 
   /** A manual What-to-Answer started (hotkey / button / accepted offer): the offer card is committed. */
   public onManualWhatToAnswer(): void {
-    this.autoAnswerController.onManualAnswerStarted();
+    this.simpleAutoAnswer.onManualAnswerStarted();
   }
 
   /** Per-mode ternary thresholds (V3 Amendment 4), resolved from the mode policy registry. */
   public applyAutoAnswerThresholds(modeTemplateType: string | null | undefined): void {
     try {
-      const { resolveAutoAnswerThresholds } = require('./context-intelligence/policies/mode-policy-registry') as typeof import('./context-intelligence/policies/mode-policy-registry');
-      this.autoAnswerController.setThresholds(resolveAutoAnswerThresholds(modeTemplateType));
+      this.simpleAutoAnswer.setThresholds(resolveAutoAnswerThresholds(modeTemplateType));
     } catch { /* keep the current thresholds */ }
   }
 
   private cancelAutoAnswer(): void {
-    this.autoAnswerController.onMeetingStop();
-    // Free the Smart Turn ORT session between meetings (and on toggle-off).
-    // It is lazily re-created on the next interviewer speech-stop. Also keeps
-    // a live ORT session out of any hard-exit path: process.exit() with one
-    // loaded SIGABRTs (reproduced under Electron 43's Node).
-    void this.smartTurnPredictor.dispose();
+    this.simpleAutoAnswer.onMeetingStop();
   }
 
   /** Stable id prefix so the renderer can replace the card in place and retract it by id. */
-  private static readonly AUTO_ANSWER_OFFER_ID_PREFIX = 'auto-answer-offer:';
-
-  /** Render the offer as a Dynamic Action (reuse, not a new surface — V2 §47 / V3 Amendment 4). */
-  private showAutoAnswerOffer(question: { id: string; text: string; answerability: number; dialogueAct: string }): void {
-    const now = Date.now();
-    let modeId = 'general';
-    let modeTemplateType = 'general';
-    try {
-      const { ModesManager } = require('./services/ModesManager');
-      const active = ModesManager.getInstance().getActiveMode();
-      if (active) { modeId = active.id; modeTemplateType = active.templateType; }
-    } catch { /* defaults */ }
-    const action = {
-      id: `${AppState.AUTO_ANSWER_OFFER_ID_PREFIX}${question.id}`,
-      sessionId: `auto-answer-${this._meetingGeneration}`,
-      modeId,
-      modeTemplateType,
-      type: 'auto_answer_offer',
-      label: 'Answer this?',
-      // The detected question IS the card body; it is also the prompt the
-      // renderer hands to handleWhatToSay on accept (manual semantics).
-      description: question.text,
-      confidence: question.answerability,
-      priority: 100,
-      evidenceRefs: [],
-      status: 'shown' as const,
-      createdAt: now,
-      expiresAt: now + 10_000,
-      promptInstruction: question.text,
-    };
-    try { this.intelligenceManager.registerDynamicAction(action); } catch { /* accept still works renderer-side */ }
-    const helper = this.getWindowHelper();
-    this.sendToWindow(helper.getLauncherWindow(), 'intelligence-dynamic-action', { action });
-    this.sendToWindow(helper.getOverlayWindow(), 'intelligence-dynamic-action', { action });
-  }
-
-  private retractAutoAnswerOffer(questionId: string, reason: string): void {
-    const id = `${AppState.AUTO_ANSWER_OFFER_ID_PREFIX}${questionId}`;
-    try { this.intelligenceManager.dismissDynamicAction(id); } catch { /* best effort */ }
-    const helper = this.getWindowHelper();
-    this.sendToWindow(helper.getLauncherWindow(), 'intelligence-dynamic-action-retract', { id, reason });
-    this.sendToWindow(helper.getOverlayWindow(), 'intelligence-dynamic-action-retract', { id, reason });
-  }
+  /**
+   * The Auto Answer offer card ("Answer this?" + Tab) was removed on the
+   * user's instruction (2026-08-25): "if it has a doubt always answer, no need
+   * to ask… if the percentage is above 20 then surely show the answer."
+   * Asking permission mid-interview costs a keystroke and a decision at the
+   * worst possible moment; an answer you can ignore in a glance costs nothing.
+   * The engine now only answers or stays silent — see ANSWER_FLOOR.
+   */
 
   /** before-quit: release the Smart Turn session before the process winds down. */
   public disposeAutoAnswerForShutdown(): void {
-    void this.smartTurnPredictor.dispose();
   }
 
   private createSTTProvider(speaker: 'interviewer' | 'user'): STTProvider | null {
@@ -3429,6 +3438,8 @@ export class AppState {
         console.warn(`[Main] No API key for ${sttProvider} STT, falling back to GoogleSTT`);
         stt = new GoogleSTT(speaker);
       }
+    } else if (sttProvider === 'apple-speech') {
+      stt = new AppleSpeechSTT();
     } else if (sttProvider === 'local-whisper') {
       const { LocalWhisperSTT } = require('./audio/LocalWhisperSTT');
       const sm = SettingsManager.getInstance();
@@ -3470,6 +3481,23 @@ export class AppState {
       : stt instanceof GoogleSTT ? 'google'
       : sttProvider;
 
+    // Speaker diarization on the MEETING-AUDIO channel (2026-08-25). That
+    // channel can carry several voices — an interviewer plus a colleague, or a
+    // video with two speakers — and without labels the judge has to infer from
+    // wording who asked what, which is the deepest remaining source of wrong
+    // verdicts. Providers that diarize surface `speakerId` per segment; the
+    // Auto Answer engine passes those labels to the judge, and providers that
+    // do not simply never send one (the prompt is then unchanged).
+    // NATIVELY_AUTO_ANSWER_DIARIZE=off disables it.
+    if (speaker === 'interviewer'
+        && (process.env.NATIVELY_AUTO_ANSWER_DIARIZE || '').toLowerCase() !== 'off'
+        && typeof (stt as any).setDiarize === 'function') {
+      try {
+        (stt as any).setDiarize(true);
+        if (this._verboseLogging) console.log(`[AutoAnswer] speaker diarization requested on ${effectiveSttId}`);
+      } catch { /* optional capability; never block the meeting */ }
+    }
+
     // Auto Answer V3 provider endpoints (Deepgram speech_final / UtteranceEnd,
     // Soniox <end>, OpenAI server VAD). Interviewer channel only; additive
     // event that only the controller consumes. Providers without the event
@@ -3477,7 +3505,7 @@ export class AppState {
     if (speaker === 'interviewer') {
       (stt as any).on?.('endpoint', (ev: { type: 'speech_final' | 'utterance_end'; confidence?: number }) => {
         if (!this._autoAnswerEnabled) return;
-        this.autoAnswerController.onProviderEndpoint({ type: ev.type, timestamp: Date.now(), confidence: ev.confidence });
+        this.simpleAutoAnswer.onProviderEndpoint();
       });
     }
 
@@ -3509,19 +3537,27 @@ export class AppState {
         punctuationSource: punctuationSourceFor(effectiveSttId, segment.isFinal),
       });
 
-      // Auto Answer V3 (Settings > General, default OFF): every segment, any
-      // speaker, partial or final — the controller decides whether anything
-      // happens (V2 §24). Returns immediately when the toggle is off.
-      this.autoAnswerController.ingest({
-        speaker,
-        text: segment.text,
-        timestamp: Date.now(),
-        final: segment.isFinal,
-        confidence: segment.confidence,
-        origin: 'stt',
-        sttProvider: effectiveSttId,
-        punctuationSource: punctuationSourceFor(effectiveSttId, segment.isFinal),
-      });
+      // Auto Answer (Settings > General, default OFF). Engine per the A/B
+      // switch: legacy = the PR #497 debounce on interviewer finals only;
+      // v3 = every segment, any speaker, the controller decides (V2 §24).
+      // Same gate: the raw STT stream, so a stoppage that judged the "wrong"
+      // words can be traced back to the segments that built it.
+      if (this.contentTraceEnabled()) {
+        console.log(`[STT:${speaker}${segment.isFinal ? '' : '~'}] ${segment.text}`);
+      }
+
+      if (this._autoAnswerEnabled) {
+        this.simpleAutoAnswer.ingest({
+          speaker,
+          text: segment.text,
+          timestamp: Date.now(),
+          final: segment.isFinal,
+          confidence: segment.confidence,
+          origin: 'stt',
+          sttProvider: effectiveSttId,
+          punctuationSource: punctuationSourceFor(effectiveSttId, segment.isFinal),
+        } as any);
+      }
 
       // Feed final transcript to JIT RAG indexer
       if (segment.isFinal && this.ragManager) {
@@ -3573,7 +3609,7 @@ export class AppState {
     // "Listening for audio…" state until the first isFinal transcript proves
     // the pipeline is actually flowing. Pre-fix this was 'reconnecting' which
     // implied a recovery state from the get-go.
-    let _lastState: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio' = 'awaiting-audio';
+    let _lastState: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio' | 'preparing' = 'awaiting-audio';
 
     stt.on('error', (err: Error) => {
       // Google streamingRecognize's 10s silence timeout closes the stream
@@ -3612,7 +3648,14 @@ export class AppState {
       const isQuotaError = err.message.toLowerCase().includes('transcription_quota_exceeded')
         || err.message.toLowerCase().includes('quota');
 
-      if (isAuthError) {
+      // A local STT worker that could not start (no ONNX slot within 20s, or
+      // the model never reported ready) is terminal for this meeting: nothing
+      // restarts a LocalWhisperSTT instance, so "reconnecting" would be a lie
+      // the user stares at until they end the call. Surface the actionable
+      // message as a failure instead (LocalWhisperSTT.LOCAL_STT_UNAVAILABLE_CODE).
+      const isLocalSttUnavailable = (err as any)?.code === 'local_stt_unavailable';
+
+      if (isAuthError || isLocalSttUnavailable) {
         _consecutiveErrors = 0;
         _lastState = 'failed';
         this.sendSttStatus( {
@@ -3676,6 +3719,31 @@ export class AppState {
       console.warn(`[Main] STT (${speaker}) warning: ${w?.code ?? 'unknown'}`,
         { provider: sttProvider, message: w?.message, droppedBytes: w?.droppedBytes });
     });
+
+    // Apple may need to install the selected language asset before either
+    // channel can produce text. Surface that phase instead of leaving the user
+    // on a generic "Listening…" state for several minutes with no explanation.
+    if (stt instanceof AppleSpeechSTT) {
+      stt.on('status', (message: string) => {
+        if (!message?.trim()) return;
+        _lastState = 'preparing';
+        this.sendSttStatus({
+          state: 'preparing',
+          provider: sttProvider,
+          error: message,
+          channel: speaker,
+        } as SttStatusPayload);
+      });
+      stt.on('ready', () => {
+        if (_lastState !== 'preparing') return;
+        _lastState = 'awaiting-audio';
+        this.sendSttStatus({
+          state: 'awaiting-audio',
+          provider: sttProvider,
+          channel: speaker,
+        } as SttStatusPayload);
+      });
+    }
 
     // Auto language detection: NativelyProSTT emits 'languageDetected' when the
     // backend resolves the language from the first audio batch. Notify the renderer
@@ -3908,7 +3976,6 @@ export class AppState {
         this.googleSTT?.write(chunk);
         // Smart Turn ring buffer (256 KB, interviewer channel only). Cheap
         // int16 copy; skipped entirely while Auto Answer is off.
-        if (this._autoAnswerEnabled) this.smartTurnPredictor.pushPcm(chunk, capture.getSampleRate?.() ?? 16000);
       }
     });
     capture.on('sample_rate_changed', (rate: number) => {
@@ -3923,7 +3990,6 @@ export class AppState {
       }
     });
     capture.on('speech_edge', (edge: SpeechEdge) => {
-      if (this.systemAudioCapture === capture) this.autoAnswerController.onSpeechEdge(edge);
     });
     // setupAudioRecoveryHandler registers its own 'error' listener — do not
     // add a duplicate logger here or the same error reports twice.
@@ -4114,7 +4180,6 @@ export class AppState {
       }
     });
     capture.on('speech_edge', (edge: SpeechEdge) => {
-      if (this.microphoneCapture === capture) this.autoAnswerController.onSpeechEdge(edge);
     });
     // setupMicRecoveryHandler registers its own 'error' listener.
     this.setupMicRecoveryHandler();
@@ -4784,6 +4849,57 @@ export class AppState {
       }
     }
 
+    // Availability gate. Rust's resolve_input_device() HARD-ERRORS on an
+    // unknown input id — there is no default fallback on that path, and the
+    // error does not surface until MicrophoneCapture.start(), long after the
+    // constructor-shaped fallback ladder below has already "succeeded". So a
+    // saved device that is simply gone (unplugged dock mic, a renamed
+    // interface, or the NativelySystemAudioTap aggregate that used to be
+    // offerable in the picker) took the mic channel down for the entire
+    // meeting.
+    //
+    // Answer availability from the enumeration instead: it opens no capture
+    // stream, so it cannot start the mic, and it lets us hand the renderer a
+    // fellBack:true broadcast — which is what raises the amber "couldn't be
+    // opened — using <device> instead" banner whose Reset button already clears
+    // preferredInputDeviceId. The self-heal UI existed; this is the wiring that
+    // finally reaches it.
+    //
+    // NOT free of HAL contact: nativeModuleLoader.ts documents that on macOS
+    // getInputDevices() instantiates cpal::default_host() and registers this
+    // process with the CoreAudio HAL, which lights the orange menu-bar mic
+    // indicator. That is why this gate lives HERE — inside reconfigureAudio, at
+    // meeting start, after three earlier getInputDevices() calls in this same
+    // function — and must not be hoisted to app launch.
+    let unavailableInput: { requested: string; reason: string } | null = null;
+    if (wantedInput) {
+      const resolution = resolveRequestedInputDevice(wantedInput, AudioDevices.getInputDevices());
+      // Only 'missing' — a device the enumeration positively did not contain.
+      // 'unverifiable' means the enumeration itself told us nothing (native
+      // module absent, or Rust swallowed a host.input_devices() error and
+      // returned just the synthetic default row); discarding a working mic on
+      // that would be treating absence of evidence as evidence of absence.
+      if (resolution.status === 'missing') {
+        const reason = `Input device "${wantedInput}" is not available (found: ${
+          resolution.available.length ? resolution.available.join(', ') : 'none'
+        }).`;
+        console.warn(`[Main] ${reason} Falling back to the system default microphone.`);
+        unavailableInput = { requested: wantedInput, reason };
+        wantedInput = undefined;
+        // Broadcast here rather than only at the construction site below: the
+        // skip-if-unchanged early return sits between the two, so on a second
+        // meeting with the same stale preference the construction site is
+        // never reached and the banner would never appear.
+        this.broadcastDeviceSelection({
+          kind: 'input',
+          requested: unavailableInput.requested,
+          actual: 'default',
+          fellBack: true,
+          reason: unavailableInput.reason,
+        });
+      }
+    }
+
     if (
       this.systemAudioCapture &&
       this.microphoneCapture &&
@@ -4877,13 +4993,26 @@ export class AppState {
       this._micSttRateApplied = false;
       this.wireMicCapture(this.microphoneCapture, '(Reconfigured)');
       console.log('[Main] MicrophoneCapture initialized.');
+      // When the availability gate above rewrote wantedInput to the default,
+      // this is still a FALLBACK from the user's point of view. Reporting
+      // fellBack:false here would clear the amber notice the gate just raised
+      // (SettingsOverlay drops any notice for a kind that reports success).
       this.broadcastDeviceSelection({
         kind: 'input',
-        requested: wantedInput || null,
+        requested: unavailableInput ? unavailableInput.requested : (wantedInput || null),
         actual: wantedInput || 'default',
-        fellBack: false,
+        fellBack: !!unavailableInput,
+        ...(unavailableInput ? { reason: unavailableInput.reason } : {}),
       });
     } catch (err) {
+      // UNREACHABLE for a bad device id, and deliberately left in place: the
+      // wrapper is lazy, so `new MicrophoneCapture(id)` only throws when the
+      // native module itself is missing — never for a device that is absent or
+      // unopenable. "Absent" is handled by the availability gate above.
+      // "Present but unopenable" (an AirPods/XM5 returning an unsupported cpal
+      // sample format) surfaces later from start(), where setupMicRecoveryHandler
+      // retargets to the default. This ladder still covers the native-module
+      // failure case, so removing it is a separate change, not a cleanup.
       console.warn('[Main] Failed to initialize MicrophoneCapture with preferred ID. Falling back to default.', err);
       try {
         this.microphoneCapture = new MicrophoneCapture(); // Default
@@ -5305,12 +5434,102 @@ export class AppState {
     this._lastObservedDefaultOutputId = null;
   }
 
+  // ── ScreenCaptureKit re-probe (macOS, 2026-09-11) ─────────────────────────
+  // When the user chose the SCK backend and a system-initiated stop (display
+  // sleep, a display reconfiguration during a screen share) made the recovery
+  // land on the CoreAudio fallback — SCK cannot enumerate a display while
+  // every display is asleep — nothing ever brought SCK back once displays
+  // returned: the user who picked SCK because the CoreAudio tap does not work
+  // with their Bluetooth/USB device (#540) stayed on it for the rest of the
+  // meeting. Poll while the meeting runs on the 'sck' route: if the live
+  // capture reports the CoreAudio backend and a display is available again,
+  // rebuild on SCK. Bounded so a display that flaps cannot rebuild forever.
+  private _sckReprobeInterval: NodeJS.Timeout | null = null;
+  private _sckReprobeRebuilds = 0;
+  private static readonly SCK_REPROBE_INTERVAL_MS = 10_000;
+  private static readonly SCK_REPROBE_MAX_REBUILDS = 3;
+
+  private startSckReprobeWatcher(): void {
+    if (process.platform !== 'darwin') return;
+    if (this._sckReprobeInterval) return;
+    if (this._lastRequestedOutputDeviceId !== 'sck') return;
+    const NativeModule: any = loadNativeModule();
+    if (!NativeModule || typeof NativeModule.screenCaptureDisplaysAvailable !== 'function') {
+      console.log('[SckReprobe] Native screenCaptureDisplaysAvailable unavailable — skipping re-probe watcher.');
+      return;
+    }
+    this._sckReprobeRebuilds = 0;
+    console.log('[SckReprobe] Started (SCK backend requested).');
+    this._sckReprobeInterval = setInterval(() => {
+      if (this._isQuitting || !this.isMeetingActive) return;
+      if (this._lastRequestedOutputDeviceId !== 'sck') return;
+      if (this._defaultOutputSwitchInProgress || this._systemAudioRecoveryInProgress) return;
+      const capture = this.systemAudioCapture;
+      if (!capture) return;
+      const backend = capture.getActiveBackend();
+      if (backend === 'sck') { this._sckReprobeRebuilds = 0; return; } // healthy
+      if (backend !== 'coreaudio') return;                               // still initialising
+      if (this._sckReprobeRebuilds >= AppState.SCK_REPROBE_MAX_REBUILDS) return;
+      let displays = false;
+      try { displays = !!NativeModule.screenCaptureDisplaysAvailable(); } catch { return; }
+      if (!displays) return;
+      this._sckReprobeRebuilds++;
+      console.log(`[SckReprobe] Displays are back and the capture is on the CoreAudio fallback — rebuilding on ScreenCaptureKit (attempt ${this._sckReprobeRebuilds}/${AppState.SCK_REPROBE_MAX_REBUILDS}).`);
+      this.rebuildSystemCaptureForSck().catch((err) => {
+        console.error('[SckReprobe] Rebuild failed:', err);
+      });
+    }, AppState.SCK_REPROBE_INTERVAL_MS);
+    this._sckReprobeInterval.unref?.();
+  }
+
+  private stopSckReprobeWatcher(): void {
+    if (this._sckReprobeInterval) {
+      clearInterval(this._sckReprobeInterval);
+      this._sckReprobeInterval = null;
+    }
+  }
+
+  /**
+   * Destroy + recreate the system capture on the SCK backend. Same ownership
+   * discipline as handleDefaultOutputChanged (F-102/F-103/F-104): the shared
+   * cross-flow mutex, an awaited destroy, and a re-validation after every await.
+   */
+  private async rebuildSystemCaptureForSck(): Promise<void> {
+    const meetingGeneration = this._meetingGeneration;
+    const isCurrentMeeting = () => this.isMeetingActive && this._meetingGeneration === meetingGeneration;
+    if (this._isQuitting || !isCurrentMeeting()) return;
+    if (this._defaultOutputSwitchInProgress || this._systemAudioRecoveryInProgress) return;
+    this._defaultOutputSwitchInProgress = true;
+    try {
+      const oldCapture = this.systemAudioCapture;
+      this.systemAudioCapture = null;
+      this._sysSttRateApplied = false;
+      await oldCapture?.destroy();
+      if (this._isQuitting || !isCurrentMeeting()) return;
+      if (this.systemAudioCapture) {
+        console.warn('[SckReprobe] Capture rebuilt by another flow mid-await — keeping theirs.');
+        return;
+      }
+      const fresh = new SystemAudioCapture('sck');
+      this.systemAudioCapture = fresh;
+      this.wireSystemCapture(fresh, '(SckReprobe)');
+      fresh.start();
+      // A fresh backend gets a fresh recovery budget.
+      this._systemAudioRecoveryAttempts = 0;
+      this._systemAudioConsecutiveFailures = 0;
+      console.log('[SckReprobe] Capture rebuilt on ScreenCaptureKit.');
+    } finally {
+      this._defaultOutputSwitchInProgress = false;
+    }
+  }
+
   // Public wrapper for the before-quit hook so shutdown can cancel the
   // interval without poking into a private method. Mirrors the meeting-end
   // path's stopDefaultOutputWatcher() call but is invoked from a context that
   // does not own a `this` reference inside the AppState class.
   public stopDefaultOutputWatcherForShutdown(): void {
     this.stopDefaultOutputWatcher();
+    this.stopSckReprobeWatcher();
   }
 
   private async handleDefaultOutputChanged(currentId?: string): Promise<void> {
@@ -5478,110 +5697,171 @@ export class AppState {
       }
 
       this._micRecoveryInProgress = true;
-      this._micRecoveryAttempts++;
-      console.warn(
-        `[MicRecovery] MicrophoneCapture error — attempting recovery #${this._micRecoveryAttempts}: ${err.message}`,
-      );
+
+      // Pause system audio ONCE, outside the attempt loop but INSIDE the try —
+      // a throw from stop() must still reach the finally that clears
+      // _micRecoveryInProgress, or every later recovery is blocked for the rest
+      // of the process. The CoreAudio process-tap + aggregate teardown is a
+      // synchronous HAL operation that, on a Bluetooth output route, can stall
+      // coreaudiod's global HAL lock for seconds — freezing the machine — when a
+      // tap is created and destroyed within ~1-2s (the hazard
+      // _audioTestSystemProbeTimer is debounced for). Pausing per-attempt would
+      // do three such cycles ~1.5s apart.
+      const systemCapturePausedForMicRecovery = !!this.systemAudioCapture;
+      const systemCapturePausedByMicRecovery = this.systemAudioCapture;
 
       try {
-        await new Promise<void>(resolve => {
-          this._micRecoveryTimer = setTimeout(resolve, 1500);
-        });
-        this._micRecoveryTimer = null;
-        if (!isMicRecoveryCurrentMeeting()) {
-          return;
-        }
-
-        // Tear down + recreate the mic. Because MicrophoneCapture is lazy-init,
-        // mic.start() constructs the cpal input stream. Pause system audio first
-        // so cpal does not negotiate the mic stream while the CoreAudio aggregate
-        // device IO proc is active — same HAL ordering invariant as startMeeting.
-        const systemCapturePausedForMicRecovery = !!this.systemAudioCapture;
-        const systemCapturePausedByMicRecovery = this.systemAudioCapture;
         if (systemCapturePausedByMicRecovery) {
           (systemCapturePausedByMicRecovery as any)?.__disarmStuckWatchdog?.();
           await systemCapturePausedByMicRecovery.stop();
         }
 
-        let micRecoveryErr: any = null;
-        try {
-          if (this.microphoneCapture) {
-            await this.microphoneCapture.destroy();
-            this.microphoneCapture = null;
-          }
-          this._micSttRateApplied = false;
+        // ATTEMPT LOOP — one inbound 'error' drives all three attempts.
+        //
+        // Pre-fix this handler did exactly one attempt per inbound event and
+        // relied on a later 'error' to trigger the next. That event never came:
+        // the recovery's own MicrophoneCapture.start() emits 'error'
+        // SYNCHRONOUSLY before throwing, re-entering this handler while
+        // _micRecoveryInProgress is still true, so the guard above dropped it.
+        // The counter froze at 1 — the mic stayed dead for the rest of the
+        // meeting and the 3-attempt terminal banner below could never fire.
+        //
+        // The bound is a LOCAL, not `this._micRecoveryAttempts`: the field is
+        // reset to 0 by the power-resume handler, reconfigureAudio and
+        // startMeetingTransition, and power-resume also clears
+        // _micRecoveryInProgress and the timer this loop awaits. A shared bound
+        // would let a parked loop run past three attempts while a second
+        // concurrent loop rebuilds the same this.microphoneCapture field.
+        let attempts = 0;
+        while (attempts < 3) {
+          attempts++;
+          this._micRecoveryAttempts = attempts;
+          console.warn(
+            `[MicRecovery] MicrophoneCapture error — attempting recovery #${this._micRecoveryAttempts}: ${err.message}`,
+          );
 
           try {
-            this.microphoneCapture = new MicrophoneCapture(this._lastRequestedInputDeviceId);
-          } catch (createErr) {
-            console.warn('[MicRecovery] Saved device unavailable on recovery, falling back to default.', createErr);
-            this.microphoneCapture = new MicrophoneCapture();
-          }
+            await new Promise<void>(resolve => {
+              this._micRecoveryTimer = setTimeout(resolve, 1500);
+            });
+            this._micRecoveryTimer = null;
+            if (!isMicRecoveryCurrentMeeting()) {
+              return;
+            }
 
-          // Use the canonical wiring path (wireMicCapture) instead of hand-rolling
-          // data/sample_rate_changed/speech_ended. Hand-rolled wiring drifts: this
-          // recovery path used to omit the stuck-watchdog and zero-fill detector
-          // (lines 1612-1693 of wireMicCapture), so after a mic recovery the user
-          // would silently get zero-filled audio with no UI signal — exactly the
-          // failure mode the watchdog was built to surface. setupMicRecoveryHandler
-          // is invoked at the tail of wireMicCapture so we don't need a separate
-          // call here either. Mirrors the system-audio recovery pattern at L2413.
-          this.wireMicCapture(this.microphoneCapture, '(Recovery)');
-          this.microphoneCapture.start();
-        } catch (err) {
-          micRecoveryErr = err;
-        } finally {
-          // Only restart the exact system wrapper WE paused. If a route-change
-          // watcher or system-audio recovery rebuilt/restarted system audio while
-          // mic recovery was in flight, that owner should keep control; starting
-          // whatever happens to be in this.systemAudioCapture could resurrect a
-          // stale wrapper or double-start a freshly-owned one.
-          if (
-            systemCapturePausedForMicRecovery &&
-            systemCapturePausedByMicRecovery &&
-            this.systemAudioCapture === systemCapturePausedByMicRecovery &&
-            !this._defaultOutputSwitchInProgress &&
-            !this._systemAudioRecoveryInProgress &&
-            isMicRecoveryCurrentMeeting()
-          ) {
-            try {
-              systemCapturePausedByMicRecovery.start();
-            } catch (restartErr) {
-              console.error('[MicRecovery] Failed to restart system audio after mic recovery pause:', restartErr);
+            // Tear down + recreate the mic. Because MicrophoneCapture is lazy-init,
+            // mic.start() constructs the cpal input stream. System audio is
+            // already paused (above the loop) so cpal does not negotiate the mic
+            // stream while the CoreAudio aggregate device IO proc is active —
+            // same HAL ordering invariant as startMeeting.
+            {
+              if (this.microphoneCapture) {
+                await this.microphoneCapture.destroy();
+                this.microphoneCapture = null;
+              }
+              this._micSttRateApplied = false;
+
+              this.microphoneCapture = new MicrophoneCapture(this._lastRequestedInputDeviceId);
+
+              // Use the canonical wiring path (wireMicCapture) instead of hand-rolling
+              // data/sample_rate_changed/speech_ended. Hand-rolled wiring drifts: this
+              // recovery path used to omit the stuck-watchdog and zero-fill detector
+              // (lines 1612-1693 of wireMicCapture), so after a mic recovery the user
+              // would silently get zero-filled audio with no UI signal — exactly the
+              // failure mode the watchdog was built to surface. setupMicRecoveryHandler
+              // is invoked at the tail of wireMicCapture so we don't need a separate
+              // call here either. Mirrors the system-audio recovery pattern at L2413.
+              this.wireMicCapture(this.microphoneCapture, '(Recovery)');
+
+              try {
+                this.microphoneCapture.start();
+              } catch (startErr) {
+                // FALL BACK ON THE SURFACE THAT ACTUALLY THROWS.
+                //
+                // This used to be `try { new MicrophoneCapture(id) } catch {
+                // new MicrophoneCapture() }` — unreachable. The wrapper is
+                // LAZY: its constructor never touches the HAL (doing so would
+                // light the macOS orange mic indicator outside a meeting), so a
+                // missing or unopenable device cannot be detected until start()
+                // builds the native monitor. Every recovery attempt therefore
+                // retried the identical dead device id forever.
+                const failedDeviceId = this._lastRequestedInputDeviceId;
+                if (!failedDeviceId) throw startErr;
+
+                console.warn(
+                  `[MicRecovery] Saved input device "${failedDeviceId}" could not be opened — falling back to the system default.`,
+                  startErr,
+                );
+                // Re-target rather than destroy+recreate: keeps the
+                // wireMicCapture wiring we just installed, and the await drains
+                // any deferred orphan teardown so it cannot race the fresh
+                // device open on the HAL.
+                await this.microphoneCapture.retargetDevice(null);
+                this._lastRequestedInputDeviceId = undefined;
+                this.microphoneCapture.start();
+                this.broadcastDeviceSelection({
+                  kind: 'input',
+                  requested: failedDeviceId,
+                  actual: 'default',
+                  fellBack: true,
+                  reason: (startErr as Error)?.message || 'device could not be opened',
+                });
+              }
+            }
+          } catch (recoveryErr: any) {
+            console.error(`[MicRecovery] Recovery attempt #${this._micRecoveryAttempts} failed:`, recoveryErr);
+            // B4: surface a terminal failure to the CURRENT meeting after the same
+            // 3-attempt cap that setupAudioRecoveryHandler uses for system audio
+            // (see L2456-2464). Pre-fix, mic recovery exhausted attempts only via
+            // console.error and the next 'error' was silently dropped by the
+            // early-return guard at the top of this handler — user heard nothing
+            // was being transcribed but no banner ever showed. Meeting-generation
+            // check mirrors isRecoveryCurrentMeeting() in the system-side handler.
+            if (this._micRecoveryAttempts >= 3 && isMicRecoveryCurrentMeeting()) {
               this.sendAudioCaptureFailed({
-                channel: 'system',
-                message: `System audio failed to restart after microphone recovery: ${(restartErr as Error)?.message || 'unknown error'}`,
-                attempt: 0,
-                maxAttempts: 0,
-                terminal: false,
+                channel: 'mic',
+                message: `Microphone capture gave up after 3 attempts. Last error: ${recoveryErr?.message || err.message}`,
+                attempt: this._micRecoveryAttempts,
+                maxAttempts: 3,
+                terminal: true,
               });
             }
+            continue;
           }
-        }
 
-        if (micRecoveryErr) throw micRecoveryErr;
-
-        this._micRecoveryAttempts = 0;
-        console.log('[MicRecovery] MicrophoneCapture restarted successfully.');
-      } catch (recoveryErr: any) {
-        console.error(`[MicRecovery] Recovery attempt #${this._micRecoveryAttempts} failed:`, recoveryErr);
-        // B4: surface a terminal failure to the CURRENT meeting after the same
-        // 3-attempt cap that setupAudioRecoveryHandler uses for system audio
-        // (see L2456-2464). Pre-fix, mic recovery exhausted attempts only via
-        // console.error and the next 'error' was silently dropped by the
-        // early-return guard at the top of this handler — user heard nothing
-        // was being transcribed but no banner ever showed. Meeting-generation
-        // check mirrors isRecoveryCurrentMeeting() in the system-side handler.
-        if (this._micRecoveryAttempts >= 3 && isMicRecoveryCurrentMeeting()) {
-          this.sendAudioCaptureFailed({
-            channel: 'mic',
-            message: `Microphone capture gave up after 3 attempts. Last error: ${recoveryErr?.message || err.message}`,
-            attempt: this._micRecoveryAttempts,
-            maxAttempts: 3,
-            terminal: true,
-          });
+          if (!isMicRecoveryCurrentMeeting()) return;
+          this._micRecoveryAttempts = 0;
+          console.log('[MicRecovery] MicrophoneCapture restarted successfully.');
+          return;
         }
       } finally {
+        // Restart the exact system wrapper WE paused, once, whatever the mic
+        // outcome. If a route-change watcher or system-audio recovery
+        // rebuilt/restarted system audio while mic recovery was in flight, that
+        // owner should keep control; starting whatever happens to be in
+        // this.systemAudioCapture could resurrect a stale wrapper or
+        // double-start a freshly-owned one.
+        if (
+          systemCapturePausedForMicRecovery &&
+          systemCapturePausedByMicRecovery &&
+          this.systemAudioCapture === systemCapturePausedByMicRecovery &&
+          !this._defaultOutputSwitchInProgress &&
+          !this._systemAudioRecoveryInProgress &&
+          isMicRecoveryCurrentMeeting()
+        ) {
+          try {
+            systemCapturePausedByMicRecovery.start();
+          } catch (restartErr) {
+            console.error('[MicRecovery] Failed to restart system audio after mic recovery pause:', restartErr);
+            this.sendAudioCaptureFailed({
+              channel: 'system',
+              message: `System audio failed to restart after microphone recovery: ${(restartErr as Error)?.message || 'unknown error'}`,
+              attempt: 0,
+              maxAttempts: 0,
+              terminal: false,
+            });
+          }
+        }
         this._micRecoveryInProgress = false;
       }
     });
@@ -5850,12 +6130,21 @@ export class AppState {
     }
   }
 
-  public finalizeMicSTT(): void {
+  /**
+   * Flush the user-mic provider so its trailing final is produced. Returns
+   * whether the provider reports a final now IN FLIGHT (local models can —
+   * they know a segment was just flushed to the worker); cloud providers
+   * return void and read as `pending: false`. The renderer's Answer/Stop tail
+   * wait uses this to decide between its short grace and its full window.
+   */
+  public finalizeMicSTT(): { pending: boolean } {
     // We only want to finalize the user microphone, because the context is Manual Answer
     if (this.googleSTT_User?.finalize) {
       console.log('[Main] Finalizing STT');
-      this.googleSTT_User.finalize();
+      const r: unknown = this.googleSTT_User.finalize();
+      return { pending: r === true };
     }
+    return { pending: false };
   }
 
   /**
@@ -5941,7 +6230,7 @@ export class AppState {
 
   private async startMeetingTransition(metadata?: any): Promise<void> {
     console.log('[Main] Starting Meeting...', metadata);
-    this.autoAnswerController.onMeetingStart();
+    this.simpleAutoAnswer.onMeetingStart();
 
     // If a previous endMeeting() is still draining STT in the background, wait
     // for it to finish before we boot a new session — otherwise the BG teardown
@@ -6053,6 +6342,10 @@ export class AppState {
           modeTemplateType: activeMode.templateType,
         });
         this.applyAutoAnswerThresholds(activeMode.templateType);
+      } else {
+        // No active mode: the registry's no-mode default (meeting bar), not
+        // whatever the previous mode left behind (review#10).
+        this.applyAutoAnswerThresholds(null);
       }
     } catch (err) {
       // Auxiliary feature — never block meeting start.
@@ -6204,6 +6497,7 @@ export class AppState {
         // output or if the native binary lacks the getDefaultOutputDeviceId
         // export.
         this.startDefaultOutputWatcher();
+        this.startSckReprobeWatcher();
 
         if (this._verboseLogging) {
           const requestedInput = metadata?.audio?.inputDeviceId || 'default';
@@ -6396,6 +6690,7 @@ export class AppState {
     // Stop the default-output watcher — no point polling CoreAudio while
     // there's no active capture to rebind.
     this.stopDefaultOutputWatcher();
+    this.stopSckReprobeWatcher();
 
     // Tell STT to mark the audio stream as ended; trailing finals will arrive
     // over the next ~150ms while we're already returning to the renderer.
@@ -6754,8 +7049,9 @@ export class AppState {
     })
 
     this.intelligenceManager.on('manual_answer_started', () => {
-      // The hotkey/click commits whatever Auto Answer was offering.
-      this.autoAnswerController.onManualAnswerStarted();
+      // The hotkey/click commits whatever Auto Answer was offering — and,
+      // inside the feedback window, says the automatic answer missed.
+      this.simpleAutoAnswer.onManualAnswerStarted();
       const win = mainWindow()
       this.sendToWindow(win, 'intelligence-manual-started')
     })
@@ -6770,7 +7066,7 @@ export class AppState {
       const win = mainWindow()
       this.sendToWindow(win, 'intelligence-mode-changed', { mode })
       // A candidate parked because the engine was busy may now dispatch.
-      if (mode === 'idle') this.autoAnswerController.onEngineIdle()
+      if (mode === 'idle') this.simpleAutoAnswer.onEngineIdle()
     })
 
     this.intelligenceManager.on('error', (error: Error, mode: string) => {
@@ -6829,13 +7125,27 @@ export class AppState {
     const { CredentialsManager } = require('./services/CredentialsManager');
     CredentialsManager.getInstance().setSttLanguage(key);
 
-    // 'auto' is only meaningful for NativelyProSTT — other providers fall back to en-US.
-    const sttProvider = CredentialsManager.getInstance().getSttProvider();
-    const effectiveKey = (key === 'auto' && sttProvider !== 'natively') ? 'english-us' : key;
-
-    this.googleSTT?.setRecognitionLanguage(effectiveKey);
-    this.googleSTT_User?.setRecognitionLanguage(effectiveKey);
-    this.processingHelper.getLLMHelper().setSttLanguage(effectiveKey);
+    // 'auto' is forwarded verbatim (changed 2026-08-24). The old collapse to
+    // 'english-us' for every non-Natively provider was stale: each provider
+    // implements its own 'auto' branch and has for some time —
+    //   GoogleSTT            en-US + fr/es/de alternativeLanguageCodes
+    //   DeepgramStreamingSTT language 'multi' (nova-3 multilingual)
+    //   ElevenLabsStreaming  language_code omitted
+    //   NvidiaNimStreaming   null → the model's own multi default
+    //   SonioxStreaming      no hint + enable_language_identification
+    //   LocalWhisperSTT      auto-detect (and self-normalises for Nemotron,
+    //                        which has no auto mode — see modelLanguageSupport)
+    //   RestSTT              language form-field omitted
+    // Collapsing here silently answered "Auto Detect" with English on all of
+    // them, and — now that getSttLanguage() defaults to 'auto' — would have
+    // pinned every untouched install to English instead.
+    //
+    // createSTTProvider() also passes the raw persisted key at construction
+    // time, so removing the collapse makes both call sites agree; they used to
+    // disagree for exactly this value.
+    this.googleSTT?.setRecognitionLanguage(key);
+    this.googleSTT_User?.setRecognitionLanguage(key);
+    this.processingHelper.getLLMHelper().setSttLanguage(key);
   }
 
   public static getInstance(): AppState {
@@ -7011,8 +7321,40 @@ export class AppState {
       wasModelSelectorVisible: !!modelSelectorWindow && !modelSelectorWindow.isDestroyed() && modelSelectorWindow.isVisible(),
       overlayBounds: this.windowHelper.getLastOverlayBounds(),
       overlayDisplayId: this.windowHelper.getLastOverlayDisplayId(),
-      restoreWithoutFocus: process.platform === 'darwin' || !restoreFocus
+      restoreWithoutFocus: process.platform === 'darwin' || !restoreFocus,
+      wasStealthTypingActive: this.isStealthTypingActive()
     };
+  }
+
+  /**
+   * Whether stealth typing is engaged right now. Isolated so a missing or stale
+   * manager module can never break a screenshot: capture is the priority, the
+   * restore is best-effort.
+   */
+  private isStealthTypingActive(): boolean {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
+      return StealthKeyboardManager.getInstance().isActive();
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Re-engage the stealth-typing hook the capture tore down. Availability is
+   * NOT re-checked here: start() already refuses on win32 unless the overlay is
+   * visible, and returns false rather than throwing, so it is the single source
+   * of truth for whether engaging is legal right now.
+   */
+  private restoreStealthTypingAfterScreenshot(): void {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
+      StealthKeyboardManager.getInstance().start();
+    } catch (e) {
+      console.error('[AppState] failed to restore stealth typing after screenshot:', e);
+    }
   }
 
   private getDisplayById(displayId: number | null): Electron.Display | undefined {
@@ -7073,6 +7415,22 @@ export class AppState {
         const { x, y } = modelSelectorWindow.getBounds();
         this.modelSelectorWindowHelper.showWindow(x, y, { activate });
       }
+    }
+
+    // LAST, and the ordering is forced in BOTH directions:
+    //   - start() refuses on win32 unless the overlay is already visible, so it
+    //     cannot run before the main-window restore above;
+    //   - start() calls hideAuxWindowsForStealth(), so running it before the
+    //     Settings / ModelSelector restores would find those windows already
+    //     hidden, do nothing, and they would then be re-shown UNDER an engaged
+    //     hook — visible windows whose input is dead because every keystroke is
+    //     routed to the overlay. That is exactly the state the helper exists to
+    //     prevent.
+    // Consequence, named rather than hidden: Settings + stealth collapses to
+    // stealth-only, which is a valid state, rather than a window that looks
+    // usable and is not.
+    if (session.wasStealthTypingActive) {
+      this.restoreStealthTypingAfterScreenshot();
     }
   }
 
@@ -7321,6 +7679,16 @@ export class AppState {
       this.tray.destroy();
       this.tray = null;
     }
+  }
+
+  /**
+   * Whether a tray icon currently exists. The launcher's win32/linux close
+   * handler hides to the tray only while this is true; with no tray (Windows
+   * undetectable mode destroys it) the close quits instead, because nothing
+   * on screen could bring the window back — see src/lib/launcherCloseDecision.mjs.
+   */
+  public hasTray(): boolean {
+    return this.tray !== null && !this.tray.isDestroyed();
   }
 
   public setHasDebugged(value: boolean): void {
@@ -7620,7 +7988,15 @@ export class AppState {
     // changes.  The OS can silently drop Carbon/IOKit hotkey registrations when
     // window focusability or visibility changes; revalidating surgically
     // re-registers any that were lost without clobbering the others.
-    KeybindManager.getInstance().revalidateShortcuts();
+    //
+    // Wrapped for the same reason as the resume/unlock/display callers: shortcut
+    // recovery is a best-effort side task of toggling passthrough, and must never
+    // be able to take the main process — or the toggle itself — down with it.
+    try {
+      KeybindManager.getInstance().revalidateShortcuts();
+    } catch (err) {
+      console.error('[Main] revalidateShortcuts on passthrough toggle threw:', err);
+    }
 
     this._broadcastToAllWindows('overlay-mouse-passthrough-changed', state);
   }
@@ -7639,13 +8015,43 @@ export class AppState {
     return this._verboseLogging;
   }
 
-  public setVerboseLogging(enabled: boolean): void {
+  public setVerboseLogging(enabled: boolean): boolean {
     this._verboseLogging = enabled;
     setVerboseLoggingFlag(enabled);
-    SettingsManager.getInstance().set('verboseLogging', enabled);
-    console.log(`[AppState] verboseLogging set to ${enabled}`);
+
+    // A degraded store REFUSES writes. Returning the result rather than
+    // dropping it is what stops the UI reporting success on a setting that
+    // reverts at restart — see RefusedSettingWriteReported2026_08_21.
+    const settings = SettingsManager.getInstance();
+    const persisted = settings.set('verboseLogging', enabled);
+
+    // Structured per-turn JSONL follows the switch, but contextDebugLevel is
+    // an INDEPENDENT three-value setting with its own selector in Intelligence
+    // settings (context-debug:set-level). Writing it unconditionally here
+    // would wipe whatever the user chose there. Raise it only when turning
+    // logging ON, and on the way out restore exactly what we displaced.
+    try {
+      if (enabled) {
+        const current = settings.getContextDebugLevel();
+        if (current !== 'verbose') {
+          settings.set('contextDebugLevelBeforeVerbose', current);
+          settings.setContextDebugLevel('verbose');
+        }
+      } else {
+        const displaced = settings.get('contextDebugLevelBeforeVerbose');
+        if (displaced) {
+          settings.setContextDebugLevel(displaced);
+          settings.set('contextDebugLevelBeforeVerbose', undefined);
+        }
+      }
+    } catch (e: any) {
+      console.warn(`[AppState] contextDebugLevel sync failed: ${e?.message || e}`);
+    }
+
+    console.log(`[AppState] verboseLogging set to ${enabled} (persisted=${persisted})`);
     // Notify all renderer windows so they can start/stop forwarding their console output
     this.broadcast('verbose-logging-changed', enabled);
+    return persisted;
   }
 
   public getAmbientChatEnabled(): boolean {
@@ -7656,6 +8062,29 @@ export class AppState {
     this._ambientChatEnabled = enabled;
     SettingsManager.getInstance().set('ambientChatEnabled', enabled);
     console.log(`[AppState] ambientChatEnabled set to ${enabled}`);
+  }
+
+  public getStealthShortcutGuardEnabled(): boolean {
+    try { return SettingsManager.getInstance().get('stealthShortcutGuard') !== false; } catch { return true; }
+  }
+
+  /**
+   * Toggle the Windows shortcut-guard (always-on hook that swallows the
+   * app's own chords so they can't leak while stealth typing is off). Persists
+   * the setting and applies it live. No-op effect off Windows (the runtime side
+   * short-circuits), but the preference still persists.
+   */
+  public setStealthShortcutGuardEnabled(enabled: boolean): void {
+    SettingsManager.getInstance().set('stealthShortcutGuard', enabled);
+    console.log(`[AppState] stealthShortcutGuard set to ${enabled}`);
+    if (process.platform === 'win32') {
+      try {
+        const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
+        StealthKeyboardManager.getInstance().setShortcutGuardEnabled(enabled);
+      } catch (e) {
+        console.error('[AppState] failed to apply stealthShortcutGuard at runtime:', e);
+      }
+    }
   }
 
   public getAutoAnswerEnabled(): boolean {
@@ -8149,15 +8578,11 @@ async function initializeApp() {
     const downloadService = LocalModelDownloadService.getInstance();
     downloadService.registerProvider(createWhisperDownloadProvider());
     downloadService.registerProvider(createNemotronDownloadProvider());
-    // 2026-07-06: lazy download for the reranker (smart-retrieval Phase 1).
-    // The 283 MB bge-reranker-base model is no longer bundled — it is fetched
-    // on first document-grounded mode activation via ModesManager.
-    try {
-        const { createRerankerDownloadProvider } = require('./rag/rerankerDownloadProvider');
-        downloadService.registerProvider(createRerankerDownloadProvider());
-    } catch (e: any) {
-        console.warn('[main] Reranker download provider registration failed (non-fatal):', e?.message);
-    }
+    // No reranker download provider. It existed to lazily fetch the 283MB
+    // bge-reranker-base on first mode activation; that model was removed on
+    // 2026-09-04 (it measured WORSE than no reranker at all), and the 24MB
+    // ms-marco that replaced it is BUNDLED, so there is nothing to fetch.
+    // Every other reranker comes through the catalogue installer instead.
   } catch (e: any) {
     console.warn('[main] LocalModelDownloadService init failed (non-fatal):', e?.message);
   }
@@ -8202,17 +8627,54 @@ async function initializeApp() {
   //
   // Started AFTER credentials are loaded, but the key is passed as a GETTER
   // rather than a value: a user who pastes their Natively key ten minutes from
-  // now must not need a restart before their queued events can drain. Inert
-  // unless NATIVELY_USAGE_OUTBOX_ENABLED is set, so shipping this changes
-  // nothing until the flag is switched on.
+  // now must not need a restart before their queued events can drain.
+  //
+  // ON BY DEFAULT since 2026-08-27. It was gated behind an unset env var from
+  // 2026-08-14 until then, which meant the whole ledger shipped inert and
+  // collected nothing in production for the entire period. Setting
+  // NATIVELY_USAGE_OUTBOX_ENABLED=0 turns it back off, but only where an
+  // environment can actually be set (dev, CI, a terminal launch) — a packaged
+  // app inherits none. The production kill switch is server-side; see
+  // UsageOutbox.isEnabled().
   try {
     const { usageOutbox } = require('./services/UsageOutbox');
     usageOutbox.start(() => CredentialsManager.getInstance().getNativelyApiKey());
     // Drain anything queued while the app was closed, without waiting a full
     // dispatch interval. Deliberately not awaited — startup must not block on it.
     setTimeout(() => { void usageOutbox.dispatchOnce(); }, 5000);
+
+    // §5 application lifecycle. recordAppStarted/recordAppShutdown were written
+    // on 2026-08-14 and had ZERO callers until 2026-08-27 — the functions
+    // existed, the taxonomy reserved app_started/app_shutdown, and nothing ever
+    // emitted either. Started is recorded here rather than at whenReady so it
+    // means "the app came up far enough to be usable", which is the only
+    // reading a launch-failure investigation can act on.
+    const { recordAppStarted } = require('./services/usageInstrumentation');
+    recordAppStarted();
   } catch (err: any) {
     console.warn('[UsageOutbox] startup failed (non-fatal):', err?.message || err);
+  }
+
+  // Extensions. Until this call nothing constructed an ExtensionManager, so no
+  // extension could run in a shipped build regardless of what the on-disk
+  // registry said.
+  //
+  // This does NOT enable anything. `install()` records enabled:false
+  // unconditionally, `loadEnabled()` starts only what the user switched on, and
+  // the rerank seam still requires BOTH the `extensionRerankers` flag (default
+  // off) AND exactly one enabled reranker extension. Wiring the source in is
+  // what makes those gates reachable, not what opens them.
+  //
+  // Deliberately not awaited: an extension that is slow to start must not delay
+  // a usable window, and every failure inside is already isolated per extension.
+  try {
+    const { wireExtensions, startExtensions } = require('./services/extensions/appWiring');
+    const extensionManager = wireExtensions();
+    void startExtensions(extensionManager);
+  } catch (err: any) {
+    // A subsystem that cannot be built leaves the built-in reranker in place,
+    // which is the correct degradation. It must never stop the app starting.
+    console.warn('[extensions] wiring failed (non-fatal):', err?.message || err);
   }
 
   // Load the Google Service Account key for Speech-to-Text: the persisted path
@@ -8379,6 +8841,21 @@ if (process.env.THINKING_MATRIX === '1') {
     windowCount: BrowserWindow.getAllWindows().length,
   });
 
+  // A saved Natively key whose plan includes Pro, with no Pro licence on this
+  // device, used to stay that way forever (activation ran once, at key save, and a
+  // 5xx ended it). Reconcile shortly after launch — late enough to stay off the
+  // startup path, and the reconciler makes no request at all unless a real key is
+  // stored and Pro is inactive. See services/ProEntitlementReconciler.ts.
+  const proReconcileTimer = setTimeout(() => {
+    try {
+      const { getProEntitlementReconciler } = require('./services/proEntitlementWiring');
+      void getProEntitlementReconciler().run('startup');
+    } catch (e: any) {
+      console.warn('[Main] Pro entitlement reconcile could not start:', e?.message);
+    }
+  }, 8000);
+  proReconcileTimer.unref?.();
+
   // Opt-in: NATIVELY_LOG_GPU_STATUS=1 logs Chromium's GPU feature status once
   // at boot (whether gpu_compositing/rasterization are 'enabled' vs.
   // 'software'/'disabled') — useful when diagnosing a renderer that freezes
@@ -8409,6 +8886,14 @@ if (process.env.THINKING_MATRIX === '1') {
       console.log('[LocalFallbackPreflight] skipped — app is quitting');
       return;
     }
+    // Sweep retired model caches first, so the preflight below never reports
+    // a model nothing opens any more. Non-fatal by construction.
+    try {
+      const { purgeObsoleteModelCaches } = require('./audio/whisper/modelManager');
+      purgeObsoleteModelCaches();
+    } catch (err: any) {
+      console.warn('[modelManager] obsolete cache sweep failed (non-fatal):', err?.message || err);
+    }
     try {
       const llmHelper = appState.processingHelper.getLLMHelper();
       const { runLocalFallbackPreflight } = require('./services/LocalFallbackPreflight');
@@ -8421,16 +8906,9 @@ if (process.env.THINKING_MATRIX === '1') {
   // Don't let the preflight timer keep the process alive past quit.
   if (preflightTimer && typeof preflightTimer.unref === 'function') preflightTimer.unref();
 
-  // Defer the zero-shot intent classifier warmup until after the launcher has
-  // had a chance to paint and settle. The classifier still lazy-loads on first
-  // use, so this only moves startup CPU work out of the visible launch path.
-  setTimeout(() => {
-    try {
-      warmupIntentClassifier();
-    } catch (err) {
-      console.warn('[Init] Intent classifier warmup scheduling failed (non-fatal):', err);
-    }
-  }, Number(process.env.NATIVELY_INTENT_WARMUP_DELAY_MS || '2500'));
+  // The zero-shot intent classifier warmup that used to sit here was removed
+  // on 2026-09-05 with the classifier itself; its cache is swept above.
+  // See docs/natively-router-final-answer-2026-09-05.md.
 
   // DUAL-DOCK-ICON FIX (promotion half): now that the disguised name/icon are
   // applied and the window exists, promote back to 'regular' so a SINGLE dock
@@ -8460,6 +8938,22 @@ if (process.env.THINKING_MATRIX === '1') {
   // Register global shortcuts using KeybindManager
   KeybindManager.getInstance().registerGlobalShortcuts()
 
+  // Shortcut-guard (Windows only, default on): an always-on hook that
+  // swallows + self-dispatches the app's own chords so a dropped RegisterHotKey
+  // registration can't leak a shortcut character into the foreground app even
+  // when stealth typing is off. Enabled AFTER shortcuts register so the chord
+  // table is populated. An explicit false remains the opt-out.
+  if (process.platform === 'win32') {
+    try {
+      if (appState.getStealthShortcutGuardEnabled()) {
+        const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
+        StealthKeyboardManager.getInstance().setShortcutGuardEnabled(true);
+      }
+    } catch (e) {
+      console.error('[Main] failed to init stealth shortcut-guard:', e);
+    }
+  }
+
   // System sleep/wake handling. macOS invalidates CoreAudio AggregateDevice
   // handles on sleep — without this the Process Tap silently stops delivering
   // buffers on resume and the user sits in front of a frozen transcript with
@@ -8470,15 +8964,78 @@ if (process.env.THINKING_MATRIX === '1') {
     const { powerMonitor } = require('electron') as typeof import('electron');
     powerMonitor.on('resume', () => {
       console.log('[Main] powerMonitor: system resumed from sleep.');
+      // Tell the Provider Performance Profile that the next few turns are not
+      // representative: a machine coming back from sleep re-associates Wi-Fi,
+      // re-opens TLS sessions and re-warms DNS, and a first-token measurement
+      // taken across that would teach the deadline that this provider is slow.
+      // Deliberately hung off the EXISTING subscription rather than a second
+      // powerMonitor listener — two listeners on the same event is how two
+      // subsystems come to disagree about whether a resume happened.
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { getRuntimeSignals } = require('./llm/performance/runtimeSignals');
+        getRuntimeSignals().noteSystemResumed();
+      } catch (err) {
+        console.warn('[Main] performance profile resume note failed (non-fatal):', err);
+      }
       appState.restartCapturesAfterResume().catch((err) =>
         console.error('[Main] restartCapturesAfterResume threw:', err)
       );
+      // Sleep/wake is one of the named causes of the OS silently dropping a
+      // global-shortcut (RegisterHotKey on Windows, Carbon/IOKit on macOS)
+      // registration — see KeybindManager.HEALTH_CHECK_INTERVAL_MS. Until the
+      // 10 s health poll re-registers, pressing the chord falls through to the
+      // foreground app: e.g. CommandOrControl+Enter drops a newline into the
+      // focused answer field, CommandOrControl+1..7 type digits, etc. Revalidate
+      // immediately on resume so that leak window closes at wake, not up to 10 s
+      // later. revalidateShortcuts() only re-registers what was actually lost
+      // (never unregisters), so this is safe and idempotent on both platforms.
+      try {
+        KeybindManager.getInstance().revalidateShortcuts();
+      } catch (err) {
+        console.error('[Main] revalidateShortcuts on resume threw:', err);
+      }
     });
     powerMonitor.on('suspend', () => {
       console.log('[Main] powerMonitor: system suspending. Captures will be recreated on resume if a meeting is active.');
     });
+    // Unlocking the session is another moment the OS may have dropped global
+    // shortcut registrations (a lock can outlast a short sleep that never fired
+    // 'resume'). Same idempotent recovery as resume/display — it shrinks the
+    // stealth-OFF leak window further without an always-on keyboard hook. Unlike
+    // audio (which the OS doesn't tear down on lock, so 'lock-screen' is ignored
+    // for captures), shortcuts genuinely can be dropped here.
+    powerMonitor.on('unlock-screen', () => {
+      try {
+        KeybindManager.getInstance().revalidateShortcuts();
+      } catch (err) {
+        console.error('[Main] revalidateShortcuts on unlock-screen threw:', err);
+      }
+    });
   } catch (err) {
     console.warn('[Main] powerMonitor unavailable — sleep/wake recovery disabled:', err);
+  }
+
+  // A display add/remove (docking, external monitor, and on Windows the virtual-
+  // desktop / workspace switches that ride on it) is the other named cause of
+  // the OS silently dropping global-shortcut registrations. Same leak as the
+  // resume path: until the 10 s health poll notices, the app's own chord
+  // falls through to whatever app is focused. Revalidate on the display change
+  // so the recovery is immediate. Idempotent (only re-registers what was lost),
+  // safe on both platforms; display-added/removed are far less chatty than
+  // display-metrics-changed, which fires continuously during window drags.
+  try {
+    const revalidateOnDisplayChange = () => {
+      try {
+        KeybindManager.getInstance().revalidateShortcuts();
+      } catch (err) {
+        console.error('[Main] revalidateShortcuts on display change threw:', err);
+      }
+    };
+    screen.on('display-added', revalidateOnDisplayChange);
+    screen.on('display-removed', revalidateOnDisplayChange);
+  } catch (err) {
+    console.warn('[Main] screen display listeners unavailable — display-change shortcut recovery disabled:', err);
   }
 
   // Pre-create detached overlay companion windows in background for faster first open
@@ -8702,6 +9259,37 @@ if (process.env.THINKING_MATRIX === '1') {
   }
 
   app.on('will-quit', () => {
+    // FIRST, and deliberately so: record() is a synchronous INSERT into the
+    // same SQLite file that checkpointDatabase('will-quit') below is about to
+    // checkpoint, and record() swallows its own errors — so writing after the
+    // checkpoint would lose the row with no signal at all. Ordering is the
+    // whole correctness argument here.
+    //
+    // Only the graceful path emits this. SIGTERM/SIGINT call app.exit(), which
+    // bypasses will-quit — so a killed app records no shutdown, which is the
+    // honest outcome rather than a fabricated one.
+    // Flush the Provider Performance Profile before anything else touches the
+    // disk. Its writes are debounced and the timer is unref'd (a cache must
+    // never hold the event loop open), so without this the last few turns of a
+    // session are lost on every graceful quit — which is precisely the turns a
+    // user just told us about by quitting after them.
+    try {
+      const { getProviderPerformanceStore } = require('./llm/performance/ProviderPerformanceStore');
+      getProviderPerformanceStore().dispose();
+    } catch { /* a cache that cannot flush is not a reason to block quit */ }
+    try {
+      const { recordAppShutdown } = require('./services/usageInstrumentation');
+      recordAppShutdown();
+    } catch { /* instrumentation must never block a quit */ }
+    // Extension utilityProcesses are children of this process. One left running
+    // keeps the app alive after every window has closed, which presents as a
+    // hang on quit rather than as an error anyone sees. Fire-and-forget:
+    // will-quit is synchronous, and stop() already hard-kills after asking for
+    // a graceful dispose.
+    try {
+      const { disposeExtensions } = require('./services/extensions/appWiring');
+      void disposeExtensions();
+    } catch { /* teardown must never block a quit */ }
     appState.stopNativeOomTraceSampling();
     nativeOomTrace.stop('will-quit');
     stopAppManagedHindsight('will-quit');
@@ -8737,7 +9325,11 @@ if (process.env.THINKING_MATRIX === '1') {
     // synchronously — so a renderer crash cannot corrupt it. We only close the
     // DB on TERMINAL paths (quit / non-crash / give-up).
     const reason = details?.reason;
-    const isCrash = reason === 'crashed' || reason === 'abnormal-exit';
+    const isCrash =
+      reason === 'crashed' ||
+      reason === 'abnormal-exit' ||
+      reason === 'oom' ||
+      reason === 'integrity-failure';
 
     // Never fight an intentional teardown, and don't reload a clean/intentional
     // exit or an intentional kill.
@@ -8760,10 +9352,10 @@ if (process.env.THINKING_MATRIX === '1') {
     // Only auto-reload real user-facing windows. Transient/hidden helpers
     // (cropper = screenshot overlay; model-selector = hidden preload with a
     // known forceRestartOllama side-effect) should NOT be blindly reloaded —
-    // they get recreated on next open. Reload launcher / settings / overlay.
+    // they get recreated on next open. Reload launcher / settings / overlay / aux floating chrome.
     const isRecoverableWindow =
       urlNow === '' /* URL unavailable — assume the main launcher */ ||
-      /[?&]window=(launcher|settings|overlay)\b/.test(urlNow) ||
+      /[?&]window=(launcher|settings|overlay|overlay-pill|overlay-toggle)\b/.test(urlNow) ||
       !/[?&]window=/.test(urlNow) /* no window tag → the default launcher */;
     if (!isRecoverableWindow) {
       logToFile(`[main] render-process-gone: not auto-reloading transient window (${urlNow})`);
@@ -8850,7 +9442,7 @@ if (process.env.THINKING_MATRIX === '1') {
   // TODO(electron43): dead event on Electron 43; remove after verifying child-process-gone covers GPU crashes on macOS+Windows
   // The `as any` is type-only: Electron 43 dropped 'gpu-process-crashed' from its
   // typings, so no overload matches. The listener is deliberately KEPT registered
-  // (removing it would be a behaviour change) — see docs/ts7-upgrade-audit.md §4.4.
+  // (removing it would be a behaviour change).
   app.on('gpu-process-crashed' as any, (_event: Electron.Event, killed: boolean) => {
     logCrashConsole('gpu-process-crashed', { killed });
     // Deprecated alias of child-process-gone {type:'GPU'} — same policy:
