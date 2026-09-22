@@ -65,3 +65,48 @@ export function decideDockTransition(
     next: settled,
   };
 }
+
+/**
+ * Self-verifying dock enforcement budget (AppState._enforceDockState).
+ *
+ * Electron's Browser::DockHide() (shell/browser/browser_mac.mm) is a SILENT
+ * NO-OP for one second after any Browser::DockShow() — a workaround for a
+ * macOS bug that leaves duplicate tiles behind on rapid hide/show flips. So a
+ * show that lands right before or during the enforcement loop (an LS check-in
+ * from `process.title`, a click on the pinned Dock tile) cannot be corrected by
+ * any hide issued inside that second. The loop must therefore keep polling
+ * app.dock.isVisible() for LONGER than the guard, or it gives up with the tile
+ * still showing — which is exactly what the 2026-09-22 live trace showed for
+ * the old 6 × 130 ms = 780 ms budget.
+ */
+export const ELECTRON_DOCK_HIDE_GUARD_MS = 1000;
+export const DOCK_ENFORCE_INTERVAL_MS = 130;
+/** Toggle / launcher-show budget: 10 × 130 ms = 1.3 s > the 1 s guard. */
+export const DOCK_ENFORCE_MAX_ATTEMPTS = 10;
+/**
+ * Startup budget: on a cold launch the dock re-show lands at the launcher's
+ * ready-to-show, which can arrive later than the toggle window — ~2.3 s.
+ */
+export const DOCK_ENFORCE_STARTUP_MAX_ATTEMPTS = 18;
+
+/**
+ * shouldWriteProcessTitle — may `_applyDisguise()` assign `process.title`?
+ *
+ * On macOS, `process.title = …` is not a plain string write: libuv's
+ * uv__set_process_title (src/unix/darwin-proctitle.c) calls the private
+ * LaunchServices SPI `_LSApplicationCheckIn(-2, <main bundle Info.plist>)`
+ * before renaming. Natively.app carries no LSUIElement, so that check-in
+ * re-registers the running process as a Foreground app — the same effect as
+ * app.dock.show(): the Dock tile and its running dot reappear, undoing
+ * dock.hide(). The +5 s re-assert timer in _applyDisguise() is what brought the
+ * tile back ~5.7 s after every launch in undetectable mode (live trace,
+ * 2026-09-22). Activity Monitor reads the LS display name, not the process
+ * title, so the write buys no disguise there; only `ps`/`top` see it.
+ *
+ * Elsewhere the title is harmless (Windows: console title; Linux: argv[0]),
+ * and in normal mode on macOS the tile is meant to be visible anyway.
+ */
+export function shouldWriteProcessTitle(platform: string, isUndetectable: boolean): boolean {
+  if (platform !== 'darwin') return true;
+  return !isUndetectable;
+}

@@ -1303,7 +1303,14 @@ import { setVerboseLoggingFlag } from "./verboseLog"
 import { ReleaseNotesManager } from "./update/ReleaseNotesManager"
 import { OllamaManager } from './services/OllamaManager'
 import { ProviderStatusRegistry } from './services/ProviderStatusRegistry'
-import { decideToggle, decideDockTransition } from './services/toggleStateReducer'
+import {
+  decideToggle,
+  decideDockTransition,
+  shouldWriteProcessTitle,
+  DOCK_ENFORCE_INTERVAL_MS,
+  DOCK_ENFORCE_MAX_ATTEMPTS,
+  DOCK_ENFORCE_STARTUP_MAX_ATTEMPTS,
+} from './services/toggleStateReducer'
 import { NativeOomTrace } from './utils/NativeOomTrace'
 import { setStealthHookAvailabilityProvider } from './utils/windowsFocusPolicy'
 import { ensureNativeModuleAbi } from './utils/nativeModuleGuard'
@@ -7831,11 +7838,16 @@ export class AppState {
   // re-apply the desired state until it sticks (or the user changes intent).
   // Also re-asserts content protection on every hide, because the activation-
   // policy flip can reset each window's NSWindowSharingType.
+  //
+  // The budget MUST outlast Electron's 1 s DockHide guard (see
+  // DOCK_ENFORCE_MAX_ATTEMPTS): app.dock.hide() is silently dropped for one
+  // second after any dock.show(), so a show that lands mid-loop is only
+  // correctable by the attempts that fire after that second has passed.
   private _enforceDockState(
     wantUndetectable: boolean,
     targetFocusWindow: BrowserWindow | null,
     attempt: number,
-    maxAttempts: number = 6,
+    maxAttempts: number = DOCK_ENFORCE_MAX_ATTEMPTS,
   ): void {
     if (process.platform !== 'darwin') return;
 
@@ -7884,7 +7896,7 @@ export class AppState {
       const t = setTimeout(() => {
         this._dockReassertTimers = this._dockReassertTimers.filter((x) => x !== t);
         this._enforceDockState(wantUndetectable, targetFocusWindow, attempt + 1, maxAttempts);
-      }, 130);
+      }, DOCK_ENFORCE_INTERVAL_MS);
       this._dockReassertTimers.push(t);
     }
   }
@@ -7917,11 +7929,11 @@ export class AppState {
   // reset sharingType) and drive the dock to hidden, retrying against the OS
   // ground truth so a late ready-to-show dock re-show is corrected.
   public applyInitialUndetectableState(): void {
-    // Longer retry budget than the toggle path (~2.5s vs ~0.8s): at startup the
+    // Longer retry budget than the toggle path (~2.3s vs ~1.3s): at startup the
     // dock re-show lands at the launcher's ready-to-show, which on a cold launch
-    // can arrive later than the toggle path's 6-retry window. Extra isVisible()
+    // can arrive later than the toggle path's retry window. Extra isVisible()
     // re-checks are cheap and stop early via the isUndetectable guard.
-    this.reassertUndetectableStealth(18);
+    this.reassertUndetectableStealth(DOCK_ENFORCE_STARTUP_MAX_ATTEMPTS);
   }
 
   // Re-drive the app back to a fully-stealth state after any operation that can
@@ -7944,7 +7956,7 @@ export class AppState {
   // so it cannot be defeated by a dropped call or a late re-show. Cheap and safe
   // to call redundantly — it no-ops immediately off-darwin or when not
   // undetectable, and stops early via the isUndetectable guard inside the loop.
-  public reassertUndetectableStealth(maxAttempts: number = 10): void {
+  public reassertUndetectableStealth(maxAttempts: number = DOCK_ENFORCE_MAX_ATTEMPTS): void {
     if (process.platform !== 'darwin') return;
     if (!this.isUndetectable) return;
     // Collapse any in-flight enforcement chain from a PRIOR re-assert before
@@ -8208,12 +8220,20 @@ export class AppState {
 
     console.log(`[AppState] Applying disguise: ${mode} (${appName}) on ${process.platform}`);
 
-    // 1. Update process title (affects Activity Monitor / Task Manager)
-    process.title = appName;
+    // 1. Update process title (affects Task Manager / ps / top).
+    // NOT while undetectable on macOS: the setter is a LaunchServices check-in
+    // (libuv uv__set_process_title → _LSApplicationCheckIn with the bundle's
+    // Info.plist, which has no LSUIElement), so every write re-registers the
+    // process as a Foreground app and re-shows the Dock tile — the same thing
+    // app.dock.show() does. Activity Monitor reads the LS display name, not
+    // this, so nothing is lost. See shouldWriteProcessTitle().
+    if (shouldWriteProcessTitle(process.platform, this.isUndetectable)) {
+      process.title = appName;
+    }
 
     // 2. Update app name (affects macOS Menu / Dock)
-    // Skip when undetectable — app.setName() causes macOS to re-register
-    // the app and re-show the dock icon even after dock.hide()
+    // Skip when undetectable — kept conservative; the verified re-show
+    // trigger is the process.title check-in above, not app.setName() itself.
     if (!this.isUndetectable) {
       app.setName(appName);
     }
@@ -8276,9 +8296,15 @@ export class AppState {
     // NOTE: We intentionally do NOT call app.setName() here — it was already called
     // synchronously above, and repeated calls on macOS cause the system to briefly
     // show a second dock tile while re-registering the app identity.
+    // The gate is re-read when each timer FIRES, not when it is scheduled: the
+    // +5 s timer from applyInitialDisguise() at startup is the one that brought
+    // the Dock tile back ~5.7 s after every launch in undetectable mode
+    // (live trace 2026-09-22) — long after _enforceDockState() had given up.
     const scheduleUpdate = (ms: number) => {
       const ts = setTimeout(() => {
-        process.title = appName;
+        if (shouldWriteProcessTitle(process.platform, this.isUndetectable)) {
+          process.title = appName;
+        }
         this._disguiseTimers = this._disguiseTimers.filter(t => t !== ts);
       }, ms);
       this._disguiseTimers.push(ts);
@@ -9217,9 +9243,17 @@ if (process.env.THINKING_MATRIX === '1') {
   app.on("activate", () => {
     console.log("App activated")
     if (process.platform === 'darwin') {
-      // Do NOT call dock.show() while a meeting is running — the dock icon
-      // appearing mid-meeting is a critical stealth failure.
-      if (!appState.getUndetectable() && !appState.getIsMeetingActive()) {
+      if (appState.getUndetectable()) {
+        // A LaunchServices re-open of the running app (click on the pinned
+        // Dock tile, `open -a`, Spotlight) has ALREADY transformed the process
+        // back to a Foreground app by the time this fires — verified on
+        // Electron 43.1.0. Skipping dock.show() is not enough: drive the dock
+        // back to hidden through the self-verifying loop, or the tile (and its
+        // running dot) stays until the next toggle.
+        appState.reassertUndetectableStealth();
+      } else if (!appState.getIsMeetingActive()) {
+        // Do NOT call dock.show() while a meeting is running — the dock icon
+        // appearing mid-meeting is a critical stealth failure.
         if (app.dock) app.dock.show();  // app.dock is macOS-only (undefined elsewhere); darwin gated at 8080
       }
     }
