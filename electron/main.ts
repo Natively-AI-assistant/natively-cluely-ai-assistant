@@ -1304,6 +1304,7 @@ import { ReleaseNotesManager } from "./update/ReleaseNotesManager"
 import { OllamaManager } from './services/OllamaManager'
 import { ProviderStatusRegistry } from './services/ProviderStatusRegistry'
 import { decideToggle, decideDockTransition } from './services/toggleStateReducer'
+import { acceptsLocalSpeechEndHint } from './intelligence/autoAnswer/SimpleAutoAnswer'
 import { NativeOomTrace } from './utils/NativeOomTrace'
 import { setStealthHookAvailabilityProvider } from './utils/windowsFocusPolicy'
 import { ensureNativeModuleAbi } from './utils/nativeModuleGuard'
@@ -3989,14 +3990,19 @@ export class AppState {
         this.googleSTT?.notifySpeechEnded?.();
         // Auto Answer: the local VAD saw the interviewer stop. For a provider
         // with no end-of-turn event of its own this is the only early signal;
-        // the controller guards against a half-transcribed turn. REST
-        // providers are excluded: their final is produced BY this flush and
-        // lands 0.5-2 s later, so the stop would always precede the text.
+        // the controller guards against a half-transcribed turn by ignoring the
+        // stop while an interim is dangling. Excluded: providers whose FINAL
+        // is produced by the end of the segment itself, with no interim to
+        // guard on — the REST ones (Groq Whisper, Azure, IBM Watson), OpenAI
+        // (its whisper-1 REST fallback; its Realtime mode emits its own
+        // endpoint anyway) and the local models (their own VAD closes the
+        // segment, then inference runs). For those the stop always precedes
+        // the text, so it would judge the turn without its last words.
         if (this._autoAnswerEnabled && this.isMeetingActive) {
           try {
             const { CredentialsManager } = require('./services/CredentialsManager');
             const provider = CredentialsManager.getInstance().getSttProvider();
-            if (provider !== 'groq' && provider !== 'azure' && provider !== 'ibmwatson' && provider !== 'none') {
+            if (acceptsLocalSpeechEndHint(provider)) {
               this.simpleAutoAnswer.onLocalSpeechEnd();
             }
           } catch { /* an endpoint hint must never break capture */ }

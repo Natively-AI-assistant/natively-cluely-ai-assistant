@@ -253,6 +253,16 @@ test('the local VAD stop is ignored while an interim is still dangling (its fina
   assert.match(h.texts()[0], /alternatives here\?$/);
 });
 
+test('the local VAD hint is taken only from providers that stream interims', () => {
+  const { acceptsLocalSpeechEndHint } = Simple;
+  for (const p of ['deepgram', 'soniox', 'nvidia_nim', 'apple-speech', 'natively', 'elevenlabs', 'google']) {
+    assert.equal(acceptsLocalSpeechEndHint(p), true, p);
+  }
+  for (const p of ['groq', 'azure', 'ibmwatson', 'openai', 'local-whisper', 'none']) {
+    assert.equal(acceptsLocalSpeechEndHint(p), false, `${p}: its final is produced by the segment end — the stop precedes the text`);
+  }
+});
+
 test('the local VAD stop with nothing pending is a no-op', async () => {
   const h = makeSimple(async () => YES());
   h.engine.onLocalSpeechEnd();
