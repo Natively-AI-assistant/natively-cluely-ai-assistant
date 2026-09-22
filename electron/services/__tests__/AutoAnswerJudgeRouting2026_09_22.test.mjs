@@ -66,6 +66,16 @@ describe('generateJudgeVerdict ladder', () => {
     }
   });
 
+  test('the DeepSeek rung switches thinking off (the API default is ON)', () => {
+    // DeepSeek defaults to thinking enabled / effort high; the reasoning runs
+    // before any content, and in a 256-token verdict budget it can consume
+    // everything, returning empty content — the rung silently falls through.
+    const at = JUDGE.indexOf('this.deepseekClient.chat.completions.create(');
+    assert.ok(at > 0);
+    assert.match(JUDGE.slice(at, at + 700), /\.\.\.DEEPSEEK_NO_THINKING,/);
+    assert.match(LLM, /const DEEPSEEK_NO_THINKING = \{ thinking: \{ type: 'disabled' as const \} \}/);
+  });
+
   test('the structured ladder is the LAST resort, after every small rung', () => {
     const last = JUDGE.lastIndexOf('this.generateContentStructured(');
     const claudeRung = JUDGE.indexOf('this.claudeClient.messages.create(');

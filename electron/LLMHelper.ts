@@ -4865,6 +4865,11 @@ let isMultimodal = !!(imagePaths?.length);
           temperature: 0,
           max_tokens: 256,
           response_format: { type: 'json_object' },
+          // Without it the default reasoning pass runs first — and inside a
+          // 256-token budget it can spend all of it, leaving empty content,
+          // so the rung would silently fall through on exactly the calls
+          // it exists to answer.
+          ...DEEPSEEK_NO_THINKING,
         }, { signal });
         const text = stripLeadingReasoningBlock(res.choices?.[0]?.message?.content || '');
         if (text) return text;
