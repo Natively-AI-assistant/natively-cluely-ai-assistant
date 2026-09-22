@@ -103,6 +103,10 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
   private readonly extraMemoryHeadroomGB: number;
   /** transformers.js identifier the worker loads (the catalog `modelId`). */
   private readonly hfModelId: string;
+  /** Indexing batch ceiling; ModeHybridRetriever sizes its sub-batches to it. */
+  readonly maxBatchSize?: number;
+  /** Input truncation below the tokenizer's own limit (long-context models). */
+  private readonly maxInputTokens?: number;
   private readonly slotWaitMs: number | undefined;
   /** Set by shutdownForQuit(): new requests are refused so the worker can drain. */
   private closingForQuit = false;
@@ -137,7 +141,11 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
       this.pooling = catalogEntry.pooling || 'mean';
       this.queryPrefix = catalogEntry.queryPrefix || '';
       this.documentPrefix = catalogEntry.documentPrefix || '';
-      this.extraMemoryHeadroomGB = catalogEntry.bundled ? BUNDLED_LOCAL_EMBEDDING.extraMemoryHeadroomGB : 0;
+      this.extraMemoryHeadroomGB = catalogEntry.bundled
+        ? BUNDLED_LOCAL_EMBEDDING.extraMemoryHeadroomGB
+        : (catalogEntry.memoryHeadroomGB ?? 0);
+      this.maxBatchSize = catalogEntry.maxBatchSize;
+      this.maxInputTokens = catalogEntry.maxInputTokens;
       const resolved = catalogEntry.bundled ? null : resolveEmbeddingModelPath(catalogEntry);
       this.modelPath = opts?.modelPath || resolved || LocalEmbeddingProvider.resolveModelPath(this.hfModelId);
     } else if (experiment) {
@@ -150,6 +158,9 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
       this.queryPrefix = experiment.queryPrefix;
       this.documentPrefix = experiment.documentPrefix;
       this.extraMemoryHeadroomGB = 0;
+      // Benchmarks run the recipe's own cap, so results describe what ships.
+      this.maxInputTokens = experiment.maxInputTokens;
+      this.maxBatchSize = experiment.maxBatchSize;
       this.modelPath = opts?.modelPath || LocalEmbeddingProvider.resolveModelPath(this.hfModelId);
     } else {
       const bundled = BUNDLED_LOCAL_EMBEDDING;
@@ -572,6 +583,7 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
             runtime: this.runtime,
             dimensions: this.dimensions,
             pooling: this.pooling,
+            maxInputTokens: this.maxInputTokens,
           },
           WORKER_INIT_TIMEOUT_MS,
         );
@@ -618,8 +630,24 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
     return this.embedRaw(prefix ? texts.map((t) => prefix + t) : texts);
   }
 
-  /** Post already-prefixed text to the worker. */
+  /**
+   * Post already-prefixed text to the worker, never more than `maxBatchSize`
+   * texts per worker call. ModeHybridRetriever already sizes its sub-batches to
+   * the cap, but profile ingest (10 per batch) and live meeting indexing call
+   * embedBatch with their own sizes. A capped model (nomic-v1.5 SIGTRAPs at
+   * 16; the 1024-d models time out) must be safe whichever caller it serves.
+   */
   private async embedRaw(texts: string[]): Promise<number[][]> {
+    const cap = this.maxBatchSize && this.maxBatchSize > 0 ? this.maxBatchSize : 0;
+    if (cap && texts.length > cap) {
+      const out: number[][] = [];
+      for (let i = 0; i < texts.length; i += cap) out.push(...(await this.embedRawOnce(texts.slice(i, i + cap))));
+      return out;
+    }
+    return this.embedRawOnce(texts);
+  }
+
+  private async embedRawOnce(texts: string[]): Promise<number[][]> {
     await this.ensureLoaded();
     const result = await this.postToWorker<{ vectors: number[][]; dimensions?: number }>(
       {
@@ -631,6 +659,7 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
         runtime: this.runtime,
         dimensions: this.dimensions,
         pooling: this.pooling,
+        maxInputTokens: this.maxInputTokens,
       },
       WORKER_EMBED_TIMEOUT_MS,
     );

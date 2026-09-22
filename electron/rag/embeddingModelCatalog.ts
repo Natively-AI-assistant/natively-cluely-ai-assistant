@@ -55,6 +55,21 @@ export interface LocalEmbeddingModel {
   queryPrefix?: string;
   /** Prepended to DOCUMENT/chunk text only (e5: "passage: "). */
   documentPrefix?: string;
+  /**
+   * Largest indexing batch this model can embed inside the worker's 30s
+   * per-call deadline on 512-token chunks. Measured (docs/local-embedding-benchmark.md
+   * §8b): every model over ~130 MiB timed out or aborted at the default 16;
+   * nomic-v1.5 SIGTRAPped inside ONNX Runtime. Omitted = the indexer's default.
+   */
+  maxBatchSize?: number;
+  /** Free memory (GB) this model needs ABOVE the shared ONNX floor before it may load. */
+  memoryHeadroomGB?: number;
+  /**
+   * Truncate inputs to this many tokens (below the tokenizer's own limit).
+   * Needed for long-context models: uncapped, a ~4 KB CSV chunk (~2400 tokens)
+   * SIGTRAPped Arctic L v2.0 and Qwen3 inside ONNX Runtime.
+   */
+  maxInputTokens?: number;
 }
 
 /** The catalog id of the model that ships inside the app (electron/rag/bundledLocalEmbedding.ts). */
@@ -354,6 +369,114 @@ export const EMBEDDING_MODEL_CATALOG: LocalEmbeddingModel[] = [
     pooling: 'mean',
     queryPrefix: "search_query: ",
     documentPrefix: "search_document: ",
+    // SIGTRAP inside ONNX Runtime at batch 16 on real 512-token chunks; batch 4
+    // survives (docs/local-embedding-benchmark.md §8, nomic-v1.5).
+    maxBatchSize: 4,
+  },
+
+  // High-end tier (2026-09-22): the three below are larger than the built-in model and slower to index; measured in the Natively benchmark (docs/local-embedding-benchmark.md §18.13).
+  {
+    id: 'snowflake-arctic-embed-l-v2.0',
+    name: 'Snowflake Arctic Embed L v2.0',
+    runtime: 'onnx',
+    repo: 'Snowflake/snowflake-arctic-embed-l-v2.0',
+    modelId: 'Snowflake/snowflake-arctic-embed-l-v2.0',
+    revision: 'ac6544c8a46e00af67e330e85a9028c66b8cfd9a',
+    dimensions: 1024,
+    supportedDimensions: [1024],
+    contextLength: 512,
+    files: [
+      { repoPath: 'config.json', bytes: 818, sha256: '706f5d1eb9ddf64b5d3067c562b893b80ad1022db7f68c20eb07ff24d33b6c15' },
+      { repoPath: 'tokenizer.json', bytes: 17083074, sha256: '39feb9863a378165ab9c5c689047203d789422966c0c58721c5309fd039a8edc' },
+      { repoPath: 'tokenizer_config.json', bytes: 1339, sha256: 'cb058b4c5c0c08738eb028c2ae82ed55cd84ce8999ece76b13472af80f0f77f1' },
+      { repoPath: 'special_tokens_map.json', bytes: 964, sha256: '8c785abebea9ae3257b61681b4e6fd8365ceafde980c21970d001e834cf10835' },
+      { repoPath: 'onnx/model_quantized.onnx', bytes: 569721975, sha256: '4b164a8bd09dd9806e035bdf3c34a2d81848b3db9642ba2e342b8367c00872d8' },
+    ],
+    bytes: 586808170,
+    license: {
+      spdx: 'Apache-2.0',
+      url: 'https://huggingface.co/Snowflake/snowflake-arctic-embed-l-v2.0',
+      commercialUseRestricted: false,
+      requiresAcknowledgement: false,
+    },
+    params: '568M · q8',
+    note: "High-end. Multilingual (74 languages). Best dense retrieval measured in the Natively benchmark (R@10 0.362 against 0.334 for the built-in model), level with it after reranking (0.454), and as good on Hindi questions. 570 MB download, about 4× slower to index than the built-in model.",
+    supported: true,
+    pooling: 'cls',
+    queryPrefix: "query: ",
+    documentPrefix: "",
+    maxBatchSize: 4,
+    memoryHeadroomGB: 0.5,
+    maxInputTokens: 512,
+  },
+
+  {
+    id: 'mxbai-embed-large-v1',
+    name: 'mxbai Embed Large v1',
+    runtime: 'onnx',
+    repo: 'mixedbread-ai/mxbai-embed-large-v1',
+    modelId: 'mixedbread-ai/mxbai-embed-large-v1',
+    revision: 'b33106f585b9ce46904ad7443a3b52b7a63e231c',
+    dimensions: 1024,
+    supportedDimensions: [1024],
+    contextLength: 512,
+    files: [
+      { repoPath: 'config.json', bytes: 677, sha256: 'ce13f118fc183c005236901d2662ced752de632ebb161e6af800aadda2d176f7' },
+      { repoPath: 'tokenizer.json', bytes: 711396, sha256: 'd241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66' },
+      { repoPath: 'tokenizer_config.json', bytes: 1242, sha256: '0b29c7bfc889e53b36d9dd3e686dd4300f6525110eaa98c76a5dafceb2029f53' },
+      { repoPath: 'special_tokens_map.json', bytes: 695, sha256: '5d5b662e421ea9fac075174bb0688ee0d9431699900b90662acd44b2a350503a' },
+      { repoPath: 'onnx/model_quantized.onnx', bytes: 336983163, sha256: '11bda26d2ee754b20d46c90d0fae7eb5a71e0f947e74261afd6ad640ebbcfa7f' },
+    ],
+    bytes: 337697173,
+    license: {
+      spdx: 'Apache-2.0',
+      url: 'https://huggingface.co/mixedbread-ai/mxbai-embed-large-v1',
+      commercialUseRestricted: false,
+      requiresAcknowledgement: false,
+    },
+    params: '335M · q8',
+    note: "Pro. 1024-d vectors from a 337 MB download. English only; in the Natively benchmark it trailed the built-in model (R@10 0.284, 0.412 after reranking) and handles Hindi questions poorly.",
+    supported: true,
+    pooling: 'cls',
+    queryPrefix: "Represent this sentence for searching relevant passages: ",
+    documentPrefix: "",
+    maxBatchSize: 4,
+    memoryHeadroomGB: 0.6,
+  },
+
+  {
+    id: 'qwen3-embedding-0.6b-onnx',
+    name: 'Qwen3 Embedding 0.6B (ONNX)',
+    runtime: 'onnx',
+    repo: 'onnx-community/Qwen3-Embedding-0.6B-ONNX',
+    modelId: 'onnx-community/Qwen3-Embedding-0.6B-ONNX',
+    revision: 'c25a394dd583836952667c12f008335071b3f43d',
+    dimensions: 1024,
+    supportedDimensions: [1024],
+    contextLength: 512,
+    files: [
+      { repoPath: 'config.json', bytes: 1576, sha256: '66a10929782f3c9a3cd5dec90e2a95c60e05736134a63cd54479eeae80bed175' },
+      { repoPath: 'tokenizer.json', bytes: 11423705, sha256: 'def76fb086971c7867b829c23a26261e38d9d74e02139253b38aeb9df8b4b50a' },
+      { repoPath: 'tokenizer_config.json', bytes: 9731, sha256: '977648852447cb6587327ff3205b0a84cf2fc9f05621d6c8e88a497caafab2e1' },
+      { repoPath: 'special_tokens_map.json', bytes: 613, sha256: '76862e765266b85aa9459767e33cbaf13970f327a0e88d1c65846c2ddd3a1ecd' },
+      { repoPath: 'onnx/model_quantized.onnx', bytes: 613527631, sha256: '87cd124e0ef1fd1f223ebc283efccbaeac386d0b08344701c46975d0657b591f' },
+    ],
+    bytes: 624963256,
+    license: {
+      spdx: 'Apache-2.0',
+      url: 'https://huggingface.co/onnx-community/Qwen3-Embedding-0.6B-ONNX',
+      commercialUseRestricted: false,
+      requiresAcknowledgement: false,
+    },
+    params: '0.6B · q8',
+    note: "Experimental. The ONNX build of Qwen3 Embedding 0.6B (the GGUF build is listed separately). In the Natively benchmark this q8 build scored below the built-in model (R@10 0.253, 0.403 after reranking) and weakly on Hindi questions despite its multilingual training. Slowest to index; embeds one text at a time.",
+    supported: true,
+    pooling: 'last',
+    queryPrefix: "Instruct: Given a web search query, retrieve relevant passages that answer the query\nQuery:",
+    documentPrefix: "",
+    maxBatchSize: 1,
+    memoryHeadroomGB: 0.7,
+    maxInputTokens: 512,
   },
 
   // ── Qwen3 Embedding 0.6B (GGUF) ─────────────────────────────────────────

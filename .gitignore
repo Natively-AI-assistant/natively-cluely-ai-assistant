@@ -503,6 +503,9 @@ tools/
 !docs/
 docs/*
 !docs/VISION_MODEL_BENCHMARK.md
+# The local embedding model benchmark (2026-09-21/22): code comments across
+# electron/rag cite its sections (bundled-model choice, catalog recipes, caps).
+!docs/local-embedding-benchmark.md
 # Per-release notes are published artifacts (linked from the README), not scratch notes.
 !docs/releases/
 !docs/releases/**

@@ -153,7 +153,17 @@ async function ensureLoaded(msg: any): Promise<void> {
       dtype: 'q8',
       session_options: getBoundedOnnxSessionOptions(),
     });
-    console.log(`[LocalEmbeddingWorker] ONNX embedding model loaded successfully (${currentDimensions}d).`);
+    // Input-token cap (2026-09-22). transformers.js truncates at the tokenizer's
+    // model_max_length, which is 8192 (Arctic L v2.0) or 131072 (Qwen3) for the
+    // long-context models. One ~4 KB CSV row is ~1800-2400 tokens: measured, a
+    // batch of four of them took 8s at 1024 tokens and SIGTRAPPED the process
+    // uncapped (a native abort, which in the app takes the whole app down).
+    const cap = Number(msg.maxInputTokens);
+    if (Number.isFinite(cap) && cap > 0 && pipe.tokenizer) {
+      const native = Number(pipe.tokenizer.model_max_length) || Infinity;
+      pipe.tokenizer.model_max_length = Math.min(native, cap);
+    }
+    console.log(`[LocalEmbeddingWorker] ONNX embedding model loaded successfully (${currentDimensions}d${pipe.tokenizer?.model_max_length ? `, max ${pipe.tokenizer.model_max_length} tokens` : ''}).`);
     parentPort!.postMessage({
       type: 'status',
       status: { type: 'ready', backend: 'onnx', modelPath: msg.modelPath },
@@ -213,12 +223,33 @@ parentPort.on('message', async (msg: any) => {
       }
 
       // ONNX inference
-      const output = await pipe(texts, { pooling: currentPooling, normalize: true });
-      // Width from the tensor, and batch x width ASSERTED (embeddingTensorSlice).
-      // A hardcoded width once handed every 768-d vector the bytes of another
-      // batch item; item 0 still looked perfect, so a first-vector check could
-      // not see it.
-      const vectors = sliceEmbeddingTensor(output, texts.length, currentDimensions, currentModelId);
+      // The catalog says 'last' (the GGUF path's name); transformers.js calls
+      // last-token pooling 'last_token' and THROWS on 'last'. Correct only with
+      // left padding, which the Qwen3 tokenizer config declares and
+      // transformers.js reads.
+      const onnxPooling = currentPooling === 'last' ? 'last_token' : currentPooling;
+      // Last-token (decoder, Qwen3-Embedding) models are embedded ONE TEXT PER
+      // RUN. Measured 2026-09-22 on the q8 ONNX: a mixed-length batch gives each
+      // text a different vector from the same text embedded alone (cosine
+      // 0.934-0.957; identical-length texts: 1.00000), even for the unpadded
+      // longest item, so it is not only pad positions. Indexing batches and
+      // queries embed singly, so batching would put documents and queries in
+      // inconsistent spaces. Enforced here so no caller's batch size can undo it.
+      let vectors: number[][];
+      if (onnxPooling === 'last_token' && texts.length > 1) {
+        vectors = [];
+        for (const text of texts) {
+          const one = await pipe([text], { pooling: onnxPooling, normalize: true });
+          vectors.push(sliceEmbeddingTensor(one, 1, currentDimensions, currentModelId)[0]);
+        }
+      } else {
+        const output = await pipe(texts, { pooling: onnxPooling, normalize: true });
+        // Width from the tensor, and batch x width ASSERTED (embeddingTensorSlice).
+        // A hardcoded width once handed every 768-d vector the bytes of another
+        // batch item; item 0 still looked perfect, so a first-vector check could
+        // not see it.
+        vectors = sliceEmbeddingTensor(output, texts.length, currentDimensions, currentModelId);
+      }
       parentPort!.postMessage({ type: 'result', requestId: msg.requestId, vectors, dimensions: vectors[0]?.length });
       return;
     }

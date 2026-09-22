@@ -52,6 +52,10 @@ const CANDIDATES = {
   'e5-large-v2':          { repo: 'Xenova/e5-large-v2',                   revision: '840fd2207f68e253697ed85392a482ff7657ad11', modelId: 'Xenova/e5-large-v2' },
   'gte-large':            { repo: 'Xenova/gte-large',                     revision: '06a8d51d496ebe830042b7323a904b4da81ac500', modelId: 'Xenova/gte-large' },
   'multilingual-e5-base': { repo: 'Xenova/multilingual-e5-base',          revision: '1ec9243030a27d1a115d5c340572074c125b58b2', modelId: 'Xenova/multilingual-e5-base' },
+  // Round 3 — larger models proposed for high-end machines (not under the 500 MiB cap).
+  'qwen3-embedding-0.6b': { repo: 'onnx-community/Qwen3-Embedding-0.6B-ONNX', revision: 'c25a394dd583836952667c12f008335071b3f43d', modelId: 'onnx-community/Qwen3-Embedding-0.6B-ONNX' },
+  'arctic-l-v2':          { repo: 'Snowflake/snowflake-arctic-embed-l-v2.0',  revision: 'ac6544c8a46e00af67e330e85a9028c66b8cfd9a', modelId: 'Snowflake/snowflake-arctic-embed-l-v2.0' },
+  'mxbai-large-v1':       { repo: 'mixedbread-ai/mxbai-embed-large-v1',       revision: 'b33106f585b9ce46904ad7443a3b52b7a63e231c', modelId: 'mixedbread-ai/mxbai-embed-large-v1' },
 };
 
 // What transformers.js actually opens for a feature-extraction pipeline at

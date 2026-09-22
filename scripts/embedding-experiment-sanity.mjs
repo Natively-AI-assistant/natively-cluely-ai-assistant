@@ -91,7 +91,10 @@ async function run(key) {
 
   const rssBefore = process.memoryUsage().rss;
   let c = new WorkerClient();
-  const init = { type: 'init', modelPath: root, modelId: r.modelId, dtype: 'q8', pooling: r.pooling };
+  // Worker protocol since the PR #582 merge: `hfModelId` is the transformers.js
+  // id to load, `modelId` a catalog/label id. Sending only `modelId` made the
+  // worker fall back to the bundled model's id and fail on load.
+  const init = { type: 'init', modelPath: root, modelId: r.modelId, hfModelId: r.modelId, dtype: 'q8', pooling: r.pooling, dimensions: r.dim, runtime: 'onnx' };
 
   try {
     const t0 = Date.now();

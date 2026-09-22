@@ -37,7 +37,9 @@
 // RAGManager already filters retrieval by getActiveSpaceKey(), so the two sets
 // cannot mix even inside one database file.
 
-export type EmbeddingPooling = 'mean' | 'cls';
+// 'last' = last-token pooling (Qwen3-Embedding); the worker maps it to
+// transformers.js 'last_token'. Correct only with a left-padding tokenizer.
+export type EmbeddingPooling = 'mean' | 'cls' | 'last';
 
 export interface EmbeddingExperiment {
   /** Key used by NATIVELY_EMBEDDING_EXPERIMENT and in results files. */
@@ -67,6 +69,10 @@ export interface EmbeddingExperiment {
   /** Distinguishes vectors in the space key. Bump if a recipe field changes. */
   recipeVersion: string;
   note: string;
+  /** Truncate inputs to this many tokens (long-context models; see the catalog field). */
+  maxInputTokens?: number;
+  /** Largest embed batch per worker call. */
+  maxBatchSize?: number;
 }
 
 /**
@@ -315,6 +321,60 @@ export const EMBEDDING_EXPERIMENTS: Readonly<Record<string, EmbeddingExperiment>
     maxSeqLength: 512,
     recipeVersion: 'v1',
     note: 'Upstream intfloat/multilingual-e5-small (MIT). Card: prefixes apply "even for non-English texts".',
+  },
+
+  // Round 3 (2026-09-22): three larger models proposed for high-end machines.
+  // Recipes from each repo's own sentence-transformers config (pooling config
+  // and `prompts`), not guessed.
+  'qwen3-embedding-0.6b': {
+    key: 'qwen3-embedding-0.6b',
+    repo: 'onnx-community/Qwen3-Embedding-0.6B-ONNX',
+    revision: 'c25a394dd583836952667c12f008335071b3f43d',
+    license: 'apache-2.0',
+    modelId: 'onnx-community/Qwen3-Embedding-0.6B-ONNX',
+    dtype: 'q8',
+    dimensions: 1024,
+    pooling: 'last',
+    // Upstream Qwen/Qwen3-Embedding-0.6B prompts.query, verbatim (no space after "Query:").
+    queryPrefix: 'Instruct: Given a web search query, retrieve relevant passages that answer the query\nQuery:',
+    documentPrefix: '',
+    maxSeqLength: 32768,
+    maxInputTokens: 512,
+    recipeVersion: 'v1',
+    note: 'Decoder-based (Qwen3), last-token pooling, left padding. Multilingual.',
+  },
+
+  'arctic-l-v2': {
+    key: 'arctic-l-v2',
+    repo: 'Snowflake/snowflake-arctic-embed-l-v2.0',
+    revision: 'ac6544c8a46e00af67e330e85a9028c66b8cfd9a',
+    license: 'apache-2.0',
+    modelId: 'Snowflake/snowflake-arctic-embed-l-v2.0',
+    dtype: 'q8',
+    dimensions: 1024,
+    pooling: 'cls',
+    queryPrefix: 'query: ',
+    documentPrefix: '',
+    maxSeqLength: 8192,
+    maxInputTokens: 512,
+    recipeVersion: 'v1',
+    note: 'Arctic v2.0 (XLM-R base, multilingual). A different model from round 2\'s English arctic-l.',
+  },
+
+  'mxbai-large-v1': {
+    key: 'mxbai-large-v1',
+    repo: 'mixedbread-ai/mxbai-embed-large-v1',
+    revision: 'b33106f585b9ce46904ad7443a3b52b7a63e231c',
+    license: 'apache-2.0',
+    modelId: 'mixedbread-ai/mxbai-embed-large-v1',
+    dtype: 'q8',
+    dimensions: 1024,
+    pooling: 'cls',
+    queryPrefix: 'Represent this sentence for searching relevant passages: ',
+    documentPrefix: '',
+    maxSeqLength: 512,
+    recipeVersion: 'v1',
+    note: 'BERT-large class, CLS pooling, query instruction. English.',
   },
 });
 

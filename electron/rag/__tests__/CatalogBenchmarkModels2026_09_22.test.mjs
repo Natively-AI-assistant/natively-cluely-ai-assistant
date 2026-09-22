@@ -38,7 +38,12 @@ const BRIEF = {
   'gte-small': 'gte-small',
   'nomic-embed-text-v1.5': 'nomic-v1.5',
   'multilingual-e5-small': 'multilingual-e5-small',
+  // Round 3 (high-end tier), added on request and benchmarked the same way.
+  'snowflake-arctic-embed-l-v2.0': 'arctic-l-v2',
+  'mxbai-embed-large-v1': 'mxbai-large-v1',
+  'qwen3-embedding-0.6b-onnx': 'qwen3-embedding-0.6b',
 };
+const HIGH_END = ['snowflake-arctic-embed-l-v2.0', 'mxbai-embed-large-v1', 'qwen3-embedding-0.6b-onnx'];
 
 describe('every model the benchmark brief named is in the local catalog', () => {
   for (const [id, key] of Object.entries(BRIEF)) {
@@ -65,6 +70,22 @@ describe('every model the benchmark brief named is in the local catalog', () => 
       for (const f of m.files) assert.match(f.sha256 ?? '', /^[0-9a-f]{64}$/, `${id}: ${f.repoPath} sha256`);
       assert.equal(m.bytes, m.files.reduce((a, f) => a + f.bytes, 0), `${id}: bytes total`);
     }
+  });
+
+  test('the high-end models carry a batch cap, memory headroom and (long-context) an input cap', () => {
+    for (const id of HIGH_END) {
+      const m = findEmbeddingCatalogModel(id);
+      assert.ok(m.maxBatchSize > 0 && m.maxBatchSize <= 4, `${id}: batch cap (the 30s worker deadline, §8b)`);
+      assert.ok(m.memoryHeadroomGB >= 0.5, `${id}: memory headroom from its measured peak RSS`);
+      assert.equal(m.dimensions, 1024);
+      assert.notEqual(m.bundled, true);
+    }
+    // Uncapped, a ~2400-token CSV chunk SIGTRAPped both long-context models.
+    assert.equal(findEmbeddingCatalogModel('snowflake-arctic-embed-l-v2.0').maxInputTokens, 512);
+    assert.equal(findEmbeddingCatalogModel('qwen3-embedding-0.6b-onnx').maxInputTokens, 512);
+    // Batching changed Qwen3's q8 vectors (cosine 0.93-0.96 vs single), so one text per run.
+    assert.equal(findEmbeddingCatalogModel('qwen3-embedding-0.6b-onnx').maxBatchSize, 1);
+    assert.equal(findEmbeddingCatalogModel('nomic-embed-text-v1.5').maxBatchSize, 4, 'nomic SIGTRAPped at batch 16');
   });
 
   test('exactly one entry is bundled, and it is the model the app ships', () => {
@@ -124,6 +145,22 @@ describe('the provider applies a catalog entry\'s prefixes', () => {
     await p.embedQuery('q');
     await p.embedBatch(['d']);
     assert.deepEqual(sent.map((m) => m.texts[0]), ['query: q', 'passage: d']);
+  });
+
+  test('an oversized batch is split into runs of at most maxBatchSize (profile ingest sends 10)', async () => {
+    const { p, sent } = recording('nomic-embed-text-v1.5');
+    const out = await p.embedBatch(Array.from({ length: 10 }, (_, i) => `d${i}`));
+    assert.deepEqual(sent.map((m) => m.texts.length), [4, 4, 2]);
+    assert.equal(out.length, 10);
+    assert.equal(sent[0].texts[0], 'search_document: d0', 'prefix still applied per text');
+  });
+
+  test('the input-token cap reaches the worker on init and embed', async () => {
+    const { p, sent } = recording('snowflake-arctic-embed-l-v2.0');
+    await p.embedQuery('q');
+    assert.equal(sent[0].maxInputTokens, 512);
+    assert.equal(sent[0].texts[0], 'query: q');
+    assert.equal(sent[0].pooling, 'cls');
   });
 
   test('a width mismatch from the worker is refused, not indexed', async () => {

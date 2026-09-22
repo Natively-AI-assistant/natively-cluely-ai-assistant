@@ -52,7 +52,8 @@ w.on('message', (m) => {
 });
 const post = (msg) => new Promise((res, rej) => { msg.requestId = ++id; pending.set(id, { resolve: res, reject: rej }); w.postMessage(msg); });
 
-const init = { type: 'init', modelPath: path.join(CACHE, KEY), modelId: MODEL_ID, dtype: 'q8', pooling: 'cls' };
+// `hfModelId` is the id the worker loads (protocol since the PR #582 merge).
+const init = { type: 'init', modelPath: path.join(CACHE, KEY), modelId: MODEL_ID, hfModelId: MODEL_ID, dtype: 'q8', pooling: 'cls', runtime: 'onnx' };
 await post(init);
 
 const texts = [

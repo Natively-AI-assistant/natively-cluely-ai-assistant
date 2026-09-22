@@ -28,7 +28,12 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const FORMATS_DIR = path.join(REPO, 'embedding-benchmark', 'corpus', 'formats');
+const CORPUS_ROOT = path.join(REPO, 'embedding-benchmark', 'corpus');
+const FORMATS_DIR = path.join(CORPUS_ROOT, 'formats');
+// EXTRA_FILES=projects/noise/billing-events-export.csv,... (relative to the corpus
+// root) are uploaded into every format mode too, e.g. to prove a long-context
+// model's input cap holds on real ~2400-token CSV rows inside the app.
+const EXTRA_FILES = (process.env.EXTRA_FILES || '').split(',').filter(Boolean).map((f) => path.join(CORPUS_ROOT, f));
 const CACHE = path.join(os.homedir(), 'Library', 'Application Support', 'natively', 'embedding-experiments');
 const MODEL = process.env.LIVE_MODEL || 'default';
 const PORT = Number(process.env.CDP_PORT || 9871);
@@ -66,7 +71,7 @@ const hadLog = fs.existsSync(DEBUG_LOG);
 if (hadLog) fs.copyFileSync(DEBUG_LOG, DEBUG_BAK);
 const restoreLog = () => { try { if (hadLog) { fs.copyFileSync(DEBUG_BAK, DEBUG_LOG); fs.rmSync(DEBUG_BAK, { force: true }); } } catch { /* */ } };
 
-const env = { ...process.env, NODE_ENV: 'production', NATIVELY_E2E: '1', NATIVELY_E2E_REFERENCE_ROOT: FORMATS_DIR, NATIVELY_TEST_USERDATA: USERDATA, NATIVELY_KEYLESS_LEXICAL_MANUAL_RETRIEVAL: '0', ...cfg.env };
+const env = { ...process.env, NODE_ENV: 'production', NATIVELY_E2E: '1', NATIVELY_E2E_REFERENCE_ROOT: CORPUS_ROOT, NATIVELY_TEST_USERDATA: USERDATA, NATIVELY_KEYLESS_LEXICAL_MANUAL_RETRIEVAL: '0', ...cfg.env };
 delete env.ELECTRON_RUN_AS_NODE;
 if (MODEL === 'default' || CATALOG_MODEL) { delete env.NATIVELY_EMBEDDING_EXPERIMENT; delete env.NATIVELY_LOCAL_MODELS_PATH; }
 for (const k of Object.keys(env)) if (/(_API_KEY|_API_TOKEN|_AUTH_TOKEN|_SECRET)$/i.test(k) || /^(OPENAI|GEMINI|GOOGLE|VOYAGE|OPENROUTER|ANTHROPIC|GROQ|DEEPSEEK|NVIDIA|NATIVELY_API)/i.test(k)) delete env[k];
@@ -136,6 +141,7 @@ try {
     const files = fs.readdirSync(dirOf(fmt)).filter((f) => f.endsWith(ext));
     let uploaded = 0; const failures = [];
     for (const f of files) { const u = await invoke('__e2e__:upload-reference-file-from-path', { modeId, filePath: path.join(dirOf(fmt), f) }); if (u?.success) uploaded++; else failures.push({ f, error: u?.error }); }
+    for (const abs of EXTRA_FILES) { const u = await invoke('__e2e__:upload-reference-file-from-path', { modeId, filePath: abs }); if (u?.success) uploaded++; else failures.push({ f: path.basename(abs), error: u?.error }); }
     await invoke('__e2e__:reindex-embeddings', modeId);
     const TERMINAL = new Set(['ready', 'lexical_only', 'failed', 'ocr_required']);
     let st = []; const t0 = Date.now();
@@ -150,7 +156,8 @@ try {
     }
     const mean = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
     const rep = {
-      files: files.length, uploaded, failures,
+      files: files.length + EXTRA_FILES.length, uploaded, failures,
+      perFile: st.map((x) => ({ name: x.fileName ?? x.name ?? x.fileId, status: x.status, chunks: x.chunkCount, embedded: x.embeddedChunkCount })),
       index: { byStatus: st.reduce((a, x) => { a[x.status] = (a[x.status] || 0) + 1; return a; }, {}), chunks: st.reduce((a, x) => a + (x.chunkCount || 0), 0), embedded: st.reduce((a, x) => a + (x.embeddedChunkCount || 0), 0) },
       hit1: +mean(perQ.map((q) => (q.firstHitRank === 1 ? 1 : 0))).toFixed(4),
       hit3: +mean(perQ.map((q) => (q.firstHitRank && q.firstHitRank <= 3 ? 1 : 0))).toFixed(4),
@@ -159,7 +166,7 @@ try {
       perQ,
     };
     report.formats[fmt] = rep;
-    console.log(`[formats:${RUN_NAME}] ${fmt.padEnd(5)} uploaded ${uploaded}/${files.length}  chunks ${rep.index.chunks} embedded ${rep.index.embedded} ${JSON.stringify(rep.index.byStatus)}  hit@1=${rep.hit1.toFixed(4)} hit@3=${rep.hit3.toFixed(4)} anywhere=${rep.anywhere.toFixed(4)} MRR=${rep.mrr.toFixed(4)}`);
+    console.log(`[formats:${RUN_NAME}] ${fmt.padEnd(5)} uploaded ${uploaded}/${files.length + EXTRA_FILES.length}  chunks ${rep.index.chunks} embedded ${rep.index.embedded} ${JSON.stringify(rep.index.byStatus)}  hit@1=${rep.hit1.toFixed(4)} hit@3=${rep.hit3.toFixed(4)} anywhere=${rep.anywhere.toFixed(4)} MRR=${rep.mrr.toFixed(4)}`);
   }
   // Unsupported formats must be refused, not silently indexed as garbage.
   if (!FORMAT_FILTER) {
@@ -179,6 +186,8 @@ try {
 }
 report.embedderLoaded = (log.match(/Loading (?:feature-extraction|ONNX embedding) model \(([^,)]+)/g) || []).map((l) => l.replace(/^.*\(/, ''));
 report.cloudSelected = log.match(/Selected provider: (?!local)\w+/g) || [];
+report.nativeAborts = log.match(/SIGTRAP|SIGABRT|terminating due to uncaught|timed out after \d+ms/g) || [];
+if (report.nativeAborts.length) report.invalid = `native abort / worker timeout in the app log: ${report.nativeAborts.slice(0, 3).join(', ')}`;
 if (CATALOG_MODEL) {
   // Indexing must have run on the catalog model, not the bundled fallback.
   const space = String(report.statusAtEnd?.space || '');
