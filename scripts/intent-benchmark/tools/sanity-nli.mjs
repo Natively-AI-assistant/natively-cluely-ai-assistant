@@ -1,9 +1,12 @@
 // Sanity check: is the zero-shot pipeline being driven correctly?
 // Uses clean, unambiguous prose — if the model can't do THESE, the harness is
 // broken; if it can, then its failure on real STT text is a real finding.
+import { fileURLToPath } from 'node:url';
+
 const { pipeline, env } = await import('@huggingface/transformers');
 env.allowRemoteModels = false;
-env.localModelPath = new URL('../../../resources/models', import.meta.url).pathname;
+// fileURLToPath, not .pathname — the latter is "/D:/repo/..." on Windows.
+env.localModelPath = fileURLToPath(new URL('../../../resources/models', import.meta.url));
 const pipe = await pipeline('zero-shot-classification', 'Xenova/mobilebert-uncased-mnli', { local_files_only: true, dtype: 'q8' });
 const LABELS = [
   'asking for clarification or explanation',
