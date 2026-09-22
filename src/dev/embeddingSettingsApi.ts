@@ -85,6 +85,43 @@ const CATALOG = {
     ],
 };
 
+// The Local Embeddings library card. One row per state it renders differently:
+// bundled, downloadable, installed-but-unused (Use/Test/Remove), and a
+// licence-gated entry (the inline warning). Without this the card showed an
+// empty well, so its model-name colour was never on screen here.
+const LICENSE = { spdx: 'Apache-2.0', url: 'https://www.apache.org/licenses/LICENSE-2.0', commercialUseRestricted: false, requiresAcknowledgement: false };
+const LOCAL_MODEL_BASE = {
+    runtime: 'onnx' as const, supported: true, unsupportedReason: null, activatable: true,
+    acknowledged: true, recommended: false, selected: false, license: LICENSE,
+};
+const LOCAL_MODELS = [
+    {
+        ...LOCAL_MODEL_BASE, id: 'multilingual-e5-small', name: 'Multilingual E5 Small', bundled: true,
+        repo: 'Xenova/multilingual-e5-small', params: '118M', bytes: 135_000_000, bytesOnDisk: 135_000_000,
+        dimensions: 384, state: 'installed' as const,
+        note: 'Bundled default. Multilingual, and answers Hindi questions about English documents as well as English ones.',
+    },
+    {
+        ...LOCAL_MODEL_BASE, id: 'all-minilm-l6-v2', name: 'MiniLM L6 v2',
+        repo: 'Xenova/all-MiniLM-L6-v2', params: '22.7M', bytes: 24_000_000, bytesOnDisk: 0,
+        dimensions: 384, state: 'not-installed' as const,
+        note: 'The previous built-in model. Smallest and fastest; weakest retrieval of this list. English only.',
+    },
+    {
+        ...LOCAL_MODEL_BASE, id: 'bge-small-en-v1.5', name: 'BGE Small EN v1.5', recommended: true,
+        repo: 'Xenova/bge-small-en-v1.5', params: '33.4M', bytes: 35_000_000, bytesOnDisk: 35_000_000,
+        dimensions: 384, state: 'installed' as const, license: { ...LICENSE, spdx: 'MIT' },
+        note: 'Same 384-d width and memory as MiniLM, with a longer 512-token window. English only.',
+    },
+    {
+        ...LOCAL_MODEL_BASE, id: 'embeddinggemma-300m', name: 'EmbeddingGemma 300M', runtime: 'gguf' as const,
+        repo: 'unsloth/embeddinggemma-300m-GGUF', params: '300M', bytes: 330_000_000, bytesOnDisk: 0,
+        dimensions: 768, state: 'not-installed' as const, acknowledged: false,
+        license: { spdx: 'Gemma', url: 'https://ai.google.dev/gemma/terms', commercialUseRestricted: false, requiresAcknowledgement: true },
+        note: 'Licence-gated: the download stays disabled until its terms are accepted.',
+    },
+];
+
 // `?lightweight=1` puts the panel in the state that renders the compatibility
 // -default warning under the Active Embedding Model row. The default stub
 // reports a strong cloud model, so that strip is otherwise unreachable here.
@@ -120,6 +157,7 @@ export const EMBEDDING_SETTINGS_API = {
     setEmbeddingVoyageKey: async () => ({ success: true }),
     setEmbeddingOpenRouterKey: async () => ({ success: true, models: [], count: 0 }),
     setEmbeddingCustomEndpoint: async () => ({ success: true, endpoint: 'http://localhost:1234/v1', models: [], reachable: true }),
+    listLocalEmbeddingModels: async () => ({ models: LOCAL_MODELS }),
     platform: 'darwin',
     openExternal: () => {},
 };

@@ -1176,7 +1176,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                                 border: installed || m.selected ? undefined : '1px solid var(--aip-border-strong)',
                             }}
                         />
-                        <span className="text-xs font-semibold text-white truncate">{m.name}</span>
+                        <span className="text-xs font-semibold aip-hero truncate">{m.name}</span>
                         {m.selected && <AipBadge tone="ok" label={t('In use')} />}
                         {installed && !m.selected && !m.supported && (
                             <AipBadge tone="warn" label={t('Downloaded · not usable yet')} />
@@ -1244,7 +1244,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                 </div>
 
                 {m.note && (
-                    <p className="text-[10px] aip-muted leading-relaxed pl-3.5 text-white/60">
+                    <p className="text-[10px] aip-muted leading-relaxed pl-3.5">
                         {m.note}
                     </p>
                 )}
@@ -1258,14 +1258,14 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
 
                 {needsExtension && (
                     <p className="text-[10px] aip-muted ml-3.5">
-                        {t('Runs through the')} <code className="px-1.5 py-0.5 rounded bg-white/10 text-[9.5px] font-mono">{m.extensionId}</code> {t('extension, which is not installed yet.')}
+                        {t('Runs through the')} <code className="px-1.5 py-0.5 rounded bg-[var(--aip-item-active)] text-[9.5px] font-mono">{m.extensionId}</code> {t('extension, which is not installed yet.')}
                         {m.requiresBinary ? ` ${t('It also needs')} ${m.requiresBinary} ${t('on your PATH.')}` : ''}
                     </p>
                 )}
 
                 {busy && prog && (
                     <div className="space-y-1 pl-3.5 pt-1">
-                        <div className="h-1 w-full bg-white/10 rounded-full overflow-hidden">
+                        <div className="h-1 w-full bg-[var(--aip-item-active)] rounded-full overflow-hidden">
                             <div className="h-full bg-[var(--aip-accent)] transition-all duration-150" style={{ width: `${Math.round(prog.fraction * 100)}%` }} />
                         </div>
                         <div className="text-[10px] aip-muted flex justify-between">
@@ -1639,7 +1639,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                     <p className="min-w-0 flex-1">
                         {t('Runs on this device with zero data sent externally. Built-in BGE model shipped with Natively, or download open models directly from Hugging Face.')}
                     </p>
-                    <span className="shrink-0 font-medium tabular-nums text-white/70">
+                    <span className="shrink-0 font-medium tabular-nums aip-text">
                         {installedCount}/{totalCount} {t('installed')}
                         {installedBytes > 0 && <> · {humanBytes(installedBytes)}</>}
                     </span>
@@ -1652,13 +1652,17 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                         </p>
                     ) : <div />}
 
-                    {/* Filter Tabs */}
-                    <div className="flex items-center gap-1 bg-white/5 p-0.5 rounded-md text-[11px]">
+                    {/* Filter Tabs. Theme tokens, not white literals: white text
+                        and a 10%-white pill vanished on the light card.
+                        --aip-pill-bg is exactly the old 10% white in dark and a
+                        raised white chip in light. */}
+                    <div className="flex items-center gap-1 bg-[var(--aip-btn-bg)] p-0.5 rounded-md text-[11px]">
                         <button
                             type="button"
-                            className="px-2 py-0.5 rounded text-white transition-colors"
+                            className="px-2 py-0.5 rounded aip-hero transition-colors"
                             style={{
-                                background: filterTab === 'all' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+                                background: filterTab === 'all' ? 'var(--aip-pill-bg)' : 'transparent',
+                                boxShadow: filterTab === 'all' ? 'var(--aip-pill-shadow)' : 'none',
                                 fontWeight: filterTab === 'all' ? 600 : 400,
                             }}
                             onClick={() => setFilterTab('all')}
@@ -1667,9 +1671,10 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                         </button>
                         <button
                             type="button"
-                            className="px-2 py-0.5 rounded text-white transition-colors"
+                            className="px-2 py-0.5 rounded aip-hero transition-colors"
                             style={{
-                                background: filterTab === 'installed' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+                                background: filterTab === 'installed' ? 'var(--aip-pill-bg)' : 'transparent',
+                                boxShadow: filterTab === 'installed' ? 'var(--aip-pill-shadow)' : 'none',
                                 fontWeight: filterTab === 'installed' ? 600 : 400,
                             }}
                             onClick={() => setFilterTab('installed')}
@@ -1678,9 +1683,10 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                         </button>
                         <button
                             type="button"
-                            className="px-2 py-0.5 rounded text-white transition-colors"
+                            className="px-2 py-0.5 rounded aip-hero transition-colors"
                             style={{
-                                background: filterTab === 'recommended' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+                                background: filterTab === 'recommended' ? 'var(--aip-pill-bg)' : 'transparent',
+                                boxShadow: filterTab === 'recommended' ? 'var(--aip-pill-shadow)' : 'none',
                                 fontWeight: filterTab === 'recommended' ? 600 : 400,
                             }}
                             onClick={() => setFilterTab('recommended')}
@@ -1732,7 +1738,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                                         className="w-1.5 h-1.5 rounded-full shrink-0"
                                         style={{ background: builtInSelected ? 'var(--aip-accent)' : 'var(--aip-tertiary)' }}
                                     />
-                                    <span className="text-xs font-semibold text-white truncate">{status.builtIn.name}</span>
+                                    <span className="text-xs font-semibold aip-hero truncate">{status.builtIn.name}</span>
                                     <AipBadge tone="neutral" label={t('Included')} />
                                     {builtInSelected && <AipBadge tone="ok" label={t('In use')} />}
                                 </div>
@@ -1996,9 +2002,9 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
 
                 <div className="aip-well p-2.5 space-y-2.5">
                     {rerankerExtensions.length === 0 ? (
-                        <div className="text-center py-6 px-4 space-y-2 border border-dashed border-white/10 rounded-md">
-                            <Puzzle size={20} className="mx-auto text-white/30" aria-hidden="true" />
-                            <p className="text-xs text-white/70 font-medium">{t('No custom extensions installed')}</p>
+                        <div className="text-center py-6 px-4 space-y-2 border border-dashed border-[var(--aip-border-strong)] rounded-md">
+                            <Puzzle size={20} className="mx-auto aip-faint" aria-hidden="true" />
+                            <p className="text-xs aip-text font-medium">{t('No custom extensions installed')}</p>
                             <p className="text-[10px] aip-muted max-w-xs mx-auto">
                                 {t('Install a local reranker extension from a folder to use custom scoring models.')}
                             </p>
@@ -2030,7 +2036,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                                                     border: ext.enabled || ext.running ? undefined : '1px solid var(--aip-border-strong)',
                                                 }}
                                             />
-                                            <span className="text-xs font-semibold text-white truncate">{ext.name}</span>
+                                            <span className="text-xs font-semibold aip-hero truncate">{ext.name}</span>
                                             <span className="text-[10px] aip-muted font-mono">{ext.version}</span>
                                             <AipBadge
                                                 tone={ext.running ? 'ok' : ext.enabled ? 'info' : 'neutral'}
@@ -2080,13 +2086,13 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                                         const pctFraction = groupProgressFraction(ext.id, group.files);
 
                                         return (
-                                            <div key={group.id} className="space-y-1.5 pl-3.5 pt-2 border-t border-white/5">
+                                            <div key={group.id} className="space-y-1.5 pl-3.5 pt-2 border-t border-[var(--aip-divider)]">
                                                 <div className="flex items-center justify-between gap-2">
                                                     <div className="min-w-0 flex-1">
                                                         <div className="flex items-center gap-2">
-                                                            <span className="text-[11px] font-semibold text-white truncate">{group.label}</span>
+                                                            <span className="text-[11px] font-semibold aip-hero truncate">{group.label}</span>
                                                             {group.files.length > 1 && (
-                                                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-white/10 text-white/70 font-mono shrink-0">
+                                                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-[var(--aip-item-active)] aip-text font-mono shrink-0">
                                                                     {group.files.length} {t('files')}
                                                                 </span>
                                                             )}
@@ -2146,7 +2152,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                                                 {/* Aggregate Download Progress Bar */}
                                                 {isDownloading && (
                                                     <div className="space-y-1 pt-1">
-                                                        <div className="h-1 w-full bg-white/10 rounded-full overflow-hidden">
+                                                        <div className="h-1 w-full bg-[var(--aip-item-active)] rounded-full overflow-hidden">
                                                             <div
                                                                 className="h-full bg-[var(--aip-accent)] transition-all duration-150"
                                                                 style={{ width: `${Math.round(pctFraction * 100)}%` }}
@@ -2171,7 +2177,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
 
                                                 {/* License Acceptance Banner */}
                                                 {group.unacknowledgedLicense && (
-                                                    <div className="space-y-1.5 p-2 rounded bg-white/5 border border-white/5 mt-1">
+                                                    <div className="space-y-1.5 p-2 rounded bg-[var(--aip-btn-bg)] border border-[var(--aip-divider)] mt-1">
                                                         <p className="text-[10px] aip-muted">
                                                             {t('This model requires licence acceptance')} ({group.unacknowledgedLicense.spdx})
                                                             {group.unacknowledgedLicense.commercialUseRestricted ? ` — ${t('non-commercial use only')}` : ''}.
@@ -2209,7 +2215,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
 
                                                 {/* Collapsible Individual Files Breakdown */}
                                                 {isExpanded && group.files.length > 1 && (
-                                                    <div className="space-y-1 mt-1 pl-2 border-l-2 border-white/10 py-1 bg-white/[0.01] rounded-r">
+                                                    <div className="space-y-1 mt-1 pl-2 border-l-2 border-[var(--aip-border-strong)] py-1 bg-white/[0.01] rounded-r">
                                                         {group.files.map(m => {
                                                             const key = `${ext.id}::${m.key}`;
                                                             const pct = progress[key];
@@ -2218,7 +2224,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                                                             return (
                                                                 <div key={m.key} className="flex items-center justify-between text-[10px] py-1 px-1.5 rounded hover:bg-white/5">
                                                                     <div className="min-w-0 flex-1 flex items-center gap-2">
-                                                                        <span className="font-mono text-white/80 truncate">{m.key}</span>
+                                                                        <span className="font-mono aip-text truncate">{m.key}</span>
                                                                         <span className="aip-muted">{humanBytes(m.bytes ?? m.approxBytes)}</span>
                                                                     </div>
                                                                     <div className="shrink-0 flex items-center gap-1.5">
@@ -2281,7 +2287,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                     />
                 </div>
 
-                <div className="pt-2 border-t border-white/5 text-[10.5px] aip-muted">
+                <div className="pt-2 border-t border-[var(--aip-divider)] text-[10.5px] aip-muted">
                     {candidateCount <= 5 && t('Fast & low latency — best for quick queries.')}
                     {candidateCount > 5 && candidateCount <= 10 && t('Balanced speed and recall.')}
                     {candidateCount > 10 && candidateCount < status.candidateCountDefault
