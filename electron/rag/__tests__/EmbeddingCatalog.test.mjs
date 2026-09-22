@@ -148,7 +148,7 @@ describe('Ollama', () => {
 
 describe('catalogue shape', () => {
   test('every provider is present so the panel never hides one silently', () => {
-    assert.deepEqual(providers(buildEmbeddingCatalog({})), ['natively', 'ollama', 'custom', 'openrouter', 'voyage', 'openai', 'gemini', 'local']);
+    assert.deepEqual(providers(buildEmbeddingCatalog({})), ['natively', 'ollama', 'custom', 'openrouter', 'ninerouter', 'voyage', 'openai', 'gemini', 'local']);
   });
 
   test('cloud providers are flagged so the panel can show where data goes', () => {
@@ -156,6 +156,10 @@ describe('catalogue shape', () => {
     assert.equal(byId(cat, 'openai').cloud, true);
     assert.equal(byId(cat, 'gemini').cloud, true);
     assert.equal(byId(cat, 'natively').cloud, true);
+    // 9Router runs on the user's own machine and is still CLOUD: it forwards
+    // to Gemini, OpenAI and 40+ others, so a 'local' flag here would be a
+    // false privacy claim in the panel.
+    assert.equal(byId(cat, 'ninerouter').cloud, true);
     assert.equal(byId(cat, 'ollama').cloud, false);
     assert.equal(byId(cat, 'local').cloud, false);
   });

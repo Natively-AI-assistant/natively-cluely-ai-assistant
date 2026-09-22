@@ -1,14 +1,16 @@
 /**
  * Hosted reranking providers.
  *
- * Every one of these speaks the same request/response shape — the one Cohere
- * introduced and everyone copied:
+ * All but one speak the request/response shape Cohere introduced and everyone
+ * copied:
  *
  *   POST {base}/rerank   { model, query, documents, top_n }
  *   -> { results: [{ index, relevance_score, document? }], usage: {...} }
  *
- * So the client is shared; only the endpoint, the credential and the model list
- * differ. That is why adding Jina needed a table entry rather than a second
+ * Voyage differs in exactly two field names — `top_k` in, `data` out — which
+ * its descriptor carries as `wire`. So the client stays shared; only the
+ * endpoint, the credential, the model list and those two names differ. That is
+ * why adding Jina (and Voyage) needed a table entry rather than a second
  * implementation.
  *
  * Jina's entry exists for one reason: jina-reranker-v3.5 CANNOT run locally.
@@ -19,7 +21,17 @@
  * Jina's own API is the only way to actually use it.
  */
 
-export type HostedRerankProviderId = 'natively' | 'openrouter' | 'jina';
+export type HostedRerankProviderId = 'natively' | 'openrouter' | 'jina' | 'voyage';
+
+/** The two field names that vary between rerank APIs. Absent = Cohere's. */
+export interface RerankWire {
+  /** Request field that caps how many results come back. */
+  topField: 'top_n' | 'top_k';
+  /** Response field holding the ranked `{ index, relevance_score }` rows. */
+  resultsField: 'results' | 'data';
+}
+
+export const COHERE_RERANK_WIRE: RerankWire = { topField: 'top_n', resultsField: 'results' };
 
 export interface HostedRerankModel {
   id: string;
@@ -45,6 +57,8 @@ export interface HostedRerankProvider {
   models: HostedRerankModel[];
   /** True when the catalogue above is a static list rather than live discovery. */
   staticCatalogue: boolean;
+  /** Field names, when they are not Cohere's. */
+  wire?: RerankWire;
 }
 
 /**
@@ -111,10 +125,30 @@ export const HOSTED_RERANK_PROVIDERS: Record<HostedRerankProviderId, HostedReran
     ],
     staticCatalogue: true,
   },
+  /**
+   * Voyage AI, on the SAME key as the Voyage embedding provider — one vendor,
+   * one credential, like OpenRouter. Models and wire format from Voyage's API
+   * reference (docs.voyageai.com/reference/reranker-api, checked 2026-09-22):
+   * `rerank-2.5` and `rerank-2.5-lite` are the recommended models, the cap is
+   * `top_k`, and results arrive in `data`, sorted by relevance.
+   */
+  voyage: {
+    id: 'voyage',
+    name: 'Voyage AI',
+    baseUrl: 'https://api.voyageai.com/v1',
+    keyUrl: 'https://dashboard.voyageai.com/',
+    keyPlaceholder: 'pa-…',
+    models: [
+      { id: 'rerank-2.5', label: 'Voyage Rerank 2.5', recommended: true },
+      { id: 'rerank-2.5-lite', label: 'Voyage Rerank 2.5 Lite' },
+    ],
+    staticCatalogue: true,
+    wire: { topField: 'top_k', resultsField: 'data' },
+  },
 };
 
 export function hostedRerankProvider(id: string | undefined): HostedRerankProvider | null {
-  if (id !== 'natively' && id !== 'openrouter' && id !== 'jina') return null;
+  if (id !== 'natively' && id !== 'openrouter' && id !== 'jina' && id !== 'voyage') return null;
   return HOSTED_RERANK_PROVIDERS[id];
 }
 

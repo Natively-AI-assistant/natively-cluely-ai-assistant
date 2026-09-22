@@ -219,7 +219,13 @@ export const prettifyModelId = (id: string): string => {
 // Fluxion is deliberately ABSENT: 36 models, and its /v1/models is scoped to
 // the key's group, so the auto-fetch cannot flood routing the way OpenRouter's
 // 444 would. Adding it here would also need the mirror in modelAvailable().
-export const isOptInModelProvider = (provider: string): boolean => provider === 'litellm' || provider === 'openrouter';
+// 9Router is opt-in for the plainest version of the reason: it exists to
+// aggregate 40+ upstreams, and a stock local instance already answers
+// /v1/models with 47 models across 6 aliases from one user's connected
+// accounts. "Empty = all" would put a catalogue nobody chose into the
+// picker. Adding a member here REQUIRES the mirror in modelAvailable()
+// (ipcHandlers.ts); a drift-guard test pins the two together.
+export const isOptInModelProvider = (provider: string): boolean => provider === 'litellm' || provider === 'openrouter' || provider === 'ninerouter';
 
 /**
  * Does `modelId` survive `provider`'s allow-list?
@@ -265,5 +271,134 @@ export const litellmModelLabel = (id: string): string => {
     const segments = id.replace(/^litellm\//, '').split('/').filter(Boolean);
     // Degenerate ids ("litellm/", "///") keep the input rather than becoming
     // an empty label — a blank row is worse than an ugly one.
+    return segments.length ? segments[segments.length - 1] : id;
+};
+
+/**
+ * The display label for any gateway-routed model id.
+ *
+ * Identical rule to litellmModelLabel — drop Natively's routing prefix, drop
+ * the gateway's own upstream segment, show the last one — but it strips ANY
+ * known routing prefix rather than the literal `litellm/`.
+ *
+ * That difference is small and real. litellmModelLabel returns the right
+ * answer for `ninerouter/gemini/gemini-3.6-flash` only because it takes the
+ * last segment and `ninerouter/` happens to be a segment worth dropping. A
+ * single-segment id breaks the coincidence: `ninerouter/vip` — 9Router's
+ * combos are single-segment — would label as "vip" correctly, but a bare
+ * `ninerouter` would label as "ninerouter". Relying on the accident also
+ * leaves a function whose NAME tells the next reader it does not apply.
+ */
+
+/** What 9Router's catalogue says about one model's reasoning behaviour. */
+export interface NinerouterThinkingCaps {
+    reasoning?: boolean;
+    thinkingCanDisable?: boolean;
+    /** 9Router's own enum: openai | claude-adaptive | claude-budget | gemini-level | … */
+    thinkingFormat?: string | null;
+}
+
+/**
+ * 9Router's per-format level vocabulary, mirrored from FORMAT_LEVELS in
+ * `open-sse/providers/thinkingLevels.js`.
+ *
+ * WHY A TABLE AND NOT ONE LIST — this is the thing an earlier version of this
+ * file got wrong. 9Router does not pass `reasoning_effort` through to the
+ * upstream: `extractThinking()` reads it as client INTENT, `applyFormat()`
+ * deletes it, and rewrites that intent into whatever the backend speaks —
+ * `thinking: {budget_tokens}` for claude-budget, `setGeminiThinking({
+ * thinkingLevel })` for gemini-level, a clamp to high|max for deepseek.
+ *
+ * That translation is exactly why ONE control can drive every backend. But the
+ * legal levels differ per format, so a flat none/low/medium/high both invents
+ * levels that do not exist (minimax and zai are BINARY — none or thinking) and
+ * hides ones that do (claude's `max`, openai's `xhigh`).
+ */
+const NINEROUTER_FORMAT_LEVELS: Readonly<Record<string, readonly string[]>> = {
+    openai: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'],
+    'claude-adaptive': ['none', 'low', 'medium', 'high', 'max'],
+    'claude-budget': ['none', 'low', 'medium', 'high', 'xhigh', 'max'],
+    // No 'none' upstream either: gemini-3's thinkingLevel starts at minimal.
+    'gemini-level': ['minimal', 'low', 'medium', 'high'],
+    'gemini-budget': ['none', 'low', 'medium', 'high'],
+    zai: ['none', 'thinking'],
+    qwen: ['none', 'low', 'medium', 'high'],
+    kimi: ['none', 'low', 'medium', 'high', 'max'],
+    deepseek: ['none', 'high', 'max'],
+    minimax: ['none', 'thinking'],
+    hunyuan: ['none', 'low', 'medium', 'high'],
+    step: ['none', 'low', 'medium', 'high'],
+    commandcode: ['none', 'low', 'medium', 'high', 'xhigh', 'max'],
+};
+
+/** Their `L.base` — the fallback for a format this table has not seen. */
+const NINEROUTER_BASE_LEVELS: readonly string[] = ['none', 'low', 'medium', 'high'];
+
+const NINEROUTER_LEVEL_LABELS: Readonly<Record<string, string>> = {
+    none: 'Off',
+    minimal: 'Minimal',
+    thinking: 'Thinking on',
+    low: 'Low',
+    medium: 'Medium',
+    high: 'High',
+    xhigh: 'Very high',
+    max: 'Maximum — slowest',
+};
+
+/**
+ * The thinking levels worth offering for ONE 9Router model.
+ *
+ * `reasoning: false` -> no control at all; gemini/gemma-4-31b-it is the only
+ * such chat model on a stock instance and a picker for it would do nothing.
+ *
+ * `thinkingCanDisable === false` -> 'none' is filtered out, which is precisely
+ * what their own `getThinkingLevels()` does. Note this leaves gemini-level
+ * starting at 'minimal', which is both their vocabulary and the honest label:
+ * that model can be turned DOWN but not off.
+ *
+ * `reasoning_effort` is genuinely honoured rather than accepted-and-ignored —
+ * latency moves monotonically across the scale, reproduced on two models. How
+ * much it buys is model- and prompt-dependent, and 'auto' is a reasonable
+ * default rather than something to escape: on Gemini, which varies its own
+ * effort per prompt, auto was the fastest setting measured.
+ */
+export const ninerouterThinkingOptions = (
+    caps?: NinerouterThinkingCaps | null,
+): { id: string; name: string }[] => {
+    if (caps && caps.reasoning === false) return [];
+    const format = caps?.thinkingFormat || '';
+    let levels = NINEROUTER_FORMAT_LEVELS[format] || NINEROUTER_BASE_LEVELS;
+    if (caps?.thinkingCanDisable === false) levels = levels.filter(l => l !== 'none');
+    // The FLOOR of the format is the default — 'none' for most, 'minimal' for
+    // gemini-level, which has no off. It leads the list and says so, because a
+    // dropdown whose default is not its first entry reads as broken.
+    //
+    // Auto sits at the end rather than the top: it is a deliberate opt-out for
+    // "let the model decide", not the recommended setting. That ordering is the
+    // product choice, not a claim that Auto is bad — on Gemini it was the
+    // fastest setting measured.
+    return [
+        ...levels.map((id, i) => ({
+            id,
+            name: i === 0
+                ? `${NINEROUTER_LEVEL_LABELS[id] || id} — fastest (default)`
+                : (NINEROUTER_LEVEL_LABELS[id] || id),
+        })),
+        { id: 'auto', name: 'Auto (let the model decide)' },
+    ];
+};
+
+/**
+ * Every level any format can yield. The wire validator checks against this, so
+ * it must be the UNION of the table above — a level the picker offers and the
+ * validator drops is a silent no-op. A test pins the two together.
+ */
+export const NINEROUTER_THINKING_LEVELS = [
+    'none', 'minimal', 'thinking', 'low', 'medium', 'high', 'xhigh', 'max',
+] as const;
+
+export const gatewayModelLabel = (id: string): string => {
+    if (!id) return '';
+    const segments = id.replace(/^(?:litellm|ninerouter|openrouter|nvidia_nim|fluxion)\//, '').split('/').filter(Boolean);
     return segments.length ? segments[segments.length - 1] : id;
 };

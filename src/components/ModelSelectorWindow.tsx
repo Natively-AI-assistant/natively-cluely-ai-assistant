@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { Check, Loader2 } from 'lucide-react';
-import { CODEX_CLI_MODEL, codexCliSelectorId, codexModelOptions, isModelAllowed, litellmModelLabel, STANDARD_CLOUD_MODELS, prettifyModelId } from '../utils/modelUtils';
+import { CODEX_CLI_MODEL, codexCliSelectorId, codexModelOptions, gatewayModelLabel, isModelAllowed, litellmModelLabel, STANDARD_CLOUD_MODELS, prettifyModelId } from '../utils/modelUtils';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
 import {
@@ -220,6 +220,20 @@ const ModelSelectorWindow = () => {
                     });
                 } catch {
                     // LiteLLM proxy may not be running — ignore.
+                }
+
+                // 9Router — auto-discovered from the configured instance. Same
+                // shape and the same try/catch: an instance that is not running
+                // must never block the rest of the list.
+                try {
+                    const ninerouterModels = await window.electronAPI?.getAvailableNinerouterModels?.() || [];
+                    ninerouterModels.forEach((m: string) => {
+                        // `m` still carries 9Router's own `<upstreamAlias>/` prefix, so
+                        // the label takes the last segment the same way LiteLLM's does.
+                        models.push({ id: `ninerouter/${m}`, name: `${gatewayModelLabel(m)} (9Router)`, type: 'cloud', provider: 'ninerouter' });
+                    });
+                } catch {
+                    // 9Router may not be running — ignore.
                 }
 
                 if (cancelled || myToken !== runToken) return;

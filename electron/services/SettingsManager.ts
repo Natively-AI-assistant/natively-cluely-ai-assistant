@@ -145,6 +145,7 @@ export interface AppSettings {
         provider?: 'natively' | 'ollama' | 'custom' | 'openrouter' | 'voyage' | 'openai' | 'gemini' | 'local';
         model?: string;
         dimensions?: number;
+        localModelId?: string;
     };
     /**
      * Reranker configuration, independent of BOTH the generation model and the
@@ -160,7 +161,7 @@ export interface AppSettings {
      * This file is plaintext on disk.
      */
     reranker?: {
-        provider?: 'local' | 'natively' | 'openrouter' | 'jina';
+        provider?: 'local' | 'natively' | 'openrouter' | 'jina' | 'voyage' | 'custom';
         /**
          * A catalogue id from rag/rerankerModelCatalog.ts, or absent for the
          * bundled model (ms-marco-MiniLM-L-6-v2 as of 2026-09-04 — see
@@ -171,6 +172,7 @@ export interface AppSettings {
         openrouterModel?: string;
         /** Model id for the Jina AI hosted reranker (jina-reranker-v3.5 and friends). */
         jinaModel?: string;
+        voyageModel?: string;
         /**
          * Model id for the Natively-managed reranker. Absent means the one model
          * the API serves — unlike the BYOK providers there is nothing to choose,
@@ -196,6 +198,13 @@ export interface AppSettings {
      * because this file is plaintext on disk.
      */
     customEmbeddingEndpoint?: string;
+    /**
+     * A user-hosted OpenAI/Cohere-compatible reranking endpoint (LM Studio,
+     * TEI, llama.cpp's llama-server, vLLM, Infinity, or local proxy).
+     */
+    customRerankerEndpoint?: string;
+    customRerankerModel?: string;
+    localEmbeddingModelId?: string;
     /**
      * The user chose "Keep MiniLM". Suppresses the lightweight-embedding
      * warning permanently — an unstoppable warning is worse than none, and this

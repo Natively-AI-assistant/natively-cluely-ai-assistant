@@ -363,6 +363,13 @@ export function initializeIpcHandlers(appState: AppState): void {
         // user's real Anthropic/OpenAI/Gemini key, and nothing about the request
         // or the answer looks wrong.
         if (modelId.startsWith('fluxion/')) return 'fluxion';
+        // MUST stay above every vendor check below, same as the three gateways
+        // above. 9Router namespaces its catalogue by upstream, so
+        // `ninerouter/openai/gpt-5` is an includes('openai') match and
+        // `ninerouter/gemini/gemini-3.6-flash` would be claimed by the gemini-
+        // branch. Classified late, a 9Router model is gated by — and billed to —
+        // the user's own vendor key, and nothing about the answer looks wrong.
+        if (modelId.startsWith('ninerouter/')) return 'ninerouter';
         if (modelId.startsWith('ollama-')) return 'ollama';
         if (modelId.startsWith('gemini-') || modelId.startsWith('models/')) return 'gemini';
         if (isKnownGroqModel(modelId)) return 'groq';
@@ -405,7 +412,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         // what the user can pick, this one decides what routing accepts. If they
         // diverge the picker offers models the router rejects. A drift guard test
         // pins the two together.
-        const optInFamily = family === 'litellm' || family === 'openrouter';
+        const optInFamily = family === 'litellm' || family === 'openrouter' || family === 'ninerouter';
         const enabledForFamily = cm.getCloudEnabledModels?.(family) || [];
         if (optInFamily) {
           if (!enabledForFamily.includes(modelId)) return false;
@@ -422,6 +429,11 @@ export function initializeIpcHandlers(appState: AppState): void {
         // Above the gemini/groq/openai/claude/deepseek lines for the reason
         // providerFamily() gives — all five would otherwise claim a Fluxion id.
         if (modelId.startsWith('fluxion/')) return has(cm.getFluxionApiKey());
+        // Above the vendor lines for the reason providerFamily() gives. Gated on
+        // the BASE URL, not a key: 9Router's own REQUIRE_API_KEY defaults to
+        // false, so a stock local instance is legitimately keyless and gating on
+        // a key would make a working install unselectable.
+        if (modelId.startsWith('ninerouter/')) return has(cm.getNinerouterBaseURL());
         if (modelId.startsWith('ollama-')) return true; // live Ollama probe happens at execution time
         if (allProviders.some((p: any) => p?.id === modelId)) return true;
         if (modelId.startsWith('gemini-') || modelId.startsWith('models/')) return has(cm.getGeminiApiKey());
@@ -453,6 +465,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Same contract: stored fully prefixed (`fluxion/<model>`), the form
       // modelAvailable() classifies. Do not re-prefix.
       const fluxionFallbackModel: string | null = cm.getPreferredModel?.('fluxion') || null;
+      // Same contract again: stored fully prefixed (`ninerouter/<alias>/<model>`),
+      // the form modelAvailable() classifies. Do not re-prefix.
+      const ninerouterFallbackModel: string | null = cm.getPreferredModel?.('ninerouter') || null;
       if (has(cm.getLitellmBaseURL())) {
         try {
           const baseURL = (cm.getLitellmBaseURL() || 'http://localhost:4000/v1').replace(/\/+$/, '');
@@ -516,6 +531,14 @@ export function initializeIpcHandlers(appState: AppState): void {
         // default went stale fell through to `allProviders.find(...)` -> null and
         // was told "No AI providers configured" while holding a working key.
         : (fluxionFallbackModel && modelAvailable(fluxionFallbackModel)) ? fluxionFallbackModel
+        // 9Router earns a rung on the same evidence, and it is the cheap kind
+        // rather than LiteLLM's: no catalogue fetch, because modelAvailable()
+        // already enforces the base URL, the disabled switch and the OPT-IN
+        // allow-list, so an id the user never ticked can never be installed as
+        // a default. Without it a 9Router-only user whose default went stale
+        // falls through to `allProviders.find(...)` -> null and is told "No AI
+        // providers configured" while holding a working instance.
+        : (ninerouterFallbackModel && modelAvailable(ninerouterFallbackModel)) ? ninerouterFallbackModel
         : antigravityFallback ? antigravityFallback
         : allProviders.find((p: any) => modelAvailable(p?.id))?.id
           || null;
@@ -8071,6 +8094,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     const customEndpoint = SettingsManager.getInstance().get('customEmbeddingEndpoint') || '';
     // Public listing: fetched with the key when present, without it otherwise.
     const { listOpenRouterEmbeddingModels } = require('./rag/openrouterEmbeddingModels');
+    const { listNinerouterEmbeddingModels } = require('./rag/ninerouterEmbeddingModels');
 
     /* CONCURRENT, not one await after another.
      *
@@ -8086,12 +8110,19 @@ export function initializeIpcHandlers(appState: AppState): void {
      * swallow their own errors and resolve to [] — none of them can reject, so
      * this cannot fail where the sequential version would have succeeded.
      */
-    const [ollamaModels, customModels, openrouterModels] = await Promise.all([
+    const [ollamaModels, customModels, openrouterModels, ninerouterModels] = await Promise.all([
       listOllamaEmbeddingModels(url),
       customEndpoint
         ? require('./rag/customEmbeddingModels').listCustomEmbeddingModels(customEndpoint, cm.getCustomEmbeddingApiKey?.())
         : Promise.resolve([]),
       listOpenRouterEmbeddingModels({ apiKey: cm.getOpenrouterApiKey?.() }),
+      // Only when an instance is configured — otherwise this would probe
+      // localhost:20128 on every catalogue open for everyone who has never
+      // heard of 9Router, which is the speculative-probe cost the comment
+      // above exists to avoid.
+      cm.getNinerouterBaseURL?.()
+        ? listNinerouterEmbeddingModels({ baseUrl: cm.getNinerouterBaseURL(), apiKey: cm.getNinerouterApiKey?.() })
+        : Promise.resolve([]),
     ]);
 
     // Still sequential, deliberately: this only runs when Ollama listed nothing,
@@ -8114,6 +8145,9 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasOpenrouterKey: !!cm.getOpenrouterApiKey?.(),
         hasVoyageKey: !!cm.getVoyageApiKey?.(),
         openrouterModels,
+        ninerouterModels,
+        ninerouterConfigured: !!cm.getNinerouterBaseURL?.(),
+        ninerouterEndpoint: cm.getNinerouterBaseURL?.() || undefined,
         hasOpenaiKey: !!cm.getOpenaiApiKey(),
         hasGeminiKey: !!cm.getGeminiApiKey(),
         hasNativelyKey: !!cm.getNativelyApiKey(),
@@ -8166,6 +8200,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           case 'ollama':     return { ...base, ollamaEmbeddingModel: choice.model, ollamaEmbeddingDims: undefined };
           case 'voyage':     return { ...base, voyageEmbeddingModel: choice.model, voyageEmbeddingDims: undefined };
           case 'openrouter': return { ...base, openrouterEmbeddingModel: choice.model, openrouterEmbeddingDims: undefined };
+          case 'ninerouter': return { ...base, ninerouterEmbeddingModel: choice.model, ninerouterEmbeddingDims: undefined };
           case 'openai':     return { ...base, openaiEmbeddingModel: choice.model, openaiEmbeddingDims: undefined };
           case 'gemini':     return { ...base, geminiEmbeddingModel: choice.model, geminiEmbeddingDims: undefined };
           case 'custom':     return { ...base, customEmbeddingModel: choice.model, customEmbeddingDims: undefined };
@@ -8176,10 +8211,12 @@ export function initializeIpcHandlers(appState: AppState): void {
         // Measure EVERY provider's width, not just Ollama's: resolve() calls all
         // four helpers, so a test path that calls one reports a reachable
         // custom/OpenRouter/Voyage model as 'not configured'.
-      const measured = await EmbeddingProviderResolver.withMeasuredVoyageDims(
-        await EmbeddingProviderResolver.withMeasuredOpenRouterDims(
-          await EmbeddingProviderResolver.withMeasuredCustomDims(
-            await EmbeddingProviderResolver.withMeasuredOllamaDims(config),
+      const measured = await EmbeddingProviderResolver.withMeasuredNinerouterDims(
+        await EmbeddingProviderResolver.withMeasuredVoyageDims(
+          await EmbeddingProviderResolver.withMeasuredOpenRouterDims(
+            await EmbeddingProviderResolver.withMeasuredCustomDims(
+              await EmbeddingProviderResolver.withMeasuredOllamaDims(config),
+            ),
           ),
         ),
       );
@@ -8336,9 +8373,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       dimensions = measured;
     }
 
-    // R-24: a refused write (degraded settings store) must NOT report success —
-    // re-initializing the pipeline and telling the user the model changed, on a
-    // value the disk never received, silently reverts on the next launch.
+    if (next?.provider === 'local' && next?.model) {
+      settings.set('localEmbeddingModelId', next.model);
+    }
+
     if (!settings.set('embedding', {
       mode: (next?.mode as any) || 'auto',
       provider: next?.provider as any,
@@ -8351,15 +8389,19 @@ export function initializeIpcHandlers(appState: AppState): void {
     const { buildEmbeddingConfig } = require('./rag/embeddingConfigIdentity');
     await ragManager?.initializeEmbeddings(buildEmbeddingConfig());
     const activeSpace = pipeline?.getActiveSpaceKey?.();
+    const incompatibleCount = (ragManager as any)?.vectorStore?.getIncompatibleSpaceCount?.(activeSpace) ?? 0;
 
-    // A space change means existing vectors are no longer comparable. The
-    // auto-reindex sweep already handles the work; the UI's job is to SAY so
-    // rather than let a silent re-index start.
+    if (incompatibleCount > 0 && ragManager?.reindexIncompatibleMeetings) {
+      ragManager.cancelPendingReindex?.();
+      void ragManager.reindexIncompatibleMeetings();
+    }
+
     return {
       success: true,
       previousSpace,
       activeSpace,
-      reindexRequired: !!previousSpace && !!activeSpace && previousSpace !== activeSpace,
+      reindexRequired: incompatibleCount > 0,
+      incompatibleCount,
     };
   });
 
@@ -8519,6 +8561,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       model: hostedModel ?? undefined,
       localOnly: isLocalOnlyMode(),
       referenceFilesScopeAllowed: referenceFilesScopeAllowed(),
+      // Same input retrieval passes, or the panel reports a loopback custom
+      // endpoint as blocked in local-only mode while retrieval uses it.
+      customEndpoint: provider === 'custom' ? (settings.get('customRerankerEndpoint') || undefined) : undefined,
     });
 
     // The built-in, described honestly: "bundled" is not the same as "loadable".
@@ -8589,6 +8634,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       provider,
       openrouterModel: stored.openrouterModel ?? null,
       jinaModel: stored.jinaModel ?? null,
+      voyageModel: stored.voyageModel ?? null,
       nativelyModel: stored.nativelyModel ?? null,
       hostedModel,
       candidateCount: stored.candidateCount ?? null,
@@ -8607,14 +8653,19 @@ export function initializeIpcHandlers(appState: AppState): void {
       selectedLocal,
       effective,
       lastTest: stored.lastTest ?? null,
+      customModel: stored.customModel ?? settings.get('customRerankerModel') ?? null,
+      customEndpoint: settings.get('customRerankerEndpoint') ?? null,
+      hasCustomKey: Boolean(CredentialsManager.getInstance().getCustomRerankerApiKey?.()),
     };
   });
 
   safeHandle('reranker:set-config', async (_evt, next: {
-    provider?: 'local' | 'natively' | 'openrouter' | 'jina';
+    provider?: 'local' | 'natively' | 'openrouter' | 'jina' | 'voyage' | 'custom';
     openrouterModel?: string;
     jinaModel?: string;
+    voyageModel?: string;
     nativelyModel?: string;
+    customModel?: string;
     candidateCount?: number;
     fallbackToLocal?: boolean;
   }) => {
@@ -8623,12 +8674,17 @@ export function initializeIpcHandlers(appState: AppState): void {
     const current = (settings.get('reranker') as any) || {};
 
     const merged: any = { ...current };
-    if (next.provider === 'local' || next.provider === 'natively' || next.provider === 'openrouter' || next.provider === 'jina') {
+    if (next.provider === 'local' || next.provider === 'natively' || next.provider === 'openrouter' || next.provider === 'jina' || next.provider === 'voyage' || next.provider === 'custom') {
       merged.provider = next.provider;
     }
     if (typeof next.openrouterModel === 'string') merged.openrouterModel = next.openrouterModel.trim() || undefined;
     if (typeof next.jinaModel === 'string') merged.jinaModel = next.jinaModel.trim() || undefined;
+    if (typeof next.voyageModel === 'string') merged.voyageModel = next.voyageModel.trim() || undefined;
     if (typeof next.nativelyModel === 'string') merged.nativelyModel = next.nativelyModel.trim() || undefined;
+    if (typeof next.customModel === 'string') {
+      merged.customModel = next.customModel.trim() || undefined;
+      settings.set('customRerankerModel', merged.customModel);
+    }
     if (typeof next.fallbackToLocal === 'boolean') merged.fallbackToLocal = next.fallbackToLocal;
     // Clamp rather than reject: a nonsensical depth should not be storable, and
     // silently keeping the old value is less confusing than an error toast.
@@ -8657,9 +8713,13 @@ export function initializeIpcHandlers(appState: AppState): void {
         message: 'The Natively reranker uses your Natively API key. Set it in the Natively API section.',
       };
     }
+    // Explicit per provider: the old two-way ternary would have written a
+    // Voyage key into the OpenRouter slot. Voyage shares the embedding key.
     const saved = provider === 'jina'
       ? cm.setJinaApiKey(key || '')
-      : cm.setOpenrouterApiKey(key || '');
+      : provider === 'voyage'
+        ? cm.setVoyageApiKey(key || '')
+        : cm.setOpenrouterApiKey(key || '');
     if (saved === false) {
       return { success: false, error: 'credential_store_degraded', message: 'Could not save the key. Your credential store is unavailable.' };
     }
@@ -8702,6 +8762,49 @@ export function initializeIpcHandlers(appState: AppState): void {
     return { success: true };
   });
 
+  safeHandle('reranker:set-custom-endpoint', async (_evt, input: { url?: string; apiKey?: string }) => {
+    const { normalizeCustomBaseUrl } = require('./rag/providers/CustomEmbeddingProvider');
+    const { SettingsManager } = require('./services/SettingsManager');
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const settings = SettingsManager.getInstance();
+
+    const raw = (input?.url || '').trim();
+    const normalized = raw ? normalizeCustomBaseUrl(raw) : '';
+    if (raw && !normalized) {
+      return { success: false, error: 'invalid_url', message: 'That does not look like a valid URL. Example: http://localhost:1234' };
+    }
+
+    if (!settings.set('customRerankerEndpoint', normalized || undefined)) {
+      return { success: false, error: 'settings_store_degraded', message: 'Could not save the endpoint. Your settings store is unavailable.' };
+    }
+    if (input?.apiKey !== undefined) {
+      const saved = CredentialsManager.getInstance().setCustomRerankerApiKey(input.apiKey || '');
+      if (saved === false) {
+        return { success: false, error: 'credential_store_degraded', message: 'Could not save the token. Your credential store is unavailable.' };
+      }
+    }
+
+    const { listCustomRerankModels } = require('./rag/customRerankModels');
+    const models = normalized
+      ? await listCustomRerankModels(normalized, CredentialsManager.getInstance().getCustomRerankerApiKey?.())
+      : [];
+    return {
+      success: true,
+      endpoint: normalized || null,
+      models,
+      reachable: models.length > 0,
+    };
+  });
+
+  safeHandle('reranker:get-custom-models', async () => {
+    const { SettingsManager } = require('./services/SettingsManager');
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const endpoint = SettingsManager.getInstance().get('customRerankerEndpoint') || '';
+    if (!endpoint) return [];
+    const { listCustomRerankModels } = require('./rag/customRerankModels');
+    return await listCustomRerankModels(endpoint, CredentialsManager.getInstance().getCustomRerankerApiKey?.());
+  });
+
   safeHandle('reranker:test', async (_evt, choice?: { model?: string }) => {
     // Sends ONE real rerank request through the exact path retrieval uses, so a
     // green test cannot pass while the real call fails. A cheaper probe (a
@@ -8717,22 +8820,41 @@ export function initializeIpcHandlers(appState: AppState): void {
     const stored = (settings.get('reranker') as any) || {};
     const { readHostedApiKey, readHostedModel } = require('./services/reranking/rerankerConfig');
     const { hostedRerankProvider } = require('./rag/hostedRerankProviders');
-    const provider = stored.provider === 'jina' ? 'jina' : 'openrouter';
-    const descriptor = hostedRerankProvider(provider);
+    const provider = ['custom', 'jina', 'voyage', 'natively'].includes(stored.provider) ? stored.provider : 'openrouter';
+    const descriptor = provider === 'custom' ? null : hostedRerankProvider(provider);
     const model = (choice?.model || readHostedModel(stored) || '').trim();
 
     // The privacy gate applies to the test too. A "Test connection" button that
     // ignores it would be the one request a local-only user never consented to.
-    if (isLocalOnlyMode()) {
-      return { success: false, error: 'local-only-mode', message: describeIneligibility('local-only-mode') };
+    // A custom endpoint is exempt only when it is loopback / private-network —
+    // the same verdict retrieval uses (customRerankPrivacyBlock).
+    {
+      const { customRerankPrivacyBlock } = require('./services/reranking/rerankerConfig');
+      const blocked = provider === 'custom'
+        ? customRerankPrivacyBlock({
+            customEndpoint: settings.get('customRerankerEndpoint') || undefined,
+            localOnly: isLocalOnlyMode(),
+            referenceFilesScopeAllowed: referenceFilesScopeAllowed(),
+          })
+        : isLocalOnlyMode() ? 'local-only-mode'
+        : !referenceFilesScopeAllowed() ? 'reference-files-scope-denied'
+        : null;
+      if (blocked) return { success: false, error: blocked, message: describeIneligibility(blocked) };
     }
-    if (!referenceFilesScopeAllowed()) {
-      return { success: false, error: 'reference-files-scope-denied', message: describeIneligibility('reference-files-scope-denied') };
+
+    const baseUrl = provider === 'custom'
+      ? (settings.get('customRerankerEndpoint') || '')
+      : descriptor?.baseUrl;
+
+    if (!baseUrl) {
+      return { success: false, error: 'no_endpoint', message: 'No endpoint is configured for this reranker provider.' };
     }
 
     const reranker = new OpenRouterReranker({
-      baseUrl: descriptor?.baseUrl,
+      baseUrl,
       providerId: provider,
+      allowAnonymousApiKey: provider === 'custom',
+      wire: descriptor?.wire,
       getApiKey: () => readHostedApiKey(provider),
       getModel: () => model,
     });
@@ -8981,6 +9103,362 @@ export function initializeIpcHandlers(appState: AppState): void {
       };
     }
   });
+
+  // ── Local Embedding Models (Bundled & Downloadable) ──────────────────────
+  const localEmbeddingDownloads = new Map<string, AbortController>();
+  /** How long a probe/test model waits for an ONNX session slot before failing fast. */
+  const LOCAL_EMBEDDING_PROBE_SLOT_WAIT_MS = 5_000;
+
+  safeHandle('embedding:list-local-models', async () => {
+    const { listEmbeddingCatalogStatus } = require('./services/embeddings/localEmbeddingModelInstaller');
+    const { SettingsManager } = require('./services/SettingsManager');
+    const settings = SettingsManager.getInstance();
+    const storedEmbedding = (settings.get('embedding') as any) || {};
+    const isLocalProvider = (storedEmbedding.provider || 'local') === 'local';
+    const { BUNDLED_CATALOG_ID } = require('./rag/embeddingModelCatalog');
+    const { isBundledLocalModelId } = require('./rag/bundledLocalEmbedding');
+    // A saved id that names a PREVIOUSLY bundled model (a released install
+    // stored 'Xenova/all-MiniLM-L6-v2' as `embedding.model`) is served by the
+    // bundled model, so it must show the bundled row as selected, not the MiniLM
+    // download row that happens to share its repo.
+    const rawSelectedId = isLocalProvider
+      ? (settings.get('localEmbeddingModelId') || storedEmbedding.localModelId || storedEmbedding.model || BUNDLED_CATALOG_ID)
+      : null;
+    const selectedId = rawSelectedId && isBundledLocalModelId(rawSelectedId) ? BUNDLED_CATALOG_ID : rawSelectedId;
+
+    // Pre-read the acknowledged set once, outside the map.
+    const ackedSet: unknown = settings.get('embeddingCatalogAcknowledged');
+    const acknowledgedIds: string[] = Array.isArray(ackedSet) ? (ackedSet as string[]) : [];
+
+    const models = listEmbeddingCatalogStatus().map((m: any) => ({
+      id: m.id,
+      name: m.name,
+      runtime: m.runtime,
+      repo: m.repo,
+      params: m.params,
+      note: m.note,
+      bytes: m.bytes,
+      dimensions: m.dimensions,
+      supportedDimensions: m.supportedDimensions,
+      contextLength: m.contextLength,
+      recommended: m.recommended === true,
+      bundled: m.bundled === true,
+      license: m.license,
+      /** Whether the user has accepted this model's licence (always true when requiresAcknowledgement is false). */
+      acknowledged: !m.license?.requiresAcknowledgement || acknowledgedIds.includes(m.id),
+      state: m.status.state,
+      bytesOnDisk: m.status.bytesOnDisk,
+      selected: isLocalProvider && (selectedId === m.id || selectedId === m.repo),
+      supported: m.supported,
+      unsupportedReason: m.unsupportedReason ?? null,
+      activatable: m.supported,
+    }));
+
+    return { models, selectedId, builtInSelected: selectedId === BUNDLED_CATALOG_ID };
+  });
+
+  safeHandle('embedding:install-local-model', async (event: any, id: string) => {
+    const { findEmbeddingCatalogModel } = require('./rag/embeddingModelCatalog');
+    const model = findEmbeddingCatalogModel(id);
+    if (!model) return { success: false, error: 'unknown_model' };
+    if (localEmbeddingDownloads.has(id)) return { success: false, error: 'already_downloading' };
+
+    // License gate: models that require explicit acknowledgement must not be
+    // installed until the user has confirmed in the UI.
+    if (model.license?.requiresAcknowledgement) {
+      const { SettingsManager } = require('./services/SettingsManager');
+      const ackedSet: string[] = (SettingsManager.getInstance().get('embeddingCatalogAcknowledged') as any) ?? [];
+      if (!Array.isArray(ackedSet) || !ackedSet.includes(id)) {
+        return {
+          success: false,
+          error: 'license_not_acknowledged',
+          message: `${model.name} requires licence acknowledgement (${model.license.spdx}). Please accept the licence terms before installing.`,
+          requiresAcknowledgement: true,
+          licenseUrl: model.license.url,
+          spdx: model.license.spdx,
+        };
+      }
+    }
+
+    const sender = event?.sender;
+    let lastSent = 0;
+    const emit = (fraction: number, currentFile: string) => {
+      const now = Date.now();
+      if (now - lastSent < 200 && fraction < 1) return;
+      lastSent = now;
+      try { sender?.send('embedding:model-progress', { id, fraction, currentFile }); } catch { /* window gone */ }
+    };
+
+    const controller = new AbortController();
+    localEmbeddingDownloads.set(id, controller);
+    try {
+      const { installEmbeddingCatalogModel } = require('./services/embeddings/localEmbeddingModelInstaller');
+      const result = await installEmbeddingCatalogModel(id, (p: any) => emit(p.fraction, p.currentFile), controller.signal);
+      if (!result.ok) return { success: false, error: 'download_failed', message: result.error };
+      return { success: true, digests: result.digests };
+    } catch (e: any) {
+      return { success: false, error: 'download_failed', message: String(e?.message || e) };
+    } finally {
+      localEmbeddingDownloads.delete(id);
+    }
+  });
+
+  safeHandle('embedding:cancel-local-model', async (_evt, id: string) => {
+    const controller = localEmbeddingDownloads.get(id);
+    if (!controller) return { success: false, error: 'not_downloading' };
+    controller.abort();
+    return { success: true };
+  });
+
+  safeHandle('embedding:remove-local-model', async (_evt, id: string) => {
+    const { SettingsManager } = require('./services/SettingsManager');
+    const settings = SettingsManager.getInstance();
+    const currentId = settings.get('localEmbeddingModelId');
+    if (currentId === id) {
+      return { success: false, error: 'in_use', message: 'This embedding model is in use. Choose another one before removing it.' };
+    }
+    const { removeEmbeddingCatalogModel } = require('./services/embeddings/localEmbeddingModelInstaller');
+    const res = removeEmbeddingCatalogModel(id);
+    return { success: res.ok, message: res.error };
+  });
+
+  safeHandle('embedding:use-local-model', async (_evt, id: string | null) => {
+    const { SettingsManager } = require('./services/SettingsManager');
+    const { findEmbeddingCatalogModel } = require('./rag/embeddingModelCatalog');
+    const { statusOf } = require('./services/embeddings/localEmbeddingModelInstaller');
+    const { LocalEmbeddingProvider } = require('./rag/providers/LocalEmbeddingProvider');
+
+    const settings = SettingsManager.getInstance();
+    const stored = (settings.get('embedding') as any) || {};
+    const previousLocalId = settings.get('localEmbeddingModelId') ?? stored.localModelId ?? null;
+    const targetId = id || require('./rag/embeddingModelCatalog').BUNDLED_CATALOG_ID;
+
+    const model = findEmbeddingCatalogModel(targetId);
+    if (!model) return { success: false, error: 'unknown_model' };
+    if (!model.supported) {
+      return { success: false, error: 'not_supported', message: model.unsupportedReason ?? `${model.name} is not supported on this platform.` };
+    }
+    const status = statusOf(model);
+    if (status.state !== 'installed') {
+      return { success: false, error: 'not_installed', message: `${model.name} is not fully downloaded (missing ${status.missing.join(', ')}).` };
+    }
+
+    // License gate: models with requiresAcknowledgement must be explicitly
+    // ack'd via embedding:acknowledge-catalog-license BEFORE they can be activated.
+    if (model.license?.requiresAcknowledgement) {
+      const ackedSet: string[] = (settings.get('embeddingCatalogAcknowledged') as any) ?? [];
+      if (!Array.isArray(ackedSet) || !ackedSet.includes(targetId)) {
+        return {
+          success: false,
+          error: 'license_not_acknowledged',
+          message: `${model.name} requires licence acknowledgement (${model.license.spdx}). Please accept the licence terms in Settings before activating this model.`,
+          requiresAcknowledgement: true,
+          licenseUrl: model.license.url,
+          spdx: model.license.spdx,
+        };
+      }
+    }
+
+    // Pre-activation validation probe.
+    //
+    // Commit NOTHING to settings until we know the model can actually produce a
+    // valid embedding vector. A corrupt or runtime-incompatible model would
+    // otherwise leave the user with a broken embedding provider and no way to
+    // recover other than a manual settings reset.
+    //
+    // The probe is a second model session beside the live provider, so it
+    // takes an ONNX slot like any other — the session cap is what keeps
+    // concurrent native sessions from exhausting memory. The wait is bounded
+    // so a busy gate fails the switch fast instead of hanging Settings.
+    let probeProvider: any = null;
+    let probeTimer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      probeProvider = new LocalEmbeddingProvider({ modelId: targetId, slotWaitMs: LOCAL_EMBEDDING_PROBE_SLOT_WAIT_MS });
+      const probeVec = await Promise.race([
+        probeProvider.embed('embedding model validation probe'),
+        new Promise<never>((_, rej) => { probeTimer = setTimeout(() => rej(new Error('Validation probe timed out after 20s')), 20_000); }),
+      ]);
+      if (!Array.isArray(probeVec) || probeVec.length === 0) {
+        throw new Error('Model loaded but did not produce a valid embedding vector.');
+      }
+      // Confirm the declared dimension matches reality.
+      if (model.dimensions > 0 && probeVec.length !== model.dimensions) {
+        throw new Error(`Expected ${model.dimensions}-d vector but got ${probeVec.length}-d. The model file may be corrupt or a different variant.`);
+      }
+    } catch (probeErr: any) {
+      const detail = String(probeErr?.message || probeErr);
+      if (/ONNX session slot/i.test(detail)) {
+        return {
+          success: false,
+          error: 'busy',
+          message: `Couldn't check ${model.name} right now: other local models (transcription or reranking) are using every model slot. Try again in a moment.`,
+        };
+      }
+      return {
+        success: false,
+        error: 'validation_failed',
+        message: `${model.name} failed the runtime check: ${detail}. The model may be corrupt — try re-downloading it.`,
+      };
+    } finally {
+      if (probeTimer) clearTimeout(probeTimer);
+      if (probeProvider) {
+        try { await probeProvider.dispose('validation probe complete'); } catch { /* best effort */ }
+      }
+    }
+
+    // Save setting
+    const ok1 = settings.set('localEmbeddingModelId', targetId);
+    const ok2 = settings.set('embedding', {
+      ...stored,
+      mode: 'manual',
+      provider: 'local',
+      localModelId: targetId,
+      model: targetId,
+      dimensions: model.dimensions,
+    });
+    if (!ok1 || !ok2) {
+      return { success: false, error: 'settings_store_degraded', message: 'Could not save the embedding settings. Your settings store is unavailable.' };
+    }
+
+    try {
+      // Re-initialize active embedding pipeline so running RAG manager immediately switches to this model
+      const { buildEmbeddingConfig } = require('./rag/embeddingConfigIdentity');
+      const ragManager = appState.getRAGManager();
+      const pipeline = ragManager?.getEmbeddingPipeline?.();
+      const previousSpace = pipeline?.getActiveSpaceKey?.();
+      await ragManager?.initializeEmbeddings(buildEmbeddingConfig());
+      const activeSpace = pipeline?.getActiveSpaceKey?.();
+      const incompatibleCount = (ragManager as any)?.vectorStore?.getIncompatibleSpaceCount?.(activeSpace) ?? 0;
+
+      if (incompatibleCount > 0 && ragManager?.reindexIncompatibleMeetings) {
+        ragManager.cancelPendingReindex?.();
+        void ragManager.reindexIncompatibleMeetings();
+      }
+
+      return {
+        success: true,
+        activeId: targetId,
+        dimensions: model.dimensions,
+        previousSpace,
+        activeSpace,
+        reindexRequired: incompatibleCount > 0,
+        incompatibleCount,
+      };
+    } catch (e: any) {
+      // Revert if activation failed
+      settings.set('localEmbeddingModelId', previousLocalId);
+      settings.set('embedding', {
+        ...stored,
+        localModelId: previousLocalId,
+      });
+      return {
+        success: false,
+        error: 'activation_failed',
+        message: `Couldn't activate ${model.name}: ${String(e?.message || e)}. Reverted to previous model.`,
+      };
+    }
+  });
+
+  /**
+   * Record that the user has acknowledged the licence terms for a catalog
+   * embedding model that has `requiresAcknowledgement: true` (e.g. Jina v4/v5
+   * under CC-BY-NC-4.0). Must be called from the UI's licence-acceptance dialog
+   * BEFORE attempting to install or activate such a model.
+   */
+  safeHandle('embedding:acknowledge-catalog-license', async (_evt, id: string) => {
+    const { SettingsManager } = require('./services/SettingsManager');
+    const { findEmbeddingCatalogModel } = require('./rag/embeddingModelCatalog');
+    const model = findEmbeddingCatalogModel(id);
+    if (!model) return { success: false, error: 'unknown_model' };
+    if (!model.license?.requiresAcknowledgement) {
+      // No acknowledgement needed — idempotently succeed so callers don't need to branch.
+      return { success: true };
+    }
+
+    const settings = SettingsManager.getInstance();
+    const existing: unknown = settings.get('embeddingCatalogAcknowledged');
+    const current: string[] = Array.isArray(existing) ? (existing as string[]) : [];
+    if (!current.includes(id)) {
+      const updated = [...current, id];
+      if (!settings.set('embeddingCatalogAcknowledged', updated)) {
+        return { success: false, error: 'settings_store_degraded', message: 'Could not persist licence acknowledgement. Your settings store may be unavailable.' };
+      }
+    }
+    return { success: true };
+  });
+
+  safeHandle('embedding:test-local-model', async (_evt, id: string) => {
+    const { findEmbeddingCatalogModel } = require('./rag/embeddingModelCatalog');
+    const { statusOf } = require('./services/embeddings/localEmbeddingModelInstaller');
+    const { LocalEmbeddingProvider } = require('./rag/providers/LocalEmbeddingProvider');
+
+    const model = findEmbeddingCatalogModel(id);
+    if (!model) return { success: false, error: 'unknown_model' };
+    const status = statusOf(model);
+    if (status.state !== 'installed') {
+      return { success: false, error: 'not_installed', message: 'Model must be installed before testing' };
+    }
+
+    let provider: any = null;
+    let testTimer: ReturnType<typeof setTimeout> | undefined;
+
+    try {
+      provider = new LocalEmbeddingProvider({ modelId: id, slotWaitMs: LOCAL_EMBEDDING_PROBE_SLOT_WAIT_MS });
+      const testText = 'Semantic search vector latency benchmark';
+
+      const testPromise = (async () => {
+        const start = Date.now();
+        const vector = await provider.embed(testText);
+        const latencyMs = Date.now() - start;
+        return { vector, latencyMs };
+      })();
+
+      const timeoutPromise = new Promise<{ vector: any; latencyMs: number }>((_, reject) => {
+        testTimer = setTimeout(() => reject(new Error('Inference test timed out after 25s')), 25000);
+      });
+
+      const { vector, latencyMs } = await Promise.race([testPromise, timeoutPromise]);
+
+      if (!Array.isArray(vector) || vector.length === 0) {
+        throw new Error('the model loaded but did not produce a vector output');
+      }
+
+      // Only what is known without asking the runtime: ONNX runs on CPU here,
+      // and llama.cpp uses Metal on Apple Silicon. Elsewhere llama.cpp picks
+      // its own backend (Vulkan, CUDA or CPU), so it is not guessed.
+      const accelerator = model.runtime === 'gguf'
+        ? ((process.platform === 'darwin' && process.arch === 'arm64') ? 'Metal GPU' : 'llama.cpp')
+        : 'CPU';
+
+      return {
+        success: true,
+        latencyMs,
+        dimensions: vector.length,
+        runtime: model.runtime,
+        accelerator,
+      };
+    } catch (e: any) {
+      return {
+        success: false,
+        error: 'test_failed',
+        message: String(e?.message || e),
+      };
+    } finally {
+      if (testTimer) clearTimeout(testTimer);
+      if (provider) {
+        try {
+          await provider.dispose('test completed');
+        } catch { /* best effort */ }
+      }
+    }
+  });
+
+  safeHandle('embedding:reveal-folder', async () => {
+    const { revealLocalEmbeddingModelsDirectory } = require('./services/embeddings/localEmbeddingModelInstaller');
+    const ok = await revealLocalEmbeddingModelsDirectory();
+    return { success: ok };
+  });
+
 
   // ── Extensions ───────────────────────────────────────────────────────────
   //
@@ -9893,6 +10371,161 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+
+  safeHandle('set-ninerouter-config', async (_, config: { apiKey: string; baseURL: string; maxTokens?: number; thinking?: string }) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cm = CredentialsManager.getInstance();
+      // Change detection, so the Hindsight restart-nudge only fires on a real
+      // change — same guard, same reason, as set-litellm-config.
+      const prevKey = cm.getNinerouterApiKey() || '';
+      const prevUrl = cm.getNinerouterBaseURL() || '';
+      const prevMaxTokens = cm.getNinerouterMaxTokens();
+      const newUrl = config?.baseURL || '';
+      const requestedKey = config?.apiKey || '';
+      const effectiveNewKey = newUrl.trim() ? (requestedKey.trim() || prevKey) : '';
+      const requestedMaxTokens = Number(config?.maxTokens);
+      const effectiveNewMaxTokens = Number.isFinite(requestedMaxTokens) && requestedMaxTokens > 0
+        ? Math.floor(requestedMaxTokens)
+        : undefined;
+      const changed = prevKey !== effectiveNewKey
+        || prevUrl !== newUrl
+        || (prevMaxTokens || undefined) !== effectiveNewMaxTokens;
+      cm.setNinerouterConfig(requestedKey, newUrl, config?.maxTokens, config?.thinking);
+
+      // The discovered catalogue belongs to ONE instance: which models a
+      // 9Router serves is a function of which upstream accounts its owner has
+      // connected, so a cache carried across a repoint lists models that
+      // instance has never heard of.
+      if (!newUrl.trim() || prevUrl !== newUrl) {
+        cm.setNinerouterModels([]);
+        cm.setNinerouterVisionModels([]);
+      }
+
+      // Push the EFFECTIVE stored key — a blank apiKey on re-save means "keep
+      // the stored one" (the field is masked), so read back what was persisted.
+      const llmHelper = appState.processingHelper.getLLMHelper();
+      llmHelper.setNinerouterConfig(cm.getNinerouterApiKey() || '', newUrl, config?.maxTokens, cm.getNinerouterThinking() || null);
+
+      appState.getIntelligenceManager().resetEngine();
+      appState.getIntelligenceManager().initializeLLMs();
+
+      if (changed) {
+        try { require('./services/HindsightManager').HindsightManager.getInstance().notifyHindsightOfKeyChange('9Router'); } catch { /* optional */ }
+        await refreshRuntimeDefaultIfUnavailable();
+        broadcastCredentialsChanged();
+      }
+
+      return { success: true };
+    } catch (error: any) {
+      console.error('Error saving 9Router config:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Discover models from the configured 9Router instance.
+  //
+  // /v1/models answers WITHOUT a key on a stock instance (REQUIRE_API_KEY
+  // defaults to false), so discovery can succeed on a configuration that cannot
+  // actually answer a question. That is precisely why it is not the connection
+  // test — see test-ninerouter-connection below.
+  const discoverNinerouterModels = async (timeoutMs: number): Promise<string[]> => {
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const cm = CredentialsManager.getInstance();
+    // Nothing configured -> never probe localhost:20128 speculatively.
+    const configuredURL = (cm.getNinerouterBaseURL() || '').trim();
+    if (!configuredURL) return [];
+    const root = configuredURL.replace(/\/+$/, '');
+    const url = /\/v1$/.test(root) ? `${root}/models` : `${root}/v1/models`;
+    const apiKey = cm.getNinerouterApiKey();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+    const resp = await fetch(url, { method: 'GET', headers, signal: AbortSignal.timeout(timeoutMs) });
+    if (!resp.ok) return [];
+    const data: any = await resp.json();
+    // typeof, not Boolean: a numeric id is truthy, would be persisted, and
+    // then string-concatenated into `ninerouter/42` by the pickers.
+    const models: string[] = (data?.data || []).map((m: any) => m?.id).filter((id: any) => typeof id === 'string' && id);
+    // Per-model vision, captured in the SAME call rather than guessed later.
+    // VisionProviderRegistry reads this back to decide whether a screenshot
+    // should be routed here at all — 17 of the 47 models a stock instance
+    // serves are text-only.
+    const visionModels: string[] = (data?.data || [])
+      .filter((m: any) => typeof m?.id === 'string' && m.id && m?.capabilities?.vision === true)
+      .map((m: any) => m.id);
+    // Per-model reasoning capability, so the settings dropdown can adapt its
+    // options to the selected model with no extra round-trip.
+    const meta: Record<string, { reasoning?: boolean; thinkingCanDisable?: boolean; thinkingFormat?: string }> = {};
+    for (const m of (data?.data || [])) {
+      if (typeof m?.id !== 'string' || !m.id || !m?.capabilities) continue;
+      // Field names deliberately MATCH the catalogue's own, so the renderer can
+      // hand this straight to ninerouterThinkingOptions with no translation —
+      // a rename in between is a silent fall-back to generic levels.
+      meta[m.id] = {
+        reasoning: m.capabilities.reasoning === true,
+        thinkingCanDisable: m.capabilities.thinkingCanDisable !== false,
+        // The format decides WHICH levels exist — minimax is binary, deepseek
+        // has no middle, gemini-level has no off. Without it the picker falls
+        // back to a generic scale and offers levels the backend lacks.
+        thinkingFormat: typeof m.capabilities.thinkingFormat === 'string' ? m.capabilities.thinkingFormat : undefined,
+      };
+    }
+    if (models.length > 0) {
+      cm.setNinerouterModels(models);
+      cm.setNinerouterVisionModels(visionModels);
+      cm.setNinerouterModelMeta(meta);
+    }
+    return models;
+  };
+
+  safeHandle('get-available-ninerouter-models', async () => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cached = CredentialsManager.getInstance().getNinerouterModels();
+      if (cached.length > 0) return cached;
+      // Cold start: pay the fetch once rather than showing an empty list until
+      // the user finds the refresh control.
+      return await discoverNinerouterModels(5000);
+    } catch {
+      return [];
+    }
+  });
+
+  safeHandle('refresh-ninerouter-models', async () => {
+    try {
+      const models = await discoverNinerouterModels(8000);
+      broadcastCredentialsChanged();
+      return models;
+    } catch (error) {
+      console.error('[IPC] refresh-ninerouter-models failed:', error);
+      return [];
+    }
+  });
+
+  // Test Connection for the 9Router card.
+  //
+  // Deliberately NOT the `GET /v1/models` shape every other gateway uses: on a
+  // real 9Router every GET answers without a key while every POST requires one,
+  // so a GET-based test reports success for a config that cannot answer a
+  // question. probeNinerouter POSTs an unroutable model id instead — auth is
+  // checked before model validation, so a 401 means the key is wrong and
+  // anything else means it was accepted, at zero upstream cost.
+  safeHandle('test-ninerouter-connection', async (_, config?: { apiKey?: string; baseURL?: string }) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cm = CredentialsManager.getInstance();
+      const { probeNinerouter } = require('./llm/ninerouterProbe');
+      // Prefer what the user currently has typed in the card, so Test
+      // Connection answers for the config in front of them rather than the last
+      // saved one.
+      const baseURL = (config?.baseURL ?? cm.getNinerouterBaseURL() ?? '').trim();
+      const apiKey = (config?.apiKey || '').trim() || (cm.getNinerouterApiKey() || '');
+      return await probeNinerouter(baseURL, apiKey, { timeoutMs: 8000 });
+    } catch (error: any) {
+      return { ok: false, reason: 'unreachable', error: error?.message || 'Connection test failed' };
+    }
+  });
+
   safeHandle('get-disabled-providers', async () => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
@@ -9959,6 +10592,10 @@ export function initializeIpcHandlers(appState: AppState): void {
     // reason instead of the unconditional { success: true } it used to return
     // even for a key that authenticates nowhere.
     let keyRejection: { error?: string } | null = null;
+    // Set when the key is fine and its plan includes Pro, but Pro could not be
+    // confirmed right now. The save still succeeds; the UI is told so it can say
+    // "still activating Pro" instead of silently showing a plan with no Pro.
+    let proPending: { error?: string } | null = null;
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
@@ -10076,6 +10713,17 @@ export function initializeIpcHandlers(appState: AppState): void {
             keyRejection = { error: result.error };
           } else {
             console.log('[IPC] set-natively-api-key: Pro not activated —', result.error);
+            // This used to be the end of it: the key was saved, the UI said so, and
+            // a transient verify failure left Pro off for good. Hand it to the
+            // reconciler, which decides from the plan whether there is anything to
+            // retry (a standard plan ends there) and keeps trying with backoff.
+            try {
+              const { getProEntitlementReconciler } = require('./services/proEntitlementWiring');
+              const outcome = await getProEntitlementReconciler().run('key-saved');
+              if (outcome === 'retrying') proPending = { error: result.error };
+            } catch (e: any) {
+              console.warn('[IPC] set-natively-api-key: Pro reconcile unavailable:', e?.message);
+            }
           }
         } catch (e: any) {
           // LicenseManager not available in this build — non-fatal
@@ -10086,6 +10734,10 @@ export function initializeIpcHandlers(appState: AppState): void {
         }
       } else {
         // API key was cleared — deactivate any natively_api Pro license so premium is revoked.
+        // …and cancel any pending Pro retry: it would be retrying a key that is gone.
+        try {
+          require('./services/proEntitlementWiring').getProEntitlementReconciler().stop();
+        } catch { /* wiring unavailable — nothing was pending */ }
         try {
           const { LicenseManager } = require('../premium/electron/services/LicenseManager');
           const lm = LicenseManager.getInstance();
@@ -10113,7 +10765,9 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       return keyRejection
         ? { success: false, error: keyRejection.error }
-        : { success: true };
+        : proPending
+          ? { success: true, proPending: true, proError: proPending.error }
+          : { success: true };
     } catch (error: any) {
       console.error('Error saving Natively API key:', error);
       return { success: false, error: error.message };
@@ -10191,6 +10845,16 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       // Cache the successful response
       _usageCache.set(key, { data: result, ts: Date.now() });
+
+      // The plan is now known. If it includes Pro and Pro is off on this device,
+      // fix that here — this is the moment the user is looking at "Ultra" with no
+      // Pro features. Fire-and-forget; passes the plan so no second request is made.
+      if (typeof data?.plan === 'string') {
+        try {
+          const { getProEntitlementReconciler } = require('./services/proEntitlementWiring');
+          void getProEntitlementReconciler().run('usage-ok', { plan: data.plan });
+        } catch { /* wiring unavailable in this build */ }
+      }
       return result;
     } catch (error: any) {
       // On transient DNS/network failure, serve stale cache rather than showing an error.
@@ -10896,10 +11560,16 @@ export function initializeIpcHandlers(appState: AppState): void {
         // a wrong-but-invisible protocol is the failure this setting exists to stop.
         fluxionProtocol: creds.fluxionProtocol === 'anthropic' ? 'anthropic' : 'openai',
         hasLitellmBaseURL: hasKey(creds.litellmBaseURL),
+        hasNinerouterBaseURL: hasKey(creds.ninerouterBaseURL),
+        hasNinerouterKey: hasKey(creds.ninerouterApiKey),
         // The base URL is config, not a secret — returned in full so Settings can
         // prefill it (unlike API keys, which are only reported as booleans).
         litellmBaseURL: creds.litellmBaseURL || null,
         litellmMaxTokens: creds.litellmMaxTokens || null,
+        ninerouterBaseURL: creds.ninerouterBaseURL || null,
+        ninerouterMaxTokens: creds.ninerouterMaxTokens || null,
+        ninerouterThinking: creds.ninerouterThinking || null,
+        ninerouterModelMeta: creds.ninerouterModelMeta || {},
         hasNativelyKey: hasKey(creds.nativelyApiKey),
         googleServiceAccountPath: creds.googleServiceAccountPath || null,
         sttProvider: creds.sttProvider || 'none',
@@ -10949,6 +11619,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         fluxionPreferredModel: creds.fluxionPreferredModel || undefined,
         // Stored prefixed (`litellm/<model>`) — see StoredCredentials.litellmPreferredModel.
         litellmPreferredModel: creds.litellmPreferredModel || undefined,
+        ninerouterPreferredModel: creds.ninerouterPreferredModel || undefined,
         disabledProviders: creds.disabledProviders || [],
         cloudEnabledModels: creds.cloudEnabledModels || {},
       };
@@ -10967,6 +11638,12 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasLitellmBaseURL: false,
         litellmBaseURL: null,
         litellmMaxTokens: null,
+        hasNinerouterBaseURL: false,
+        hasNinerouterKey: false,
+        ninerouterBaseURL: null,
+        ninerouterMaxTokens: null,
+        ninerouterThinking: null,
+        ninerouterModelMeta: {},
         hasNativelyKey: false,
         googleServiceAccountPath: null,
         sttProvider: 'none',
@@ -11064,7 +11741,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle(
     'set-provider-preferred-model',
-    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'litellm', modelId: string) => {
+    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'litellm' | 'ninerouter', modelId: string) => {
       try {
         const { CredentialsManager } = require('./services/CredentialsManager');
         CredentialsManager.getInstance().setPreferredModel(provider, modelId);

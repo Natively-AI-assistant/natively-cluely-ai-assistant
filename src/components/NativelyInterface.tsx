@@ -365,7 +365,7 @@ import {
 } from '../lib/overlayAppearance';
 import { NegotiationCoachingCard } from '../premium';
 import type { DynamicActionPayload } from '../types/electron';
-import { getCodexCliModelDisplayName, litellmModelLabel } from '../utils/modelUtils';
+import { getCodexCliModelDisplayName, gatewayModelLabel, litellmModelLabel } from '../utils/modelUtils';
 import { getModifierSymbol, isMac, isWindows } from '../utils/platformUtils';
 import { DynamicActionBar } from './dynamic-actions/DynamicActionBar';
 import GlassEffectLayer from './ui/GlassEffectLayer';
@@ -11327,6 +11327,13 @@ Provide only the answer, nothing else.`;
                           // verbatim for LiteLLM, so that path would render the
                           // full id and this chip is a 140px truncating control.
                           if (m.startsWith('litellm/')) return litellmModelLabel(m);
+                          // 9Router stacks the same two prefixes — ours and the
+                          // instance's upstream namespace — so a raw id reads
+                          // `ninerouter/minimax/MiniMax-M3`. Same position rule as
+                          // LiteLLM above: getCurrentModelDisplayName() returns
+                          // currentModelId verbatim for a gateway, so below the
+                          // displayName branch this chip renders the whole id.
+                          if (m.startsWith('ninerouter/')) return gatewayModelLabel(m);
                           // For everything else, prefer the authoritative
                           // displayName from `getCurrentLlmConfig` (handles
                           // custom-provider UUIDs and any future model aliases

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useT } from '../../i18n';
 import { Plus, Trash2, Edit2, AlertCircle, Save, ChevronDown, Check, RefreshCw, ExternalLink, Loader2, LogOut, Cloud, Server, Eye, Info, MessageSquare, Image, FileText, User, Boxes, ClipboardList, Laptop } from 'lucide-react';
-import { CODEX_CLI_MODEL, codexCliSelectorId, codexModelOptions, type CodexModelCatalogResult, isModelAllowed, isOptInModelProvider, litellmModelLabel, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
+import { CODEX_CLI_MODEL, codexCliSelectorId, codexModelOptions, type CodexModelCatalogResult, isModelAllowed, isOptInModelProvider, litellmModelLabel, gatewayModelLabel, ninerouterThinkingOptions, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
 import { validateCurl } from '../../lib/curl-validator';
 import { ProviderCard } from './ProviderCard';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -1776,6 +1776,7 @@ export const AipSelect: React.FC<AipSelectProps> = ({
 // the confirm dialog can render action-specific copy from one piece of state.
 type PendingConfirm =
     | { kind: 'litellm' }
+    | { kind: 'ninerouter' }
     | { kind: 'providerKey'; provider: string; setter: (val: string) => void }
     | { kind: 'customProvider'; id: string };
 
@@ -2391,6 +2392,21 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     const [litellmMaxTokens, setLitellmMaxTokens] = useState('');
     const [litellmModels, setLitellmModels] = useState<string[]>([]);
     const [isRefreshingLitellm, setIsRefreshingLitellm] = useState(false);
+    // --- 9Router (self-hosted OpenAI-compatible fallback proxy: baseURL + optional key) ---
+    const [ninerouterBaseURL, setNinerouterBaseURL] = useState('');
+    const [ninerouterApiKey, setNinerouterApiKey] = useState('');
+    const [ninerouterMaxTokens, setNinerouterMaxTokens] = useState('');
+    const [ninerouterModels, setNinerouterModels] = useState<string[]>([]);
+    const [isRefreshingNinerouter, setIsRefreshingNinerouter] = useState(false);
+    // Test Connection result. Kept separate from savingStatus because it answers a
+    // different question: Save persists, this proves the instance will actually
+    // answer. On 9Router those are genuinely different outcomes — /v1/models
+    // responds without a key while /v1/chat/completions does not.
+    const [ninerouterTest, setNinerouterTest] = useState<{ testing: boolean; ok?: boolean; message?: string }>({ testing: false });
+    const [ninerouterThinking, setNinerouterThinking] = useState('');
+    // Per-model reasoning capability from the catalogue, so the thinking
+    // dropdown offers what THIS model can actually do.
+    const [ninerouterModelMeta, setNinerouterModelMeta] = useState<Record<string, { reasoning?: boolean; thinkingCanDisable?: boolean; thinkingFormat?: string }>>({});
     // Provider visibility filters. `disabledProviders` hides a provider's models
     // without touching its stored credential; `cloudEnabledModels[prov]` narrows
     // which of that provider's models reach the picker (empty = all).
@@ -2678,6 +2694,8 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         openrouter: (creds as any).hasOpenrouterKey || false,
                         fluxion: (creds as any).hasFluxionKey || false,
                         litellm: creds.hasLitellmBaseURL || false,
+                        // Base URL, not key: a stock 9Router runs keyless.
+                        ninerouter: (creds as any).hasNinerouterBaseURL || false,
                         natively: creds.hasNativelyKey || false
                     });
                     setActiveSttProvider((creds as any).sttProvider || 'none');
@@ -2686,6 +2704,10 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     // Also clear the fields when another window removes the proxy.
                     setLitellmBaseURL(creds.litellmBaseURL || '');
                     setLitellmMaxTokens(creds.litellmMaxTokens ? String(creds.litellmMaxTokens) : '');
+                    setNinerouterBaseURL((creds as any).ninerouterBaseURL || '');
+                    setNinerouterMaxTokens((creds as any).ninerouterMaxTokens ? String((creds as any).ninerouterMaxTokens) : '');
+                    setNinerouterThinking((creds as any).ninerouterThinking || '');
+                    setNinerouterModelMeta((creds as any).ninerouterModelMeta || {});
                     // Load preferred models
                     const pm: Record<string, string> = {};
                     if (creds.geminiPreferredModel) pm.gemini = creds.geminiPreferredModel;
@@ -2715,6 +2737,8 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     // LiteLLM model list renders — no re-prefixing here or the star lands
                     // on no row at all.
                     if (creds.litellmPreferredModel) pm.litellm = creds.litellmPreferredModel;
+                    // Already prefixed on disk (`ninerouter/<alias>/<model>`), same rule.
+                    if ((creds as any).ninerouterPreferredModel) pm.ninerouter = (creds as any).ninerouterPreferredModel;
                     setDisabledProviders(Array.isArray(creds.disabledProviders) ? creds.disabledProviders : []);
                     setCloudEnabledModelsState(creds.cloudEnabledModels || {});
                     window.electronAPI?.getCloudFetchedModels?.()
@@ -2848,6 +2872,11 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         // modelAvailable() in ipcHandlers.ts compares against; storing the bare name
         // would make the two surfaces disagree and the filter would silently no-op.
         if (provider === 'litellm') litellmModels.forEach(m => push(`litellm/${m}`, litellmModelLabel(m)));
+        // Same shape as LiteLLM: no preset table, no cloudFetchedModels entry.
+        // The universe is whatever the instance reported, held UNPREFIXED in
+        // `ninerouterModels`, so the prefix is added here and the allow-list
+        // stores the same `ninerouter/<id>` ids modelAvailable() compares.
+        if (provider === 'ninerouter') ninerouterModels.forEach(m => push(`ninerouter/${m}`, gatewayModelLabel(m)));
         // Antigravity is the same shape of problem as LiteLLM: no preset table, and
         // `cloudFetchedModels` is written only from getCloudFetchedModels(), which
         // covers the key-backed providers and never the OAuth ones. Without this the
@@ -2867,9 +2896,9 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         // prettifyModelId — which would render `litellm/openai/gpt-4o` as
         // "Litellm/Openai/Gpt 4o".
         (cloudEnabledModels[provider] || []).forEach(id =>
-            push(id, provider === 'litellm' ? litellmModelLabel(id) : prettifyModelId(id)));
+            push(id, (provider === 'litellm' || provider === 'ninerouter') ? gatewayModelLabel(id) : prettifyModelId(id)));
         return out;
-    }, [cloudFetchedModels, cloudEnabledModels, litellmModels, antigravityModels]);
+    }, [cloudFetchedModels, cloudEnabledModels, litellmModels, ninerouterModels, antigravityModels]);
 
     const buildAvailableModelOptions = (): { id: string; name: string }[] => {
         const opts: { id: string; name: string }[] = [];
@@ -2923,6 +2952,16 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 opts.push({ id, name: `${litellmModelLabel(model)} (LiteLLM)` });
             });
         }
+        if (hasStoredKey.ninerouter && isProviderEnabled('ninerouter')) {
+            // Same allow-list gate, same reason: without it the instance's whole
+            // catalogue reaches the picker while modelAvailable() filters it, and
+            // the two surfaces disagree.
+            ninerouterModels.forEach(model => {
+                const id = `ninerouter/${model}`;
+                if (!isModelEnabled('ninerouter', id)) return;
+                opts.push({ id, name: `${gatewayModelLabel(model)} (9Router)` });
+            });
+        }
         if (isProviderEnabled('custom')) {
             customProviders.forEach(p => opts.push({ id: p.id, name: p.name }));
         }
@@ -2950,7 +2989,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             || opts[0].id;
         setDefaultModel(next);
         window.electronAPI?.setDefaultModel?.(next).catch(console.error);
-    }, [credentialsLoaded, defaultModel, hasStoredKey, preferredModels, isCodexReady, codexCliConfig.model, codexModelCatalog, customProviders, ollamaModels, litellmModels, disabledProviders, cloudEnabledModels, antigravityStatus.signedIn, antigravityModels, antigravityError]);
+    }, [credentialsLoaded, defaultModel, hasStoredKey, preferredModels, isCodexReady, codexCliConfig.model, codexModelCatalog, customProviders, ollamaModels, litellmModels, ninerouterModels, disabledProviders, cloudEnabledModels, antigravityStatus.signedIn, antigravityModels, antigravityError]);
 
     // Load LiteLLM model IDs only when the proxy is configured. The active-model
     // selector should not expose stale `litellm/...` choices after the proxy is
@@ -2970,6 +3009,27 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             });
         return () => { cancelled = true; };
     }, [hasStoredKey.litellm, litellmBaseURL]);
+
+    // Same rule for 9Router: load its ids only while configured, so the
+    // active-model selector cannot offer stale `ninerouter/...` choices after the
+    // instance is removed. Keyed on the base URL too, because repointing at a
+    // different instance invalidates the catalogue — which models a 9Router
+    // serves depends on which upstream accounts its owner has connected.
+    useEffect(() => {
+        let cancelled = false;
+        if (!hasStoredKey.ninerouter) {
+            setNinerouterModels([]);
+            return;
+        }
+        window.electronAPI?.getAvailableNinerouterModels?.()
+            .then((models) => {
+                if (!cancelled) setNinerouterModels(Array.isArray(models) ? models.filter(Boolean) : []);
+            })
+            .catch(() => {
+                if (!cancelled) setNinerouterModels([]);
+            });
+        return () => { cancelled = true; };
+    }, [hasStoredKey.ninerouter, ninerouterBaseURL]);
 
     // Switch a whole provider off/on. The credential is left untouched — this is
     // the difference between "I'm not using this right now" and "delete my key".
@@ -3609,6 +3669,100 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         }
     };
 
+    // 9Router takes the same three fields as LiteLLM for the same reason: it is a
+    // user-supplied endpoint, not a vendor key.
+    const handleSaveNinerouter = async () => {
+        const url = ninerouterBaseURL.trim();
+        if (!url) return;
+        setSavingStatus(prev => ({ ...prev, ninerouter: true }));
+        try {
+            const parsedMax = parseInt(ninerouterMaxTokens, 10);
+            const result = await window.electronAPI.setNinerouterConfig({
+                apiKey: ninerouterApiKey.trim(),
+                baseURL: url,
+                maxTokens: Number.isFinite(parsedMax) && parsedMax > 0 ? parsedMax : undefined,
+                thinking: ninerouterThinking || undefined,
+            });
+            if (result && result.success) {
+                setSavedStatus(prev => ({ ...prev, ninerouter: true }));
+                setHasStoredKey(prev => ({ ...prev, ninerouter: true }));
+                setNinerouterApiKey('');
+                window.electronAPI?.getAvailableNinerouterModels?.()
+                    .then((models) => setNinerouterModels(Array.isArray(models) ? models.filter(Boolean) : []))
+                    .catch(() => setNinerouterModels([]));
+                setTimeout(() => setSavedStatus(prev => ({ ...prev, ninerouter: false })), 2000);
+            }
+        } catch (e) {
+            console.error('Failed to save 9Router config:', e);
+        } finally {
+            setSavingStatus(prev => ({ ...prev, ninerouter: false }));
+        }
+    };
+
+    /**
+     * Test Connection.
+     *
+     * Deliberately tests what the user typed, not what is stored, so pressing it
+     * before Save answers for the config in front of them. The probe POSTs — a
+     * GET-based test would go green on an instance whose work routes reject the
+     * key, because on 9Router every GET answers openly and every POST does not.
+     */
+    const handleTestNinerouter = async () => {
+        setNinerouterTest({ testing: true });
+        try {
+            const r = await window.electronAPI?.testNinerouterConnection?.({
+                apiKey: ninerouterApiKey.trim(),
+                baseURL: ninerouterBaseURL.trim(),
+            });
+            setNinerouterTest({
+                testing: false,
+                ok: !!r?.ok,
+                message: r?.ok ? t('9Router answered. The key works.') : (r?.error || t('Connection test failed.')),
+            });
+        } catch (e: any) {
+            setNinerouterTest({ testing: false, ok: false, message: e?.message || t('Connection test failed.') });
+        }
+    };
+
+    const handleRefreshNinerouterModels = async () => {
+        setIsRefreshingNinerouter(true);
+        try {
+            const models = await window.electronAPI?.refreshNinerouterModels?.();
+            setNinerouterModels(Array.isArray(models) ? models.filter(Boolean) : []);
+        } catch (e) {
+            console.error('Failed to refresh 9Router models:', e);
+        } finally {
+            setIsRefreshingNinerouter(false);
+        }
+    };
+
+    const handleRemoveNinerouter = () => setPendingConfirm({ kind: 'ninerouter' });
+
+    const performRemoveNinerouter = async () => {
+        try {
+            const result = await window.electronAPI.setNinerouterConfig({ apiKey: '', baseURL: '' });
+            if (result && result.success) {
+                setHasStoredKey(prev => ({ ...prev, ninerouter: false }));
+                setNinerouterBaseURL('');
+                setNinerouterApiKey('');
+                setNinerouterMaxTokens('');
+                setNinerouterThinking('');
+                setNinerouterModelMeta({});
+                setNinerouterModels([]);
+                setNinerouterTest({ testing: false });
+                // Main already dropped ninerouterPreferredModel with the rest of the
+                // config; mirror it so re-configuring the same instance in this
+                // session doesn't show a star pointing at the old catalogue.
+                setPreferredModels(prev => {
+                    const { ninerouter: _removed, ...rest } = prev;
+                    return rest;
+                });
+            }
+        } catch (e) {
+            console.error('Failed to remove 9Router config:', e);
+        }
+    };
+
     // LiteLLM needs three fields (baseURL + optional key + optional max-tokens),
     // so it can't use the single-key ProviderCard contract. baseURL is required
     // to enable the proxy; maxTokens empty → backend default (8192).
@@ -3836,6 +3990,12 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     const confirmCopy = (() => {
         if (!pendingConfirm) return null;
         switch (pendingConfirm.kind) {
+            case 'ninerouter':
+                return {
+                    title: t('Remove 9Router configuration?'),
+                    description: t('The base URL, API key and token limit will be cleared. Discovered models will no longer appear in the model picker.'),
+                    confirmLabel: t('Remove'),
+                };
             case 'litellm':
                 return {
                     title: t('Remove LiteLLM proxy configuration?'),
@@ -3880,6 +4040,9 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             switch (pendingConfirm.kind) {
                 case 'litellm':
                     await performRemoveLitellm();
+                    break;
+                case 'ninerouter':
+                    await performRemoveNinerouter();
                     break;
                 case 'providerKey':
                     await performRemoveKey(pendingConfirm.provider, pendingConfirm.setter);
@@ -4739,6 +4902,197 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                     // now the only place it lives.
                                     onFirstOpen={() => {
                                         if (litellmModels.length === 0) handleRefreshLitellmModels();
+                                    }}
+                                />
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+
+            {/* 9Router — self-hosted fallback proxy. Grouped with LiteLLM rather
+                than with the Cloud providers because it is the same SHAPE: an
+                address the user runs and pastes, not a vendor key. */}
+            <div className="space-y-5">
+                <div className="space-y-4">
+                    <div className="aip-card p-5 space-y-4">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-start gap-2.5 min-w-0">
+                                <AipProviderMark provider="ninerouter" name="9Router" className="mt-0.5" />
+                                <div className="min-w-0">
+                                <label className="block text-xs font-bold aip-hero mb-0">9Router</label>
+                                <p className="text-[10px] aip-muted">
+                                    {t('Self-hosted proxy that falls back across 40+ providers. Models auto-discovered from your instance.')}{' '}
+                                    <a href="https://github.com/decolua/9router" target="_blank" rel="noreferrer" className="aip-link">{t('Docs')}</a>
+                                </p>
+                                </div>
+                            </div>
+                            {hasStoredKey.ninerouter && (
+                                <div className="flex items-center gap-2 shrink-0">
+                                    {/* No "Configured" badge: the card already says so three
+                                        times over — the fields are filled, Remove has
+                                        appeared, and the switch itself only renders once
+                                        there is a configuration to switch. */}
+                                    <AipSwitch
+                                        checked={!disabledProviders.includes('ninerouter')}
+                                        onChange={() => handleToggleProvider('ninerouter', disabledProviders.includes('ninerouter'))}
+                                        label={`${disabledProviders.includes('ninerouter') ? t('Enable') : t('Disable')} 9Router`}
+                                        title={disabledProviders.includes('ninerouter') ? t('Enable provider') : t('Disable provider (keeps your configuration)')}
+                                    />
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <label className="space-y-1 block min-w-0">
+                                <span className="aip-label">{t('Base URL')}</span>
+                                <input
+                                    value={ninerouterBaseURL}
+                                    onChange={e => { setNinerouterBaseURL(e.target.value); setNinerouterTest({ testing: false }); }}
+                                    data-mono="true"
+                                    className="aip-input"
+                                    placeholder="http://localhost:20128/v1"
+                                />
+                            </label>
+
+                            <label className="space-y-1 block min-w-0">
+                                <span className="aip-label">{t('API Key')}</span>
+                                <input
+                                    type="password"
+                                    value={ninerouterApiKey}
+                                    onChange={e => { setNinerouterApiKey(e.target.value); setNinerouterTest({ testing: false }); }}
+                                    data-mono="true"
+                                    className="aip-input"
+                                    placeholder={hasStoredKey.ninerouter ? t('•••••••• (leave blank to keep)') : t('From the 9Router dashboard → Keys')}
+                                />
+                            </label>
+                        </div>
+
+                        {/* Said here rather than discovered later: 9Router's model list
+                            answers without a key, so a configuration can look complete
+                            and still fail every question. */}
+                        <p className="text-[10px] aip-muted">
+                            {t('Your instance may serve its model list without a key while still requiring one to answer. Use Test Connection to be sure.')}
+                        </p>
+
+                        <div className="space-y-1">
+                            <span className="block aip-label">{t('Max Output Tokens')}</span>
+                            <ModelSelect
+                                value={ninerouterMaxTokens}
+                                options={LITELLM_MAX_TOKENS_OPTIONS}
+                                onChange={setNinerouterMaxTokens}
+                                placeholder={t("Auto (per-model)")}
+                            />
+                            <p className="text-[10px] aip-muted">
+                                {t("Auto reads each model's real output budget from")} <span className="aip-code-inline">/v1/models</span> {t('(falls back to 64,000 if unavailable). Pick a fixed value to override.')}
+                            </p>
+                        </div>
+
+                        {/* Thinking level.
+                            45 of the 47 models a stock instance serves are reasoning
+                            models, and reasoning_effort is honoured monotonically
+                            (measured: none < low < medium < high). How much it buys
+                            depends on the model and the prompt — on Gemini, Auto was
+                            itself the fastest, because it varies effort per prompt.
+
+                            The OPTIONS come from the selected model's own catalogue
+                            entry, so a non-reasoning model shows no control at all and a
+                            model that can only be turned DOWN says "Minimal" rather than
+                            promising "Off". */}
+                        {(() => {
+                            const selected = (preferredModels['ninerouter'] || '').replace(/^ninerouter\//, '');
+                            const opts = ninerouterThinkingOptions(selected ? ninerouterModelMeta[selected] : undefined);
+                            if (opts.length === 0) {
+                                return (
+                                    <p className="text-[10px] aip-muted">
+                                        {t('This model does not use reasoning, so there is no thinking level to set.')}
+                                    </p>
+                                );
+                            }
+                            return (
+                                <div className="space-y-1">
+                                    <span className="block aip-label">{t('Thinking')}</span>
+                                    <ModelSelect
+                                        /* An empty stored value IS the default, so the row
+                                           shown is the first option rather than a blank —
+                                           a control whose default renders as nothing reads
+                                           as unset, and users then set it redundantly. */
+                                        value={ninerouterThinking || opts[0].id}
+                                        options={opts}
+                                        onChange={setNinerouterThinking}
+                                        placeholder={opts[0].name}
+                                    />
+                                    <p className="text-[10px] aip-muted">
+                                        {selected
+                                            ? t('Applies to the model you set as default here.')
+                                            : t('Set a default model above to match these options to it.')}{' '}
+                                        {t('Natively defaults to the fastest setting. Raise it when an answer needs more reasoning, or pick Auto to let the model choose.')}
+                                    </p>
+                                </div>
+                            );
+                        })()}
+
+                        {ninerouterTest.message && (
+                            <p className={`text-[10px] ${ninerouterTest.ok ? 'aip-ok-fg' : 'aip-danger-fg'}`} role="status">
+                                {ninerouterTest.message}
+                            </p>
+                        )}
+
+                        <div className="flex flex-wrap items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={handleSaveNinerouter}
+                                disabled={!ninerouterBaseURL.trim() || !!savingStatus.ninerouter}
+                                className="aip-btn min-w-[92px]"
+                                data-variant="accent"
+                            >
+                                {savingStatus.ninerouter
+                                    ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Saving…')}</>
+                                    : savedStatus.ninerouter
+                                        ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Saved')}</>
+                                        : t('Save')}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleTestNinerouter}
+                                disabled={!ninerouterBaseURL.trim() || ninerouterTest.testing}
+                                className="aip-btn"
+                                data-variant="ghost"
+                            >
+                                {ninerouterTest.testing
+                                    ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Testing…')}</>
+                                    : t('Test Connection')}
+                            </button>
+                            {hasStoredKey.ninerouter && (
+                                <button
+                                    type="button"
+                                    onClick={handleRemoveNinerouter}
+                                    className="aip-btn"
+                                    data-variant="ghost"
+                                >
+                                    {t('Remove')}
+                                </button>
+                            )}
+
+                            {hasStoredKey.ninerouter && (
+                                <AipModelList
+                                    models={effectiveModels('ninerouter')}
+                                    enabled={cloudEnabledModels['ninerouter'] || []}
+                                    onToggle={(modelId) => handleToggleModel('ninerouter', modelId)}
+                                    onReset={() => handleResetModels('ninerouter')}
+                                    defaultId={preferredModels['ninerouter']}
+                                    onSetDefault={(modelId) => handleSetDefaultModel('ninerouter', modelId)}
+                                    // Opt-in: a stock instance already answers with 47 models
+                                    // across 6 upstream aliases, and that is one user's
+                                    // connected accounts, not the ceiling.
+                                    optIn
+                                    onBulkToggle={(ids, enable) => handleBulkToggleModels('ninerouter', ids, enable)}
+                                    error={modelSaveError['ninerouter'] ? 'save-failed' : null}
+                                    refreshing={isRefreshingNinerouter}
+                                    onRefresh={handleRefreshNinerouterModels}
+                                    onFirstOpen={() => {
+                                        if (ninerouterModels.length === 0) handleRefreshNinerouterModels();
                                     }}
                                 />
                             )}

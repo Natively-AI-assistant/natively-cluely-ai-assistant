@@ -120,6 +120,15 @@ export class ProcessingHelper {
       this.llmHelper.setLitellmConfig(credManager.getLitellmApiKey() || '', litellmBaseURL, credManager.getLitellmMaxTokens());
     }
 
+    // Without this the client is never constructed at startup, so a user who
+    // configured 9Router in a previous session has a selected model that
+    // dispatches to nothing until they re-save the card.
+    const ninerouterBaseURL = credManager.getNinerouterBaseURL();
+    if (ninerouterBaseURL) {
+      console.log("[ProcessingHelper] Loading stored 9Router config from CredentialsManager");
+      this.llmHelper.setNinerouterConfig(credManager.getNinerouterApiKey() || '', ninerouterBaseURL, credManager.getNinerouterMaxTokens(), credManager.getNinerouterThinking() || null);
+    }
+
     const nativelyKey = credManager.getNativelyApiKey();
     if (nativelyKey) {
       console.log("[ProcessingHelper] Loading stored Natively API Key from CredentialsManager");

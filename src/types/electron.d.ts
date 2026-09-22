@@ -233,13 +233,18 @@ export interface ElectronAPI {
   setOpenrouterApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string; retrievalDeactivated?: boolean }>
   setFluxionConfig: (config: { apiKey?: string; protocol?: 'openai' | 'anthropic' }) => Promise<{ success: boolean; error?: string; message?: string; protocol?: 'openai' | 'anthropic'; protocolDetected?: boolean }>
   setLitellmConfig: (config: { apiKey: string; baseURL: string; maxTokens?: number }) => Promise<{ success: boolean; error?: string }>
+  setNinerouterConfig: (config: { apiKey: string; baseURL: string; maxTokens?: number; thinking?: string }) => Promise<{ success: boolean; error?: string }>
+  getAvailableNinerouterModels: () => Promise<string[]>
+  refreshNinerouterModels: () => Promise<string[]>
+  /** POSTs an unroutable model id: 401 means the key is wrong, anything else means it was accepted. */
+  testNinerouterConnection: (config?: { apiKey?: string; baseURL?: string }) => Promise<{ ok: boolean; reason?: 'auth' | 'unreachable' | 'unconfigured'; error?: string; status?: number }>
   getAvailableLiteLLMModels: () => Promise<string[]>
   refreshLiteLLMModels: () => Promise<string[]>
   getCloudFetchedModels: () => Promise<{ models: Record<string, { id: string; label: string }[]>; fetchedAt: Record<string, number> }>
   getDisabledProviders: () => Promise<string[]>
   setDisabledProviders: (providers: string[]) => Promise<{ success: boolean; error?: string }>
   setCloudEnabledModels: (provider: string, models: string[]) => Promise<{ success: boolean; error?: string }>
-  setNativelyApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
+  setNativelyApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string; proPending?: boolean; proError?: string }>
   setNvidiaNimSttModel: (model: string) => Promise<{ success: boolean; error?: string }>
   // ── In-app review / testimonial prompt ─────────────────────────────────
   reviewGetPromptState: () => Promise<{
@@ -276,7 +281,7 @@ export interface ElectronAPI {
   // bridge. Four user-facing categories over five server-side meters.
   getNativelyUsage: (force?: boolean) => Promise<import('./nativelyUsage').NativelyUsageResponse>
   getNativelyPlans: () => Promise<import('./nativelyUsage').NativelyPlansResponse>
-  getStoredCredentials: () => Promise<{ hasNativelyKey?: boolean; hasGeminiKey: boolean; hasGroqKey: boolean; hasOpenaiKey: boolean; hasClaudeKey: boolean; hasDeepseekKey: boolean; hasNvidiaNimKey?: boolean; hasOpenrouterKey?: boolean; hasFluxionKey?: boolean; fluxionProtocol?: 'openai' | 'anthropic'; hasLitellmBaseURL?: boolean; litellmBaseURL?: string | null; litellmMaxTokens?: number | null; googleServiceAccountPath: string | null; sttProvider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech'; hasSttGroqKey: boolean; hasSttOpenaiKey: boolean; hasDeepgramKey: boolean; hasElevenLabsKey: boolean; hasAzureKey: boolean; azureRegion: string; hasIbmWatsonKey: boolean; ibmWatsonRegion: string; groqSttModel?: string; hasSonioxKey?: boolean; hasTavilyKey?: boolean; geminiPreferredModel?: string; groqPreferredModel?: string; openaiPreferredModel?: string; claudePreferredModel?: string; deepseekPreferredModel?: string; nvidia_nimPreferredModel?: string; openrouterPreferredModel?: string; fluxionPreferredModel?: string; litellmPreferredModel?: string; disabledProviders?: string[]; cloudEnabledModels?: Record<string, string[]>; sttGroqKey?: string; sttOpenaiKey?: string; sttDeepgramKey?: string; sttElevenLabsKey?: string; sttAzureKey?: string; sttIbmKey?: string; sttSonioxKey?: string; openAiSttBaseUrl?: string }>
+  getStoredCredentials: () => Promise<{ hasNativelyKey?: boolean; hasGeminiKey: boolean; hasGroqKey: boolean; hasOpenaiKey: boolean; hasClaudeKey: boolean; hasDeepseekKey: boolean; hasNvidiaNimKey?: boolean; hasOpenrouterKey?: boolean; hasFluxionKey?: boolean; fluxionProtocol?: 'openai' | 'anthropic'; hasLitellmBaseURL?: boolean; litellmBaseURL?: string | null; litellmMaxTokens?: number | null; hasNinerouterBaseURL?: boolean; hasNinerouterKey?: boolean; ninerouterBaseURL?: string | null; ninerouterMaxTokens?: number | null; ninerouterThinking?: string | null; ninerouterModelMeta?: Record<string, { reasoning?: boolean; thinkingCanDisable?: boolean; thinkingFormat?: string }>; googleServiceAccountPath: string | null; sttProvider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech'; hasSttGroqKey: boolean; hasSttOpenaiKey: boolean; hasDeepgramKey: boolean; hasElevenLabsKey: boolean; hasAzureKey: boolean; azureRegion: string; hasIbmWatsonKey: boolean; ibmWatsonRegion: string; groqSttModel?: string; hasSonioxKey?: boolean; hasTavilyKey?: boolean; geminiPreferredModel?: string; groqPreferredModel?: string; openaiPreferredModel?: string; claudePreferredModel?: string; deepseekPreferredModel?: string; nvidia_nimPreferredModel?: string; openrouterPreferredModel?: string; fluxionPreferredModel?: string; litellmPreferredModel?: string; ninerouterPreferredModel?: string; disabledProviders?: string[]; cloudEnabledModels?: Record<string, string[]>; sttGroqKey?: string; sttOpenaiKey?: string; sttDeepgramKey?: string; sttElevenLabsKey?: string; sttAzureKey?: string; sttIbmKey?: string; sttSonioxKey?: string; openAiSttBaseUrl?: string }>
   // R-10 resolution flow: ambiguous credential stores (names + last-4 only; null when nothing to resolve).
   getAmbiguousCredentialStores: () => Promise<{
     keyring: { keys: { name: string; last4: string }[]; mtimeIso: string | null };
@@ -485,7 +490,7 @@ export interface ElectronAPI {
     ok: boolean; provider?: string; model?: string; dimensions?: number; space?: string; latencyMs?: number; error?: string; status?: number; message?: string
   }>
   setEmbeddingConfig: (next: { mode?: string; provider?: string; model?: string; dimensions?: number }) => Promise<{
-    success: boolean; previousSpace?: string; activeSpace?: string; reindexRequired?: boolean; error?: string; message?: string
+    success: boolean; previousSpace?: string; activeSpace?: string; reindexRequired?: boolean; incompatibleCount?: number; error?: string; message?: string
   }>
   fetchEmbeddingModels: (providerId: string) => Promise<{
     success: boolean; models?: Array<{ id: string; label: string; dimensions: number; dimensionsVerified: boolean; supportedDimensions?: number[] }>; count?: number; error?: string
@@ -501,9 +506,14 @@ export interface ElectronAPI {
   // Embedding retrieval finds the candidate set; reranking decides the order of
   // those candidates. Configured independently of the embedding provider.
   getRerankerStatus: () => Promise<{
-    provider: 'local' | 'openrouter' | 'jina'
+    provider: 'local' | 'natively' | 'openrouter' | 'jina' | 'voyage' | 'custom'
     openrouterModel: string | null
     jinaModel: string | null
+    voyageModel?: string | null
+    nativelyModel?: string | null
+    customModel?: string | null
+    customEndpoint?: string | null
+    hasCustomKey?: boolean
     /** The model id for whichever hosted provider is selected. */
     hostedModel: string | null
     candidateCount: number | null
@@ -521,7 +531,7 @@ export interface ElectronAPI {
     /** The catalogue model in use, when one is selected AND fully installed. */
     selectedLocal: { id: string; name: string } | null
     /** What would actually run right now, resolved the way retrieval resolves it. */
-    effective: { kind: 'local' | 'extension' | 'openrouter' | 'jina'; id: string | null }
+    effective: { kind: 'local' | 'extension' | 'natively' | 'openrouter' | 'jina' | 'voyage' | 'custom'; id: string | null }
     lastTest: { at: string; model: string; latencyMs: number; ok: boolean; failure?: string } | null
   }>
   getRerankerCatalog: (opts?: { refresh?: boolean }) => Promise<{
@@ -537,18 +547,29 @@ export interface ElectronAPI {
     error?: string
   }>
   setRerankerConfig: (next: {
-    provider?: 'local' | 'natively' | 'openrouter' | 'jina'
+    provider?: 'local' | 'natively' | 'openrouter' | 'jina' | 'voyage' | 'custom'
     openrouterModel?: string
     jinaModel?: string
+    voyageModel?: string
     nativelyModel?: string
+    customModel?: string
     candidateCount?: number
     fallbackToLocal?: boolean
   }) => Promise<{ success: boolean; reranker?: unknown; error?: string }>
   setRerankerOpenRouterKey: (key: string) => Promise<{ success: boolean; error?: string; message?: string }>
   setRerankerHostedKey: (provider: string, key: string) => Promise<{ success: boolean; error?: string; message?: string }>
+  setRerankerCustomEndpoint: (input: { url?: string; apiKey?: string }) => Promise<{
+    success: boolean
+    endpoint?: string | null
+    models?: Array<{ id: string; label: string }>
+    reachable?: boolean
+    error?: string
+    message?: string
+  }>
+  getCustomRerankerModels: () => Promise<Array<{ id: string; label: string }>>
   getRerankerHostedProviders: () => Promise<{
     providers: Array<{
-      id: 'openrouter' | 'jina'
+      id: 'natively' | 'openrouter' | 'jina' | 'voyage'
       name: string
       keyUrl: string
       keyPlaceholder: string
@@ -589,6 +610,46 @@ export interface ElectronAPI {
     success: boolean; activeId?: string | null; topIndex?: number; error?: string; message?: string
   }>
   onLocalRerankerModelProgress: (callback: (p: { id: string; fraction: number; currentFile: string }) => void) => () => void
+
+  listLocalEmbeddingModels: () => Promise<{
+    models: Array<{
+      id: string; name: string; runtime: 'onnx' | 'gguf'; repo: string
+      params: string; note: string; bytes: number; dimensions: number
+      supportedDimensions?: number[]
+      contextLength?: number
+      recommended: boolean; bundled?: boolean
+      license: { spdx: string; url: string; commercialUseRestricted: boolean; requiresAcknowledgement: boolean }
+      /** true when requiresAcknowledgement is false, or the user has already accepted. */
+      acknowledged: boolean
+      state: 'not-installed' | 'partial' | 'installed'
+      bytesOnDisk: number
+      selected: boolean
+      supported: boolean
+      unsupportedReason: string | null
+      activatable: boolean
+    }>
+    selectedId: string | null
+    builtInSelected: boolean
+  }>
+  installLocalEmbeddingModel: (id: string) => Promise<{
+    success: boolean; error?: string; message?: string; digests?: Record<string, string>
+    /** Present when error === 'license_not_acknowledged'. */
+    requiresAcknowledgement?: boolean; licenseUrl?: string; spdx?: string
+  }>
+  cancelLocalEmbeddingModel: (id: string) => Promise<{ success: boolean; error?: string }>
+  removeLocalEmbeddingModel: (id: string) => Promise<{ success: boolean; error?: string; message?: string }>
+  useLocalEmbeddingModel: (id: string | null) => Promise<{
+    success: boolean; activeId?: string | null; dimensions?: number; reindexRequired?: boolean; incompatibleCount?: number; error?: string; message?: string
+    /** Present when error === 'license_not_acknowledged'. */
+    requiresAcknowledgement?: boolean; licenseUrl?: string; spdx?: string
+  }>
+  testLocalEmbeddingModel: (id: string) => Promise<{
+    success: boolean; latencyMs?: number; dimensions?: number; runtime?: 'onnx' | 'gguf'; accelerator?: string; error?: string; message?: string
+  }>
+  revealLocalEmbeddingModelsFolder: () => Promise<{ success: boolean }>
+  /** Persist the user's acceptance of a catalog model's licence terms. Must be called before install/use on models where requiresAcknowledgement is true. */
+  acknowledgeLocalEmbeddingCatalogModel: (id: string) => Promise<{ success: boolean; error?: string; message?: string }>
+  onLocalEmbeddingModelProgress: (callback: (p: { id: string; fraction: number; currentFile: string }) => void) => () => void
 
   listExtensions: () => Promise<{
     available: boolean
@@ -896,7 +957,7 @@ export interface ElectronAPI {
 
   // Dynamic Model Discovery
   fetchProviderModels: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion', apiKey: string) => Promise<{ success: boolean; models?: {id: string, label: string}[]; error?: string }>
-  setProviderPreferredModel: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'litellm', modelId: string) => Promise<void>
+  setProviderPreferredModel: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'litellm' | 'ninerouter', modelId: string) => Promise<void>
 
   // License Management
   licenseActivate: (key: string) => Promise<{ success: boolean; error?: string }>

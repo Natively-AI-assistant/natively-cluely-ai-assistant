@@ -14,6 +14,7 @@
 import { isBundledLocalModelId } from './bundledLocalEmbedding';
 import type { AppAPIConfig } from './EmbeddingProviderResolver';
 import { TRIAL_SENTINEL_KEY } from '../config/constants';
+import { findEmbeddingCatalogModel } from './embeddingModelCatalog';
 
 /**
  * The credential reads buildEmbeddingConfig needs. Injectable because esbuild
@@ -29,6 +30,8 @@ export interface EmbeddingCredentialStore {
   /** Optional bearer token for a user-hosted endpoint. */
   getCustomEmbeddingApiKey?(): string | undefined;
   getOpenrouterApiKey?(): string | undefined;
+  getNinerouterApiKey?(): string | undefined;
+  getNinerouterBaseURL?(): string | undefined;
   getVoyageApiKey?(): string | undefined;
 }
 
@@ -52,6 +55,11 @@ export interface EmbeddingConfigSources {
   openrouterKey?: string;
   openrouterEmbeddingModel?: string;
   openrouterEmbeddingDims?: number;
+  /** 9Router: base URL is the gate, key optional (REQUIRE_API_KEY defaults off). */
+  ninerouterBaseUrl?: string;
+  ninerouterKey?: string;
+  ninerouterEmbeddingModel?: string;
+  ninerouterEmbeddingDims?: number;
   voyageKey?: string;
   voyageEmbeddingModel?: string;
   voyageEmbeddingDims?: number;
@@ -66,6 +74,7 @@ export interface EmbeddingConfigSources {
   nativelyApiUrl?: string;
   providerDataScopes?: AppAPIConfig['providerDataScopes'];
   explicitKeyManagement?: boolean;
+  localEmbeddingModelId?: string;
 }
 
 /** Trim, and treat a blank string as absent so a cleared key really removes its provider. */
@@ -96,6 +105,10 @@ export function embeddingConfigFrom(sources: EmbeddingConfigSources): AppAPIConf
     openrouterKey: clean(sources.openrouterKey),
     openrouterEmbeddingModel: clean(sources.openrouterEmbeddingModel),
     openrouterEmbeddingDims: sources.openrouterEmbeddingDims,
+    ninerouterBaseUrl: clean(sources.ninerouterBaseUrl),
+    ninerouterKey: clean(sources.ninerouterKey),
+    ninerouterEmbeddingModel: clean(sources.ninerouterEmbeddingModel),
+    ninerouterEmbeddingDims: sources.ninerouterEmbeddingDims,
     voyageKey: clean(sources.voyageKey),
     voyageEmbeddingModel: clean(sources.voyageEmbeddingModel),
     voyageEmbeddingDims: sources.voyageEmbeddingDims,
@@ -107,6 +120,7 @@ export function embeddingConfigFrom(sources: EmbeddingConfigSources): AppAPIConf
     geminiEmbeddingDims: sources.geminiEmbeddingDims,
     providerDataScopes: sources.providerDataScopes,
     explicitKeyManagement: sources.explicitKeyManagement,
+    localEmbeddingModelId: clean(sources.localEmbeddingModelId),
   };
 }
 
@@ -140,6 +154,8 @@ export function resolveEmbeddingCredentials(
   const nativelyApiKey = pick('nativelyApiKey', () => store.getNativelyApiKey());
   const customEmbeddingKey = pick('customEmbeddingKey', () => store.getCustomEmbeddingApiKey?.());
   const openrouterKey = pick('openrouterKey', () => store.getOpenrouterApiKey?.());
+  const ninerouterKey = pick('ninerouterKey', () => store.getNinerouterApiKey?.());
+  const ninerouterBaseUrl = pick('ninerouterBaseUrl', () => store.getNinerouterBaseURL?.());
   const voyageKey = pick('voyageKey', () => store.getVoyageApiKey?.());
 
   // Gemini embedding key POOL: the effective key + GEMINI_API_KEY(_2.._6)/GOOGLE
@@ -241,10 +257,13 @@ export function buildEmbeddingConfig(overrides: Partial<EmbeddingConfigSources> 
   // 'Xenova/all-MiniLM-L6-v2' saved. Comparing against the new id alone would
   // declare that user Ollama-backed and route them to Ollama asking for a model
   // it does not serve — a silent break on the first launch after the swap.
+  // A curated-catalog id (embedding:use-local-model saves it as `model`) is
+  // likewise served by LocalEmbeddingProvider itself, not by Ollama.
   const localIsOllamaBacked = chosen?.mode === 'manual'
     && chosen?.provider === 'local'
     && !!chosen?.model
-    && !isBundledLocalModelId(chosen.model);
+    && !isBundledLocalModelId(chosen.model)
+    && !findEmbeddingCatalogModel(chosen.model);
   const effectiveProvider = localIsOllamaBacked ? 'ollama' : chosen?.provider;
   const localViaOllama = localIsOllamaBacked
     ? { ollamaEmbeddingModel: chosen!.model, ollamaEmbeddingDims: chosen!.dimensions }
@@ -258,6 +277,10 @@ export function buildEmbeddingConfig(overrides: Partial<EmbeddingConfigSources> 
     ? { openrouterEmbeddingModel: chosen.model, openrouterEmbeddingDims: chosen.dimensions }
     : {};
 
+  const ninerouterFromSettings = (chosen?.mode === 'manual' && chosen?.provider === 'ninerouter')
+    ? { ninerouterEmbeddingModel: chosen.model, ninerouterEmbeddingDims: chosen.dimensions }
+    : {};
+
   const cloudFromSettings = (chosen?.mode === 'manual' && chosen?.provider === 'openai')
     ? { openaiEmbeddingModel: chosen.model, openaiEmbeddingDims: chosen.dimensions }
     : (chosen?.mode === 'manual' && chosen?.provider === 'gemini')
@@ -268,12 +291,27 @@ export function buildEmbeddingConfig(overrides: Partial<EmbeddingConfigSources> 
     ? { customEmbeddingUrl: customEndpoint, customEmbeddingModel: chosen.model, customEmbeddingDims: chosen.dimensions }
     : { customEmbeddingUrl: customEndpoint };
 
+  const localModelId = (() => {
+    try {
+      return (
+        settings?.get('localEmbeddingModelId') ||
+        (chosen?.provider === 'local' ? (chosen.localModelId || chosen.model) : undefined)
+      );
+    } catch {
+      return undefined;
+    }
+  })();
+
   // The choice itself, not just its model/dims hints. Every provider is covered
   // here — including natively and local, which have no hints to carry and were
   // therefore dropped entirely before.
-  const choice = { embeddingMode: chosen?.mode, embeddingProvider: effectiveProvider };
+  const choice = {
+    embeddingMode: chosen?.mode,
+    embeddingProvider: effectiveProvider,
+    localEmbeddingModelId: localModelId,
+  };
 
-  return resolveEmbeddingCredentials({ providerDataScopes, ...choice, ...ollamaFromSettings, ...cloudFromSettings, ...openrouterFromSettings, ...voyageFromSettings, ...localViaOllama, ...customFromSettings, ...overrides }, cm);
+  return resolveEmbeddingCredentials({ providerDataScopes, ...choice, ...ollamaFromSettings, ...cloudFromSettings, ...openrouterFromSettings, ...ninerouterFromSettings, ...voyageFromSettings, ...localViaOllama, ...customFromSettings, ...overrides }, cm);
 }
 
 /**
@@ -308,6 +346,13 @@ export function embeddingConfigChanged(prev: AppAPIConfig, next: AppAPIConfig): 
     norm(prev.customEmbeddingKey) !== norm(next.customEmbeddingKey) ||
     norm(prev.openrouterKey) !== norm(next.openrouterKey) ||
     norm(prev.openrouterEmbeddingModel) !== norm(next.openrouterEmbeddingModel) ||
+    // All three change the VECTOR SPACE for 9Router. The BASE URL especially:
+    // its space key carries the host, so repointing at another instance is a
+    // different space even for an identical model id.
+    norm(prev.ninerouterBaseUrl) !== norm(next.ninerouterBaseUrl) ||
+    norm(prev.ninerouterEmbeddingModel) !== norm(next.ninerouterEmbeddingModel) ||
+    (prev.ninerouterEmbeddingDims || 0) !== (next.ninerouterEmbeddingDims || 0) ||
+    norm(prev.ninerouterKey) !== norm(next.ninerouterKey) ||
     (prev.openrouterEmbeddingDims || 0) !== (next.openrouterEmbeddingDims || 0) ||
     norm(prev.voyageKey) !== norm(next.voyageKey) ||
     norm(prev.voyageEmbeddingModel) !== norm(next.voyageEmbeddingModel) ||
@@ -321,6 +366,7 @@ export function embeddingConfigChanged(prev: AppAPIConfig, next: AppAPIConfig): 
     // re-resolution, and the switch would silently do nothing.
     norm(prev.embeddingMode) !== norm(next.embeddingMode) ||
     norm(prev.embeddingProvider) !== norm(next.embeddingProvider) ||
+    norm(prev.localEmbeddingModelId) !== norm(next.localEmbeddingModelId) ||
     norm(prev.openaiEmbeddingModel) !== norm(next.openaiEmbeddingModel) ||
     (prev.openaiEmbeddingDims || 0) !== (next.openaiEmbeddingDims || 0) ||
     normScopes(prev.providerDataScopes) !== normScopes(next.providerDataScopes) ||

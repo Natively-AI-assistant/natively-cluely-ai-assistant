@@ -36,6 +36,7 @@ import jinaMark from '../../assets/provider-logos/jina.svg?raw';
 // loses nothing here. Vendored from BerriAI/litellm — MIT, and outside the
 // `enterprise/` directory that their LICENSE carves out.
 import litellmMark from '../../assets/provider-logos/litellm.png';
+import ninerouterMark from '../../assets/provider-logos/ninerouter.png';
 // Fluxion's mark is full-colour artwork, so it is a URL rendered with <img> for
 // the same reason as litellm. This is the F monogram from their wordmark, NOT
 // the orbital-galaxy brand image: the tile renders a 16px glyph, and at that
@@ -62,6 +63,11 @@ export const AI_PROVIDER_BRANDS: Record<string, { mono: string; brand: string }>
     nvidia_nim: { mono: 'NV', brand: '#76B900' },
     codex:    { mono: 'CX', brand: '#10A37F' },
     litellm:  { mono: 'LL', brand: '#8B5CF6' },
+    // Mark is vendored (ninerouter.png), so `mono` is only a safety net. The hex
+    // is the start stop of 9Router's own favicon gradient (#f97815 -> #c2590a);
+    // the start is the lighter of the two and so the one that stays legible as a
+    // tile wash on the dark theme.
+    ninerouter: { mono: '9R', brand: '#F97815' },
     ollama:   { mono: 'OL', brand: '#9CA3AF' },
     // Marks are vendored, so `mono` is only a safety net. The brand hexes drive
     // the tile wash and are the published brand colours from lobehub's -color
@@ -96,11 +102,12 @@ export const AI_PROVIDER_BRANDS: Record<string, { mono: string; brand: string }>
  * so a constant sharing that prefix is found FIRST and parsed instead of the
  * real map — every provider then reads as having no mark.
  */
-export const WHITE_ON_TRANSPARENT_MARKS = new Set(['natively']);
+export const WHITE_ON_TRANSPARENT_MARKS = new Set(['natively', 'ninerouter']);
 
 /** Raster marks, rendered as <img>. See AI_PROVIDER_MARKS for the inlined SVGs. */
 export const AI_PROVIDER_MARK_IMAGES: Record<string, string> = {
     litellm: litellmMark,
+    ninerouter: ninerouterMark,
     fluxion: fluxionMark,
     natively: nativelyIcon,
 };

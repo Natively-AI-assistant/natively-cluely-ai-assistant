@@ -16,7 +16,7 @@
 // import despite the note above about esbuild inlining a second copy of each.
 import { TRIAL_SENTINEL_KEY } from '../../config/constants';
 
-export type RerankerProvider = 'local' | 'natively' | 'openrouter' | 'jina';
+export type RerankerProvider = 'local' | 'natively' | 'openrouter' | 'jina' | 'voyage' | 'custom';
 
 export interface RerankerSettings {
   /**
@@ -35,6 +35,10 @@ export interface RerankerSettings {
   nativelyModel?: string;
   /** Jina AI model id, e.g. jina-reranker-v3.5. */
   jinaModel?: string;
+  /** Voyage AI model id, e.g. rerank-2.5. */
+  voyageModel?: string;
+  /** User-hosted custom rerank model id (LM Studio, TEI, etc.). */
+  customModel?: string;
   /**
    * A catalogue id from rag/rerankerModelCatalog.ts, or absent for the bundled
    * bge-reranker-base. ONNX entries are read by LocalReranker; GGUF entries are
@@ -93,6 +97,67 @@ export interface EligibilityInputs {
    * machine, and a rerank request is a way for them to leave.
    */
   referenceFilesScopeAllowed: boolean;
+  /**
+   * Populated only when provider === 'custom'. The URL the user configured,
+   * before any normalisation — used to decide whether the endpoint is truly
+   * loopback / private-network so we can relax the privacy gate for it.
+   */
+  customEndpoint?: string;
+}
+
+/**
+ * Return true iff the given URL resolves to a loopback address or a private
+ * (RFC-1918 / RFC-4193 / link-local) host — i.e. the request never leaves
+ * this machine / LAN.
+ *
+ * This is best-effort and intentionally conservative: any ambiguity (parse
+ * failure, bare hostname that isn't `localhost`) returns false so privacy
+ * always wins.
+ */
+export function isLoopbackOrPrivateHost(urlString: string): boolean {
+  let parsed: URL;
+  try { parsed = new URL(urlString); } catch { return false; }
+  // WHATWG URL keeps IPv6 hosts bracketed.
+  const host = parsed.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  if (host === 'localhost') return true;
+
+  // Only IP LITERALS are classified. A DNS name that merely starts with a
+  // private octet (10.proxy.example.com, 127.0.0.1.nip.io) resolves wherever
+  // its owner points it, so it is public for this purpose.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { isIP } = require('net') as typeof import('net');
+  const family = isIP(host);
+  if (family === 4) {
+    const [a, b] = host.split('.').map(Number);
+    return a === 127                                  // loopback 127/8
+      || a === 10                                     // RFC-1918
+      || (a === 192 && b === 168)                     // RFC-1918
+      || (a === 172 && b >= 16 && b <= 31)            // RFC-1918 172.16/12
+      || (a === 169 && b === 254);                    // link-local
+  }
+  if (family === 6) {
+    return host === '::1'                             // loopback
+      || /^fe[89ab][0-9a-f]?:/.test(host)             // link-local fe80::/10
+      || /^f[cd][0-9a-f]{0,2}:/.test(host);           // unique local fc00::/7
+  }
+  return false;
+}
+
+/**
+ * The privacy verdict for a custom rerank endpoint, shared by retrieval
+ * (evaluateHostedEligibility) and Settings' Test button so the two cannot
+ * drift: a loopback / private-network endpoint is allowed in every mode, any
+ * other endpoint obeys the same rules as a hosted provider.
+ */
+export function customRerankPrivacyBlock(input: {
+  customEndpoint?: string;
+  localOnly: boolean;
+  referenceFilesScopeAllowed: boolean;
+}): 'local-only-mode' | 'reference-files-scope-denied' | null {
+  if (input.customEndpoint && isLoopbackOrPrivateHost(input.customEndpoint)) return null;
+  if (input.localOnly) return 'local-only-mode';
+  if (!input.referenceFilesScopeAllowed) return 'reference-files-scope-denied';
+  return null;
 }
 
 /**
@@ -105,7 +170,17 @@ export interface EligibilityInputs {
  * than being invited to fix a key that would still not be used.
  */
 export function evaluateHostedEligibility(input: EligibilityInputs): HostedEligibility {
-  if (input.provider !== 'natively' && input.provider !== 'openrouter' && input.provider !== 'jina') {
+  if (input.provider === 'custom') {
+    if (!input.model || !input.model.trim()) return { eligible: false, reason: 'no-model' };
+
+    // Custom endpoints pointing at a true loopback / private-network host are
+    // safe in all modes — data never leaves the machine. Public HTTPS custom
+    // endpoints (e.g. a Jina-compatible proxy hosted externally) are subject to
+    // the same privacy rules as other cloud providers.
+    const blocked = customRerankPrivacyBlock(input);
+    return blocked ? { eligible: false, reason: blocked } : { eligible: true };
+  }
+  if (input.provider !== 'natively' && input.provider !== 'openrouter' && input.provider !== 'jina' && input.provider !== 'voyage') {
     return { eligible: false, reason: 'provider-not-selected' };
   }
   if (input.localOnly) return { eligible: false, reason: 'local-only-mode' };
@@ -157,6 +232,15 @@ export function readRerankerSettings(): RerankerSettings {
 
 /** The key for a hosted provider. One credential per provider, shared app-wide. */
 export function readHostedApiKey(provider: RerankerProvider): string | undefined {
+  if (provider === 'custom') {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { CredentialsManager } = require('../CredentialsManager');
+      const stored = CredentialsManager.getInstance().getCustomRerankerApiKey?.();
+      if (stored && stored.trim()) return stored.trim();
+    } catch { /* fall through */ }
+    return undefined;
+  }
   if (provider === 'natively') {
     try {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -183,11 +267,32 @@ export function readHostedApiKey(provider: RerankerProvider): string | undefined
     const env = (process.env.JINA_API_KEY || '').trim();
     return env || undefined;
   }
+  if (provider === 'voyage') {
+    // The SAME credential the Voyage embedding provider uses — one vendor, one
+    // key, the way OpenRouter backs chat, embeddings and reranking. Explicit,
+    // because the fall-through below would hand Voyage the OpenRouter key.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { CredentialsManager } = require('../CredentialsManager');
+      const stored = CredentialsManager.getInstance().getVoyageApiKey?.();
+      if (stored && stored.trim()) return stored.trim();
+    } catch { /* no credential store: no key */ }
+    return undefined;
+  }
   return readOpenRouterApiKey();
 }
 
 /** The model id for whichever hosted provider is selected. */
 export function readHostedModel(settings: RerankerSettings): string | undefined {
+  if (settings.provider === 'custom') {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { SettingsManager } = require('../SettingsManager');
+      return settings.customModel || SettingsManager.getInstance().get('customRerankerModel') || undefined;
+    } catch {
+      return settings.customModel;
+    }
+  }
   if (settings.provider === 'natively') {
     // Falls back to the managed model rather than to undefined: with one model
     // served and nothing to pick, an unset setting must mean "the managed one",
@@ -205,6 +310,12 @@ export function readHostedModel(settings: RerankerSettings): string | undefined 
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { defaultHostedModel } = require('../../rag/hostedRerankProviders') as typeof import('../../rag/hostedRerankProviders');
     return settings.jinaModel || defaultHostedModel('jina') || undefined;
+  }
+  if (settings.provider === 'voyage') {
+    // Static catalogue, same as Jina: unset means the recommended model.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { defaultHostedModel } = require('../../rag/hostedRerankProviders') as typeof import('../../rag/hostedRerankProviders');
+    return settings.voyageModel || defaultHostedModel('voyage') || undefined;
   }
   // OpenRouter's catalogue is FETCHED (staticCatalogue: false), so there is no
   // id to fall back to here that we have seen on the live API. It is filled in
@@ -287,14 +398,61 @@ export function buildHostedRerankPort(): RerankSeamPort | null {
   const apiKey = readHostedApiKey(provider);
   const model = readHostedModel(settings);
 
+  // Read custom endpoint early so the privacy guard in evaluateHostedEligibility
+  // can inspect the host and decide whether it is loopback / private-network.
+  let customEndpointUrl: string | undefined;
+  if (provider === 'custom') {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { SettingsManager } = require('../SettingsManager');
+      customEndpointUrl = SettingsManager.getInstance().get('customRerankerEndpoint');
+    } catch { /* ignored */ }
+  }
+
   const verdict = evaluateHostedEligibility({
     provider,
     hasApiKey: Boolean(apiKey),
     model,
     localOnly: isLocalOnlyMode(),
     referenceFilesScopeAllowed: referenceFilesScopeAllowed(),
+    customEndpoint: customEndpointUrl,
   });
   if (!verdict.eligible) return null;
+
+  if (provider === 'custom') {
+    const baseUrl = customEndpointUrl;
+    if (!baseUrl) return null;
+
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { OpenRouterReranker } = require('./OpenRouterReranker') as typeof import('./OpenRouterReranker');
+    return new OpenRouterReranker({
+      baseUrl,
+      providerId: 'custom',
+      allowAnonymousApiKey: true,
+      getApiKey: () => readHostedApiKey('custom'),
+      getModel: () => readHostedModel(readRerankerSettings()),
+      onStats: (stats) => {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const { telemetryService } = require('../telemetry/TelemetryService');
+          telemetryService.track({
+            name: 'rerank_request',
+            properties: {
+              provider: 'custom',
+              model: stats.model,
+              requestLatencyMs: stats.requestLatencyMs,
+              candidateCount: stats.candidateCount,
+              ok: stats.ok,
+              failure: stats.failure,
+              costUsd: stats.costUsd,
+              httpStatus: stats.httpStatus,
+            },
+          });
+        } catch { /* telemetry never blocks retrieval */ }
+      },
+      logger: console,
+    });
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { hostedRerankProvider } = require('../../rag/hostedRerankProviders') as typeof import('../../rag/hostedRerankProviders');
@@ -308,6 +466,7 @@ export function buildHostedRerankPort(): RerankSeamPort | null {
   return new OpenRouterReranker({
     baseUrl: descriptor.baseUrl,
     providerId: descriptor.id,
+    wire: descriptor.wire,
     // Re-read per call rather than closing over the values: a key or model
     // changed in Settings must take effect without a restart.
     getApiKey: () => readHostedApiKey(readRerankerSettings().provider ?? 'local'),
@@ -458,12 +617,21 @@ export function isRerankerExplicitlySelected(): boolean {
     // exactly that, and buildHostedRerankPort() already gates on it.
     const provider = settings.provider ?? DEFAULT_RERANKER_SETTINGS.provider;
     if (provider !== 'local') {
+      let customEndpointUrl: string | undefined;
+      if (provider === 'custom') {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const { SettingsManager } = require('../SettingsManager');
+          customEndpointUrl = SettingsManager.getInstance().get('customRerankerEndpoint');
+        } catch { /* ignored */ }
+      }
       const eligible = evaluateHostedEligibility({
         provider,
         hasApiKey: Boolean(readHostedApiKey(provider)),
         model: readHostedModel(settings),
         localOnly: isLocalOnlyMode(),
         referenceFilesScopeAllowed: referenceFilesScopeAllowed(),
+        customEndpoint: customEndpointUrl,
       }).eligible;
       if (eligible) return true;
     }

@@ -581,8 +581,16 @@ describe('the provider is reachable from the UI', () => {
     // white-on-transparent art (Natively's icon). It was applied to EVERY raster
     // mark, so it repainted Fluxion's blue monogram solid black on a light tile —
     // and was quietly doing the same to LiteLLM's. Opt-in, not opt-out.
-    assert.match(marks, /WHITE_ON_TRANSPARENT_MARKS = new Set\(\['natively'\]\)/,
-      'only genuinely white artwork may take the light-theme flatten');
+    // Asserts the PROPERTY, not the membership. Pinning the exact set meant any
+    // new white-on-transparent mark failed a test about Fluxion's blue one.
+    // 9Router joined legitimately: its mark is a white 9 on transparency, which
+    // is exactly the art this flatten exists for.
+    assert.match(marks, /WHITE_ON_TRANSPARENT_MARKS = new Set\(\[[^\]]*'natively'[^\]]*\]\)/,
+      'the flatten set must stay an explicit opt-in list including natively');
+    // Fluxion must NEVER be in it — that is the bug this test was written for.
+    const setLiteral = marks.slice(marks.indexOf('WHITE_ON_TRANSPARENT_MARKS = new Set('));
+    assert.doesNotMatch(setLiteral.slice(0, setLiteral.indexOf(')')), /'fluxion'|'litellm'/,
+      'a full-colour mark must never take the flatten — it repaints it solid black');
     for (const f of ['src/components/settings/AIProvidersSettings.tsx', 'src/components/ui/BrandMark.tsx']) {
       assert.match(read(f), /WHITE_ON_TRANSPARENT_MARKS\.has\(key\)/,
         `${f} must gate brand-mark-raster on the opt-in set`);

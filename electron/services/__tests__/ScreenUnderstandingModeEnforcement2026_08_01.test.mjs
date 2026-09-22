@@ -121,7 +121,12 @@ describe('resolveVisionPolicy', () => {
     // fluxion is the sharpest case: it resells the real vendors, so a reader
     // scanning for "is this remote?" sees only familiar model names.
     for (const p of ['openai', 'gemini', 'claude', 'groq', 'natively', 'custom_provider',
-                     'litellm', 'nvidia_nim', 'openrouter', 'fluxion']) {
+                     'litellm', 'nvidia_nim', 'openrouter', 'fluxion',
+                     // 9Router is the sharpest case of all: it RUNS on the
+                     // user's machine, so its base URL is a localhost address,
+                     // and it still forwards every request to one of 40+ cloud
+                     // providers. Local binary, remote inference.
+                     'ninerouter']) {
       assert.equal(isLocalVisionProvider(p), false, `${p} routes off-device — counting it as local would ship the screenshot`);
     }
   });

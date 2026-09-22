@@ -1,11 +1,42 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, Check, ChevronDown, Cloud, ExternalLink, HardDrive, KeyRound, Loader2, Monitor, Server, Trash2 } from 'lucide-react';
+import { AlertCircle, Check, ChevronDown, Download, ExternalLink, FolderOpen, HardDrive, KeyRound, Loader2, Monitor, Search, Server, Trash2, X } from 'lucide-react';
 import { useT } from '../../i18n';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { AIP_ACTIVE_SELECT_CONTAINER, AIP_CSS, AipBadge, AipModelList, AipProviderMark, type AipTone } from './AIProvidersSettings';
 import { isMac, isWindows } from '../../utils/platformUtils';
 
 // Embeddings — configured INDEPENDENTLY of the generation model.
+
+function humanBytes(bytes: number): string {
+    if (!Number.isFinite(bytes) || bytes <= 0) return '—';
+    if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
+    if (bytes >= 1e6) return `${Math.round(bytes / 1e6)} MB`;
+    return `${Math.round(bytes / 1e3)} KB`;
+}
+
+export interface LocalCatalogEmbeddingModel {
+    id: string;
+    name: string;
+    runtime: 'onnx' | 'gguf';
+    repo: string;
+    params: string;
+    note: string;
+    bytes: number;
+    dimensions: number;
+    supportedDimensions?: number[];
+    contextLength?: number;
+    recommended: boolean;
+    bundled?: boolean;
+    license: { spdx: string; url: string; commercialUseRestricted: boolean; requiresAcknowledgement: boolean };
+    /** true when requiresAcknowledgement is false, or the user has already acknowledged this model's terms. */
+    acknowledged: boolean;
+    state: 'not-installed' | 'partial' | 'installed';
+    bytesOnDisk: number;
+    selected: boolean;
+    supported: boolean;
+    unsupportedReason: string | null;
+    activatable: boolean;
+}
 
 interface CatalogModel {
     id: string;
@@ -22,7 +53,7 @@ interface CatalogModel {
 }
 
 interface CatalogProvider {
-    id: 'natively' | 'ollama' | 'custom' | 'openrouter' | 'voyage' | 'openai' | 'gemini' | 'local';
+    id: 'natively' | 'ollama' | 'custom' | 'openrouter' | 'ninerouter' | 'voyage' | 'openai' | 'gemini' | 'local';
     name: string;
     cloud: boolean;
     managed?: boolean;
@@ -57,6 +88,7 @@ interface ActiveDescription {
     configured: boolean;
     provider?: string | null;
     model?: string | null;
+    catalogId?: string | null;
     dimensions?: number | null;
     space?: string | null;
     location?: 'on-device' | 'cloud' | 'unknown';
@@ -151,6 +183,7 @@ interface EmbeddingSelectOption { id: string; name: string; triggerName?: string
  */
 interface EmbeddingModelSelectProps {
     value: string;
+    displayLabel?: string;
     options: EmbeddingSelectOption[];
     onChange: (value: string) => void;
     placeholder?: string;
@@ -170,6 +203,7 @@ interface EmbeddingModelSelectProps {
 
 const EmbeddingModelSelect: React.FC<EmbeddingModelSelectProps> = ({
     value,
+    displayLabel,
     options,
     onChange,
     placeholder,
@@ -194,9 +228,10 @@ const EmbeddingModelSelect: React.FC<EmbeddingModelSelectProps> = ({
     }, []);
 
     const selectedOption = options.find(o => o.id === value);
-    const resolvedLabel = selectedOption
-        ? (selectedOption.triggerName || selectedOption.name)
-        : (placeholder || t('Select model'));
+    const resolvedLabel = displayLabel
+        || (selectedOption ? (selectedOption.triggerName || selectedOption.name) : null)
+        || (value && value.includes('::') ? bareModelName(value.split('::').slice(1).join('::')) : null)
+        || (placeholder || t('Select model'));
 
     return (
         <div className={containerClassName} ref={containerRef}>
@@ -294,11 +329,11 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
     const [configured, setConfigured] = useState<{ mode?: 'auto' | 'manual'; provider?: string; model?: string }>({ mode: 'auto' });
     const [acknowledged, setAcknowledged] = useState(false);
 
+    const [reindexing, setReindexing] = useState(false);
     const [pending, setPending] = useState<string | null>(null);
     const [testingActive, setTestingActive] = useState(false);
     const [activeTestResult, setActiveTestResult] = useState<TestResult | null>(null);
     const [note, setNote] = useState<string | null>(null);
-    const [reindexing, setReindexing] = useState(false);
 
     // Per-provider API Key states
     const [keyState, setKeyState] = useState<Record<string, string>>({ gemini: '', openai: '', custom: '' });
@@ -314,6 +349,43 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
     const [endpointSaving, setEndpointSaving] = useState(false);
     const [endpointSaved, setEndpointSaved] = useState(false);
     const [endpointNote, setEndpointNote] = useState<string | null>(null);
+
+    // Local Embedding Models (Bundled & Downloadable)
+    const [localModels, setLocalModels] = useState<LocalCatalogEmbeddingModel[]>([]);
+    const [localModelProgress, setLocalModelProgress] = useState<Record<string, { fraction: number; file: string }>>({});
+    const [busyLocalModelId, setBusyLocalModelId] = useState<string | null>(null);
+    const [testingLocalModelId, setTestingLocalModelId] = useState<string | null>(null);
+    const [localModelTestResults, setLocalModelTestResults] = useState<Record<string, { latencyMs?: number; accelerator?: string; error?: string }>>({});
+    const [localModelError, setLocalModelError] = useState<string | null>(null);
+    const [localFilterTab, setLocalFilterTab] = useState<'all' | 'installed' | 'recommended'>('all');
+    const [localModelQuery, setLocalModelQuery] = useState('');
+    /**
+     * When non-null, the inline license dialog is shown for this model.
+     * The user must accept before install/use proceeds.
+     *
+     * The `pendingAction` field records what the user wanted to do so we can
+     * resume it after acceptance — avoiding an extra button press.
+     */
+    const [licenseDialogModel, setLicenseDialogModel] = useState<{
+        model: LocalCatalogEmbeddingModel;
+        pendingAction: 'install' | 'use';
+    } | null>(null);
+
+    const loadLocalEmbeddingModels = useCallback(async () => {
+        try {
+            const res = await window.electronAPI.listLocalEmbeddingModels?.();
+            if (res) {
+                setLocalModels((res.models ?? []) as LocalCatalogEmbeddingModel[]);
+            }
+        } catch { /* best-effort */ }
+    }, []);
+
+    useEffect(() => {
+        const off = window.electronAPI.onLocalEmbeddingModelProgress?.(({ id, fraction, currentFile }) => {
+            setLocalModelProgress(prev => ({ ...prev, [id]: { fraction, file: currentFile } }));
+        });
+        return () => { off?.(); };
+    }, []);
 
     const refresh = useCallback(async () => {
         try {
@@ -349,10 +421,123 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
             setHasCatalog((c as any)?.hasCatalog ?? {});
             setEndpointDraft(prev => (prev ? prev : (list.find(p => p.id === 'custom')?.endpoint ?? '')));
         } catch { setProviders([]); }
+        try {
+            await loadLocalEmbeddingModels();
+        } catch { /* best-effort */ }
         finally { setLoaded(true); }
-    }, []);
+    }, [loadLocalEmbeddingModels]);
 
     useEffect(() => { void refresh(); }, [refresh]);
+
+    const installLocalModel = useCallback(async (id: string, skipLicenseGuard = false) => {
+        // Guard: model needs licence acknowledgement (skipped when called right after acceptance)
+        if (!skipLicenseGuard) {
+            const m = localModels.find(x => x.id === id);
+            if (m?.license?.requiresAcknowledgement && !m.acknowledged) {
+                setLicenseDialogModel({ model: m, pendingAction: 'install' });
+                return;
+            }
+        }
+        setBusyLocalModelId(id);
+        setLocalModelError(null);
+        try {
+            const res = await window.electronAPI.installLocalEmbeddingModel?.(id);
+            if (res && !res.success) {
+                if (res.error === 'license_not_acknowledged') {
+                    // Backend also guards — sync frontend state and open dialog.
+                    const candidate = localModels.find(x => x.id === id);
+                    if (candidate) setLicenseDialogModel({ model: candidate, pendingAction: 'install' });
+                } else {
+                    setLocalModelError(res.message || res.error || t('Download failed.'));
+                }
+            }
+            await loadLocalEmbeddingModels();
+        } finally {
+            setBusyLocalModelId(null);
+            setLocalModelProgress(prev => { const next = { ...prev }; delete next[id]; return next; });
+        }
+    }, [localModels, loadLocalEmbeddingModels, t]);
+
+    const useLocalModel = useCallback(async (id: string | null, skipLicenseGuard = false) => {
+        // Guard: model needs licence acknowledgement (skipped when called right after acceptance)
+        if (!skipLicenseGuard) {
+            const m = localModels.find(x => x.id === id);
+            if (m?.license?.requiresAcknowledgement && !m.acknowledged) {
+                setLicenseDialogModel({ model: m, pendingAction: 'use' });
+                return;
+            }
+        }
+        setBusyLocalModelId(id ?? localModels.find(m => m.bundled)?.id ?? 'multilingual-e5-small');
+        setLocalModelError(null);
+        try {
+            // No renderer-side deadline: the main process bounds the switch
+            // itself (slot wait + 20s validation probe) and, once the probe
+            // passes, COMMITS the new model and starts the re-index. A shorter
+            // renderer timeout reported "failed" for a switch that then happened.
+            if (!window.electronAPI.useLocalEmbeddingModel) throw new Error(t('API unavailable'));
+            const res = await window.electronAPI.useLocalEmbeddingModel(id);
+            if (res && !res.success) {
+                if (res.error === 'license_not_acknowledged') {
+                    const candidate = localModels.find(x => x.id === id);
+                    if (candidate) setLicenseDialogModel({ model: candidate, pendingAction: 'use' });
+                } else {
+                    setLocalModelError(res.message || res.error || t('Could not activate this embedding model.'));
+                }
+            }
+            setReindexing(!!res?.success && !!res.reindexRequired);
+            await Promise.all([loadLocalEmbeddingModels(), refresh()]);
+        } catch (e: any) {
+            setLocalModelError(e?.message || t('Could not activate this embedding model.'));
+        } finally {
+            setBusyLocalModelId(null);
+        }
+    }, [localModels, loadLocalEmbeddingModels, refresh, t]);
+
+    const removeLocalModel = useCallback(async (id: string) => {
+        setBusyLocalModelId(id);
+        setLocalModelError(null);
+        try {
+            const res = await window.electronAPI.removeLocalEmbeddingModel?.(id);
+            if (res && !res.success) {
+                setLocalModelError(res.message || res.error || t('Could not remove this model.'));
+            }
+            await loadLocalEmbeddingModels();
+        } finally {
+            setBusyLocalModelId(null);
+        }
+    }, [loadLocalEmbeddingModels, t]);
+
+    const testLocalModel = useCallback(async (id: string) => {
+        setTestingLocalModelId(id);
+        try {
+            const callPromise = window.electronAPI.testLocalEmbeddingModel
+                ? window.electronAPI.testLocalEmbeddingModel(id)
+                : Promise.reject(new Error('API unavailable'));
+            let timer: ReturnType<typeof setTimeout> | undefined;
+            const timeoutPromise = new Promise<never>((_, reject) => {
+                timer = setTimeout(() => reject(new Error(t('Inference test timed out after 25 seconds.'))), 25000);
+            });
+            const res = await Promise.race([callPromise, timeoutPromise]).finally(() => clearTimeout(timer));
+            if (res && res.success) {
+                setLocalModelTestResults(prev => ({
+                    ...prev,
+                    [id]: { latencyMs: res.latencyMs, accelerator: res.accelerator },
+                }));
+            } else {
+                setLocalModelTestResults(prev => ({
+                    ...prev,
+                    [id]: { error: res?.message || res?.error || t('Test failed.') },
+                }));
+            }
+        } catch (e: any) {
+            setLocalModelTestResults(prev => ({
+                ...prev,
+                [id]: { error: String(e?.message || e) },
+            }));
+        } finally {
+            setTestingLocalModelId(null);
+        }
+    }, [t]);
 
     const select = useCallback(async (providerId: string, modelId: string, dimensions?: number) => {
         setPending(`${providerId}:${modelId}:${dimensions ?? ''}`);
@@ -512,6 +697,48 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
         } finally { setEndpointSaving(false); }
     }, [endpointDraft, customApiKeyDraft, refresh, t]);
 
+    const installedLocalCount = useMemo(() => {
+        return localModels.filter(m => m.state === 'installed').length;
+    }, [localModels]);
+
+    const totalLocalCount = useMemo(() => localModels.length, [localModels]);
+
+    const installedLocalBytes = useMemo(() => {
+        return localModels.filter(m => m.state === 'installed').reduce((acc, m) => acc + (m.bytesOnDisk || m.bytes), 0);
+    }, [localModels]);
+
+    const recommendedLocalModel = useMemo(() => {
+        return localModels.find(m => m.recommended && m.supported);
+    }, [localModels]);
+
+    const selectedLocalModel = useMemo(() => {
+        return localModels.find(m => m.selected);
+    }, [localModels]);
+
+    const activeLocalModel = useMemo(() => {
+        if (active.provider !== 'local') return null;
+        const key = active.catalogId || active.model;
+        // The built-in row is whichever catalog entry is `bundled` (multilingual-e5-small
+        // since 2026-09-22), never a hardcoded id.
+        if (!key) return localModels.find(m => m.bundled) ?? null;
+        return localModels.find(m => m.id === key || m.repo === key) ?? null;
+    }, [active, localModels]);
+
+    const filteredLocalModels = useMemo(() => {
+        return localModels.filter(m => {
+            if (localFilterTab === 'installed' && m.state !== 'installed') return false;
+            if (localFilterTab === 'recommended' && !m.recommended) return false;
+            if (localModelQuery.trim()) {
+                const q = localModelQuery.toLowerCase().trim();
+                const matchesName = m.name.toLowerCase().includes(q);
+                const matchesParams = m.params.toLowerCase().includes(q);
+                const matchesNote = m.note?.toLowerCase().includes(q) ?? false;
+                return matchesName || matchesParams || matchesNote;
+            }
+            return true;
+        });
+    }, [localModels, localFilterTab, localModelQuery]);
+
     const activeOptions: EmbeddingSelectOption[] = useMemo(() => {
         const fromCatalogue = providers
             .flatMap(p => {
@@ -559,11 +786,20 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
     // does not carry (a non-recommended pick, or a catalogue that has not loaded
     // yet). It follows the trigger's rule, not the menu's: bare model name.
     const activeDisplayLabel = useMemo(() => {
+        if (active.provider === 'local') {
+            if (activeLocalModel) return activeLocalModel.name;
+            if (active.catalogId) {
+                const found = localModels.find(m => m.id === active.catalogId);
+                if (found) return found.name;
+            }
+            if (active.model) return bareModelName(active.model);
+            return 'MiniLM L6 v2';
+        }
         if (!active.model) return t('Select embedding model');
         const matched = activeOptions.find(o => o.id === activeOptionId);
         if (matched) return matched.triggerName || matched.name;
         return bareModelName(active.model);
-    }, [active, activeOptionId, activeOptions, t]);
+    }, [active, activeOptionId, activeOptions, activeLocalModel, localModels, t]);
 
     const activeModelDetails = useMemo(() => {
         if (!active.configured) return null;
@@ -571,12 +807,22 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
         const providerId = active.provider || 'local';
         // Display fallback only, when the status carries no model. Names the
         // model actually bundled since 2026-09-22 (electron/rag/bundledLocalEmbedding.ts).
-        const modelId = active.model || 'Xenova/multilingual-e5-small';
+        const modelId = active.model || active.catalogId || 'Xenova/multilingual-e5-small';
+
+        if (providerId === 'local') {
+            const modelName = activeLocalModel?.name || (active.catalogId ? localModels.find(m => m.id === active.catalogId)?.name : null) || bareModelName(modelId);
+            const dims = active.dimensions || activeLocalModel?.dimensions || 384;
+            return {
+                dims,
+                providerName: t('On-device'),
+                modelLabel: modelName,
+            };
+        }
 
         const prov = providers.find(p => p.id === providerId);
         const mod = prov?.models.find(m => m.id === modelId);
 
-        const dims = active.dimensions || mod?.dimensions || (providerId === 'gemini' ? 3072 : providerId === 'openai' ? 1536 : providerId === 'local' ? 384 : 768);
+        const dims = active.dimensions || mod?.dimensions || (providerId === 'gemini' ? 3072 : providerId === 'openai' ? 1536 : 768);
 
         /* No location segment. "Cloud" / "On-device" was a third clause on a
            line that is already dimensions + a re-index warning, and the
@@ -585,10 +831,15 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
         return {
             dims,
             providerName: prov?.name || providerId,
-            modelLabel: mod?.label || modelId,
+            modelLabel: mod?.label || bareModelName(modelId),
         };
-    }, [active, providers]);
+    }, [active, providers, activeLocalModel, localModels, t]);
 
+    // This FILTERS as well as orders — `CARD_ORDER.map(...).filter(...)` below —
+    // so a provider the catalogue returns but this list omits is silently
+    // invisible in the panel. 9Router is deliberately left out (owner decision,
+    // 2026-09-22): it is configured under AI Providers, and an already-chosen
+    // 9Router embedding model stays selectable in the active-model control.
     const CARD_ORDER = ['gemini', 'openai', 'voyage', 'openrouter', 'ollama', 'custom'] as const;
     const cardProviders = useMemo(
         () => CARD_ORDER
@@ -634,6 +885,8 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
         // because the control states it authoritatively right beside them.
         // (Voyage's domain models — code-4, finance-2, law-2 — are fixed at 1024;
         // the control renders disabled for those rather than disappearing.)
+        // Models with no documented widths fall to `fixedWidth` below and render
+        // the control disabled, which is the same treatment ada-002 already gets.
         const hasWidthPicker = p.id === 'gemini' || p.id === 'openai' || p.id === 'voyage' || p.id === 'openrouter';
         const enabled = isActiveProvider && active.model ? [active.model] : [];
         const isCloudWithKey = (p.id === 'gemini' || p.id === 'openai' || p.id === 'openrouter' || p.id === 'voyage');
@@ -652,11 +905,11 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                     {badge && <AipBadge tone={badge.tone} label={badge.label} />}
 
                     <div className="ml-auto flex items-center gap-2 shrink-0">
-                        <span className="aip-meta inline-flex items-center gap-1.5">
-                            {p.cloud
-                                ? <><Cloud size={12} strokeWidth={1.75} /> {t('Cloud')}</>
-                                : <><HardDrive size={12} strokeWidth={1.75} /> {t('On-device')}</>}
-                        </span>
+                        {!p.cloud && (
+                            <span className="aip-meta inline-flex items-center gap-1.5">
+                                <HardDrive size={12} strokeWidth={1.75} /> {t('On-device')}
+                            </span>
+                        )}
 
                         {keyUrl && (
                             <button
@@ -940,6 +1193,299 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
         );
     };
 
+    const renderLocalEmbeddingRow = (m: LocalCatalogEmbeddingModel) => {
+        const installed = m.state === 'installed';
+        const busy = busyLocalModelId === m.id;
+        const prog = localModelProgress[m.id];
+        const locked = busyLocalModelId !== null || testingLocalModelId !== null;
+        const needsLicence = !!m.license?.requiresAcknowledgement && !m.acknowledged;
+        const test = localModelTestResults[m.id];
+        const isSelected = active.provider === 'local' && (
+            (activeLocalModel ? m.id === activeLocalModel.id : false) ||
+            m.selected ||
+            (m.bundled && (!selectedLocalModel || selectedLocalModel.bundled))
+        );
+
+        const acceptLicence = async () => {
+            const res = await window.electronAPI.acknowledgeLocalEmbeddingCatalogModel?.(m.id);
+            if (!res?.success) return;
+            // Clear dialog state FIRST so the resumed callback doesn't re-open it,
+            // then resume with skipLicenseGuard: localModels is still stale here.
+            const pendingAction = licenseDialogModel?.pendingAction;
+            setLicenseDialogModel(null);
+            void loadLocalEmbeddingModels();
+            if (pendingAction === 'use' && m.state === 'installed') void useLocalModel(m.id, true);
+            else void installLocalModel(m.id, true);
+        };
+
+        return (
+            <div
+                key={m.id}
+                className="aip-card p-3 space-y-1.5 transition-colors hover:bg-white/[0.03]"
+                data-active={isSelected ? 'true' : undefined}
+            >
+                <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap sm:flex-nowrap">
+                        <span
+                            aria-hidden="true"
+                            className={`w-1.5 h-1.5 rounded-full shrink-0 ${isSelected ? 'bg-[var(--aip-accent)]' : installed ? 'bg-[var(--aip-tertiary)]' : 'border border-[var(--aip-border-strong)]'}`}
+                        />
+                        <span className="text-xs font-semibold text-white truncate">{m.name}</span>
+                        {m.bundled && <AipBadge tone="neutral" label={t('Included')} />}
+                        {isSelected && <AipBadge tone="ok" label={t('In use')} />}
+                    </div>
+
+                    <div className="shrink-0 flex items-center gap-1.5">
+                        {needsLicence ? (
+                            <button
+                                type="button"
+                                className="aip-btn"
+                                data-size="sm"
+                                disabled={busyLocalModelId !== null}
+                                onClick={() => void acceptLicence()}
+                                title={t('Accept the licence terms to enable download and activation')}
+                            >
+                                <Check size={12} strokeWidth={1.75} aria-hidden="true" />
+                                <span>{t('Accept licence')}</span>
+                            </button>
+                        ) : (
+                            <>
+                                {!installed && (busy ? (
+                                    <button
+                                        type="button"
+                                        className="aip-btn"
+                                        data-size="sm"
+                                        onClick={() => void window.electronAPI.cancelLocalEmbeddingModel?.(m.id)}
+                                    >
+                                        <X size={12} strokeWidth={1.75} aria-hidden="true" />
+                                        <span>{t('Cancel')}</span>
+                                    </button>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        className="aip-btn"
+                                        data-size="sm"
+                                        disabled={locked}
+                                        onClick={() => void installLocalModel(m.id)}
+                                    >
+                                        <Download size={12} strokeWidth={1.75} aria-hidden="true" />
+                                        <span>{t('Download')}</span>
+                                    </button>
+                                ))}
+                                {installed && !isSelected && (
+                                    <button
+                                        type="button"
+                                        className="aip-btn"
+                                        data-size="sm"
+                                        disabled={locked}
+                                        onClick={() => void useLocalModel(m.id)}
+                                    >
+                                        {busy ? <Loader2 size={12} className="animate-spin" aria-hidden="true" /> : null}
+                                        <span>{t('Use')}</span>
+                                    </button>
+                                )}
+                                {installed && (
+                                    <button
+                                        type="button"
+                                        className="aip-btn"
+                                        data-size="sm"
+                                        disabled={locked}
+                                        onClick={() => void testLocalModel(m.id)}
+                                        title={t('Measure how long one embedding takes on this device')}
+                                    >
+                                        <span>{testingLocalModelId === m.id ? t('Testing…') : t('Test')}</span>
+                                    </button>
+                                )}
+                                {installed && !isSelected && !m.bundled && (
+                                    <button
+                                        type="button"
+                                        className="aip-btn"
+                                        data-size="sm"
+                                        data-variant="danger-ghost"
+                                        disabled={locked}
+                                        onClick={() => void removeLocalModel(m.id)}
+                                        title={t('Remove model')}
+                                    >
+                                        <Trash2 size={12} strokeWidth={1.75} aria-hidden="true" />
+                                    </button>
+                                )}
+                            </>
+                        )}
+                    </div>
+                </div>
+
+                <div className="text-[10.5px] aip-muted pl-3.5 flex items-center gap-2 flex-wrap">
+                    <span>
+                        {[`${m.dimensions}d`, m.params, humanBytes(m.bytes), m.license.spdx, m.license.commercialUseRestricted ? t('non-commercial') : null]
+                            .filter(Boolean).join(' · ')}
+                    </span>
+                    {test?.latencyMs !== undefined && (
+                        <span className="text-[var(--aip-secondary)]">{`${test.latencyMs} ms · ${test.accelerator}`}</span>
+                    )}
+                    {test?.error && <span className="aip-danger-fg">{test.error}</span>}
+                </div>
+
+                {m.note && (
+                    <p className="text-[10px] aip-muted leading-relaxed pl-3.5 text-white/60">{m.note}</p>
+                )}
+
+                {needsLicence && (
+                    <div className="aip-inline-warn flex items-start gap-2 ml-3.5 mt-1" role="note">
+                        <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
+                        <span className="min-w-0">
+                            {t('Licence requires acceptance before downloading.')}
+                            {m.license.url && (
+                                <>
+                                    {' '}
+                                    <a
+                                        href={m.license.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="underline hover:opacity-80 inline-flex items-center gap-0.5"
+                                        aria-label={`${t('View')} ${m.license.spdx} ${t('licence')}`}
+                                    >
+                                        {m.license.spdx} <ExternalLink size={9} strokeWidth={1.75} aria-hidden="true" />
+                                    </a>
+                                </>
+                            )}
+                        </span>
+                    </div>
+                )}
+
+                {busy && prog && (
+                    <div className="space-y-1 pl-3.5 pt-1">
+                        <div className="h-1 w-full bg-white/10 rounded-full overflow-hidden">
+                            <div className="h-full bg-[var(--aip-accent)] transition-all duration-150" style={{ width: `${Math.round(prog.fraction * 100)}%` }} />
+                        </div>
+                        <div className="text-[10px] aip-muted flex justify-between">
+                            <span>{`${Math.round(prog.fraction * 100)}% · ${prog.file}`}</span>
+                            <span>{`${humanBytes(Math.round(prog.fraction * m.bytes))} / ${humanBytes(m.bytes)}`}</span>
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    const renderLocalEmbeddingSection = (title: string, models: LocalCatalogEmbeddingModel[]) => (
+        models.length > 0 && (
+            <section className="space-y-1.5">
+                <header className="flex items-baseline justify-between gap-3 px-1">
+                    <h5 className="text-[10px] font-bold uppercase tracking-wider text-[var(--aip-secondary)]">
+                        {title}
+                    </h5>
+                    <span className="text-[10px] tabular-nums text-[var(--aip-tertiary)]">
+                        {models.filter(m => m.state === 'installed').length}/{models.length}
+                    </span>
+                </header>
+                <div className="space-y-1.5">{models.map(renderLocalEmbeddingRow)}</div>
+            </section>
+        )
+    );
+
+    const renderLocalEmbeddingLibraryCard = () => {
+        const isLocalActive = active.provider === 'local';
+        const filterTabStyle = (tab: typeof localFilterTab) => ({
+            background: localFilterTab === tab ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+            fontWeight: localFilterTab === tab ? 600 : 400,
+        });
+
+        return (
+            <div className="aip-card aip-provider space-y-3">
+                <div className="aip-provider-head">
+                    <PlatformMark />
+                    <h4 className="aip-card-title truncate min-w-0">{t('Local Embeddings')}</h4>
+                    <div className="ml-auto flex items-center gap-2 shrink-0">
+                        <span className="aip-meta inline-flex items-center gap-1.5">
+                            <HardDrive size={12} strokeWidth={1.75} /> {t('On-device')}
+                        </span>
+                        <AipBadge tone={isLocalActive ? 'ok' : 'neutral'} label={isLocalActive ? t('Active') : t('Ready')} />
+                    </div>
+                </div>
+
+                <div className="flex items-center justify-between gap-3 flex-wrap text-[10px] aip-muted px-1">
+                    <p className="min-w-0 flex-1">
+                        {t('Runs on this device with zero data sent externally. Built-in MiniLM model shipped with Natively, or download open models directly from Hugging Face.')}
+                    </p>
+                    <span className="shrink-0 inline-flex items-center gap-2">
+                        <span className="font-medium tabular-nums text-white/70">
+                            {installedLocalCount}/{totalLocalCount} {t('installed')}
+                            {installedLocalBytes > 0 && <> · {humanBytes(installedLocalBytes)}</>}
+                        </span>
+                        <button
+                            type="button"
+                            className="aip-btn"
+                            data-size="sm"
+                            data-variant="ghost"
+                            onClick={() => void window.electronAPI.revealLocalEmbeddingModelsFolder?.()}
+                            title={t('Open local models folder in file manager')}
+                        >
+                            <FolderOpen size={12} strokeWidth={1.75} aria-hidden="true" />
+                        </button>
+                    </span>
+                </div>
+
+                <div className="flex items-center justify-between gap-3 flex-wrap pt-1">
+                    {recommendedLocalModel ? (
+                        <p className="text-[11px] px-1 text-[var(--aip-tertiary)]">
+                            {t('Best for this')} {isMac ? 'Mac' : 'PC'}: <span className="font-medium text-[var(--aip-secondary)]">{recommendedLocalModel.name}</span>
+                        </p>
+                    ) : <div />}
+
+                    <div className="flex items-center gap-1 bg-white/5 p-0.5 rounded-md text-[11px]">
+                        <button type="button" className="px-2 py-0.5 rounded text-white transition-colors" style={filterTabStyle('all')} onClick={() => setLocalFilterTab('all')}>
+                            {t('All')} ({totalLocalCount})
+                        </button>
+                        <button type="button" className="px-2 py-0.5 rounded text-white transition-colors" style={filterTabStyle('installed')} onClick={() => setLocalFilterTab('installed')}>
+                            {t('Installed')} ({installedLocalCount})
+                        </button>
+                        <button type="button" className="px-2 py-0.5 rounded text-white transition-colors" style={filterTabStyle('recommended')} onClick={() => setLocalFilterTab('recommended')}>
+                            {t('Recommended')}
+                        </button>
+                    </div>
+                </div>
+
+                <div className="aip-field">
+                    <Search size={13} strokeWidth={1.75} className="aip-field-icon" aria-hidden="true" />
+                    <input
+                        type="text"
+                        className="aip-input"
+                        value={localModelQuery}
+                        placeholder={t('Filter models by name, size, or format…')}
+                        onChange={(e) => setLocalModelQuery(e.target.value)}
+                    />
+                    {localModelQuery && (
+                        <button
+                            type="button"
+                            className="aip-btn text-[10px] shrink-0"
+                            data-size="sm"
+                            data-variant="ghost"
+                            onClick={() => setLocalModelQuery('')}
+                        >
+                            <X size={12} strokeWidth={1.75} aria-hidden="true" />
+                        </button>
+                    )}
+                </div>
+
+                {localModelError && (
+                    <div className="aip-inline-warn flex items-start gap-2" role="status">
+                        <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
+                        <span className="min-w-0">{localModelError}</span>
+                    </div>
+                )}
+
+                <div className="aip-well aip-scroll-y p-2.5 space-y-3.5" style={{ maxHeight: 380 }}>
+                    {renderLocalEmbeddingSection(t('Bundled with Natively'), filteredLocalModels.filter(m => m.bundled))}
+                    {renderLocalEmbeddingSection(t('Hugging Face ONNX Models'), filteredLocalModels.filter(m => !m.bundled && m.runtime === 'onnx'))}
+                    {renderLocalEmbeddingSection(t('Hugging Face GGUF Models'), filteredLocalModels.filter(m => !m.bundled && m.runtime === 'gguf'))}
+                    {filteredLocalModels.length === 0 && (
+                        <p className="text-[10px] aip-muted text-center py-4">{t('No models match your current filter query.')}</p>
+                    )}
+                </div>
+            </div>
+        );
+    };
+
     /* The Active Embedding Model card: the decision this panel exists to make.
        On the combined Retrieval page it sits above the Embedding/Reranker
        switcher, so it stays readable no matter which sub-tab is open. */
@@ -949,10 +1495,6 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
             <div className="aip-card p-5">
                 <div className="flex items-center justify-between gap-4 flex-wrap sm:flex-nowrap">
                     <div className="min-w-0 flex-1">
-                        {/* No "Lightweight" badge. AI Providers' own rule is that a
-                            badge carries only what NO other control already says —
-                            and the notice below states it in words, with the reason
-                            and a way to dismiss it. The badge was an echo. */}
                         <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">
                             {t('Active Embedding Model')}
                         </label>
@@ -968,25 +1510,24 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                     <div className="shrink-0">
                         <EmbeddingModelSelect
                             value={activeOptionId}
+                            displayLabel={activeDisplayLabel}
                             options={activeOptions}
                             placeholder={activeDisplayLabel}
                             disabled={!!pending || activeOptions.length === 0}
                             onChange={(id) => {
                                 const [providerId, ...rest] = id.split('::');
-                                void select(providerId, rest.join('::'));
+                                const modelId = rest.join('::');
+                                if (providerId === 'local' && modelId) {
+                                    void useLocalModel(modelId);
+                                } else {
+                                    void select(providerId, modelId);
+                                }
                             }}
                         />
                     </div>
                 </div>
 
                 {active.lightweight && !acknowledged && (
-                    /* mt-3, not pt-3. `.aip-inline-warn` sets `padding: 8px 10px`
-                       as a SHORTHAND, and AIP_CSS is injected into the body —
-                       later in document order than Tailwind's sheet — so at equal
-                       specificity the shorthand wins and a `pt-*` on this element
-                       emits nothing. The strip was sitting flush against the
-                       "384 dimensions · …" line with no separation at all
-                       (measured: 0px). Margin is unset by the class, so it lands. */
                     <div className="aip-inline-warn flex items-start gap-2 mt-3" role="status">
                         <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
                         <span className="min-w-0">
@@ -1032,13 +1573,16 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
             <SkeletonProviderCard />
             <SkeletonProviderCard />
         </div>
-    ) : cardProviders.length === 0 ? (
-        <div className="aip-card aip-card-dashed text-center py-8">
-            <p className="text-xs aip-muted">{t('No configurable embedding providers were found.')}</p>
-        </div>
     ) : (
         <div className="aip-cq space-y-4">
-            {cardProviders.map(renderProvider)}
+            {/* Local Embeddings sits after OpenRouter, before Ollama and Custom endpoint. */}
+            {cardProviders.map(p => (
+                <React.Fragment key={p.id}>
+                    {renderProvider(p)}
+                    {p.id === 'openrouter' && renderLocalEmbeddingLibraryCard()}
+                </React.Fragment>
+            ))}
+            {!cardProviders.some(p => p.id === 'openrouter') && renderLocalEmbeddingLibraryCard()}
         </div>
     );
 

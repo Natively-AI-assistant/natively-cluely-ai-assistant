@@ -144,10 +144,16 @@ const GEMINI_PRO_MODEL = "gemini-3.1-pro-preview"
 const GROQ_MODEL = GROQ_PRIMARY_MODEL
 import { GROQ_VISION_MODEL } from './llm/groqModels'
 import { stripLeadingReasoningBlock } from './llm/reasoningTagFilter'
+import { describeNinerouterFailure, NINEROUTER_EMPTY_ANSWER } from './llm/ninerouterErrors'
 import { renderUserInstructionSystemLayer } from './llm/userInstructionContract'
 // Groq rejects a request carrying more than 5 images. Every other vision
 // provider here takes as many as we send, so the cap lives on the Groq path.
 const GROQ_VISION_MAX_IMAGES = 5
+// How long the vision chain waits for a cold Ollama vision-model probe before
+// seating the other providers without it, and how long an empty result is
+// trusted. The probe itself can take 5s per request against a hung daemon.
+const OLLAMA_VISION_CHAIN_PROBE_BUDGET_MS = 1500
+const OLLAMA_VISION_NEGATIVE_TTL_MS = 30_000
 const OPENAI_MODEL = "gpt-5.4"
 const CLAUDE_MODEL = "claude-sonnet-4-6"
 const DEEPSEEK_MODEL = "deepseek-v4-flash"
@@ -200,6 +206,32 @@ const LITELLM_MAX_TOKENS_MIN = 256
 const LITELLM_MAX_TOKENS_MAX = 1048576 // 1M — Gemini-class ceilings exist behind proxies
 // /model/info budgets are cached this long; the proxy's model list rarely churns.
 const LITELLM_MODEL_INFO_TTL_MS = 5 * 60_000
+// 9Router answers budgets AND context windows on /v1/models itself, so
+// unlike LiteLLM there is no second /model/info round-trip: these are only
+// the clamp and the fallback for a model its catalogue does not describe.
+// The default deliberately mirrors 9Router's own DEFAULT_CAPABILITIES
+// (open-sse/providers/capabilities.js, maxOutput 64000), so an undescribed
+// model is treated the way 9Router itself would treat it rather than the way
+// a different proxy would.
+const NINEROUTER_DEFAULT_MAX_OUTPUT_TOKENS = 64000
+const NINEROUTER_MAX_TOKENS_MIN = 256
+const NINEROUTER_MAX_TOKENS_MAX = 1048576
+const NINEROUTER_MODELS_TTL_MS = 5 * 60_000
+// Mirrors NINEROUTER_THINKING_LEVELS in src/utils/modelUtils.ts. electron/
+// never imports from src/, so the list is restated; the settings dropdown
+// and this validator have to agree or a picked level is silently dropped.
+// The UNION of 9Router's per-format level sets (FORMAT_LEVELS in
+// open-sse/providers/thinkingLevels.js). Mirrors NINEROUTER_THINKING_LEVELS
+// in src/utils/modelUtils.ts — electron/ never imports from src/, so the
+// list is restated, and a test pins the two together. A level the picker
+// offers and this validator drops would be a silent no-op.
+/** Sent when the user has expressed no preference. See ninerouterThinkingParam. */
+const NINEROUTER_DEFAULT_THINKING = 'none'
+const NINEROUTER_THINKING_LEVELS: readonly string[] = [
+  'none', 'minimal', 'thinking', 'low', 'medium', 'high', 'xhigh', 'max',
+]
+/** The SDK's own reasoning_effort type, widened to admit 9Router's 'none'. */
+type ReasoningEffortValue = NonNullable<OpenAI.ChatCompletionCreateParams['reasoning_effort']> | 'none'
 const MAX_OUTPUT_TOKENS = 65536
 const CLAUDE_MAX_OUTPUT_TOKENS = 64000
 
@@ -457,6 +489,11 @@ export class LLMHelper {
   // Same pattern as DeepSeek: OpenAI SDK + custom baseURL, separate client so
   // credentials/scope/telemetry stay provider-specific.
   private _litellmClient: OpenAI | null = null
+  // 9Router is a self-hosted fallback proxy, OpenAI-compatible on /v1. Same
+  // shape as LiteLLM — OpenAI SDK against a user-supplied baseURL — and a
+  // separate client for the same reason: credentials, outbound scopes and
+  // telemetry stay provider-specific.
+  private _ninerouterClient: OpenAI | null = null
 
   private get client(): GoogleGenAI | null { return this.isProviderDisabled('gemini') ? null : this._client }
   private set client(v: GoogleGenAI | null) { this._client = v }
@@ -482,6 +519,12 @@ export class LLMHelper {
   private set fluxionAnthropicClient(v: Anthropic | null) { this._fluxionAnthropicClient = v }
   private get litellmClient(): OpenAI | null { return this.isProviderDisabled('litellm') ? null : this._litellmClient }
   private set litellmClient(v: OpenAI | null) { this._litellmClient = v }
+  // This getter IS the disabled-provider guard for 9Router, for the reason the
+  // Fluxion pair above spells out: PROVIDER_LABEL_FAMILY carries no entry for
+  // any gateway, so assertOutboundScopes' backstop never fires here and
+  // returning null is what actually stops a switched-off 9Router being called.
+  private get ninerouterClient(): OpenAI | null { return this.isProviderDisabled('ninerouter') ? null : this._ninerouterClient }
+  private set ninerouterClient(v: OpenAI | null) { this._ninerouterClient = v }
 
   /**
    * The user's switched-off providers, read LIVE on every question.
@@ -536,6 +579,24 @@ export class LLMHelper {
   private litellmModelBudgets: Map<string, number> = new Map()
   private litellmModelBudgetsFetchedAt: number = 0
   private litellmModelBudgetsFetch: Promise<void> | null = null
+  private ninerouterApiKey: string | null = null
+  // 9Router's own default port. Users who expose it through a Cloudflare
+  // tunnel paste that host instead — it is a user endpoint either way.
+  private ninerouterBaseURL: string = "http://localhost:20128/v1"
+  // Manual output-ceiling override (Settings → 9Router dropdown).
+  // null = Auto: resolve per-model from the catalogue.
+  private ninerouterMaxTokens: number | null = null
+  private ninerouterModelBudgets: Map<string, number> = new Map()
+  private ninerouterModelInputCaps: Map<string, number> = new Map()
+  /** Wire ids whose catalogue entry reports `capabilities.vision`. EMPTY
+   *  means UNKNOWN (never "none") — see ninerouterModelSupportsVision. */
+  private ninerouterVisionModels: Set<string> = new Set()
+  /** Thinking level for 9Router-routed models, sent as `reasoning_effort`.
+   *  'auto' (or unset) sends nothing and leaves the upstream's own choice,
+   *  which for some models (Gemini) adapts per prompt and is already fast. */
+  private ninerouterThinking: string | null = null
+  private ninerouterModelsFetchedAt: number = 0
+  private ninerouterModelsFetch: Promise<void> | null = null
   private useOllama: boolean = false
   private ollamaModel: string = ""
   private ollamaUrl: string = "http://127.0.0.1:11434"
@@ -555,6 +616,10 @@ export class LLMHelper {
   private ollamaVisionCache: Map<string, boolean> = new Map();
   // Dedupe concurrent refreshOllamaVisionModel() calls (init + switch + lazy).
   private ollamaVisionRefreshInFlight: Promise<string | null> | null = null;
+  // Until this time (ms epoch), the vision chain skips its bounded Ollama probe:
+  // the last one found nothing vision-capable or ran out of budget. Without it a
+  // user with Ollama selected and no vision model re-paid the probe per screenshot.
+  private ollamaVisionNegativeUntil = 0;
   private ollamaStartedByApp: boolean = false;
   private geminiModel: string = GEMINI_FLASH_MODEL
   private customProvider: CustomProvider | null = null;
@@ -654,7 +719,7 @@ export class LLMHelper {
       const c: any = this.activeCurlProvider;
       return `curl:${c.id}:${c.curlCommand ? String(c.curlCommand).length : ''}`;
     }
-    if (this.isLiteLLMModel(this.currentModelId) || this.isNvidiaNimModel(this.currentModelId) || this.isOpenRouterModel(this.currentModelId) || this.isFluxionModel(this.currentModelId)) {
+    if (this.isLiteLLMModel(this.currentModelId) || this.isNvidiaNimModel(this.currentModelId) || this.isOpenRouterModel(this.currentModelId) || this.isFluxionModel(this.currentModelId) || this.isNinerouterModel(this.currentModelId)) {
       return `model:${this.currentModelId}`;
     }
     return null;
@@ -1029,6 +1094,11 @@ export class LLMHelper {
   private static readonly PROVIDER_LABEL_FAMILY: Readonly<Record<string, string>> = {
     gemini: 'gemini', groq: 'groq', natively: 'natively', openai: 'openai',
     claude: 'claude', deepseek: 'deepseek', litellm: 'litellm', codex: 'codex-cli',
+    // Present so the last-boundary disabled check actually runs: the lookup is
+    // `if (family && ...)`, so an absent entry removes the guard silently
+    // rather than failing. The client getter is the primary guard; this is the
+    // backstop for any path that reaches the provider without passing it.
+    ninerouter: 'ninerouter',
     antigravity: 'antigravity', custom_curl: 'custom', custom_provider: 'custom',
   };
 
@@ -1585,6 +1655,239 @@ export class LLMHelper {
     return Math.min(LITELLM_MAX_TOKENS_MAX, Math.max(LITELLM_MAX_TOKENS_MIN, budget));
   }
 
+  /**
+   * Point the app at a 9Router instance.
+   *
+   * The BASE URL is the presence gate, not the key — 9Router's own
+   * REQUIRE_API_KEY defaults to false, so a stock local install is legitimately
+   * keyless and the OpenAI SDK's non-empty-apiKey requirement is satisfied with
+   * a dummy. A remote or hardened instance DOES require the real key, and its
+   * /v1 POST routes 401 without one even though every GET answers openly.
+   */
+  public setNinerouterConfig(apiKey: string, baseURL: string, maxTokens?: number, thinking?: string | null) {
+    const trimmedURL = (baseURL || '').trim();
+    if (!trimmedURL) {
+      this.ninerouterApiKey = null;
+      this.ninerouterClient = null;
+      this.ninerouterBaseURL = "http://localhost:20128/v1";
+      this.ninerouterMaxTokens = null;
+      this.ninerouterThinking = null;
+      this.ninerouterModelBudgets.clear();
+      this.ninerouterModelInputCaps.clear();
+      this.ninerouterVisionModels.clear();
+      this.ninerouterModelsFetchedAt = 0;
+      console.log("[LLMHelper] 9Router config cleared.");
+      return;
+    }
+    this.ninerouterApiKey = (apiKey || '').trim() || null;
+    this.ninerouterBaseURL = trimmedURL;
+    const n = Number(maxTokens);
+    this.ninerouterMaxTokens = (Number.isFinite(n) && n > 0)
+      ? Math.min(NINEROUTER_MAX_TOKENS_MAX, Math.max(NINEROUTER_MAX_TOKENS_MIN, Math.floor(n)))
+      : null; // Auto
+    this.ninerouterThinking = (thinking || '').trim() || null;
+    // Repointed → the cached budgets describe a different instance's catalogue.
+    this.ninerouterModelBudgets.clear();
+    this.ninerouterModelInputCaps.clear();
+    this.ninerouterVisionModels.clear();
+    this.ninerouterModelsFetchedAt = 0;
+    this.ninerouterClient = new OpenAI({ apiKey: this.ninerouterApiKey || "dummy", baseURL: trimmedURL });
+    console.log(`[LLMHelper] 9Router client initialized with base URL: ${trimmedURL}, max_tokens: ${this.ninerouterMaxTokens ?? 'auto'}`);
+  }
+
+  /**
+   * Refresh the per-model budget cache from 9Router's /v1/models.
+   *
+   * ONE fetch, where LiteLLM needs two: 9Router returns per-model capabilities
+   * and token limits on the model list itself, as `context_length` /
+   * `max_completion_tokens` at the top level and `capabilities.contextWindow` /
+   * `capabilities.maxOutput` nested. Both are read, top level first, because
+   * 9Router emits the snake_case pair precisely so that clients which do not
+   * recurse into nested objects stop guessing the window from the model name.
+   *
+   * Failures are silent — Auto then falls back to the default budget and never
+   * blocks a question. Concurrent callers share one in-flight fetch.
+   */
+  private async refreshNinerouterModelCatalogue(): Promise<void> {
+    if (Date.now() - this.ninerouterModelsFetchedAt < NINEROUTER_MODELS_TTL_MS) return;
+    if (this.ninerouterModelsFetch) return this.ninerouterModelsFetch;
+
+    // The instance this fetch belongs to. setNinerouterConfig can repoint the
+    // app mid-flight; without this tag the OLD instance's reply lands in the
+    // freshly-cleared cache and stamps fetchedAt, pinning another host's
+    // ceilings for the whole TTL.
+    const issuedForBaseURL = this.ninerouterBaseURL;
+    this.ninerouterModelsFetch = (async () => {
+      try {
+        // The configured value already ends in /v1 (that is the base URL
+        // 9Router's dashboard hands out), but accept a bare root too.
+        const root = this.ninerouterBaseURL.replace(/\/+$/, '');
+        const url = /\/v1$/.test(root) ? `${root}/models` : `${root}/v1/models`;
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        // Sent when present even though /v1/models answers without it: a
+        // hardened instance may well require it, and it costs nothing here.
+        if (this.ninerouterApiKey) headers['Authorization'] = `Bearer ${this.ninerouterApiKey}`;
+        const resp = await fetch(url, { method: 'GET', headers, signal: AbortSignal.timeout(5000) });
+        if (!resp.ok) return;
+        const data: any = await resp.json();
+        const fresh = new Map<string, number>();
+        const freshInput = new Map<string, number>();
+        const freshVision = new Set<string>();
+        for (const entry of (data?.data || [])) {
+          const name = entry?.id;
+          // typeof, not truthiness. A numeric id (42) is truthy, becomes a
+          // NUMBER key in these string-keyed Maps/Sets, and every later lookup
+          // misses silently — the model reads as "no budget" and "not
+          // vision-capable" while occupying a cache slot.
+          // listNinerouterEmbeddingModels already gets this right.
+          if (typeof name !== 'string' || !name) continue;
+          // Per-model vision, which no other gateway here can answer. 30 of
+          // the 47 models a stock instance serves report true and 17 report
+          // false, so this is the difference between routing a screenshot to
+          // a model that can read it and burning an attempt on one that
+          // cannot.
+          if (entry?.capabilities?.vision === true) freshVision.add(name);
+          const budget = Number(entry?.max_completion_tokens ?? entry?.capabilities?.maxOutput);
+          if (Number.isFinite(budget) && budget > 0) fresh.set(name, Math.floor(budget));
+          const inputCap = Number(entry?.context_length ?? entry?.capabilities?.contextWindow);
+          if (Number.isFinite(inputCap) && inputCap > 0) freshInput.set(name, Math.floor(inputCap));
+        }
+        if (this.ninerouterBaseURL !== issuedForBaseURL) {
+          console.log('[LLMHelper] 9Router /v1/models reply discarded — the instance was repointed while it was in flight.');
+          return;
+        }
+        this.ninerouterModelBudgets = fresh;
+        this.ninerouterModelInputCaps = freshInput;
+        this.ninerouterVisionModels = freshVision;
+        console.log(`[LLMHelper] 9Router /v1/models: cached budgets for ${fresh.size} model(s) `
+          + `(${freshInput.size} with a context window)`);
+      } catch {
+        // Instance down, unreachable or mid-restart — Auto falls back to the
+        // default budget and the user can always set a manual value.
+      } finally {
+        // Stamp on failure too (negative cache), or an unreachable instance adds
+        // up to 5s to EVERY question. Never stamp for an instance we are no
+        // longer pointed at, or the repoint's cache reset is silently undone.
+        if (this.ninerouterBaseURL === issuedForBaseURL) {
+          this.ninerouterModelsFetchedAt = Date.now();
+        }
+        this.ninerouterModelsFetch = null;
+      }
+    })();
+    return this.ninerouterModelsFetch;
+  }
+
+  /**
+   * Effective max_tokens for a 9Router-routed model. Manual override wins;
+   * otherwise the catalogue's budget for this model; otherwise the default.
+   */
+  private async resolveNinerouterMaxTokens(ninerouterModel: string): Promise<number> {
+    // The refresh runs BEFORE the manual-override return, and that ordering is
+    // load-bearing. This is the catalogue's only caller, so returning early
+    // meant that choosing a fixed Max Output Tokens in Settings left it
+    // permanently unfetched: `ninerouterVisionModels` stayed empty, its
+    // "empty means unknown" fallback then answered true for every model, and the
+    // per-model vision gate -- the one thing this provider does that LiteLLM
+    // cannot -- was silently dead. `ninerouterModelInputCaps` starved with it,
+    // so fitContextForCurrentModel never trimmed either.
+    //
+    // It is TTL-guarded, negative-cached and ~45ms, so running it here is free.
+    await this.refreshNinerouterModelCatalogue();
+    if (this.ninerouterMaxTokens !== null) return this.ninerouterMaxTokens; // manual override
+    const budget = this.ninerouterModelBudgets.get(ninerouterModel) ?? NINEROUTER_DEFAULT_MAX_OUTPUT_TOKENS;
+    return Math.min(NINEROUTER_MAX_TOKENS_MAX, Math.max(NINEROUTER_MAX_TOKENS_MIN, budget));
+  }
+
+  /**
+   * Can this 9Router model read an image?
+   *
+   * The one place this integration deliberately does NOT copy LiteLLM.
+   * LiteLLM's vision builder seats every proxied model as vision-capable and
+   * says why: the proxy fronts arbitrary upstreams and "gating on a guess
+   * is what produced 'no vision provider configured' for users who had one".
+   * That reasoning is sound for LiteLLM, whose /model/info says nothing about
+   * modalities. 9Router's /v1/models DOES — `capabilities.vision`, per model,
+   * 30 true and 17 false on a stock instance.
+   *
+   * So: a model the catalogue calls text-only is refused. And the cost of NOT
+   * refusing it is worse than a wasted attempt — measured against the live
+   * instance, sending an image to a text-only model returns HTTP 200. 9Router
+   * does not reject it; the upstream simply answers without having seen it. So
+   * the alternative to this gate is not an error the chain can fail over from,
+   * it is a confident answer that silently ignored the user's screenshot.
+   *
+   * But an EMPTY set means the catalogue has not been fetched — cold cache,
+   * cleared cache, or the instance down at discovery time — and that is
+   * UNKNOWN, never "no". Failing closed there would reproduce LiteLLM's bug
+   * exactly.
+   */
+  private ninerouterModelSupportsVision(modelId: string): boolean {
+    if (!this.isNinerouterModel(modelId)) return false;
+    if (this.ninerouterVisionModels.size === 0) return true; // unknown, not "no"
+    return this.ninerouterVisionModels.has(this.ninerouterWireModel(modelId));
+  }
+
+  /**
+   * The wire ids this instance's catalogue reports as vision-capable.
+   *
+   * Exposed because VisionProviderRegistry runs in the main process without a
+   * handle on this cache and must answer the same question synchronously — so
+   * the IPC discovery path persists this list and the registry reads it back.
+   * Empty means the catalogue has not been fetched, which is UNKNOWN.
+   */
+  public getNinerouterVisionModels(): string[] {
+    return [...this.ninerouterVisionModels];
+  }
+
+  /**
+   * The thinking parameter for a 9Router request, or nothing.
+   *
+   * `reasoning_effort` is the control 9Router honours across formats —
+   * verified live, and monotonic (none < low < medium < high) rather than
+   * accepted-and-ignored, which is the OpenRouter `output_dimension` failure
+   * this repo has been bitten by before.
+   *
+   * Sending nothing is deliberate for 'auto': the upstream's own default is
+   * not uniformly slow (Gemini varies effort per prompt and was the fastest
+   * setting measured), so pinning a level is a user choice rather than a fix.
+   *
+   * An unrecognised stored value sends NOTHING rather than reaching the
+   * wire: settings outlive code, and a stale level must not turn every
+   * question into a 400.
+   */
+  private ninerouterThinkingParam(): { reasoning_effort?: ReasoningEffortValue } {
+    const level = (this.ninerouterThinking || '').trim();
+    // DEFAULT IS NO THINKING. 9Router's own default reasons hard, and on a
+    // free/cheap-tier aggregator that is the difference between a ~1s answer and
+    // a multi-second one. 'auto' is the explicit opt-out for users who would
+    // rather the model decide — and it is a real choice, not a worse one: Gemini
+    // varies its own effort per prompt and was the fastest setting measured.
+    //
+    // 'none' is sent as canonical INTENT, not as a literal. applyFormat()
+    // translates it per backend — disabling where the format supports it, and
+    // clamping to the model's floor where it does not (gemini-level has no off,
+    // so it lands on minimal). That is why one value is safe across formats.
+    if (!level) return { reasoning_effort: NINEROUTER_DEFAULT_THINKING };
+    if (level === 'auto') return {};
+    // Cast is confined to THIS line on purpose. The OpenAI SDK types
+    // reasoning_effort as its own union which does not include 'none' — but
+    // 9Router honours 'none' and it is the fastest setting there is (3963ms ->
+    // 721ms on gemini-3.5-flash-lite, measured). Casting the whole request
+    // instead would destroy the `stream: true` literal that picks the
+    // streaming overload, which is how the first attempt at this broke.
+    return NINEROUTER_THINKING_LEVELS.includes(level)
+      ? { reasoning_effort: level as ReasoningEffortValue }
+      // A stale level from an older build falls back to the default rather than
+      // to silence, so it keeps the fast path instead of quietly becoming Auto.
+      : { reasoning_effort: NINEROUTER_DEFAULT_THINKING };
+  }
+
+  /** The wire id: one segment off, never two. `ninerouter/openai/gpt-5` is
+   *  `openai/gpt-5` to 9Router, whose catalogue is namespaced by upstream. */
+  private ninerouterWireModel(modelId: string): string {
+    return (modelId || '').replace(/^ninerouter\//, '');
+  }
+
   public setNativelyKey(key: string | null): void {
     this.nativelyKey = key || null;
     console.log(`[LLMHelper] Natively key ${key ? 'set' : 'cleared'}`);
@@ -1658,7 +1961,7 @@ export class LLMHelper {
   // these named entry points so the surface stays auditable.
 
   public async runVisionRequest(
-    providerId: 'natively' | 'openai' | 'claude' | 'gemini_flash_lite' | 'gemini_flash' | 'gemini_pro' | 'groq_scout' | 'custom' | 'litellm' | 'nvidia_nim' | 'openrouter' | 'fluxion',
+    providerId: 'natively' | 'openai' | 'claude' | 'gemini_flash_lite' | 'gemini_flash' | 'gemini_pro' | 'groq_scout' | 'custom' | 'litellm' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'ninerouter',
     userPrompt: string,
     systemPrompt: string,
     imagePath: string,
@@ -1695,6 +1998,8 @@ export class LLMHelper {
         return this.generateWithOpenRouter(userPrompt, systemPrompt, [imagePath]);
       case 'fluxion':
         return this.generateWithFluxion(userPrompt, systemPrompt, [imagePath]);
+      case 'ninerouter':
+        return this.generateWithNinerouter(userPrompt, systemPrompt, [imagePath]);
       case 'gemini_flash_lite':
       case 'gemini_flash':
       case 'gemini_pro': {
@@ -1807,6 +2112,13 @@ export class LLMHelper {
     // and the direct-assist chain at once, so none of them depends on branch
     // order staying correct.
     if (this.isFluxionModel(modelId)) return false;
+    // Third gateway, same line of defence, and the one that needs it most
+    // literally: 9Router's catalogue IS vendor-namespaced, so
+    // `ninerouter/openai/gpt-5` satisfies BOTH the startsWith("gpt-") test
+    // (no) and the includes("openai") catch-all (yes) below. Without this the
+    // request goes to api.openai.com on the user's own key and answers
+    // perfectly, which is what makes it so hard to see.
+    if (this.isNinerouterModel(modelId)) return false;
     return modelId.startsWith("gpt-") || modelId.startsWith("o1-") || modelId.startsWith("o3-") || modelId.includes("openai");
   }
 
@@ -1825,6 +2137,27 @@ export class LLMHelper {
 
   private isLiteLLMModel(modelId: string): boolean {
     return !!modelId && modelId.startsWith("litellm/");
+  }
+
+  /**
+   * MUST be tested before isOpenAiModel/isGroqModel/isGeminiModel everywhere it
+   * is used — and, because that is easy to get wrong once and never notice,
+   * isOpenAiModel excludes it directly rather than relying on branch order.
+   *
+   * 9Router ids are vendor-namespaced (`ninerouter/openai/gpt-5`,
+   * `ninerouter/gemini/gemini-3.6-flash`, `ninerouter/cc/claude-opus-5`), so the
+   * vendor segment inside the id is a live match for that vendor's own
+   * predicate. Classified late, a 9Router turn is answered by — and billed to —
+   * the user's real OpenAI/Gemini key, and neither the request nor the answer
+   * looks wrong anywhere in the trace.
+   *
+   * The internal id is `ninerouter`, never `9router`: the latter is not a legal
+   * JavaScript identifier, and CredentialsManager builds its preferred-model key
+   * by interpolation (`${provider}PreferredModel`). "9Router" is the display
+   * name everywhere a user can see one.
+   */
+  private isNinerouterModel(modelId: string): boolean {
+    return !!modelId && modelId.startsWith('ninerouter/');
   }
 
   private isNvidiaNimModel(modelId: string): boolean { return !!modelId && modelId.startsWith('nvidia_nim/'); }
@@ -2534,6 +2867,25 @@ export class LLMHelper {
     return this.litellmModelInputCaps.get(modelId.replace('litellm/', '')) ?? null;
   }
 
+  /**
+   * The same ceiling for a 9Router-routed model, read from the catalogue cache
+   * that refreshNinerouterModelCatalogue fills from `/v1/models`.
+   *
+   * 9Router reports `context_length` per model and its own DEFAULT_CAPABILITIES
+   * floor is 200k, but its catalogue is full of genuinely small models -- a
+   * stock instance lists Gemma and GLM variants well under that. Without this
+   * the id resolves to the full cloud tier and fitContextForCurrentModel returns
+   * early for anything at or above 100k, so a small model behind the proxy gets
+   * a cloud-sized prompt and either 400s or is truncated upstream where nothing
+   * here can see it.
+   *
+   * Absent means "no extra cap", never "cap at zero".
+   */
+  private ninerouterInputCapFor(modelId: string): number | null {
+    if (!modelId?.startsWith('ninerouter/')) return null;
+    return this.ninerouterModelInputCaps.get(modelId.replace('ninerouter/', '')) ?? null;
+  }
+
   public fitContextForCurrentModel(text: string, reservedOutputTokens?: number): string {
     if (!text) return text;
     const modelId = this.useOllama ? this.ollamaModel : this.currentModelId;
@@ -2548,6 +2900,7 @@ export class LLMHelper {
     const maxContextTokens = Math.min(
       caps.maxContextTokens,
       this.litellmInputCapFor(modelId) ?? Number.POSITIVE_INFINITY,
+      this.ninerouterInputCapFor(modelId) ?? Number.POSITIVE_INFINITY,
     );
     if (maxContextTokens >= 100_000) return text;
     const reserved = reservedOutputTokens ?? 2000;
@@ -4170,6 +4523,12 @@ let isMultimodal = !!(imagePaths?.length);
       if (this.isNvidiaNimModel(this.currentModelId) && this.nvidiaNimClient) {
         return await this.generateWithNvidiaNim(cloudUserContent, openaiSystemPrompt, cloudIsMultimodal ? cloudImagePaths : undefined);
       }
+      if (this.isNinerouterModel(this.currentModelId) && this.ninerouterClient) {
+        // Images forwarded only when the catalogue agrees this model reads
+        // them; otherwise the turn still runs, as text, rather than failing.
+        const sendImages = cloudIsMultimodal && this.ninerouterModelSupportsVision(this.currentModelId);
+        return await this.generateWithNinerouter(cloudUserContent, openaiSystemPrompt, sendImages ? cloudImagePaths : undefined);
+      }
       // Before the Groq/OpenAI branches below — see isOpenRouterModel.
       if (this.isOpenRouterModel(this.currentModelId) && this.openrouterClient) {
         return await this.generateWithOpenRouter(cloudUserContent, openaiSystemPrompt, cloudIsMultimodal ? cloudImagePaths : undefined);
@@ -5077,6 +5436,63 @@ let isMultimodal = !!(imagePaths?.length);
     );
 
     return stripLeadingReasoningBlock(response.choices[0]?.message?.content || "");
+  }
+
+  /**
+   * Non-streaming 9Router call. 9Router decides which upstream serves this, so
+   * images are forwarded when present and the chosen upstream decides whether
+   * it can read them.
+   */
+  private async generateWithNinerouter(userMessage: string, systemPrompt?: string, imagePaths?: string[]): Promise<string> {
+    if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
+    if (!this.ninerouterClient) throw new Error("9Router client not initialized");
+    this.assertOutboundScopes('ninerouter', userMessage, imagePaths);
+
+    await this.rateLimiters.ninerouter.acquire();
+
+    const ninerouterModel = this.ninerouterWireModel(this.currentModelId);
+    const messages: any[] = [];
+    if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
+    if (imagePaths?.length) {
+      const content: any[] = [{ type: "text", text: userMessage }, ...await this.buildOpenAiImageParts(imagePaths)];
+      messages.push({ role: "user", content });
+    } else {
+      messages.push({ role: "user", content: userMessage });
+    }
+
+    const maxTokens = await this.resolveNinerouterMaxTokens(ninerouterModel);
+    const request = {
+      model: ninerouterModel,
+      messages,
+      max_tokens: maxTokens,
+      ...this.ninerouterThinkingParam(),
+    };
+    require('./llm/providerPayloadCapture').captureProviderPayload({
+      provider: 'ninerouter', classification: 'sdk_request_object_before_serialization', payload: request,
+    });
+    let response: any;
+    try {
+      response = await this.withTimeout(
+        this.withRetry(() => this.ninerouterClient!.chat.completions.create(request)),
+        60000,
+        `9Router (${ninerouterModel})`
+      );
+    } catch (e: any) {
+      throw Object.assign(new Error(describeNinerouterFailure(e, ninerouterModel)), {
+        status: e?.status, provider: 'ninerouter', cause: e,
+      });
+    }
+
+    const answer = stripLeadingReasoningBlock(response.choices?.[0]?.message?.content || "");
+    if (!answer.trim()) {
+      // Same silent case as the streaming path. Note the strip runs FIRST: a
+      // reply that was nothing but a <think> block is empty once filtered, and
+      // is just as useless to the caller as no reply at all.
+      throw Object.assign(new Error(describeNinerouterFailure(new Error(NINEROUTER_EMPTY_ANSWER), ninerouterModel)), {
+        provider: 'ninerouter',
+      });
+    }
+    return answer;
   }
 
   private async generateWithNvidiaNim(userMessage: string, systemPrompt?: string, imagePaths?: string[]): Promise<string> {
@@ -6773,6 +7189,15 @@ let isMultimodal = !!(imagePaths?.length);
         cloud.push({ id: 'nvidia_nim', name: `NVIDIA NIM (${this.currentModelId.replace('nvidia_nim/', '')})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
           open: (sig) => this.streamWithNvidiaNim(userContent, systemPrompt, imagePaths, sig) });
       }
+      // Same selection rule as the gateways around it, plus one gate none of
+      // them can apply: the catalogue says per model whether it reads images.
+      // A text-only 9Router model is not seated at all, so the screenshot
+      // goes to something that can actually see it instead of burning an
+      // attempt and a health mark first.
+      if (this.isNinerouterModel(this.currentModelId) && this.ninerouterClient && this.ninerouterModelSupportsVision(this.currentModelId)) {
+        cloud.push({ id: 'ninerouter', name: `9Router (${this.ninerouterWireModel(this.currentModelId)})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
+          open: (sig) => this.streamWithNinerouter(userContent, systemPrompt, imagePaths, sig) });
+      }
       // Same rule as the two gateways above: only recruited when it is the model
       // the user actually picked. OpenRouter fronts hundreds of upstreams and we
       // cannot know whether someone else's turn should be routed through it.
@@ -6834,11 +7259,18 @@ let isMultimodal = !!(imagePaths?.length);
       }
     }
     // Ollama: use the resolved vision-capable model (which may differ from the
-    // primary text model). Synchronously trust the cached resolution; kick off
-    // a refresh for next time if we haven't probed yet.
-    const ollamaVisionModel = this.useOllama ? this.ollamaVisionModel : null;
+    // primary text model). If not yet resolved, await the probe so the very first
+    // screenshot request finds any installed vision model instead of dead-ending.
+    // The wait is bounded (resolveOllamaVisionModelForChain): it runs before ANY
+    // provider is seated, cloud included, and an unbounded probe against a hung
+    // daemon cost 5s on every screenshot.
+    let ollamaVisionModel = this.useOllama ? this.ollamaVisionModel : null;
     if (this.useOllama && !ollamaVisionModel) {
-      this.refreshOllamaVisionModel().catch(() => { }); // populate for the next request
+      try {
+        ollamaVisionModel = await this.resolveOllamaVisionModelForChain();
+      } catch (err: any) {
+        console.warn('[LLMHelper] Failed to probe Ollama vision model:', err?.message || err);
+      }
     }
     if (ollamaVisionModel) {
       local.push({ id: 'ollama', name: `Ollama (${ollamaVisionModel})`, isLocal: true, priority: 101,
@@ -6862,6 +7294,7 @@ let isMultimodal = !!(imagePaths?.length);
       if (this.isLiteLLMModel(this.currentModelId)) { const l = cloud.find(p => p.id === 'litellm'); if (l) front.push(l); }
       if (this.isNvidiaNimModel(this.currentModelId)) { const n = cloud.find(p => p.id === 'nvidia_nim'); if (n) front.push(n); }
       if (this.isOpenRouterModel(this.currentModelId)) { const o = cloud.find(p => p.id === 'openrouter'); if (o) front.push(o); }
+      if (this.isNinerouterModel(this.currentModelId)) { const n9 = cloud.find(p => p.id === 'ninerouter'); if (n9) front.push(n9); }
       // Fluxion belongs here for a sharper version of the same reason. Its rung
       // IS seated in `cloud`, but at the end of the priority order, and
       // orderVisionByHealth sorts unmeasured providers by ascending priority —
@@ -8824,6 +9257,34 @@ let isMultimodal = !!(imagePaths?.length);
       return;
     }
 
+    // 9Router (self-hosted OpenAI-compatible fallback proxy). It picks its
+    // upstream AFTER accepting the request, so images are forwarded through and
+    // the chosen upstream decides whether it can read them — same contract as
+    // the LiteLLM rung above.
+    if (this.isNinerouterModel(this.currentModelId) && this.ninerouterClient) {
+      const ninerouterSystem = this.injectLanguageInstruction(systemPromptOverride || OPENAI_SYSTEM_PROMPT);
+      // Images go only to a model the catalogue says can read them. This is the
+      // PRIMARY chat path, and it was the one of four dispatch sites that
+      // forwarded them ungated while the non-streaming cascade and the vision
+      // chain both gated. The asymmetry mattered because 9Router returns HTTP
+      // 200 for an image sent to a text-only model: nothing errors, the upstream
+      // simply answers without having seen it. Forwarding was therefore not the
+      // permissive choice, it was the silent one.
+      const ninerouterSendsImages = Boolean(isMultimodal && imagePaths?.length)
+        && this.ninerouterModelSupportsVision(this.currentModelId);
+      // Failover for the reason the Fluxion rung gives, squared: 9Router is
+      // ITSELF a fallback ladder, so a stall here can be a cold upstream two
+      // hops away rather than anything wrong with the request.
+      yield* this.streamSelectedProviderWithFailover({
+        id: 'ninerouter',
+        name: `9Router (${this.ninerouterWireModel(this.currentModelId)})`,
+        open: (sig) => this.streamWithNinerouter(userContent, ninerouterSystem, ninerouterSendsImages ? imagePaths : undefined, sig),
+        userContent, finalSystemPrompt: ninerouterSystem, thinkingBudget, abortSignal,
+        hasImages: ninerouterSendsImages,
+      });
+      return;
+    }
+
     // Groq (Text + Multimodal)
     //
     // NOT routed through streamSelectedProviderWithFailover, unlike the other
@@ -9929,6 +10390,80 @@ let isMultimodal = !!(imagePaths?.length);
     }
   }
 
+  private async * streamWithNinerouter(userMessage: string, systemPrompt?: string, imagePaths?: string[], abortSignal?: AbortSignal, modelId?: string): AsyncGenerator<string, void, unknown> {
+    if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
+    if (!this.ninerouterClient) throw new Error("9Router client not initialized");
+    this.assertOutboundScopes('ninerouter', userMessage, imagePaths);
+
+    await this.rateLimiters.ninerouter.acquire();
+
+    const ninerouterModel = this.ninerouterWireModel(modelId || this.currentModelId);
+    const messages: any[] = [];
+    if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
+    if (imagePaths?.length) {
+      const content: any[] = [{ type: "text", text: userMessage }, ...await this.buildOpenAiImageParts(imagePaths)];
+      messages.push({ role: "user", content });
+    } else {
+      messages.push({ role: "user", content: userMessage });
+    }
+
+    const maxTokens = await this.resolveNinerouterMaxTokens(ninerouterModel);
+    if (abortSignal?.aborted) return;
+    const request = {
+      model: ninerouterModel,
+      messages,
+      stream: true as const,
+      max_tokens: maxTokens,
+      ...this.ninerouterThinkingParam(),
+    };
+    require('./llm/providerPayloadCapture').captureProviderPayload({
+      provider: 'ninerouter', classification: 'sdk_request_object_before_serialization', payload: request,
+    });
+    // An IIFE rather than a pre-declared `let`: annotating the stream's type
+    // would need `typeof this.…`, which is not legal in a type position, and
+    // widening it to `any` loses the `stream: true` overload's iterability.
+    const stream = await (async () => {
+      try {
+        return await this.ninerouterClient!.chat.completions.create(request, { signal: abortSignal });
+      } catch (e: any) {
+        // Rewrite before it leaves the adapter. 9Router relays its upstream's
+        // status, so the raw text is a nested JSON blob naming a provider the
+        // user has never heard of — and the right REMEDY differs per status in
+        // ways that CONFLICT (429 means retry, 410 means never retry, 401 means
+        // open a dashboard). See ninerouterErrors.ts for the measured spread.
+        throw Object.assign(new Error(describeNinerouterFailure(e, ninerouterModel)), {
+          status: e?.status, provider: 'ninerouter', cause: e,
+        });
+      }
+    })();
+
+    let emitted = false;
+    try {
+      for await (const chunk of stream) {
+        if (abortSignal?.aborted) return;
+        const content = chunk.choices[0]?.delta?.content;
+        if (content) { emitted = true; yield content; }
+      }
+    } catch (e: any) {
+      if (abortSignal?.aborted) return;
+      throw Object.assign(new Error(describeNinerouterFailure(e, ninerouterModel)), {
+        status: e?.status, provider: 'ninerouter', cause: e,
+      });
+    } finally {
+      if (abortSignal?.aborted && typeof (stream as any).abort === 'function') (stream as any).abort();
+    }
+
+    // HTTP 200, a well-formed stream, and no content at all — measured on
+    // MiniMax-M3 and gemma-4-31b-it, which stream reasoning only. Nothing
+    // rejects, so without this the turn ends with an empty answer bubble and no
+    // indication that anything failed.
+    if (!emitted && !abortSignal?.aborted) {
+      throw Object.assign(new Error(describeNinerouterFailure(new Error(NINEROUTER_EMPTY_ANSWER), ninerouterModel)), {
+        provider: 'ninerouter',
+      });
+    }
+  }
+
   private async * streamWithNvidiaNim(userMessage: string, systemPrompt?: string, imagePaths?: string[], abortSignal?: AbortSignal, modelId?: string): AsyncGenerator<string, void, unknown> {
     if (this.isLocalOnlyMode) throw new Error('Cloud providers disabled in local-only mode');
     if (!this.nvidiaNimClient) throw new Error('NVIDIA NIM client not initialized');
@@ -11014,7 +11549,11 @@ let isMultimodal = !!(imagePaths?.length);
     // at its budget comment: an OpenRouter model can be QUEUEING behind the
     // upstream it fronts, so it gets the user-supplied-endpoint budget rather
     // than a first-party provider's tighter one.
-    return this.isLiteLLMModel(this.currentModelId) || this.isNvidiaNimModel(this.currentModelId) || this.isOpenRouterModel(this.currentModelId) || this.isFluxionModel(this.currentModelId);
+    // 9Router belongs here most literally of all: the address is the user's own
+    // machine or their tunnel, and its whole purpose is to fail over between
+    // upstreams AFTER accepting the request, so its first token can be waiting
+    // on a cold provider two hops away.
+    return this.isLiteLLMModel(this.currentModelId) || this.isNvidiaNimModel(this.currentModelId) || this.isOpenRouterModel(this.currentModelId) || this.isFluxionModel(this.currentModelId) || this.isNinerouterModel(this.currentModelId);
   }
 
   /**
@@ -11222,6 +11761,28 @@ let isMultimodal = !!(imagePaths?.length);
   }
 
   /**
+   * The vision chain's view of refreshOllamaVisionModel(): the same probe, but
+   * capped at OLLAMA_VISION_CHAIN_PROBE_BUDGET_MS and remembered when it comes up
+   * empty. On a timeout the probe keeps running in the background (and is shared
+   * with any concurrent caller), so a slow-but-alive daemon still populates
+   * ollamaVisionModel for the next screenshot.
+   */
+  private async resolveOllamaVisionModelForChain(): Promise<string | null> {
+    if (!this.useOllama) return null;
+    if (this.ollamaVisionModel) return this.ollamaVisionModel;
+    if (Date.now() < this.ollamaVisionNegativeUntil) return null;
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timedOut = new Promise<null>((resolve) => {
+      timer = setTimeout(() => resolve(null), OLLAMA_VISION_CHAIN_PROBE_BUDGET_MS);
+    });
+    const model = await Promise.race([this.refreshOllamaVisionModel(), timedOut]);
+    clearTimeout(timer);
+    if (!model) this.ollamaVisionNegativeUntil = Date.now() + OLLAMA_VISION_NEGATIVE_TTL_MS;
+    return model;
+  }
+
+  /**
    * Resolve a vision-capable installed Ollama model and cache it in
    * `this.ollamaVisionModel`. Prefers the currently-active model when it is
    * itself vision-capable (no behavior change for users already on a vision
@@ -11402,6 +11963,11 @@ let isMultimodal = !!(imagePaths?.length);
       // gemini-* and deepseek-v* are all live Fluxion catalogue entries.
       else if (this.isFluxionModel(selected)) provider = 'fluxion';
       else if (this.isLiteLLMModel(selected)) provider = 'litellm';
+      // Same rule, same reason as Fluxion above: 9Router's ids carry a real
+      // vendor segment (`ninerouter/openai/gpt-5`,
+      // `ninerouter/gemini/gemini-3.6-flash`), so every predicate below would
+      // claim one if this did not come first.
+      else if (this.isNinerouterModel(selected)) provider = 'ninerouter';
       else if (this.isGroqModel(selected)) provider = 'groq';
       else if (this.isOpenAiModel(selected)) provider = 'openai';
       else if (this.isClaudeModel(selected)) provider = 'claude';
@@ -11544,6 +12110,7 @@ let isMultimodal = !!(imagePaths?.length);
       case 'openrouter': return !!this.openrouterClient;
       case 'fluxion': return this.hasFluxionCredential();
       case 'litellm': return !!this.litellmClient;
+      case 'ninerouter': return !!this.ninerouterClient;
       case 'ollama': return this.useOllama;
       case 'antigravity': return !!this.antigravityFallbackModel();
       default: return false;
@@ -11617,6 +12184,15 @@ let isMultimodal = !!(imagePaths?.length);
       case 'nvidia_nim':
       case 'openrouter':
       case 'fluxion':
+      // 9Router belongs with them rather than with its own vision seat's
+      // per-model gate, and the difference is deliberate. The vision CHAIN
+      // chooses whether to recruit 9Router for a screenshot turn at all, so
+      // refusing a text-only model there costs nothing — another rung answers.
+      // Direct Assist has no other rung: the user picked this model for this
+      // question. Dropping the image here would answer it blind and say
+      // nothing, which is worse than forwarding it and surfacing the
+      // upstream's own error.
+      case 'ninerouter':
         // These adapters are image-forwarding gateways whose catalogues can
         // contain newly-added upstream vision models that are unknown to the
         // app's static capability table. Preserve the image and exact model;
@@ -11800,6 +12376,20 @@ let isMultimodal = !!(imagePaths?.length);
       ? this.getAntigravityModelId(model)
       : provider === 'litellm'
       ? model.replace(/^litellm\//, '')
+      // 'ninerouter' falls through on purpose, for the same reason 'openrouter'
+      // does below — and an earlier version of this had it exactly backwards.
+      // Pre-stripping `ninerouter/` is what makes ROUTING_PREFIX_RE STOP
+      // matching, so the vendor segment survives and the id resolves as
+      // something else entirely:
+      //
+      //   ninerouter/qwen/qwen3-8b   whole -> qwen3-8b      -> 128k ctx (cloud)
+      //                           stripped -> qwen/qwen3-8b ->   8k ctx (local-small)
+      //
+      // requestBuilder sizes the prompt against the WHOLE id, so the two
+      // disagreed by 16x and this function then threw CONTEXT_TOO_LARGE on a
+      // prompt just declared legal. It also set isGatewayRouted=false, which
+      // disables the guard in modelCapabilities added because
+      // `litellm/qwen/qwen2.5-vl-72b` was being claimed by Groq's tables.
       : provider === 'nvidia_nim'
         ? model.replace(/^nvidia_nim\//, '')
         // 'openrouter' falls through on purpose: getModelCapabilities strips two
@@ -11874,6 +12464,11 @@ let isMultimodal = !!(imagePaths?.length);
         return;
       case 'litellm':
         yield* this.streamWithLiteLLM(directUserPrompt, request.systemPrompt, imagePaths, abortSignal, model);
+        return;
+      case 'ninerouter':
+        // `model` is still prefixed; streamWithNinerouter strips the one
+        // `ninerouter/` segment to get the instance's own wire id.
+        yield* this.streamWithNinerouter(directUserPrompt, request.systemPrompt, imagePaths, abortSignal, model);
         return;
       case 'ollama':
         yield* this.streamWithOllama(directUserPrompt, undefined, request.systemPrompt, imagePaths, abortSignal, model, true);
@@ -12567,6 +13162,7 @@ let isMultimodal = !!(imagePaths?.length);
     // URL/model change invalidates the per-model vision cache from a prior host.
     this.ollamaVisionCache.clear();
     this.ollamaVisionModel = null;
+    this.ollamaVisionNegativeUntil = 0;
 
     if (model) {
       this.ollamaModel = model;
@@ -12577,7 +13173,7 @@ let isMultimodal = !!(imagePaths?.length);
 
     // Resolve the best vision-capable installed model for screenshots (may
     // differ from the primary text model). Fire-and-forget; the vision chain
-    // also refreshes lazily on first image request.
+    // also probes (bounded) on the first image request.
     this.refreshOllamaVisionModel().catch(() => { });
 
     console.log(`[LLMHelper] Switched to Ollama: ${this.ollamaModel} at ${this.ollamaUrl}`);

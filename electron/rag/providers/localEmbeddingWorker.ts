@@ -1,94 +1,169 @@
 // electron/rag/providers/localEmbeddingWorker.ts
 //
-// Worker-thread host for LocalEmbeddingProvider's ONNX inference. Mirrors the
-// exact pattern the (since removed) intent classifier worker used.
+// Worker-thread host for LocalEmbeddingProvider. Supports:
+// 1. ONNX models via @huggingface/transformers
+// 2. GGUF models via node-llama-cpp (llama.cpp)
 //
-// WHY (2026-07-05 SIGTRAP crash hardening): 9/9 real macOS crash reports
-// showed the app crashing on the MAIN THREAD inside ONNX Runtime's BFC
-// allocator during a live InferenceSession::Run() call — consistent with
-// multiple ONNX sessions (Whisper STT worker + reranker worker +
-// this local-embedding fallback) being concurrently active in-process. The
-// embedding fallback was the only one of the three still running its
-// pipeline()/inference DIRECTLY on the main process, so it is moved into its
-// own worker_threads.Worker here, matching the isolation the other two
-// already had. Also applies bounded intra/inter-op thread counts (see
-// electron/utils/onnxThreadConfig.ts) to reduce native thread/memory
-// pressure even when multiple sessions are concurrently active.
-//
-// Message protocol:
-//   { type: 'init', requestId, isPackaged, localModelPath, cacheDir }
-//     -> { type: 'ready', requestId } | { type: 'error', requestId, error }
-//   { type: 'embed', requestId, texts: string[] }
-//     -> { type: 'result', requestId, vectors: number[][] } | { type: 'error', requestId, error }
+// Keeps heavy ML computation completely isolated from the Electron main thread.
 
+import * as path from 'path';
+import * as fs from 'fs';
 import { parentPort } from 'worker_threads';
 import { getBoundedOnnxSessionOptions } from '../../utils/onnxThreadConfig';
 import { classifyWorkerFailure } from '../../utils/workerStatus';
+import { finalizeGgufVector } from './ggufEmbeddingVector';
 import { sliceEmbeddingTensor } from './embeddingTensorSlice';
 import { BUNDLED_LOCAL_EMBEDDING } from '../bundledLocalEmbedding';
+import { BUNDLED_CATALOG_ID } from '../embeddingModelCatalog';
 
 if (!parentPort) throw new Error('localEmbeddingWorker must be run as a Worker thread');
 
-// Defaults only. The provider sends the full recipe on every init/embed, so
-// these are reached only by a message that somehow omits it — and even then
-// they name the model actually bundled, never a stale literal.
-const MODEL_ID = BUNDLED_LOCAL_EMBEDDING.modelId;
-const DIMENSIONS = BUNDLED_LOCAL_EMBEDDING.dimensions;
+let runtime: 'onnx' | 'gguf' = 'onnx';
+let currentModelId = BUNDLED_CATALOG_ID;
+let currentDimensions = 384;
+let currentPooling: 'mean' | 'cls' | 'last' = 'mean';
 
+// ONNX state
 let pipe: any = null;
-let loadingPromise: Promise<void> | null = null;
-/** Recipe the currently-loaded pipe was built with. Defaults = the bundled model. */
-let loadedModelId = MODEL_ID;
-let loadedPooling: 'mean' | 'cls' = BUNDLED_LOCAL_EMBEDDING.pooling;
 
-// @huggingface/transformers is ESM-only — must use a true dynamic import().
-// `new Function` keeps this opaque to TypeScript's commonjs rewrite (which
-// would otherwise turn `import()` into `require()` and fail for an ESM-only
-// package). See LocalEmbeddingProvider.ts for the full explanation.
+// GGUF state
+let llama: any = null;
+let ggufModel: any = null;
+let ggufContext: any = null;
+
+let loadingPromise: Promise<void> | null = null;
+let lastConfig: any = null;
+let idleTimer: NodeJS.Timeout | null = null;
+const IDLE_UNLOAD_TIMEOUT_MS = 15 * 60 * 1000; // 15m idle timeout to free RAM/VRAM
+
+function resetIdleTimer(): void {
+  if (idleTimer) {
+    clearTimeout(idleTimer);
+  }
+  idleTimer = setTimeout(async () => {
+    console.log('[LocalEmbeddingWorker] Idle for 15 minutes. Unloading weights to free system memory.');
+    await disposeAll();
+  }, IDLE_UNLOAD_TIMEOUT_MS);
+  if (idleTimer && typeof (idleTimer as any).unref === 'function') {
+    (idleTimer as any).unref();
+  }
+}
+
 async function loadTransformers(): Promise<{ pipeline: any; env: any }> {
   return (new Function('return import("@huggingface/transformers")')()) as any;
 }
 
+async function loadLlamaCpp(): Promise<any> {
+  return (new Function('return import("node-llama-cpp")')()) as any;
+}
+
+async function disposeAll(): Promise<void> {
+  if (idleTimer) {
+    clearTimeout(idleTimer);
+    idleTimer = null;
+  }
+  if (ggufContext) {
+    try { await ggufContext.dispose(); } catch { /* ignore */ }
+    ggufContext = null;
+  }
+  if (ggufModel) {
+    try { await ggufModel.dispose(); } catch { /* ignore */ }
+    ggufModel = null;
+  }
+  if (pipe) {
+    // Dropping the reference does not free the native ONNX session.
+    try { await pipe.dispose?.(); } catch { /* ignore */ }
+    pipe = null;
+  }
+  loadingPromise = null;
+}
+
+const GGUF_CONTEXT_SIZE = 2048;
+
+/**
+ * llama.cpp throws "Input is longer than the context size" for any input past
+ * the context window, which failed the WHOLE batch. Embed the leading
+ * window instead — the same truncation transformers.js applies on the ONNX
+ * path at the model's max length.
+ */
+async function ggufEmbedOne(text: string): Promise<ArrayLike<number>> {
+  const tokens = ggufModel.tokenize(text);
+  const input = tokens.length > GGUF_CONTEXT_SIZE - 8
+    ? tokens.slice(0, GGUF_CONTEXT_SIZE - 8)
+    : text;
+  const embedding = await ggufContext.getEmbeddingFor(input);
+  return embedding.vector;
+}
+
 async function ensureLoaded(msg: any): Promise<void> {
-  if (pipe) return;
+  if (msg) lastConfig = { ...msg };
+  const targetRuntime = msg.runtime === 'gguf' ? 'gguf' : 'onnx';
+  const targetModelId = msg.modelId || BUNDLED_CATALOG_ID;
+
+  if (targetRuntime === runtime && currentModelId === targetModelId) {
+    if (runtime === 'onnx' && pipe) return;
+    if (runtime === 'gguf' && ggufContext) return;
+  } else if (pipe || ggufContext || ggufModel) {
+    await disposeAll();
+  }
+
   if (loadingPromise) return loadingPromise;
 
   loadingPromise = (async () => {
+    runtime = msg.runtime === 'gguf' ? 'gguf' : 'onnx';
+    currentModelId = msg.modelId || BUNDLED_CATALOG_ID;
+    currentDimensions = Number(msg.dimensions) || 384;
+    currentPooling = msg.pooling || 'mean';
+
+    if (runtime === 'gguf') {
+      console.log(`[LocalEmbeddingWorker] Loading GGUF embedding model (${currentModelId}) from ${msg.modelPath}...`);
+      const { getLlama } = await loadLlamaCpp();
+      llama = await getLlama({ build: 'never', logLevel: 'error' });
+      ggufModel = await llama.loadModel({ modelPath: msg.modelPath });
+      ggufContext = await ggufModel.createEmbeddingContext({
+        contextSize: GGUF_CONTEXT_SIZE,
+      });
+      console.log(`[LocalEmbeddingWorker] GGUF embedding model loaded successfully (${currentDimensions}d).`);
+      parentPort!.postMessage({
+        type: 'status',
+        status: { type: 'ready', backend: 'gguf', modelPath: msg.modelPath },
+      });
+      return;
+    }
+
+    // ONNX via @huggingface/transformers
     const { pipeline, env } = await loadTransformers();
-
     env.allowRemoteModels = false;
-    env.localModelPath = msg.modelPath;
 
-    // LocalEmbeddingProvider always sends modelId/dtype/pooling (the bundled
-    // recipe, or an experiment's). The fallbacks here are the bundled model's
-    // own values, so a message missing them still loads the right model.
-    loadedModelId = msg.modelId || MODEL_ID;
-    loadedPooling = msg.pooling === 'cls' ? 'cls' : msg.pooling === 'mean' ? 'mean' : BUNDLED_LOCAL_EMBEDDING.pooling;
+    // Resolve local model directory or root
+    const modelPath = msg.modelPath;
+    let targetIdentifier: string;
 
-    console.log(`[LocalEmbeddingWorker] Loading feature-extraction model (${loadedModelId}, pooling=${loadedPooling})...`);
-    pipe = await pipeline('feature-extraction', loadedModelId, {
+    if (fs.existsSync(path.join(modelPath, 'config.json'))) {
+      env.localModelPath = path.dirname(path.dirname(modelPath));
+      targetIdentifier = modelPath;
+    } else {
+      env.localModelPath = modelPath;
+      targetIdentifier = msg.hfModelId || BUNDLED_LOCAL_EMBEDDING.modelId;
+    }
+
+    console.log(`[LocalEmbeddingWorker] Loading ONNX embedding model (${currentModelId}) from ${modelPath}...`);
+    pipe = await pipeline('feature-extraction', targetIdentifier, {
       local_files_only: true,
-      // dtype MUST be explicit on transformers.js v3. v2 defaulted to the
-      // quantized variant; v3 ignores `quantized` and defaults to fp32, so a
-      // bare pipeline() call asks for onnx/model.onnx — while the installer
-      // ships onnx/model_quantized.onnx and NOTHING else (see
-      // LocalFallbackAssets.ts and scripts/verify-packaged-local-assets.mjs).
-      // In a packaged build that is local_files_only, so the load fails and the
-      // feature silently degrades. scripts/download-models.js already documents
-      // this trap for the DOWNLOAD side; these consumers were missed.
-      // localRerankerWorker already passes `dtype: msg.dtype || 'q8'`.
-      dtype: msg.dtype || BUNDLED_LOCAL_EMBEDDING.dtype,
+      dtype: 'q8',
       session_options: getBoundedOnnxSessionOptions(),
     });
-    console.log('[LocalEmbeddingWorker] Feature-extraction model loaded successfully.');
-    parentPort!.postMessage({ type: 'status', status: { type: 'ready', backend: 'onnx', modelPath: msg.modelPath } });
+    console.log(`[LocalEmbeddingWorker] ONNX embedding model loaded successfully (${currentDimensions}d).`);
+    parentPort!.postMessage({
+      type: 'status',
+      status: { type: 'ready', backend: 'onnx', modelPath: msg.modelPath },
+    });
   })();
 
   try {
     await loadingPromise;
   } catch (e) {
-    loadingPromise = null;
-    pipe = null;
+    await disposeAll();
     const failure = classifyWorkerFailure(e);
     parentPort!.postMessage({
       type: 'status',
@@ -108,29 +183,43 @@ parentPort.on('message', async (msg: any) => {
   try {
     if (msg.type === 'init') {
       await ensureLoaded(msg);
+      resetIdleTimer();
       parentPort!.postMessage({ type: 'ready', requestId: msg.requestId });
       return;
     }
 
-    if (msg.type === 'embed') {
-      if (!pipe) {
-        await ensureLoaded(msg);
-      }
-      const texts: string[] = msg.texts;
-      const output = await pipe(texts, { pooling: loadedPooling, normalize: true });
+    if (msg.type === 'dispose') {
+      lastConfig = null;
+      await disposeAll();
+      parentPort!.postMessage({ type: 'disposed', requestId: msg.requestId });
+      return;
+    }
 
-      // Width comes from the TENSOR, never from a constant. See
-      // embeddingTensorSlice.ts for the measured reason this matters — it is
-      // the difference between correct vectors and silent corruption on any
-      // model wider than the bundled MiniLM. DIMENSIONS is only the fallback
-      // for a tensor that reports no dims at all.
-      const vectors = sliceEmbeddingTensor(output, texts.length, DIMENSIONS, loadedModelId);
-      parentPort!.postMessage({
-        type: 'result',
-        requestId: msg.requestId,
-        vectors,
-        dimensions: vectors[0]?.length ?? DIMENSIONS,
-      });
+    if (msg.type === 'embed') {
+      if ((runtime === 'onnx' && !pipe) || (runtime === 'gguf' && !ggufContext)) {
+        await ensureLoaded(msg.modelPath ? msg : lastConfig);
+      }
+      resetIdleTimer();
+
+      const texts: string[] = msg.texts;
+
+      if (runtime === 'gguf') {
+        const vectors: number[][] = [];
+        for (const text of texts) {
+          vectors.push(finalizeGgufVector(await ggufEmbedOne(text), currentDimensions));
+        }
+        parentPort!.postMessage({ type: 'result', requestId: msg.requestId, vectors });
+        return;
+      }
+
+      // ONNX inference
+      const output = await pipe(texts, { pooling: currentPooling, normalize: true });
+      // Width from the tensor, and batch x width ASSERTED (embeddingTensorSlice).
+      // A hardcoded width once handed every 768-d vector the bytes of another
+      // batch item; item 0 still looked perfect, so a first-vector check could
+      // not see it.
+      const vectors = sliceEmbeddingTensor(output, texts.length, currentDimensions, currentModelId);
+      parentPort!.postMessage({ type: 'result', requestId: msg.requestId, vectors, dimensions: vectors[0]?.length });
       return;
     }
 

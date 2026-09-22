@@ -160,6 +160,8 @@ describe('the shipped implementation matches this rule', () => {
   test("AppSettings allows 'natively' — the value being written", async () => {
     const { readFileSync } = await import('node:fs');
     const src = readFileSync('electron/services/SettingsManager.ts', 'utf8');
-    assert.match(src, /provider\?: 'local' \| 'natively' \| 'openrouter' \| 'jina';/);
+    // The union grows as providers are added (voyage, custom); what matters is
+    // that 'natively' is in the reranker provider union.
+    assert.match(src, /provider\?: 'local' \| 'natively' \|[^;]*;/);
   });
 });

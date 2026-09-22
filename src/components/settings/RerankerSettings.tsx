@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { AlertCircle, Check, ChevronDown, Cloud, Download, ExternalLink, Filter, FolderOpen, HardDrive, KeyRound, Loader2, Monitor, Puzzle, RefreshCw, Search, ShieldAlert, Trash2, X } from 'lucide-react';
+import { AlertCircle, Check, ChevronDown, Download, ExternalLink, Filter, FolderOpen, HardDrive, KeyRound, Loader2, Monitor, Puzzle, RefreshCw, Search, Server, ShieldAlert, Trash2, X } from 'lucide-react';
 import { useT } from '../../i18n';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { AIP_ACTIVE_SELECT_CONTAINER, AIP_CSS, AipBadge, AipModelList, AipProviderMark, AipSelect, AipSwitch, type AipSelectOption, type AipTone } from './AIProvidersSettings';
@@ -62,7 +62,7 @@ const trimVendorAttribution = (label: string): string => {
 /**
  * `provider/model`, for the open menu. Provider IDs, not display names, because
  * a path segment is built from the short single tokens the catalogue defines —
- * `local`, `openrouter`, `jina`, `extension`.
+ * `local`, `openrouter`, `jina`, `extension`, `custom`.
  *
  * Qualifying the BARE name matters: a hosted label may already be namespaced
  * (`voyage/rerank-2.5-lite`), and qualifying that raw would render
@@ -87,7 +87,14 @@ const PlatformMark: React.FC = () => (
     </span>
 );
 
-type RerankerProvider = 'local' | 'natively' | 'openrouter' | 'jina';
+/** The user-hosted endpoint has no vendor; a server glyph beats a monogram. */
+const CustomEndpointMark: React.FC = () => (
+    <span className="aip-tile aip-tile--mark" aria-hidden="true" title="Custom endpoint">
+        <Server size={16} strokeWidth={1.75} />
+    </span>
+);
+
+type RerankerProvider = 'local' | 'natively' | 'openrouter' | 'jina' | 'voyage' | 'custom';
 type ModelGroup = 'recommended' | 'quality' | 'fast' | 'multimodal' | 'other';
 
 interface CatalogModel {
@@ -106,7 +113,11 @@ interface RerankerStatus {
     provider: RerankerProvider;
     openrouterModel: string | null;
     jinaModel: string | null;
+    voyageModel?: string | null;
     nativelyModel: string | null;
+    customModel: string | null;
+    customEndpoint: string | null;
+    hasCustomKey: boolean;
     /** The model id for whichever hosted provider is selected. */
     hostedModel: string | null;
     candidateCount: number | null;
@@ -120,7 +131,7 @@ interface RerankerStatus {
     ineligibleMessage: string | null;
     builtIn: { id: string; name: string; bundled: boolean; cached?: boolean; available?: boolean };
     selectedLocal: { id: string; name: string } | null;
-    effective: { kind: 'local' | 'extension' | 'natively' | 'openrouter' | 'jina'; id: string | null };
+    effective: { kind: 'local' | 'extension' | 'natively' | 'openrouter' | 'jina' | 'voyage' | 'custom'; id: string | null };
     lastTest: { at: string; model: string; latencyMs: number; ok: boolean; failure?: string } | null;
 }
 
@@ -309,6 +320,7 @@ interface FloatingSelectProps {
     ariaLabel?: string;
     title?: string;
     disabledHint?: string;
+    displayLabel?: string;
 }
 
 /**
@@ -317,6 +329,7 @@ interface FloatingSelectProps {
  */
 const RerankerModelSelect: React.FC<FloatingSelectProps> = ({
     value,
+    displayLabel,
     options,
     onChange,
     placeholder,
@@ -343,9 +356,10 @@ const RerankerModelSelect: React.FC<FloatingSelectProps> = ({
 
     const selectedOption = options.find(o => o.id === value);
     // triggerName first: closed, the control names the model, not the route.
-    const resolvedLabel = selectedOption
-        ? (selectedOption.triggerName || selectedOption.name)
-        : (placeholder || t('Select reranker'));
+    const resolvedLabel = displayLabel
+        || (selectedOption ? (selectedOption.triggerName || selectedOption.name) : null)
+        || (value && value.includes('::') ? bareModelName(value.split('::').slice(1).join('::')) : null)
+        || (placeholder || t('Select reranker'));
 
     return (
         <div className={containerClassName} ref={containerRef}>
@@ -468,6 +482,9 @@ const INITIAL_STATUS: RerankerStatus = {
     openrouterModel: null,
     jinaModel: null,
     nativelyModel: null,
+    customModel: null,
+    customEndpoint: null,
+    hasCustomKey: false,
     hostedModel: null,
     candidateCount: null,
     // The retriever's ceiling. Replaced by the real value on the first IPC
@@ -560,7 +577,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
     const [busyCatalogId, setBusyCatalogId] = useState<string | null>(null);
     const [catalogError, setCatalogError] = useState<string | null>(null);
     const [hostedProviders, setHostedProviders] = useState<Array<{
-        id: 'natively' | 'openrouter' | 'jina'; name: string; keyUrl: string; keyPlaceholder: string;
+        id: 'natively' | 'openrouter' | 'jina' | 'voyage'; name: string; keyUrl: string; keyPlaceholder: string;
         staticCatalogue: boolean; hasApiKey: boolean;
         models: Array<{ id: string; label: string; note?: string; recommended?: boolean }>;
     }>>([]);
@@ -571,10 +588,59 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
     const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
     const [expandedFileDrawers, setExpandedFileDrawers] = useState<Record<string, boolean>>({});
 
+    // Custom local endpoint states
+    const [customEndpointDraft, setCustomEndpointDraft] = useState('');
+    const [customApiKeyDraft, setCustomApiKeyDraft] = useState('');
+    const [customSaving, setCustomSaving] = useState(false);
+    const [customSaved, setCustomSaved] = useState(false);
+    const [customNote, setCustomNote] = useState<string | null>(null);
+    const [customModels, setCustomModels] = useState<Array<{ id: string; label: string; note?: string }>>([]);
+    const [customRefreshing, setCustomRefreshing] = useState(false);
+
     const refreshStatus = useCallback(async () => {
-        const next = await window.electronAPI.getRerankerStatus?.();
-        if (next) setStatus(next as RerankerStatus);
+        const next = (await window.electronAPI.getRerankerStatus?.()) as RerankerStatus | undefined;
+        if (next) {
+            setStatus(next);
+            if (next.customEndpoint) {
+                setCustomEndpointDraft(cur => cur ? cur : next.customEndpoint!);
+            }
+        }
     }, []);
+
+    const loadCustomModels = useCallback(async (_refresh?: boolean) => {
+        setCustomRefreshing(true);
+        try {
+            const models = await window.electronAPI.getCustomRerankerModels?.();
+            if (Array.isArray(models)) setCustomModels(models);
+        } catch { /* best-effort */ } finally {
+            setCustomRefreshing(false);
+        }
+    }, []);
+
+    const saveCustomEndpoint = useCallback(async () => {
+        setCustomSaving(true);
+        setCustomNote(null);
+        setCustomSaved(false);
+        try {
+            const r = await window.electronAPI.setRerankerCustomEndpoint?.({
+                url: customEndpointDraft,
+                apiKey: customApiKeyDraft || undefined,
+            });
+            if (!r?.success) {
+                setCustomNote(r?.message || t('Could not save that endpoint.'));
+                return;
+            }
+            setCustomSaved(true);
+            setTimeout(() => setCustomSaved(false), 3000);
+            if (customEndpointDraft.trim() && !r.reachable) {
+                setCustomNote(t('Saved, but no reranking models were found there. Check that the server is running and serving a reranking API.'));
+            }
+            if (r.models) setCustomModels(r.models);
+            await refreshStatus();
+        } finally {
+            setCustomSaving(false);
+        }
+    }, [customEndpointDraft, customApiKeyDraft, refreshStatus, t]);
 
     // Every hosted card is rendered from this list, so an empty list means no
     // key field at all — the failure that made Jina v3.5 unreachable. If
@@ -605,6 +671,10 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
         }, {
             id: 'jina', name: 'Jina AI',
             keyUrl: 'https://jina.ai/api-dashboard/', keyPlaceholder: 'jina_…',
+            staticCatalogue: true, hasApiKey: false, models: [],
+        }, {
+            id: 'voyage', name: 'Voyage AI',
+            keyUrl: 'https://dashboard.voyageai.com/', keyPlaceholder: 'pa-…',
             staticCatalogue: true, hasApiKey: false, models: [],
         }]));
     }, []);
@@ -664,6 +734,18 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
         await refreshStatus();
     }, [refreshStatus]);
 
+    // One arm per hosted provider. A two-way ternary here used to send every
+    // non-Jina pick to OpenRouter, which would have written a Voyage model id
+    // into openrouterModel and switched the provider to OpenRouter.
+    const hostedModelConfig = (providerId: string, model: string): Parameters<NonNullable<typeof window.electronAPI.setRerankerConfig>>[0] => {
+        switch (providerId) {
+            case 'jina': return { provider: 'jina', jinaModel: model };
+            case 'voyage': return { provider: 'voyage', voyageModel: model };
+            case 'natively': return { provider: 'natively', nativelyModel: model };
+            default: return { provider: 'openrouter', openrouterModel: model };
+        }
+    };
+
     const activeOptions: AipSelectOption[] = useMemo(() => {
         // Every row: `provider/model` open, bare model closed. One helper so a
         // new provider cannot invent a fourth label format — this panel had
@@ -707,19 +789,53 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
             }
         }
 
+        // Custom local endpoint models (LM Studio, TEI, llama-server, etc.)
+        for (const m of customModels) {
+            options.push(opt(`custom::${m.id}`, 'custom', m.label || m.id));
+        }
+        if (status?.effective.kind === 'custom' && status?.effective.id && !customModels.some(m => m.id === status.effective.id)) {
+            options.push(opt(`custom::${status.effective.id}`, 'custom', status.effective.id));
+        }
+
+        if (status?.selectedLocal && !options.some(o => o.id === `local::${status.selectedLocal!.id}`)) {
+            options.push(opt(`local::${status.selectedLocal.id}`, 'local', status.selectedLocal.name || status.selectedLocal.id));
+        }
+        if (status?.effective?.kind && status.effective.id) {
+            const effOptId = `${status.effective.kind}::${status.effective.id}`;
+            if (!options.some(o => o.id === effOptId)) {
+                options.push(opt(effOptId, status.effective.kind, status.effective.id));
+            }
+        }
+
         return options;
-    }, [status?.builtIn.name, status?.hasApiKey, catalogModels, extensions, catalog, hostedProviders, t]);
+    }, [status?.builtIn.name, status?.hasApiKey, status?.effective, status?.selectedLocal, catalogModels, extensions, catalog, hostedProviders, customModels, t]);
 
     const activeOptionId = useMemo(() => {
-        if (status?.effective.kind === 'natively'
-            || status?.effective.kind === 'openrouter'
-            || status?.effective.kind === 'jina') {
+        if (!status?.effective) return 'local::built-in';
+        if (status.effective.kind === 'natively'
+            || status.effective.kind === 'openrouter'
+            || status.effective.kind === 'jina'
+            || status.effective.kind === 'voyage') {
             return `${status.effective.kind}::${status.effective.id ?? ''}`;
         }
-        if (status?.effective.kind === 'extension') return `extension::${status.effective.id ?? ''}`;
+        if (status.effective.kind === 'custom') return `custom::${status.effective.id ?? ''}`;
+        if (status.effective.kind === 'extension') return `extension::${status.effective.id ?? ''}`;
+        if (status.selectedLocal?.id) return `local::${status.selectedLocal.id}`;
         const selected = catalogModels.find(m => m.selected);
-        return selected ? `local::${selected.id}` : 'local::built-in';
-    }, [status?.effective, catalogModels]);
+        if (selected) return `local::${selected.id}`;
+        if (status.effective.id && status.effective.id !== status.builtIn.id && status.effective.id !== 'built-in') {
+            return `local::${status.effective.id}`;
+        }
+        return 'local::built-in';
+    }, [status?.effective, status?.selectedLocal, status?.builtIn, catalogModels]);
+
+    const activeDisplayLabel = useMemo(() => {
+        const matched = activeOptions.find(o => o.id === activeOptionId);
+        if (matched) return matched.triggerName || matched.name;
+        if (status?.selectedLocal?.name) return status.selectedLocal.name;
+        if (status?.effective?.id) return bareModelName(status.effective.id);
+        return status?.builtIn?.name || t('Select reranker');
+    }, [activeOptionId, activeOptions, status?.selectedLocal, status?.effective, status?.builtIn, t]);
 
     const chooseActive = useCallback(async (optionId: string) => {
         const [kind, ...rest] = optionId.split('::');
@@ -737,6 +853,10 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                 await window.electronAPI.setRerankerConfig?.({ provider: 'openrouter', openrouterModel: id });
             } else if (kind === 'jina') {
                 await window.electronAPI.setRerankerConfig?.({ provider: 'jina', jinaModel: id });
+            } else if (kind === 'voyage') {
+                await window.electronAPI.setRerankerConfig?.({ provider: 'voyage', voyageModel: id });
+            } else if (kind === 'custom') {
+                await window.electronAPI.setRerankerConfig?.({ provider: 'custom', customModel: id });
             } else if (kind === 'extension') {
                 await window.electronAPI.setRerankerConfig?.({ provider: 'local' });
                 for (const ext of extensions.filter(e => e.type === 'reranker' && e.enabled && e.id !== id)) {
@@ -753,11 +873,11 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                     setCatalogError(res.message || res.error || t('Could not activate this reranker.'));
                 }
             }
-            await Promise.all([refreshStatus(), loadCatalogModels(), loadExtensions(), loadHostedProviders()]);
+            await Promise.all([refreshStatus(), loadCatalogModels(), loadExtensions(), loadHostedProviders(), loadCustomModels()]);
         } finally {
             setBusyCatalogId(null);
         }
-    }, [extensions, refreshStatus, loadCatalogModels, loadExtensions, loadHostedProviders, t]);
+    }, [extensions, refreshStatus, loadCatalogModels, loadExtensions, loadHostedProviders, loadCustomModels, t]);
 
     const activeDetail = useMemo(() => {
         if (!status) return '';
@@ -774,11 +894,19 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
         } else if (status.effective.kind === 'openrouter') {
             parts.push(t('Hosted'), t('Document text is sent to OpenRouter'));
             if (status.lastTest?.ok) parts.push(`${Math.round(status.lastTest.latencyMs)} ms ${t('last test')}`);
+        } else if (status.effective.kind === 'jina' || status.effective.kind === 'voyage') {
+            parts.push(t('Hosted'), status.effective.kind === 'jina' ? t('Document text is sent to Jina AI') : t('Document text is sent to Voyage AI'));
+            if (status.lastTest?.ok) parts.push(`${Math.round(status.lastTest.latencyMs)} ms ${t('last test')}`);
+        } else if (status.effective.kind === 'custom') {
+            parts.push(t('On-device'), t('Custom endpoint'));
+            if (status.lastTest?.ok) parts.push(`${Math.round(status.lastTest.latencyMs)} ms ${t('last test')}`);
         } else if (status.effective.kind === 'extension') {
             parts.push(t('On-device'), t('Provided by an extension'));
         } else {
             const selected = catalogModels.find(m => m.selected);
+            const localName = status.selectedLocal?.name || (selected ? selected.name : null);
             parts.push(t('On-device'));
+            if (localName) parts.push(localName);
             parts.push(selected ? humanBytes(selected.bytesOnDisk || selected.bytes) : t('Included with Natively'));
         }
         return parts.join(' · ');
@@ -1010,11 +1138,11 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
     // one as an argument, and it must not, because probing a provider would
     // otherwise mean quietly switching to it. So Test is offered only on the
     // card that is already active.
-    const runTest = async () => {
+    const runTest = async (override?: { provider?: RerankerProvider; model?: string; apiKey?: string; endpoint?: string }) => {
         setTesting(true);
         setTestResult(null);
         try {
-            const res = await window.electronAPI.testReranker?.({});
+            const res = await window.electronAPI.testReranker?.(override ?? {});
             setTestResult((res ?? { success: false, message: t('No response.') }) as TestResult);
             await refreshStatus();
         } finally {
@@ -1049,13 +1177,9 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                             }}
                         />
                         <span className="text-xs font-semibold text-white truncate">{m.name}</span>
-                        {m.recommended && m.supported && <AipBadge tone="info" label={t('Recommended')} />}
                         {m.selected && <AipBadge tone="ok" label={t('In use')} />}
-                        {installed && !m.selected && (
-                            <AipBadge
-                                tone={m.supported ? 'neutral' : 'warn'}
-                                label={m.supported ? t('Downloaded') : t('Downloaded · not usable yet')}
-                            />
+                        {installed && !m.selected && !m.supported && (
+                            <AipBadge tone="warn" label={t('Downloaded · not usable yet')} />
                         )}
                     </div>
 
@@ -1204,7 +1328,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                 <div className="flex items-center justify-between gap-4 flex-wrap sm:flex-nowrap">
                     <div className="min-w-0 flex-1">
                         <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">
-                            {t('Active Reranker')}
+                            {t('Active Reranker Model')}
                         </label>
                         <p className="text-[10px] aip-muted mt-0.5">
                             {activeDetail}
@@ -1213,8 +1337,9 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
 
                     <div className="shrink-0 relative">
                         <RerankerModelSelect
-                            ariaLabel={t('Active Reranker')}
+                            ariaLabel={t('Active Reranker Model')}
                             value={activeOptionId}
+                            displayLabel={activeDisplayLabel}
                             options={activeOptions}
                             placeholder={t('No rerankers available')}
                             disabled={busyCatalogId !== null}
@@ -1286,16 +1411,227 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
        Reranker sub-tab. */
     const panel = (
         <>
-            {/* Provider Card 1: Unified Local Reranker & Model Library Card */}
+            {/* Provider Card 3+: hosted rerankers, one card per provider.
+                OpenRouter discovers its catalogue live; Jina publishes a fixed
+                enum. Jina was added for jina-reranker-v3.5 when that model could
+                only run hosted. It runs locally now — Core implements the
+                listwise protocol and the catalogue entry downloads the projector
+                — so the hosted card is the no-download, no-warm-up route to the
+                same model, not the only one.
+                Natively gets no card (owner decision, 2026-09-22): the server
+                pins its model and the key comes from the Natively plan, so there
+                is nothing to configure. It stays selectable in Active Reranker. */}
+            {hostedProviders.filter(p => p.id !== 'natively').map(p => {
+                const isActive = status.effective.kind === p.id;
+                const isSelected = status.provider === p.id;
+                // status.hasApiKey is the presence flag for the SELECTED
+                // provider. Preferring the per-provider flag but falling back
+                // to it keeps the badge honest if discovery degraded.
+                const hasKey = p.hasApiKey || (isSelected && status.hasApiKey);
+                const draft = keyDrafts[p.id] ?? '';
+                const saving = savingKeyFor === p.id;
+                const saved = savedKeyFor === p.id;
+                const selectedModel = p.id === 'natively'
+                    ? status.nativelyModel
+                    : p.id === 'jina' ? status.jinaModel
+                    : p.id === 'voyage' ? (status.voyageModel ?? null)
+                    : status.openrouterModel;
+                // Natively runs on the API key the user already configured, so
+                // this card must not offer a key field. Rendering one would
+                // invite a paste that reranker:set-hosted-key now refuses
+                // ('not_byok'), and a Remove button that would delete nothing.
+                const byok = p.id !== 'natively';
+                // A live catalogue arrives from OpenRouter; a static one ships
+                // with the app and is listed even before a key exists, so the
+                // user can see what a key would buy them.
+                const models = p.staticCatalogue
+                    ? p.models.map(m => ({ id: m.id, label: m.label }))
+                    : catalog.map(m => ({ id: m.id, label: trimVendorAttribution(m.label) }));
+
+                return (
+                    <div className="aip-card aip-provider" key={p.id}>
+                        {/* Header */}
+                        <div className="aip-provider-head">
+                            <AipProviderMark provider={p.id} name={p.name} />
+                            <h4 className="aip-card-title truncate min-w-0">{t(p.name)}</h4>
+                            <div className="ml-auto flex items-center gap-2 shrink-0">
+                                <AipBadge tone={hasKey ? 'ok' : 'warn'} label={hasKey ? t('Key set') : t('No key')} />
+
+                                {byok && (
+                                    <button
+                                        type="button"
+                                        className="aip-btn"
+                                        data-size="sm"
+                                        data-variant="ghost"
+                                        onClick={() => window.electronAPI.openExternal?.(p.keyUrl)}
+                                        title={`Get ${p.name} API Key`}
+                                    >
+                                        <span className="uppercase tracking-wide">{t('Get Key')}</span>
+                                        <ExternalLink size={12} strokeWidth={1.75} />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Not BYOK: say which key it uses and where that lives, rather
+                            than showing an input for a credential this card does not own. */}
+                        {!byok && (
+                            <div className="aip-provider-row">
+                                <p className="text-[11px] text-white/45 leading-relaxed">
+                                    {hasKey
+                                        ? t('Runs on your Natively API key. Reranking counts toward your plan\u2019s Knowledge allowance.')
+                                        : t('Requires a Natively API key. Add one in the Natively API section to use the managed reranker.')}
+                                </p>
+                            </div>
+                        )}
+
+                        {/* API Key Credential Row matching EmbeddingSettings */}
+                        {byok && (
+                        <div className="aip-provider-row">
+                            <div className="aip-provider-field">
+                                <div className="aip-field">
+                                    <KeyRound size={13} strokeWidth={1.75} className="aip-field-icon" aria-hidden="true" />
+                                    <input
+                                        type="password"
+                                        className="aip-input"
+                                        value={draft}
+                                        placeholder={hasKey ? '••••••••••••••••' : p.keyPlaceholder}
+                                        onChange={(e) => {
+                                            const v = e.target.value;
+                                            setKeyDrafts(prev => ({ ...prev, [p.id]: v }));
+                                            setSavedKeyFor(cur => (cur === p.id ? null : cur));
+                                        }}
+                                        onKeyDown={(e) => { if (e.key === 'Enter') void saveKey(p.id, p.staticCatalogue); }}
+                                        autoComplete="off"
+                                        spellCheck={false}
+                                        aria-label={`${p.name} ${t('API key')}`}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => void saveKey(p.id, p.staticCatalogue)}
+                                        disabled={saving || !draft.trim()}
+                                        className="aip-btn-seg aip-field-seg"
+                                        data-tone={saved ? 'ok' : undefined}
+                                    >
+                                        {saving
+                                            ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Saving...')}</>
+                                            : saved
+                                                ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Saved')}</>
+                                                : t('Save')}
+                                    </button>
+                                </div>
+                                {hasKey && (
+                                    <button
+                                        type="button"
+                                        onClick={() => void removeKey(p.id, p.staticCatalogue)}
+                                        className="aip-btn shrink-0"
+                                        data-icon="true"
+                                        data-variant="danger-ghost"
+                                        title={t('Remove API Key')}
+                                    >
+                                        <Trash2 size={14} strokeWidth={1.75} />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                        )}
+
+                        {/* Action Row: Test Connection & Model List Selector matching EmbeddingSettings */}
+                        {(hasKey || models.length > 0) && (
+                            <div className="aip-provider-row">
+                                {hasKey && (
+                                    <button
+                                        type="button"
+                                        onClick={() => void runTest()}
+                                        disabled={testing || !isSelected || !selectedModel}
+                                        className="aip-btn shrink-0"
+                                        data-tone={isSelected && testResult?.success ? 'ok' : isSelected && testResult ? 'danger' : undefined}
+                                        title={!isSelected
+                                            ? t('Pick a model from this provider first — testing sends a real request through whichever provider is selected.')
+                                            : (testResult?.message || t('Test Connection'))}
+                                    >
+                                        {testing && isSelected
+                                            ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Testing...')}</>
+                                            : isSelected && testResult?.success
+                                                ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Passed')}</>
+                                                : isSelected && testResult
+                                                    ? <><AlertCircle size={12} strokeWidth={1.75} /> {t('Error')}</>
+                                                    : <>{t('Test Connection')}</>}
+                                    </button>
+                                )}
+
+                                {isSelected && testResult?.success && testResult.budgetFit?.warning && (
+                                    <div className="aip-inline-warn flex items-start gap-2" role="status">
+                                        <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
+                                        <span className="min-w-0">{t(testResult.budgetFit.warning)}</span>
+                                    </div>
+                                )}
+
+                                {/* Provider Model Selector matching EmbeddingSettings */}
+                                {models.length > 0 && (
+                                    <AipModelList
+                                        models={models}
+                                        optIn
+                                        enabled={isActive && selectedModel ? [selectedModel] : []}
+                                        defaultId={isActive ? (selectedModel ?? undefined) : undefined}
+                                        onToggle={(id) => void setConfig(
+                                            hostedModelConfig(p.id, id))}
+                                        onSetDefault={(id) => void setConfig(
+                                            hostedModelConfig(p.id, id))}
+                                        onReset={() => {}}
+                                        refreshing={p.staticCatalogue ? false : refreshing}
+                                        onRefresh={p.staticCatalogue
+                                            ? undefined
+                                            : async () => { setRefreshing(true); try { await loadCatalog(true); } finally { setRefreshing(false); } }}
+                                    />
+                                )}
+                            </div>
+                        )}
+
+                        {/* Notes carried by a static catalogue are the whole reason it is
+                            static: they say what the model is for, and for v3.5 that it
+                            cannot be run any other way. */}
+                        {p.staticCatalogue && p.models.some(m => m.note) && (
+                            <div className="px-1 space-y-1">
+                                {p.models.filter(m => m.note).map(m => (
+                                    <p key={m.id} className="aip-meta aip-provider-note">
+                                        <span className="font-medium">{m.label}</span>{' — '}{t(m.note as string)}
+                                    </p>
+                                ))}
+                            </div>
+                        )}
+
+                        {!p.staticCatalogue && catalogStale && (
+                            <p className="aip-meta aip-provider-note">
+                                {t('Could not reach OpenRouter. Showing the models from the last successful check.')}
+                            </p>
+                        )}
+
+                        {!p.staticCatalogue && selectedMissing && (
+                            <p className="aip-meta aip-provider-note">
+                                {t('The selected reranker is no longer offered by OpenRouter. Your local reranker will be used until you pick another.')}
+                            </p>
+                        )}
+                    </div>
+                );
+            })}
+            {/* Local Reranker & Model Library — below the hosted cards. */}
             <div className="aip-card aip-provider space-y-3">
                 <div className="aip-provider-head">
                     <PlatformMark />
                     <h4 className="aip-card-title truncate min-w-0">{t('Local Reranker')}</h4>
                     <div className="ml-auto flex items-center gap-2 shrink-0">
-                        <AipBadge
-                            tone={status.builtIn.available ? 'ok' : status.builtIn.cached ? 'info' : 'neutral'}
-                            label={status.builtIn.available ? t('Ready') : status.builtIn.cached ? t('Downloaded') : t('Local')}
-                        />
+                        <span className="aip-meta inline-flex items-center gap-1.5">
+                            <HardDrive size={12} strokeWidth={1.75} /> {t('On-device')}
+                        </span>
+                        {/* No "Downloaded" state (owner request): a cached-but-unloaded
+                            model shows no badge; Ready once loaded, Local when absent. */}
+                        {(status.builtIn.available || !status.builtIn.cached) && (
+                            <AipBadge
+                                tone={status.builtIn.available ? 'ok' : 'neutral'}
+                                label={status.builtIn.available ? t('Ready') : t('Local')}
+                            />
+                        )}
                     </div>
                 </div>
 
@@ -1459,211 +1795,172 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                 </div>
             </div>
 
-            {/* Provider Card 3+: hosted rerankers, one card per provider.
-                OpenRouter discovers its catalogue live; Jina publishes a fixed
-                enum. Jina was added for jina-reranker-v3.5 when that model could
-                only run hosted. It runs locally now — Core implements the
-                listwise protocol and the catalogue entry downloads the projector
-                — so the hosted card is the no-download, no-warm-up route to the
-                same model, not the only one. */}
-            {hostedProviders.map(p => {
-                const isActive = status.effective.kind === p.id;
-                const isSelected = status.provider === p.id;
-                // status.hasApiKey is the presence flag for the SELECTED
-                // provider. Preferring the per-provider flag but falling back
-                // to it keeps the badge honest if discovery degraded.
-                const hasKey = p.hasApiKey || (isSelected && status.hasApiKey);
-                const draft = keyDrafts[p.id] ?? '';
-                const saving = savingKeyFor === p.id;
-                const saved = savedKeyFor === p.id;
-                const selectedModel = p.id === 'natively'
-                    ? status.nativelyModel
-                    : p.id === 'jina' ? status.jinaModel : status.openrouterModel;
-                // Natively runs on the API key the user already configured, so
-                // this card must not offer a key field. Rendering one would
-                // invite a paste that reranker:set-hosted-key now refuses
-                // ('not_byok'), and a Remove button that would delete nothing.
-                const byok = p.id !== 'natively';
-                // A live catalogue arrives from OpenRouter; a static one ships
-                // with the app and is listed even before a key exists, so the
-                // user can see what a key would buy them.
-                const models = p.staticCatalogue
-                    ? p.models.map(m => ({ id: m.id, label: m.label }))
-                    : catalog.map(m => ({ id: m.id, label: trimVendorAttribution(m.label) }));
+            {/* Provider Card 2: Custom Local Endpoint */}
+            <div className="aip-card aip-provider space-y-3">
+                <div className="aip-provider-head">
+                    <CustomEndpointMark />
+                    <h4 className="aip-card-title truncate min-w-0">{t('Custom Endpoint')}</h4>
+                    <AipBadge
+                        tone={status.customEndpoint ? 'ok' : 'neutral'}
+                        label={status.customEndpoint ? (status.customModel ? t('Configured') : t('Connected')) : t('Not configured')}
+                    />
+                    <div className="ml-auto flex items-center gap-2 shrink-0">
+                        <span className="aip-meta inline-flex items-center gap-1.5">
+                            <HardDrive size={12} strokeWidth={1.75} /> {t('On-device')}
+                        </span>
+                    </div>
+                </div>
 
-                return (
-                    <div className="aip-card aip-provider" key={p.id}>
-                        {/* Header */}
-                        <div className="aip-provider-head">
-                            <AipProviderMark provider={p.id} name={p.name} />
-                            <h4 className="aip-card-title truncate min-w-0">{t(p.name)}</h4>
-                            <div className="ml-auto flex items-center gap-2 shrink-0">
-                                <AipBadge tone={hasKey ? 'ok' : 'warn'} label={hasKey ? t('Key set') : t('No key')} />
+                <div className="text-[10px] aip-muted px-1">
+                    <p>
+                        {t('Connect any local or self-hosted reranker service (e.g. Text Embeddings Inference / TEI, LM Studio, Infinity, or a local proxy) using the Cohere/OpenAI-compatible /rerank endpoint.')}
+                    </p>
+                </div>
 
-                                {byok && (
-                                    <button
-                                        type="button"
-                                        className="aip-btn"
-                                        data-size="sm"
-                                        data-variant="ghost"
-                                        onClick={() => window.electronAPI.openExternal?.(p.keyUrl)}
-                                        title={`Get ${p.name} API Key`}
-                                    >
-                                        <span className="uppercase tracking-wide">{t('Get Key')}</span>
-                                        <ExternalLink size={12} strokeWidth={1.75} />
-                                    </button>
-                                )}
-                            </div>
+                {/* Server URL Input */}
+                <div className="aip-provider-row flex-col sm:flex-row gap-2">
+                    <div className="aip-provider-field flex-1">
+                        <div className="aip-field">
+                            <Server size={13} strokeWidth={1.75} className="aip-field-icon" aria-hidden="true" />
+                            <input
+                                type="text"
+                                value={customEndpointDraft}
+                                onChange={(e) => {
+                                    setCustomEndpointDraft(e.target.value);
+                                    setCustomSaved(false);
+                                }}
+                                onKeyDown={(e) => { if (e.key === 'Enter') void saveCustomEndpoint(); }}
+                                autoComplete="off"
+                                spellCheck={false}
+                                aria-label={t('Custom reranker endpoint URL')}
+                                placeholder="http://localhost:8080"
+                                className="aip-input"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => { void saveCustomEndpoint(); }}
+                                disabled={customSaving}
+                                className="aip-field-seg"
+                                data-tone={customSaved ? 'ok' : undefined}
+                            >
+                                {customSaving
+                                    ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Saving...')}</>
+                                    : customSaved
+                                        ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Saved')}</>
+                                        : t('Save')}
+                            </button>
                         </div>
+                    </div>
+                </div>
 
-                        {/* Not BYOK: say which key it uses and where that lives, rather
-                            than showing an input for a credential this card does not own. */}
-                        {!byok && (
-                            <div className="aip-provider-row">
-                                <p className="text-[11px] text-white/45 leading-relaxed">
-                                    {hasKey
-                                        ? t('Runs on your Natively API key. Reranking counts toward your plan\u2019s Knowledge allowance.')
-                                        : t('Requires a Natively API key. Add one in the Natively API section to use the managed reranker.')}
-                                </p>
-                            </div>
-                        )}
-
-                        {/* API Key Credential Row matching EmbeddingSettings */}
-                        {byok && (
-                        <div className="aip-provider-row">
-                            <div className="aip-provider-field">
-                                <div className="aip-field">
-                                    <KeyRound size={13} strokeWidth={1.75} className="aip-field-icon" aria-hidden="true" />
-                                    <input
-                                        type="password"
-                                        className="aip-input"
-                                        value={draft}
-                                        placeholder={hasKey ? '••••••••••••••••' : p.keyPlaceholder}
-                                        onChange={(e) => {
-                                            const v = e.target.value;
-                                            setKeyDrafts(prev => ({ ...prev, [p.id]: v }));
-                                            setSavedKeyFor(cur => (cur === p.id ? null : cur));
-                                        }}
-                                        onKeyDown={(e) => { if (e.key === 'Enter') void saveKey(p.id, p.staticCatalogue); }}
-                                        autoComplete="off"
-                                        spellCheck={false}
-                                        aria-label={`${p.name} ${t('API key')}`}
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={() => void saveKey(p.id, p.staticCatalogue)}
-                                        disabled={saving || !draft.trim()}
-                                        className="aip-btn-seg aip-field-seg"
-                                        data-tone={saved ? 'ok' : undefined}
-                                    >
-                                        {saving
-                                            ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Saving...')}</>
-                                            : saved
-                                                ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Saved')}</>
-                                                : t('Save')}
-                                    </button>
-                                </div>
-                                {hasKey && (
-                                    <button
-                                        type="button"
-                                        onClick={() => void removeKey(p.id, p.staticCatalogue)}
-                                        className="aip-btn shrink-0"
-                                        data-icon="true"
-                                        data-variant="danger-ghost"
-                                        title={t('Remove API Key')}
-                                    >
-                                        <Trash2 size={14} strokeWidth={1.75} />
-                                    </button>
-                                )}
-                            </div>
+                {/* Optional API Key Input */}
+                <div className="aip-provider-row">
+                    <div className="aip-provider-field">
+                        <div className="aip-field">
+                            <KeyRound size={13} strokeWidth={1.75} className="aip-field-icon" aria-hidden="true" />
+                            <input
+                                type="password"
+                                value={customApiKeyDraft}
+                                onChange={(e) => {
+                                    setCustomApiKeyDraft(e.target.value);
+                                    setCustomSaved(false);
+                                }}
+                                onKeyDown={(e) => { if (e.key === 'Enter') void saveCustomEndpoint(); }}
+                                autoComplete="off"
+                                spellCheck={false}
+                                aria-label={t('Custom reranker API key (optional)')}
+                                placeholder={status.hasCustomKey ? '••••••••••••••••' : t('API key (optional for local servers)')}
+                                className="aip-input"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => { void saveCustomEndpoint(); }}
+                                disabled={customSaving}
+                                className="aip-btn-seg aip-field-seg"
+                                data-tone={customSaved ? 'ok' : undefined}
+                            >
+                                {customSaving
+                                    ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Saving...')}</>
+                                    : customSaved
+                                        ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Saved')}</>
+                                        : t('Save')}
+                            </button>
                         </div>
-                        )}
+                    </div>
+                </div>
 
-                        {/* Action Row: Test Connection & Model List Selector matching EmbeddingSettings */}
-                        {(hasKey || models.length > 0) && (
-                            <div className="aip-provider-row">
-                                {hasKey && (
-                                    <button
-                                        type="button"
-                                        onClick={() => void runTest()}
-                                        disabled={testing || !isSelected || !selectedModel}
-                                        className="aip-btn shrink-0"
-                                        data-tone={isSelected && testResult?.success ? 'ok' : isSelected && testResult ? 'danger' : undefined}
-                                        title={!isSelected
-                                            ? t('Pick a model from this provider first — testing sends a real request through whichever provider is selected.')
-                                            : (testResult?.message || t('Test Connection'))}
-                                    >
-                                        {testing && isSelected
-                                            ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Testing...')}</>
-                                            : isSelected && testResult?.success
-                                                ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Passed')}</>
-                                                : isSelected && testResult
-                                                    ? <><AlertCircle size={12} strokeWidth={1.75} /> {t('Error')}</>
-                                                    : <>{t('Test Connection')}</>}
-                                    </button>
-                                )}
+                {/* Action row: Test Connection & Models List */}
+                {(status.customEndpoint || customEndpointDraft.trim()) && (
+                    <div className="aip-provider-row">
+                        <button
+                            type="button"
+                            onClick={() => void runTest({
+                                provider: 'custom',
+                                endpoint: customEndpointDraft.trim() || status.customEndpoint || undefined,
+                                apiKey: customApiKeyDraft.trim() || undefined,
+                                model: status.customModel || customModels[0]?.id || undefined,
+                            })}
+                            disabled={testing}
+                            className="aip-btn shrink-0"
+                            data-tone={testResult?.success ? 'ok' : testResult ? 'danger' : undefined}
+                            title={t('Test Connection')}
+                        >
+                            {testing
+                                ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Testing...')}</>
+                                : testResult?.success
+                                    ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Passed')}</>
+                                    : testResult
+                                        ? <><AlertCircle size={12} strokeWidth={1.75} /> {t('Error')}</>
+                                        : <>{t('Test Connection')}</>}
+                        </button>
 
-                                {isSelected && testResult?.success && testResult.budgetFit?.warning && (
-                                    <div className="aip-inline-warn flex items-start gap-2" role="status">
-                                        <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
-                                        <span className="min-w-0">{t(testResult.budgetFit.warning)}</span>
-                                    </div>
-                                )}
-
-                                {/* Provider Model Selector matching EmbeddingSettings */}
-                                {models.length > 0 && (
-                                    <AipModelList
-                                        models={models}
-                                        optIn
-                                        enabled={isActive && selectedModel ? [selectedModel] : []}
-                                        defaultId={isActive ? (selectedModel ?? undefined) : undefined}
-                                        onToggle={(id) => void setConfig(
-                                            p.id === 'jina' ? { provider: 'jina', jinaModel: id } : { provider: 'openrouter', openrouterModel: id })}
-                                        onSetDefault={(id) => void setConfig(
-                                            p.id === 'jina' ? { provider: 'jina', jinaModel: id } : { provider: 'openrouter', openrouterModel: id })}
-                                        onReset={() => {}}
-                                        refreshing={p.staticCatalogue ? false : refreshing}
-                                        onRefresh={p.staticCatalogue
-                                            ? undefined
-                                            : async () => { setRefreshing(true); try { await loadCatalog(true); } finally { setRefreshing(false); } }}
-                                    />
-                                )}
-                            </div>
-                        )}
-
-                        {/* Notes carried by a static catalogue are the whole reason it is
-                            static: they say what the model is for, and for v3.5 that it
-                            cannot be run any other way. */}
-                        {p.staticCatalogue && p.models.some(m => m.note) && (
-                            <div className="px-1 space-y-1">
-                                {p.models.filter(m => m.note).map(m => (
-                                    <p key={m.id} className="aip-meta aip-provider-note">
-                                        <span className="font-medium">{m.label}</span>{' — '}{t(m.note as string)}
-                                    </p>
-                                ))}
-                            </div>
-                        )}
-
-                        {!p.staticCatalogue && catalogStale && (
-                            <p className="aip-meta aip-provider-note">
-                                {t('Could not reach OpenRouter. Showing the models from the last successful check.')}
-                            </p>
-                        )}
-
-                        {!p.staticCatalogue && selectedMissing && (
-                            <p className="aip-meta aip-provider-note">
-                                {t('The selected reranker is no longer offered by OpenRouter. Your local reranker will be used until you pick another.')}
-                            </p>
+                        {customModels.length > 0 && (
+                            <AipModelList
+                                models={customModels.map(m => ({
+                                    id: m.id,
+                                    label: m.label,
+                                }))}
+                                optIn
+                                enabled={status.provider === 'custom' && status.customModel ? [status.customModel] : []}
+                                defaultId={status.provider === 'custom' ? (status.customModel ?? undefined) : undefined}
+                                onToggle={(id) => { void setConfig({ provider: 'custom', customModel: id }); }}
+                                onSetDefault={(id) => { void setConfig({ provider: 'custom', customModel: id }); }}
+                                onReset={() => { }}
+                                refreshing={customRefreshing}
+                                onRefresh={() => { void loadCustomModels(true); }}
+                            />
                         )}
                     </div>
-                );
-            })}
+                )}
+
+                {customNote && (
+                    <p className="aip-meta aip-provider-note" style={{ color: 'var(--aip-tertiary)' }}>
+                        {customNote}
+                    </p>
+                )}
+
+                {testResult && !testResult.success && (
+                    <p className="aip-meta aip-danger-fg aip-provider-note">
+                        {testResult.message || t('Connection test failed. Verify the server is running and accepts /rerank requests.')}
+                    </p>
+                )}
+
+                {!status.customEndpoint && (
+                    <p className="aip-meta aip-provider-note">
+                        {t('Runs on your local machine or local network without sending data externally. Example: Text Embeddings Inference (TEI) with --model-id BAAI/bge-reranker-large on port 8080.')}
+                    </p>
+                )}
+            </div>
+
             {/* Provider Card 4: Community Extensions — High-End Minimalist Design */}
             <div className="aip-card aip-provider space-y-3">
                 <div className="aip-provider-head">
                     <AipProviderMark provider="natively" name={t('Reranker Extensions')} />
                     <h4 className="aip-card-title truncate min-w-0">{t('Reranker Extensions')}</h4>
                     <div className="ml-auto flex items-center gap-2 shrink-0">
+                        <span className="aip-meta inline-flex items-center gap-1.5">
+                            <HardDrive size={12} strokeWidth={1.75} /> {t('On-device')}
+                        </span>
                         <button
                             type="button"
                             className="aip-btn"

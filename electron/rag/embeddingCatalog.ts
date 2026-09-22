@@ -31,7 +31,7 @@ export interface EmbeddingCatalogModel {
 }
 
 export interface EmbeddingCatalogProvider {
-  id: 'natively' | 'ollama' | 'custom' | 'openrouter' | 'voyage' | 'openai' | 'gemini' | 'local';
+  id: 'natively' | 'ollama' | 'custom' | 'openrouter' | 'ninerouter' | 'voyage' | 'openai' | 'gemini' | 'local';
   name: string;
   /** Embedding calls leave the machine. */
   cloud: boolean;
@@ -165,6 +165,11 @@ export interface CatalogInput {
    * offer, and what it costs, before signing up.
    */
   openrouterModels?: EmbeddingCatalogModel[];
+  ninerouterModels?: EmbeddingCatalogModel[];
+  /** True when a base URL is stored — the gate for 9Router, as everywhere else. */
+  ninerouterConfigured?: boolean;
+  /** The instance currently configured, for display. */
+  ninerouterEndpoint?: string;
   /** A user-hosted OpenAI-compatible endpoint, if one is configured. */
   customEndpoint?: string;
   customModels?: Array<{ id: string; capabilityKnown?: boolean }>;
@@ -289,6 +294,27 @@ export function buildEmbeddingCatalog(input: CatalogInput): EmbeddingCatalogProv
     models: cloudBlocked ? [] : (input.openrouterModels || []).map(m => ({ ...m })),
   };
 
+  const ninerouter: EmbeddingCatalogProvider = {
+    id: 'ninerouter',
+    name: '9Router',
+    // CLOUD, even though the endpoint is usually the user's own machine. The
+    // binary is local; the inference is not — it forwards to Gemini, OpenAI and
+    // 40+ others. Saying otherwise here is a false privacy claim, the same
+    // reason embeddingStatus keeps it out of the host-gated branch.
+    cloud: true,
+    // The BASE URL is the gate, not a key: a stock instance runs with
+    // REQUIRE_API_KEY=false and embeds fine without one.
+    available: !cloudBlocked && !!input.ninerouterConfigured,
+    unavailableReason: cloudBlocked ? 'blocked_by_policy' : (input.ninerouterConfigured ? undefined : 'not_configured'),
+    endpoint: input.ninerouterEndpoint,
+    // Listed models are NOT a promise that they work: 9Router relays whatever
+    // its upstream says, and on the reference instance 4 of 6 listed embedding
+    // models answer 401/404 from a dead vendor account. The width probe on
+    // selection is what separates them, so everything listed is offered and the
+    // probe refuses the broken ones.
+    models: cloudBlocked ? [] : (input.ninerouterModels || []).map(m => ({ ...m })),
+  };
+
   const voyage: EmbeddingCatalogProvider = {
     id: 'voyage',
     name: 'Voyage AI',
@@ -328,5 +354,5 @@ export function buildEmbeddingCatalog(input: CatalogInput): EmbeddingCatalogProv
     ],
   };
 
-  return [natively, ollama, custom, openrouter, voyage, openai, gemini, local];
+  return [natively, ollama, custom, openrouter, ninerouter, voyage, openai, gemini, local];
 }
