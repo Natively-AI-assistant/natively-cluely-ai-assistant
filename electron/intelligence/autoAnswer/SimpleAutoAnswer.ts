@@ -292,6 +292,21 @@ export class SimpleAutoAnswerEngine {
         this.arm(ENDPOINT_CONFIRM_MS);
     }
 
+    /**
+     * The LOCAL VAD (native capture, 150-200 ms hangover) saw the interviewer
+     * stop. Only four STT providers emit their own end-of-turn event; the rest
+     * waited the full STABILITY_MS after the last final even though the
+     * capture layer already knew. Treat the local stop like a provider
+     * endpoint — with one guard: a dangling interim means the final for the
+     * last words has not landed yet, and committing now would judge half a
+     * turn. That final re-arms the window itself when it arrives.
+     */
+    onLocalSpeechEnd(): void {
+        if (!this.host.isEnabled() || this.pending.length === 0) return;
+        if (this.lastInterviewerInterim) return;
+        this.arm(ENDPOINT_CONFIRM_MS);
+    }
+
     ingest(segment: TranscriptSegment & { speaker: string; final: boolean }): void {
         if (!this.host.isEnabled() || !this.host.isMeetingActive()) return;
         const text = (segment.text ?? '').trim();
