@@ -3260,10 +3260,10 @@ export class AppState {
     speculativeSnapshot: () => this.intelligenceManager.getSpeculativeSnapshot(),
     prefetchAnswer: (id, text) => this.intelligenceManager.prefetchAutoAnswer(id, text),
     ...((process.env.NATIVELY_AUTO_ANSWER_JUDGE || '').toLowerCase() === 'off' ? {} : {
-      judgeCandidate: async (req) => {
+      judgeCandidate: async (req, signal) => {
         const llm = this.processingHelper?.getLLMHelper?.();
         if (!llm) return null;
-        return await llm.generateJudgeVerdict(buildJudgePrompt(req));
+        return await llm.generateJudgeVerdict(buildJudgePrompt(req), { signal });
       },
     }),
     modeName: () => {

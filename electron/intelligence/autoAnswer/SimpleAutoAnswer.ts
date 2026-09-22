@@ -189,7 +189,12 @@ export interface SimpleAutoAnswerHost {
     /** See answerStreamActive: retired 2026-09-03, supplied but never called. */
     cancelAutomaticAnswer?(reason: 'user_barge_in'): boolean;
     /** The judge call (same hook as V3): raw model reply, parsed here. */
-    judgeCandidate?(req: JudgeRequest): Promise<string | null>;
+    /**
+     * The judge call. `signal` aborts when the controller supersedes the verdict
+     * (more interviewer speech, meeting ended) — the answer would be discarded
+     * anyway, so the provider request should stop costing money and quota.
+     */
+    judgeCandidate?(req: JudgeRequest, signal?: AbortSignal): Promise<string | null>;
     /** Key the engine's speculative cache to this candidate. */
     noteCandidate?(questionId: string, candidateGeneration: number): void;
     /** What the engine currently holds speculatively, for keyed reuse. */
@@ -226,6 +231,8 @@ export class SimpleAutoAnswerEngine {
     private lastInterviewerAt = 0;
     private retryTimer: ClockTimer | null = null;
     private judgeSeq = 0;
+    /** Aborts the judge call in flight; nulled when it settles or is superseded. */
+    private judgeAbort: AbortController | null = null;
     private sequence = 0;
     private lastJudgedKey = '';
     private lastAnsweredText: string | null = null;
@@ -261,6 +268,8 @@ export class SimpleAutoAnswerEngine {
     private bumpJudgeSeq(cause: NonNullable<AutoAnswerTelemetryEvent['supersededBy']>): void {
         this.judgeSeq++;
         this.judgeSeqCause = cause;
+        // The in-flight verdict is superseded — stop paying for it.
+        if (this.judgeAbort) { try { this.judgeAbort.abort(); } catch { /* never break ingest */ } this.judgeAbort = null; }
     }
 
     onMeetingStart(): void { this.reset(); }
@@ -455,6 +464,11 @@ export class SimpleAutoAnswerEngine {
         if (!this.host.judgeCandidate) {
             outcome = 'absent';
         } else {
+            // One controller per consult. bumpJudgeSeq() aborts it when newer
+            // speech supersedes this verdict; a deadline also aborts it — the
+            // controller has stopped waiting, so the provider may stop working.
+            const abort = new AbortController();
+            this.judgeAbort = abort;
             try {
                 raw = await Promise.race([
                     this.host.judgeCandidate({
@@ -465,16 +479,17 @@ export class SimpleAutoAnswerEngine {
                         modeName: this.host.modeName?.() ?? null,
                         questionId: id,
                         lastAnsweredText: this.lastAnsweredText,
-                    }),
+                    }, abort.signal),
                     new Promise<null>((resolve) => {
                         timer = this.clock.setTimeout(() => { timedOut = true; resolve(null); }, JUDGE_DEADLINE_MS);
                     }),
                 ]);
-                if (timedOut) outcome = 'timeout';
+                if (timedOut) { outcome = 'timeout'; try { abort.abort(); } catch { /* noop */ } }
             } catch {
                 outcome = 'error';
             } finally {
                 if (timer !== null) this.clock.clearTimeout(timer);
+                if (this.judgeAbort === abort) this.judgeAbort = null;
             }
         }
         const judgeMs = this.clock.now() - committedAt;
