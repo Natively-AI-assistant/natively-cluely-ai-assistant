@@ -12763,6 +12763,9 @@ export function initializeIpcHandlers(appState: AppState): void {
               model: 'deepseek-v4-flash',
               max_tokens: 10,
               messages: [{ role: 'user', content: 'Hello' }],
+              // DeepSeek thinks by default; the probe only asks "is the key
+              // accepted?", so don't make the user wait out a reasoning pass.
+              thinking: { type: 'disabled' },
             },
             {
               headers: {

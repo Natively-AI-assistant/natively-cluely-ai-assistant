@@ -158,6 +158,17 @@ const OPENAI_MODEL = "gpt-5.4"
 const CLAUDE_MODEL = "claude-sonnet-4-6"
 const DEEPSEEK_MODEL = "deepseek-v4-flash"
 const DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+// DeepSeek's chat API THINKS BY DEFAULT: `thinking.type` defaults to `enabled`
+// (reasoning_effort `high`), and in streaming the reasoning arrives in
+// `delta.reasoning_content` BEFORE the first `delta.content` token
+// (api-docs.deepseek.com/api/create-chat-completion). Every reader here takes
+// only `delta.content`, so a request without this field waits out the whole
+// hidden chain of thought before the overlay shows a word. The post-meeting
+// summary server has always sent it (benchmark/reports/REPORT.md: a probe that
+// dropped it returned reasoning_tokens 106 on a tiny prompt, the production
+// body 0); the interactive paths never did. A spread, not an inline literal:
+// the OpenAI SDK's request type has no `thinking` field.
+const DEEPSEEK_NO_THINKING = { thinking: { type: 'disabled' as const } }
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 // Optional on OpenRouter's side, and purely for their public leaderboards —
 // they are NOT auth and carry nothing about the user. Sent as constants so a
@@ -5390,6 +5401,7 @@ let isMultimodal = !!(imagePaths?.length);
         model,
         messages,
         max_tokens: this.getDeepseekMaxOutput(model),
+        ...DEEPSEEK_NO_THINKING,
       })),
       60000,
       `DeepSeek (${model})`
@@ -10328,6 +10340,7 @@ let isMultimodal = !!(imagePaths?.length);
         temperature: INTERACTIVE_TEMPERATURE,
         seed: INTERACTIVE_SEED, // DeepSeek is OpenAI-compatible and honors seed
         max_tokens: this.getDeepseekMaxOutput(model),
+        ...DEEPSEEK_NO_THINKING, // else the first token waits out the default reasoning
       }, { signal: abortSignal });
     } catch (err: any) {
       // Hard-trip on billing/quota/auth failures so we don't burn 3 chain rotations
