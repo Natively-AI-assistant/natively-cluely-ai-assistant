@@ -114,6 +114,19 @@ export const FALLBACK_INTERROGATIVE = /^(?:(?:ok(?:ay)?|so|and|now|alright|well)
  * speculation — still apply on top, so bypassing cannot stack generations.)
  */
 export const PREFETCH_MIN_INTERVAL_MS = 25_000;
+/**
+ * STT providers whose transcript can be trusted to be caught up when the local
+ * VAD reports the interviewer stopped: they stream interims, so a dangling
+ * interim tells the controller the last words' final is still in flight (see
+ * onLocalSpeechEnd). The rest produce their FINAL from the end of the segment
+ * itself — REST uploads (groq, azure, ibmwatson), OpenAI's whisper-1 REST
+ * fallback, and the local models (their own VAD closes the segment, then
+ * inference runs) — so the stop always precedes the text and would judge the
+ * turn without its last words.
+ */
+export function acceptsLocalSpeechEndHint(sttProvider: string): boolean {
+    return !['none', 'groq', 'azure', 'ibmwatson', 'openai', 'local-whisper'].includes(sttProvider);
+}
 /** The shape that earns an unrationed prefetch: a trailing '?' or an interrogative lead. */
 export function isQuestionShaped(candidate: string): boolean {
     return /\?\s*$/.test(candidate) || FALLBACK_INTERROGATIVE.test(candidate);
