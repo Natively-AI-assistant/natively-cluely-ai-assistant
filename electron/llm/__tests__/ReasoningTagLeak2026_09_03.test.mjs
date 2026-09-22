@@ -53,15 +53,29 @@ describe('groqReasoningParams — per-model gating', () => {
     assert.deepEqual(groqReasoningParams('qwen/qwen3.6-27b'), { reasoning_effort: 'none' });
   });
 
-  test('LADDER TRAP: the gpt-oss production rung gets NOTHING (it 400s on none)', () => {
+  test('LADDER TRAP: the gpt-oss production rung gets its OWN floor, never none (it 400s on none)', () => {
     // Measured live: `reasoning_effort` must be one of `low`, `medium`, `high`.
     // A param fixed at the call site would ride the model swap in
     // createGroqCompletion and turn a leak into a hard failure on the ONE path
     // that only fires after a retirement — i.e. it would pass every test until
     // the day it mattered.
-    assert.deepEqual(groqReasoningParams(GROQ_PRODUCTION_FALLBACK_MODEL), {});
-    assert.deepEqual(groqReasoningParams('openai/gpt-oss-120b'), {});
-    assert.deepEqual(groqReasoningParams('openai/gpt-oss-20b'), {});
+    //
+    // 2026-09-23: it used to get NOTHING, which is the model's default
+    // (medium). The reasoning is out-of-band, so it never leaked — but it is
+    // still generated before the first content token. `low` is the cheapest
+    // value the family accepts.
+    assert.deepEqual(groqReasoningParams(GROQ_PRODUCTION_FALLBACK_MODEL), { reasoning_effort: 'low' });
+    assert.deepEqual(groqReasoningParams('openai/gpt-oss-120b'), { reasoning_effort: 'low' });
+    assert.deepEqual(groqReasoningParams('openai/gpt-oss-20b'), { reasoning_effort: 'low' });
+  });
+
+  test('the qwen3.6 successor, qwen3.8, still gets none', () => {
+    assert.deepEqual(groqReasoningParams('qwen/qwen3.8-27b'), { reasoning_effort: 'none' });
+  });
+
+  test('ids that are neither family get nothing (no guessing at a param)', () => {
+    assert.deepEqual(groqReasoningParams('groq/compound'), {});
+    assert.deepEqual(groqReasoningParams('llama-3.3-70b-versatile'), {});
   });
 
   test('matches a namespaced id, which the anchored isThinkingModel regex cannot', () => {
@@ -192,6 +206,26 @@ describe('createGroqCompletion applies reasoning params per attempt', () => {
     return { self, seen };
   };
 
+  // ORDER-DEPENDENT, deliberately first: the LADDER TRAP tests below mark the
+  // primary gone in the bundle's (unresettable — see the NOTE at the top) memo,
+  // after which the successor itself would ladder on to gpt-oss.
+  test('a RETIRED id with a named successor never costs a round trip', async () => {
+    // qwen3.6-27b was shut down 2026-09-14. Anything still holding it (a
+    // persisted pick before the default-model repair runs) must go straight
+    // to qwen3.8 — the deprecations page already says it is gone, so no
+    // process should pay a doomed request to find out.
+    const { self, seen } = harness(() => ({ ok: true }));
+    await self.createGroqCompletion({ model: 'qwen/qwen3.6-27b', messages: [], stream: true });
+    assert.deepEqual(seen.map((r) => r.model), [GROQ_PRIMARY_MODEL], 'one request, on the successor');
+    assert.equal(seen[0].reasoning_effort, 'none', 'with the successor\'s own params');
+  });
+
+  test('strictModel still means strict: a retired id is sent as-is, never rerouted', async () => {
+    const { self, seen } = harness(() => ({ ok: true }));
+    await self.createGroqCompletion({ model: 'qwen/qwen3.6-27b', messages: [], stream: true }, { strictModel: true });
+    assert.deepEqual(seen.map((r) => r.model), ['qwen/qwen3.6-27b']);
+  });
+
   test('the qwen3 primary is sent reasoning_effort:none', async () => {
     const { self, seen } = harness(() => ({ ok: true }));
     await self.createGroqCompletion({ model: GROQ_PRIMARY_MODEL, messages: [], stream: true });
@@ -201,7 +235,7 @@ describe('createGroqCompletion applies reasoning params per attempt', () => {
     assert.equal(seen[0].stream, true, 'the rest of the request survives untouched');
   });
 
-  test('LADDER TRAP: after a model-gone retry the param is DROPPED for gpt-oss', async () => {
+  test('LADDER TRAP: after a model-gone retry gpt-oss gets low, never the primary\'s none', async () => {
     // Without per-attempt recomputation this second request carries
     // reasoning_effort:'none' onto openai/gpt-oss-120b, which the live probe
     // measured as HTTP 400 — a leak traded for an outage, on the one path that
@@ -216,7 +250,7 @@ describe('createGroqCompletion applies reasoning params per attempt', () => {
     const landed = seen[seen.length - 1];
     if (attempted) assert.equal(attempted.reasoning_effort, 'none', 'qwen attempt keeps the param');
     assert.equal(landed.model, GROQ_PRODUCTION_FALLBACK_MODEL, 'laddered down');
-    assert.equal('reasoning_effort' in landed, false, 'gpt-oss must receive NO reasoning_effort');
+    assert.equal(landed.reasoning_effort, 'low', 'gpt-oss must receive its own floor, not the inherited none');
   });
 
   test('the known-gone memo path also recomputes for the rung it lands on', async () => {
@@ -229,7 +263,7 @@ describe('createGroqCompletion applies reasoning params per attempt', () => {
     await self.createGroqCompletion({ model: GROQ_PRIMARY_MODEL, messages: [], stream: true });
     const last = seen[seen.length - 1];
     assert.equal(last.model, GROQ_PRODUCTION_FALLBACK_MODEL);
-    assert.equal('reasoning_effort' in last, false);
+    assert.equal(last.reasoning_effort, 'low');
   });
 });
 
