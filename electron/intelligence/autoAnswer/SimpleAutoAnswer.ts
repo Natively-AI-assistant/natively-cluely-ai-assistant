@@ -99,8 +99,25 @@ export const FALLBACK_INTERROGATIVE = /^(?:(?:ok(?:ay)?|so|and|now|alright|well)
  * the one case that never benefited. Now the ration is TIME, not shape — at
  * most one prefetch per window, so a long meeting cannot spend more than a
  * bounded number of generations no matter how it is phrased.
+ *
+ * 2026-09-22: the time ration is the FLOOR, not the only gate. Live telemetry
+ * (9 automatic answers, Deepgram + gpt-5.6-luna) showed the judge (1.2-2.5 s)
+ * and the answer's first token (0.7-2.7 s) running back to back, because an
+ * interview asks faster than once per 25 s and the ration let the head start
+ * fire for one question in several. A candidate that is question-SHAPED — a
+ * trailing '?' or an interrogative lead ("tell me", "walk me through", "how
+ * would you") — is the high-prior case: those are the asks the judge
+ * overwhelmingly said 'answer' to, so a rejected prefetch is rare there and
+ * the shape now bypasses the ration. Statements and bare declarative tasks
+ * keep it: their prior is low, and the ration is what bounds the spend.
+ * (The engine's own guards — never over a live stream or an existing
+ * speculation — still apply on top, so bypassing cannot stack generations.)
  */
 export const PREFETCH_MIN_INTERVAL_MS = 25_000;
+/** The shape that earns an unrationed prefetch: a trailing '?' or an interrogative lead. */
+export function isQuestionShaped(candidate: string): boolean {
+    return /\?\s*$/.test(candidate) || FALLBACK_INTERROGATIVE.test(candidate);
+}
 /**
  * How long after an automatic answer a manual press still counts as "that
  * answer was not good enough". Long enough for the user to read it and
@@ -425,7 +442,10 @@ export class SimpleAutoAnswerEngine {
      */
     private maybePrefetch(id: string, candidate: string, now: number): void {
         if (!this.host.prefetchAnswer) return;
-        if (this.lastPrefetchAt !== null && now - this.lastPrefetchAt < PREFETCH_MIN_INTERVAL_MS) return;
+        // Question-shaped asks always get the head start; everything else is
+        // rationed by time. See PREFETCH_MIN_INTERVAL_MS for why both exist.
+        const rationed = this.lastPrefetchAt !== null && now - this.lastPrefetchAt < PREFETCH_MIN_INTERVAL_MS;
+        if (rationed && !isQuestionShaped(candidate)) return;
         this.lastPrefetchAt = now;
         try {
             this.host.prefetchAnswer(id, candidate);

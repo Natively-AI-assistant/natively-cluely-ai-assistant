@@ -400,6 +400,49 @@ test('a verdict that arrives after the meeting moved on is still recorded as sta
   await flush(); await flush();
   const judged = h.state.events.filter(e => e.name === 'auto_answer_judged');
   assert.ok(judged.some(e => e.judgeOutcome === 'stale'), 'the superseded call reports stale');
+// ── Latency work (2026-09-22): question-shaped candidates always prefetch ──
+// Live telemetry (9 auto answers, Deepgram + gpt-5.6-luna): the judge took
+// 1.2-2.5 s and the answer's first token another 0.7-2.7 s, SERIALLY, because
+// the time ration let the prefetch fire at most once per 25 s and an interview
+// asks faster than that. A candidate that ends in '?' or opens with an
+// interrogative ("tell me", "walk me through", "how would you") is the
+// high-prior shape — the judge said 'answer' to those far more often than to
+// statements — so it starts the answer at the consult every time. Statements
+// and declarative tasks keep the time ration (a rejected prefetch is a wasted
+// generation, and their prior is low).
+
+test('prefetch: question-shaped candidates bypass the time ration — back-to-back questions each get the head start', async () => {
+  const h = makeSimple(async () => YES());
+  const prefetched = [];
+  h.engine.host.prefetchAnswer = (id, text) => prefetched.push(text);
+  h.engine.host.speculativeSnapshot = () => ({ questionId: null, text: null });
+  h.interviewer('Why did you choose PostgreSQL over the alternatives here?');
+  await h.advance(STABILITY_MS + 200);
+  assert.equal(prefetched.length, 1);
+  h.state.streaming = false; h.state.accepting = true;
+  await h.advance(3000);                                   // well inside the 25 s ration
+  h.interviewer('Tell me how you would shard it once it outgrows one box.');
+  await h.advance(STABILITY_MS + 200);
+  assert.equal(prefetched.length, 2, 'an interrogative-led ask 3 s later prefetches too');
+  h.state.streaming = false; h.state.accepting = true;
+  await h.advance(3000);
+  h.interviewer('And what breaks first under that write load?');
+  await h.advance(STABILITY_MS + 200);
+  assert.equal(prefetched.length, 3, 'and a third question, again inside the window');
+});
+
+test('prefetch: a statement inside the window is still rationed — the shape bypass is for asks only', async () => {
+  const h = makeSimple(async () => NO);
+  const prefetched = [];
+  h.engine.host.prefetchAnswer = (id, text) => prefetched.push(text);
+  h.engine.host.speculativeSnapshot = () => ({ questionId: null, text: null });
+  h.interviewer('So the first thing to know about this system is that it stores everything in one place.');
+  await h.advance(STABILITY_MS + 200);
+  assert.equal(prefetched.length, 1, 'the first stoppage is inside a fresh window');
+  await h.advance(3000);
+  h.interviewer('The second thing to know is that the cache is invalidated on write, not on read.');
+  await h.advance(STABILITY_MS + 200);
+  assert.equal(prefetched.length, 1, 'a second statement 3 s later does not spend another generation');
 });
 
 test('prefetch: a stale speculative snapshot for ANOTHER question is not reused', async () => {
