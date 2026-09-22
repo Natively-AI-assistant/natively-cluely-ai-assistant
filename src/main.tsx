@@ -40,6 +40,16 @@ document.documentElement.setAttribute(
   window.electronAPI?.platform ?? (typeof process !== 'undefined' ? process.platform : '') ?? ''
 );
 
+// Which window this document is (?window=launcher|settings|overlay|…), exposed
+// to CSS for chrome that differs per window — currently only the Windows/Linux
+// corner radius, which is larger on the launcher. Set here, synchronously, for
+// the same no-flash-on-first-paint reason as data-platform. No `?window=` tag
+// means the launcher (see main.ts's default-launcher fallback).
+document.documentElement.setAttribute(
+  'data-window',
+  new URLSearchParams(window.location.search).get('window') || 'launcher'
+);
+
 // Step 1: Apply cached theme synchronously — before React renders.
 // This ensures useResolvedTheme()'s initial useState read sees the correct value.
 const cachedTheme = localStorage.getItem(THEME_CACHE_KEY) as 'light' | 'dark' | null;
