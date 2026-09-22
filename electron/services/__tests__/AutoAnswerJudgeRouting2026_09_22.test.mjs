@@ -28,13 +28,13 @@ describe('generateJudgeVerdict ladder', () => {
     assert.ok(judgeStart > 0 && judgeEnd > judgeStart, 'generateJudgeVerdict precedes generateContentStructured');
   });
 
-  test('every provider gets a SMALL-tier rung: Gemini flash-lite, Groq, OpenAI mini, DeepSeek, Claude Haiku', () => {
+  test('every provider gets an explicit judge rung: Gemini flash-lite, Groq, OpenAI, DeepSeek, Claude', () => {
     assert.match(JUDGE, /GEMINI_FLASH_LITE_MODEL/);
     assert.match(JUDGE, /this\.groqClient/);
     assert.match(JUDGE, /this\.createGroqCompletion\(/);
     assert.match(JUDGE, /OPENAI_JUDGE_MODEL/);
     assert.match(JUDGE, /this\.deepseekClient/);
-    assert.match(JUDGE, /CLAUDE_JUDGE_MODEL/);
+    assert.match(JUDGE, /this\.claudeClient\.messages\.create\(/);
   });
 
   test('the judge never borrows the chat model: no currentModelId, no generateWithOpenai/Claude/Deepseek helpers inside the ladder', () => {
@@ -44,13 +44,19 @@ describe('generateJudgeVerdict ladder', () => {
     assert.doesNotMatch(JUDGE, /this\.generateWithDeepseek\(/);
   });
 
-  test('the judge tiers are the small models, not the chat defaults', () => {
-    const openai = LLM.match(/const OPENAI_JUDGE_MODEL = "([^"]+)"/)?.[1];
-    const claude = LLM.match(/const CLAUDE_JUDGE_MODEL = "([^"]+)"/)?.[1];
-    assert.ok(openai && /mini|nano/.test(openai), `OPENAI_JUDGE_MODEL must be a mini/nano tier (got ${openai})`);
-    assert.ok(claude && /haiku/.test(claude), `CLAUDE_JUDGE_MODEL must be a Haiku tier (got ${claude})`);
-    assert.notEqual(openai, LLM.match(/const OPENAI_MODEL = "([^"]+)"/)?.[1]);
-    assert.notEqual(claude, LLM.match(/const CLAUDE_MODEL = "([^"]+)"/)?.[1]);
+  // Chosen by judgeEval.mjs on 146 labeled real-meeting candidates, not by
+  // size: gpt-5.4-mini was faster but lost 3-7 of 19 real asks; gpt-5.5 caught
+  // 14/19 (the old chat-model path 12-13/19) at p50 1.4 s vs 2.0 s. A change
+  // here must come with a fresh eval run — this pins the measured choice.
+  test('the OpenAI judge model is the MEASURED one, with the eval recorded beside it', () => {
+    assert.equal(LLM.match(/const OPENAI_JUDGE_MODEL = "([^"]+)"/)?.[1], 'gpt-5.5');
+    const block = LLM.slice(LLM.indexOf('// Auto Answer judge on the OpenAI rung'), LLM.indexOf('const OPENAI_JUDGE_MODEL'));
+    assert.match(block, /recall 14\/19/, 'the eval result that justifies it sits next to the constant');
+  });
+
+  test('no unmeasured small tier is substituted on the Claude rung', () => {
+    assert.match(JUDGE, /model: CLAUDE_MODEL,/);
+    assert.doesNotMatch(JUDGE, /haiku/i);
   });
 
   test('every rung honours the outbound data-scope policy and its rate limiter', () => {
@@ -62,7 +68,8 @@ describe('generateJudgeVerdict ladder', () => {
 
   test('the structured ladder is the LAST resort, after every small rung', () => {
     const last = JUDGE.lastIndexOf('this.generateContentStructured(');
-    assert.ok(last > JUDGE.indexOf('CLAUDE_JUDGE_MODEL'), 'falls through only after the Claude rung');
+    const claudeRung = JUDGE.indexOf('this.claudeClient.messages.create(');
+    assert.ok(claudeRung > 0 && last > claudeRung, 'falls through only after the Claude rung');
     assert.equal((JUDGE.match(/this\.generateContentStructured\(/g) || []).length, 1);
   });
 

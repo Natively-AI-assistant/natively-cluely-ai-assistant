@@ -158,16 +158,22 @@ const OLLAMA_VISION_CHAIN_PROBE_BUDGET_MS = 1500
 const OLLAMA_VISION_NEGATIVE_TTL_MS = 30_000
 const OPENAI_MODEL = "gpt-5.4"
 const CLAUDE_MODEL = "claude-sonnet-4-6"
-// Auto Answer judge tiers: the smallest fast model of each provider. A verdict
-// is a yes/no JSON on ~2k tokens of context; the chat model is the wrong tool
-// (see generateJudgeVerdict).
-const OPENAI_JUDGE_MODEL = "gpt-5.4-mini"
+// Auto Answer judge on the OpenAI rung — chosen by MEASUREMENT, not by size.
+// Scored with judgeEval.mjs on the 146 labeled real-meeting candidates (19 asks),
+// two runs each, JSON mode, 2026-09-22:
+//   gpt-5.5       none  recall 14/19 14/19  false fires 0  p50 1.4 s  worst p90 2.1 s
+//   gpt-5.6-luna  low   recall 12/19 13/19  false fires 0  p50 2.0 s  worst p90 3.7 s  ← the old path
+//   gpt-5.4       none  recall 11/19 11/19  false fires 0  p50 1.4 s  worst p90 2.3 s
+//   gpt-5.4-mini  none  recall  9/19  6/19  false fires 1  p50 1.2 s  worst p90 2.5 s
+// The small tiers are faster but miss real asks; gpt-5.5 is both faster AND more
+// accurate than the chat-model fallback it replaces. Re-run the eval before
+// changing this.
+const OPENAI_JUDGE_MODEL = "gpt-5.5"
 const CLAUDE_JUDGE_MODEL = "claude-haiku-4-5"
 // DEEPSEEK_MODEL keeps main's centralised id, NOT the "deepseek-v4-flash"
-// literal this commit carried: main moved the current id and the retired-alias
-// map into llm/deepseekModels.ts precisely because v4-flash is a retired alias
-// and deepseek-flash is what DeepSeek serves today. Taking the literal here
-// would silently revert that fix.
+// literal this commit carried: v4-flash is a RETIRED alias and deepseek-flash
+// is what DeepSeek serves today (llm/deepseekModels.ts). Taking the literal
+// would silently revert main's fix.
 const DEEPSEEK_MODEL = DEEPSEEK_DEFAULT_MODEL
 const DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 // DeepSeek's chat API THINKS BY DEFAULT: `thinking.type` defaults to `enabled`
@@ -4782,15 +4788,15 @@ let isMultimodal = !!(imagePaths?.length);
    * The Auto Answer judge's call. A small, FAST model — never the user's chat
    * model. Live telemetry (2026-09-22, OpenAI-only user on gpt-5.6-luna): the
    * judge fell through to generateContentStructured, whose OpenAI rung takes
-   * the CURRENT model, so a yes/no classification ran on the heaviest model
-   * configured — 1.4 s median, 2.5 s p90 (the deadline), and 41 of 83 calls
-   * superseded mid-flight and paid for nothing. The ladder here is every
-   * provider's smallest fast tier, in the order they have been validated:
-   * Gemini flash-lite (the tuned default, live-probed 750-1200 ms) → Groq
-   * (~0.3 s, and previously had NO judge rung at all, so a Groq-only user got
-   * the regex fallback) → OpenAI mini → DeepSeek flash → Claude Haiku. Only
-   * when none of those is configured does it fall back to the structured
-   * ladder. Every rung honours the outbound data-scope policy and its
+   * the CURRENT model, so a yes/no classification ran on whatever chat model
+   * was selected — 1.4 s median, 2.5 s p90 (the deadline), and 41 of 83 calls
+   * superseded mid-flight and paid for nothing. The ladder here is an explicit
+   * JUDGE model per provider: Gemini flash-lite (the tuned default, live-probed
+   * 750-1200 ms) → Groq (~0.3 s TTFT, and previously NO judge rung at all, so a
+   * Groq-only user got the "only a trailing '?' fires" regex fallback) →
+   * OpenAI OPENAI_JUDGE_MODEL (measured: see the constant) → DeepSeek flash →
+   * Claude's default model. Only when none of those is configured does it fall
+   * back to the structured ladder. Every rung honours the outbound data-scope policy and its
    * provider's rate limiter like any other call, and `signal` aborts the rung
    * in flight when the interviewer keeps talking (the controller supersedes
    * the verdict anyway — the call was money and quota spent on nothing).
@@ -4875,7 +4881,10 @@ let isMultimodal = !!(imagePaths?.length);
         this.assertOutboundScopes('claude', message);
         await this.rateLimiters.claude.acquire();
         const res: any = await this.claudeClient.messages.create({
-          model: CLAUDE_JUDGE_MODEL,
+          // The app's default Claude model, as the structured ladder used before.
+          // A smaller tier is NOT substituted unmeasured: on OpenAI the small
+          // tiers lost 3-7 of 19 real asks (see OPENAI_JUDGE_MODEL).
+          model: CLAUDE_MODEL,
           max_tokens: 256,
           temperature: 0,
           messages: userOnly,
