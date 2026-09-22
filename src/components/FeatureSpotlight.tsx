@@ -69,38 +69,61 @@ const FEATURES: FeatureSlide[] = [
 /**
  * Paging arrow: a long-armed, obtuse (100°) chevron. Lucide's chevrons are a
  * tight right angle, which read as a UI glyph rather than a quiet direction
- * cue at the card's edge. Drawn for the left; the right one is mirrored.
+ * cue at the card's edge. 16-unit arms at ±50° from the horizontal.
  */
-const PagingArrow: React.FC<{ flip?: boolean }> = ({ flip }) => (
-    <svg
-        width="16"
-        height="28"
-        viewBox="0 0 16 28"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={1}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-        className="drop-shadow-[0_1px_2px_rgba(0,0,0,0.45)]"
-        style={flip ? { transform: 'scaleX(-1)' } : undefined}
-    >
-        {/* 16-unit arms at ±50° from the horizontal: a 100° opening */}
-        <path d="M13.3 1.7 L3 14 L13.3 26.3" />
-    </svg>
-);
+const ARROW_PATH = { left: 'M13.3 1.7 L3 14 L13.3 26.3', right: 'M2.7 1.7 L13 14 L2.7 26.3' } as const;
+
+/**
+ * The GLYPH is the glass — there is no plate behind it. A stroke cannot carry a
+ * backdrop-filter, so the chevron is drawn into a mask and the filter runs on the
+ * element the mask cuts: what is left is a chevron-shaped window onto a blurred,
+ * saturated copy of the artwork, with a faint white body over it for the material
+ * and a dark rim under it so the shape survives a pale background.
+ *
+ * ARROW_STROKE is the one number to move. The band has to be wide enough to hold
+ * a blur — below about 2 the refraction has nowhere to show and it collapses back
+ * into a plain white line.
+ */
+const ARROW_STROKE = 2.25;
+
+const arrowMask = (side: 'left' | 'right') =>
+    `url("data:image/svg+xml,${encodeURIComponent(
+        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 28"><path d="${ARROW_PATH[side]}" fill="none" stroke="#fff" stroke-width="${ARROW_STROKE}" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    )}")`;
+
+const PagingArrow: React.FC<{ side: 'left' | 'right' }> = ({ side }) => {
+    const mask = arrowMask(side);
+    return (
+        <span
+            aria-hidden="true"
+            className="block h-7 w-4 opacity-90 transition-opacity duration-200 group-hover/arrow:opacity-100"
+            style={{
+                maskImage: mask,
+                WebkitMaskImage: mask,
+                maskSize: '100% 100%',
+                WebkitMaskSize: '100% 100%',
+                maskRepeat: 'no-repeat',
+                WebkitMaskRepeat: 'no-repeat',
+                backdropFilter: 'blur(4px) saturate(180%) brightness(1.35)',
+                WebkitBackdropFilter: 'blur(4px) saturate(180%) brightness(1.35)',
+                background: 'linear-gradient(150deg, rgba(255,255,255,0.55), rgba(255,255,255,0.14))',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.45)',
+            }}
+        />
+    );
+};
 
 /**
  * Proximity reveal. The arrows used to appear together the moment the card was
  * hovered, which put two controls on screen for a cursor that was only passing
  * over the copy. Instead each one wakes on its own, and only once the pointer is
- * within PROXIMITY_RADIUS of ITS centre — roughly 3cm on a typical display.
+ * within PROXIMITY_RADIUS of ITS centre — roughly 2cm on a typical display.
  *
  * Measured against the card box rather than with a hover zone, because a zone
  * large enough to feel like a radius would sit over the headline and the CTA and
  * swallow their clicks.
  */
-const PROXIMITY_RADIUS = 120;
+const PROXIMITY_RADIUS = 72;
 /** left-2.5 (10px) + half of w-7 (14px): the centre of either arrow, from its own edge. */
 const ARROW_INSET = 24;
 
@@ -160,7 +183,7 @@ export const FeatureSpotlight: React.FC = () => {
     };
 
     // Nearest arrow wins, so the two never light up at once. The radii do not
-    // overlap on this card anyway (593px wide against a 120px reach), but a
+    // overlap on this card anyway (593px wide against a 72px reach), but a
     // narrower one should still reveal one arrow at a time.
     const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
         const box = cardRef.current?.getBoundingClientRect();
@@ -225,9 +248,9 @@ export const FeatureSpotlight: React.FC = () => {
             {/* Side arrows: revealed when the pointer comes within reach of that one
                 arrow (or on keyboard focus), nudging in from their own edge */}
             {([
-                { delta: -1, label: 'Previous card', flip: false, side: 'left-2.5', rest: '-translate-x-1', which: 'prev' },
-                { delta: 1, label: 'Next card', flip: true, side: 'right-2.5', rest: 'translate-x-1', which: 'next' },
-            ] as const).map(({ delta, label, flip, side, rest, which }) => (
+                { delta: -1, label: 'Previous card', glyph: 'left', side: 'left-2.5', rest: '-translate-x-1', which: 'prev' },
+                { delta: 1, label: 'Next card', glyph: 'right', side: 'right-2.5', rest: 'translate-x-1', which: 'next' },
+            ] as const).map(({ delta, label, glyph, side, rest, which }) => (
                 <button
                     key={label}
                     type="button"
@@ -236,18 +259,13 @@ export const FeatureSpotlight: React.FC = () => {
                     className={`
                         absolute top-1/2 ${side} z-30 -translate-y-1/2
                         ${nearArrow === which ? 'opacity-100 translate-x-0 pointer-events-auto' : `opacity-0 ${rest} pointer-events-none`}
-                        flex h-10 w-7 items-center justify-center
-                        rounded-full text-white/70
-                        bg-white/[0.07] ring-1 ring-white/[0.1]
-                        backdrop-blur-md backdrop-saturate-150
-                        shadow-[inset_0_1px_0_rgba(255,255,255,0.14),inset_0_-1px_0_rgba(255,255,255,0.04),0_8px_20px_-10px_rgba(0,0,0,0.55)]
+                        group/arrow flex h-10 w-7 items-center justify-center
                         focus-visible:opacity-100 focus-visible:translate-x-0 focus-visible:pointer-events-auto
-                        hover:text-white hover:bg-white/[0.12] hover:ring-white/[0.18]
                         active:scale-[0.92]
-                        transition-[opacity,transform,color,background-color,box-shadow] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)]
+                        transition-[opacity,transform] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)]
                     `}
                 >
-                    <PagingArrow flip={flip} />
+                    <PagingArrow side={glyph} />
                 </button>
             ))}
 
