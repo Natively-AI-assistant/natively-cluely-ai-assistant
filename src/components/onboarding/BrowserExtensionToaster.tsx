@@ -100,7 +100,9 @@ const PLATE_ZOOM_OUT = 700;
 const CTA_IN  = 420;
 const CTA_OUT = 280;
 
-const CLOSE_LIGHT = { rest: 'rgba(11,16,32,0.34)',    hover: 'rgba(11,16,32,0.92)' };
+// Close ink on the light image panel (#E6E8EE). Rest clears the 3:1 that
+// WCAG 1.4.11 asks of a control (3.97:1); at 0.34 it was 2.17:1.
+const CLOSE_LIGHT = { rest: 'rgba(11,16,32,0.55)', hover: 'rgba(11,16,32,0.92)' };
 
 // Entrance: the column arrives as one piece, tier by tier.
 const STAGGER = { hidden: {}, show: { transition: { staggerChildren: 0.07, delayChildren: 0.14 } } };
