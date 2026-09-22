@@ -98,6 +98,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSe
         if (model === 'gemini-3.6-flash') return 'Gemini 3.6 Flash';
         if (model === 'gemini-3.1-flash-lite') return 'Gemini 3.1 Flash Lite';
         if (model === 'gemini-3.1-pro-preview') return 'Gemini 3.1 Pro';
+        if (model === 'qwen/qwen3.8-27b') return 'Groq Qwen 3.8';
         if (model === 'qwen/qwen3.6-27b') return 'Groq Qwen 3.6';
         if (model === 'openai/gpt-oss-120b') return 'Groq GPT-OSS 120B';
         if (model === 'openai/gpt-oss-20b') return 'Groq GPT-OSS 20B';

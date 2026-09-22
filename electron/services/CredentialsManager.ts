@@ -1377,7 +1377,7 @@ export class CredentialsManager {
         if (this.getOpenaiApiKey()) return true;                 // gpt-4o / gpt-5 vision
         if (this.getClaudeApiKey()) return true;                 // Claude vision
         if (this.getGeminiApiKey()) return true;                 // Gemini vision
-        if (this.getGroqApiKey()) return true;                   // Groq qwen3.6-27b vision
+        if (this.getGroqApiKey()) return true;                   // Groq qwen3.8-27b vision
         // Custom providers. TWO fixes over the previous `customProviders.some(
         // p => p.multimodal === true)`:
         //   • getAllCustomProviders() — the old read missed the store the
@@ -1883,12 +1883,14 @@ export class CredentialsManager {
             // Auto-assigned ids, past and present: the gemini defaults, the
             // historical Groq fallbacks (llama-3.3, scout — both retired,
             // which is exactly why sitting on them must not be treated as a
-            // choice), and the current Groq default qwen/qwen3.6-27b.
+            // choice), the former Groq default qwen/qwen3.6-27b (retired
+            // 2026-09-14) and the current one, qwen/qwen3.8-27b.
             const AUTO_ASSIGNED_MODEL_IDS = new Set([
                 'gemini', 'llama',
                 'llama-3.3-70b-versatile',
                 'meta-llama/llama-4-scout-17b-16e-instruct',
                 'qwen/qwen3.6-27b',
+                'qwen/qwen3.8-27b',
             ]);
             const isAutoDefault = !current
                 || current.startsWith('gemini-')

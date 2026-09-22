@@ -132,7 +132,8 @@ const GEMINI_PRO_MODEL = "gemini-3.1-pro-preview"
 // TEXT_HEDGE_ENABLED / GEMINI_TEXT_HEDGE_CONFIG knobs were removed.
 // Groq retired every Llama id it hosted: `llama-3.3-70b-versatile` shut down
 // 2026-08-16 and `meta-llama/llama-4-scout-17b-16e-instruct` on 2026-07-17.
-// `qwen/qwen3.6-27b` is the replacement for BOTH paths — it is the only model
+// `qwen/qwen3.8-27b` (successor to qwen3.6-27b, itself shut down 2026-09-14) is
+// the model for BOTH paths — it is the only model
 // left in Groq's catalogue that accepts image input, so text and vision share
 // one id. The user's pick in the model selector still wins; these are only the
 // baseline used when nothing is chosen and by the Fast Text / emergency paths.
@@ -5046,8 +5047,12 @@ let isMultimodal = !!(imagePaths?.length);
     // used to pay a doomed full-payload round trip to the dead model before
     // laddering — callers keep passing the module const. Skip straight to the
     // fallback rung when this process has already seen the model die.
-    const { markGroqModelGone, isGroqModelKnownGone, groqReasoningParams } = require('./llm/groqModels') as typeof import('./llm/groqModels');
-    if (!opts?.strictModel && isGroqModelKnownGone(request?.model)) {
+    const { markGroqModelGone, isGroqModelKnownGone, isRetiredModelId, groqReasoningParams } = require('./llm/groqModels') as typeof import('./llm/groqModels');
+    // A RETIRED id with a named successor is known-gone before the first call,
+    // not after it: no process should pay a doomed round trip to learn what
+    // the deprecations page already says. (Retired ids without a successor
+    // return null below and take the normal path, as before.)
+    if (!opts?.strictModel && (isGroqModelKnownGone(request?.model) || isRetiredModelId(request?.model))) {
       const memoFallback = groqFallbackFor(request?.model);
       if (memoFallback) {
         return await this.createGroqCompletion({ ...request, model: memoFallback }, opts);
@@ -6346,14 +6351,14 @@ let isMultimodal = !!(imagePaths?.length);
       model: GROQ_VISION_MODEL,
       messages,
       temperature: 1,
-      // Groq caps qwen3.6-27b at 16,384 completion tokens. The old 28,672 was
+      // Groq caps qwen3.8-27b (as it did 3.6) at 16,384 completion tokens. The old 28,672 was
       // llama-4-scout's ceiling; asking for more than a model's limit is a 400,
       // not a silent clamp.
       max_completion_tokens: 16384,
       top_p: 1,
       stream: false as const,
       stop: null as string[] | null,
-      // GROQ_VISION_MODEL is qwen3.6-27b — a THINKING model. Without this the
+      // GROQ_VISION_MODEL is qwen3.8-27b — a THINKING model. Without this the
       // <think> block is returned as message.content and handed straight to the
       // caller (2026-09-03). Note this call deliberately does NOT go through
       // createGroqCompletion: that ladder falls back to a TEXT-ONLY model, which
@@ -6773,7 +6778,7 @@ let isMultimodal = !!(imagePaths?.length);
    * and Gemini-only for multimodal (images)
    *
    * TEXT-ONLY FALLBACK CHAIN:
-   * 1. Groq (qwen/qwen3.6-27b) - Primary
+   * 1. Groq (qwen/qwen3.8-27b) - Primary
    * 2. Gemini Flash - 1st fallback
    * 3. Gemini Flash + Pro parallel - 2nd fallback
    * 4. Gemini Flash retries (max 3) - Last resort
@@ -10197,7 +10202,7 @@ let isMultimodal = !!(imagePaths?.length);
       temperature: 1,
       top_p: 1,
       stop: null,
-      // Same as the non-streaming vision call above: qwen3.6-27b thinks out loud
+      // Same as the non-streaming vision call above: qwen3.8-27b thinks out loud
       // into delta.content, and this is the LATENCY-CRITICAL path (every
       // screenshot turn). Applied here rather than via createGroqCompletion
       // because that ladder's fallback rung is text-only.

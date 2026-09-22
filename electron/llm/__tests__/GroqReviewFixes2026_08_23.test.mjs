@@ -57,7 +57,10 @@ describe('FINDING 2: a persisted RETIRED default is repaired even when a Groq ke
   test('the historical auto-installed defaults are in the retired set', () => {
     assert.equal(gm.isRetiredModelId('llama-3.3-70b-versatile'), true);
     assert.equal(gm.isRetiredModelId('meta-llama/llama-4-scout-17b-16e-instruct'), true);
-    assert.equal(gm.isRetiredModelId('qwen/qwen3.6-27b'), false);
+    // qwen3.6-27b was the live default when this was written; Groq shut it
+    // down on 2026-09-14, so it is now one of the historical ones too.
+    assert.equal(gm.isRetiredModelId('qwen/qwen3.6-27b'), true);
+    assert.equal(gm.isRetiredModelId('qwen/qwen3.8-27b'), false);
   });
 });
 
@@ -133,7 +136,8 @@ describe('FINDING (admission): discovery never admits a retired id', () => {
 
 describe('FINDING 4: the e2e harness no longer defaults to a retired model', () => {
   test('groq-keypool EVAL_MODEL default is the live primary', () => {
-    assert.match(src('tests/intelligence/e2e/groq-keypool.mjs'), /GROQ_EVAL_MODEL \|\| 'qwen\/qwen3\.6-27b'/);
+    assert.match(src('tests/intelligence/e2e/groq-keypool.mjs'), /GROQ_EVAL_MODEL \|\| 'qwen\/qwen3\.8-27b'/);
+    assert.doesNotMatch(src('tests/intelligence/e2e/groq-keypool.mjs'), /\|\| 'qwen\/qwen3\.6-27b'/);
     assert.doesNotMatch(src('tests/intelligence/e2e/groq-keypool.mjs'), /\|\| 'meta-llama\/llama-4-scout/);
   });
   test('finalize-results fallback label matches', () => {
