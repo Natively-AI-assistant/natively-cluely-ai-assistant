@@ -186,6 +186,16 @@ export interface IntelligenceModeEvents {
     'dynamic_action_emitted': (action: DynamicAction) => void;
 }
 
+/**
+ * What an adopted-mid-stream prefetch had already painted when it finished:
+ * whether any token reached the renderer (under the run's own generation id)
+ * and what the prefix buffer still held. Undefined when the run never painted.
+ */
+interface SpeculativeStreamed {
+    emitted: boolean;
+    pendingBuffer: string;
+}
+
 /** A speculative prefetch that completed unadopted, held for the dispatch that may adopt it. */
 interface SpeculativeAnswer {
     generationId: number;
@@ -440,6 +450,14 @@ export class IntelligenceEngine extends EventEmitter {
      * is the only non-automatic caller — but wrong on any caller.
      */
     private speculativeAdoptedGenerationId: number | null = null;
+    /**
+     * Registered by a RUNNING speculative stream: called with the adopted
+     * generation id the moment the dispatch adopts it, so what has already
+     * been generated paints now rather than on the next token (or at
+     * completion, when the provider has paused). Null when no speculative
+     * stream is in flight. See unmuteAdoptedStream in runWhatShouldISay.
+     */
+    private speculativeAdoptHook: ((adoptedGenerationId: number) => void) | null = null;
     // epoch ms after which speculativeText is stale; Infinity while stream is still running
     private speculativeTextExpiry: number = Infinity;
     private readonly SPECULATIVE_DEBOUNCE_MS = 350;
@@ -1026,12 +1044,15 @@ export class IntelligenceEngine extends EventEmitter {
                         && this.speculativeGenerationId !== null
                         && this.speculativeGenerationId === this.currentGenerationId;
                     if (stillStreaming) {
-                        console.log(`[IntelligenceEngine] Speculative stream accepted (Jaccard=${similarity.toFixed(2)}) — continuing; revealed at completion`);
+                        console.log(`[IntelligenceEngine] Speculative stream accepted (Jaccard=${similarity.toFixed(2)}) — continuing; painting live from here`);
                         // The running speculative stream IS the automatic answer
-                        // now. It never streamed to the UI, so completion reveals
-                        // it (see the isSpeculative completion branch).
+                        // now. It paints from this moment on (what it already
+                        // generated first, then live); completion finishes the
+                        // same row (see completeSpeculativeRun / revealSpeculativeAnswer).
                         this.speculativeAdoptedGenerationId = this.currentGenerationId;
                         if (trigger.automatic) this.automaticGenerationId = this.currentGenerationId;
+                        // Unmute the stream NOW: paint what it has, stream the rest.
+                        try { this.speculativeAdoptHook?.(this.currentGenerationId); } catch (err) { console.warn('[IntelligenceEngine] adopted-stream paint failed; it will reveal at completion:', err); }
                         return;
                     }
                     if (finished) {
@@ -1152,6 +1173,7 @@ export class IntelligenceEngine extends EventEmitter {
     private completeSpeculativeRun(
         generationId: number, question: string | undefined, confidence: number, text: string,
         writeDecision: SessionWriteDecision | undefined,
+        streamed?: SpeculativeStreamed,
     ): string {
         const finished: SpeculativeAnswer = { generationId, question: question || 'inferred', confidence, text, writeDecision };
         const adoptedInFlight = this.speculativeAdoptedGenerationId === generationId && this.currentGenerationId === generationId;
@@ -1166,7 +1188,7 @@ export class IntelligenceEngine extends EventEmitter {
             this.speculativeTextExpiry = Date.now() + this.triggerCooldown + 500;
         }
         this.setMode('idle');
-        if (adoptedInFlight) this.revealSpeculativeAnswer(finished, this.automaticGenerationId === generationId);
+        if (adoptedInFlight) this.revealSpeculativeAnswer(finished, this.automaticGenerationId === generationId, streamed);
         return text;
     }
 
@@ -1181,7 +1203,7 @@ export class IntelligenceEngine extends EventEmitter {
      * cut short is shown, like any truncated live answer, but it must not
      * become prior_assistant_responses evidence for the next turn.
      */
-    private revealSpeculativeAnswer(finished: SpeculativeAnswer, automatic: boolean): void {
+    private revealSpeculativeAnswer(finished: SpeculativeAnswer, automatic: boolean, streamed?: SpeculativeStreamed): void {
         let text = finished.text;
         // A speculative run is never `isCoding` (see runWhatShouldISay), so it
         // gets neither the StreamingSpecStripper nor the live path's
@@ -1207,12 +1229,26 @@ export class IntelligenceEngine extends EventEmitter {
             console.warn('[IntelligenceEngine] Prefetched answer was empty — nothing to reveal');
             return;
         }
-        // The prefetch never emitted, so the renderer never saw its generation.
-        // Mint a fresh one: the engine is idle here, so nothing is superseded.
-        const generationId = ++this.currentGenerationId;
+        // Two shapes of adoption (2026-09-22):
+        //  - adopted AFTER it finished, or adopted mid-stream but nothing crossed
+        //    the paint guards yet: the renderer never saw this generation. Mint a
+        //    fresh one (the engine is idle here, so nothing is superseded) and
+        //    open the row with the whole text.
+        //  - adopted mid-stream and already PAINTING under its own generation:
+        //    flush whatever the prefix buffer still holds, then let the final
+        //    below replace that same row by id — the live-path contract. Minting
+        //    here would leave the streamed row orphaned beside a second copy.
+        const alreadyPainting = streamed?.emitted === true;
+        const generationId = alreadyPainting ? finished.generationId : ++this.currentGenerationId;
         this.automaticGenerationId = automatic ? generationId : null;
-        console.log(`[IntelligenceEngine] Revealing the prefetched answer (${text.length} chars, prefetch gen ${finished.generationId} → ${generationId})`);
-        this.emit('suggested_answer_token', text, finished.question, finished.confidence, generationId);
+        if (alreadyPainting) {
+            console.log(`[IntelligenceEngine] Finishing the adopted prefetch that streamed live (${text.length} chars, gen ${generationId})`);
+            const pending = streamed?.pendingBuffer ?? '';
+            if (pending.trim()) this.emit('suggested_answer_token', pending, finished.question, finished.confidence, generationId);
+        } else {
+            console.log(`[IntelligenceEngine] Revealing the prefetched answer (${text.length} chars, prefetch gen ${finished.generationId} → ${generationId})`);
+            this.emit('suggested_answer_token', text, finished.question, finished.confidence, generationId);
+        }
         this.session.addAssistantMessage(text, finished.writeDecision, 'what_to_answer');
         if (finished.writeDecision?.policy !== 'do_not_store') {
             this.session.pushUsage({ type: 'assist', timestamp: Date.now(), question: finished.question, answer: text });
@@ -3974,6 +4010,9 @@ export class IntelligenceEngine extends EventEmitter {
             let streamAborted = false;
             let emittedStreamingToken = false;
             let streamingTokenBuffer = '';
+            // A speculative run that the dispatch adopted while it was still
+            // streaming: from that token on it paints like a live turn.
+            let speculativeStreamingLive = false;
             const STREAMING_SAFE_PREFIX_CHARS = 160;
             // RC-4 (session C, 2026-08-21): scaffold-aware stream hold for
             // NON-coding turns. Live, 23 presses streamed a "## Approach…"
@@ -4090,6 +4129,82 @@ export class IntelligenceEngine extends EventEmitter {
                 // already-queued tokens can be dropped renderer-side.
                 this.emit('suggested_answer_token', chunk, question || 'inferred', confidence, generationId);
             };
+            // Non-coding paint path: buffer tokens, decide the scaffold hold once,
+            // hold canned openers, and paint the first SAFE prefix, then stream.
+            // Shared by every live token and by the adoption flush below.
+            const paintBuffered = (token: string): void => {
+                streamingTokenBuffer += token;
+                // RC-4: decide the hold once, on the first visible
+                // characters. A leading markdown heading on a spoken
+                // (non-coding) answer is the scaffold-misfire shape —
+                // hold every paint and deliver only the repaired final.
+                if (!scaffoldStreamHoldDecided) {
+                    const seen = streamingTokenBuffer.trimStart();
+                    if (seen.length >= 4) {
+                        scaffoldStreamHoldDecided = true;
+                        scaffoldStreamHold = /^#{1,3}\s/.test(seen);
+                        if (scaffoldStreamHold) {
+                            trace.mark('repair_used', { reason: 'scaffold_stream_hold', answerType: answerPlan.answerType });
+                        }
+                    }
+                }
+                if (scaffoldStreamHold) return;
+                // Canned-opener hold (2026-09-07): "Sorry, I don't have that in
+                // front of me. Could you clarify which…?" followed by a real
+                // answer must paint WITHOUT the opener — see cannedOpener.ts.
+                let openerHold = false;
+                try {
+                    const { shouldHoldForCannedOpener } = require('./llm/cannedOpener') as typeof import('./llm/cannedOpener');
+                    openerHold = shouldHoldForCannedOpener(streamingTokenBuffer);
+                } catch { /* never hold on a helper failure */ }
+                if (streamingTokenBuffer.length >= STREAMING_SAFE_PREFIX_CHARS
+                    && !openerHold
+                    && !IntelligenceEngine.isNonAnswerSentinel(streamingTokenBuffer)) {
+                    // Prompt System v2: a misfired "[[NO_ACTION]] real
+                    // text…" keeps its real text but the sentinel token
+                    // itself must never paint.
+                    let visiblePrefix = streamingTokenBuffer;
+                    try {
+                        const { stripLeadingNoActionSentinel } = require('./llm/promptSystemV2') as typeof import('./llm/promptSystemV2');
+                        visiblePrefix = stripLeadingNoActionSentinel(visiblePrefix) || visiblePrefix;
+                    } catch { /* emit unmodified */ }
+                    try {
+                        const { stripCannedOpener } = require('./llm/cannedOpener') as typeof import('./llm/cannedOpener');
+                        const cleaned = stripCannedOpener(visiblePrefix);
+                        if (cleaned.stripped.length) { console.log('[IntelligenceEngine] canned opener stripped at first paint', { count: cleaned.stripped.length }); visiblePrefix = cleaned.text; }
+                    } catch { /* emit unmodified */ }
+                    emitChunk(visiblePrefix);
+                    streamingTokenBuffer = '';
+                }
+            };
+            // A speculative prefetch the dispatch adopts mid-stream becomes the
+            // automatic answer at that moment. Everything the judge kept
+            // off-screen so far is replayed into the prefix buffer and goes
+            // through the same guards as a live first chunk (scaffold hold,
+            // canned opener, safe prefix); the rest streams. Before 2026-09-22
+            // an adopted stream stayed silent until it FINISHED, so the head
+            // start the prefetch bought was spent waiting for completion.
+            // `pendingToken` is the token whose arrival triggered the unmute:
+            // it is appended by the caller, so it is kept out of the seed here.
+            const unmuteAdoptedStream = (pendingToken = ''): void => {
+                if (speculativeStreamingLive) return;
+                speculativeStreamingLive = true;
+                streamingTokenBuffer = pendingToken
+                    ? fullAnswer.slice(0, fullAnswer.length - pendingToken.length)
+                    : fullAnswer;
+                console.log(`[IntelligenceEngine] Adopted prefetch now streaming live (${fullAnswer.length} chars already generated)`);
+            };
+            if (isSpeculative) {
+                // Adoption may land between two tokens (or during a provider
+                // pause); paint what exists NOW instead of waiting for the next
+                // token to arrive.
+                this.speculativeAdoptHook = (adoptedGenerationId: number) => {
+                    if (adoptedGenerationId !== generationId) return;
+                    if (codingGate) return;   // a speculative run is never coding; guard anyway
+                    unmuteAdoptedStream();
+                    paintBuffered('');
+                };
+            }
 
             // Centralized live-deadline driver (electron/llm/liveDeadlines.ts) — a
             // `for await` blocks forever on a hung provider, and even `await
@@ -4188,7 +4303,13 @@ export class IntelligenceEngine extends EventEmitter {
                     // surfaces feed one map and must mean the same thing.
                     if (!isSpeculative) noteFirstToken();
                     fullAnswer += token;
-                    if (isSpeculative) return; // speculative prefetch never streams to UI
+                    if (isSpeculative) {
+                        // A speculative prefetch never streams to the UI — the
+                        // judge may still say no — UNTIL the dispatch adopts it
+                        // (see unmuteAdoptedStream). Silent until then.
+                        if (this.speculativeAdoptedGenerationId !== generationId) return;
+                        if (!speculativeStreamingLive) unmuteAdoptedStream(token);
+                    }
                     if (codingGate) {
                         const gated = codingGate.push(token);
                         if (gated) {
@@ -4196,52 +4317,12 @@ export class IntelligenceEngine extends EventEmitter {
                             if (visible) emitChunk(visible);
                         }
                     } else {
-                        streamingTokenBuffer += token;
-                        // RC-4: decide the hold once, on the first visible
-                        // characters. A leading markdown heading on a spoken
-                        // (non-coding) answer is the scaffold-misfire shape —
-                        // hold every paint and deliver only the repaired final.
-                        if (!scaffoldStreamHoldDecided) {
-                            const seen = streamingTokenBuffer.trimStart();
-                            if (seen.length >= 4) {
-                                scaffoldStreamHoldDecided = true;
-                                scaffoldStreamHold = /^#{1,3}\s/.test(seen);
-                                if (scaffoldStreamHold) {
-                                    trace.mark('repair_used', { reason: 'scaffold_stream_hold', answerType: answerPlan.answerType });
-                                }
-                            }
-                        }
-                        if (scaffoldStreamHold) return;
-                        // Canned-opener hold (2026-09-07): "Sorry, I don't have that in
-                        // front of me. Could you clarify which…?" followed by a real
-                        // answer must paint WITHOUT the opener — see cannedOpener.ts.
-                        let openerHold = false;
-                        try {
-                            const { shouldHoldForCannedOpener } = require('./llm/cannedOpener') as typeof import('./llm/cannedOpener');
-                            openerHold = shouldHoldForCannedOpener(streamingTokenBuffer);
-                        } catch { /* never hold on a helper failure */ }
-                        if (streamingTokenBuffer.length >= STREAMING_SAFE_PREFIX_CHARS
-                            && !openerHold
-                            && !IntelligenceEngine.isNonAnswerSentinel(streamingTokenBuffer)) {
-                            // Prompt System v2: a misfired "[[NO_ACTION]] real
-                            // text…" keeps its real text but the sentinel token
-                            // itself must never paint.
-                            let visiblePrefix = streamingTokenBuffer;
-                            try {
-                                const { stripLeadingNoActionSentinel } = require('./llm/promptSystemV2') as typeof import('./llm/promptSystemV2');
-                                visiblePrefix = stripLeadingNoActionSentinel(visiblePrefix) || visiblePrefix;
-                            } catch { /* emit unmodified */ }
-                            try {
-                                const { stripCannedOpener } = require('./llm/cannedOpener') as typeof import('./llm/cannedOpener');
-                                const cleaned = stripCannedOpener(visiblePrefix);
-                                if (cleaned.stripped.length) { console.log('[IntelligenceEngine] canned opener stripped at first paint', { count: cleaned.stripped.length }); visiblePrefix = cleaned.text; }
-                            } catch { /* emit unmodified */ }
-                            emitChunk(visiblePrefix);
-                            streamingTokenBuffer = '';
-                        }
+                        paintBuffered(token);
                     }
                 },
             });
+            // The adoption hook is only meaningful while THIS stream runs.
+            this.speculativeAdoptHook = null;
             // Deadline cleanup aborts the provider transport too, but a deadline
             // still needs the established visible fallback below. Keep the owned
             // controller's aborted state out of this decision: cleanup aborts that
@@ -6117,7 +6198,13 @@ export class IntelligenceEngine extends EventEmitter {
             }
 
             if (isSpeculative) {
-                return this.completeSpeculativeRun(generationId, question, confidence, fullAnswer, wtaWriteDecision);
+                // If the dispatch adopted this stream mid-flight it has been
+                // painting live; the reveal must then finish THAT row (flush the
+                // held prefix, replace by the same id) instead of opening a new one.
+                const streamed = speculativeStreamingLive
+                    ? { emitted: emittedStreamingToken, pendingBuffer: streamingTokenBuffer }
+                    : undefined;
+                return this.completeSpeculativeRun(generationId, question, confidence, fullAnswer, wtaWriteDecision, streamed);
             }
 
             // Keep the RAW answer (with the hidden <verification_spec>) for
