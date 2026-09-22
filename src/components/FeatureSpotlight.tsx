@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowRight, Bell, Rocket } from 'lucide-react';
 import mainui from "../UI_comp/mainui.png";
@@ -78,10 +78,11 @@ const PagingArrow: React.FC<{ flip?: boolean }> = ({ flip }) => (
         viewBox="0 0 16 28"
         fill="none"
         stroke="currentColor"
-        strokeWidth={1.75}
+        strokeWidth={1}
         strokeLinecap="round"
         strokeLinejoin="round"
         aria-hidden="true"
+        className="drop-shadow-[0_1px_2px_rgba(0,0,0,0.45)]"
         style={flip ? { transform: 'scaleX(-1)' } : undefined}
     >
         {/* 16-unit arms at ±50° from the horizontal: a 100° opening */}
@@ -89,11 +90,28 @@ const PagingArrow: React.FC<{ flip?: boolean }> = ({ flip }) => (
     </svg>
 );
 
+/**
+ * Proximity reveal. The arrows used to appear together the moment the card was
+ * hovered, which put two controls on screen for a cursor that was only passing
+ * over the copy. Instead each one wakes on its own, and only once the pointer is
+ * within PROXIMITY_RADIUS of ITS centre — roughly 3cm on a typical display.
+ *
+ * Measured against the card box rather than with a hover zone, because a zone
+ * large enough to feel like a radius would sit over the headline and the CTA and
+ * swallow their clicks.
+ */
+const PROXIMITY_RADIUS = 120;
+/** left-2.5 (10px) + half of w-7 (14px): the centre of either arrow, from its own edge. */
+const ARROW_INSET = 24;
+
 // --- Component ---
 
 export const FeatureSpotlight: React.FC = () => {
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isPaused, setIsPaused] = useState(false);
+    // Which arrow the pointer is currently near, if either.
+    const [nearArrow, setNearArrow] = useState<'prev' | 'next' | null>(null);
+    const cardRef = useRef<HTMLDivElement>(null);
 
     // Interest state: map of feature ID -> boolean
     const [interestState, setInterestState] = useState<Record<string, boolean>>(() => {
@@ -141,6 +159,26 @@ export const FeatureSpotlight: React.FC = () => {
         setCurrentIndex((prev) => (prev + delta + FEATURES.length) % FEATURES.length);
     };
 
+    // Nearest arrow wins, so the two never light up at once. The radii do not
+    // overlap on this card anyway (593px wide against a 120px reach), but a
+    // narrower one should still reveal one arrow at a time.
+    const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+        const box = cardRef.current?.getBoundingClientRect();
+        if (!box) return;
+
+        const x = e.clientX - box.left;
+        const y = e.clientY - box.top;
+        const cy = box.height / 2;
+        const toPrev = Math.hypot(x - ARROW_INSET, y - cy);
+        const toNext = Math.hypot(x - (box.width - ARROW_INSET), y - cy);
+
+        const next = Math.min(toPrev, toNext) > PROXIMITY_RADIUS
+            ? null
+            : (toPrev <= toNext ? 'prev' : 'next');
+
+        setNearArrow((prev) => (prev === next ? prev : next));
+    };
+
     const handleActionClick = (e: React.MouseEvent) => {
         e.stopPropagation(); // Prevent parent clicks
 
@@ -167,9 +205,11 @@ export const FeatureSpotlight: React.FC = () => {
 
     return (
         <div
+            ref={cardRef}
             className="relative h-full w-full overflow-hidden rounded-xl flex flex-col group select-none bg-gradient-to-br from-[#1C1C1E] to-[#151516]"
             onMouseEnter={() => setIsPaused(true)}
-            onMouseLeave={() => setIsPaused(false)}
+            onMouseLeave={() => { setIsPaused(false); setNearArrow(null); }}
+            onPointerMove={handlePointerMove}
             style={{ isolation: 'isolate' }}
         >
             {/* 1. Background (Ambient) */}
@@ -182,26 +222,29 @@ export const FeatureSpotlight: React.FC = () => {
                 <div className="absolute inset-0 bg-black/20" />
             </div>
 
-            {/* Side arrows: revealed on card hover (or keyboard focus), nudging in from their own edge */}
+            {/* Side arrows: revealed when the pointer comes within reach of that one
+                arrow (or on keyboard focus), nudging in from their own edge */}
             {([
-                { delta: -1, label: 'Previous card', flip: false, side: 'left-2.5', rest: '-translate-x-1' },
-                { delta: 1, label: 'Next card', flip: true, side: 'right-2.5', rest: 'translate-x-1' },
-            ] as const).map(({ delta, label, flip, side, rest }) => (
+                { delta: -1, label: 'Previous card', flip: false, side: 'left-2.5', rest: '-translate-x-1', which: 'prev' },
+                { delta: 1, label: 'Next card', flip: true, side: 'right-2.5', rest: 'translate-x-1', which: 'next' },
+            ] as const).map(({ delta, label, flip, side, rest, which }) => (
                 <button
                     key={label}
                     type="button"
                     aria-label={label}
                     onClick={goTo(delta)}
                     className={`
-                        absolute top-1/2 ${side} z-30 -translate-y-1/2 ${rest}
+                        absolute top-1/2 ${side} z-30 -translate-y-1/2
+                        ${nearArrow === which ? 'opacity-100 translate-x-0 pointer-events-auto' : `opacity-0 ${rest} pointer-events-none`}
                         flex h-10 w-7 items-center justify-center
-                        text-white/70 drop-shadow-[0_1px_2px_rgba(0,0,0,0.45)]
-                        opacity-0 pointer-events-none
-                        group-hover:opacity-100 group-hover:translate-x-0 group-hover:pointer-events-auto
+                        rounded-full text-white/70
+                        bg-white/[0.07] ring-1 ring-white/[0.1]
+                        backdrop-blur-md backdrop-saturate-150
+                        shadow-[inset_0_1px_0_rgba(255,255,255,0.14),inset_0_-1px_0_rgba(255,255,255,0.04),0_8px_20px_-10px_rgba(0,0,0,0.55)]
                         focus-visible:opacity-100 focus-visible:translate-x-0 focus-visible:pointer-events-auto
-                        hover:text-white
+                        hover:text-white hover:bg-white/[0.12] hover:ring-white/[0.18]
                         active:scale-[0.92]
-                        transition-[opacity,transform,color] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)]
+                        transition-[opacity,transform,color,background-color,box-shadow] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)]
                     `}
                 >
                     <PagingArrow flip={flip} />
