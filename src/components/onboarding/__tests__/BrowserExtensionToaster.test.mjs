@@ -186,6 +186,13 @@ test('the scrim dims but never blurs the launcher', () => {
 test('close sits on the image panel with dark ink in both themes', () => {
   const close = rendered.slice(rendered.indexOf('aria-label="Close"') - 200);
   assert.ok(close.includes('CLOSE_LIGHT.rest'), 'the panel is light in both themes');
+  // The close is a control, so its resting ink must clear 3:1 (WCAG 1.4.11)
+  // on the panel it sits on.
+  assert.ok(source.includes("background: '#E6E8EE'"), 'the panel ground is still what ships');
+  const rest = source.match(/const CLOSE_LIGHT = \{ rest: '([^']+)'/)[1];
+  const panel = hexToRgb('#E6E8EE');
+  const ratio = contrast(parseColour(rest, panel), panel);
+  assert.ok(ratio >= 3, `close rest ink is ${ratio.toFixed(2)}:1, below 3:1`);
 });
 
 test('CTA is outlined, and every hover channel moves', () => {
