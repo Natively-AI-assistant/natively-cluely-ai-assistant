@@ -223,6 +223,44 @@ test('a provider endpoint confirms the stop early', async () => {
   assert.equal(h.state.judgeCalls.length, 1, 'judged at the endpoint, not the full window');
 });
 
+// ── Latency work (2026-09-22): the local VAD confirms the stop for providers without an endpoint ──
+// Only four STT providers emit their own end-of-turn event (Deepgram, Nvidia NIM,
+// Soniox, OpenAI Realtime); the other eight waited the full STABILITY_MS after
+// the last final. The native capture already reports `speech_ended` (VAD,
+// 150-200 ms hangover) on the interviewer channel — it just never reached the
+// controller. It now counts as an endpoint, with one guard: a dangling interim
+// means the final for the last words has not landed, and that final re-arms
+// the window itself when it does.
+
+test('the local VAD stop confirms the window early when the transcript is caught up', async () => {
+  const h = makeSimple(async () => YES());
+  h.interviewer('Why did you choose PostgreSQL over the alternatives here?');   // final landed
+  h.engine.onLocalSpeechEnd();
+  await h.advance(ENDPOINT_CONFIRM_MS + 100);
+  assert.equal(h.texts().length, 1, 'committed at ENDPOINT_CONFIRM_MS, not STABILITY_MS');
+});
+
+test('the local VAD stop is ignored while an interim is still dangling (its final is in flight)', async () => {
+  const h = makeSimple(async () => YES());
+  h.interviewer('Why did you choose PostgreSQL over the', true);
+  h.interviewer('alternatives here', false);                                    // interim, final not yet in
+  h.engine.onLocalSpeechEnd();
+  await h.advance(ENDPOINT_CONFIRM_MS + 100);
+  assert.deepEqual(h.texts(), [], 'not committed on a half-transcribed turn');
+  h.interviewer('alternatives here?', true);                                    // the final lands
+  await h.advance(STABILITY_MS + 100);
+  assert.equal(h.texts().length, 1, 'the final re-armed the window and the turn commits whole');
+  assert.match(h.texts()[0], /alternatives here\?$/);
+});
+
+test('the local VAD stop with nothing pending is a no-op', async () => {
+  const h = makeSimple(async () => YES());
+  h.engine.onLocalSpeechEnd();
+  await h.advance(ENDPOINT_CONFIRM_MS + 100);
+  assert.equal(h.state.judgeCalls.length, 0);
+  assert.equal(h.clock.pendingCount(), 0);
+});
+
 test('meeting stop clears everything; telemetry carries no transcript text', async () => {
   const h = makeSimple(async () => YES());
   h.interviewer('Why did you choose PostgreSQL over the alternatives here?');
