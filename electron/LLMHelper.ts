@@ -158,7 +158,16 @@ const OLLAMA_VISION_CHAIN_PROBE_BUDGET_MS = 1500
 const OLLAMA_VISION_NEGATIVE_TTL_MS = 30_000
 const OPENAI_MODEL = "gpt-5.4"
 const CLAUDE_MODEL = "claude-sonnet-4-6"
-// Current id and the retired-alias map live in llm/deepseekModels.ts.
+// Auto Answer judge tiers: the smallest fast model of each provider. A verdict
+// is a yes/no JSON on ~2k tokens of context; the chat model is the wrong tool
+// (see generateJudgeVerdict).
+const OPENAI_JUDGE_MODEL = "gpt-5.4-mini"
+const CLAUDE_JUDGE_MODEL = "claude-haiku-4-5"
+// DEEPSEEK_MODEL keeps main's centralised id, NOT the "deepseek-v4-flash"
+// literal this commit carried: main moved the current id and the retired-alias
+// map into llm/deepseekModels.ts precisely because v4-flash is a retired alias
+// and deepseek-flash is what DeepSeek serves today. Taking the literal here
+// would silently revert that fix.
 const DEEPSEEK_MODEL = DEEPSEEK_DEFAULT_MODEL
 const DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 // DeepSeek's chat API THINKS BY DEFAULT: `thinking.type` defaults to `enabled`
@@ -4769,23 +4778,116 @@ let isMultimodal = !!(imagePaths?.length);
     }
   }
 
-  public async generateJudgeVerdict(message: string): Promise<string> {
+  /**
+   * The Auto Answer judge's call. A small, FAST model — never the user's chat
+   * model. Live telemetry (2026-09-22, OpenAI-only user on gpt-5.6-luna): the
+   * judge fell through to generateContentStructured, whose OpenAI rung takes
+   * the CURRENT model, so a yes/no classification ran on the heaviest model
+   * configured — 1.4 s median, 2.5 s p90 (the deadline), and 41 of 83 calls
+   * superseded mid-flight and paid for nothing. The ladder here is every
+   * provider's smallest fast tier, in the order they have been validated:
+   * Gemini flash-lite (the tuned default, live-probed 750-1200 ms) → Groq
+   * (~0.3 s, and previously had NO judge rung at all, so a Groq-only user got
+   * the regex fallback) → OpenAI mini → DeepSeek flash → Claude Haiku. Only
+   * when none of those is configured does it fall back to the structured
+   * ladder. Every rung honours the outbound data-scope policy and its
+   * provider's rate limiter like any other call, and `signal` aborts the rung
+   * in flight when the interviewer keeps talking (the controller supersedes
+   * the verdict anyway — the call was money and quota spent on nothing).
+   */
+  public async generateJudgeVerdict(message: string, opts: { signal?: AbortSignal } = {}): Promise<string> {
+    const signal = opts.signal;
+    const aborted = () => signal?.aborted === true;
+    const abortError = () => Object.assign(new Error('judge aborted: superseded by newer speech'), { name: 'AbortError' });
+    const userOnly = [{ role: 'user' as const, content: message }];
+
     if (this.client) {
       for (const modelId of [GEMINI_FLASH_LITE_MODEL, GEMINI_FLASH_MODEL]) {
+        if (aborted()) throw abortError();
         try {
+          this.assertOutboundScopes('gemini', message);
           await this.rateLimiters.gemini.acquire();
-          // @ts-ignore
+          // @ts-ignore — abortSignal is accepted by the SDK's request config
           const res = await this.client.models.generateContent({
             model: modelId,
             contents: [{ role: 'user', parts: [{ text: message }] }],
-            config: { maxOutputTokens: 256, temperature: 0, responseMimeType: 'application/json' },
+            config: { maxOutputTokens: 256, temperature: 0, responseMimeType: 'application/json', abortSignal: signal },
           });
           const parts = res.candidates?.[0]?.content?.parts ?? [];
           const text = res.text ?? (Array.isArray(parts) ? parts : [parts]).map((p: any) => p?.text ?? '').join('');
           if (text) return text;
-        } catch { /* try the next model, then the structured ladder */ }
+        } catch { if (aborted()) throw abortError(); /* try the next rung */ }
       }
     }
+    if (this.groqClient && !this._groqLocalDisabled && !this.isLocalOnlyMode) {
+      if (aborted()) throw abortError();
+      try {
+        this.assertOutboundScopes('groq', message);
+        await this.rateLimiters.groq.acquire();
+        // createGroqCompletion adds reasoning_effort:'none' for a thinking model
+        // and ladders a retired id down to the production tier.
+        const res = await this.createGroqCompletion(
+          { model: GROQ_MODEL, messages: userOnly, temperature: 0, max_tokens: 256, stream: false },
+          { signal },
+        );
+        const text = stripLeadingReasoningBlock(res.choices?.[0]?.message?.content || '');
+        if (text) return text;
+      } catch { if (aborted()) throw abortError(); }
+    }
+    if (this.openaiClient && !this.isLocalOnlyMode) {
+      if (aborted()) throw abortError();
+      try {
+        this.assertOutboundScopes('openai', message);
+        await this.rateLimiters.openai.acquire();
+        // OPENAI_NO_SAMPLING_PARAMS: gpt-5 / o-series 400 on temperature. The
+        // JSON response_format and the lowest valid reasoning effort keep the
+        // verdict deterministic enough and the first token fast.
+        const res = await this.openaiClient.chat.completions.create({
+          model: OPENAI_JUDGE_MODEL,
+          messages: userOnly,
+          max_completion_tokens: 512,
+          response_format: { type: 'json_object' },
+          ...openaiReasoningParam(OPENAI_JUDGE_MODEL),
+        }, { signal });
+        const text = res.choices?.[0]?.message?.content || '';
+        if (text) return text;
+      } catch { if (aborted()) throw abortError(); }
+    }
+    if (this.deepseekClient && !this.isLocalOnlyMode) {
+      if (aborted()) throw abortError();
+      try {
+        this.assertOutboundScopes('deepseek', message);
+        await this.rateLimiters.deepseek.acquire();
+        const res = await this.deepseekClient.chat.completions.create({
+          model: DEEPSEEK_MODEL,
+          messages: userOnly,
+          temperature: 0,
+          max_tokens: 256,
+          response_format: { type: 'json_object' },
+        }, { signal });
+        const text = stripLeadingReasoningBlock(res.choices?.[0]?.message?.content || '');
+        if (text) return text;
+      } catch { if (aborted()) throw abortError(); }
+    }
+    if (this.claudeClient && !this.isLocalOnlyMode) {
+      if (aborted()) throw abortError();
+      try {
+        this.assertOutboundScopes('claude', message);
+        await this.rateLimiters.claude.acquire();
+        const res: any = await this.claudeClient.messages.create({
+          model: CLAUDE_JUDGE_MODEL,
+          max_tokens: 256,
+          temperature: 0,
+          messages: userOnly,
+        }, { signal });
+        const text = (res?.content ?? []).map((c: any) => (c?.type === 'text' ? c.text : '')).join('');
+        if (text) return text;
+      } catch { if (aborted()) throw abortError(); }
+    }
+    if (aborted()) throw abortError();
+    // Nothing small is configured (Codex CLI / Ollama / custom / Natively-only
+    // users): the structured ladder still answers, bounded by the controller's
+    // deadline.
     return this.generateContentStructured(message, { preferFast: true });
   }
 

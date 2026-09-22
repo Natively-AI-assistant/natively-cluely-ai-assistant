@@ -51,7 +51,7 @@ function makeSimple(judgeImpl, overrides = {}) {
     telemetry: (e) => { state.events.push(e); if (e.name === 'auto_answer_ignored') state.skips.push(e.skipReason); },
     logContent: (label, text) => state.contentTrace.push({ label, text }),
     log: () => {},
-    ...(judgeImpl ? { judgeCandidate: (req) => { state.judgeCalls.push(req); return judgeImpl(req, state.judgeCalls.length); } } : {}),
+    ...(judgeImpl ? { judgeCandidate: (req, signal) => { state.judgeCalls.push(req); state.judgeSignals = [...(state.judgeSignals || []), signal]; return judgeImpl(req, state.judgeCalls.length); } } : {}),
   };
   const engine = new SimpleAutoAnswerEngine(host, clock);
   engine.onMeetingStart();
@@ -370,6 +370,36 @@ test('prefetch: rationed by time, so a chatty meeting cannot stack generations',
   h.interviewer('And now the last thing to know is how the cache gets invalidated on write.');
   await h.advance(STABILITY_MS + 200);
   assert.equal(prefetched.length, 2, 'once the window passes, prefetch is allowed again');
+});
+
+// ── Latency work (2026-09-22): a superseded judge call is aborted, not left to finish ──
+// 41 of 83 judge calls in the 2026-09-22 telemetry were 'stale': the interviewer
+// kept talking, the controller discarded the verdict — and the request ran to
+// completion anyway, spending money and rate-limit headroom on nothing. The
+// controller now hands the host an AbortSignal and aborts it on supersede.
+
+test('supersede aborts the in-flight judge call through the host signal', async () => {
+  const h = makeSimple(() => new Promise(() => {}));   // a judge that never answers on its own
+  h.interviewer('Why did you choose PostgreSQL over the alternatives here?');
+  await h.advance(EARLY_JUDGE_MS + 60);
+  assert.equal(h.state.judgeCalls.length, 1);
+  const signal = h.state.judgeSignals[0];
+  assert.ok(signal && typeof signal.aborted === 'boolean', 'the host receives an AbortSignal');
+  assert.equal(signal.aborted, false, 'live while the verdict is wanted');
+  h.interviewer('and also how', false);                 // interviewer resumes → supersede
+  assert.equal(signal.aborted, true, 'superseded → aborted, so the provider call stops costing');
+});
+
+test('a verdict that arrives after the meeting moved on is still recorded as stale (abort does not lose telemetry)', async () => {
+  const resolvers = [];
+  const h = makeSimple(() => new Promise((r) => resolvers.push(r)));
+  h.interviewer('Why did you choose PostgreSQL over the alternatives here?');
+  await h.advance(EARLY_JUDGE_MS + 60);
+  h.interviewer('and also how about the indexes on it?', true);   // a new final supersedes
+  resolvers[0](YES());
+  await flush(); await flush();
+  const judged = h.state.events.filter(e => e.name === 'auto_answer_judged');
+  assert.ok(judged.some(e => e.judgeOutcome === 'stale'), 'the superseded call reports stale');
 });
 
 test('prefetch: a stale speculative snapshot for ANOTHER question is not reused', async () => {
