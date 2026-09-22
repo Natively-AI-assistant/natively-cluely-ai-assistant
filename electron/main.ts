@@ -3987,6 +3987,20 @@ export class AppState {
     capture.on('speech_ended', () => {
       if (this.systemAudioCapture === capture) {
         this.googleSTT?.notifySpeechEnded?.();
+        // Auto Answer: the local VAD saw the interviewer stop. For a provider
+        // with no end-of-turn event of its own this is the only early signal;
+        // the controller guards against a half-transcribed turn. REST
+        // providers are excluded: their final is produced BY this flush and
+        // lands 0.5-2 s later, so the stop would always precede the text.
+        if (this._autoAnswerEnabled && this.isMeetingActive) {
+          try {
+            const { CredentialsManager } = require('./services/CredentialsManager');
+            const provider = CredentialsManager.getInstance().getSttProvider();
+            if (provider !== 'groq' && provider !== 'azure' && provider !== 'ibmwatson' && provider !== 'none') {
+              this.simpleAutoAnswer.onLocalSpeechEnd();
+            }
+          } catch { /* an endpoint hint must never break capture */ }
+        }
       }
     });
     capture.on('speech_edge', (edge: SpeechEdge) => {
