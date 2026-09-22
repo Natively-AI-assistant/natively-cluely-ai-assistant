@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowRight, Bell, Rocket } from 'lucide-react';
 import mainui from "../UI_comp/mainui.png";
+import { FLUXION_REFERRAL_URL, SPONSORSHIP_EMAIL, SPONSORSHIP_GMAIL_COMPOSE_URL } from '../lib/partnerLinks';
 
 // --- Types ---
 
@@ -9,7 +10,7 @@ interface FeatureSlide {
     id: string;
     headline: string;
     subtitle: string;
-    type?: 'feature' | 'support' | 'premium';
+    type?: 'feature' | 'support' | 'premium' | 'sponsor' | 'advertise';
     actionLabel?: string;
     url?: string;
     eyebrow?: string;
@@ -20,6 +21,18 @@ interface FeatureSlide {
 // --- Data ---
 
 const FEATURES: FeatureSlide[] = [
+    {
+        id: 'sponsor_fluxion',
+        headline: 'Fluxion AI',
+        subtitle: 'GPT, Claude and more through one API',
+        bullets: [
+            'Up to 70% below official API pricing',
+            '$1 in free credit when you join through Natively',
+        ],
+        type: 'sponsor',
+        actionLabel: 'Claim $1 credit',
+        url: FLUXION_REFERRAL_URL,
+    },
     {
         id: 'tailored_answers',
         headline: 'Upcoming features',
@@ -41,8 +54,40 @@ const FEATURES: FeatureSlide[] = [
         type: 'support',
         actionLabel: 'Contribute to development',
         url: 'https://buymeacoffee.com/evinjohnn'
-    }
+    },
+    {
+        id: 'advertise_natively',
+        headline: 'Advertise with Natively',
+        subtitle: 'Sponsorship and ad slots are open',
+        bullets: [SPONSORSHIP_EMAIL],
+        type: 'advertise',
+        actionLabel: 'Get in touch',
+        url: SPONSORSHIP_GMAIL_COMPOSE_URL,
+    },
 ];
+
+/**
+ * Paging arrow: a long-armed, obtuse (100°) chevron. Lucide's chevrons are a
+ * tight right angle, which read as a UI glyph rather than a quiet direction
+ * cue at the card's edge. Drawn for the left; the right one is mirrored.
+ */
+const PagingArrow: React.FC<{ flip?: boolean }> = ({ flip }) => (
+    <svg
+        width="16"
+        height="28"
+        viewBox="0 0 16 28"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.75}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+        style={flip ? { transform: 'scaleX(-1)' } : undefined}
+    >
+        {/* 16-unit arms at ±50° from the horizontal: a 100° opening */}
+        <path d="M13.3 1.7 L3 14 L13.3 26.3" />
+    </svg>
+);
 
 // --- Component ---
 
@@ -64,15 +109,20 @@ export const FeatureSpotlight: React.FC = () => {
     const isInterested = interestState[currentFeature.id] || false;
     const isSupport = currentFeature.type === 'support';
     const isPremium = currentFeature.type === 'premium';
+    const isSponsor = currentFeature.type === 'sponsor';
+    const isAdvertise = currentFeature.type === 'advertise';
+    // Slides whose button leaves the app (a link or an email) rather than toggling interest.
+    const isCallout = isSupport || isSponsor || isAdvertise;
 
     // --- Auto-Advance Logic ---
 
     useEffect(() => {
         if (isPaused) return;
 
-        // Support slide has longer duration (10s), others 6-8s
-        const baseDuration = isSupport ? 10000 : 6000;
-        const randomFactor = isSupport ? 0 : Math.random() * 2000;
+        // Support and sponsor slides hold longer (10s), others 6-8s
+        const holdsLonger = isSupport || isSponsor;
+        const baseDuration = holdsLonger ? 10000 : 6000;
+        const randomFactor = holdsLonger ? 0 : Math.random() * 2000;
         const intervalDuration = baseDuration + randomFactor;
 
         const timer = setTimeout(() => {
@@ -80,15 +130,21 @@ export const FeatureSpotlight: React.FC = () => {
         }, intervalDuration);
 
         return () => clearTimeout(timer);
-    }, [currentIndex, isPaused, isSupport]);
+    }, [currentIndex, isPaused, isSupport, isSponsor]);
 
 
     // --- Interaction Handlers ---
 
+    // Manual paging. Changing currentIndex also restarts the auto-advance timer.
+    const goTo = (delta: number) => (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setCurrentIndex((prev) => (prev + delta + FEATURES.length) % FEATURES.length);
+    };
+
     const handleActionClick = (e: React.MouseEvent) => {
         e.stopPropagation(); // Prevent parent clicks
 
-        if (isSupport && currentFeature.url) {
+        if (currentFeature.url) {
             if (window.electronAPI && window.electronAPI.openExternal) {
                 window.electronAPI.openExternal(currentFeature.url);
             } else {
@@ -126,12 +182,38 @@ export const FeatureSpotlight: React.FC = () => {
                 <div className="absolute inset-0 bg-black/20" />
             </div>
 
+            {/* Side arrows: revealed on card hover (or keyboard focus), nudging in from their own edge */}
+            {([
+                { delta: -1, label: 'Previous card', flip: false, side: 'left-2.5', rest: '-translate-x-1' },
+                { delta: 1, label: 'Next card', flip: true, side: 'right-2.5', rest: 'translate-x-1' },
+            ] as const).map(({ delta, label, flip, side, rest }) => (
+                <button
+                    key={label}
+                    type="button"
+                    aria-label={label}
+                    onClick={goTo(delta)}
+                    className={`
+                        absolute top-1/2 ${side} z-30 -translate-y-1/2 ${rest}
+                        flex h-10 w-7 items-center justify-center
+                        text-white/70 drop-shadow-[0_1px_2px_rgba(0,0,0,0.45)]
+                        opacity-0 pointer-events-none
+                        group-hover:opacity-100 group-hover:translate-x-0 group-hover:pointer-events-auto
+                        focus-visible:opacity-100 focus-visible:translate-x-0 focus-visible:pointer-events-auto
+                        hover:text-white
+                        active:scale-[0.92]
+                        transition-[opacity,transform,color] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)]
+                    `}
+                >
+                    <PagingArrow flip={flip} />
+                </button>
+            ))}
+
             {/* 2. Content Area (Centered) */}
             <div className="relative z-10 w-full h-full text-center">
 
                 {/* Ambient Glow for Premium Slide */}
                 <AnimatePresence>
-                    {currentFeature.type === 'premium' && (
+                    {isPremium && (
                         <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
@@ -178,14 +260,14 @@ export const FeatureSpotlight: React.FC = () => {
 
                                 {/* Title */}
                                 <h2
-                                    className={`drop-shadow-sm tracking-tight mb-0 transition-all duration-300 group-hover:brightness-105 ${isSupport ? 'translate-y-1.5' : ''}`}
+                                    className={`drop-shadow-sm tracking-tight mb-0 transition-all duration-300 group-hover:brightness-105 ${isCallout ? 'translate-y-1.5' : ''}`}
                                     style={{
                                         fontFamily: 'var(--font-system)',
-                                        fontSize: (isPremium || isSupport) ? '30px' : '26px',
+                                        fontSize: (isPremium || isCallout) ? '30px' : '26px',
                                         fontWeight: 500,
                                         lineHeight: 1.1,
-                                        color: (isPremium || isSupport) ? '#E6C46A' : '#ffffff',
-                                        textShadow: (isPremium || isSupport) ? '0px 1px 1px rgba(0, 0, 0, 0.1)' : 'none',
+                                        color: (isPremium || isCallout) ? '#E6C46A' : '#ffffff',
+                                        textShadow: (isPremium || isCallout) ? '0px 1px 1px rgba(0, 0, 0, 0.1)' : 'none',
                                     }}
                                 >
                                     {currentFeature.headline}
@@ -193,15 +275,15 @@ export const FeatureSpotlight: React.FC = () => {
 
                                 {/* Subtitle */}
                                 <p
-                                    className={`antialiased mb-2 ${isSupport ? 'translate-y-1.5' : ''}`} // Standardized mb-2 for equal spacing
+                                    className={`antialiased mb-2 ${isCallout ? 'translate-y-1.5' : ''}`} // Standardized mb-2 for equal spacing
                                     style={{
                                         fontFamily: 'var(--font-system)',
-                                        fontSize: (isPremium || isSupport) ? '16px' : '15px',
+                                        fontSize: (isPremium || isCallout) ? '16px' : '15px',
                                         fontWeight: 400,
                                         lineHeight: 1.4,
                                         color: '#F5F7FA',
                                         opacity: 0.9,
-                                        maxWidth: isSupport ? '380px' : '360px'
+                                        maxWidth: isCallout ? '380px' : '360px'
                                     }}
                                 >
                                     {currentFeature.subtitle}
@@ -212,8 +294,8 @@ export const FeatureSpotlight: React.FC = () => {
                                         {currentFeature.bullets.map((bullet, idx) => (
                                             <div key={idx} className={`flex items-center justify-center group/item transition-transform duration-200 px-2`}>
                                                 <span
-                                                    className={`${isSupport ? 'text-[12px] leading-relaxed font-medium opacity-100' : 'text-[12.5px] leading-snug font-medium'}`}
-                                                    style={{ letterSpacing: isSupport ? '0.01em' : '-0.01em', color: '#E6C46A' }}
+                                                    className={`${isCallout ? 'text-[12px] leading-relaxed font-medium opacity-100' : 'text-[12.5px] leading-snug font-medium'}`}
+                                                    style={{ letterSpacing: isCallout ? '0.01em' : '-0.01em', color: '#E6C46A' }}
                                                 >
                                                     {bullet}
                                                 </span>
@@ -247,16 +329,16 @@ export const FeatureSpotlight: React.FC = () => {
                                             group relative
                                             flex items-center justify-center gap-3
                                             rounded-full
-                                            transition-all duration-200 ease-out
+                                            transition-[filter,transform] duration-200 ease-out
                                             hover:brightness-105
-                                            active:scale-[0.98]
+                                            active:scale-[0.97]
                                             overflow-hidden
-                                            ${isSupport
+                                            ${isCallout
                                                 ? 'mt-2 translate-y-5 px-6 py-2 text-[13px] font-medium text-[#1C1C1E]'
                                                 : `px-10 py-2.5 text-[13px] font-medium text-[#F5F7FA]`
                                             }
                                         `}
-                                        style={isSupport ? {
+                                        style={isCallout ? {
                                             background: 'linear-gradient(180deg, #F1D88B 0%, #E6C87A 100%)',
                                             boxShadow: `
                                                 0 6px 20px rgba(230, 200, 122, 0.35),
@@ -270,7 +352,7 @@ export const FeatureSpotlight: React.FC = () => {
                                         }}
                                     >
                                         {/* Gradient Border (Standard Connect Button Only) */}
-                                        {!isSupport && (
+                                        {!isCallout && (
                                             <div
                                                 className="absolute inset-0 rounded-full pointer-events-none transition-opacity duration-300 group-hover:opacity-80"
                                                 style={{
@@ -285,7 +367,7 @@ export const FeatureSpotlight: React.FC = () => {
                                         )}
 
                                         {/* Inner Highlight for Standard Button */}
-                                        {!isSupport && (
+                                        {!isCallout && (
                                             <div
                                                 className="absolute inset-0 rounded-full pointer-events-none"
                                                 style={{
@@ -303,30 +385,30 @@ export const FeatureSpotlight: React.FC = () => {
                                                 className="flex items-center gap-2.5 relative z-10"
                                             >
                                                 <span>
-                                                    {isInterested && !isSupport
+                                                    {isInterested && !isCallout
                                                         ? 'Interested'
-                                                        : (isSupport ? (
+                                                        : isSupport ? (
                                                             <span className="flex items-center gap-2">
                                                                 <Rocket size={14} className="text-[#1C1C1E]" strokeWidth={2.5} />
                                                                 Fund development
                                                             </span>
-                                                        ) : (currentFeature.actionLabel || 'Mark interest'))
+                                                        ) : (currentFeature.actionLabel || 'Mark interest')
                                                     }
                                                 </span>
 
-                                                {/* Icon: ArrowReference for Support, Bell for Features */}
+                                                {/* Icon: arrow for outbound links, bell for features */}
                                                 <motion.div
                                                     variants={{
                                                         hover: isInterested ? {
                                                             rotate: [0, -10, 10, -10, 10, 0],
                                                             transition: { duration: 0.5, repeat: Infinity, repeatDelay: 2 }
-                                                        } : (isSupport ? {
+                                                        } : (isCallout ? {
                                                             x: [0, 4, 0],
                                                             transition: { duration: 1.5, repeat: Infinity, ease: "easeInOut" }
                                                         } : {})
                                                     }}
                                                 >
-                                                    {isSupport ? (
+                                                    {isCallout ? (
                                                         <ArrowRight
                                                             size={14}
                                                             className="text-[#1C1C1E] transition-colors duration-300"
