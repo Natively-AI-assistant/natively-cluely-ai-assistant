@@ -169,6 +169,17 @@ const CLAUDE_MODEL = "claude-sonnet-4-6"
 const OPENAI_JUDGE_MODEL = "gpt-5.5"
 const DEEPSEEK_MODEL = "deepseek-v4-flash"
 const DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+// DeepSeek's chat API THINKS BY DEFAULT: `thinking.type` defaults to `enabled`
+// (reasoning_effort `high`), and in streaming the reasoning arrives in
+// `delta.reasoning_content` BEFORE the first `delta.content` token
+// (api-docs.deepseek.com/api/create-chat-completion). Every reader here takes
+// only `delta.content`, so a request without this field waits out the whole
+// hidden chain of thought before the overlay shows a word. The post-meeting
+// summary server has always sent it (benchmark/reports/REPORT.md: a probe that
+// dropped it returned reasoning_tokens 106 on a tiny prompt, the production
+// body 0); the interactive paths never did. A spread, not an inline literal:
+// the OpenAI SDK's request type has no `thinking` field.
+const DEEPSEEK_NO_THINKING = { thinking: { type: 'disabled' as const } }
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 // Optional on OpenRouter's side, and purely for their public leaderboards —
 // they are NOT auth and carry nothing about the user. Sent as constants so a
@@ -4853,6 +4864,11 @@ let isMultimodal = !!(imagePaths?.length);
           temperature: 0,
           max_tokens: 256,
           response_format: { type: 'json_object' },
+          // Without it the default reasoning pass runs first — and inside a
+          // 256-token budget it can spend all of it, leaving empty content,
+          // so the rung would silently fall through on exactly the calls
+          // it exists to answer.
+          ...DEEPSEEK_NO_THINKING,
         }, { signal });
         const text = stripLeadingReasoningBlock(res.choices?.[0]?.message?.content || '');
         if (text) return text;
