@@ -107,6 +107,9 @@ const EXTENSIONS = [{
 const params = new URLSearchParams(location.search);
 const SLOW = params.has('slow');
 const HANG = params.has('hang');   // never resolves — the stuck-skeleton repro
+// `?extensions=0` renders the Reranker Extensions empty state, which is what
+// most installs see and which the one-extension fixture never shows.
+const NO_EXTENSIONS = params.get('extensions') === '0';
 const delay = <T,>(v: T): Promise<T> =>
     HANG ? new Promise<T>(() => {})
         : SLOW ? new Promise(r => setTimeout(() => r(v), 4000))
@@ -133,7 +136,7 @@ export const RERANKER_SETTINGS_API = {
         ],
     }),
     listLocalRerankerModels: async () => ({ models: CATALOG_MODELS, selectedId: 'ettin-reranker-68m', builtInSelected: false }),
-    listExtensions: async () => ({ available: true, extensions: EXTENSIONS }),
+    listExtensions: async () => ({ available: true, extensions: NO_EXTENSIONS ? [] : EXTENSIONS }),
     setRerankerConfig: async () => ({ success: true }),
     useLocalRerankerModel: async () => ({ success: true }),
     installLocalRerankerModel: async () => ({ success: true }),

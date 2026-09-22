@@ -1230,7 +1230,7 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                             aria-hidden="true"
                             className={`w-1.5 h-1.5 rounded-full shrink-0 ${isSelected ? 'bg-[var(--aip-accent)]' : installed ? 'bg-[var(--aip-tertiary)]' : 'border border-[var(--aip-border-strong)]'}`}
                         />
-                        <span className="text-xs font-semibold text-white truncate">{m.name}</span>
+                        <span className="text-xs font-semibold aip-hero truncate">{m.name}</span>
                         {m.bundled && <AipBadge tone="neutral" label={t('Included')} />}
                         {isSelected && <AipBadge tone="ok" label={t('In use')} />}
                     </div>
@@ -1326,7 +1326,7 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                 </div>
 
                 {m.note && (
-                    <p className="text-[10px] aip-muted leading-relaxed pl-3.5 text-white/60">{m.note}</p>
+                    <p className="text-[10px] aip-muted leading-relaxed pl-3.5">{m.note}</p>
                 )}
 
                 {needsLicence && (
@@ -1354,7 +1354,7 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
 
                 {busy && prog && (
                     <div className="space-y-1 pl-3.5 pt-1">
-                        <div className="h-1 w-full bg-white/10 rounded-full overflow-hidden">
+                        <div className="h-1 w-full bg-[var(--aip-item-active)] rounded-full overflow-hidden">
                             <div className="h-full bg-[var(--aip-accent)] transition-all duration-150" style={{ width: `${Math.round(prog.fraction * 100)}%` }} />
                         </div>
                         <div className="text-[10px] aip-muted flex justify-between">
@@ -1385,8 +1385,12 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
 
     const renderLocalEmbeddingLibraryCard = () => {
         const isLocalActive = active.provider === 'local';
+        // Theme tokens, not white literals: white text and a 10%-white pill
+        // vanished on the light card. --aip-pill-bg is exactly the old 10% white
+        // in dark and a raised white chip in light.
         const filterTabStyle = (tab: typeof localFilterTab) => ({
-            background: localFilterTab === tab ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+            background: localFilterTab === tab ? 'var(--aip-pill-bg)' : 'transparent',
+            boxShadow: localFilterTab === tab ? 'var(--aip-pill-shadow)' : 'none',
             fontWeight: localFilterTab === tab ? 600 : 400,
         });
 
@@ -1408,7 +1412,7 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                         {t('Runs on this device with zero data sent externally. Built-in MiniLM model shipped with Natively, or download open models directly from Hugging Face.')}
                     </p>
                     <span className="shrink-0 inline-flex items-center gap-2">
-                        <span className="font-medium tabular-nums text-white/70">
+                        <span className="font-medium tabular-nums aip-text">
                             {installedLocalCount}/{totalLocalCount} {t('installed')}
                             {installedLocalBytes > 0 && <> · {humanBytes(installedLocalBytes)}</>}
                         </span>
@@ -1432,14 +1436,14 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                         </p>
                     ) : <div />}
 
-                    <div className="flex items-center gap-1 bg-white/5 p-0.5 rounded-md text-[11px]">
-                        <button type="button" className="px-2 py-0.5 rounded text-white transition-colors" style={filterTabStyle('all')} onClick={() => setLocalFilterTab('all')}>
+                    <div className="flex items-center gap-1 bg-[var(--aip-btn-bg)] p-0.5 rounded-md text-[11px]">
+                        <button type="button" className="px-2 py-0.5 rounded aip-hero transition-colors" style={filterTabStyle('all')} onClick={() => setLocalFilterTab('all')}>
                             {t('All')} ({totalLocalCount})
                         </button>
-                        <button type="button" className="px-2 py-0.5 rounded text-white transition-colors" style={filterTabStyle('installed')} onClick={() => setLocalFilterTab('installed')}>
+                        <button type="button" className="px-2 py-0.5 rounded aip-hero transition-colors" style={filterTabStyle('installed')} onClick={() => setLocalFilterTab('installed')}>
                             {t('Installed')} ({installedLocalCount})
                         </button>
-                        <button type="button" className="px-2 py-0.5 rounded text-white transition-colors" style={filterTabStyle('recommended')} onClick={() => setLocalFilterTab('recommended')}>
+                        <button type="button" className="px-2 py-0.5 rounded aip-hero transition-colors" style={filterTabStyle('recommended')} onClick={() => setLocalFilterTab('recommended')}>
                             {t('Recommended')}
                         </button>
                     </div>
