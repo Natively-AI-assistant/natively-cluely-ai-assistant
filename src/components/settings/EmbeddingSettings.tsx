@@ -569,7 +569,9 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
         if (!active.configured) return null;
 
         const providerId = active.provider || 'local';
-        const modelId = active.model || 'Xenova/all-MiniLM-L6-v2';
+        // Display fallback only, when the status carries no model. Names the
+        // model actually bundled since 2026-09-22 (electron/rag/bundledLocalEmbedding.ts).
+        const modelId = active.model || 'Xenova/multilingual-e5-small';
 
         const prov = providers.find(p => p.id === providerId);
         const mod = prov?.models.find(m => m.id === modelId);

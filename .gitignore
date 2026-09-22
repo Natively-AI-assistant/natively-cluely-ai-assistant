@@ -612,3 +612,23 @@ scripts/intent-benchmark/reports/hybrid-rules-proto-head-cs.json
 scripts/intent-benchmark/reports/hybrid-tight-cs.json
 scripts/intent-benchmark/reports/hybrid-wide-cs.json
 scripts/intent-benchmark/reports/none-always-answer-cs.json
+
+# Local-embedding bake-off binary output (2026-09-21, docs/local-embedding-benchmark.md).
+# The per-model sqlite-vec indexes are ~18MB of regenerable vectors — this repo
+# has already had one commit sweep hundreds of MB of model binaries into its
+# history, so they are ignored by path. The JSON/CSV results beside them are
+# small and deliberately NOT ignored.
+results/indexes/
+results/live-fixtures/
+
+# Embedders no longer bundled: multilingual-e5-base (bundled 2026-09-21 only,
+# never released) and all-MiniLM-L6-v2 (bundled until 2026-09-21; unshipped
+# 2026-09-22). A local copy may remain from an older checkout; the R&D baseline
+# uses its own pinned copy under the embedding-experiments cache.
+resources/models/Xenova/multilingual-e5-base/
+resources/models/Xenova/all-MiniLM-L6-v2/
+
+# Bundled multilingual-e5-small (default since 2026-09-22): only the pinned
+# manifest is tracked; download-models.js fetches every file by sha256.
+resources/models/Xenova/multilingual-e5-small/*
+!resources/models/Xenova/multilingual-e5-small/manifest.json

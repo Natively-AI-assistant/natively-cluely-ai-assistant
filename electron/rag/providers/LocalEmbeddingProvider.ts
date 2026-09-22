@@ -34,6 +34,12 @@ import {
 import { ProviderStatusRegistry } from '../../services/ProviderStatusRegistry';
 import type { LocalWorkerStatus } from '../../utils/workerStatus';
 import { resolveBundledScript } from '../resolveRagWorker';
+import {
+  experimentSpaceModelId,
+  resolveEmbeddingExperiment,
+  type EmbeddingExperiment,
+} from '../embeddingExperiments';
+import { BUNDLED_LOCAL_EMBEDDING, type LocalEmbeddingRecipe } from '../bundledLocalEmbedding';
 
 const WORKER_INIT_TIMEOUT_MS = 60_000; // model load (cold disk read + ORT session init)
 const WORKER_EMBED_TIMEOUT_MS = 30_000; // a single embed()/embedBatch() call
@@ -50,11 +56,37 @@ let startupPoisoned = false;
  */
 const DISPOSE_DRAIN_MAX_MS = 120_000;
 
+/**
+ * Providers whose worker thread is alive, for the quit drain below.
+ *
+ * On `globalThis`, not module scope: esbuild inlines this file into more than
+ * one bundle, and a module-scoped set would give each bundle its own view.
+ */
+const LIVE_PROVIDERS_KEY = '__nativelyLiveLocalEmbeddingProviders';
+function liveProviders(): Set<LocalEmbeddingProvider> {
+  const g = globalThis as unknown as Record<string, Set<LocalEmbeddingProvider> | undefined>;
+  return (g[LIVE_PROVIDERS_KEY] ??= new Set<LocalEmbeddingProvider>());
+}
+
 export class LocalEmbeddingProvider implements IEmbeddingProvider {
   readonly name = 'local';
-  readonly dimensions = 384; // all-MiniLM-L6-v2
-  readonly model = 'Xenova/all-MiniLM-L6-v2';
+  readonly dimensions: number;
+  readonly model: string;
   readonly space: string;
+
+  /**
+   * R&D bake-off only (2026-09-21). Null on every production launch, because
+   * `NATIVELY_EMBEDDING_EXPERIMENT` is unset. See embeddingExperiments.ts.
+   */
+  private readonly experiment: EmbeddingExperiment | null;
+
+  /**
+   * What this provider loads and how it calls it: the bundled model
+   * (bundledLocalEmbedding.ts) on every production launch, or the experiment
+   * candidate when one is set. Always present, so pooling, prefixes, dtype and
+   * the memory headroom travel together and cannot be applied piecemeal.
+   */
+  private readonly recipe: LocalEmbeddingRecipe;
 
   private worker: Worker | null = null;
   private requestId = 0;
@@ -65,15 +97,29 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
   private lastWorkerStatus: LocalWorkerStatus | null = null;
   private nonRecoverableLoadError: Error | null = null;
   private modelPath: string;
+  /** Set by shutdownForQuit(): new requests are refused so the worker can drain. */
+  private closingForQuit = false;
 
   constructor() {
+    this.experiment = resolveEmbeddingExperiment();
+    this.recipe = this.experiment
+      // Experiments carry no measured headroom; they run with the shared floor.
+      ? { ...this.experiment, extraMemoryHeadroomGB: 0 }
+      : BUNDLED_LOCAL_EMBEDDING;
+    this.dimensions = this.recipe.dimensions;
+    // The bundled model's space key is its plain model id, the same convention
+    // MiniLM used (`local:xenova/all-minilm-l6-v2:384`). Experiments add their
+    // recipe suffix so a benchmark index can never share a space with production.
+    this.model = this.experiment
+      ? experimentSpaceModelId(this.experiment)
+      : BUNDLED_LOCAL_EMBEDDING.modelId;
     this.space = embeddingSpaceKey({ name: this.name, model: this.model, dimensions: this.dimensions });
     // Point to the bundled model inside the app's resources.
     // In dev: use app.getAppPath() so the path is independent of how esbuild
     // bundles this file (bundle: true inlines the provider into main.js, which
     // makes __dirname-relative paths fragile).
     // In prod: app.isPackaged = true → use process.resourcesPath (electron-builder extraResources).
-    this.modelPath = LocalEmbeddingProvider.resolveModelPath();
+    this.modelPath = LocalEmbeddingProvider.resolveModelPath(this.recipe.modelId);
   }
 
   // Resolve to the first candidate that actually holds the model, so the local
@@ -81,7 +127,11 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
   // Playwright launching dist-electron/main.js (where getAppPath() points at the
   // built dir, not the repo root that holds resources/models). Without this an
   // exhausted-cloud-quota run had NO working embedder (tokenizer 404).
-  private static resolveModelPath(): string {
+  //
+  // `modelId` only changes WHICH tokenizer.json is probed for, never the
+  // candidate list or its order.
+  private static resolveModelPath(modelId: string = BUNDLED_LOCAL_EMBEDDING.modelId): string {
+    const probe = path.join(...modelId.split('/'), 'tokenizer.json');
     const candidates: string[] = [];
     if (process.env.NATIVELY_LOCAL_MODELS_PATH) candidates.push(process.env.NATIVELY_LOCAL_MODELS_PATH);
     if (app.isPackaged) candidates.push(path.join(process.resourcesPath, 'models'));
@@ -93,7 +143,7 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
       candidates.push(path.join(appPath, '..', '..', 'resources', 'models'));
     }
     for (const c of candidates) {
-      try { if (fs.existsSync(path.join(c, 'Xenova', 'all-MiniLM-L6-v2', 'tokenizer.json'))) return c; } catch { /* keep trying */ }
+      try { if (fs.existsSync(path.join(c, probe))) return c; } catch { /* keep trying */ }
     }
     return candidates.find(Boolean) || path.join(process.resourcesPath || '.', 'models');
   }
@@ -126,6 +176,8 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
       writeOnnxLoadSentinel('embeddings', this.model);
       const spawned = new Worker(this.getWorkerPath());
       this.worker = spawned;
+      liveProviders().add(this);
+      spawned.once('exit', () => { if (this.worker === spawned || this.worker === null) liveProviders().delete(this); });
 
       this.worker.on('message', (msg: { type: string; requestId?: number; vectors?: number[][]; error?: string; status?: LocalWorkerStatus }) => {
         if (msg.type === 'status' && msg.status) {
@@ -276,6 +328,51 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
     try { await worker.terminate(); } catch { /* already gone */ }
   }
 
+  /**
+   * Quit-time teardown (2026-09-22).
+   *
+   * Quitting while this worker was inside a native ONNX call ABORTED the app:
+   * process exit tore the worker thread down mid-`run()`, onnxruntime-node's
+   * binding threw a Napi::Error into the dying environment, and libc++ called
+   * std::terminate (SIGABRT, a macOS "quit unexpectedly" report). Reproduced
+   * 4/4 on multilingual-e5-small and 3/3 on MiniLM by quitting mid-indexing.
+   * A quit during model LOAD also left the load sentinel behind, so the next
+   * launch read a clean quit as a crashed load and skipped local embedding.
+   *
+   * So: refuse new requests, let the ones already sent finish (each is one
+   * batch), then terminate a worker that is idle in its message loop, which
+   * is the same safe path dispose() takes on a config change. Bounded: a
+   * wedged worker must not hold the quit hostage.
+   */
+  async shutdownForQuit(maxWaitMs: number): Promise<'idle' | 'drained' | 'timed-out'> {
+    this.closingForQuit = true;
+    const worker = this.worker;
+    if (!worker) return 'idle';
+    const hadWork = this.pendingRequests.size > 0;
+    const deadline = Date.now() + maxWaitMs;
+    while (this.pendingRequests.size > 0 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    const outcome = this.pendingRequests.size > 0 ? 'timed-out' : hadWork ? 'drained' : 'idle';
+    this.worker = null;
+    this.loadingPromise = null;
+    try { clearOnnxLoadSentinel('embeddings', this.model); } catch { /* best effort */ }
+    try { await worker.terminate(); } catch { /* already gone */ }
+    liveProviders().delete(this);
+    return outcome;
+  }
+
+  /** True when any live local embedding worker still owes a reply. */
+  static hasInFlightWorkForQuit(): boolean {
+    for (const p of liveProviders()) if (p.worker && p.pendingRequests.size > 0) return true;
+    return false;
+  }
+
+  /** shutdownForQuit() on every live provider, in parallel. */
+  static async shutdownAllForQuit(maxWaitMs: number): Promise<string[]> {
+    return Promise.all([...liveProviders()].map((p) => p.shutdownForQuit(maxWaitMs).then((o) => `${p.model}:${o}`)));
+  }
+
   private rejectAllPending(err: Error): void {
     for (const [, pending] of this.pendingRequests) {
       clearTimeout(pending.timer);
@@ -350,6 +447,9 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
   }
 
   private postToWorker<T>(message: any, timeoutMs: number): Promise<T> {
+    if (this.closingForQuit) {
+      return Promise.reject(new Error('[LocalEmbeddingProvider] the app is quitting; local embedding request refused'));
+    }
     this.requestId = (this.requestId + 1) % Number.MAX_SAFE_INTEGER;
     const id = this.requestId;
     message.requestId = id;
@@ -416,9 +516,14 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
     // EmbeddingPipeline falls back to lexical retrieval, and the next call
     // retries. We do NOT have a `loadFailed` latch (matches the pre-gate
     // behavior); a later, less-pressured moment will retry automatically.
-    if (!hasEnoughMemoryForOnnxSession()) {
+    // MODEL-AWARE since 2026-09-22: the shared floor plus this model's own extra
+    // footprint. The floor alone admitted a 492 MB model exactly when it would
+    // admit MiniLM's 134 MB. A refusal is non-fatal: retrieval stays lexical and
+    // the next call retries once memory frees up.
+    const headroomGB = this.recipe.extraMemoryHeadroomGB;
+    if (!hasEnoughMemoryForOnnxSession(headroomGB)) {
       throw new Error(
-        `insufficient available memory (<${getMinFreeGBForOnnxSession()}GB) — skipping local embedder load`,
+        `insufficient available memory (<${getMinFreeGBForOnnxSession(headroomGB)}GB for ${this.recipe.modelId}) — skipping local embedder load`,
       );
     }
 
@@ -433,7 +538,18 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
     this.loadingPromise = (async () => {
       const releaseSlot = await acquireOnnxSlot('normal');
       try {
-        await this.postToWorker({ type: 'init', modelPath: this.modelPath }, WORKER_INIT_TIMEOUT_MS);
+        // The recipe is always sent, so the worker never falls back to
+        // constants of its own and cannot silently load a different model.
+        await this.postToWorker(
+          {
+            type: 'init',
+            modelPath: this.modelPath,
+            modelId: this.recipe.modelId,
+            dtype: this.recipe.dtype,
+            pooling: this.recipe.pooling,
+          },
+          WORKER_INIT_TIMEOUT_MS,
+        );
         this.loaded = true;
         this.slotRelease = releaseSlot;
       } catch (e) {
@@ -459,16 +575,53 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
     return vector;
   }
 
+  /**
+   * Query and document text are NOT embedded the same way. The bundled
+   * multilingual-e5-small wants "query: " on queries and "passage: " on chunks
+   * (its card: "even for non-English texts"). EmbeddingPipeline routes queries
+   * here and chunks to embedBatch(), so this is the one correct place for the
+   * split — feeding a document prefix to a query, or neither to either, is an
+   * integration bug that shows up as a model quality result. A symmetric recipe
+   * (empty prefixes, e.g. MiniLM) falls through to a plain embed().
+   */
   async embedQuery(text: string): Promise<number[]> {
-    return this.embed(text); // all-MiniLM-L6-v2 is symmetric
+    if (!this.recipe.queryPrefix) return this.embed(text);
+    const [vector] = await this.embedRaw([this.recipe.queryPrefix + text]);
+    return vector;
   }
 
   async embedBatch(texts: string[]): Promise<number[][]> {
+    const prefix = this.recipe.documentPrefix;
+    return this.embedRaw(prefix ? texts.map((t) => prefix + t) : texts);
+  }
+
+  /** Post already-prefixed text to the worker. */
+  private async embedRaw(texts: string[]): Promise<number[][]> {
     await this.ensureLoaded();
-    const result = await this.postToWorker<{ vectors: number[][] }>(
-      { type: 'embed', texts, modelPath: this.modelPath },
+    // The recipe rides along on `embed` as well as `init`, because the worker's
+    // `if (!pipe) await ensureLoaded(msg)` safety net can fire on a message that
+    // never went through init — and without these fields that net would quietly
+    // load MiniLM/mean and answer with vectors from the wrong model.
+    const result = await this.postToWorker<{ vectors: number[][]; dimensions?: number }>(
+      {
+        type: 'embed',
+        texts,
+        modelPath: this.modelPath,
+        modelId: this.recipe.modelId,
+        dtype: this.recipe.dtype,
+        pooling: this.recipe.pooling,
+      },
       WORKER_EMBED_TIMEOUT_MS,
     );
+    // The worker derives the width from the tensor. If it disagrees with the
+    // width this provider advertises, every vector written under this space key
+    // would be mislabelled, so refuse rather than index them.
+    if (result.dimensions && result.dimensions !== this.dimensions) {
+      throw new Error(
+        `[LocalEmbeddingProvider] ${this.model} returned ${result.dimensions}d but this ` +
+        `provider advertises ${this.dimensions}d — refusing to emit mislabelled vectors`,
+      );
+    }
     return result.vectors;
   }
 }

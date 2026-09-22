@@ -2383,36 +2383,79 @@ body {
     border-color: rgba(202, 138, 4, 0.22);
 }
 
-/* ─── "Waiting for answer" indicator — soft breathing pulse ──────────────
-   Replaces Tailwind's default .animate-bounce (a large springy translateY
-   keyframe that reads as generic/childish) with a calmer opacity+scale pulse,
-   matching the iMessage/Slack-style typing indicator: the dot barely moves,
-   it breathes. Mounted in two places (see NativelyInterface.tsx) — a single
-   dot, no stagger — that must stay visually identical. */
-@keyframes natively-thinking-pulse {
-  0%, 100% { opacity: 0.35; transform: scale(0.8); }
-  45% { opacity: 1; transform: scale(1); }
+/* @thinking-label:start */
+/* ─── "Waiting for answer" indicator — shimmering "Thinking..." label ─────
+   Replaced the single breathing dot (2026-09-21). A word says what the dot
+   only implied, and a highlight sweeping through the letters carries the
+   "in progress" signal that the dot's pulse used to.
+
+   Colours live in CSS rather than in the component. The dot they replaced
+   picked its colour from the `isLightTheme` prop, which only ever meant
+   `documentElement[data-theme] === 'light'` (useResolvedTheme.ts) and so could
+   not see the INTERFACE theme at all — the axis that actually decides whether
+   the panel under the text is light or dark. Reading the tokens below fixes
+   that, and it keeps the markup class string CONSTANT, which matters at the
+   imperative streaming site: queueToken overwrites that subtree's children out
+   of band, and its own comment forbids any isThinking-conditional class on the
+   node, since it would freeze at whatever value was present on first paint.
+
+   Mounted in three places (see NativelyInterface.tsx) — only ever one at a
+   time, so all three must stay visually identical. */
+.natively-thinking-label {
+  /* Derived from the overlay text tokens, NOT from a hand-picked light/dark
+     pair. liquid-glass and modern paint a DARK panel even under
+     [data-theme='light'] and therefore force WHITE text in both colour themes
+     (see their token blocks) — so a `[data-theme='light']` override keyed on
+     the colour theme alone is wrong in four of the six combinations. It was:
+     an earlier draft of this rule used dark slate on light, and the harness
+     showed it washing out on light+liquid-glass and light+modern. The tokens
+     already encode the right answer for all six, so defer to them. */
+  --natively-thinking-base: var(--overlay-text-muted, rgba(255, 255, 255, 0.7));
+  --natively-thinking-sweep: var(--overlay-text-strong, #ffffff);
+  display: inline-block;
+  /* The highlight occupies the 40%–60% band of an image 2.5x the element's
+     width, so the visible slice (1 / 2.5 = 40% of the image) contains only
+     base colour at both ends of the travel. The loop therefore wraps
+     base → base with no visible jump, and needs no alternate direction. */
+  background-image: linear-gradient(
+    90deg,
+    var(--natively-thinking-base) 0%,
+    var(--natively-thinking-base) 40%,
+    var(--natively-thinking-sweep) 50%,
+    var(--natively-thinking-base) 60%,
+    var(--natively-thinking-base) 100%
+  );
+  background-size: 250% 100%;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  /* ease-in-out reads as a deliberate pass rather than a metronome: the slow
+     ends of the curve happen while the highlight is off the letters, so what
+     you see is a sweep followed by a short rest. */
+  animation: natively-thinking-sweep 1.6s ease-in-out infinite;
+  will-change: background-position;
 }
 
-.natively-thinking-dot {
-  animation: natively-thinking-pulse 0.9s ease-in-out infinite;
-  will-change: opacity, transform;
+@keyframes natively-thinking-sweep {
+  0% { background-position: 0% 0; }
+  100% { background-position: 100% 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  /* A fully static dot reads as a stray artifact rather than "in progress"
-     with only one dot (no siblings to imply motion by contrast), so keep a
-     gentle opacity-only cycle instead of freezing it — no transform/scale,
-     which is the part reduced-motion users actually want suppressed. */
-  .natively-thinking-dot {
-    animation: natively-thinking-pulse-reduced 1.8s ease-in-out infinite;
+  /* The dot kept a gentle opacity cycle here, because one motionless dot with
+     no siblings reads as a stray artifact rather than as progress. A word does
+     not have that problem — "Thinking..." says so on its own — so this branch
+     drops the gradient entirely and paints flat base colour. */
+  .natively-thinking-label {
+    animation: none;
+    background-image: none;
+    color: var(--natively-thinking-base);
+    -webkit-text-fill-color: var(--natively-thinking-base);
   }
 }
-
-@keyframes natively-thinking-pulse-reduced {
-  0%, 100% { opacity: 0.5; }
-  50% { opacity: 0.9; }
-}
+/* @thinking-label:end */
 
 /* ─── Word-level reveal entrance (premium "typing" feel) ──────────────────
    Each newly-revealed word — the imperative reveal-tail path

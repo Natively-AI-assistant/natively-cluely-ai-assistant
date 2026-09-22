@@ -77,10 +77,20 @@ describe('Natively', () => {
 });
 
 describe('Built-in', () => {
-  test('always offers the bundled MiniLM', () => {
+  // The bundled model changed from MiniLM to multilingual-e5-small on
+  // 2026-09-22 (electron/rag/bundledLocalEmbedding.ts). Settings must name the
+  // model that is actually storing the user's vectors — a catalogue that still
+  // said MiniLM would be a label on the wrong box.
+  test('always offers the bundled model, and only that one, when Ollama is absent', () => {
     const p = byId(buildEmbeddingCatalog({ ollamaReachable: false }), 'local');
-    assert.deepEqual(ids(p), ['Xenova/all-MiniLM-L6-v2']);
+    assert.deepEqual(ids(p), ['Xenova/multilingual-e5-small']);
     assert.equal(p.models[0].dimensions, 384);
+  });
+
+  test('the previous bundled model is no longer offered', () => {
+    const p = byId(buildEmbeddingCatalog({ ollamaReachable: true }), 'local');
+    assert.ok(!ids(p).includes('Xenova/all-MiniLM-L6-v2'),
+      'MiniLM is no longer loaded by anything; offering it would name a model the app does not run');
   });
 
   test('adds nomic-embed-text only when Ollama is actually running', () => {
@@ -93,12 +103,17 @@ describe('Built-in', () => {
     assert.ok(!ids(without).includes('nomic-embed-text'));
   });
 
-  test('MiniLM is labelled lightweight, never recommended', () => {
-    // §14: it is the compatibility default, not the recommendation.
+  test('the bundled model is NOT lightweight and never the recommendation', () => {
+    // `lightweight` drives the "your embeddings are lightweight" notice. It was
+    // true of MiniLM and is not of multilingual-e5-small (+0.1213 R@10 over
+    // MiniLM, docs/local-embedding-benchmark.md §8), so the notice must stop.
+    // §14 still holds: the bundled model is the offline default, never the
+    // catalogue's recommendation over a configured cloud provider.
     const p = byId(buildEmbeddingCatalog({}), 'local');
-    const mini = p.models.find(m => m.id === 'Xenova/all-MiniLM-L6-v2');
-    assert.equal(mini.lightweight, true);
-    assert.notEqual(mini.recommended, true);
+    const bundled = p.models.find(m => m.id === 'Xenova/multilingual-e5-small');
+    assert.ok(bundled, 'bundled model missing from the local catalogue');
+    assert.notEqual(bundled.lightweight, true);
+    assert.notEqual(bundled.recommended, true);
   });
 });
 

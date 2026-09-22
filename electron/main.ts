@@ -19,6 +19,7 @@ import { FatalMainProcessCoordinator } from "./utils/fatalMainProcess"
 import { installResilientDnsLookup } from "./utils/resilientDnsLookup"
 import { MeetingLifecycleQueue, type MeetingLifecycleState } from "./audio/meetingLifecycleQueue"
 import { autoUpdater } from "electron-updater"
+import { summarizeUpdateDownload } from "./update/updateDownloadSummary"
 
 import {
   classifyServiceAccountFile,
@@ -1374,6 +1375,8 @@ export class AppState {
   private updateAvailable: boolean = false
   private updateDownloadState: 'idle' | 'available' | 'downloading' | 'downloaded' = 'idle'
   private updateDownloadPromise: Promise<unknown> | null = null
+  // Last `total` from download-progress; smaller than the file when the download was differential.
+  private lastUpdateProgressTotal: number | null = null
   private downloadedUpdateInfo: any = null
   private disguiseMode: 'terminal' | 'settings' | 'activity' | 'none' = 'none'
 
@@ -2617,6 +2620,17 @@ export class AppState {
         if (typeof this.knowledgeOrchestrator.setEmbedWithMetadataFn === 'function') {
           this.knowledgeOrchestrator.setEmbedWithMetadataFn(embedWithProducerMetadata);
         }
+        // Ingest embeds its nodes a BATCH at a time through this (2026-09-19): ten
+        // concurrent single-text requests per batch drew 429s from the embed route
+        // and silently demoted a whole résumé's nodes to the bundled model's space.
+        if (typeof (this.knowledgeOrchestrator as any).setEmbedBatchWithMetadataFn === 'function') {
+          (this.knowledgeOrchestrator as any).setEmbedBatchWithMetadataFn(async (texts: string[]) => {
+            const pipeline = self.ragManager?.getEmbeddingPipeline();
+            if (!pipeline) throw new Error('RAG pipeline not available');
+            await pipeline.waitForReady();
+            return await pipeline.getEmbeddingsWithFallback(texts);
+          });
+        }
         // Report the active document-embedder's composite space so the orchestrator
         // can detect knowledge nodes embedded in an OLD space (e.g. after a
         // gemini-embedding-001 → -2 upgrade) and re-embed them, instead of silently
@@ -2854,11 +2868,17 @@ export class AppState {
       log_message = log_message + " - Downloaded " + progressObj.percent + "%"
       log_message = log_message + " (" + progressObj.transferred + "/" + progressObj.total + ")"
       console.log("[AutoUpdater] " + log_message)
+      this.lastUpdateProgressTotal = progressObj.total
       this.broadcast("download-progress", progressObj)
     })
 
     autoUpdater.on("update-downloaded", (info) => {
       console.log("[AutoUpdater] Update downloaded:", info.version)
+      let downloadedFileBytes: number | null = null
+      try {
+        downloadedFileBytes = fs.statSync(info.downloadedFile).size
+      } catch { /* summary reports the size as unknown */ }
+      console.log(`[AutoUpdater] ${summarizeUpdateDownload(this.lastUpdateProgressTotal, downloadedFileBytes).message}`)
       this.updateDownloadState = 'downloaded'
       this.updateDownloadPromise = null
       // info.filePath is the public path of the staged update zip from Squirrel.Mac.
@@ -3144,6 +3164,7 @@ export class AppState {
 
     console.log('[AutoUpdater] Starting download...')
     this.updateDownloadState = 'downloading'
+    this.lastUpdateProgressTotal = null
     try {
       // Errors during download are surfaced via autoUpdater.on("error") which
       // already broadcasts "update-error". Do not broadcast here to avoid duplicates.
@@ -9416,8 +9437,39 @@ if (process.env.THINKING_MATRIX === '1') {
     logToFile('[DIAG:gpu-info-update] GPU process info changed');
   });
 
+  // Local embedding workers must be idle before the process exits (2026-09-22):
+  // quitting while one was inside a native ONNX call aborted the app with
+  // SIGABRT (see LocalEmbeddingProvider.shutdownForQuit). Deferred ONCE, only
+  // when a worker still owes a reply, and bounded so a wedged worker cannot
+  // hold the quit hostage. Same code path on macOS and Windows: both run the
+  // worker on a Node worker_thread that process exit tears down.
+  let localEmbeddingQuitDrainStarted = false;
+  const LOCAL_EMBEDDING_QUIT_DRAIN_MS = 5_000;
+  /** True when the quit was deferred; before-quit returns and re-runs on app.quit(). */
+  const deferQuitForLocalEmbeddingDrain = (event: Electron.Event): boolean => {
+    if (localEmbeddingQuitDrainStarted) return false;
+    localEmbeddingQuitDrainStarted = true;
+    try {
+      const { LocalEmbeddingProvider } = require('./rag/providers/LocalEmbeddingProvider');
+      if (!LocalEmbeddingProvider.hasInFlightWorkForQuit()) return false;
+      event.preventDefault();
+      appState.setQuitting(true);
+      const startedAt = Date.now();
+      console.log('[Main] Quit deferred: waiting for the local embedding worker to finish its current batch...');
+      void LocalEmbeddingProvider.shutdownAllForQuit(LOCAL_EMBEDDING_QUIT_DRAIN_MS)
+        .then((outcomes: string[]) => console.log(`[Main] Local embedding workers stopped for quit in ${Date.now() - startedAt}ms: ${outcomes.join(', ')}`))
+        .catch((e: unknown) => console.warn('[Main] Local embedding quit drain failed; quitting anyway:', e))
+        .finally(() => app.quit());
+      return true;
+    } catch (e) {
+      console.warn('[Main] Local embedding quit drain unavailable; quitting normally:', e);
+      return false;
+    }
+  };
+
   // Scrub API keys from memory on quit to minimize exposure window
   app.on("before-quit", (event) => {
+    if (deferQuitForLocalEmbeddingDrain(event)) return;
     console.log("App is quitting, cleaning up resources...");
     appState.setQuitting(true);
 

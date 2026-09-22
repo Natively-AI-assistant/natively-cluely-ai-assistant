@@ -32,10 +32,6 @@ const repoRoot = path.resolve(__dirname, '..');
 
 // Required packaged model files (the source of truth for the local fallback stack).
 const REQUIRED_MODEL_FILES = [
-  'Xenova/all-MiniLM-L6-v2/config.json',
-  'Xenova/all-MiniLM-L6-v2/tokenizer.json',
-  'Xenova/all-MiniLM-L6-v2/tokenizer_config.json',
-  'Xenova/all-MiniLM-L6-v2/onnx/model_quantized.onnx',
   // The bundled cross-encoder. ms-marco replaced bge-reranker-base on
   // 2026-09-04: bge measured WORSE than no reranker at all (MRR 0.7558 against
   // a 0.8368 baseline) while costing 283MB, where ms-marco is +0.0320 at 24MB
@@ -47,6 +43,15 @@ const REQUIRED_MODEL_FILES = [
 
   'pipecat-ai/smart-turn-v3/manifest.json',
   'pipecat-ai/smart-turn-v3/smart-turn-v3.1-cpu.onnx',
+
+  // multilingual-e5-small — the default bundled embedder since 2026-09-22
+  // (electron/rag/bundledLocalEmbedding.ts). A release must never ship without it.
+  'Xenova/multilingual-e5-small/manifest.json',
+  'Xenova/multilingual-e5-small/config.json',
+  'Xenova/multilingual-e5-small/tokenizer.json',
+  'Xenova/multilingual-e5-small/tokenizer_config.json',
+  'Xenova/multilingual-e5-small/special_tokens_map.json',
+  'Xenova/multilingual-e5-small/onnx/model_quantized.onnx',
 ];
 
 // Required dependency directories in node_modules.

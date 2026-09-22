@@ -79,7 +79,8 @@ describe('resolveWithDemotion names the pinned provider that failed transiently'
 describe('the pipeline re-probes a startup-demoted pinned provider (source pins)', () => {
   const src = fs.readFileSync(path.resolve(root, 'electron/rag/EmbeddingPipeline.ts'), 'utf8');
   test('initialization reads the demotion and schedules the re-probe', () => {
-    assert.match(src, /const resolution = await EmbeddingProviderResolver\.resolveWithDemotion\(config\);/);
+    assert.match(src, /const resolution = await this\.resolveEmbeddingProvider\(config\);/);
+    assert.match(src, /return EmbeddingProviderResolver\.resolveWithDemotion\(config\);/, 'the seam still calls resolveWithDemotion');
     const block = src.slice(src.indexOf('if (resolution.demotedPinned)'), src.indexOf('// Check for previous embedding-SPACE mismatches'));
     assert.match(block, /this\.schedulePrimaryReprobe\(pinned\)/, 'the interval re-probe is armed');
     assert.match(block, /setTimeout\(\(\) => \{ void this\.reprobePrimaryOnce\(pinned\); \}, BOOT_REPROBE_FIRST_DELAY_MS\)/, 'an early first probe runs too');

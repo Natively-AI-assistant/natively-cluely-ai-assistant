@@ -518,17 +518,42 @@ export function getAvailableMemoryGB(): number {
  * Fails OPEN (returns true) if the measurement itself throws — refusing on
  * a measurement failure would block the app for no real reason.
  */
-export function hasEnoughMemoryForOnnxSession(): boolean {
+export function hasEnoughMemoryForOnnxSession(extraGB: number = 0): boolean {
     try {
-        return getAvailableMemoryGB() >= readMinFreeGB();
+        return getAvailableMemoryGB() >= readMinFreeGB() + sanitizeExtraGB(extraGB);
     } catch {
         return true;
     }
 }
 
-/** Returns the current free-memory floor in GB (live, env-aware). */
-export function getMinFreeGBForOnnxSession(): number {
-    return readMinFreeGB();
+/**
+ * Returns the current free-memory floor in GB (live, env-aware), plus the
+ * caller's model-specific headroom.
+ *
+ * `extraGB` makes the gate MODEL-AWARE (2026-09-22). The shared floor is blind
+ * to what is about to load, so without it a 492 MB embedding model was admitted
+ * under exactly the conditions that admit a 134 MB one. A caller loading a
+ * heavier model passes its extra footprint (see
+ * BUNDLED_LOCAL_EMBEDDING.extraMemoryHeadroomGB). Every existing caller omits
+ * it and is therefore unchanged.
+ */
+export function getMinFreeGBForOnnxSession(extraGB: number = 0): number {
+    return readMinFreeGB() + sanitizeExtraGB(extraGB);
+}
+
+/** Negative, NaN or non-finite headroom must never LOWER the shared floor. */
+function sanitizeExtraGB(extraGB: number): number {
+    return Number.isFinite(extraGB) && extraGB > 0 ? extraGB : 0;
+}
+
+/**
+ * True when a new high-priority (STT channel) session of `weight` would have to
+ * WAIT right now. Read-only: it never changes admission. Lets the model
+ * preloader see that a live channel is starving so it can give back a worker
+ * nobody has claimed (see ModelPreloader.yieldUnclaimedWorkerIfStarving).
+ */
+export function isHighPriorityOnnxBudgetExhausted(weight: number = 1): boolean {
+    return !canAcquireNow('high', weight);
 }
 
 /** Returns the current max-concurrent cap (live, env-aware). */

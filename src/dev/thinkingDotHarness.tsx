@@ -1,12 +1,16 @@
-// DEV-ONLY visual repro for the "no thinking-dot under liquid-glass/modern"
-// bug report. Not part of the shipped app (see harness.html precedent:
-// streamingCodeHarness.tsx). Renders the REAL class strings used by both
-// thinking-dot render sites in NativelyInterface.tsx (the embedded dot in
-// renderMessageText's streaming branch, ~L5636-5651, and the standalone
-// pre-placeholder pill, ~L7404-7427) under all 6 (theme x light/dark)
-// combinations, each wrapped in the real `[data-theme]` / `[data-interface-theme]`
-// ancestor attributes the real CSS selectors key off of — so the REAL
-// index.css cascade decides what's visible, not a guess.
+// DEV-ONLY visual repro for the overlay's "waiting for answer" indicator.
+// Originally built for the "no thinking-dot under liquid-glass/modern" bug;
+// the dot became a shimmering "Thinking..." label on 2026-09-21 and this
+// harness moved with it (filename kept — revealHarness.html cites it as
+// precedent). Not part of the shipped app (see harness.html precedent:
+// streamingCodeHarness.tsx). Renders the REAL class strings used by the
+// thinking-label render sites in NativelyInterface.tsx (the embedded label in
+// renderMessageText's streaming branches, and the standalone pre-placeholder
+// row) under all 6 (theme x light/dark) combinations, each wrapped in the real
+// `[data-theme]` / `[data-interface-theme]` ancestor attributes the real CSS
+// selectors key off of — so the REAL index.css cascade decides what's visible,
+// not a guess. Contrast is the whole point: 13px glyphs are a far harder test
+// of a theme than the solid 8px dot they replaced.
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import '../index.css';
@@ -19,44 +23,32 @@ const THEMES: Array<{ value: 'default' | 'liquid-glass' | 'modern'; label: strin
   { value: 'modern', label: 'modern' },
 ];
 
-function EmbeddedDot({ isLightTheme }: { isLightTheme: boolean }) {
-  // Exact classes from NativelyInterface.tsx L5605-5651 (the `key="streaming"`
-  // branch, isThinking = true).
-  const cardBgBorderClass = isLightTheme
-    ? 'bg-slate-100/70 backdrop-blur-md border border-slate-200/50 text-slate-900 shadow-sm'
-    : 'bg-zinc-800/60 backdrop-blur-md border border-zinc-700/40 text-zinc-100 shadow-md';
+function VariantRow({ label, className }: { label: string; className: string }) {
+  // Real wrapper classes from NativelyInterface.tsx's standalone pre-placeholder
+  // row, so both candidates are measured in the real box, at the real size.
   return (
-    <div
-      className={`w-fit px-[16.5px] py-[12.5px] rounded-[20px] rounded-tl-[4px] ai-response-card ${cardBgBorderClass} my-2.5 transition-all duration-300 markdown-content whitespace-pre-wrap text-[14.5px] leading-relaxed`}
-    >
-      <div className="flex gap-1.5 items-center py-0.5">
-        <div
-          className={`natively-thinking-dot w-2 h-2 ${isLightTheme ? 'bg-slate-400' : 'bg-white'} rounded-full`}
-          style={{ animationDelay: '0ms' }}
-        />
-        <div
-          className={`natively-thinking-dot w-2 h-2 ${isLightTheme ? 'bg-slate-400' : 'bg-white'} rounded-full`}
-          style={{ animationDelay: '160ms' }}
-        />
-        <div
-          className={`natively-thinking-dot w-2 h-2 ${isLightTheme ? 'bg-slate-400' : 'bg-white'} rounded-full`}
-          style={{ animationDelay: '320ms' }}
-        />
+    <div>
+      <div style={{ fontSize: 9, letterSpacing: 0.6, textTransform: 'uppercase', opacity: 0.45, fontFamily: 'monospace' }}>
+        {label}
+      </div>
+      <div className="flex justify-start my-2.5 min-h-[24px] items-center">
+        <span className={`${className} text-[13px]`}>Thinking...</span>
       </div>
     </div>
   );
 }
 
-function StandalonePill({ subtleStyle }: { subtleStyle: React.CSSProperties }) {
-  // Exact classes from NativelyInterface.tsx L7404-7427, now with the REAL
-  // appearance.subtleStyle inline style (advisor-flagged: the earlier repro
-  // omitted this).
+function EmbeddedLabel() {
+  // Exact classes from NativelyInterface.tsx renderMessageText, the
+  // `key="streaming"` branch with `!msg.text`. The card chrome the earlier
+  // version of this harness carried (w-fit / rounded bubble / per-theme
+  // bg+border) is gone from the real site — `.ai-response-card` is
+  // neutralized in index.css — so reproducing it here would have tested a
+  // bubble the user never sees.
   return (
-    <div className="flex justify-start">
-      <div className="px-3 py-2 flex gap-1.5 overlay-subtle-surface rounded-full border" style={subtleStyle}>
-        <div className="natively-thinking-dot w-2 h-2 bg-slate-400 rounded-full" style={{ animationDelay: '0ms' }} />
-        <div className="natively-thinking-dot w-2 h-2 bg-slate-400 rounded-full" style={{ animationDelay: '160ms' }} />
-        <div className="natively-thinking-dot w-2 h-2 bg-slate-400 rounded-full" style={{ animationDelay: '320ms' }} />
+    <div className="w-full ai-response-card my-2.5 min-h-[24px] transition-opacity duration-200 markdown-content whitespace-pre-wrap text-[14px] leading-relaxed natively-streaming-answer">
+      <div className="flex items-center min-h-[24px] py-0.5">
+        <span className="natively-thinking-label text-[13px]">Thinking...</span>
       </div>
     </div>
   );
@@ -109,11 +101,14 @@ function ThemeBlock({ theme, mode }: { theme: 'default' | 'liquid-glass' | 'mode
         {isGlassTheme && <GlassEffectLayer parentRef={shellRef} cornerRadius={24} />}
         {/* Real scroll container: NativelyInterface.tsx L7326-7331 */}
         <div className="relative z-10 flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-3 no-drag isolate">
-          <div data-testid={`embedded-${theme}-${mode}`}>
-            <EmbeddedDot isLightTheme={isLightTheme} />
+          <div data-testid={`standalone-${theme}-${mode}`}>
+            <VariantRow label="standalone pre-placeholder row" className="natively-thinking-label" />
           </div>
-          <div data-testid={`standalone-${theme}-${mode}`} style={{ marginTop: 8 }}>
-            <StandalonePill subtleStyle={appearance.subtleStyle} />
+          <div data-testid={`embedded-${theme}-${mode}`} style={{ marginTop: 10, borderTop: '1px solid rgba(128,128,128,0.25)', paddingTop: 6 }}>
+            <div style={{ fontSize: 9, letterSpacing: 0.6, textTransform: 'uppercase', opacity: 0.45, fontFamily: 'monospace' }}>
+              in the streaming bubble
+            </div>
+            <EmbeddedLabel />
           </div>
         </div>
       </div>
@@ -123,6 +118,7 @@ function ThemeBlock({ theme, mode }: { theme: 'default' | 'liquid-glass' | 'mode
 
 function Harness() {
   const [rootMode, setRootMode] = React.useState<'light' | 'dark'>('dark');
+
 
   // The real app sets data-theme on <html> (document.documentElement) in
   // main.tsx — NOT per-subtree. Selectors like
@@ -135,14 +131,21 @@ function Harness() {
 
   return (
     <div style={{ padding: 24, fontFamily: 'sans-serif', background: '#0b0e14', minHeight: '100vh', color: '#e6edf3' }}>
-      <h2>Thinking-dot repro — real classes, real index.css, real [data-theme]/[data-interface-theme] nesting</h2>
-      <p style={{ opacity: 0.7, fontSize: 13, maxWidth: 700 }}>
-        Each box below sets <code>data-interface-theme</code> on its own wrapper
-        div. <code>document.documentElement[data-theme]</code> is toggled by the
-        button (real app sets this on &lt;html&gt;, matching the actual
-        ancestor-selector shape). Two rows per box: the embedded in-bubble dot
-        (renderMessageText streaming branch) and the standalone pre-placeholder
-        pill.
+      <h2>&quot;Thinking...&quot; — real classes, real index.css, real [data-theme]/[data-interface-theme] nesting</h2>
+      <p style={{ opacity: 0.7, fontSize: 13, maxWidth: 760 }}>
+        Each box sets <code>data-interface-theme</code> on its own wrapper div;
+        <code>document.documentElement[data-theme]</code> is toggled by the button
+        (the real app sets it on &lt;html&gt;, which is the ancestor-selector shape
+        the real CSS depends on). Two rows per box: the standalone
+        pre-placeholder row and the label inside the streaming bubble.
+        <br />
+        <br />
+        The point of the light/dark toggle is liquid-glass and modern: both paint
+        a DARK panel in <i>both</i> colour themes, which is the case that has
+        broken this element twice. The label reads
+        <code>--overlay-text-muted</code> / <code>--overlay-text-strong</code> so
+        it follows the panel rather than the colour theme;
+        <code>tests/css/thinking-label.check.mjs</code> pins that.
       </p>
       <button type="button" onClick={() => setRootMode((m) => (m === 'light' ? 'dark' : 'light'))} style={{ marginBottom: 16 }}>
         Toggle html[data-theme] (currently: {rootMode})

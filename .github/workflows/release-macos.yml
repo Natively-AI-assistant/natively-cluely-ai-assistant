@@ -234,6 +234,10 @@ jobs:
           node scripts/smoke-packaged-local-fallback.mjs --app "$APP" --no-ollama --no-keys
           echo "::endgroup::"
 
+      # This is a CI artifact, NOT the GitHub Release. Attach it to the release with
+      # `node scripts/publish-github-release.mjs --platform mac --tag V<version>`,
+      # which refuses a set whose zips lack their .blockmap (V2.8.8 shipped without
+      # them, so every client re-downloaded ~1 GB instead of a differential update).
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -241,5 +245,6 @@ jobs:
           path: |
             release/*.dmg
             release/*.zip
+            release/*.zip.blockmap
             release/latest-mac.yml
           if-no-files-found: error

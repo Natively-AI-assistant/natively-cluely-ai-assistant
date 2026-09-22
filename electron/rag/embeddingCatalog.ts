@@ -8,6 +8,8 @@
 // is worse than offering none, because the failure only shows up at index time,
 // after the user has committed to a re-index.
 
+import { BUNDLED_LOCAL_EMBEDDING } from './bundledLocalEmbedding';
+
 export interface EmbeddingCatalogModel {
   id: string;
   /** Short display name. The id is shown separately where it differs. */
@@ -103,7 +105,11 @@ export const STATIC_EMBEDDING_MODELS = Object.freeze({
   ]),
   /** The model bundled with the app — always present, needs no network. */
   local: Object.freeze([
-    Object.freeze({ id: 'Xenova/all-MiniLM-L6-v2', label: 'MiniLM', dimensions: 384, dimensionsVerified: true, lightweight: true, note: 'Bundled with Natively. Small and fast; weaker retrieval on large projects.' }),
+    // Since 2026-09-22 the bundled model is multilingual-e5-small
+    // (bundledLocalEmbedding.ts). Not `lightweight`: that flag drives the
+    // "your embeddings are lightweight" notice, which was true of MiniLM and is
+    // not of this model (docs/local-embedding-benchmark.md §12b).
+    Object.freeze({ id: BUNDLED_LOCAL_EMBEDDING.modelId, label: BUNDLED_LOCAL_EMBEDDING.label, dimensions: BUNDLED_LOCAL_EMBEDDING.dimensions, dimensionsVerified: true, note: 'Bundled with Natively. Runs entirely on this device; nothing leaves the machine.' }),
   ]),
   /**
    * Voyage AI's embedding suite (docs.voyageai.com, checked 2026-08-31).

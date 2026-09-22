@@ -2908,7 +2908,10 @@ export class LLMHelper {
         const isRetryable = msg.includes("503") || msg.includes("overloaded")
           || status === 529 || status === 429 || status === 500
           || msg.includes("rate_limit") || msg.includes("rate limit");
-        if (!isRetryable) throw e;
+        // "Consecutive" must mean consecutive: a 429 followed by a non-429 error
+        // used to leave the count at 1 forever, so the next lone 429 — hours
+        // later — tripped a breaker meant for a saturated model.
+        if (!isRetryable) { if (circuitKey) this.rateLimitCircuit.delete(circuitKey); throw e; }
 
         // Track 429s for the breaker and trip it once saturated.
         if (circuitKey && is429) {
@@ -4355,6 +4358,45 @@ let isMultimodal = !!(imagePaths?.length);
    * generateContentStructured ladder so the judge still answers when Gemini
    * is down (the controller's deadline bounds the total wait either way).
    */
+  /**
+   * The low-confidence QUERY REWRITE's model call (2026-09-20): exactly ONE rung,
+   * aborted at its deadline. It first borrowed generateJudgeVerdict, and an
+   * adversarial review read what that does without a Gemini key: it falls into
+   * generateContentStructured — OpenAI, Claude, a Codex CLI subprocess, Ollama
+   * with a 120 s timeout competing with the answer call, then the Natively
+   * extraction route — for three rotations, on a call whose result is discarded
+   * after 1.5 s. A rewrite is an optimisation: it uses the one fast provider the
+   * user has, honours the outbound data-scope settings like every other call,
+   * and returns '' when there is nothing suitable — never a ladder.
+   */
+  public async generateQueryRewrite(message: string, opts: { timeoutMs?: number } = {}): Promise<string> {
+    const timeoutMs = opts.timeoutMs ?? 1500;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      if (this.isLocalOnlyMode) return '';
+      if (this.client) {
+        this.assertOutboundScopes('gemini', message);
+        // @ts-ignore — abortSignal is accepted by the SDK's request config
+        const res = await this.client.models.generateContent({
+          model: GEMINI_FLASH_LITE_MODEL,
+          contents: [{ role: 'user', parts: [{ text: message }] }],
+          config: { maxOutputTokens: 96, temperature: 0, responseMimeType: 'application/json', abortSignal: controller.signal },
+        });
+        const parts = res.candidates?.[0]?.content?.parts ?? [];
+        return res.text ?? (Array.isArray(parts) ? parts : [parts]).map((p: any) => p?.text ?? '').join('');
+      }
+      if (this.groqClient) return await this.generateWithGroq(message);
+      const nativelyKey = this.nativelyKey || (() => {
+        try { return require('./services/CredentialsManager').CredentialsManager.getInstance().getNativelyApiKey() || null; } catch { return null; }
+      })();
+      if (nativelyKey) return await this.generateWithNatively(message, undefined, undefined, { timeoutMs, signal: controller.signal });
+      return '';
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   public async generateJudgeVerdict(message: string): Promise<string> {
     if (this.client) {
       for (const modelId of [GEMINI_FLASH_LITE_MODEL, GEMINI_FLASH_MODEL]) {
@@ -4395,6 +4437,9 @@ let isMultimodal = !!(imagePaths?.length);
   ): Promise<string> {
     type ProviderAttempt = { name: string; execute: () => Promise<string> };
     const providers: ProviderAttempt[] = [];
+    // A breaker may skip a rung only if another rung exists to fall to. Evaluated
+    // when the rung RUNS (the list is complete by then), not when it is pushed.
+    const breakerKeyFor = (key: string): string | undefined => (providers.length > 1 ? key : undefined);
     const permanentFailureKeyFor = (name: string): string => {
       if (name.startsWith('Gemini')) return 'gemini';
       if (name.startsWith('OpenAI')) return 'openai';
@@ -4410,13 +4455,27 @@ let isMultimodal = !!(imagePaths?.length);
 
     // Priority 1: OpenAI
     if (this.openaiClient) {
-      providers.push({ name: `OpenAI (${OPENAI_MODEL})`, execute: () => this.generateWithOpenai(message) });
+      // Breaker key (2026-09-20): the Gemini rungs below have always had one; this
+      // rung did not. Measured on a live 45-role résumé ingest with a
+      // rate-limited OpenAI key: 140 of 141 structured calls spent ~9.7 s in
+      // 429 backoff HERE before Gemini answered in ~4.4 s — 1,334 s of a
+      // 33-minute ingest, on a provider that never once succeeded. With the key,
+      // two consecutive 429s open the breaker and the ladder skips this rung
+      // for the cooldown. Scoped to the structured ladder: chat's handling of
+      // the same client is unchanged.
+      // …but ONLY when a later rung can take the call (review finding, reproduced):
+      // with the key unconditionally set, a user whose ONLY provider is OpenAI
+      // lost all structured generation for 60 s after two 429s — before, the
+      // third attempt succeeded in 1.2 s. `breakerKeyFor` decides at call time,
+      // once the ladder is known.
+      providers.push({ name: `OpenAI (${OPENAI_MODEL})`, execute: () => this.generateWithOpenai(message, undefined, undefined, undefined, breakerKeyFor('structured:openai')) });
     }
 
     // Priority 2: Claude (now safe — generateWithClaude streams internally, so the SDK's
     // 10-minute pre-flight gate on large max_tokens is bypassed).
     if (this.claudeClient) {
-      providers.push({ name: `Claude (${CLAUDE_MODEL})`, execute: () => this.generateWithClaude(message) });
+      // Same breaker as the OpenAI rung above, for the same reason.
+      providers.push({ name: `Claude (${CLAUDE_MODEL})`, execute: () => this.generateWithClaude(message, undefined, undefined, undefined, breakerKeyFor('structured:claude')) });
     }
 
     // Priority 3: Gemini cascade — flash-lite → 3.7-flash ONLY (cheapest/fastest
@@ -4899,7 +4958,7 @@ let isMultimodal = !!(imagePaths?.length);
    * Non-streaming OpenAI generation with proper system/user separation.
    * PREFIX CACHING: see streamWithOpenai for the caching contract.
    */
-  private async generateWithOpenai(userMessage: string, systemPrompt?: string, imagePaths?: string[], modelId?: string): Promise<string> {
+  private async generateWithOpenai(userMessage: string, systemPrompt?: string, imagePaths?: string[], modelId?: string, circuitKey?: string): Promise<string> {
     if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
     if (!this.openaiClient) throw new Error("OpenAI client not initialized");
     this.assertOutboundScopes('openai', userMessage, imagePaths);
@@ -4940,7 +4999,7 @@ let isMultimodal = !!(imagePaths?.length);
       provider: 'openai', classification: 'sdk_request_object_before_serialization', payload: request,
     });
     const response = await this.withTimeout(
-      this.withRetry(() => this.openaiClient!.chat.completions.create(request)),
+      this.withRetry(() => this.openaiClient!.chat.completions.create(request), 3, circuitKey),
       60000,
       `OpenAI (${model})`
     );
@@ -5448,7 +5507,7 @@ let isMultimodal = !!(imagePaths?.length);
   /**
    * Non-streaming Claude generation with proper system/user separation
    */
-  private async generateWithClaude(userMessage: string, systemPrompt?: string, imagePaths?: string[], modelId?: string): Promise<string> {
+  private async generateWithClaude(userMessage: string, systemPrompt?: string, imagePaths?: string[], modelId?: string, circuitKey?: string): Promise<string> {
     if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
     if (!this.claudeClient) throw new Error("Claude client not initialized");
     // Was MISSING entirely — this method accepts imagePaths and builds base64
@@ -5499,7 +5558,7 @@ let isMultimodal = !!(imagePaths?.length);
       this.withRetry(async () => {
         const stream = this.claudeClient!.messages.stream(request);
         return await stream.finalMessage();
-      }),
+      }, 3, circuitKey),
       120000,
       `Claude (${model})`
     );

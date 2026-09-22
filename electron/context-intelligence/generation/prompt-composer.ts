@@ -878,7 +878,7 @@ export function composePrompt(input: ComposeInput): ComposedPrompt {
   // token budget must grow with it or the extra chunks are dropped here.
   const exhaustive = d.retrievalPlan.exhaustive === true;
   const budget: PackBudget = {
-    evidenceTokens: policy.contextBudget.evidenceTokens * (exhaustive ? 3 : 1),
+    evidenceTokens: (d.retrievalPlan.evidenceTokens ?? policy.contextBudget.evidenceTokens) * (exhaustive ? 3 : 1),
     conversationTokens: policy.contextBudget.conversationTokens,
     transcriptTokens: policy.contextBudget.transcriptTokens,
   };

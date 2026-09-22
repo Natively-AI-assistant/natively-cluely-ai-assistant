@@ -127,6 +127,12 @@ export interface AnswerTrace {
 
   retrievalPath: RetrievalPath;
   retrievalAttempts: RetrievalAttemptTrace[];
+  /**
+   * Low-confidence query rewrite (llm-query-rewrite.ts). Present only when the
+   * trigger fired. The rewritten TEXT is not recorded — it is derived from the
+   * user's question and the trace is content-free by contract; its length is.
+   */
+  queryRewrite?: { reason: 'OK' | 'TIMEOUT' | 'ERROR' | 'EMPTY' | 'UNCHANGED' | 'BUSY'; durationMs: number; queryChars: number; addedEvidence: number; answerabilityBefore: string; answerabilityAfter: string };
 
   acceptedEvidence: EvidenceTrace[];
   rejectedEvidence: RejectedEvidenceTrace[];

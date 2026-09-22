@@ -24,14 +24,22 @@
 import { parentPort } from 'worker_threads';
 import { getBoundedOnnxSessionOptions } from '../../utils/onnxThreadConfig';
 import { classifyWorkerFailure } from '../../utils/workerStatus';
+import { sliceEmbeddingTensor } from './embeddingTensorSlice';
+import { BUNDLED_LOCAL_EMBEDDING } from '../bundledLocalEmbedding';
 
 if (!parentPort) throw new Error('localEmbeddingWorker must be run as a Worker thread');
 
-const MODEL_ID = 'Xenova/all-MiniLM-L6-v2';
-const DIMENSIONS = 384;
+// Defaults only. The provider sends the full recipe on every init/embed, so
+// these are reached only by a message that somehow omits it — and even then
+// they name the model actually bundled, never a stale literal.
+const MODEL_ID = BUNDLED_LOCAL_EMBEDDING.modelId;
+const DIMENSIONS = BUNDLED_LOCAL_EMBEDDING.dimensions;
 
 let pipe: any = null;
 let loadingPromise: Promise<void> | null = null;
+/** Recipe the currently-loaded pipe was built with. Defaults = the bundled model. */
+let loadedModelId = MODEL_ID;
+let loadedPooling: 'mean' | 'cls' = BUNDLED_LOCAL_EMBEDDING.pooling;
 
 // @huggingface/transformers is ESM-only — must use a true dynamic import().
 // `new Function` keeps this opaque to TypeScript's commonjs rewrite (which
@@ -51,8 +59,14 @@ async function ensureLoaded(msg: any): Promise<void> {
     env.allowRemoteModels = false;
     env.localModelPath = msg.modelPath;
 
-    console.log('[LocalEmbeddingWorker] Loading feature-extraction model (all-MiniLM-L6-v2)...');
-    pipe = await pipeline('feature-extraction', MODEL_ID, {
+    // LocalEmbeddingProvider always sends modelId/dtype/pooling (the bundled
+    // recipe, or an experiment's). The fallbacks here are the bundled model's
+    // own values, so a message missing them still loads the right model.
+    loadedModelId = msg.modelId || MODEL_ID;
+    loadedPooling = msg.pooling === 'cls' ? 'cls' : msg.pooling === 'mean' ? 'mean' : BUNDLED_LOCAL_EMBEDDING.pooling;
+
+    console.log(`[LocalEmbeddingWorker] Loading feature-extraction model (${loadedModelId}, pooling=${loadedPooling})...`);
+    pipe = await pipeline('feature-extraction', loadedModelId, {
       local_files_only: true,
       // dtype MUST be explicit on transformers.js v3. v2 defaulted to the
       // quantized variant; v3 ignores `quantized` and defaults to fp32, so a
@@ -63,7 +77,7 @@ async function ensureLoaded(msg: any): Promise<void> {
       // feature silently degrades. scripts/download-models.js already documents
       // this trap for the DOWNLOAD side; these consumers were missed.
       // localRerankerWorker already passes `dtype: msg.dtype || 'q8'`.
-      dtype: 'q8',
+      dtype: msg.dtype || BUNDLED_LOCAL_EMBEDDING.dtype,
       session_options: getBoundedOnnxSessionOptions(),
     });
     console.log('[LocalEmbeddingWorker] Feature-extraction model loaded successfully.');
@@ -103,13 +117,20 @@ parentPort.on('message', async (msg: any) => {
         await ensureLoaded(msg);
       }
       const texts: string[] = msg.texts;
-      const output = await pipe(texts, { pooling: 'mean', normalize: true });
-      const batchSize = texts.length;
-      const vectors: number[][] = [];
-      for (let i = 0; i < batchSize; i++) {
-        vectors.push(Array.from(output.data.slice(i * DIMENSIONS, (i + 1) * DIMENSIONS)) as number[]);
-      }
-      parentPort!.postMessage({ type: 'result', requestId: msg.requestId, vectors });
+      const output = await pipe(texts, { pooling: loadedPooling, normalize: true });
+
+      // Width comes from the TENSOR, never from a constant. See
+      // embeddingTensorSlice.ts for the measured reason this matters — it is
+      // the difference between correct vectors and silent corruption on any
+      // model wider than the bundled MiniLM. DIMENSIONS is only the fallback
+      // for a tensor that reports no dims at all.
+      const vectors = sliceEmbeddingTensor(output, texts.length, DIMENSIONS, loadedModelId);
+      parentPort!.postMessage({
+        type: 'result',
+        requestId: msg.requestId,
+        vectors,
+        dimensions: vectors[0]?.length ?? DIMENSIONS,
+      });
       return;
     }
 

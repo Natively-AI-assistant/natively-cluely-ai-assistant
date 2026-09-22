@@ -36,6 +36,7 @@
  * never change safe-refusal behaviour.
  */
 
+import { e2eLocalTestHeaderFor } from '../../rag/e2eLocalTest';
 import type { RerankSeamPort } from './RerankerRegistry';
 
 const DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1';
@@ -223,6 +224,8 @@ export class OpenRouterReranker implements RerankSeamPort {
             // them, so they are harmless to send unconditionally.
             'HTTP-Referer': 'https://natively.software',
             'X-Title': 'Natively',
+            // Only when `base` IS the natively API, and only under the E2E gate.
+            ...e2eLocalTestHeaderFor(base),
           },
           // ONLY the query and the candidate text. No file paths, no chunk ids,
           // no metadata — the mapping back to candidates is done locally, by index.

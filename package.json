@@ -1,6 +1,6 @@
 {
   "name": "natively",
-  "version": "2.9.0",
+  "version": "2.9.1",
   "main": "dist-electron/electron/main.js",
   "engines": {
     "node": ">=22.6.0"
@@ -48,7 +48,7 @@
     "test:realtime-prompt": "npm run build:electron && cross-env ELECTRON_RUN_AS_NODE=1 electron tests/realtime-prompt/e2e-wiring.cjs && cross-env ELECTRON_RUN_AS_NODE=1 electron tests/realtime-prompt/e2e-wiring.cjs --v3=0 && cross-env ELECTRON_RUN_AS_NODE=1 electron tests/realtime-prompt/e2e-typed-chat.cjs",
     "test:realtime-prompt:live": "npm run build:electron && cross-env RUN_REALTIME_PROMPT_LIVE=1 ELECTRON_RUN_AS_NODE=1 electron tests/realtime-prompt/live-e2e.cjs",
     "test:modes:long": "node --test electron/services/__tests__/ModeLongSession.test.mjs",
-    "test:css": "npm run test:css:table && npm run test:css:resize-handle && npm run test:css:split-audio-select && npm run test:css:undetectable-ring && npm run test:css:cta-liquid-glass && npm run test:css:pricing-liquid-glass && npm run test:css:clear-variant",
+    "test:css": "npm run test:css:table && npm run test:css:resize-handle && npm run test:css:split-audio-select && npm run test:css:undetectable-ring && npm run test:css:cta-liquid-glass && npm run test:css:pricing-liquid-glass && npm run test:css:clear-variant && npm run test:css:thinking-label",
     "test:css:table": "electron tests/css/table-scrollbar.check.mjs",
     "test:css:resize-handle": "electron tests/css/resize-handle-cursor.check.mjs",
     "test:css:split-audio-select": "electron tests/css/split-audio-model-select.check.mjs",
@@ -119,6 +119,7 @@
     "build:apple-speech": "node scripts/build-apple-speech.js",
     "test:css:cta-liquid-glass": "electron tests/css/cta-liquid-glass.check.mjs",
     "test:css:clear-variant": "electron tests/css/clear-variant-liquid-glass.check.mjs",
+    "test:css:thinking-label": "electron tests/css/thinking-label.check.mjs",
     "test:css:pricing-liquid-glass": "electron tests/css/pricing-liquid-glass.check.mjs"
   },
   "build": {
@@ -185,8 +186,8 @@
         "from": "resources/models/",
         "to": "models/",
         "filter": [
-          "Xenova/all-MiniLM-L6-v2/**",
           "Xenova/ms-marco-MiniLM-L-6-v2/**",
+          "Xenova/multilingual-e5-small/**",
           "pipecat-ai/**"
         ]
       }

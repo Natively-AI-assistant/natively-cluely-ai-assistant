@@ -975,6 +975,11 @@ export class NativelyProSTT extends EventEmitter {
             language_alternates: this.languageAlternates,
             audio_channels:      this.audioChannels,
             channel:             this.channel,
+            // Opt out of the cumulative transcript on every final. This client has
+            // never read it, and it made each final frame bigger than the last —
+            // ~15 MB per channel per meeting-hour, measured 2026-09-21. Only a
+            // boolean false opts out; a server that predates the flag ignores it.
+            full_text:           false,
         };
         if (this.apiKey === TRIAL_SENTINEL_KEY) {
             try {
