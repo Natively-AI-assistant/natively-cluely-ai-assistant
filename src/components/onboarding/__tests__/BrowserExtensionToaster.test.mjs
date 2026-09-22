@@ -27,6 +27,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const genie = await import('../genieMotion.mjs');
 const source = readFileSync(resolve(__dirname, '../BrowserExtensionToaster.tsx'), 'utf8');
 
 // What reaches the screen: the source with every comment removed. Copy and
@@ -88,22 +89,233 @@ test('Escape and backdrop click both dismiss permanently', () => {
   assert.ok(source.includes('if (e.target === e.currentTarget) handlePermanentDismiss();'));
 });
 
-test('"Not now" dismisses and reports the skip', () => {
+test('"Not now" dismisses permanently and reports the skip', () => {
   const notNow = source.slice(source.indexOf('const handleNotNow'), source.indexOf('const handleInstall'));
-  assert.ok(notNow.includes('handlePermanentDismiss()'));
-  assert.ok(notNow.includes('onSkip?.()'));
+  assert.ok(notNow.includes('persistDismiss()'));
+  assert.ok(notNow.includes('onDismiss(); onSkip?.();'), 'both reports wait for the exit, in order');
 });
 
-test('?extToaster=force test hook still bypasses the orchestrator', () => {
-  assert.ok(source.includes(".get('extToaster') === 'force'"));
+// ─── Close sequencing ───────────────────────────────────────────
+// OrchestratedToasterHost returns null the moment it hears onDismiss, which
+// unmounts this component and cuts any exit animation off. The card has to
+// close itself first and report after.
+
+test('every way out plays the genie before reporting to the host', () => {
+  const handlers = rendered.slice(rendered.indexOf('const handlePermanentDismiss'), rendered.indexOf('const item = reduced'));
+  // No handler may call the host directly: only through closeThen.
+  const direct = handlers.match(/^\s*onDismiss\(\);/gm) || [];
+  assert.equal(direct.length, 0, 'onDismiss called outside closeThen');
+  assert.ok(handlers.includes('closeThen(onDismiss)'), 'Escape, backdrop and close');
+  assert.ok(handlers.includes('closeThen(() => onDismiss())'), 'install');
+  assert.ok(rendered.includes('Promise.all([a, b]).then(() => { setDone(true); finishClose(); });'),
+    'reports once the card and scrim have both finished');
+  assert.ok(rendered.includes('const shown = (isOpen || testForceShow) && !done;'));
 });
 
-test('every electronAPI access is optional-chained', () => {
-  const calls = rendered.match(/window\.electronAPI[^\s(;]*/g) || [];
-  assert.ok(calls.length >= 2);
-  for (const c of calls) {
-    assert.ok(c.startsWith('window.electronAPI?.'), `unsafe access: ${c}`);
+test('a close that never finishes animating still releases the slot', () => {
+  // Chromium stops animation frames in a hidden window; the genie would never
+  // complete and the onboarding queue would stall behind this card.
+  assert.ok(rendered.includes('setTimeout(finishClose, CLOSE_FALLBACK_MS)'));
+  const n = Number(source.match(/const CLOSE_FALLBACK_MS\s*=\s*(\d+)/)[1]);
+  const close = Number(source.match(/const GENIE_CLOSE\s*=\s*\{ duration: ([\d.]+)/)[1]) * 1000;
+  assert.ok(n > close + 100, 'the backstop must not cut a healthy close short');
+  assert.ok(n <= 1000, 'but it must release the slot promptly');
+});
+
+test('the report fires once, however many ways out are taken', () => {
+  const closeThen = rendered.slice(rendered.indexOf('const closeThen'), rendered.indexOf('const finishClose'));
+  assert.ok(closeThen.includes('if (afterCloseRef.current) return;'));
+  assert.ok(!/report\s*\(/.test(closeThen), 'closeThen only schedules the report; calling it here would unmount the card mid-genie');
+  const start = rendered.indexOf('const finishClose');
+  const finish = rendered.slice(start, rendered.indexOf('useEffect', start));
+  assert.ok(finish.includes('afterCloseRef.current = null;'), 'cleared before the report, so the fallback cannot repeat it');
+});
+
+test('clicks pass through while the card drains away', () => {
+  // Otherwise "Add to Chrome" could still be hit mid-close.
+  assert.ok(rendered.includes("pointerEvents: closing ? 'none' : 'auto'"));
+});
+
+test('the genie is drawn by one per-frame write, straight to the DOM', () => {
+  assert.ok(source.includes("from './genieMotion.mjs'"));
+  assert.ok(rendered.includes("useEffect(() => genie.on('change', renderGenie), [genie, renderGenie]);"));
+  assert.ok(!/useTransform\(/.test(rendered), 'no per-property transforms recomputing the same frame');
+  assert.ok(rendered.includes('const r = wrapRef.current?.getBoundingClientRect();'),
+    'the transformed card cannot report its resting position; the wrapper can');
+  assert.ok(rendered.includes('slotY: window.innerHeight - SLOT_INSET'), 'the slot is at the bottom of the window');
+  assert.ok(rendered.includes('animate(genie, 1, reduced ? REDUCED_FADE : GENIE_CLOSE)'));
+  assert.ok(rendered.includes('animate(genie, 0, reduced ? REDUCED_FADE : GENIE_OPEN)'));
+});
+
+test('the content warps with the funnel: bands of the card, not a clipped card', () => {
+  assert.ok(rendered.includes('const transforms = genieBands(p, geom, rows);'));
+  assert.ok(rendered.includes("card.style.visibility = 'hidden';"),
+    'visibility, not display: the wrapper must keep its size for the measurement');
+  // A band is a picture of the card, never a second dialog.
+  const build = rendered.slice(rendered.indexOf('const buildBands'), rendered.indexOf('const clearBands'));
+  for (const attr of ['role', 'aria-modal', 'aria-labelledby', 'aria-describedby']) {
+    assert.ok(build.includes(`copy.removeAttribute('${attr}');`), attr);
   }
+  assert.ok(build.includes("querySelectorAll<HTMLElement>('[id]').forEach(el => el.removeAttribute('id'))"), 'no duplicate ids');
+  assert.ok(build.includes("el.style.willChange = 'auto';"), 'no layer per copy per promoted child');
+  assert.ok(rendered.includes('ref={bandsRef}') && /ref=\{bandsRef\}\s*aria-hidden\s*inert/.test(rendered),
+    'the band layer is hidden from assistive tech and unreachable by keyboard');
+});
+
+test('the bands exist only while the genie runs', () => {
+  const rest = rendered.slice(rendered.indexOf('if (p <= 0.001 || !geom) {'), rendered.indexOf('if (!rowsRef.current'));
+  assert.ok(rest.includes('clearBands();'));
+  assert.ok(rest.includes("card.style.visibility = '';"));
+});
+
+test('if the bands cannot be built, the outline genie still runs', () => {
+  assert.ok(rendered.includes('bandsFailedRef.current = !buildBands();'));
+  assert.ok(rendered.includes('const f = genieFrame(p, geom);'));
+});
+
+test('the shadow is moved, never re-rasterised', () => {
+  assert.ok(!/drop-shadow|filter: liftShadow/.test(rendered), 'no per-frame filter');
+  assert.ok(rendered.includes('boxShadow: isLight ? SHADOW_LIGHT : SHADOW_DARK'), 'the stand-in is the card\'s own shadow');
+  assert.ok(rendered.includes("' + SHADOW_LIGHT") && rendered.includes("' + SHADOW_DARK"), 'shared with the card, so the hand-over is exact');
+  assert.ok(rendered.includes('shadow.style.opacity = String(1 - genieStretch(p));'), 'gone before the outline stops being a rectangle');
+});
+
+test('the genie does not bring the content in twice', () => {
+  assert.ok(rendered.includes("variants={STAGGER} initial={reduced ? 'hidden' : false} animate=\"show\""));
+});
+
+test('reduced motion gets a plain fade, with no warp or travel', () => {
+  const reducedBranch = rendered.slice(rendered.indexOf('if (reduced) {'), rendered.indexOf('if (p <= 0.001 || !geom) {'));
+  assert.ok(reducedBranch.includes('card.style.opacity = String(1 - p);'));
+  assert.ok(reducedBranch.includes('return;'));
+});
+
+// ─── Genie geometry (executed, not read) ────────────────────────
+// A 600x440 card centred in a 1200x800 launcher, as it ships.
+const GEOM = { top: 180, bottom: 620, width: 600, slotY: 800 - genie.SLOT_INSET };
+
+test('genie: at rest the card is whole, unclipped and in place', () => {
+  assert.deepEqual(genie.genieFrame(0, GEOM), { transform: 'none', clipPath: 'none', opacity: 1 });
+  assert.deepEqual(genie.genieFrame(0.5, null), { transform: 'none', clipPath: 'none', opacity: 1 },
+    'unmeasured: no warp rather than a warp from nonsense');
+});
+
+test('genie: it ends at the bottom centre, slot-wide, and gone', () => {
+  const { top, bottom } = genie.genieEdges(1, GEOM);
+  assert.equal(top, GEOM.slotY);
+  assert.equal(bottom, GEOM.slotY);
+  assert.ok(GEOM.slotY < 800 && GEOM.slotY > 790, 'the slot is inside the window, at its bottom');
+  assert.equal(genie.genieHalfWidthAt(1, GEOM, GEOM.slotY), genie.SLOT_WIDTH / 2);
+  assert.equal(genie.genieOpacity(1), 0);
+  // Symmetric about the card's centre line, which is the window's.
+  const pts = genie.genieFrame(0.99, GEOM).clipPath.replace(/^polygon\(|\)$/g, '').split(', ');
+  const xs = pts.map(pt => parseFloat(pt));
+  assert.ok(Math.abs(Math.max(...xs) + Math.min(...xs) - 100) < 0.02, 'centred');
+});
+
+test('genie: the funnel is fixed on screen, not carried with the card', () => {
+  // The same screen row has the same width whether the card's top edge is
+  // still high or already halfway down: the card moves through the funnel.
+  const y = 700;
+  const early = genie.genieHalfWidthAt(0.6, GEOM, y);
+  const late = genie.genieHalfWidthAt(0.9, GEOM, y);
+  assert.ok(Math.abs(early - late) < 1e-9, `${early} vs ${late}`);
+});
+
+test('genie: the bottom stretches into the slot before the top starts down', () => {
+  assert.equal(genie.genieDrain(0.3), 0, 'the top holds while the funnel forms');
+  const e = genie.genieEdges(0.3, GEOM);
+  assert.equal(e.top, GEOM.top);
+  assert.ok(e.bottom > GEOM.bottom + 50, 'the bottom edge is already reaching down');
+});
+
+test('genie: the sides bow in an S-curve, and the top corners stay square', () => {
+  const p = 0.3;   // funnel formed, top edge not yet moving
+  const { top, bottom } = genie.genieEdges(p, GEOM);
+  const at = u => genie.genieHalfWidthAt(p, GEOM, top + u * (bottom - top));
+  assert.equal(at(0), GEOM.width / 2, 'top edge full width');
+  assert.ok(at(0.25) > at(0) + (at(1) - at(0)) * 0.25 + 1, 'not a straight taper');
+  assert.ok(at(1) < at(0.5) && at(0.5) < at(0), 'narrows downward');
+});
+
+test('genie: every quantity moves one way only, so the open is the close reversed', () => {
+  let prev = { top: -Infinity, bottom: -Infinity, w: Infinity, o: Infinity };
+  for (let p = 0; p <= 1.0001; p += 0.02) {
+    const { top, bottom } = genie.genieEdges(p, GEOM);
+    const w = genie.genieHalfWidthAt(p, GEOM, 700), o = genie.genieOpacity(p);
+    assert.ok(top >= prev.top - 1e-9 && bottom >= prev.bottom - 1e-9 && w <= prev.w + 1e-9 && o <= prev.o + 1e-9,
+      `jump at p=${p.toFixed(2)}`);
+    prev = { top, bottom, w, o };
+  }
+});
+
+test('genie: the clip path is a polygon of fixed size inside the card', () => {
+  const pts = genie.genieFrame(0.5, GEOM).clipPath.replace(/^polygon\(|\)$/g, '').split(', ');
+  assert.equal(pts.length, 42, 'a fixed point count, so it tweens without popping');
+  for (const pt of pts) {
+    const [x, y] = pt.split(' ').map(parseFloat);
+    assert.ok(x >= 0 && x <= 100 && y >= 0 && y <= 100, pt);
+  }
+});
+
+test('bands: whole-pixel rows that tile the card exactly', () => {
+  for (const [h, n] of [[440, 48], [437, 48], [300, 7]]) {
+    const rows = genie.genieBandRows(h, n);
+    assert.equal(rows[0][0], 0);
+    assert.equal(rows.at(-1)[1], h);
+    for (let i = 0; i < rows.length; i++) {
+      assert.ok(Number.isInteger(rows[i][0]) && Number.isInteger(rows[i][1]), `row ${i} is whole pixels`);
+      if (i) assert.equal(rows[i][0], rows[i - 1][1], `row ${i} continues the last`);
+    }
+  }
+});
+
+// Apply a matrix3d to a point, perspective divide included.
+const apply = (m3d, x, y) => {
+  const M = m3d.match(/\(([^)]+)\)/)[1].split(',').map(Number);
+  const w = M[3] * x + M[7] * y + M[15];
+  return [(M[0] * x + M[4] * y + M[12]) / w, (M[1] * x + M[5] * y + M[13]) / w];
+};
+
+test('bands: quadMatrix3d lands every corner exactly', () => {
+  const q = [[10, 5], [90, 5], [70, 25], [30, 25]];
+  const m = genie.quadMatrix3d(100, 20, q);
+  [[0, 0], [100, 0], [100, 20], [0, 20]].forEach(([x, y], i) => {
+    const [X, Y] = apply(m, x, y);
+    assert.ok(Math.abs(X - q[i][0]) < 1e-6 && Math.abs(Y - q[i][1]) < 1e-6, `corner ${i}: ${X},${Y}`);
+  });
+});
+
+test('bands: each band sits on the funnel, and neighbours share an edge', () => {
+  // To a thousandth of a pixel: the matrix is serialised to 10 significant figures.
+  const H = GEOM.bottom - GEOM.top;
+  const rows = genie.genieBandRows(H, 48);
+  for (const p of [0.2, 0.5, 0.8]) {
+    const mats = genie.genieBands(p, GEOM, rows);
+    const { top, bottom } = genie.genieEdges(p, GEOM);
+    const span = bottom - top;
+    mats.forEach((m, i) => {
+      const [r0, r1] = rows[i];
+      // Band-local corners -> screen (the band sits at GEOM.top + r0).
+      const tl = apply(m, 0, 0), br = apply(m, GEOM.width, r1 - r0);
+      const y0 = GEOM.top + r0 + tl[1], y1 = GEOM.top + r0 + br[1];
+      assert.ok(Math.abs(y0 - (top + (r0 / H) * span)) < 1e-3, `p=${p} band ${i} top row`);
+      assert.ok(Math.abs(y1 - (top + (r1 / H) * span)) < 1e-3, `p=${p} band ${i} bottom row`);
+      const half = genie.genieHalfWidthAt(p, GEOM, y0);
+      assert.ok(Math.abs(tl[0] - (GEOM.width / 2 - half)) < 1e-3, `p=${p} band ${i} left edge on the funnel`);
+      if (i) {
+        const prevBottomLeft = apply(mats[i - 1], 0, rows[i - 1][1] - rows[i - 1][0]);
+        assert.ok(Math.abs(GEOM.top + rows[i - 1][0] + prevBottomLeft[1] - y0) < 1e-3
+          && Math.abs(prevBottomLeft[0] - tl[0]) < 1e-3, `p=${p} seam ${i} shared`);
+      }
+    });
+  }
+});
+
+test('closing is quicker than opening', () => {
+  const open = Number(source.match(/const GENIE_OPEN\s*=\s*\{ duration: ([\d.]+)/)[1]);
+  const close = Number(source.match(/const GENIE_CLOSE\s*=\s*\{ duration: ([\d.]+)/)[1]);
+  assert.ok(close < open);
 });
 
 // ─── Accessibility ──────────────────────────────────────────────
