@@ -12144,6 +12144,33 @@ let isMultimodal = !!(imagePaths?.length);
   }
 
   /**
+   * Returns true if at least one LLM provider (cloud, gateway, local, OAuth, or custom)
+   * is configured and ready to handle requests.
+   * Useful for background tasks (e.g. prompt compilation) to avoid churning
+   * through fallback ladders when no provider is configured.
+   */
+  public hasAnyConfiguredProvider(): boolean {
+    return Boolean(
+      this.client ||
+      this.openaiClient ||
+      this.claudeClient ||
+      this.groqClient ||
+      this.deepseekClient ||
+      this.nvidiaNimClient ||
+      this.openrouterClient ||
+      this.litellmClient ||
+      this.ninerouterClient ||
+      this.hasFluxionCredential() ||
+      this.hasNatively() ||
+      this.customProvider ||
+      this.activeCurlProvider ||
+      this.isCodexAvailable() ||
+      this.antigravityFallbackModel() ||
+      this.useOllama
+    );
+  }
+
+  /**
    * Direct Assist provider boundary. The request is copied synchronously so a
    * later Settings/model change cannot alter an in-flight dispatch. The
    * returned generator invokes exactly one adapter and contains no fallback.
