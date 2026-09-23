@@ -783,6 +783,11 @@ export interface ElectronAPI {
   getDefaultModel: () => Promise<{ model: string }>;
   setModel: (modelId: string) => Promise<{ success: boolean; error?: string }>;
   setDefaultModel: (modelId: string) => Promise<{ success: boolean; error?: string }>;
+  /** The fast model used for internal calls only. null clears it (= "Auto"). */
+  getFastModel: () => Promise<{ model: string | null }>;
+  setFastModel: (modelId: string | null) => Promise<{ success: boolean; error?: string }>;
+  /** Narrows picker options to the ids the fast path can actually dispatch. */
+  filterFastModelCandidates: (ids: string[]) => Promise<{ ids: string[] }>;
   toggleModelSelector: (coords: { x: number; y: number; activate?: boolean }) => Promise<void>;
   modelSelectorCloseIfOpen: () => Promise<void>;
   // NOTE: this interface and the one in electron/preload.ts are maintained

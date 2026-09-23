@@ -13267,6 +13267,17 @@ export function initializeIpcHandlers(appState: AppState): void {
     return { success: true };
   });
 
+  // Which of these ids can the fast path actually RUN? The picker lists the whole
+  // Active Model universe, most of which the seam has no branch for, so an
+  // unfiltered list offers picks that save, display, and silently do nothing.
+  // Main answers because main owns the classifiers; the renderer must not
+  // re-implement them or the two drift.
+  safeHandle('filter-fast-model-candidates', async (_, ids: string[]) => {
+    if (!Array.isArray(ids)) return { ids: [] };
+    const llmHelper = appState.processingHelper.getLLMHelper();
+    return { ids: ids.filter((id) => typeof id === 'string' && llmHelper.canDispatchFastModel(id)) };
+  });
+
   safeHandle('get-fast-model', async () => {
     const { CredentialsManager } = require('./services/CredentialsManager');
     return { model: CredentialsManager.getInstance().getFastModel() };
