@@ -4772,7 +4772,9 @@ let isMultimodal = !!(imagePaths?.length);
    * the first time a branch changed, and invisibly - which is how the gateway
    * egress bug got in.
    */
-  private resolveFastModelFamily(modelId: string): 'openai' | 'groq' | 'gemini' | 'deepseek' | 'claude' | null {
+  private resolveFastModelFamily(modelId: string):
+    'openai' | 'groq' | 'gemini' | 'deepseek' | 'claude'
+    | 'openrouter' | 'litellm' | 'nvidia_nim' | 'ninerouter' | 'fluxion' | null {
     if (!modelId) return null;
     // Gateways are OpenAI-SHAPED but are NOT OpenAI. isOpenAiModel() self-excludes
     // Groq and Fluxion but not these, and its final clause is `includes('openai')`
@@ -4781,11 +4783,11 @@ let isMultimodal = !!(imagePaths?.length);
     // prompt's meeting turns, for a prefixed id OpenAI rejects. Supporting them
     // properly needs per-gateway clients plus routing-prefix stripping; until
     // then they resolve to no family rather than leak. MUST stay first.
-    if (this.isOpenRouterModel(modelId) || this.isLiteLLMModel(modelId)
-        || this.isNvidiaNimModel(modelId) || this.isNinerouterModel(modelId)
-        || this.isFluxionModel(modelId)) {
-      return null;
-    }
+    if (this.isOpenRouterModel(modelId)) return 'openrouter';
+    if (this.isLiteLLMModel(modelId)) return 'litellm';
+    if (this.isNvidiaNimModel(modelId)) return 'nvidia_nim';
+    if (this.isNinerouterModel(modelId)) return 'ninerouter';
+    if (this.isFluxionModel(modelId)) return 'fluxion';
     if (this.isOpenAiModel(modelId)) return 'openai';
     if (this.isGroqModel(modelId)) return 'groq';
     if (this.isGeminiModel(modelId)) return 'gemini';
@@ -4848,6 +4850,42 @@ let isMultimodal = !!(imagePaths?.length);
     };
 
     try {
+      // The gateways are OpenAI-SHAPED but each has its OWN wire-id rule, and
+      // getting it wrong 404s: Fluxion strips to a bare id, OpenRouter keeps the
+      // vendor segment underneath. Never a generic strip.
+      const gateways: Record<string, { client: OpenAI | null; wire: string } | undefined> = {
+        openrouter: { client: this.openrouterClient, wire: this.openrouterWireModel(modelId) },
+        litellm:    { client: this.litellmClient,    wire: modelId.replace(/^litellm\//, '') },
+        nvidia_nim: { client: this.nvidiaNimClient,  wire: modelId.replace(/^nvidia_nim\//, '') },
+        ninerouter: { client: this.ninerouterClient, wire: this.ninerouterWireModel(modelId) },
+        fluxion:    { client: this.fluxionOpenAIClient, wire: this.fluxionWireModel(modelId) },
+      };
+      const gw = gateways[family];
+      if (gw) {
+        // Fluxion speaks either protocol and exactly one client is ever non-null;
+        // when the user's group is Anthropic the OpenAI client is null, so take
+        // the Anthropic path rather than falling through to a wrong provider.
+        if (family === 'fluxion' && !gw.client && this.fluxionAnthropicClient) {
+          this.assertOutboundScopes('fluxion', message);
+          await this.rateLimiters.fluxion?.acquire();
+          const res: any = await this.fluxionAnthropicClient.messages.create({
+            model: this.fluxionWireModel(modelId), max_tokens: 256, temperature: 0,
+            messages: [{ role: 'user', content: message }],
+          }, { signal: timer });
+          return finish((res?.content ?? []).map((c: any) => (c?.type === 'text' ? c.text : '')).join(''));
+        }
+        if (!gw.client) return notDispatchable();
+        this.assertOutboundScopes(family, message);
+        await this.rateLimiters[family]?.acquire();
+        const res = await gw.client.chat.completions.create({
+          model: gw.wire,
+          messages: [{ role: 'user', content: message }],
+          temperature: 0, max_tokens: 256,
+          ...(opts.json ? { response_format: { type: 'json_object' as const } } : {}),
+        }, { signal: timer });
+        return finish(res.choices?.[0]?.message?.content);
+      }
+
       if (family === 'openai' && this.openaiClient) {
         this.assertOutboundScopes('openai', message);
         await this.rateLimiters.openai?.acquire();
