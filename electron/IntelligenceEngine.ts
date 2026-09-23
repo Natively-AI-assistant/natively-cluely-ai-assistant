@@ -4320,9 +4320,19 @@ export class IntelligenceEngine extends EventEmitter {
                         paintBuffered(token);
                     }
                 },
+            }).finally(() => {
+                // The adoption hook is only meaningful while THIS stream runs,
+                // and it MUST be cleared even when the stream throws.
+                //
+                // A provider error or a deadline abort leaves `speculativeGenerationId`
+                // set — it has a single writer and is never cleared on failure — and a
+                // failed run does not bump `currentGenerationId`. So `stillStreaming`
+                // in handleSuggestionTrigger can still be true afterwards, the stale
+                // hook's `adoptedGenerationId !== generationId` guard passes, and the
+                // dead run's partial text paints as the answer. Clearing outside the
+                // `finally` left exactly that window open.
+                this.speculativeAdoptHook = null;
             });
-            // The adoption hook is only meaningful while THIS stream runs.
-            this.speculativeAdoptHook = null;
             // Deadline cleanup aborts the provider transport too, but a deadline
             // still needs the established visible fallback below. Keep the owned
             // controller's aborted state out of this decision: cleanup aborts that
