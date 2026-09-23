@@ -114,8 +114,11 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
     overlayBg: isLight ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.6)',
     rightBg: isLight ? '#EEEFF2' : 'rgba(0,0,0,0.3)',
     rightBorderLeft: isLight ? '1px solid rgba(0,0,0,0.07)' : '1px solid rgba(255,255,255,0.1)',
-    gridOpacity: isLight ? 0.08 : 0.04,
-    gridLineColor: isLight ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.5)',
+    // Off-white grey on the dark panel, a darker grey on the light one —
+    // a neutral rule either way rather than pure black/white at low alpha,
+    // which picked up the panel's tint and read slightly blue.
+    gridOpacity: isLight ? 0.14 : 0.10,
+    gridLineColor: isLight ? 'rgba(88, 90, 98, 0.55)' : 'rgba(228, 229, 234, 0.42)',
 
     closeBtnColor: isLight ? '#1C1C1E' : '#FFFFFF',
     closeBtnOpacityDefault: isLight ? 0.45 : 0.4,
@@ -315,8 +318,7 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
               }}>
 
                 {/* Header row */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '24px' }}>
-                  <img src={nativelyIcon} alt="Natively" style={{ width: '18px', height: '18px', borderRadius: '4px', flexShrink: 0 }} />
+                <div style={{ marginBottom: '24px' }}>
                   <span style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: t3 }}>
                     Permissions
                   </span>
@@ -739,18 +741,6 @@ function PermItem({
     row.tone === 'pending' ? (isLight ? 'rgba(28,28,30,0.35)' : 'rgba(255,255,255,0.35)') :
     T.blue;
 
-  const wellBg =
-    row.tone === 'granted' ? 'rgba(52,211,153,0.12)' :
-    row.tone === 'blocked' ? 'rgba(245,158,11,0.12)' :
-    row.tone === 'pending' ? (isLight ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.05)') :
-    'rgba(0,122,255,0.1)';
-
-  const wellBorder =
-    row.tone === 'granted' ? 'rgba(52,211,153,0.2)' :
-    row.tone === 'blocked' ? 'rgba(245,158,11,0.2)' :
-    row.tone === 'pending' ? rule :
-    'rgba(0,122,255,0.15)';
-
   const interactive = row.actionable && !busy;
 
   return (
@@ -774,13 +764,14 @@ function PermItem({
       whileHover={interactive ? { scale: 1.005 } : {}}
       whileTap={interactive ? { scale: 0.995 } : {}}
     >
-      {/* Icon well */}
+      {/* The icon carries the row's state in its colour alone — no squircle
+          well behind it. A tinted, bordered tile per row read as a second
+          button next to the real action pill. */}
       <div style={{
-        width: '32px', height: '32px', borderRadius: '9px', flexShrink: 0,
+        width: '26px', flexShrink: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: wellBg, border: `1px solid ${wellBorder}`,
       }}>
-        <Icon size={15} strokeWidth={1.75} color={accent} />
+        <Icon size={19} strokeWidth={1.75} color={accent} />
       </div>
 
       {/* Text */}
