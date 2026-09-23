@@ -59,7 +59,6 @@ interface CardColors {
   mockShadow: string;
   mockIconShadow: string;
   mockTextPrimary: string;
-  mockTextMuted: string;
   mockSecondaryBg: string;
   mockSecondaryBorder: string;
   mockSecondaryText: string;
@@ -131,7 +130,6 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
       : '0 24px 50px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,255,255,0.1)',
     mockIconShadow: isLight ? '0 4px 10px rgba(0,0,0,0.12)' : '0 4px 12px rgba(0,0,0,0.4)',
     mockTextPrimary: isLight ? '#1C1C1E' : '#FFFFFF',
-    mockTextMuted: isLight ? 'rgba(0,0,0,0.48)' : 'rgba(255,255,255,0.45)',
     mockSecondaryBg: isLight
       ? 'linear-gradient(180deg, #FFFFFF 0%, #F3F3F5 100%)'
       : 'linear-gradient(180deg, rgba(255,255,255,0.13) 0%, rgba(255,255,255,0.08) 100%)',
@@ -584,15 +582,9 @@ function GuideSteps({ colors, t3, reduced }: {
 
         <div style={{
           fontSize: '10.5px', fontWeight: 600, color: colors.mockTextPrimary,
-          lineHeight: 1.35, letterSpacing: '-0.005em', marginBottom: '4px',
+          lineHeight: 1.35, letterSpacing: '-0.005em', marginBottom: '13px',
         }}>
           Natively wants to record the screen.
-        </div>
-        <div style={{
-          fontSize: '10px', color: colors.mockTextMuted,
-          lineHeight: 1.35, marginBottom: '13px',
-        }}>
-          Enable access in Privacy &amp; Security settings.
         </div>
 
         <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
