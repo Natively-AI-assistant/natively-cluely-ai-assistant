@@ -2,6 +2,8 @@
  * Popup UI controller. All privileged work (token storage, loopback fetch) is
  * delegated to the service worker via chrome.runtime.sendMessage — the popup
  * itself never holds the token persistently nor talks to the desktop directly.
+ * The one exception is chrome.permissions.request: it needs the click's user
+ * activation, which never reaches the service worker, so the popup calls it.
  */
 import type { CaptureReport, DomPostOutcome, PairFetchOutcome } from './service-worker';
 import {
