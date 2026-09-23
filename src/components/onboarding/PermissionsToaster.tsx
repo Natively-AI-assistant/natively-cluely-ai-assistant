@@ -110,7 +110,7 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
       ? '0 32px 80px rgba(0,0,0,0.12), 0 0 1px rgba(0,0,0,0.12)'
       : '0 40px 100px rgba(0,0,0,0.9), 0 0 1px rgba(255,255,255,0.08)',
     overlayBg: isLight ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.6)',
-    rightBg: isLight ? '#F5F5F7' : 'rgba(0,0,0,0.3)',
+    rightBg: isLight ? '#EEEFF2' : 'rgba(0,0,0,0.3)',
     rightBorderLeft: isLight ? '1px solid rgba(0,0,0,0.07)' : '1px solid rgba(255,255,255,0.1)',
     gridOpacity: isLight ? 0.08 : 0.04,
     gridLineColor: isLight ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.5)',
