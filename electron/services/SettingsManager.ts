@@ -14,6 +14,10 @@ export interface AppSettings {
     // typing is OFF, closing the residual leak where a dropped RegisterHotKey
     // registration lets a chord's modifier/completing key reach the foreground.
     stealthShortcutGuard?: boolean;
+    // Issue #517: master switch for OS-wide shortcuts. false = only Toggle
+    // Visibility stays global (so a hidden window can always come back); every
+    // other bind works only while Natively is focused. Unset = true.
+    globalShortcutsEnabled?: boolean;
     // Context Intelligence debug logging level (Developer settings). The env
     // var NATIVELY_CONTEXT_DEBUG overrides this — precedence is owned by
     // context-intelligence/debug/debug-config.ts, which reads this value

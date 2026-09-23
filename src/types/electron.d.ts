@@ -897,6 +897,10 @@ export interface ElectronAPI {
   onKeybindRegistrationSucceeded: (callback: (data: { id: string; accelerator: string }) => void) => () => void
   /** Snapshot of currently-failing registrations, for renderers that mount after the boot-time pass. */
   getKeybindRegistrationFailures: () => Promise<Array<{ id: string; accelerator: string }>>
+  /** Issue #517: false = only Toggle Visibility stays OS-wide. */
+  getGlobalShortcutsEnabled: () => Promise<boolean>
+  /** Resolves to the value actually in effect. */
+  setGlobalShortcutsEnabled: (enabled: boolean) => Promise<boolean>
 
   onGlobalShortcut: (callback: (data: { action: string }) => void) => () => void
 
