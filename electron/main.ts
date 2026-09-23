@@ -6148,13 +6148,19 @@ export class AppState {
    * wait uses this to decide between its short grace and its full window.
    */
   public finalizeMicSTT(): { pending: boolean } {
-    // We only want to finalize the user microphone, because the context is Manual Answer
+    let pendingInterviewer = false;
+    if (this.googleSTT?.finalize) {
+      console.log('[Main] Finalizing Interviewer STT');
+      const rInterviewer: unknown = this.googleSTT.finalize();
+      if (rInterviewer === true) pendingInterviewer = true;
+    }
     if (this.googleSTT_User?.finalize) {
       console.log('[Main] Finalizing STT');
       const r: unknown = this.googleSTT_User.finalize();
+      if (pendingInterviewer) return { pending: true };
       return { pending: r === true };
     }
-    return { pending: false };
+    return { pending: pendingInterviewer };
   }
 
   /**
