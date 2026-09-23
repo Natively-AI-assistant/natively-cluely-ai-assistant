@@ -4,6 +4,7 @@ import * as crypto from 'crypto';
 import { AntigravityService, initializeAntigravityLifecycle } from './services/AntigravityService';
 import { buildEmbeddingConfig } from './rag/embeddingConfigIdentity';
 import { app, BrowserWindow, dialog, desktopCapturer, ipcMain, shell, systemPreferences } from 'electron';
+import { setOpenAtLogin, getOpenAtLogin } from './utils/windowsTaskbarPolicy';
 import { micSettingsUri } from '../src/lib/micPermissionPolicy.mjs';
 import { TEXT_PLACEHOLDER_RE } from './utils/curlPlaceholderPolicy';
 import * as fs from 'fs';
@@ -6427,18 +6428,18 @@ export function initializeIpcHandlers(appState: AppState): void {
     return appState.getDisguise();
   });
 
+  // Windows names the Run entry after the AppUserModelID unless told
+  // otherwise, and that ID follows the disguise — so the helpers pin one stable
+  // name and clean the old per-disguise ones. macOS: the same single call as
+  // before. See utils/windowsTaskbarPolicy.ts.
   safeHandle('set-open-at-login', async (_, openAtLogin: boolean) => {
-    app.setLoginItemSettings({
-      openAtLogin,
-      openAsHidden: false,
-      path: app.getPath('exe'), // Explicitly point to executable for production reliability
-    });
+    // Explicitly point to executable for production reliability
+    setOpenAtLogin(app, process.platform, openAtLogin, app.getPath('exe'));
     return { success: true };
   });
 
   safeHandle('get-open-at-login', async () => {
-    const settings = app.getLoginItemSettings();
-    return settings.openAtLogin;
+    return getOpenAtLogin(app, process.platform, app.getPath('exe'));
   });
 
   safeHandle('get-verbose-logging', async () => {
