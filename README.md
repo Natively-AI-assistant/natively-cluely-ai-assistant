@@ -63,6 +63,9 @@ If you’re looking for a hosted desktop recording API, consider checking out [R
   <a href="https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant/releases/latest">
     <img src="https://img.shields.io/badge/Download-Windows-0078D4?style=for-the-badge&logo=windows&logoColor=white" />
   </a>
+  <a href="https://github.com/Homebrew/homebrew-cask/blob/main/Casks/n/natively.rb">
+    <img src="https://img.shields.io/badge/Homebrew-brew%20install%20--cask%20natively-FBB040?style=for-the-badge&logo=homebrew&logoColor=black" />
+  </a>
 </p>
 
 <small>Requires macOS 12+ (Apple Silicon & Intel) or Windows 10/11</small>
@@ -522,6 +525,24 @@ You explicitly control:
 - What runs locally
 - What uses cloud AI
 - Which providers are enabled
+
+---
+
+## Quick Install (macOS via Homebrew)
+
+The easiest way to install and keep Natively updated on macOS is via [Homebrew](https://brew.sh):
+
+```bash
+brew install --cask natively
+```
+
+To upgrade to new releases:
+
+```bash
+brew upgrade --cask natively
+```
+
+> See [docs/homebrew-distribution.md](docs/homebrew-distribution.md) for distribution details and release automation.
 
 ---
 
