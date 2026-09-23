@@ -1372,7 +1372,7 @@ export class ModesManager {
         void (async () => {
             try {
                 const llmHelper = ModesManager.llmHelperForCompiler;
-                if (!llmHelper) return; // compiler not available in this context
+                if (!llmHelper || !llmHelper.hasAnyConfiguredProvider?.()) return; // compiler not available or no provider configured
                 // Scope gate: never call a cloud LLM for prompt compilation when post_call_summary
                 // is denied (the deterministic fallback covers it at summary time).
                 try {
@@ -1403,8 +1403,15 @@ export class ModesManager {
     public compileAllSectionsAsync(modeId: string): void {
         void (async () => {
             try {
+                // Yield one macrotask before reading provider state. Built-in seeding runs inside
+                // AppState.getInstance(), BEFORE loadStoredCredentials() in the same synchronous
+                // stretch of initializeApp, so a packaged build has no keys loaded yet. Checking
+                // now would permanently skip every seeded section for users who DO have keys
+                // (a release that adds a built-in template, an upgrade from before built-ins
+                // existed, or a rebuilt DB whose stored keys survived).
+                await new Promise<void>(resolve => setImmediate(resolve));
                 const llmHelper = ModesManager.llmHelperForCompiler;
-                if (!llmHelper) return;
+                if (!llmHelper || !llmHelper.hasAnyConfiguredProvider?.()) return;
                 try {
                     const { SettingsManager } = require('./SettingsManager');
                     if (SettingsManager.getInstance().get('providerDataScopes')?.post_call_summary === false) return;

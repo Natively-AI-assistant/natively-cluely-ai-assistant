@@ -88,6 +88,9 @@ export class SectionPromptCompiler {
   async compile(params: CompileSectionParams): Promise<{ instruction: string; compiled: boolean }> {
     const fallback = deterministicSectionInstruction(params);
     if (!params.sectionTitle?.trim()) return { instruction: fallback, compiled: false };
+    if (this.llmHelper.hasAnyConfiguredProvider && !this.llmHelper.hasAnyConfiguredProvider()) {
+      return { instruction: fallback, compiled: false };
+    }
 
     const { systemPrompt, jsonShapeHint } = buildMetaPrompt(params);
     try {
