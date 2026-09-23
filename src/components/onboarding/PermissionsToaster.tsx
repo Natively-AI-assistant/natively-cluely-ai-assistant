@@ -243,9 +243,10 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
             exit={   reduced ? FADE.exit : { opacity: 0, scale: 0.97, y: 8,  filter: 'blur(4px)' }}
             transition={SPRING.gentle}
             style={{
-              // Windows renders no visual guide, so the card loses that column
-              // rather than leaving 260px of empty pane.
-              width: isMac ? '680px' : '420px',
+              // Matches BrowserExtensionToaster's frame so the two onboarding
+              // cards read as one family. Windows renders no visual guide, so
+              // it loses that column rather than leaving an empty pane.
+              width: isMac ? '600px' : '420px',
               maxWidth: '92vw',
               borderRadius: '20px', overflow: 'hidden',
               background: colors.cardBg,
@@ -254,7 +255,10 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
               position: 'relative',
             }}
           >
-            {/* Close — on the card, so it survives the guide pane being absent */}
+            {/* On macOS the close sits on the inset panel (below), as it does
+                on the extension card. Windows has no panel, so it falls back
+                to the card corner. */}
+            {!isMac && (
             <button onClick={handleDismiss} aria-label="Dismiss"
               style={{
                 position: 'absolute', top: '16px', right: '16px', zIndex: 10,
@@ -274,14 +278,21 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
               }}>
               <X size={12} strokeWidth={2.5} color={colors.closeBtnColor} />
             </button>
+            )}
 
-            {/* Two-column layout. No min-height: the card is sized by its
-                content, so a two-row list no longer strands ~170px of gap
-                above the button. */}
-            <div style={{ display: 'flex', alignItems: 'stretch' }}>
+            {/* Two-column split on the extension card's proportions:
+                58/40 with a 440 floor. The footer below is pinned with
+                marginTop:auto, which is what holds the column together at
+                that floor instead of the flex:1 row list that used to strand
+                the gap ABOVE the button. */}
+            <div style={{ display: 'flex', alignItems: 'stretch', minHeight: isMac ? '440px' : undefined }}>
 
               {/* ── LEFT: Permission controls ── */}
-              <div style={{ flex: 1, minWidth: 0, padding: '32px 32px 28px', display: 'flex', flexDirection: 'column' }}>
+              <div style={{
+                flex: isMac ? '1 1 58%' : 1, minWidth: 0,
+                padding: isMac ? '40px 28px 34px 40px' : '32px 32px 28px',
+                display: 'flex', flexDirection: 'column',
+              }}>
 
                 {/* Header row */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '24px' }}>
@@ -339,10 +350,13 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
                       />
                     </motion.div>
 
-                    {/* Footer button */}
+                    {/* marginTop:auto pins the action to the bottom of the
+                        column however short the copy above it runs — the same
+                        device the extension card uses to hold its 440 floor. */}
                     <motion.div
                       initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
                       transition={{ ...SPRING.smooth, delay: 0.2 }}
+                      style={{ marginTop: 'auto' }}
                     >
                       <PrimaryButton
                         isLight={isLight}
@@ -368,27 +382,56 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
                 <motion.div
                   initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
                   transition={{ ...SPRING.gentle, delay: 0.08 }}
-                  style={{
-                    width: '260px', flexShrink: 0,
-                    background: colors.rightBg,
-                    borderLeft: colors.rightBorderLeft,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    padding: '32px 22px',
-                    position: 'relative',
-                    overflow: 'hidden',
-                  }}
+                  style={{ flex: '0 0 40%', padding: '8px 8px 8px 0', display: 'flex' }}
                 >
-                  {/* Subtle grid pattern */}
-                  <div aria-hidden style={{
-                    position: 'absolute', inset: 0, opacity: colors.gridOpacity,
-                    backgroundImage: `linear-gradient(${colors.gridLineColor} 1px, transparent 1px),
-                                     linear-gradient(90deg, ${colors.gridLineColor} 1px, transparent 1px)`,
-                    backgroundSize: '24px 24px',
-                  }} />
+                  {/*
+                    Inset 8px from the card's top, right and bottom with its own
+                    radius, exactly as the extension card holds its image panel.
+                    That gap is what makes the guide read as a separate object
+                    held inside the card rather than a second column bleeding to
+                    the edge — the old full-bleed pane with a left hairline.
+                  */}
+                  <div style={{
+                    position: 'relative', flex: 1,
+                    borderRadius: '14px', overflow: 'hidden',
+                    background: colors.rightBg,
+                    boxShadow: isLight ? 'inset 0 0 0 1px rgba(11,16,32,0.07)' : 'none',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    padding: '28px 18px',
+                  }}>
+                    {/* Subtle grid pattern */}
+                    <div aria-hidden style={{
+                      position: 'absolute', inset: 0, opacity: colors.gridOpacity,
+                      backgroundImage: `linear-gradient(${colors.gridLineColor} 1px, transparent 1px),
+                                       linear-gradient(90deg, ${colors.gridLineColor} 1px, transparent 1px)`,
+                      backgroundSize: '24px 24px',
+                    }} />
 
-                  {allResolved
-                    ? <GuideResolved isLight={isLight} colors={colors} t3={t3} />
-                    : <GuideSteps colors={colors} t3={t3} reduced={reduced} />}
+                    <button onClick={handleDismiss} aria-label="Dismiss"
+                      style={{
+                        position: 'absolute', top: '8px', right: '8px', zIndex: 2,
+                        width: '30px', height: '30px',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        padding: 0, cursor: 'pointer',
+                        background: 'none', border: 0, borderRadius: '8px',
+                        opacity: colors.closeBtnOpacityDefault,
+                        transition: 'opacity 200ms, background 200ms',
+                      }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.opacity = String(colors.closeBtnOpacityHover);
+                        e.currentTarget.style.background = colors.closeBtnBgHover;
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.opacity = String(colors.closeBtnOpacityDefault);
+                        e.currentTarget.style.background = 'transparent';
+                      }}>
+                      <X size={14} strokeWidth={2} color={colors.closeBtnColor} />
+                    </button>
+
+                    {allResolved
+                      ? <GuideResolved isLight={isLight} colors={colors} t3={t3} />
+                      : <GuideSteps colors={colors} t3={t3} reduced={reduced} />}
+                  </div>
                 </motion.div>
               )}
             </div>
@@ -466,7 +509,7 @@ function AllSetPanel({ isLight, reduced, onContinue }: {
       initial={reduced ? { opacity: 0 } : { opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={reduced ? { duration: 0.15 } : SPRING.gentle}
-      style={{ display: 'flex', flexDirection: 'column' }}
+      style={{ display: 'flex', flexDirection: 'column', flex: 1 }}
     >
       <motion.div
         initial={reduced ? {} : { scale: 0.8, opacity: 0 }}
@@ -490,7 +533,9 @@ function AllSetPanel({ isLight, reduced, onContinue }: {
         Natively has everything it needs to capture and transcribe your meetings.
       </p>
 
-      <PrimaryButton isLight={isLight} variant="green" label="Continue" onClick={onContinue} />
+      <div style={{ marginTop: 'auto' }}>
+        <PrimaryButton isLight={isLight} variant="green" label="Continue" onClick={onContinue} />
+      </div>
     </motion.div>
   );
 }
@@ -526,7 +571,7 @@ function GuideSteps({ colors, t3, reduced }: {
       <motion.div
         {...rise(0.15)}
         style={{
-          width: '216px',
+          width: '188px',
           backgroundColor: colors.mockBg,
           borderRadius: '12px',
           padding: '16px 14px 12px',
@@ -587,7 +632,7 @@ function GuideSteps({ colors, t3, reduced }: {
       <motion.div
         {...rise(0.25)}
         style={{
-          width: '216px',
+          width: '188px',
           backgroundColor: colors.panelBg,
           borderRadius: '10px',
           padding: '9px 11px',
@@ -702,8 +747,8 @@ function PermItem({
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onAction(row.remedy); }
       } : undefined}
       style={{
-        display: 'flex', alignItems: 'center', gap: '14px',
-        padding: '14px 16px', borderRadius: '12px',
+        display: 'flex', alignItems: 'center', gap: '10px',
+        padding: '13px 14px', borderRadius: '12px',
         background: glass,
         border: `1px solid ${row.tone === 'granted' ? 'rgba(52,211,153,0.18)' : rule}`,
         transition: 'border-color 300ms, transform 150ms',
@@ -714,17 +759,17 @@ function PermItem({
     >
       {/* Icon well */}
       <div style={{
-        width: '38px', height: '38px', borderRadius: '10px', flexShrink: 0,
+        width: '32px', height: '32px', borderRadius: '9px', flexShrink: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         background: wellBg, border: `1px solid ${wellBorder}`,
       }}>
-        <Icon size={17} strokeWidth={1.75} color={accent} />
+        <Icon size={15} strokeWidth={1.75} color={accent} />
       </div>
 
       {/* Text */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: '13.5px', fontWeight: 580, color: t1, letterSpacing: '-0.01em' }}>{label}</div>
-        <div style={{ fontSize: '11.5px', color: t3, marginTop: '2px', lineHeight: 1.35 }}>
+        <div style={{ fontSize: '13px', fontWeight: 580, color: t1, letterSpacing: '-0.015em', whiteSpace: 'nowrap' }}>{label}</div>
+        <div style={{ fontSize: '11px', color: t3, marginTop: '2px', lineHeight: 1.3 }}>
           {row.sublabel}
         </div>
       </div>
@@ -751,10 +796,10 @@ function PermItem({
           <Lock size={15} strokeWidth={2} color={T.amber} />
         ) : row.tone === 'pending' ? null : (
           <span style={{
-            padding: '6px 11px', borderRadius: '8px',
+            padding: '5px 9px', borderRadius: '7px',
             background: isLight ? 'rgba(0,122,255,0.1)' : 'rgba(0,122,255,0.18)',
             border: `1px solid ${isLight ? 'rgba(0,122,255,0.2)' : 'rgba(0,122,255,0.28)'}`,
-            fontSize: '11.5px', fontWeight: 600, color: isLight ? '#0A6CD8' : '#6BAEFF',
+            fontSize: '11px', fontWeight: 600, color: isLight ? '#0A6CD8' : '#6BAEFF',
             letterSpacing: '-0.01em', whiteSpace: 'nowrap',
           }}>
             {row.actionLabel}
