@@ -18,7 +18,7 @@ import {
   easeLauncherResize,
   interpolateBounds,
 } from './utils/launcherResizeAnimation';
-import { attachNoActivate, isNoActivateManaged } from './utils/windowsFocusPolicy';
+import { attachNoActivate, isNoActivateManaged, restoreFocusableOffTaskbar } from './utils/windowsFocusPolicy';
 import { setVisibleOnAllWorkspacesKeepingDock } from './utils/macDockPolicy';
 import { resizeEnvelopeFor, OVERLAY_PANEL_INSET } from '../src/lib/overlayCustomSize.mjs';
 import { decideLauncherClose } from '../src/lib/launcherCloseDecision.mjs';
@@ -1475,8 +1475,10 @@ export class WindowHelper {
       // focus from the meeting app. Mouse interactivity does not need focusable
       // on Windows; typing is captured by the WH_KEYBOARD_LL stealth hook
       // without the window ever being focused (StealthKeyboardManager).
+      // Never the raw setFocusable(true): on Windows it re-adds a taskbar
+      // button (AddTab) on every hover — undetectable mode included.
       if (!isNoActivateManaged(this.overlayWindow)) {
-        this.overlayWindow.setFocusable(true);
+        restoreFocusableOffTaskbar(this.overlayWindow);
       }
     }
     auxWindows.forEach((w) => {
@@ -1485,7 +1487,7 @@ export class WindowHelper {
       } else {
         w.setIgnoreMouseEvents(false);
         // Same no-activate guard as the overlay body above.
-        if (!isNoActivateManaged(w)) w.setFocusable(true);
+        if (!isNoActivateManaged(w)) restoreFocusableOffTaskbar(w);
       }
     });
     if (!quiet) {

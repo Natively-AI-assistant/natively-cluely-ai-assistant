@@ -194,14 +194,16 @@ test('the hover-gate interaction policy must not re-arm click-activation on mana
     windowHelperSource.indexOf('public setOverlayHoverInteractive('),
   );
   assert.ok(body.length > 0, 'syncOverlayInteractionPolicy() not found');
+  // Focus is restored through restoreFocusableOffTaskbar() (a raw
+  // setFocusable(true) also re-adds a Windows taskbar button); both count.
   const unguarded = body
     .split('\n')
     .filter((l) => !l.trim().startsWith('//'))
-    .filter((l) => /setFocusable\(true\)/.test(l));
+    .filter((l) => /setFocusable\(true\)|restoreFocusableOffTaskbar\(/.test(l));
   const guards = body.match(/isNoActivateManaged\(/g) ?? [];
   assert.ok(
     guards.length >= unguarded.length && unguarded.length > 0,
-    'BUG: every setFocusable(true) in syncOverlayInteractionPolicy must be guarded by ' +
+    'BUG: every focus restore in syncOverlayInteractionPolicy must be guarded by ' +
       '!isNoActivateManaged(...) — an unguarded call re-arms click-activation on Windows.',
   );
 });

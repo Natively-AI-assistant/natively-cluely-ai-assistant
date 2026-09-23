@@ -1308,6 +1308,8 @@ import { NativeOomTrace } from './utils/NativeOomTrace'
 import { setStealthHookAvailabilityProvider } from './utils/windowsFocusPolicy'
 import { shouldPromoteToRegularAtStartup, planDisguiseTitleWrites } from './utils/macDockPolicy'
 import { disguiseAppName } from './utils/disguiseAppName'
+import { appUserModelIdForDisguise } from './utils/windowsTaskbarPolicy'
+import { shouldOpenExternally } from './utils/windowOpenPolicy'
 import { ensureNativeModuleAbi } from './utils/nativeModuleGuard'
 
 // Opt-in only: this trace writes allowlisted process metadata and IPC byte estimates
@@ -8218,10 +8220,12 @@ export class AppState {
       process.env.CFBundleName = appName.trim();
     }
 
-    // 3. Update App User Model ID (Windows Taskbar grouping)
+    // 3. Update App User Model ID (Windows Taskbar grouping). Undisguised, it
+    // is the installer shortcut's ID so the running window groups with a
+    // pinned Natively instead of adding a second button; each disguise keeps
+    // its own ID so it never groups with the real app. See windowsTaskbarPolicy.
     if (isWin) {
-      // Use unique AUMID per disguise to avoid grouping with the real app
-      app.setAppUserModelId(`com.natively.assistant.${mode}`);
+      app.setAppUserModelId(appUserModelIdForDisguise(mode));
     }
 
     // 4. Update Icons
@@ -8367,6 +8371,22 @@ async function initializeApp() {
     } catch (err) {
       console.error('[Main] second-instance handler failed:', err);
     }
+  });
+
+  // No renderer may open another Electron window: a target="_blank" link used
+  // to spawn a default BrowserWindow — its own taskbar button on Windows and no
+  // content protection, even in undetectable mode. https goes to the default
+  // browser (the 'open-external' rule); everything else is dropped. Registered
+  // before whenReady so it covers every window. See utils/windowOpenPolicy.ts.
+  app.on('web-contents-created', (_event, contents) => {
+    contents.setWindowOpenHandler(({ url }) => {
+      if (shouldOpenExternally(url)) {
+        shell.openExternal(url).catch((err) => console.warn('[Main] openExternal failed:', err?.message || err));
+      } else {
+        console.warn('[Main] Blocked window.open', { protocol: url.split(':')[0] });
+      }
+      return { action: 'deny' };
+    });
   });
 
   // PHASE-2E: install lifecycle tracking BEFORE app.whenReady() so we never
