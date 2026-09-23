@@ -29,6 +29,7 @@ import {
 } from '../ui/aiProviderMarks';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { FLUXION_REFERRAL_URL } from '../../lib/partnerLinks';
+import { isKnownFastModel } from '../../lib/fastModelHint.mjs';
 import { LiquidGlassBadge } from '../../ui-components/LiquidGlassBadge';
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -2565,6 +2566,8 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     // 2026-09-03), so the model default takes the branch side; the three
     // Direct Assist states are main's and are additive.
     const [defaultModel, setDefaultModel] = useState<string>('gemini-3.8-flash');
+    // 'auto' means unset: use the measured per-provider ladder, not a slow default.
+    const [fastModel, setFastModel] = useState<string>('auto');
     const [directAssistEnabled, setDirectAssistEnabled] = useState(false);
     const [directAssistBusy, setDirectAssistBusy] = useState(false);
     const [directAssistError, setDirectAssistError] = useState('');
@@ -2808,6 +2811,11 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 if (result && result.model) {
                     setDefaultModel(result.model);
                 }
+
+                // Load the persisted fast model. null on disk means "Auto".
+                // @ts-ignore
+                const fastResult = await window.electronAPI?.getFastModel?.();
+                setFastModel(fastResult?.model || 'auto');
 
                 const directEnabled = await window.electronAPI?.getDirectAssistEnabled?.();
                 setDirectAssistEnabled(directEnabled === true);
@@ -4129,6 +4137,29 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                             setDefaultModel(val);
                             // @ts-ignore - persist as default + update runtime + broadcast
                             window.electronAPI?.setDefaultModel(val).catch(console.error);
+                        }}
+                    />
+                </div>
+
+            <div className="aip-card p-5 flex items-center justify-between gap-4">
+                    <div className="min-w-0">
+                        <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('Fast Model')}</label>
+                        <p className="text-[10px] aip-muted mt-0.5">{t('Used for Auto Answer and other quick internal decisions — never for your answers.')}</p>
+                        {/* Advisory only: a big pick silently re-creates the latency
+                            problem the measured judge ladder exists to avoid, but a
+                            hard filter would need a hand-maintained list that goes
+                            stale on every model retirement. */}
+                        {!isKnownFastModel(fastModel) && (
+                            <p className="text-[10px] aip-warn-fg mt-0.5 font-medium">{t('Large models make Auto Answer slower. Pick a small tier for the best results.')}</p>
+                        )}
+                    </div>
+                    <ModelSelect
+                        value={fastModel}
+                        options={[{ id: 'auto', name: t('Auto (recommended)') }, ...buildAvailableModelOptions()]}
+                        onChange={(val) => {
+                            setFastModel(val);
+                            // @ts-ignore - null clears it, which means "use the measured ladder"
+                            window.electronAPI?.setFastModel?.(val === 'auto' ? null : val).catch(console.error);
                         }}
                     />
                 </div>
