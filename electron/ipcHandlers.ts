@@ -7757,7 +7757,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (typeof value !== 'boolean') {
         return { success: false, error: 'invalid_value_type' };
       }
-      SettingsManager.getInstance().set(key as any, value);
+      if (!SettingsManager.getInstance().set(key as any, value)) {
+        return { success: false, error: 'settings_store_degraded' };
+      }
       return { success: true };
     }
     return { success: false, error: 'invalid_key' };
