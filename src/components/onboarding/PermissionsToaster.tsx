@@ -231,6 +231,40 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
 
   const CARD_W = isMac ? '600px' : '420px';
 
+  // The same rows in both states. Once granted, PermItem already draws its own
+  // check badge and stops being interactive, so the resolved state needs no
+  // separate markup — and the card keeps ONE row implementation instead of two
+  // that drift apart. Rendering them when resolved is also what fills the 440
+  // column, so the card is the same size and shape either way.
+  const permRows = (
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+      transition={{ delay: 0.12 }}
+      style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '24px' }}
+    >
+      {isMac && (
+        <PermItem
+          icon={Monitor}
+          label="Screen Recording"
+          row={describePermRow(platform, 'screen', scrStatus)}
+          busy={requesting === 'screen'}
+          onAction={r => handleRowAction('screen', r)}
+          reduced={reduced}
+          isLight={isLight}
+        />
+      )}
+      <PermItem
+        icon={Mic}
+        label="Microphone"
+        row={describePermRow(platform, 'microphone', micStatus)}
+        busy={requesting === 'microphone'}
+        onAction={r => handleRowAction('microphone', r)}
+        reduced={reduced}
+        isLight={isLight}
+      />
+    </motion.div>
+  );
+
   return (
     <>
       {shown && (
@@ -325,7 +359,7 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
                 </div>
 
                 {allResolved ? (
-                  <AllSetPanel isLight={isLight} reduced={reduced} onContinue={handleDismiss} />
+                  <AllSetPanel isLight={isLight} reduced={reduced} onContinue={handleDismiss} rows={permRows} />
                 ) : (
                   <>
                     {/* Title + subtitle */}
@@ -344,33 +378,7 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
                       </p>
                     </motion.div>
 
-                    {/* Permission items */}
-                    <motion.div
-                      initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                      transition={{ delay: 0.12 }}
-                      style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '24px' }}
-                    >
-                      {isMac && (
-                        <PermItem
-                          icon={Monitor}
-                          label="Screen Recording"
-                          row={describePermRow(platform, 'screen', scrStatus)}
-                          busy={requesting === 'screen'}
-                          onAction={r => handleRowAction('screen', r)}
-                          reduced={reduced}
-                          isLight={isLight}
-                        />
-                      )}
-                      <PermItem
-                        icon={Mic}
-                        label="Microphone"
-                        row={describePermRow(platform, 'microphone', micStatus)}
-                        busy={requesting === 'microphone'}
-                        onAction={r => handleRowAction('microphone', r)}
-                        reduced={reduced}
-                        isLight={isLight}
-                      />
-                    </motion.div>
+                    {permRows}
 
                     {/* marginTop:auto pins the action to the bottom of the
                         column however short the copy above it runs — the same
@@ -523,8 +531,9 @@ function PrimaryButton({
 // `allPermissionsResolved` used to be computed and then thrown away, so the
 // card kept demanding "Open Settings" from a user who had already granted
 // everything. This is what it renders now.
-function AllSetPanel({ isLight, reduced, onContinue }: {
+function AllSetPanel({ isLight, reduced, onContinue, rows }: {
   isLight: boolean; reduced: boolean; onContinue: () => void;
+  rows: React.ReactNode;
 }) {
   const t1 = isLight ? '#1C1C1E' : '#FFFFFF';
   const t3 = isLight ? 'rgba(28, 28, 30, 0.48)' : 'rgba(255, 255, 255, 0.44)';
@@ -539,9 +548,11 @@ function AllSetPanel({ isLight, reduced, onContinue }: {
       <h2 id="perm-toast-title" style={{ fontSize: '24px', fontWeight: 700, letterSpacing: '-0.03em', color: t1, margin: '0 0 8px', lineHeight: 1.2 }}>
         You're all set
       </h2>
-      <p id="perm-toast-desc" style={{ fontSize: '13px', lineHeight: 1.65, color: t3, margin: '0 0 28px' }}>
+      <p id="perm-toast-desc" style={{ fontSize: '13px', lineHeight: 1.65, color: t3, margin: '0 0 24px' }}>
         Natively has everything it needs to capture and transcribe your meetings.
       </p>
+
+      {rows}
 
       <div style={{ marginTop: 'auto' }}>
         <PrimaryButton isLight={isLight} variant="green" label="Continue" onClick={onContinue} />
