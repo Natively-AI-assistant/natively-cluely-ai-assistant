@@ -536,21 +536,6 @@ function AllSetPanel({ isLight, reduced, onContinue }: {
       transition={reduced ? { duration: 0.15 } : SPRING.gentle}
       style={{ display: 'flex', flexDirection: 'column', flex: 1 }}
     >
-      <motion.div
-        initial={reduced ? {} : { scale: 0.8, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={reduced ? { duration: 0 } : { type: 'spring', stiffness: 320, damping: 18, delay: 0.05 }}
-        style={{
-          width: '46px', height: '46px', borderRadius: '14px',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(52,211,153,0.14)',
-          border: '1px solid rgba(52,211,153,0.28)',
-          marginBottom: '18px',
-        }}
-      >
-        <Check size={24} strokeWidth={2.5} color={T.green} />
-      </motion.div>
-
       <h2 id="perm-toast-title" style={{ fontSize: '24px', fontWeight: 700, letterSpacing: '-0.03em', color: t1, margin: '0 0 8px', lineHeight: 1.2 }}>
         You're all set
       </h2>
