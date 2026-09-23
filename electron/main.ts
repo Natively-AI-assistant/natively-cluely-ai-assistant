@@ -1306,7 +1306,13 @@ import { ProviderStatusRegistry } from './services/ProviderStatusRegistry'
 import { decideToggle, decideDockTransition } from './services/toggleStateReducer'
 import { NativeOomTrace } from './utils/NativeOomTrace'
 import { setStealthHookAvailabilityProvider } from './utils/windowsFocusPolicy'
-import { shouldPromoteToRegularAtStartup, planDisguiseTitleWrites } from './utils/macDockPolicy'
+import {
+  shouldPromoteToRegularAtStartup,
+  planDisguiseTitleWrites,
+  DOCK_ENFORCE_INTERVAL_MS,
+  DOCK_ENFORCE_MAX_ATTEMPTS,
+  DOCK_ENFORCE_STARTUP_MAX_ATTEMPTS,
+} from './utils/macDockPolicy'
 import { disguiseAppName } from './utils/disguiseAppName'
 import { appUserModelIdForDisguise } from './utils/windowsTaskbarPolicy'
 import { shouldOpenExternally } from './utils/windowOpenPolicy'
@@ -7839,7 +7845,7 @@ export class AppState {
     wantUndetectable: boolean,
     targetFocusWindow: BrowserWindow | null,
     attempt: number,
-    maxAttempts: number = 6,
+    maxAttempts: number = DOCK_ENFORCE_MAX_ATTEMPTS,
   ): void {
     if (process.platform !== 'darwin') return;
 
@@ -7888,7 +7894,7 @@ export class AppState {
       const t = setTimeout(() => {
         this._dockReassertTimers = this._dockReassertTimers.filter((x) => x !== t);
         this._enforceDockState(wantUndetectable, targetFocusWindow, attempt + 1, maxAttempts);
-      }, 130);
+      }, DOCK_ENFORCE_INTERVAL_MS);
       this._dockReassertTimers.push(t);
     }
   }
@@ -7921,11 +7927,11 @@ export class AppState {
   // reset sharingType) and drive the dock to hidden, retrying against the OS
   // ground truth so a late ready-to-show dock re-show is corrected.
   public applyInitialUndetectableState(): void {
-    // Longer retry budget than the toggle path (~2.5s vs ~0.8s): at startup the
+    // Longer retry budget than the toggle path (~2.3s vs ~1.3s): at startup the
     // dock re-show lands at the launcher's ready-to-show, which on a cold launch
-    // can arrive later than the toggle path's 6-retry window. Extra isVisible()
+    // can arrive later than the toggle path's retry window. Extra isVisible()
     // re-checks are cheap and stop early via the isUndetectable guard.
-    this.reassertUndetectableStealth(18);
+    this.reassertUndetectableStealth(DOCK_ENFORCE_STARTUP_MAX_ATTEMPTS);
   }
 
   // Re-drive the app back to a fully-stealth state after any operation that can
@@ -7948,7 +7954,7 @@ export class AppState {
   // so it cannot be defeated by a dropped call or a late re-show. Cheap and safe
   // to call redundantly — it no-ops immediately off-darwin or when not
   // undetectable, and stops early via the isUndetectable guard inside the loop.
-  public reassertUndetectableStealth(maxAttempts: number = 10): void {
+  public reassertUndetectableStealth(maxAttempts: number = DOCK_ENFORCE_MAX_ATTEMPTS): void {
     if (process.platform !== 'darwin') return;
     if (!this.isUndetectable) return;
     // Collapse any in-flight enforcement chain from a PRIOR re-assert before
@@ -9240,9 +9246,16 @@ if (process.env.THINKING_MATRIX === '1') {
   app.on("activate", () => {
     console.log("App activated")
     if (process.platform === 'darwin') {
-      // Do NOT call dock.show() while a meeting is running — the dock icon
-      // appearing mid-meeting is a critical stealth failure.
-      if (!appState.getUndetectable() && !appState.getIsMeetingActive()) {
+      if (appState.getUndetectable()) {
+        // A LaunchServices re-open of the running app (clicking its pinned
+        // Dock icon, `open -a`, Spotlight) has ALREADY made it a Foreground
+        // app when this fires — measured: the tile came back ~5 ms before the
+        // event and stayed. Not calling dock.show() is not enough; drive the
+        // Dock back to hidden. (Identified in PR #595.)
+        appState.reassertUndetectableStealth();
+      } else if (!appState.getIsMeetingActive()) {
+        // Do NOT call dock.show() while a meeting is running — the dock icon
+        // appearing mid-meeting is a critical stealth failure.
         if (app.dock) app.dock.show();  // app.dock is macOS-only (undefined elsewhere); darwin gated at 8080
       }
     }

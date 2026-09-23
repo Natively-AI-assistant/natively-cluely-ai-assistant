@@ -106,3 +106,16 @@ export function planDisguiseTitleWrites(
     reassertStealthAfterWrite: dockMustStayHidden,
   };
 }
+
+// Self-verifying Dock enforcement budget (main.ts _enforceDockState).
+// Electron's Browser::DockHide() is a silent no-op for 1 s after any DockShow()
+// (browser_mac.mm, base::Seconds(1)), so the retries must keep going past that
+// second or a show landing mid-loop is never corrected. Measured on the real
+// build: a fast OFF→ON toggle had three hides ignored before the fourth took.
+// Identified in PR #595.
+export const ELECTRON_DOCK_HIDE_GUARD_MS = 1000;
+export const DOCK_ENFORCE_INTERVAL_MS = 130;
+/** 10 × 130 ms = 1.3 s > the 1 s guard. */
+export const DOCK_ENFORCE_MAX_ATTEMPTS = 10;
+/** Startup waits out the launcher's ready-to-show as well (~2.3 s). */
+export const DOCK_ENFORCE_STARTUP_MAX_ATTEMPTS = 18;
