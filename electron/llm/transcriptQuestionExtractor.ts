@@ -62,6 +62,11 @@ export interface ExtractedQuestion {
 // catches whole-turn greetings that survive as short meaningful-looking turns.
 const GREETING_ONLY = /^(hi|hello|hey|good (morning|afternoon|evening)|how are you|nice to meet you|thanks?|thank you|welcome|let'?s (get )?started|can you hear me|are you there)[\s!.,?]*$/i;
 
+// A turn that only constrains the previous ask (issue #539) — see the split
+// constraint join in extractLatestQuestion.
+const SPLIT_CONSTRAINT_LEAD = /^(?:you\s+(?:can|may|should|could)\s+(?:safely\s+)?assume|assume\b|note\s+that|the\s+constraints?\b|constraints?\s*:|the\s+input\s+(?:is|will|can|may)|inputs?\s+(?:are|is|will)|do\s+it\s+(?:in|without)|without\s+using\b|in\s+o\s*\(|with\s+o\s*\()/i;
+const SPLIT_CONSTRAINT_MAX_GAP_MS = 30_000;
+
 // Social-pleasantry chit-chat that is grammatically a question ("did you have
 // any trouble finding parking?", "how was your weekend?", "did you find us
 // okay?") but is NOT a substantive interview question. These pass QUESTION_MARK
@@ -423,8 +428,27 @@ export function extractLatestQuestion(
     // anchored at ^, so a raw "Um, what is your name?" would lose its lead
     // signal and drop from 0.95 to 0.4 confidence. Cleaning exists to make the
     // heuristics robust — it is a FILTER, not a transformation of the output.
-    const scoringText = chosen.text.trim();
-    const latestQuestion = rawTextAt(chosenIdx) || scoringText;
+    let scoringText = chosen.text.trim();
+    let latestQuestion = rawTextAt(chosenIdx) || scoringText;
+    // SPLIT CONSTRAINT (issue #539): "Implement an LRU cache with get and put."
+    // then, after a pause, "You can assume capacity is positive." Recency picks
+    // the constraint, which has no ask of its own, and the turn routes as
+    // general. Join it to the interviewer ask right before it — ONE turn back,
+    // only when this turn is a pure constraint (no '?', constraint lead) and the
+    // previous turn is itself an ask within 30s. Anything else stays recency-only.
+    const prevIdx = chosenIdx - 1;
+    const prevTurn = prevIdx >= 0 ? cleaned[prevIdx] : null;
+    if (prevTurn && prevTurn.role === 'interviewer'
+        && !QUESTION_MARK.test(latestQuestion) && SPLIT_CONSTRAINT_LEAD.test(scoringText)
+        && Math.abs(chosen.timestamp - prevTurn.timestamp) <= SPLIT_CONSTRAINT_MAX_GAP_MS) {
+        const prevText = prevTurn.text.trim();
+        const prevRaw = rawTextAt(prevIdx) || prevText;
+        const prevIsAsk = QUESTION_MARK.test(prevRaw) || INTERROGATIVE_LEAD.test(prevText) || TASK_DIRECTIVE.test(prevText);
+        if (prevIsAsk && !GREETING_ONLY.test(prevText) && !GREETING_ONLY.test(prevRaw)) {
+            scoringText = `${prevText} ${scoringText}`;
+            latestQuestion = `${prevRaw} ${latestQuestion}`;
+        }
+    }
     const hasMark = QUESTION_MARK.test(scoringText) || QUESTION_MARK.test(latestQuestion);
     const hasLead = INTERROGATIVE_LEAD.test(scoringText);
     // F9: on providers that never guarantee punctuation, the absence of '?'

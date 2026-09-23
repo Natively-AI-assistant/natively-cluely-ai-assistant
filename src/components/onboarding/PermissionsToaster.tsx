@@ -114,8 +114,11 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
     overlayBg: isLight ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.6)',
     rightBg: isLight ? '#EEEFF2' : 'rgba(0,0,0,0.3)',
     rightBorderLeft: isLight ? '1px solid rgba(0,0,0,0.07)' : '1px solid rgba(255,255,255,0.1)',
-    gridOpacity: isLight ? 0.08 : 0.04,
-    gridLineColor: isLight ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.5)',
+    // Off-white grey on the dark panel, a darker grey on the light one —
+    // a neutral rule either way rather than pure black/white at low alpha,
+    // which picked up the panel's tint and read slightly blue.
+    gridOpacity: isLight ? 0.14 : 0.10,
+    gridLineColor: isLight ? 'rgba(88, 90, 98, 0.55)' : 'rgba(228, 229, 234, 0.42)',
 
     closeBtnColor: isLight ? '#1C1C1E' : '#FFFFFF',
     closeBtnOpacityDefault: isLight ? 0.45 : 0.4,
@@ -228,6 +231,40 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
 
   const CARD_W = isMac ? '600px' : '420px';
 
+  // The same rows in both states. Once granted, PermItem already draws its own
+  // check badge and stops being interactive, so the resolved state needs no
+  // separate markup — and the card keeps ONE row implementation instead of two
+  // that drift apart. Rendering them when resolved is also what fills the 440
+  // column, so the card is the same size and shape either way.
+  const permRows = (
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+      transition={{ delay: 0.12 }}
+      style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '24px' }}
+    >
+      {isMac && (
+        <PermItem
+          icon={Monitor}
+          label="Screen Recording"
+          row={describePermRow(platform, 'screen', scrStatus)}
+          busy={requesting === 'screen'}
+          onAction={r => handleRowAction('screen', r)}
+          reduced={reduced}
+          isLight={isLight}
+        />
+      )}
+      <PermItem
+        icon={Mic}
+        label="Microphone"
+        row={describePermRow(platform, 'microphone', micStatus)}
+        busy={requesting === 'microphone'}
+        onAction={r => handleRowAction('microphone', r)}
+        reduced={reduced}
+        isLight={isLight}
+      />
+    </motion.div>
+  );
+
   return (
     <>
       {shown && (
@@ -315,15 +352,14 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
               }}>
 
                 {/* Header row */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '24px' }}>
-                  <img src={nativelyIcon} alt="Natively" style={{ width: '18px', height: '18px', borderRadius: '4px', flexShrink: 0 }} />
+                <div style={{ marginBottom: '24px' }}>
                   <span style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: t3 }}>
                     Permissions
                   </span>
                 </div>
 
                 {allResolved ? (
-                  <AllSetPanel isLight={isLight} reduced={reduced} onContinue={handleDismiss} />
+                  <AllSetPanel isLight={isLight} reduced={reduced} onContinue={handleDismiss} rows={permRows} />
                 ) : (
                   <>
                     {/* Title + subtitle */}
@@ -342,33 +378,7 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
                       </p>
                     </motion.div>
 
-                    {/* Permission items */}
-                    <motion.div
-                      initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                      transition={{ delay: 0.12 }}
-                      style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '24px' }}
-                    >
-                      {isMac && (
-                        <PermItem
-                          icon={Monitor}
-                          label="Screen Recording"
-                          row={describePermRow(platform, 'screen', scrStatus)}
-                          busy={requesting === 'screen'}
-                          onAction={r => handleRowAction('screen', r)}
-                          reduced={reduced}
-                          isLight={isLight}
-                        />
-                      )}
-                      <PermItem
-                        icon={Mic}
-                        label="Microphone"
-                        row={describePermRow(platform, 'microphone', micStatus)}
-                        busy={requesting === 'microphone'}
-                        onAction={r => handleRowAction('microphone', r)}
-                        reduced={reduced}
-                        isLight={isLight}
-                      />
-                    </motion.div>
+                    {permRows}
 
                     {/* marginTop:auto pins the action to the bottom of the
                         column however short the copy above it runs — the same
@@ -521,8 +531,9 @@ function PrimaryButton({
 // `allPermissionsResolved` used to be computed and then thrown away, so the
 // card kept demanding "Open Settings" from a user who had already granted
 // everything. This is what it renders now.
-function AllSetPanel({ isLight, reduced, onContinue }: {
+function AllSetPanel({ isLight, reduced, onContinue, rows }: {
   isLight: boolean; reduced: boolean; onContinue: () => void;
+  rows: React.ReactNode;
 }) {
   const t1 = isLight ? '#1C1C1E' : '#FFFFFF';
   const t3 = isLight ? 'rgba(28, 28, 30, 0.48)' : 'rgba(255, 255, 255, 0.44)';
@@ -534,27 +545,14 @@ function AllSetPanel({ isLight, reduced, onContinue }: {
       transition={reduced ? { duration: 0.15 } : SPRING.gentle}
       style={{ display: 'flex', flexDirection: 'column', flex: 1 }}
     >
-      <motion.div
-        initial={reduced ? {} : { scale: 0.8, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={reduced ? { duration: 0 } : { type: 'spring', stiffness: 320, damping: 18, delay: 0.05 }}
-        style={{
-          width: '46px', height: '46px', borderRadius: '14px',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(52,211,153,0.14)',
-          border: '1px solid rgba(52,211,153,0.28)',
-          marginBottom: '18px',
-        }}
-      >
-        <Check size={24} strokeWidth={2.5} color={T.green} />
-      </motion.div>
-
       <h2 id="perm-toast-title" style={{ fontSize: '24px', fontWeight: 700, letterSpacing: '-0.03em', color: t1, margin: '0 0 8px', lineHeight: 1.2 }}>
         You're all set
       </h2>
-      <p id="perm-toast-desc" style={{ fontSize: '13px', lineHeight: 1.65, color: t3, margin: '0 0 28px' }}>
+      <p id="perm-toast-desc" style={{ fontSize: '13px', lineHeight: 1.65, color: t3, margin: '0 0 24px' }}>
         Natively has everything it needs to capture and transcribe your meetings.
       </p>
+
+      {rows}
 
       <div style={{ marginTop: 'auto' }}>
         <PrimaryButton isLight={isLight} variant="green" label="Continue" onClick={onContinue} />
@@ -739,18 +737,6 @@ function PermItem({
     row.tone === 'pending' ? (isLight ? 'rgba(28,28,30,0.35)' : 'rgba(255,255,255,0.35)') :
     T.blue;
 
-  const wellBg =
-    row.tone === 'granted' ? 'rgba(52,211,153,0.12)' :
-    row.tone === 'blocked' ? 'rgba(245,158,11,0.12)' :
-    row.tone === 'pending' ? (isLight ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.05)') :
-    'rgba(0,122,255,0.1)';
-
-  const wellBorder =
-    row.tone === 'granted' ? 'rgba(52,211,153,0.2)' :
-    row.tone === 'blocked' ? 'rgba(245,158,11,0.2)' :
-    row.tone === 'pending' ? rule :
-    'rgba(0,122,255,0.15)';
-
   const interactive = row.actionable && !busy;
 
   return (
@@ -774,13 +760,14 @@ function PermItem({
       whileHover={interactive ? { scale: 1.005 } : {}}
       whileTap={interactive ? { scale: 0.995 } : {}}
     >
-      {/* Icon well */}
+      {/* The icon carries the row's state in its colour alone — no squircle
+          well behind it. A tinted, bordered tile per row read as a second
+          button next to the real action pill. */}
       <div style={{
-        width: '32px', height: '32px', borderRadius: '9px', flexShrink: 0,
+        width: '26px', flexShrink: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: wellBg, border: `1px solid ${wellBorder}`,
       }}>
-        <Icon size={15} strokeWidth={1.75} color={accent} />
+        <Icon size={19} strokeWidth={1.75} color={accent} />
       </div>
 
       {/* Text */}

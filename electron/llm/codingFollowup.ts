@@ -185,11 +185,57 @@ export function isBareCodeRequest(question: string): boolean {
   return tokens.every((t) => BARE_CODE_TOKENS.has(t));
 }
 
+// Issue #539: "show in python", "show the solution in python", "show me how you
+// would implement in python" — a request to present the CURRENT solution in a
+// named language. Live (Windows 2.8.8) all three routed general_meeting_answer
+// and the model invented an unrelated count_ways(n) problem.
+//
+// Token-set, like isBareCodeRequest: an imperative verb, a trailing language,
+// and nothing between them but filler. A content word ("write a web server in
+// go") gives the message its own subject, and an experience question ("tell me
+// about your experience with python", "have you worked in go?") never opens
+// with one of these verbs — both fall through.
+const LANGUAGE_TOKENS = new Set([
+  'python', 'py', 'java', 'javascript', 'js', 'typescript', 'ts', 'cpp', 'csharp',
+  'c', 'go', 'golang', 'rust', 'kotlin', 'swift', 'ruby', 'scala', 'php', 'sql',
+]);
+const LANGUAGE_REQUEST_VERBS = new Set([
+  'show', 'write', 'give', 'do', 'implement', 'code', 'convert', 'rewrite', 'redo', 'translate', 'port', 'solve',
+]);
+const LANGUAGE_REQUEST_LEAD = new Set(['ok', 'okay', 'so', 'now', 'and', 'then', 'please', 'can', 'could', 'would', 'will', 'you']);
+const LANGUAGE_REQUEST_FILLER = new Set([
+  ...BARE_CODE_TOKENS, ...LANGUAGE_REQUEST_VERBS,
+  'how', 'would', 'will', 'could', 'same', 'again', 'instead', 'one', 'version', 'using', 'into', 'to',
+]);
+
+function isLanguageRequest(question: string): boolean {
+  const tokens = (question || '')
+    .toLowerCase()
+    .replace(/c\+\+/g, 'cpp')
+    .replace(/c#/g, 'csharp')
+    .replace(/[^a-z\s]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+  if (tokens.length < 2 || tokens.length > 10) return false;
+  if (!LANGUAGE_TOKENS.has(tokens[tokens.length - 1])) return false;
+  if (!['in', 'using', 'into', 'to'].includes(tokens[tokens.length - 2])) return false;
+  let i = 0;
+  while (i < tokens.length && LANGUAGE_REQUEST_LEAD.has(tokens[i])) i++;
+  if (!LANGUAGE_REQUEST_VERBS.has(tokens[i])) return false;
+  return tokens.slice(i, -1).every((t) => LANGUAGE_REQUEST_FILLER.has(t));
+}
+
+// "implement this", "write it", "solve that" — an action on the current problem
+// with nothing else in the message (issue #539).
+const DIRECT_ACTION_RE =
+  /^(?:(?:ok(?:ay)?|so|now|and|please)[,.!]?\s+)*(?:(?:can|could)\s+you\s+)?(?:implement|write|code|solve)\s+(?:this|it|that|the\s+(?:solution|same|above))(?:\s+(?:now|please|again))?\s*[?.!]*$/i;
+
 export function isCodingContinuation(question: string): boolean {
   const q = lc(question);
   if (!q) return false;
   // A bare code request is ALWAYS a continuation — it has no subject of its own.
   if (isBareCodeRequest(q)) return true;
+  if (isLanguageRequest(q) || DIRECT_ACTION_RE.test(q)) return true;
   if (detectExplicitCodingContract(q)) return true; // code_only/complexity/dry-run/explain are all continuations-or-constraints
   const words = q.split(/\s+/).filter(Boolean).length;
   // STRONG coding signal: a SHORT message is a follow-up on its own; a LONG one needs a

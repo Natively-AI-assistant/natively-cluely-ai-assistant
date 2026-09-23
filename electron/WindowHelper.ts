@@ -22,6 +22,7 @@ import { attachNoActivate, isNoActivateManaged, restoreFocusableOffTaskbar } fro
 import { setVisibleOnAllWorkspacesKeepingDock } from './utils/macDockPolicy';
 import { resizeEnvelopeFor, OVERLAY_PANEL_INSET } from '../src/lib/overlayCustomSize.mjs';
 import { decideLauncherClose } from '../src/lib/launcherCloseDecision.mjs';
+import { DEV_SERVER_URL } from './devServerUrl';
 
 const isEnvDev = process.env.NODE_ENV === 'development';
 const isPackaged = app.isPackaged;
@@ -49,7 +50,7 @@ function traceOverlayResize(event: string, data: Record<string, unknown>): void 
 }
 
 const startUrl = isDev
-  ? 'http://127.0.0.1:5180'
+  ? DEV_SERVER_URL
   : `file://${path.join(__dirname, '../../dist/index.html')}`;
 
 export class WindowHelper {
@@ -623,8 +624,8 @@ export class WindowHelper {
         if (mode === 'none') {
           if (isMac) {
             return app.isPackaged
-              ? path.join(process.resourcesPath, 'natively.icns')
-              : path.resolve(__dirname, '../../assets/natively.icns');
+              ? path.join(process.resourcesPath, 'assets', 'icon.png')
+              : path.resolve(__dirname, '../../assets/icon.png');
           } else if (isWin) {
             return app.isPackaged
               ? path.join(process.resourcesPath, 'assets/icons/win/icon.ico')
@@ -647,8 +648,8 @@ export class WindowHelper {
           // Defensive: unknown mode — use the real app icon, matching 'none'.
           if (isMac) {
             return app.isPackaged
-              ? path.join(process.resourcesPath, 'natively.icns')
-              : path.resolve(__dirname, '../../assets/natively.icns');
+              ? path.join(process.resourcesPath, 'assets', 'icon.png')
+              : path.resolve(__dirname, '../../assets/icon.png');
           } else if (isWin) {
             return app.isPackaged
               ? path.join(process.resourcesPath, 'assets/icons/win/icon.ico')

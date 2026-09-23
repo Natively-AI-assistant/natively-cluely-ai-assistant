@@ -384,9 +384,9 @@
   --legacy-action-disabled-border: var(--border-subtle);
   --legacy-action-disabled-text: var(--text-tertiary);
 
-  /* Scrim & overlay backdrops (Frosted glass look without blur) */
-  --scrim-backdrop: rgba(255, 255, 255, 0.45);
-  --scrim-backdrop-subtle: rgba(255, 255, 255, 0.35);
+  /* Scrim & overlay backdrops (Apple macOS Sheet dimming: subtle 6% tint without blur) */
+  --scrim-backdrop: rgba(0, 0, 0, 0.06);
+  --scrim-backdrop-subtle: rgba(0, 0, 0, 0.04);
 }
 
 [data-theme='light'] .ai-response-card p,
