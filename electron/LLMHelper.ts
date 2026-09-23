@@ -4862,6 +4862,11 @@ let isMultimodal = !!(imagePaths?.length);
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       if (this.isLocalOnlyMode) return '';
+      // The user's chosen fast model first; the Gemini -> Groq -> Natively chain
+      // below is the fallback. This method already had exactly this shape, so the
+      // seam replaces a hand-rolled copy rather than adding a layer.
+      const pickedFast = await this.callFastModel(message, { timeoutMs, signal: controller.signal, json: true });
+      if (pickedFast) return pickedFast;
       if (this.client) {
         this.assertOutboundScopes('gemini', message);
         // @ts-ignore — abortSignal is accepted by the SDK's request config
@@ -5045,9 +5050,14 @@ let isMultimodal = !!(imagePaths?.length);
       if (name.startsWith('Natively')) return 'natively';
       return name;
     };
-    // `opts.preferFast` retained for API compatibility; ordering no longer
-    // depends on it (the Gemini block always leads with flash-lite).
-    void opts;
+    // `opts.preferFast` is the opt-in fast path: the user's chosen fast model is
+    // tried BEFORE the ladder is built. It was previously a no-op behind `void
+    // opts` — "retained for API compatibility" — so the flag promised something
+    // it never delivered. The ladder below is unchanged and remains the fallback.
+    if (opts?.preferFast) {
+      const pickedFast = await this.callFastModel(message, { json: true });
+      if (pickedFast) return pickedFast;
+    }
 
     // Priority 1: OpenAI
     if (this.openaiClient) {
