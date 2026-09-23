@@ -1,6 +1,7 @@
 import { BookOpen, Bot, Braces, Briefcase, Check, Copy, HelpCircle, Lock, Paperclip, RefreshCw, ShieldAlert, ShieldCheck, Sparkles, Wifi, Zap } from 'lucide-react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useT } from '../../i18n';
+import { isPartialPhoneMirrorStatus, mergePhoneMirrorStatus } from '../../lib/phoneMirrorStatusMerge.mjs';
 import type { BrowserContextSettings, PhoneMirrorInfo } from '../../types/electron';
 import { isMac } from '../../utils/platformUtils';
 import { BrowserExtensionIcon } from '../onboarding/BrowserExtensionIcon';
@@ -152,22 +153,16 @@ export const PhoneMirrorSettings: React.FC = () => {
     refresh();
     const off = window.electronAPI.onPhoneMirrorStatus((next) => {
       if (!next || typeof next !== 'object') return;
-      setInfo((prev) => {
-        const n = next as PhoneMirrorInfo;
-        if (
-          prev &&
-          prev.qrDataUrl === n.qrDataUrl &&
-          prev.primaryUrl === n.primaryUrl &&
-          prev.token === n.token &&
-          prev.extToken === n.extToken &&
-          prev.running === n.running &&
-          prev.clients === n.clients &&
-          prev.extensionConnected === n.extensionConnected
-        ) {
-          return prev;
-        }
-        return n;
-      });
+      // This pane lives in the launcher window, which only receives the small
+      // flag subset of a status broadcast (ipcHandlers.ts onStatusChange). Lay
+      // the flags over the full snapshot we already hold — replacing it wiped
+      // port/bindAddress/exposeOnLan/URLs ("port undefined · bound to
+      // undefined", LAN toggle snapping back off ~150 ms after Allow).
+      setInfo((prev) => mergePhoneMirrorStatus(prev, next));
+      // The subset cannot describe a (re)start — new port, bind host, URLs, QR —
+      // so reconcile with the full snapshot. Broadcasts are deduped upstream on
+      // the flag tuple, so this is one get-info per real flag change.
+      if (isPartialPhoneMirrorStatus(next)) void refresh();
     });
     return () => {
       off?.();
