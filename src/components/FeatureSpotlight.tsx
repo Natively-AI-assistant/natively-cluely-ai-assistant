@@ -27,10 +27,10 @@ const FEATURES: FeatureSlide[] = [
         subtitle: 'GPT, Claude and more through one API',
         bullets: [
             'Up to 70% below official API pricing',
-            '$1 in free credit when you join through Natively',
+            '$3 in free credit when you join through Natively',
         ],
         type: 'sponsor',
-        actionLabel: 'Claim $1 credit',
+        actionLabel: 'Claim $3 credit',
         url: FLUXION_REFERRAL_URL,
     },
     {
