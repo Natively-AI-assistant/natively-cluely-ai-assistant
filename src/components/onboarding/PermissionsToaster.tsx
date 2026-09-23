@@ -155,6 +155,9 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
   const t3 = isLight ? 'rgba(28, 28, 30, 0.48)' : 'rgba(255, 255, 255, 0.44)';
 
   const refreshStatus = useCallback(async () => {
+    // TEMP-VERIFY-ONLY
+    setPlatform('darwin'); setMicStatus('denied'); setScrStatus('denied');
+    if (1 as number) return;
     try {
       const p = await window.electronAPI?.checkPermissions?.();
       if (!p) return;
@@ -548,7 +551,7 @@ function GuideSteps({ colors, t3, reduced }: {
           Natively wants to record the screen.
         </div>
         <div style={{
-          fontSize: '9.5px', color: colors.mockTextMuted,
+          fontSize: '10px', color: colors.mockTextMuted,
           lineHeight: 1.35, marginBottom: '13px',
         }}>
           Enable access in Privacy &amp; Security settings.
@@ -561,7 +564,7 @@ function GuideSteps({ colors, t3, reduced }: {
             borderRadius: '6px',
             background: colors.mockSecondaryBg,
             border: colors.mockSecondaryBorder,
-            fontSize: '9.5px', fontWeight: 500, color: colors.mockSecondaryText,
+            fontSize: '10px', fontWeight: 500, color: colors.mockSecondaryText,
             letterSpacing: '-0.005em',
           }}>
             Deny
@@ -571,7 +574,7 @@ function GuideSteps({ colors, t3, reduced }: {
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             borderRadius: '6px',
             background: T.blue,
-            fontSize: '9.5px', fontWeight: 500, color: '#FFFFFF',
+            fontSize: '10px', fontWeight: 500, color: '#FFFFFF',
             letterSpacing: '-0.005em',
             boxShadow: '0 1px 3px rgba(0,122,255,0.35), inset 0 1px 0 rgba(255,255,255,0.22)',
           }}>
