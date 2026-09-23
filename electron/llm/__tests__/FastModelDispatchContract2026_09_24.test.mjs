@@ -40,12 +40,19 @@ const DISPATCHABLE = [
   ['deepseek-v4-flash', 'deepseek'],
 ];
 
-// Every one of these is offered by the picker today and can never run.
+// Gateways WERE in this list. They now dispatch to their own clients - see
+// FastModelGatewayDispatch2026_09_24, which pins the wire id and proves each one
+// never reaches the OpenAI client. They are named here so the move is explicit
+// rather than looking like a lost assertion.
+const GATEWAYS_NOW_DISPATCHABLE = [
+  ['openrouter/google/gemini-3.8-flash', 'openrouter'],
+  ['litellm/azure-openai-gpt4', 'litellm'],
+  ['nvidia_nim/openai/gpt-oss-20b', 'nvidia_nim'],
+  ['fluxion/gpt-5.5', 'fluxion'],
+];
+
+// Still no branch, and the picker must not offer these.
 const NOT_DISPATCHABLE = [
-  'openrouter/google/gemini-3.8-flash',
-  'litellm/azure-openai-gpt4',
-  'nvidia_nim/openai/gpt-oss-20b',
-  'fluxion/gpt-5.5',
   'natively',
   'ollama-llama3',
   'some-retired-model',
@@ -81,5 +88,13 @@ test('callFastModel returns null for exactly the ids the resolver rejects', asyn
       _deepseekClient: { chat: { completions: { create: async () => ({ choices: [{ message: { content: 'REACHED' } }] }) } } },
     });
     assert.equal(await h.callFastModel('judge'), null, `${id} must not reach any provider`);
+  }
+});
+
+test('the gateways moved from "refused" to their own families', () => {
+  const h = helper();
+  for (const [id, family] of GATEWAYS_NOW_DISPATCHABLE) {
+    assert.equal(h.resolveFastModelFamily(id), family, id);
+    assert.equal(h.canDispatchFastModel(id), true, id);
   }
 });
