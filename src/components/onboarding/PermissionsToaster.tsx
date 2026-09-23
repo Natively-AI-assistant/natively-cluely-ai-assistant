@@ -568,7 +568,7 @@ function GuideSteps({ colors, t3, reduced }: {
           width: '188px',
           backgroundColor: colors.mockBg,
           borderRadius: '12px',
-          padding: '16px 14px 12px',
+          padding: '12px 12px 10px',
           border: colors.mockBorder,
           boxShadow: colors.mockShadow,
           display: 'flex', flexDirection: 'column', alignItems: 'center',
@@ -576,20 +576,20 @@ function GuideSteps({ colors, t3, reduced }: {
         }}
       >
         <img src={nativelyIcon} alt="" aria-hidden style={{
-          width: '38px', height: '38px', borderRadius: '9px',
-          marginBottom: '10px', boxShadow: colors.mockIconShadow,
+          width: '30px', height: '30px', borderRadius: '7px',
+          marginBottom: '7px', boxShadow: colors.mockIconShadow,
         }} />
 
         <div style={{
           fontSize: '10.5px', fontWeight: 600, color: colors.mockTextPrimary,
-          lineHeight: 1.35, letterSpacing: '-0.005em', marginBottom: '13px',
+          lineHeight: 1.25, letterSpacing: '-0.005em', marginBottom: '9px',
         }}>
           Natively wants to record the screen.
         </div>
 
         <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
           <div style={{
-            flex: 1, height: '21px',
+            flex: 1, height: '20px',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             borderRadius: '6px',
             background: colors.mockSecondaryBg,
@@ -600,7 +600,7 @@ function GuideSteps({ colors, t3, reduced }: {
             Deny
           </div>
           <div style={{
-            flex: 1, height: '21px',
+            flex: 1, height: '20px',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             borderRadius: '6px',
             background: T.blue,
