@@ -10,14 +10,11 @@
 //
 // Chrome Web Store URL canonical source: src/components/settings/HelpSettings.tsx
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { motion, animate, useMotionValue, useReducedMotion, type MotionStyle } from 'framer-motion';
+import { motion, useReducedMotion, type MotionStyle } from 'framer-motion';
 import { X, ArrowRight } from 'lucide-react';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import beBlack from '../../../assets/BE-black.png';
-import {
-  genieFrame, genieBands, genieBandRows, genieOpacity, genieStretch, genieEdges,
-  SLOT_INSET, BAND_OVERLAP, type GenieGeometry,
-} from './genieMotion.mjs';
+import { useGenieCard } from './useGenieCard';
 
 const DISMISS_KEY = 'natively_ext_connect_dismissed_v1';
 const MIN_VERSION = '2.8.0';
@@ -112,34 +109,6 @@ const SHADOW_DARK  = '0 40px 90px -30px rgba(0,0,0,0.85)';
 
 const CLOSE_LIGHT = { rest: 'rgba(11,16,32,0.55)', hover: 'rgba(11,16,32,0.92)' };
 
-/*
-  Open / close: the macOS genie. On close the card pours through a funnel
-  into a slot at the bottom centre of the window, the way a minimised window
-  pours into its Dock icon; on open it pours back out. The funnel is fixed on
-  screen and the card passes through it. The geometry lives in
-  genieMotion.mjs; this file only measures the card and runs the clock.
-
-  The close eases in and out, since the card travels on screen. The open eases
-  out, so it answers at once and settles gently. The close is the quicker of
-  the two: the user asked for it to go.
-*/
-const GENIE_OPEN  = { duration: 0.55, ease: [0.23, 1, 0.32, 1] as any };
-const GENIE_CLOSE = { duration: 0.45, ease: [0.65, 0, 0.35, 1] as any };
-// About this many bands. Each is a copy of the card mapped onto its own slice
-// of the funnel, so the content pinches with the outline. 48 held 60fps with
-// the CPU throttled 4x; 144 dropped frames.
-const GENIE_BANDS = 48;
-
-const REDUCED_FADE = { duration: 0.15, ease: 'linear' as const };
-const SCRIM_OPEN_S  = 0.25;
-const SCRIM_CLOSE_S = 0.3;
-// The host unmounts this component the moment it hears onDismiss, which
-// would cut the genie off. So the card closes itself first and reports after
-// the animation completes. This timer is the backstop: Chromium stops
-// animation frames in a hidden window, and a close that never completes must
-// still release the onboarding slot.
-const CLOSE_FALLBACK_MS = 900;
-
 // Entrance: once the card has poured out, the column arrives tier by tier.
 const STAGGER = { hidden: {}, show: { transition: { staggerChildren: 0.04, delayChildren: 0.3 } } };
 const ITEM = {
@@ -194,183 +163,14 @@ export const BrowserExtensionToaster: React.FC<Props> = ({ isOpen, onDismiss, on
   const testForceShow = typeof window !== 'undefined'
     && new URLSearchParams(window.location.search).get('extToaster') === 'force';
 
-  // closing: the genie is running. done: it has finished and the card is gone.
-  const [closing, setClosing] = useState(false);
-  const [done, setDone]       = useState(false);
-  const afterCloseRef = useRef<(() => void) | null>(null);
-
-  const shown = (isOpen || testForceShow) && !done;
-
-  // ─── Genie clock ────────────────────────────────────────────
-  // genie: 1 = in the slot, 0 = the card at rest.
-  const genie = useMotionValue(1);
-  const scrim = useMotionValue(0);
-  // The wrapper is never transformed, so it reports where the card sits at
-  // rest even while the card is mid-genie.
-  const wrapRef   = useRef<HTMLDivElement>(null);
-  const cardRef   = useRef<HTMLDivElement>(null);
-  const bandsRef  = useRef<HTMLDivElement>(null);
-  const shadowRef = useRef<HTMLDivElement>(null);
-  const geomRef   = useRef<GenieGeometry | null>(null);
-  const rowsRef   = useRef<[number, number][] | null>(null);
-
-  const measure = () => {
-    const r = wrapRef.current?.getBoundingClientRect();
-    geomRef.current = r && r.width > 0
-      ? { top: r.top, bottom: r.bottom, width: r.width, slotY: window.innerHeight - SLOT_INSET }
-      : null;
-  };
-
-  // Cut the card into bands: copies of it, each showing a strip of rows.
-  // Built when the genie starts and removed when it ends, so at rest there
-  // is one card and nothing promoted to its own layer.
-  const buildBands = (): boolean => {
-    const card = cardRef.current, layer = bandsRef.current, geom = geomRef.current;
-    if (!card || !layer || !geom) return false;
-    try {
-      const height = Math.round(geom.bottom - geom.top);
-      const rows = genieBandRows(height, GENIE_BANDS);
-      const frag = document.createDocumentFragment();
-      rows.forEach(([r0, r1], i) => {
-        const band = document.createElement('div');
-        band.style.cssText = `position:absolute;left:0;width:100%;top:${r0}px;`
-          + `height:${r1 - r0 + (i < rows.length - 1 ? BAND_OVERLAP : 0)}px;`
-          + 'overflow:hidden;transform-origin:0 0;will-change:transform;';
-        const copy = card.cloneNode(true) as HTMLElement;
-        // A copy is a picture, not a dialog: no ids to collide with the real
-        // card's aria references, and nothing promoted or filtered inside it.
-        copy.removeAttribute('role');
-        copy.removeAttribute('aria-modal');
-        copy.removeAttribute('aria-labelledby');
-        copy.removeAttribute('aria-describedby');
-        copy.querySelectorAll<HTMLElement>('[id]').forEach(el => el.removeAttribute('id'));
-        copy.querySelectorAll<HTMLElement>('[style]').forEach(el => {
-          el.style.willChange = 'auto';
-          if (el.style.filter === 'blur(0px)') el.style.filter = '';
-        });
-        copy.style.cssText += `;position:absolute;left:0;top:${-r0}px;width:100%;`
-          + 'visibility:visible;transform:none;clip-path:none;opacity:1;box-shadow:none;';
-        band.appendChild(copy);
-        frag.appendChild(band);
-      });
-      layer.replaceChildren(frag);
-      rowsRef.current = rows;
-      return true;
-    } catch (e) {
-      console.warn('[BrowserExtensionToaster] genie bands unavailable, using the outline genie:', e);
-      layer.replaceChildren();
-      rowsRef.current = null;
-      return false;
-    }
-  };
-
-  const clearBands = () => {
-    bandsRef.current?.replaceChildren();
-    rowsRef.current = null;
-  };
-
-  // One write per frame, straight to the DOM: no React render and no
-  // per-property transforms recomputing the same geometry.
-  const bandsFailedRef = useRef(false);
-  const renderGenie = useCallback((p: number) => {
-    const card = cardRef.current, layer = bandsRef.current, shadow = shadowRef.current;
-    if (!card || !layer || !shadow) return;
-    const geom = geomRef.current;
-
-    if (reduced) {
-      card.style.opacity = String(1 - p);
-      return;
-    }
-
-    if (p <= 0.001 || !geom) {
-      // At rest: the real card, whole, with its own shadow.
-      clearBands();
-      card.style.visibility = '';
-      card.style.transform = card.style.clipPath = '';
-      card.style.opacity = '1';
-      shadow.style.display = 'none';
-      return;
-    }
-
-    if (!rowsRef.current && !bandsFailedRef.current) bandsFailedRef.current = !buildBands();
-    const rows = rowsRef.current;
-    if (rows) {
-      card.style.visibility = 'hidden';
-      layer.style.opacity = String(genieOpacity(p));
-      const transforms = genieBands(p, geom, rows);
-      const els = layer.children;
-      for (let i = 0; i < transforms.length; i++) (els[i] as HTMLElement).style.transform = transforms[i];
-    } else {
-      // Fallback: warp the outline only.
-      const f = genieFrame(p, geom);
-      card.style.transform = f.transform;
-      card.style.clipPath = f.clipPath;
-      card.style.opacity = String(f.opacity);
-    }
-
-    // The shadow is the card's own, drawn once and only ever moved: it
-    // follows the card's top edge down and fades as the funnel forms, so it
-    // is gone before the silhouette stops being a rectangle.
-    const { top, bottom } = genieEdges(p, geom);
-    const sy = Math.max(bottom - top, 0.5) / (geom.bottom - geom.top);
-    shadow.style.display = 'block';
-    shadow.style.transform = `translateY(${(top - geom.top).toFixed(2)}px) scaleY(${sy.toFixed(4)})`;
-    shadow.style.opacity = String(1 - genieStretch(p));
-  }, [reduced]);
-
-  useEffect(() => genie.on('change', renderGenie), [genie, renderGenie]);
-
-  // Pour out whenever the card appears.
-  useEffect(() => {
-    if (!shown) return;
-    measure();
-    bandsFailedRef.current = false;
-    genie.set(1);
-    renderGenie(1);
-    scrim.set(0);
-    const a = animate(genie, 0, reduced ? REDUCED_FADE : GENIE_OPEN);
-    const b = animate(scrim, 1, { duration: SCRIM_OPEN_S, ease: EASE_FM as any });
-    return () => { a.stop(); b.stop(); clearBands(); };
-  }, [shown, reduced, genie, scrim, renderGenie]);
-
-  // ─── Close sequencing ───────────────────────────────────────
-  // Every way out goes through here: run the genie now, report once it has
-  // played. The first request wins; a second click during it is ignored.
-  const closeThen = useCallback((report: () => void) => {
-    if (afterCloseRef.current) return;
-    afterCloseRef.current = report;
-    setClosing(true);
-  }, []);
-
-  const finishClose = useCallback(() => {
-    const report = afterCloseRef.current;
-    afterCloseRef.current = null;
-    report?.();
-  }, []);
-
-  useEffect(() => {
-    if (!closing) return;
-    // Re-measure, and cut fresh bands from the card as it looks now (hover
-    // states and all): the window may have been resized since it opened.
-    if (genie.get() <= 0.001) { measure(); clearBands(); bandsFailedRef.current = false; }
-    // Cut the bands before the clock starts, not on its first frame: the
-    // copying is the one heavy step, and done inside a frame it would make
-    // the genie skip ahead. At rest the bands match the card exactly, so
-    // building them early shows nothing.
-    if (!reduced && !rowsRef.current && !bandsFailedRef.current) bandsFailedRef.current = !buildBands();
-    const a = animate(genie, 1, reduced ? REDUCED_FADE : GENIE_CLOSE);
-    const b = animate(scrim, 0, reduced
-      ? REDUCED_FADE
-      : { duration: SCRIM_CLOSE_S, delay: GENIE_CLOSE.duration - SCRIM_CLOSE_S, ease: EASE_FM as any });
-    Promise.all([a, b]).then(() => { setDone(true); finishClose(); });
-    const t = setTimeout(finishClose, CLOSE_FALLBACK_MS);
-    return () => { clearTimeout(t); a.stop(); b.stop(); };
-  }, [closing, reduced, genie, scrim, finishClose]);
-
-  // A host that keeps this mounted and opens it again gets a fresh card.
-  useEffect(() => {
-    if (!isOpen) { setClosing(false); setDone(false); afterCloseRef.current = null; }
-  }, [isOpen]);
+  // The macOS genie: entrance, scrim and close sequencing. Extracted to
+  // useGenieCard so the permissions card runs the identical animation rather
+  // than a second copy of it.
+  const {
+    shown: genieShown, closing, closeThen, scrim,
+    wrapRef, cardRef, bandsRef, shadowRef,
+  } = useGenieCard(isOpen || testForceShow, 'BrowserExtensionToaster');
+  const shown = genieShown;
 
   // ─── Dismiss handlers ───────────────────────────────────────
   // The permanent flag is written at once, not after the exit, so quitting

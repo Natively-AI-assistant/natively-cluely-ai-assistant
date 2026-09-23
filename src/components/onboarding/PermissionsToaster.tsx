@@ -17,11 +17,12 @@
 //
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { motion, type MotionStyle } from 'framer-motion';
 import { X, Monitor, Mic, Settings, Check, Lock, Loader2 } from 'lucide-react';
 import nativelyIcon from '../../../assets/icon.png';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { LiquidGlassButton } from '../../ui-components/LiquidGlassButton';
+import { useGenieCard } from './useGenieCard';
 import { describePermRow, allPermissionsResolved } from '../../lib/permissionRowPolicy.mjs';
 import type { RowPresentation } from '../../lib/permissionRowPolicy.mjs';
 
@@ -82,19 +83,20 @@ const SPRING = {
   smooth: { duration: 0.35, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] },
 };
 
-const FADE = {
-  enter: { opacity: 0, y: 12, filter: 'blur(4px)' },
-  in:    { opacity: 1, y: 0,  filter: 'blur(0px)' },
-  exit:  { opacity: 0, scale: 0.97, filter: 'blur(3px)' },
-};
-
 export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
-  const [visible,    setVisible]    = useState(false);
+  const [ready,      setReady]      = useState(false);
   const [platform,   setPlatform]   = useState<string>('darwin');
   const [micStatus,  setMicStatus]  = useState<PermStatus>('loading');
   const [scrStatus,  setScrStatus]  = useState<PermStatus>('loading');
   const [requesting, setRequesting] = useState<RowKind | null>(null);
-  const reduced = useReducedMotion() ?? false;
+
+  // The same macOS genie the extension card pours out with. It owns the
+  // entrance, the scrim and the close sequencing; this file only says WHEN
+  // the card is ready to appear.
+  const {
+    shown, closing, closeThen, scrim,
+    wrapRef, cardRef, bandsRef, shadowRef, reduced,
+  } = useGenieCard(ready, 'PermissionsToaster');
 
   const theme = useResolvedTheme();
   const isLight = theme === 'light';
@@ -167,20 +169,20 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
   }, []);
 
   useEffect(() => {
-    if (!isOpen) { setVisible(false); return; }
+    if (!isOpen) { setReady(false); return; }
     // Pure presentational: orchestrator already gated on the homepage-mounted
     // duration predicate. We just refresh status and become visible.
-    refreshStatus().then(() => setVisible(true));
+    refreshStatus().then(() => setReady(true));
   }, [isOpen, refreshStatus]);
 
   useEffect(() => {
-    if (!visible) return;
+    if (!shown) return;
     // The only way a grant reaches this card. Every row action is fire-and-
     // re-read: nothing below writes 'granted' on its own.
     const onFocus = () => refreshStatus();
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
-  }, [visible, refreshStatus]);
+  }, [shown, refreshStatus]);
 
   const openScreenSettings = useCallback(() => {
     if (platform !== 'darwin') return;
@@ -211,42 +213,59 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
     }
   }, [refreshStatus, openScreenSettings]);
 
-  const handleDismiss = () => {
-    localStorage.setItem(STORAGE_KEY, '1');
-    onDismiss();
-  };
+  // The host unmounts us the moment it hears onDismiss, which would cut the
+  // genie off — so close first, report after.
+  const handleDismiss = useCallback(() => {
+    closeThen(() => {
+      localStorage.setItem(STORAGE_KEY, '1');
+      onDismiss();
+    });
+  }, [closeThen, onDismiss]);
 
   const isMac = platform === 'darwin';
   const allResolved = allPermissionsResolved(platform, { microphone: micStatus, screen: scrStatus });
   const checking = micStatus === 'loading' || (isMac && scrStatus === 'loading');
 
+  const CARD_W = isMac ? '600px' : '420px';
+
   return (
-    <AnimatePresence>
-      {visible && (
+    <>
+      {shown && (
         <motion.div
           key="perm-overlay"
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          transition={{ duration: 0.25, ease: 'easeOut' }}
           style={{
+            // The genie owns the scrim: it fades in with the pour and holds
+            // until the card is back in the slot.
+            opacity: scrim,
+            pointerEvents: closing ? 'none' : 'auto',
             position: 'fixed', inset: 0, zIndex: 9998,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             background: colors.overlayBg,
-          }}
+          } as MotionStyle}
           onClick={e => { if (e.target === e.currentTarget) handleDismiss(); }}
         >
-          {/* Card */}
-          <motion.div
-            key="perm-card"
-            initial={reduced ? FADE.enter : { opacity: 0, scale: 0.95, y: 16, filter: 'blur(12px)' }}
-            animate={reduced ? FADE.in   : { opacity: 1, scale: 1,    y: 0,  filter: 'blur(0px)' }}
-            exit={   reduced ? FADE.exit : { opacity: 0, scale: 0.97, y: 8,  filter: 'blur(4px)' }}
-            transition={SPRING.gentle}
+          {/* Never transformed, so it reports where the card sits at rest
+              even while the card is mid-genie. */}
+          <div ref={wrapRef} style={{ position: 'relative', width: CARD_W, maxWidth: '92vw' }}>
+            {/* The card's shadow, standing in for it mid-genie. */}
+            <div
+              ref={shadowRef}
+              aria-hidden
+              style={{
+                display: 'none', position: 'absolute', inset: 0,
+                borderRadius: '20px', transformOrigin: '50% 0', pointerEvents: 'none',
+                boxShadow: colors.boxShadow,
+              }}
+            />
+          <div
+            ref={cardRef}
+            role="dialog"
+            aria-modal="true"
             style={{
               // Matches BrowserExtensionToaster's frame so the two onboarding
               // cards read as one family. Windows renders no visual guide, so
               // it loses that column rather than leaving an empty pane.
-              width: isMac ? '600px' : '420px',
-              maxWidth: '92vw',
+              width: '100%',
               borderRadius: '20px', overflow: 'hidden',
               background: colors.cardBg,
               boxShadow: colors.boxShadow,
@@ -434,10 +453,18 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
                 </motion.div>
               )}
             </div>
-          </motion.div>
+          </div>
+            {/* The genie's bands, present only while it runs. */}
+            <div
+              ref={bandsRef}
+              aria-hidden
+              inert
+              style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
+            />
+          </div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </>
   );
 };
 
