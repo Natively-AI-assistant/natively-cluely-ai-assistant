@@ -2,6 +2,7 @@ import { BrowserWindow, screen, app } from "electron"
 import { WindowHelper } from "./WindowHelper"
 import path from "node:path"
 import { attachNoActivate } from "./utils/windowsFocusPolicy"
+import { setVisibleOnAllWorkspacesKeepingDock } from "./utils/macDockPolicy"
 
 // Force production mode if running as packaged app — matches WindowHelper.ts's
 // isDev predicate. A stray NODE_ENV=development in a packaged launch's
@@ -253,7 +254,7 @@ export class SettingsWindowHelper {
         attachNoActivate(this.settingsWindow)
 
         if (process.platform === "darwin") {
-            this.settingsWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+            setVisibleOnAllWorkspacesKeepingDock(this.settingsWindow, true, true)
             this.settingsWindow.setHiddenInMissionControl(true)
             this.settingsWindow.setAlwaysOnTop(true, "floating")
         }
