@@ -38,6 +38,10 @@ const {
   setVisibleOnAllWorkspacesKeepingDock,
   shouldPromoteToRegularAtStartup,
   planDisguiseTitleWrites,
+  DOCK_ENFORCE_INTERVAL_MS,
+  DOCK_ENFORCE_MAX_ATTEMPTS,
+  DOCK_ENFORCE_STARTUP_MAX_ATTEMPTS,
+  ELECTRON_DOCK_HIDE_GUARD_MS,
 } = require(path.join(repoRoot, 'dist-electron/electron/utils/macDockPolicy.js'));
 const { disguiseAppName } = require(path.join(repoRoot, 'dist-electron/electron/utils/disguiseAppName.js'));
 
@@ -111,6 +115,16 @@ test('disguise names are unchanged per platform (one source for startup and _app
   }
   // Anything outside the union falls back to the real name, like _applyDisguise's default.
   assert.equal(disguiseAppName('service', 'darwin'), 'Natively');
+});
+
+// Electron's Browser::DockHide() is a silent no-op for 1 s after any
+// DockShow() (browser_mac.mm, base::Seconds(1)). Measured on the real build: a
+// fast OFF→ON toggle had three hides ignored before the fourth took. The
+// enforcement loop must keep retrying past that second. (PR #595.)
+test('dock enforcement retries outlast Electron\'s 1 s DockHide guard', () => {
+  assert.equal(ELECTRON_DOCK_HIDE_GUARD_MS, 1000);
+  assert.ok(DOCK_ENFORCE_INTERVAL_MS * DOCK_ENFORCE_MAX_ATTEMPTS > ELECTRON_DOCK_HIDE_GUARD_MS);
+  assert.ok(DOCK_ENFORCE_STARTUP_MAX_ATTEMPTS >= DOCK_ENFORCE_MAX_ATTEMPTS);
 });
 
 test('no electron/ window calls setVisibleOnAllWorkspaces directly', () => {

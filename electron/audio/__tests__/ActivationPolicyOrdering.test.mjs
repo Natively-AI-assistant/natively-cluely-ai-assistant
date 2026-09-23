@@ -167,3 +167,25 @@ test('undetectable startup writes the disguise title BEFORE hiding the Dock tile
   assert.ok(titleIdx >= 0, 'BUG: the undetectable startup branch must write process.title = disguiseAppName(...).');
   assert.ok(hideIdx > titleIdx, 'BUG: the title write must come BEFORE app.dock.hide().');
 });
+
+test('a LaunchServices re-open in undetectable mode re-hides the Dock tile', () => {
+  // Clicking the pinned Dock icon, `open -a` or Spotlight on the running app
+  // makes it a Foreground app BEFORE 'activate' fires (measured: the tile came
+  // back ~5 ms before the event and stayed). Skipping dock.show() is not
+  // enough — the handler must drive the Dock back to hidden. (PR #595.)
+  const start = mainSource.indexOf('app.on("activate"');
+  assert.ok(start >= 0, 'activate handler not found');
+  const handler = mainSource.slice(start, start + 1400);
+  assert.ok(
+    /if\s*\(\s*appState\.getUndetectable\(\)\s*\)\s*\{[\s\S]{0,700}appState\.reassertUndetectableStealth\(\)/.test(handler),
+    'BUG: the activate handler must call reassertUndetectableStealth() when undetectable.',
+  );
+});
+
+test('the toggle and startup enforcement loops use the guard-outlasting budget', () => {
+  assert.ok(/maxAttempts: number = DOCK_ENFORCE_MAX_ATTEMPTS/.test(mainSource),
+    'BUG: _enforceDockState must default to DOCK_ENFORCE_MAX_ATTEMPTS.');
+  assert.ok(/\},\s*DOCK_ENFORCE_INTERVAL_MS\)/.test(mainSource), 'BUG: retry interval must be DOCK_ENFORCE_INTERVAL_MS.');
+  assert.ok(/reassertUndetectableStealth\(\s*DOCK_ENFORCE_STARTUP_MAX_ATTEMPTS\s*\)/.test(mainSource),
+    'BUG: startup convergence must use DOCK_ENFORCE_STARTUP_MAX_ATTEMPTS.');
+});
