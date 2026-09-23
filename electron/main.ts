@@ -8192,8 +8192,8 @@ export class AppState {
       default:
         if (isMac) {
           iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "natively.icns")
-            : path.join(app.getAppPath(), "assets/natively.icns");
+            ? path.join(process.resourcesPath, "assets/icon.png")
+            : path.join(app.getAppPath(), "assets/icon.png");
         } else if (isWin) {
           iconPath = app.isPackaged
             ? path.join(process.resourcesPath, "assets/icons/win/icon.ico")
@@ -8241,7 +8241,7 @@ export class AppState {
       if (isMac) {
         // Skip dock icon update when dock is hidden to avoid potential flicker
         if (!this.isUndetectable) {
-          if (app.dock) app.dock.setIcon(image);  // app.dock is macOS-only (undefined elsewhere); isMac gated at 7244
+          if (app.dock && !image.isEmpty()) app.dock.setIcon(image);  // app.dock is macOS-only (undefined elsewhere); isMac gated at 7244
         }
       } else {
         // Windows/Linux: Update all window icons
@@ -8351,8 +8351,30 @@ export class AppState {
 // packaged build — there it logs and exits, because a packaged mismatch means
 // the release pipeline shipped the wrong .node binaries and no runtime fix is
 // honest.
-const gotSingleInstanceLock = app.requestSingleInstanceLock();
-logStartupPhase('single-instance-lock', { gotLock: gotSingleInstanceLock });
+/*
+  Agent UI testing (CLAUDE.md, "Agent UI testing via CDP"). An agent-driven
+  instance must not fight the developer's own app for the single-instance lock,
+  and must not write into the real profile. scripts/dev-agent.mjs is the only
+  thing that sets NATIVELY_AGENT_USER_DATA.
+
+  Both concessions are gated on !app.isPackaged. A packaged build must keep the
+  lock and the real profile whatever the environment says, or a stray env var in
+  a user's shell would silently give them a second app writing to a throwaway
+  directory — and CLAUDE.md forbids enabling this in packaged builds outright.
+*/
+const agentUserData = !app.isPackaged ? process.env.NATIVELY_AGENT_USER_DATA : undefined;
+if (agentUserData) {
+  // Before whenReady and before anything reads userData, or the log file and
+  // the DB would already have been opened against the real profile.
+  app.setPath('userData', agentUserData);
+}
+
+// Skipping the lock is what lets an agent instance run beside the developer's.
+const gotSingleInstanceLock = agentUserData ? true : app.requestSingleInstanceLock();
+logStartupPhase('single-instance-lock', {
+  gotLock: gotSingleInstanceLock,
+  agentMode: Boolean(agentUserData),
+});
 if (!gotSingleInstanceLock) {
   console.log('[Main] Another instance is already running. Exiting this instance.');
   // process.exit(0), not app.quit() and not app.exit(0). app.quit() before
