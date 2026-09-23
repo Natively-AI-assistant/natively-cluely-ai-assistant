@@ -2568,6 +2568,11 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     const [defaultModel, setDefaultModel] = useState<string>('gemini-3.8-flash');
     // 'auto' means unset: use the measured per-provider ladder, not a slow default.
     const [fastModel, setFastModel] = useState<string>('auto');
+    // Only the ids the fast path can actually dispatch. Main owns the provider
+    // classifiers, so we ASK it rather than re-deriving them here - a second copy
+    // would drift, and drift here means offering a pick that silently does nothing.
+    // null = not answered yet.
+    const [fastModelDispatchable, setFastModelDispatchable] = useState<string[] | null>(null);
     const [directAssistEnabled, setDirectAssistEnabled] = useState(false);
     const [directAssistBusy, setDirectAssistBusy] = useState(false);
     const [directAssistError, setDirectAssistError] = useState('');
@@ -2923,6 +2928,16 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         return out;
     }, [cloudFetchedModels, cloudEnabledModels, litellmModels, ninerouterModels, antigravityModels]);
 
+    /**
+     * The Background Model picker's options: Auto, plus only the models the fast
+     * path can actually run.
+     *
+     * Until main answers the filter IPC we offer ONLY Auto (plus whatever is
+     * already saved), so the full unfiltered list never flashes up as selectable.
+     * A saved-but-unsupported pick stays visible and labelled rather than being
+     * silently dropped - dropping it would render an empty control while the id
+     * is still persisted, and rewriting it would change a setting the user chose.
+     */
     const buildAvailableModelOptions = (): { id: string; name: string }[] => {
         const opts: { id: string; name: string }[] = [];
 
@@ -2993,6 +3008,30 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         }
         return opts;
     };
+
+    const fastModelCandidateKey = buildAvailableModelOptions().map((o) => o.id).join(',');
+    useEffect(() => {
+        let cancelled = false;
+        const ids = fastModelCandidateKey ? fastModelCandidateKey.split(',') : [];
+        window.electronAPI?.filterFastModelCandidates?.(ids)
+            .then((r) => { if (!cancelled) setFastModelDispatchable(r?.ids ?? []); })
+            .catch(() => { if (!cancelled) setFastModelDispatchable([]); });
+        return () => { cancelled = true; };
+    }, [fastModelCandidateKey]);
+
+    const buildFastModelOptions = (): { id: string; name: string }[] => {
+        const all = buildAvailableModelOptions();
+        const allowed = fastModelDispatchable === null
+            ? []
+            : all.filter((o) => fastModelDispatchable.includes(o.id));
+        const opts = [{ id: 'auto', name: t('Auto (recommended)') }, ...allowed];
+        if (fastModel !== 'auto' && !allowed.some((o) => o.id === fastModel)) {
+            const saved = all.find((o) => o.id === fastModel);
+            opts.push({ id: fastModel, name: `${saved?.name ?? fastModel} ${t('(not supported)')}` });
+        }
+        return opts;
+    };
+
 
     // Keep the persisted default model from pointing at a provider the user just
     // removed/signed out of. This turns credential changes into immediate routing
@@ -4143,8 +4182,8 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
 
             <div className="aip-card p-5 flex items-center justify-between gap-4">
                     <div className="min-w-0">
-                        <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('Fast Model')}</label>
-                        <p className="text-[10px] aip-muted mt-0.5">{t('Used for Auto Answer and other quick internal decisions — never for your answers.')}</p>
+                        <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('Background Model')}</label>
+                        <p className="text-[10px] aip-muted mt-0.5">{t('Runs Auto Answer and other quick background decisions — never your answers.')}</p>
                         {/* Advisory only: a big pick silently re-creates the latency
                             problem the measured judge ladder exists to avoid, but a
                             hard filter would need a hand-maintained list that goes
@@ -4155,7 +4194,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     </div>
                     <ModelSelect
                         value={fastModel}
-                        options={[{ id: 'auto', name: t('Auto (recommended)') }, ...buildAvailableModelOptions()]}
+                        options={buildFastModelOptions()}
                         onChange={async (val) => {
                             const previous = fastModel;
                             setFastModel(val);
