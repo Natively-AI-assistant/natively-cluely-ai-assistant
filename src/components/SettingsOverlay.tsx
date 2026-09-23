@@ -651,7 +651,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
            click of a deep link did nothing at all. */
     }, [isOpen, initialTab, initialTabSeq]);
 
-    const { shortcuts, updateShortcut, resetShortcuts, conflicts } = useShortcuts();
+    const { shortcuts, updateShortcut, resetShortcuts, conflicts, globalShortcutsEnabled, setGlobalShortcutsEnabled } = useShortcuts();
     // Small badge shown next to a shortcut row when globalShortcut.register()
     // failed for it (another app/OS already owns that key combo). The
     // KeyRecorder right next to it is the fix — recording a new combo
@@ -3063,6 +3063,24 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                             <RotateCcw size={13} strokeWidth={2.5} />
                                             {t('Restore Default')}
                                         </button>
+                                    </div>
+
+                                    {/* Issue #517: one switch to stop Natively claiming keys OS-wide. */}
+                                    <div className="flex items-center justify-between gap-4 px-4 py-3 rounded-xl border border-border-subtle bg-bg-subtle/30">
+                                        <div>
+                                            <h4 className="text-sm font-bold text-text-primary">{t('Global shortcuts')}</h4>
+                                            <p className="text-xs text-text-secondary mt-0.5">
+                                                {globalShortcutsEnabled
+                                                    ? t('Shortcuts work even when another app is focused.')
+                                                    : t('Shortcuts work only while Natively is focused. Toggle Visibility stays global so you can always bring Natively back.')}
+                                            </p>
+                                        </div>
+                                        <SettingsToggle
+                                            checked={globalShortcutsEnabled}
+                                            label={t('Global shortcuts')}
+                                            onChange={() => setGlobalShortcutsEnabled(!globalShortcutsEnabled)}
+                                            className={globalShortcutsEnabled ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
+                                        />
                                     </div>
 
                                     {/* Surfaces globalShortcut.register() failures in bulk — e.g. on
