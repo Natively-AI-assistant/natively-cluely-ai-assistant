@@ -783,6 +783,23 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
       } as never);
     } catch { /* observability must never break an answer */ }
 
+    // E2E-only (NATIVELY_E2E=1, never set in a shipped app): the composed
+    // prompt as handed to the transport, so the conversation-memory harness can
+    // tell "the fact never reached the prompt" from "it was there and the model
+    // did not use it". Read back through `__e2e__:memory-probe`.
+    if (process.env.NATIVELY_E2E === '1') {
+      try {
+        const g = globalThis as unknown as { __nativelyE2eV3Prompts?: unknown[] };
+        const ring = g.__nativelyE2eV3Prompts ?? (g.__nativelyE2eV3Prompts = []);
+        ring.push({
+          at: Date.now(), surface: input.surface, sessionId: req.sessionId,
+          scope: req.scope, conversationSummary: convoSummary ?? null,
+          system: composed.system, user: composed.user,
+        });
+        if (ring.length > 40) ring.splice(0, ring.length - 40);
+      } catch { /* harness capture only */ }
+    }
+
     return {
       system: composed.system,
       user: composed.user,

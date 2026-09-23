@@ -18405,6 +18405,29 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { success: true };
     });
 
+    // Conversation-memory harness: the V3 conversation ring per session key
+    // (scope + turns) and the last composed V3 prompts (engine-bridge capture).
+    safeHandle('__e2e__:memory-probe', async (_event, params?: { prompts?: number; clear?: boolean }) => {
+      const g = globalThis as any;
+      const store: Map<string, any> | undefined = g.__nativelyV3ConversationStateV1__;
+      const states = store
+        ? [...store.entries()].map(([key, s]) => ({
+            key,
+            scopeId: s?.scopeId ?? null,
+            previousQuestion: s?.previousQuestion ?? null,
+            turns: (s?.turns ?? []).map((t: any) => ({ q: t.q, a: t.a, screen: t.screen ? t.screen.length : 0 })),
+          }))
+        : [];
+      const ring: any[] = Array.isArray(g.__nativelyE2eV3Prompts) ? g.__nativelyE2eV3Prompts : [];
+      const prompts = ring.slice(-(params?.prompts ?? 1));
+      if (params?.clear) g.__nativelyE2eV3Prompts = [];
+      let conversationSessionId: string | null = null;
+      try { conversationSessionId = appState.getIntelligenceManager?.()?.conversationSessionId?.() ?? null; } catch { /* no engine */ }
+      let liveMeetingId: string | null = null;
+      try { liveMeetingId = appState.getRAGManager?.()?.getLiveMeetingId?.() ?? null; } catch { /* no rag */ }
+      return { success: true, states, prompts, conversationSessionId, liveMeetingId };
+    });
+
     // CONTEXT OS H1: drive the REAL manual chat path (gemini-chat-stream logic)
     // for E2E, so the typed-pack-governs-the-prompt behavior can be verified on
     // the manual surface (not just WTA). Reuses the same handler by emitting the
