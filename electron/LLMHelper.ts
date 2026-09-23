@@ -4912,6 +4912,14 @@ let isMultimodal = !!(imagePaths?.length);
     const abortError = () => Object.assign(new Error('judge aborted: superseded by newer speech'), { name: 'AbortError' });
     const userOnly = [{ role: 'user' as const, content: message }];
 
+    // Rung 0: the user's chosen fast model, when they have set one. Everything
+    // below is the measured per-provider ladder and remains the fallback, so an
+    // unset or failing pick degrades to exactly the previous behaviour. An abort
+    // here propagates rather than falling through — a superseded judge must not
+    // spend a ladder call on a verdict the controller has already discarded.
+    const picked = await this.callFastModel(message, { signal, json: true });
+    if (picked) return picked;
+
     if (this.client) {
       for (const modelId of [GEMINI_FLASH_LITE_MODEL, GEMINI_FLASH_MODEL]) {
         if (aborted()) throw abortError();
