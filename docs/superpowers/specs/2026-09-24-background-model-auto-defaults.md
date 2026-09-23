@@ -139,3 +139,53 @@ behaviour.
 Two of five families have a defensible pick. Raising the bar to int >= 20 is
 what removed Groq and Claude, and that is the correct outcome rather than a
 gap to paper over: a judge running at int 9 is a worse judge.
+
+---
+
+# Revision 3 — the static table is abandoned. Measured live, 2026-09-24.
+
+A real non-streaming judge call (short transcript, `{"is_ask":bool}` out,
+thinking off, median of 3) against this repo's own `.env` keys:
+
+| Model | Median | Runs | Verdict |
+|---|---|---|---|
+| `deepseek-chat` | **858 ms** | 2205 / 858 / 783 | fastest — AND NOT IN OUR PICKER |
+| `gemini-3.1-flash-lite` | **1012 ms** | 1932 / 1012 / 785 | AA said 8.02 s |
+| `deepseek-v4-flash` | 1540 ms | 1540 / 1565 / 1465 | my revision-2 top pick, 680 ms SLOWER than deepseek-chat |
+| `gemini-3.8-flash` | 7135 ms | 1892 / 7135 / 12431 | unusable, and wildly variable |
+| `gpt-5.5`, `gpt-5.6-terra` | — | 429 no credits | untestable here |
+
+## Why the static table is dead
+
+1. **AA measures a different workload.** Its Gemini figure was 8x our measured
+   value. Its rows include reasoning tokens and a large task; ours is a 60-token
+   verdict with thinking off.
+2. **The best model was not in our catalogue.** `deepseek-chat` beat every
+   curated pick. A hand-maintained table cannot find what it does not list.
+3. **First-run variance is large** (2205 -> 783 ms). Any measurement must take a
+   median, never one sample - cold connections dominate the first call.
+4. Model retirement has burned this repo before (Groq killed every Llama id).
+
+## The design that replaces it
+
+On API-key entry, and when a provider's model list changes:
+  1. list the provider's current models
+  2. shortlist plausible background candidates
+  3. run the SAME synthetic judge call against each, timed, median of N
+  4. keep the fastest that returns valid JSON; persist it with a timestamp
+  5. at runtime, a failure falls back to the last known-good model, then the ladder
+
+This self-corrects when a provider ships or retires a model, and it measures OUR
+call rather than someone else's benchmark.
+
+## Open questions for this design
+
+- **It spends the user's credits.** N models x M runs on their key, unprompted
+  on key entry. Needs disclosure, a cap, and probably a "re-test" button rather
+  than silent periodic runs.
+- **The probe prompt must be synthetic.** Never a real transcript - that would
+  send meeting content to a provider purely to benchmark it.
+- **Model-list endpoints differ.** OpenAI-shaped providers expose GET /models;
+  Gemini has ListModels; Anthropic has no equivalent - needs a curated shortlist.
+- **Shortlisting matters.** Testing every model on a 400-model gateway is not
+  viable; needs a name heuristic plus a hard cap.
