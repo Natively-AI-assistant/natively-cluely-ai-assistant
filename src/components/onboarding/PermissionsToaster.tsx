@@ -261,6 +261,7 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
         onAction={r => handleRowAction('microphone', r)}
         reduced={reduced}
         isLight={isLight}
+        divider={isMac}
       />
     </motion.div>
   );
@@ -552,9 +553,11 @@ function AllSetPanel({ isLight, reduced, onContinue, rows }: {
         Natively has everything it needs to capture and transcribe your meetings.
       </p>
 
-      {rows}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+        {rows}
+      </div>
 
-      <div style={{ marginTop: 'auto' }}>
+      <div>
         <PrimaryButton isLight={isLight} variant="green" label="Continue" onClick={onContinue} />
       </div>
     </motion.div>
@@ -716,7 +719,7 @@ function GuideResolved({ isLight, colors, t3 }: {
 // flip itself green, and clicking a granted row does nothing, because nothing
 // was revoked.
 function PermItem({
-  icon: Icon, label, row, busy, onAction, reduced, isLight,
+  icon: Icon, label, row, busy, onAction, reduced, isLight, divider = false,
 }: {
   icon:     React.ElementType;
   label:    string;
@@ -725,6 +728,8 @@ function PermItem({
   onAction: (remedy: RowPresentation['remedy']) => void;
   reduced:  boolean;
   isLight:  boolean;
+  /** A row precedes this one. Draws a hairline once the container is gone. */
+  divider?: boolean;
 }) {
   const t1 = isLight ? '#1C1C1E' : '#FFFFFF';
   const t3 = isLight ? 'rgba(28, 28, 30, 0.48)' : 'rgba(255, 255, 255, 0.44)';
@@ -758,6 +763,8 @@ function PermItem({
         padding: '13px 14px', borderRadius: '12px',
         background: row.tone === 'granted' ? 'transparent' : glass,
         border: `1px solid ${row.tone === 'granted' ? 'transparent' : rule}`,
+        // Without a container the rows need something to read as a list.
+        ...(row.tone === 'granted' && divider ? { borderTop: `1px solid ${rule}` } : {}),
         transition: 'border-color 300ms, transform 150ms',
         cursor: interactive ? 'pointer' : 'default',
       }}
