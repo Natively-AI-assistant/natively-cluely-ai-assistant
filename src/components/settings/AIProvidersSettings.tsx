@@ -4183,7 +4183,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             <div className="aip-card p-5 flex items-center justify-between gap-4">
                     <div className="min-w-0">
                         <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('Background Model')}</label>
-                        <p className="text-[10px] aip-muted mt-0.5">{t('Runs Auto Answer and other quick background decisions — never your answers.')}</p>
+                        <p className="text-[10px] aip-muted mt-0.5">{t('Runs Auto Answer and other quick background decisions.')}</p>
                         {/* Advisory only: a big pick silently re-creates the latency
                             problem the measured judge ladder exists to avoid, but a
                             hard filter would need a hand-maintained list that goes
