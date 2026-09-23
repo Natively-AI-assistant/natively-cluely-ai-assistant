@@ -2575,7 +2575,11 @@ export class AppState {
         // negotiation script + all extraction keep the quality-first fn above.
         if (typeof this.knowledgeOrchestrator.setLiveCoachingContentFn === 'function') {
           this.knowledgeOrchestrator.setLiveCoachingContentFn(async (contents: any[]) => {
-            return await llmHelper.generateContentStructured(joinContents(contents), { preferFast: true });
+            // Deliberately NOT on the fast path - this returns a tacticalNote + exactScript the user reads
+            // and says aloud, so it is not an "invisible call". The fast rung also caps
+            // output at 256 tokens, and a truncated coaching JSON degrades to a canned
+            // fallback mid-negotiation with nothing pointing at the setting that caused it.
+            return await llmHelper.generateContentStructured(joinContents(contents));
           });
         }
 

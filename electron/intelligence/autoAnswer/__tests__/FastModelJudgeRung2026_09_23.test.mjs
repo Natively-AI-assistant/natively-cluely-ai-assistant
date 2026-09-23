@@ -70,3 +70,24 @@ test('with no fast model set the judge behaves exactly as before', async () => {
   assert.equal(await h.generateJudgeVerdict('prompt'), '{"ladder":true}');
   assert.equal(consulted, true, 'rung 0 is always consulted; unset is what makes it a no-op');
 });
+
+// --- fix pass (review finding 2): rung 0 needs a sub-deadline ---
+test('rung 0 is given a sub-deadline well inside JUDGE_DEADLINE_MS', async () => {
+  let seen = null;
+  const h = judgeHelper();
+  h.callFastModel = async (_m, o) => { seen = o; return null; };
+  h.generateContentStructured = async () => '{}';
+  await h.generateJudgeVerdict('prompt');
+  assert.ok(seen?.timeoutMs, 'without a sub-deadline a slow pick eats the whole 2500ms budget and the measured ladder never runs');
+  assert.ok(seen.timeoutMs < 2500, `must leave room for the ladder; got ${seen.timeoutMs}`);
+});
+
+// --- fix pass (review finding 4): the fast model must be tried once per consult ---
+test('the terminal ladder rung does not re-enter the fast path', async () => {
+  let fastCalls = 0;
+  const h = judgeHelper();
+  h.callFastModel = async () => { fastCalls += 1; return null; };
+  // Let the real generateContentStructured run its preferFast check.
+  await h.generateJudgeVerdict('prompt').catch(() => {});
+  assert.equal(fastCalls, 1, 'a second billed call to the model that just failed, and it is uncancellable');
+});

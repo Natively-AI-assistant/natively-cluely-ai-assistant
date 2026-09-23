@@ -131,3 +131,50 @@ test('an answering fast model logs a stable, greppable marker', async () => {
   assert.ok(lines.some((l) => l.includes('[LLMHelper] fast-model answered') && l.includes('gpt-5.5')),
     `expected a fast-model marker naming the model; got: ${JSON.stringify(lines)}`);
 });
+
+// --- fix pass (review finding 1, CRITICAL): gateway ids must never reach the OpenAI client ---
+// isOpenAiModel() self-excludes Groq and Fluxion but NOT OpenRouter, LiteLLM,
+// NVIDIA NIM or 9Router, and its last clause is `includes("openai")`. Without a
+// guard the judge prompt — which carries recent meeting turns — is POSTed to
+// api.openai.com on the user's own OpenAI key for a model OpenAI will reject.
+for (const id of [
+  'openrouter/openai/gpt-5.6-terra',
+  'nvidia_nim/openai/gpt-oss-20b',
+  'litellm/openai/gpt-4o-mini',
+  'litellm/azure-openai-gpt4',
+]) {
+  test(`gateway id ${id} never reaches the OpenAI client`, async () => {
+    let sentTo = null;
+    const h = helper({
+      fastModelId: id,
+      _openaiClient: { chat: { completions: { create: async (req) => { sentTo = req.model; return { choices: [{ message: { content: 'leaked' } }] }; } } } },
+    });
+    assert.equal(await call(h), null, 'must fall through, not answer via the wrong provider');
+    assert.equal(sentTo, null, `the judge prompt must not be sent to OpenAI for ${id}`);
+  });
+}
+
+// --- fix pass (review finding 5): an undispatchable pick must be diagnosable ---
+test('a set-but-undispatchable fast model logs a marker instead of failing silently', async () => {
+  const lines = [];
+  const realLog = console.log;
+  console.log = (...a) => lines.push(a.join(' '));
+  try {
+    assert.equal(await call(helper({ fastModelId: 'litellm/azure-openai-gpt4' })), null);
+  } finally {
+    console.log = realLog;
+  }
+  assert.ok(lines.some((l) => l.includes('[LLMHelper] fast-model not dispatchable')),
+    `a silent no-op is indistinguishable from "unset"; got: ${JSON.stringify(lines)}`);
+});
+
+// --- fix pass (review finding 4): a signal-less caller still gets a deadline ---
+test('with no caller signal the fast rung still bounds itself', async () => {
+  let opts = null;
+  const h = helper({
+    fastModelId: 'gpt-5.5',
+    _openaiClient: { chat: { completions: { create: async (_r, o) => { opts = o; return { choices: [{ message: { content: 'ok' } }] }; } } } },
+  });
+  assert.equal(await call(h), 'ok');
+  assert.ok(opts?.signal, 'an uncancellable request can outlive the judge by minutes');
+});

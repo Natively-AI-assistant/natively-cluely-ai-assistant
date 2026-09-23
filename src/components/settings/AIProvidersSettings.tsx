@@ -4156,10 +4156,23 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     <ModelSelect
                         value={fastModel}
                         options={[{ id: 'auto', name: t('Auto (recommended)') }, ...buildAvailableModelOptions()]}
-                        onChange={(val) => {
+                        onChange={async (val) => {
+                            const previous = fastModel;
                             setFastModel(val);
-                            // @ts-ignore - null clears it, which means "use the measured ladder"
-                            window.electronAPI?.setFastModel?.(val === 'auto' ? null : val).catch(console.error);
+                            try {
+                                // @ts-ignore - null clears it, which means "use the measured ladder"
+                                const res = await window.electronAPI?.setFastModel?.(val === 'auto' ? null : val);
+                                // A resolved { success:false } is invisible to .catch(), and a
+                                // missing preload method resolves undefined. Either way the write
+                                // did not land, so the row must not keep showing the new value.
+                                if (!res?.success) {
+                                    setFastModel(previous);
+                                    console.error('[Settings] Fast Model not saved:', res?.error ?? 'unavailable');
+                                }
+                            } catch (e) {
+                                setFastModel(previous);
+                                console.error('[Settings] Fast Model not saved:', e);
+                            }
                         }}
                     />
                 </div>
