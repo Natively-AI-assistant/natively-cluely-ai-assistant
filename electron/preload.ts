@@ -2362,6 +2362,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getDefaultModel: () => ipcRenderer.invoke('get-default-model'),
   setModel: (modelId: string) => ipcRenderer.invoke('set-model', modelId),
   setDefaultModel: (modelId: string) => ipcRenderer.invoke('set-default-model', modelId),
+  getFastModel: () => ipcRenderer.invoke('get-fast-model'),
+  setFastModel: (modelId: string | null) => ipcRenderer.invoke('set-fast-model', modelId),
   toggleModelSelector: (coords: { x: number; y: number; activate?: boolean }) =>
     ipcRenderer.invoke('toggle-model-selector', coords),
   modelSelectorCloseIfOpen: () => ipcRenderer.invoke('model-selector:close-if-open'),

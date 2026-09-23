@@ -137,6 +137,8 @@ export interface StoredCredentials {
     customProviders?: CustomProvider[];
     curlProviders?: CurlProvider[];
     defaultModel?: string;
+    /** Model for cheap internal calls (Auto Answer judge, query rewrite, classification). */
+    fastModel?: string;
     nativelyApiKey?: string;
     /**
      * Optional bearer token for a user-hosted OpenAI-compatible embedding
@@ -1126,6 +1128,17 @@ export class CredentialsManager {
         return this.credentials.defaultModel || 'gemini-3.1-flash-lite';
     }
 
+    /**
+     * The user's chosen fast model, or null when unset.
+     *
+     * Null is a first-class state meaning "use the measured per-provider ladder",
+     * NOT a missing default. Returning a model id here would silently override the
+     * judge ladder for every user who never opened the picker.
+     */
+    public getFastModel(): string | null {
+        return this.credentials.fastModel || null;
+    }
+
     public getVoyageApiKey(): string | undefined {
         return this.credentials.voyageApiKey;
     }
@@ -1752,6 +1765,19 @@ export class CredentialsManager {
         this.credentials.defaultModel = model;
         this.saveCredentials();
         console.log(`[CredentialsManager] Default Model set to: ${model}`);
+    }
+
+    /**
+     * @returns false when the write was refused or did not persist. Boolean, not
+     * void: a void setter is how a refused write gets reported to the UI as a
+     * success and then vanishes on restart.
+     */
+    public setFastModel(model: string | null): boolean {
+        if (this.refuseWriteWhileDegraded('set fast model')) return false;
+        this.credentials.fastModel = model ?? undefined;
+        const persisted = this.saveCredentials();
+        console.log(`[CredentialsManager] Fast Model set to: ${model ?? '(auto)'}`);
+        return persisted;
     }
 
     /**
