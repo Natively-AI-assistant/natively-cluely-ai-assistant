@@ -21,6 +21,7 @@ import WebSocket from 'ws';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
 import { streamingStttWsOptions } from './dnsHelpers';
 import { shouldReviveExhaustedReconnect, DEFAULT_REVIVE_COOLDOWN_MS } from './sttReconnectPolicy.mjs';
+import { RealtimeSilenceTail } from './realtimeSilenceTail';
 
 const SONIOX_WEBSOCKET_URL = 'wss://stt-rt.soniox.com/transcribe-websocket';
 const RECONNECT_BASE_DELAY_MS = 1000;
@@ -38,6 +39,21 @@ const RECONNECT_MAX_DELAY_MS = 30000;
 // meeting-critical' rationale.
 const RECONNECT_MAX_ATTEMPTS = 10;
 const KEEPALIVE_INTERVAL_MS = 5000;
+
+// Endpoint tuning — Soniox's own starting point for voice-AI turn-taking
+// (soniox.com/docs/stt/rt/endpoint-detection, "Recommended Configuration"):
+// level 2 + sensitivity 0.3 + a 1500 ms cap. The defaults (0, 0.0, 2000 ms)
+// are tuned for dictation, not for answering a question the moment it ends.
+// Both tuning knobs are v5-only; the model below is stt-rt-v5.
+export const SONIOX_ENDPOINT_TUNING = {
+    endpoint_latency_adjustment_level: 2,
+    endpoint_sensitivity: 0.3,
+    max_endpoint_delay_ms: 1500,
+} as const;
+// Real-time silence after the local VAD's speech end, so the endpointer's
+// 1500 ms cap is 1500 ms of WALL time, not ~5× that at the keepalive cadence:
+// hangover (>= 500) + 1200 = 1700 ms. See realtimeSilenceTail.ts.
+export const SONIOX_SILENCE_TAIL_MS = 1200;
 
 export class SonioxStreamingSTT extends EventEmitter {
     private apiKey: string;
@@ -68,10 +84,21 @@ export class SonioxStreamingSTT extends EventEmitter {
 
     private buffer: Buffer[] = [];
     private isConnecting = false;
+    private readonly silenceTail = new RealtimeSilenceTail({
+        tailMs: SONIOX_SILENCE_TAIL_MS,
+        format: () => ({ sampleRate: this.sampleRate, channels: this.numChannels }),
+        sink: (pcm) => this.sendAudio(pcm),
+    });
 
     constructor(apiKey: string) {
         super();
         this.apiKey = apiKey;
+    }
+
+    /** Local VAD: the speaker stopped. Keep the endpointer's clock real-time. */
+    public notifySpeechEnded(): void {
+        if (!this.isActive) return;
+        this.silenceTail.start();
     }
 
     // =========================================================================
@@ -166,6 +193,7 @@ export class SonioxStreamingSTT extends EventEmitter {
             sample_rate: this.sampleRate,
             num_channels: this.numChannels,
             enable_endpoint_detection: true,
+            ...SONIOX_ENDPOINT_TUNING,
         };
 
         if (this.languageCode) {
@@ -243,6 +271,7 @@ export class SonioxStreamingSTT extends EventEmitter {
 
     public stop(): void {
         this.shouldReconnect = false;
+        this.silenceTail.cancel();
         this.reconnectExhaustedAt = null; // state hygiene: no stale exhaustion marker across stop
         this.clearTimers();
 
@@ -271,6 +300,12 @@ export class SonioxStreamingSTT extends EventEmitter {
     // =========================================================================
 
     public write(chunk: Buffer): void {
+        if (!this.isActive) return;
+        this.silenceTail.observe(chunk);
+        this.sendAudio(chunk);
+    }
+
+    private sendAudio(chunk: Buffer): void {
         if (!this.isActive) return;
 
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !this.configSent) {
