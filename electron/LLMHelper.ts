@@ -4775,7 +4775,11 @@ let isMultimodal = !!(imagePaths?.length);
 
     const finish = (raw: string | null | undefined): string | null => {
       const text = stripLeadingReasoningBlock(raw || '').trim();
-      return text ? text : null;
+      if (!text) return null;
+      // Stable, greppable marker: this is how a user's debug log shows whether
+      // their pick is actually being used, and which model answered.
+      console.log(`[LLMHelper] fast-model answered (${modelId})`);
+      return text;
     };
 
     try {
