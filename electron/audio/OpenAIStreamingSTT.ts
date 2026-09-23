@@ -710,7 +710,13 @@ export class OpenAIStreamingSTT extends EventEmitter {
                     break;
                 }
                 const preview = this.turnCoalescer.onCompleted(msg.transcript ?? '');
-                if (preview) {
+                // speech_stopped came first (it is what commits the audio), so
+                // this completed IS the stopped turn's final — see
+                // OpenAITranscriptTurnCoalescer "ORDER".
+                const awaited = this.turnCoalescer.takeAwaitedFinal();
+                if (awaited) {
+                    this._emitTranscript(awaited, true);
+                } else if (preview) {
                     this._emitTranscript(preview, false);
                 }
                 break;
