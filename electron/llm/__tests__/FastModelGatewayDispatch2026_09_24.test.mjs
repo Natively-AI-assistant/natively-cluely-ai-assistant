@@ -85,3 +85,32 @@ test('a disabled gateway family falls through rather than leaking to OpenAI', as
   assert.equal(await h.callFastModel('judge'), null);
   assert.equal(sink.leaked, undefined);
 });
+
+// Observed live against OpenRouter (google/gemini-2.5-flash-lite, 2026-09-24):
+// without response_format the body comes back as ```json ... ``` and JSON.parse
+// fails. We DO send response_format, but not every gateway model honours it, and
+// the failure is silent - the judge just never gets a verdict. finish() strips
+// reasoning blocks; it must strip fences too.
+test('a fenced JSON body is unwrapped, not handed back with its backticks', async () => {
+  const sink = {};
+  const h = helper({
+    fastModelId: 'openrouter/google/gemini-2.5-flash-lite',
+    _openrouterClient: { chat: { completions: { create: async () => ({
+      choices: [{ message: { content: '```json\n{"is_ask": true}\n```' } }],
+    }) } } },
+    _openaiClient: trap(sink),
+  });
+  const out = await h.callFastModel('judge', { json: true });
+  assert.equal(out, '{"is_ask": true}');
+  JSON.parse(out); // must not throw - this is what the judge does with it
+});
+
+test('a plain fenced block with no language tag is unwrapped too', async () => {
+  const h = helper({
+    fastModelId: 'fluxion/claude-fable-5',
+    _fluxionOpenAIClient: { chat: { completions: { create: async () => ({
+      choices: [{ message: { content: '```\n{"is_ask": false}\n```' } }],
+    }) } } },
+  });
+  assert.equal(await h.callFastModel('judge', { json: true }), '{"is_ask": false}');
+});
