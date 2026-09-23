@@ -261,6 +261,8 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
             ref={cardRef}
             role="dialog"
             aria-modal="true"
+            aria-labelledby="perm-toast-title"
+            aria-describedby="perm-toast-desc"
             style={{
               // Matches BrowserExtensionToaster's frame so the two onboarding
               // cards read as one family. Windows renders no visual guide, so
@@ -330,10 +332,10 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
                       transition={{ ...SPRING.smooth, delay: 0.05 }}
                       style={{ marginBottom: '24px' }}
                     >
-                      <h2 style={{ fontSize: '24px', fontWeight: 700, letterSpacing: '-0.03em', color: t1, margin: '0 0 8px', lineHeight: 1.2 }}>
+                      <h2 id="perm-toast-title" style={{ fontSize: '24px', fontWeight: 700, letterSpacing: '-0.03em', color: t1, margin: '0 0 8px', lineHeight: 1.2 }}>
                         Let's get you set up
                       </h2>
-                      <p style={{ fontSize: '13px', lineHeight: 1.65, color: t3, margin: 0 }}>
+                      <p id="perm-toast-desc" style={{ fontSize: '13px', lineHeight: 1.65, color: t3, margin: 0 }}>
                         {isMac
                           ? 'Natively needs a few permissions to capture meetings and transcribe speech.'
                           : 'Natively needs microphone access to transcribe speech.'}
@@ -547,10 +549,10 @@ function AllSetPanel({ isLight, reduced, onContinue }: {
         <Check size={24} strokeWidth={2.5} color={T.green} />
       </motion.div>
 
-      <h2 style={{ fontSize: '24px', fontWeight: 700, letterSpacing: '-0.03em', color: t1, margin: '0 0 8px', lineHeight: 1.2 }}>
+      <h2 id="perm-toast-title" style={{ fontSize: '24px', fontWeight: 700, letterSpacing: '-0.03em', color: t1, margin: '0 0 8px', lineHeight: 1.2 }}>
         You're all set
       </h2>
-      <p style={{ fontSize: '13px', lineHeight: 1.65, color: t3, margin: '0 0 28px' }}>
+      <p id="perm-toast-desc" style={{ fontSize: '13px', lineHeight: 1.65, color: t3, margin: '0 0 28px' }}>
         Natively has everything it needs to capture and transcribe your meetings.
       </p>
 
