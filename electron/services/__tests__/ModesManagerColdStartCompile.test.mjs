@@ -1,4 +1,4 @@
-import { test, beforeEach } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -14,7 +14,7 @@ const { ModesManager } = modesMod;
 const { SectionPromptCompiler, deterministicSectionInstruction } = compilerMod;
 
 test('ModesManager.compileAllSectionsAsync short-circuits when no provider is configured', async () => {
-  let compileCalls = 0;
+  let sectionReads = 0;
   let generateMeetingSummaryCalls = 0;
 
   const mockLlmHelper = {
@@ -30,17 +30,20 @@ test('ModesManager.compileAllSectionsAsync short-circuits when no provider is co
   ModesManager.setLlmHelperForCompiler(mockLlmHelper);
 
   const manager = ModesManager.getInstance();
-  // Override getNoteSections to return sections needing compilation
-  manager.getNoteSections = () => [
+  // Override getNoteSections to return sections needing compilation. It is read
+  // only AFTER the provider gate, so a zero count pins that gate itself;
+  // generateMeetingSummaryCalls alone would stay 0 via SectionPromptCompiler's own gate.
+  manager.getNoteSections = () => (sectionReads++, [
     { id: 's1', modeId: 'm1', title: 'Action Items', description: 'Next steps', compiledPrompt: '' },
     { id: 's2', modeId: 'm1', title: 'Key Decisions', description: 'Agreed points', compiledPrompt: '' },
-  ];
+  ]);
 
   manager.compileAllSectionsAsync('m1');
 
   // Allow any microtasks / ticks to run
   await new Promise(r => setTimeout(r, 50));
 
+  assert.equal(sectionReads, 0, 'compileAllSectionsAsync must return at the provider gate, before reading sections');
   assert.equal(generateMeetingSummaryCalls, 0, 'Should not have called generateMeetingSummary when no provider configured');
 });
 
@@ -60,6 +63,10 @@ test('ModesManager.addNoteSection short-circuits compilation when no provider is
   ModesManager.setLlmHelperForCompiler(mockLlmHelper);
 
   const manager = ModesManager.getInstance();
+  // getModes() is read only AFTER compileSectionPromptAsync's provider gate.
+  let modeReads = 0;
+  const realGetModes = manager.getModes.bind(manager);
+  manager.getModes = () => { modeReads++; return realGetModes(); };
   manager.addNoteSection({
     modeId: 'm1',
     title: 'Action Items',
@@ -68,7 +75,40 @@ test('ModesManager.addNoteSection short-circuits compilation when no provider is
 
   await new Promise(r => setTimeout(r, 50));
 
+  manager.getModes = realGetModes;
+  assert.equal(modeReads, 0, 'compileSectionPromptAsync must return at the provider gate, before reading modes');
   assert.equal(generateMeetingSummaryCalls, 0, 'Should not have called generateMeetingSummary for single section when no provider configured');
+});
+
+test('compileAllSectionsAsync still compiles when stored keys load right after seeding (packaged startup order)', async () => {
+  // main.ts: AppState.getInstance() seeds built-ins, THEN loadStoredCredentials() runs in the
+  // same synchronous stretch. A packaged build has no keys at seed time, so a gate read at call
+  // time skipped every seeded section for users who have keys (e.g. a release adding a template).
+  let providerReady = false;
+  let sectionReads = 0;
+  let generateMeetingSummaryCalls = 0;
+  ModesManager.setLlmHelperForCompiler({
+    hasAnyConfiguredProvider() { return providerReady; },
+    async generateMeetingSummary() {
+      generateMeetingSummaryCalls++;
+      return JSON.stringify({ instruction: 'Extract the relevant points. Use ONLY the transcript provided; do not use outside knowledge. If this was not discussed, output exactly: Not discussed.' });
+    },
+  });
+
+  const manager = ModesManager.getInstance();
+  const realGetNoteSections = manager.getNoteSections;
+  manager.getNoteSections = () => (sectionReads++, [
+    { id: 's1', modeId: 'm1', title: 'Action Items', description: 'Next steps', compiledPrompt: '' },
+  ]);
+
+  manager.compileAllSectionsAsync('m1'); // seeding
+  providerReady = true;                  // loadStoredCredentials(), same synchronous run
+
+  await new Promise(r => setTimeout(r, 50));
+  manager.getNoteSections = realGetNoteSections;
+
+  assert.equal(sectionReads, 1, 'compileAllSectionsAsync must read provider state after keys load, not at call time');
+  assert.ok(generateMeetingSummaryCalls > 0, 'the seeded section must be compiled once the stored key is loaded');
 });
 
 test('SectionPromptCompiler falls back immediately to deterministic instruction when no provider is configured', async () => {
@@ -174,5 +214,3 @@ test('LLMHelper.generateMeetingSummary skips Gemini cascade without retries when
   assert.equal(generateWithFlashCalls, 0, 'Should not have called generateWithFlash when client is not initialized');
   assert.ok(elapsed < 1000, `Expected fast return without retry backoff delays, took ${elapsed}ms`);
 });
-
-

@@ -1403,6 +1403,13 @@ export class ModesManager {
     public compileAllSectionsAsync(modeId: string): void {
         void (async () => {
             try {
+                // Yield one macrotask before reading provider state. Built-in seeding runs inside
+                // AppState.getInstance(), BEFORE loadStoredCredentials() in the same synchronous
+                // stretch of initializeApp, so a packaged build has no keys loaded yet. Checking
+                // now would permanently skip every seeded section for users who DO have keys
+                // (a release that adds a built-in template, an upgrade from before built-ins
+                // existed, or a rebuilt DB whose stored keys survived).
+                await new Promise<void>(resolve => setImmediate(resolve));
                 const llmHelper = ModesManager.llmHelperForCompiler;
                 if (!llmHelper || !llmHelper.hasAnyConfiguredProvider?.()) return;
                 try {
