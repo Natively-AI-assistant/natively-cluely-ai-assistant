@@ -75,3 +75,67 @@ Only gpt-oss maps cleanly between AA and this app.
 4. **The 1200 ms rung-0 deadline.** Best est in the whole table is 0.95 s and
    most good picks are 1.1–1.3 s. Real-world variance means 1200 ms will often
    lose. Either raise it (~1800 ms) or accept frequent fall-through.
+
+
+---
+
+# Revision 2 — intelligence floor >= 20, recency bar, and "fastest configured"
+
+User constraints added 2026-09-24: Auto must pick the FASTEST model across all
+families the user has keys for (not just the active family); and a pick must be
+the latest offering, or under ~4 months old, or score above ~20 intelligence.
+
+## The floor disqualifies both earlier "high confidence" picks
+
+| Earlier pick | Intelligence | Verdict |
+|---|---|---|
+| `openai/gpt-oss-120b` | 12 | **rejected** |
+| `claude-haiku-4-5` (Non-reasoning) | 15 | **rejected** |
+
+## Exact app-id -> AA row mapping (int >= 20 only)
+
+| App id | AA row | Int | est | $/task | Verdict |
+|---|---|---|---|---|---|
+| `deepseek-v4-flash` | DeepSeek V4.1 Flash (max) | 39 | **1.23 s** | 0.27 | **PICK** — fastest qualifying anywhere; our no-thinking call should beat this row |
+| `gpt-5.5` | GPT-5.5 Instant (June 2026) | 26 | **1.53 s** | 0.69 | **PICK** — 3 months old; already the ladder's OPENAI_JUDGE_MODEL, so no second table |
+| `gpt-5.6-terra` | GPT-5.6 Terra (Non-reasoning) | 21 | 1.69 s | 0.14 | runner-up: 5x cheaper, 0.16 s slower, 5 points dumber |
+| `gpt-5.6-luna` | *no AA row* | — | — | — | cannot verify; also fails our own `isKnownFastModel` |
+| `claude-haiku-4-5` | Claude 4.5 Haiku (Non-reasoning) | 15 | 1.31 s | n/a | fails the floor |
+| `claude-sonnet-4-6` | *no AA row* | — | — | — | unrated |
+| `openai/gpt-oss-20b` / `-120b` | gpt-oss | 9 / 12 | 1.11 / 1.20 s | 0.01 | fail the floor |
+| `qwen/qwen3.8-27b` | Qwen3.8 27B | 20 | 5.05 s | 2.49 | meets floor, 4x over budget |
+| `gemini-3.1-flash-lite` | *no AA row* | — | — | — | unrated; see below |
+| `gemini-3.8-flash` | (low) int 33 / (high) int 41 | 33 | no latency data / 14.47 s | | (low) has no latency row |
+
+## Result: only two families have a qualifying pick
+
+- **DeepSeek** -> `deepseek-v4-flash`
+- **OpenAI** -> `gpt-5.5`
+- **Claude** -> none. Haiku is fast but int 15; Sonnet 5 (int 23, 2.16 s) is not
+  in the direct catalogue, only behind gateways.
+- **Groq** -> none. Everything fast is int 9-12; the only model clearing 20 is
+  4x over the latency budget.
+- **Gemini** -> unresolved. AA has no row for `gemini-3.1-flash-lite`, so it is
+  unrated against the floor. It also fails the RECENCY bar: `gemini-3.8-flash`
+  is the newer offering, and 3.1-flash-lite's age is unknown. But our own
+  measurement (750-1200 ms) makes it the fastest thing we have, and it is
+  already the ladder's first rung.
+
+## Auto with multiple keys — the ordering rule
+
+Auto filters this ordered list to the families the user actually has keys for,
+then takes the first. Latency is the only ordering key; the floor is a filter
+applied BEFORE ordering, not a weight.
+
+1. `gemini-3.1-flash-lite` — 0.75-1.2 s (our measurement; unrated by AA)
+2. `deepseek-v4-flash` — 1.23 s, int 39
+3. `gpt-5.5` — 1.53 s, int 26
+
+No key for any of these -> fall through to the measured ladder, i.e. today's
+behaviour.
+
+## What this means
+
+Two of five families have a defensible pick. Raising the bar to int >= 20 is
+what removed Groq and Claude, and that is the correct outcome rather than a
+gap to paper over: a judge running at int 9 is a worse judge.
