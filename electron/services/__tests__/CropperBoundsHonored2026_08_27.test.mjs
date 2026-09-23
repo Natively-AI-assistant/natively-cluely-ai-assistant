@@ -72,8 +72,9 @@ test('darwin gets enableLargerThanScreen (macOS clamps a window to one screen wi
   );
   assert.equal(
     settings.type,
-    'toolbar',
-    'type:toolbar is load-bearing for the macOS NSPanel stealth path and must survive the platform-gate fix',
+    'panel',
+    "macOS cropper must be an NSPanel: Electron ignores 'toolbar' on macOS, and a plain NSWindow only " +
+      'covered fullscreen apps via the activation-policy flip that left duplicate Dock tiles (2026-09-23)',
   );
 });
 
