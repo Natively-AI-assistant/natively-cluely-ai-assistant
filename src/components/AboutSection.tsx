@@ -1,6 +1,10 @@
 import React, { useEffect, useRef } from 'react';
 import { useT } from '../i18n';
-import { Github, Twitter, Linkedin, Instagram, Globe, Send, Star, Bug, Mail, Heart } from 'lucide-react';
+import {
+    Github, Twitter, Linkedin, Instagram, Globe, Send, Star, Bug, Mail, Heart,
+    AudioLines, Sparkles, Layers, Search, Cpu, FileText,
+    HardDrive, SlidersHorizontal, KeyRound, EyeOff, Camera,
+} from 'lucide-react';
 import evinProfile from '../assets/evin.png';
 import nativelyIcon from './icon.png';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
@@ -21,9 +25,23 @@ const WHATS_NEW: { title: string; body: string; badge?: string }[] = [
     { title: 'Embedding models', body: 'Gemini, OpenAI, Voyage AI, OpenRouter, Ollama, or any OpenAI-compatible endpoint. In Retrieval.' },
 ];
 
+// Checked against the code on 2026-09-23 (the earlier copy described the app's
+// first week). Keep claims to what the app does by default on both platforms.
 const HOW_IT_WORKS = [
-    { title: 'Stateful Intelligence OS', body: 'Acts as a persistent control plane using mode-aware priors (Sales, Technical, Lecture) to dynamically filter context and direct queries to the optimal reasoning engine.' },
-    { title: 'Hindsight LTM & Session Memory', body: 'Combines a secure local sidecar vector database for document indexing with a time-decayed sliding transcript memory to retrieve relevant semantic context on-demand.' },
+    { Icon: AudioLines, title: 'Hears both sides', body: 'Captures your mic and system audio and transcribes it with the speech provider you choose, including on-device ones.' },
+    { Icon: Sparkles, title: 'Answers from context', body: "Each answer draws on the conversation, your mode's files, your profile, and any screenshot you take." },
+    { Icon: Layers, title: 'Modes', body: 'Start from templates like Sales, Recruiting or Technical Interview, then add your own context and files.' },
+    { Icon: Search, title: 'Searches files and meetings', body: 'Indexed in a local database, using a built-in on-device model or a cloud one you pick.' },
+    { Icon: Cpu, title: 'Your choice of AI', body: "Gemini, OpenAI, Claude, Groq, OpenRouter and more, or local models through Ollama. A stalled provider fails over to your spare." },
+    { Icon: FileText, title: 'Notes after every meeting', body: 'Structured notes, plus open questions that came up in recent meetings.' },
+];
+
+const PRIVACY = [
+    { Icon: HardDrive, title: 'Stored on your device', body: 'Meetings, transcripts, notes and documents live in a local database. Audio is transcribed as it streams and never saved.' },
+    { Icon: SlidersHorizontal, title: 'You decide what is sent', body: 'Audio goes only to your speech provider; text and screenshots only to your AI provider. Each can be switched off per provider, and local models keep everything on your computer.' },
+    { Icon: KeyRound, title: 'Keys are encrypted', body: "API keys are encrypted with your operating system's secure storage." },
+    { Icon: EyeOff, title: 'Undetectable Mode', body: 'Hides Natively from screen shares and recordings, and from the Dock on macOS or the taskbar and tray on Windows. Disguise renames it as a system app.' },
+    { Icon: Camera, title: 'Screenshots only on command', body: 'Taken only from your hotkey, a button, or your phone shutter.' },
 ];
 
 const REPO_URL = 'https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant';
@@ -44,11 +62,12 @@ const CREATOR_LINKS = [
 
 // One row of a divided aip-card: title over a meta line, optional trailing
 // control. Every row after the first carries the hairline.
-const AboutRow: React.FC<{ title: string; body: string; first: boolean; children?: React.ReactNode }> = ({ title, body, first, children }) => (
+const AboutRow: React.FC<{ title: string; body: string; first: boolean; icon?: React.ReactNode; children?: React.ReactNode }> = ({ title, body, first, icon, children }) => (
     <div
         className={`flex flex-wrap items-center justify-between gap-x-3 gap-y-2 ${first ? '' : 'pt-3 border-t'}`}
         style={first ? undefined : { borderColor: 'var(--aip-divider)' }}
     >
+        {icon && <span className="aip-muted shrink-0 self-start mt-[1px]">{icon}</span>}
         <div className="flex flex-col flex-1 min-w-[160px]">
             <span className="text-xs aip-hero font-semibold">{title}</span>
             <span className="aip-meta leading-snug mt-0.5">{body}</span>
@@ -125,12 +144,13 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
     // both themes: the card shows through and only the rim is added. Its label
     // is `color: inherit` (and outranks a utility on the button itself), so the
     // colour has to come from a parent.
-    // Hover: the glyph takes its own hue and fills in, with a small spring pop
-    // (overshoot curve on the way in, a fast plain ease-out on the way out, so
-    // it never lags the pointer). The fill is fill-opacity on currentColor
-    // because `fill: none` cannot interpolate. Line-art glyphs (bug, mail) only
-    // wash in, since a solid fill erases their inner strokes. Reduced motion
-    // keeps the colour and drops the pop.
+    // Hover: the glyph takes its own hue and fills in with a small spring pop.
+    // The overshoot curve drives the scale ONLY; on colour it overshoots the hue
+    // and visibly settles to a dimmer one, so colour and fill ease out plainly.
+    // Leaving is a fast ease-out so it never lags the pointer. The fill is
+    // fill-opacity on currentColor because `fill: none` cannot interpolate.
+    // Line-art glyphs (bug, mail) only wash in, since a solid fill erases their
+    // inner strokes. Reduced motion keeps the colour and drops the pop.
     const actionButton = (label: string, url: string, Icon: typeof Star, hue: string, solid = true) => (
         <span className="shrink-0 text-text-primary">
             <LiquidGlassButton
@@ -140,7 +160,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                     <Icon
                         size={14}
                         strokeWidth={1.75}
-                        className={`fill-current [fill-opacity:0] transition-[transform,color,fill-opacity] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:duration-[280ms] group-hover:ease-[cubic-bezier(0.34,1.56,0.64,1)] group-hover:scale-[1.12] motion-reduce:group-hover:scale-100 ${hue} ${solid ? 'group-hover:[fill-opacity:1]' : 'group-hover:[fill-opacity:0.28]'}`}
+                        className={`fill-current [fill-opacity:0] [transition:transform_150ms_cubic-bezier(0.23,1,0.32,1),color_150ms_cubic-bezier(0.23,1,0.32,1),fill-opacity_150ms_cubic-bezier(0.23,1,0.32,1)] group-hover:[transition:transform_280ms_cubic-bezier(0.34,1.56,0.64,1),color_200ms_cubic-bezier(0.23,1,0.32,1),fill-opacity_200ms_cubic-bezier(0.23,1,0.32,1)] group-hover:scale-[1.12] motion-reduce:group-hover:scale-100 ${hue} ${solid ? 'group-hover:[fill-opacity:1]' : 'group-hover:[fill-opacity:0.28]'}`}
                     />
                 }
                 onClick={() => openLink(url)}
@@ -151,7 +171,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
     );
 
     const community = [
-        { title: t('Star on GitHub'), body: t('Love Natively? Support us by starring the repo.'), action: actionButton(t('Star'), REPO_URL, Star, 'group-hover:text-[#D4A84B]') },
+        { title: t('Star on GitHub'), body: t('Love Natively? Support us by starring the repo.'), action: actionButton(t('Star'), REPO_URL, Star, 'group-hover:text-[#E3B341]') },
         { title: t('Report an Issue'), body: t('Found a bug? Let us know so we can fix it.'), action: actionButton(t('Report'), `${REPO_URL}/issues`, Bug, 'group-hover:text-red-500', false) },
         { title: t('Get in Touch'), body: t('Open for professional collaborations and job offers.'), action: actionButton(t('Contact Me'), 'mailto:evinjohnignatious@gmail.com', Mail, 'group-hover:text-accent-primary', false) },
         { title: t('Support Development'), body: t('Natively is independent source-available software.'), action: actionButton(t('Support Project'), DONATE_URL, Heart, 'group-hover:text-pink-500') },
@@ -196,27 +216,36 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
             </div>
 
             <div className="space-y-5">
-                <SectionHeading title={t('How Natively Works')} subtitle={t('What runs underneath every answer.')} />
-                <div className="aip-card p-5 flex flex-col gap-3">
-                    {HOW_IT_WORKS.map(({ title, body }, i) => (
-                        <AboutRow key={title} title={title} body={body} first={i === 0} />
-                    ))}
+                <SectionHeading title={t('How Natively Works')} subtitle={t('What happens between the conversation and the answer.')} />
+                {/* One surface split by hairlines: the grid gap shows the divider
+                    colour behind cells painted in the card's own fill. */}
+                <div className="aip-card overflow-hidden">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-px" style={{ background: 'var(--aip-divider)' }}>
+                        {HOW_IT_WORKS.map(({ Icon, title, body }) => (
+                            <div key={title} className="bg-bg-item-surface p-4">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <Icon size={14} strokeWidth={1.75} className="aip-muted shrink-0" />
+                                    <span className="text-xs aip-hero font-semibold">{t(title)}</span>
+                                </div>
+                                <p className="aip-meta leading-snug">{t(body)}</p>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             </div>
 
             <div className="space-y-5">
-                <SectionHeading title={t('Privacy & Data')} subtitle={t('You control exactly what leaves your device.')} />
+                <SectionHeading title={t('Privacy & Data')} subtitle={t('What stays on your computer, and what you choose to send.')} />
                 <div className="aip-card p-5 flex flex-col gap-3">
-                    <AboutRow
-                        first
-                        title={t('Stealth & Control')}
-                        body={'"Undetectable Mode" hides Natively from the dock and taskbar, and "Masquerading" disguises it as a system app.'}
-                    />
-                    <AboutRow
-                        first={false}
-                        title={t('No Recording')}
-                        body="Natively listens only when active. It does not record video, take arbitrary screenshots without command, or perform background surveillance."
-                    />
+                    {PRIVACY.map(({ Icon, title, body }, i) => (
+                        <AboutRow
+                            key={title}
+                            first={i === 0}
+                            title={t(title)}
+                            body={t(body)}
+                            icon={<Icon size={14} strokeWidth={1.75} />}
+                        />
+                    ))}
                 </div>
             </div>
 
