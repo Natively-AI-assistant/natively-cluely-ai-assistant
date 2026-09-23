@@ -24,8 +24,19 @@
 
 import { classifyVisionError } from './visionStreamFallback';
 
-/** Preview tier, multimodal. What routing uses by default. */
-export const GROQ_PRIMARY_MODEL = 'qwen/qwen3.6-27b';
+/**
+ * Preview tier, multimodal. What routing uses by default.
+ *
+ * The prediction above came true: Groq shut `qwen/qwen3.6-27b` down on
+ * 2026-09-14 for free and developer tiers and named `qwen/qwen3.8-27b` as the
+ * replacement (console.groq.com/docs/deprecations). Same shape — text + image
+ * input, 16,384 max completion tokens, preview tier, and `reasoning_effort:
+ * 'none'` still switches thinking off (console.groq.com/docs/model/qwen/
+ * qwen3.8-27b). Until this moved, every fresh process paid one doomed round
+ * trip to the dead id, then answered on gpt-oss-120b (text-only, and reasoning
+ * before its first token), and Groq vision had no model at all.
+ */
+export const GROQ_PRIMARY_MODEL = 'qwen/qwen3.8-27b';
 
 /**
  * Production tier, text-only. Survives the primary's retirement.
@@ -46,11 +57,26 @@ export const GROQ_TEXT_MODEL_LADDER: readonly string[] = [
 ];
 
 /**
+ * Former ladder heads and the successor Groq itself named for each. Without
+ * this, the day an id leaves the ladder its fallback silently becomes "none":
+ * `qwen/qwen3.6-27b` laddered to gpt-oss while it was index 0, and would have
+ * turned into a hard failure on every turn for anyone still holding it (a
+ * persisted pick, a mode LLM given the id before the default-model repair ran).
+ * The user never chose "a model that 404s", so this is not rerouting a
+ * deliberate pick — it is following Groq's own migration note.
+ */
+const GROQ_RETIRED_SUCCESSORS: Readonly<Record<string, string>> = {
+  'qwen/qwen3.6-27b': GROQ_PRIMARY_MODEL, // shut down 2026-09-14
+};
+
+/**
  * The next id to try after `modelId` failed as gone, or null when the ladder is
  * exhausted (or `modelId` is a user-chosen id that is not on the ladder — we do
  * not silently reroute a model the user picked deliberately).
  */
 export function groqFallbackFor(modelId: string): string | null {
+  const successor = GROQ_RETIRED_SUCCESSORS[modelId];
+  if (successor) return successor;
   const i = GROQ_TEXT_MODEL_LADDER.indexOf(modelId);
   if (i < 0) return null;
   return GROQ_TEXT_MODEL_LADDER[i + 1] ?? null;
@@ -90,7 +116,10 @@ export function isGroqModelId(modelId: string | null | undefined): boolean {
  */
 export const GROQ_VISION_MODEL = GROQ_PRIMARY_MODEL;
 export function groqSupportsImages(modelId: string | null | undefined): boolean {
-  return /qwen3\.6/i.test(modelId || '');
+  // 3.8 is the current id. 3.6 still takes images where it is still served
+  // (Groq's retirement exempts committed-spend enterprise contracts); whether
+  // it is AVAILABLE is RETIRED_MODEL_IDS' question, not this predicate's.
+  return /qwen3\.[68]/i.test(modelId || '');
 }
 
 /**
@@ -102,6 +131,7 @@ export function groqSupportsImages(modelId: string | null | undefined): boolean 
  * See https://console.groq.com/docs/deprecations
  */
 export const RETIRED_MODEL_IDS: ReadonlySet<string> = new Set<string>([
+  'qwen/qwen3.6-27b',                          // shut down 2026-09-14 (free/dev tiers) -> qwen/qwen3.8-27b
   'meta-llama/llama-4-scout-17b-16e-instruct', // shut down 2026-07-17
   'meta-llama/llama-4-maverick-17b-128e-instruct', // shut down 2026-03-09
   'llama-3.3-70b-versatile',                   // shut down 2026-08-16
@@ -180,17 +210,25 @@ export function isGroqModelGone(err: any): boolean {
  * only callers set Ollama's `think:false` where ids look like `qwen3:8b` and do
  * match. Widening it would change Ollama behaviour as a side effect.
  *
- * Note gpt-oss needs nothing: it already returns reasoning out-of-band in
- * `delta.reasoning`, which none of the content readers here look at.
+ * gpt-oss returns its reasoning out-of-band in `delta.reasoning`, so it never
+ * LEAKED — but out-of-band is not free: the reasoning is still generated before
+ * the first `delta.content` token, so every token of it is time-to-first-word.
+ * Sending nothing left it on the model's default (medium). `low` is the
+ * cheapest value the family accepts (`none` is the 400 above), and gpt-oss-120b
+ * is not a corner case: it is the production rung every Groq call landed on
+ * after qwen3.6's 2026-09-14 shutdown, and a pickable model in its own right.
  *
  * Platform note: pure string matching — identical on darwin and win32.
  */
 export function groqReasoningParams(
   modelId: string | null | undefined,
-): { reasoning_effort: 'none' } | Record<string, never> {
-  // Qwen3 family only. `none` is documented for Qwen 3.6 27B ("Disable
-  // reasoning. The model will not use any reasoning tokens.") and is rejected
-  // by the GPT-OSS models, which accept only low|medium|high.
-  // https://console.groq.com/docs/reasoning
-  return /(^|\/)qwen3/i.test(modelId || '') ? { reasoning_effort: 'none' } : {};
+): { reasoning_effort: 'none' | 'low' } | Record<string, never> {
+  const id = modelId || '';
+  // Qwen3 family: `none` disables thinking outright (documented for 3.6 and
+  // its successor 3.8 — "For efficient dialogue, set reasoning_effort='none'").
+  if (/(^|\/)qwen3/i.test(id)) return { reasoning_effort: 'none' };
+  // GPT-OSS accepts only low|medium|high ("only supported by GPT-OSS 20B and
+  // GPT-OSS 120B"). https://console.groq.com/docs/reasoning
+  if (/(^|\/)gpt-oss-/i.test(id)) return { reasoning_effort: 'low' };
+  return {};
 }

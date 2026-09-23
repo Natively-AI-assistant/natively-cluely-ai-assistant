@@ -55,7 +55,9 @@ const {
   TextModelFamily,
 } = await import(pathToFileURL(modPath).href);
 
-const GROQ_REPLACEMENT = 'qwen/qwen3.6-27b';
+// qwen3.6-27b replaced the llamas on 2026-08-23 and was itself shut down on
+// 2026-09-14; qwen3.8-27b is Groq's named successor. Same rules, new live id.
+const GROQ_REPLACEMENT = 'qwen/qwen3.8-27b';
 const DEAD_VISION = 'meta-llama/llama-4-scout-17b-16e-instruct';
 const DEAD_TEXT = 'llama-3.3-70b-versatile';
 
@@ -71,7 +73,7 @@ const entry = (over = {}) => ({
 });
 
 describe('the retired-model list names what Groq switched off', () => {
-  for (const id of [DEAD_VISION, DEAD_TEXT, 'llama-3.1-8b-instant', 'qwen/qwen3-32b']) {
+  for (const id of [DEAD_VISION, DEAD_TEXT, 'llama-3.1-8b-instant', 'qwen/qwen3-32b', 'qwen/qwen3.6-27b']) {
     test(`${id} is marked retired`, () => {
       assert.equal(isRetiredModelId(id), true);
     });
@@ -83,10 +85,10 @@ describe('the retired-model list names what Groq switched off', () => {
 });
 
 describe('BUG 3: a parameter count is not a version', () => {
-  test('qwen/qwen3.6-27b parses as 3.6, not 27.x', () => {
+  test('qwen/qwen3.8-27b parses as 3.8, not 27.x', () => {
     const v = parseModelVersion(GROQ_REPLACEMENT);
     assert.ok(v, 'expected a parsed version');
-    assert.equal(`${v.major}.${v.minor}`, '3.6');
+    assert.equal(`${v.major}.${v.minor}`, '3.8');
   });
 });
 
