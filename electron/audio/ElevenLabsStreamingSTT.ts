@@ -151,34 +151,39 @@ export class ElevenLabsStreamingSTT extends EventEmitter {
     }
 
     /**
-     * "Answer now": flush what is pending AND commit, so the utterance in
-     * flight becomes a committed_transcript immediately instead of waiting
-     * for the VAD. The official SDK's commit() is exactly this message with an
-     * empty audio_base_64 (elevenlabs/packages scribe connection.ts), so the
-     * commit is sent even when nothing is buffered locally — the server may
-     * still hold uncommitted audio.
+     * "Answer now": flush what is pending so the server has every sample now.
+     *
+     * Deliberately NO `commit: true`. Measured live (2026-09-23): a commit with
+     * under 0.3 s of uncommitted audio is answered with `commit_throttled` —
+     * "You need at least 0.3s of uncommitted audio before committing" — AND the
+     * server CLOSES the socket (1000, reason commit_throttled). The VAD commit
+     * is invisible until its transcript arrives, so the client cannot know
+     * whether 0.3 s is still uncommitted when the button is pressed (the usual
+     * case is right after the VAD already committed). The VAD commit
+     * (commit_strategy=vad, 0.8 s, kept real-time by the silence tail) lands
+     * ~1.2-1.4 s after speech end on its own — measured — so a manual commit
+     * would buy a few hundred ms at the price of a dead session.
      */
     public finalize(): void {
         if (!this.isActive || !this.ws || this.ws.readyState !== WebSocket.OPEN || !this.isSessionReady) return;
-        this.silenceTail.cancel();
+        if (this.pcmAccumulatorLen === 0) return;
 
-        let audio = '';
-        if (this.pcmAccumulatorLen > 0) {
-            const combined = new Int16Array(this.pcmAccumulatorLen);
-            let offset = 0;
-            for (const arr of this.pcmAccumulator) {
-                combined.set(arr, offset);
-                offset += arr.length;
-            }
-            this.pcmAccumulator = [];
-            this.pcmAccumulatorLen = 0;
-            audio = Buffer.from(combined.buffer, combined.byteOffset, combined.byteLength).toString('base64');
+        const combined = new Int16Array(this.pcmAccumulatorLen);
+        let offset = 0;
+        for (const arr of this.pcmAccumulator) {
+            combined.set(arr, offset);
+            offset += arr.length;
         }
+        this.pcmAccumulator = [];
+        this.pcmAccumulatorLen = 0;
         try {
-            this.ws.send(JSON.stringify(this.audioMessage(audio, true)));
-            console.log('[ElevenLabsStreaming] Finalize — flushed pending accumulator and committed');
+            this.ws.send(JSON.stringify(this.audioMessage(
+                Buffer.from(combined.buffer, combined.byteOffset, combined.byteLength).toString('base64'),
+                false,
+            )));
+            console.log('[ElevenLabsStreaming] Finalize — flushed pending accumulator');
         } catch (err) {
-            console.error('[ElevenLabsStreaming] Finalize commit failed:', err);
+            console.error('[ElevenLabsStreaming] Finalize flush failed:', err);
         }
     }
 
