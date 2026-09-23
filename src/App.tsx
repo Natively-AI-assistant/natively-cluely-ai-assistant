@@ -50,6 +50,7 @@ import { analytics } from "./lib/analytics/analytics.service"
 import { ErrorBoundary } from "./components/ErrorBoundary"
 import ModesSettings from "./components/settings/ModesSettings"
 import { ProfileIntelligenceSettings } from "./components/ProfileIntelligenceSettings"
+import { useResolvedTheme } from "./hooks/useResolvedTheme"
 
 
 // DEV-ONLY: should the launcher mount an uncontrolled ReviewPromptHost?
@@ -109,6 +110,7 @@ function getLauncherIsolation(): LauncherIsolation {
 }
 
 const App: React.FC = () => {
+  const isLight = useResolvedTheme() === 'light';
   const isSettingsWindow = new URLSearchParams(window.location.search).get('window') === 'settings';
   const isLauncherWindow = new URLSearchParams(window.location.search).get('window') === 'launcher';
   const isOverlayWindow = new URLSearchParams(window.location.search).get('window') === 'overlay';
@@ -1159,7 +1161,7 @@ const App: React.FC = () => {
                       initial="initial"
                       animate="animate"
                       exit="exit"
-                      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+                      className={`fixed inset-0 z-50 flex items-center justify-center ${isLight ? 'bg-black/20' : 'bg-black/60'}`}
                       onClick={(event) => {
                         if (event.target !== event.currentTarget) return;
                         closeManagerPanel();
