@@ -167,6 +167,12 @@ const CLAUDE_MODEL = "claude-sonnet-4-6"
 // The small tiers are faster but miss real asks; gpt-5.5 is both faster AND more
 // accurate than the chat-model fallback it replaces. Re-run the eval before
 // changing this.
+// Sub-deadline for the fast rung inside the judge's 2500 ms budget. A slow pick
+// must not eat the whole budget: the measured Gemini flash-lite rung answers in
+// 750-1200 ms and has to stay reachable underneath.
+const FAST_MODEL_JUDGE_RUNG_TIMEOUT_MS = 1200
+// Ceiling for a fast call made with no caller signal (the preferFast callers).
+const FAST_MODEL_DEFAULT_TIMEOUT_MS = 8000
 const OPENAI_JUDGE_MODEL = "gpt-5.5"
 const DEEPSEEK_MODEL = "deepseek-v4-flash"
 const DEEPSEEK_BASE_URL = "https://api.deepseek.com"
@@ -4769,8 +4775,31 @@ let isMultimodal = !!(imagePaths?.length);
     if (!modelId) return null;
     if (this.isLocalOnlyMode) return null;
 
-    const timer = opts.timeoutMs
-      ? AbortSignal.any([opts.signal, AbortSignal.timeout(opts.timeoutMs)].filter(Boolean) as AbortSignal[])
+    // A pick the seam cannot dispatch is a silent no-op forever, which is
+    // indistinguishable from "unset" without this line.
+    const notDispatchable = () => {
+      console.log(`[LLMHelper] fast-model not dispatchable (${modelId}) - falling through to the ladder`);
+      return null;
+    };
+
+    // Gateways are OpenAI-SHAPED but are NOT OpenAI. isOpenAiModel() self-excludes
+    // Groq and Fluxion but not these, and its final clause is `includes('openai')`
+    // - so `openrouter/openai/gpt-5.6-terra` (a stock picker preset) would be
+    // POSTed to api.openai.com on the user's OWN OpenAI key, carrying the judge
+    // prompt's meeting turns, for a prefixed id OpenAI rejects. Supporting them
+    // properly needs per-gateway clients plus routing-prefix stripping; until then
+    // they fall through rather than leak.
+    if (this.isOpenRouterModel(modelId) || this.isLiteLLMModel(modelId)
+        || this.isNvidiaNimModel(modelId) || this.isNinerouterModel(modelId)
+        || this.isFluxionModel(modelId)) {
+      return notDispatchable();
+    }
+
+    // A caller with neither a signal nor a timeout would leave the request running
+    // to the SDK default (10 min on OpenAI) long after its result is worthless.
+    const budget = opts.timeoutMs ?? (opts.signal ? undefined : FAST_MODEL_DEFAULT_TIMEOUT_MS);
+    const timer = budget
+      ? AbortSignal.any([opts.signal, AbortSignal.timeout(budget)].filter(Boolean) as AbortSignal[])
       : opts.signal;
 
     const finish = (raw: string | null | undefined): string | null => {
@@ -4842,7 +4871,7 @@ let isMultimodal = !!(imagePaths?.length);
       }
       // Unrecognised id (a retired model, or a provider with no fast path):
       // fall through rather than guessing a client.
-      return null;
+      return notDispatchable();
     } catch (error) {
       if (opts.signal?.aborted) throw error;
       return null;
@@ -4921,7 +4950,7 @@ let isMultimodal = !!(imagePaths?.length);
     // unset or failing pick degrades to exactly the previous behaviour. An abort
     // here propagates rather than falling through — a superseded judge must not
     // spend a ladder call on a verdict the controller has already discarded.
-    const picked = await this.callFastModel(message, { signal, json: true });
+    const picked = await this.callFastModel(message, { signal, json: true, timeoutMs: FAST_MODEL_JUDGE_RUNG_TIMEOUT_MS });
     if (picked) return picked;
 
     if (this.client) {
@@ -5019,7 +5048,10 @@ let isMultimodal = !!(imagePaths?.length);
     // Nothing small is configured (Codex CLI / Ollama / custom / Natively-only
     // users): the structured ladder still answers, bounded by the controller's
     // deadline.
-    return this.generateContentStructured(message, { preferFast: true });
+    // NOT preferFast: rung 0 already tried the fast model with the caller's signal.
+    // Re-entering here would bill it a second time, milliseconds after it failed,
+    // on a request that carries no signal and so cannot be cancelled.
+    return this.generateContentStructured(message);
   }
 
   public async generateContentStructured(
