@@ -13253,6 +13253,25 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // Persist default model (from Settings), update runtime, and notify model UI surfaces
+  // The FAST model: used for cheap internal calls (Auto Answer judge, query
+  // rewrite, browser-metadata classification), never for the user's answers.
+  // null clears it, which means "use the measured per-provider ladder".
+  safeHandle('set-fast-model', async (_, modelId: string | null) => {
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    if (modelId !== null && typeof modelId !== 'string') {
+      return { success: false, error: 'invalid_value_type' };
+    }
+    if (!CredentialsManager.getInstance().setFastModel(modelId)) {
+      return { success: false, error: 'settings_store_degraded' };
+    }
+    return { success: true };
+  });
+
+  safeHandle('get-fast-model', async () => {
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    return { model: CredentialsManager.getInstance().getFastModel() };
+  });
+
   safeHandle('set-default-model', async (_, modelId: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
