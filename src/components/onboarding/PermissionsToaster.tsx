@@ -155,9 +155,6 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
   const t3 = isLight ? 'rgba(28, 28, 30, 0.48)' : 'rgba(255, 255, 255, 0.44)';
 
   const refreshStatus = useCallback(async () => {
-    // TEMP-VERIFY-ONLY
-    setPlatform('darwin'); setMicStatus('denied'); setScrStatus('denied');
-    if (1 as number) return;
     try {
       const p = await window.electronAPI?.checkPermissions?.();
       if (!p) return;
