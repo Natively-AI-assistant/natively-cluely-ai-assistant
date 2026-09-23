@@ -46,10 +46,10 @@ const CREATOR_LINKS = [
 // control. Every row after the first carries the hairline.
 const AboutRow: React.FC<{ title: string; body: string; first: boolean; children?: React.ReactNode }> = ({ title, body, first, children }) => (
     <div
-        className={`flex items-center justify-between gap-3 ${first ? '' : 'pt-3 border-t'}`}
+        className={`flex flex-wrap items-center justify-between gap-x-3 gap-y-2 ${first ? '' : 'pt-3 border-t'}`}
         style={first ? undefined : { borderColor: 'var(--aip-divider)' }}
     >
-        <div className="flex flex-col min-w-0">
+        <div className="flex flex-col flex-1 min-w-[160px]">
             <span className="text-xs aip-hero font-semibold">{title}</span>
             <span className="aip-meta leading-snug mt-0.5">{body}</span>
         </div>
@@ -138,7 +138,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
     const community = [
         { title: t('Star on GitHub'), body: t('Love Natively? Support us by starring the repo.'), action: linkButton(t('Star'), REPO_URL) },
         { title: t('Report an Issue'), body: t('Found a bug? Let us know so we can fix it.'), action: linkButton(t('Report'), `${REPO_URL}/issues`) },
-        { title: t('Get in Touch'), body: t('Open for professional collaborations and job offers.'), action: linkButton(t('Email'), 'mailto:evinjohnignatious@gmail.com') },
+        { title: t('Get in Touch'), body: t('Open for professional collaborations and job offers.'), action: linkButton(t('Contact Me'), 'mailto:evinjohnignatious@gmail.com') },
         { title: t('Support Development'), body: t('Natively is independent source-available software.'), action: linkButton(t('Support Project'), DONATE_URL, true) },
     ];
 
@@ -150,8 +150,8 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
             </header>
 
             {/* Identity: the app's mark, the running build, and its official channels. */}
-            <div className="aip-card p-4 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
+            <div className="aip-card p-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                <div className="flex items-center gap-3 flex-1 min-w-[180px]">
                     <span className="aip-tile aip-tile--mark">
                         <img
                             src={nativelyIcon}
@@ -195,7 +195,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                     <AboutRow
                         first
                         title={t('Stealth & Control')}
-                        body={'"Undetectable Mode" hides Natively from the dock, and "Masquerading" disguises it as a system app.'}
+                        body={'"Undetectable Mode" hides Natively from the dock and taskbar, and "Masquerading" disguises it as a system app.'}
                     />
                     <AboutRow
                         first={false}
@@ -208,8 +208,8 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
             <div className="space-y-5">
                 <SectionHeading title={t('Community')} subtitle={t('Follow along, report a bug, or support the project.')} />
                 <div className="space-y-3">
-                    <div className="aip-card p-4 flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-3 min-w-0">
+                    <div className="aip-card p-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                        <div className="flex items-center gap-3 flex-1 min-w-[180px]">
                             <img
                                 src={evinProfile}
                                 alt=""
