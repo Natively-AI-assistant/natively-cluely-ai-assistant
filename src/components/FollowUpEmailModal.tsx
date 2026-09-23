@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, Mail, RotateCcw, ExternalLink, Loader2, Paperclip } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useT } from '../i18n';
+import { useResolvedTheme } from '../hooks/useResolvedTheme';
 
 interface Meeting {
     id: string;
@@ -29,6 +30,7 @@ interface FollowUpEmailModalProps {
 
 const FollowUpEmailModal: React.FC<FollowUpEmailModalProps> = ({ isOpen, onClose, meeting }) => {
     const t = useT();
+    const isLight = useResolvedTheme() === 'light';
     const [recipientEmail, setRecipientEmail] = useState('');
     const [senderName, setSenderName] = useState('');
     const [recipientName, setRecipientName] = useState('');
@@ -153,7 +155,7 @@ const FollowUpEmailModal: React.FC<FollowUpEmailModalProps> = ({ isOpen, onClose
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         onClick={onClose}
-                        className="fixed inset-0 bg-black/70 z-50 transition-opacity"
+                        className={`fixed inset-0 ${isLight ? 'bg-black/20' : 'bg-black/70'} z-50 transition-opacity`}
                     />
 
                     {/* Modal Container */}

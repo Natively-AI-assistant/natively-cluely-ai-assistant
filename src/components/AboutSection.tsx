@@ -1,65 +1,77 @@
 import React, { useEffect, useRef } from 'react';
 import { useT } from '../i18n';
-import {
-    Github, Twitter, Shield, Cpu, Database,
-    Heart, Linkedin, Instagram, Mail, MicOff, Star, Bug, Globe, Sparkles, Zap, Camera, LayoutGrid, User, Volume2, Activity, MessageSquare, Link, Smartphone, Calendar, ListOrdered, Boxes, Users, WifiOff, Send
-} from 'lucide-react';
+import { Github, Twitter, Linkedin, Instagram, Globe, Send, ExternalLink } from 'lucide-react';
 import evinProfile from '../assets/evin.png';
 import nativelyIcon from './icon.png';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { APP_FEATURE_VERSION } from '../utils/appVersion';
+import { AIP_CSS, AipBadge } from './settings/AIProvidersSettings';
+import { LiquidGlassBadge } from '../ui-components/LiquidGlassBadge';
 
-// What's New for APP_FEATURE_VERSION, laid out as a bento grid: on a wide
-// panel the rows alternate 3+2 / 2+3 columns and the last tile runs full width.
-// `span` must stay a literal class string so Tailwind emits it.
-const WHATS_NEW: { icon: typeof Zap; title: string; body: string; span: string; hero?: boolean }[] = [
-    {
-        icon: Zap,
-        title: 'Direct Assist',
-        body: 'Your last three minutes and reference files, sent verbatim. Off by default — enable in AI Providers.',
-        span: 'md:col-span-2 lg:col-span-3',
-        hero: true,
-    },
-    {
-        icon: ListOrdered,
-        title: 'Your Own Reranker',
-        body: 'Hosted via Jina AI or OpenRouter, or run locally.',
-        span: 'lg:col-span-2',
-    },
-    {
-        icon: Cpu,
-        title: 'Lighter & Faster',
-        body: 'About a quarter less memory; windows open faster.',
-        span: 'lg:col-span-2',
-    },
-    {
-        icon: Activity,
-        title: 'Provider Failover',
-        body: 'OpenAI, Claude, DeepSeek, LiteLLM, NVIDIA NIM and custom endpoints fail over when stalled. Local stays local.',
-        span: 'md:col-span-2 lg:col-span-3',
-    },
-    {
-        icon: Boxes,
-        title: 'Your Embedding Model',
-        body: 'Gemini, OpenAI, Voyage AI, OpenRouter, Ollama or any OpenAI-compatible endpoint. In Retrieval.',
-        span: 'md:col-span-2 lg:col-span-5',
-    },
+// Built from the AI Providers panel's `.aip-*` system (the same one Retrieval
+// adopts), so About reads as part of Settings rather than its own UI: aip-card
+// surfaces, rows split by --aip-divider hairlines, neutral 1.75-stroke icons,
+// and colour only where something carries a state.
+
+const WHATS_NEW: { title: string; body: string; badge?: string }[] = [
+    { title: 'Direct Assist', body: 'Sends your last three minutes and reference files verbatim. Turn it on in AI Providers.', badge: 'Off by default' },
+    { title: 'Rerankers', body: 'Jina AI, OpenRouter, or a local model. In Retrieval.' },
+    { title: 'Lighter and faster', body: 'About a quarter less memory. Windows open faster.' },
+    { title: 'Provider failover', body: 'OpenAI, Claude, DeepSeek, LiteLLM, NVIDIA NIM and custom endpoints switch to a spare when stalled. Local models are untouched.' },
+    { title: 'Embedding models', body: 'Gemini, OpenAI, Voyage AI, OpenRouter, Ollama, or any OpenAI-compatible endpoint. In Retrieval.' },
 ];
+
+const HOW_IT_WORKS = [
+    { title: 'Stateful Intelligence OS', body: 'Acts as a persistent control plane using mode-aware priors (Sales, Technical, Lecture) to dynamically filter context and direct queries to the optimal reasoning engine.' },
+    { title: 'Hindsight LTM & Session Memory', body: 'Combines a secure local sidecar vector database for document indexing with a time-decayed sliding transcript memory to retrieve relevant semantic context on-demand.' },
+];
+
+const REPO_URL = 'https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant';
+const DONATE_URL = 'https://buymeacoffee.com/evinjohnn';
+
+const NATIVELY_LINKS = [
+    { label: 'Website', url: 'https://natively.software', Icon: Globe },
+    { label: 'Telegram', url: 'https://t.me/nativelyaichat', Icon: Send },
+    { label: 'LinkedIn', url: 'https://www.linkedin.com/company/nativley-ai', Icon: Linkedin },
+];
+
+const CREATOR_LINKS = [
+    { label: 'GitHub', url: REPO_URL, Icon: Github },
+    { label: 'X', url: 'https://x.com/evinjohnn', Icon: Twitter },
+    { label: 'LinkedIn', url: 'https://www.linkedin.com/in/evinjohn', Icon: Linkedin },
+    { label: 'Instagram', url: 'https://www.instagram.com/evinjohnn/', Icon: Instagram },
+];
+
+// One row of a divided aip-card: title over a meta line, optional trailing
+// control. Every row after the first carries the hairline.
+const AboutRow: React.FC<{ title: string; body: string; first: boolean; children?: React.ReactNode }> = ({ title, body, first, children }) => (
+    <div
+        className={`flex items-center justify-between gap-3 ${first ? '' : 'pt-3 border-t'}`}
+        style={first ? undefined : { borderColor: 'var(--aip-divider)' }}
+    >
+        <div className="flex flex-col min-w-0">
+            <span className="text-xs aip-hero font-semibold">{title}</span>
+            <span className="aip-meta leading-snug mt-0.5">{body}</span>
+        </div>
+        {children}
+    </div>
+);
+
+const SectionHeading: React.FC<{ title: string; subtitle: string }> = ({ title, subtitle }) => (
+    <div>
+        <h3 className="text-sm font-bold aip-hero mb-1">{title}</h3>
+        <p className="text-xs aip-muted mb-2">{subtitle}</p>
+    </div>
+);
 
 interface AboutSectionProps { }
 
 export const AboutSection: React.FC<AboutSectionProps> = () => {
     const t = useT();
-    const isLight = useResolvedTheme() === 'light';
+    const theme = useResolvedTheme();
     const donationClickTimeRef = useRef<number | null>(null);
     const appVersion = import.meta.env.VITE_APP_VERSION || 'unknown';
     const buildCommit = import.meta.env.VITE_BUILD_COMMIT || 'unknown';
-
-    // Initial check for donation status not needed for visuals anymore (since we removed key input)
-    // but we might want to hide the support button if donated? 
-    // User said "wont show if the user open the donate button" -> this refers to the toaster.
-    // For About section, usually validation/support button stays but maybe changes text?
-    // I'll keep it as is, just the logic change.
 
     useEffect(() => {
         const handleFocus = async () => {
@@ -80,15 +92,12 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
         return () => window.removeEventListener('focus', handleFocus);
     }, []);
 
-    const handleOpenLink = (e: React.MouseEvent<HTMLAnchorElement>, url: string) => {
-        e.preventDefault();
-
-        // Special handling for donation link
-        if (url.includes('buymeacoffee.com')) {
+    const openLink = (url: string) => {
+        // Returning >20s after opening the donation page marks it complete (above).
+        if (url === DONATE_URL) {
             donationClickTimeRef.current = Date.now();
         }
 
-        // Use backend shell.openExternal
         if (window.electronAPI?.openExternal) {
             window.electronAPI.openExternal(url);
         } else {
@@ -96,289 +105,140 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
         }
     };
 
+    const iconLinks = (links: typeof NATIVELY_LINKS) => (
+        <div className="flex items-center gap-0.5 shrink-0">
+            {links.map(({ label, url, Icon }) => (
+                <button
+                    key={url}
+                    onClick={() => openLink(url)}
+                    className="aip-btn"
+                    data-icon="true"
+                    data-variant="ghost"
+                    title={label}
+                    aria-label={label}
+                >
+                    <Icon size={14} strokeWidth={1.75} />
+                </button>
+            ))}
+        </div>
+    );
+
+    const linkButton = (label: string, url: string, accent = false) => (
+        <button
+            onClick={() => openLink(url)}
+            className="aip-btn shrink-0"
+            data-size="sm"
+            data-variant={accent ? 'accent' : 'ghost'}
+        >
+            <span className={accent ? undefined : 'uppercase tracking-wide'}>{label}</span>
+            <ExternalLink size={12} strokeWidth={1.75} />
+        </button>
+    );
+
+    const community = [
+        { title: t('Star on GitHub'), body: t('Love Natively? Support us by starring the repo.'), action: linkButton(t('Star'), REPO_URL) },
+        { title: t('Report an Issue'), body: t('Found a bug? Let us know so we can fix it.'), action: linkButton(t('Report'), `${REPO_URL}/issues`) },
+        { title: t('Get in Touch'), body: t('Open for professional collaborations and job offers.'), action: linkButton(t('Email'), 'mailto:evinjohnignatious@gmail.com') },
+        { title: t('Support Development'), body: t('Natively is independent source-available software.'), action: linkButton(t('Support Project'), DONATE_URL, true) },
+    ];
+
     return (
-        <div className="space-y-6 animated fadeIn pb-10" data-settings-stagger>
-            {/* Header */}
-            <div>
-                <h3 className="text-lg font-bold text-text-primary mb-1">{t('About Natively')}</h3>
-                <p className="text-sm text-text-secondary">{t('Designed to be invisible, intelligent, and trusted.')}</p>
+        <div className="aip-root space-y-5 pb-10" data-theme={theme} data-settings-stagger>
+            <header>
+                <h3 className="aip-title mb-1">{t('About Natively')}</h3>
+                <p className="aip-subtitle mb-2">{t('Designed to be invisible, intelligent, and trusted.')}</p>
+            </header>
+
+            {/* Identity: the app's mark, the running build, and its official channels. */}
+            <div className="aip-card p-4 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                    <span className="aip-tile aip-tile--mark">
+                        <img
+                            src={nativelyIcon}
+                            alt=""
+                            className="w-4 h-4 object-contain"
+                            style={{ filter: theme === 'light' ? 'brightness(0)' : 'brightness(0) invert(1)' }}
+                            draggable={false}
+                        />
+                    </span>
+                    <div className="min-w-0">
+                        <h4 className="aip-card-title">Natively</h4>
+                        <p className="aip-meta tabular-nums truncate">{`Version ${appVersion} · Build ${buildCommit}`}</p>
+                    </div>
+                </div>
+                {iconLinks(NATIVELY_LINKS)}
             </div>
 
-            {/* What's New Section */}
-            <div>
-                <h4 className="text-xs font-bold text-text-tertiary uppercase tracking-wider mb-2 px-1">{`${t("What's New in")} v${APP_FEATURE_VERSION}`}</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-2">
-                    {WHATS_NEW.map(({ icon: Icon, title, body, span, hero }) => (
-                        <div
-                            key={title}
-                            className={`${span} rounded-xl border bg-bg-item-surface p-3 ${hero ? 'border-[color:var(--accent-shadow-20)]' : 'border-border-subtle'}`}
-                            style={hero ? { backgroundImage: 'radial-gradient(120% 150% at 100% 0%, color-mix(in srgb, var(--accent-primary) 14%, transparent), transparent 65%)' } : undefined}
-                        >
-                            <div className="flex items-center gap-2 mb-1">
-                                <div className="w-6 h-6 rounded-md bg-accent-subtle text-accent-primary flex items-center justify-center shrink-0">
-                                    <Icon size={13} />
-                                </div>
-                                <h5 className="text-[13px] font-semibold text-text-primary leading-tight">{title}</h5>
-                            </div>
-                            <p className="text-[11.5px] text-text-secondary leading-[1.55]">{body}</p>
-                        </div>
+            <div className="space-y-5">
+                <SectionHeading title={`${t("What's New in")} v${APP_FEATURE_VERSION}`} subtitle={t('The changes you can see in this release.')} />
+                <div className="aip-card p-5 flex flex-col gap-3">
+                    {WHATS_NEW.map(({ title, body, badge }, i) => (
+                        <AboutRow key={title} title={title} body={body} first={i === 0}>
+                            {badge && <AipBadge tone="neutral" label={t(badge)} className="shrink-0" />}
+                        </AboutRow>
                     ))}
                 </div>
             </div>
 
-            {/* Architecture Section */}
-            <div>
-                <h4 className="text-xs font-bold text-text-tertiary uppercase tracking-wider mb-2 px-1">{t('How Natively Works')}</h4>
-                <div className="bg-bg-item-surface rounded-xl border border-border-subtle overflow-hidden">
-                    <div className="p-3 border-b border-border-subtle bg-bg-card/50">
-                        <div className="flex items-start gap-4">
-                            <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-400 shrink-0">
-                                <Cpu size={20} />
-                            </div>
-                            <div>
-                                <h5 className="text-sm font-bold text-text-primary mb-1">Stateful Intelligence OS</h5>
-                                <p className="text-xs text-text-secondary leading-relaxed">
-                                    Acts as a persistent control plane using mode-aware priors (Sales, Technical, Lecture) to dynamically filter context and direct queries to the optimal reasoning engine.
-                                </p>
+            <div className="space-y-5">
+                <SectionHeading title={t('How Natively Works')} subtitle={t('What runs underneath every answer.')} />
+                <div className="aip-card p-5 flex flex-col gap-3">
+                    {HOW_IT_WORKS.map(({ title, body }, i) => (
+                        <AboutRow key={title} title={title} body={body} first={i === 0} />
+                    ))}
+                </div>
+            </div>
+
+            <div className="space-y-5">
+                <SectionHeading title={t('Privacy & Data')} subtitle={t('You control exactly what leaves your device.')} />
+                <div className="aip-card p-5 flex flex-col gap-3">
+                    <AboutRow
+                        first
+                        title={t('Stealth & Control')}
+                        body={'"Undetectable Mode" hides Natively from the dock, and "Masquerading" disguises it as a system app.'}
+                    />
+                    <AboutRow
+                        first={false}
+                        title={t('No Recording')}
+                        body="Natively listens only when active. It does not record video, take arbitrary screenshots without command, or perform background surveillance."
+                    />
+                </div>
+            </div>
+
+            <div className="space-y-5">
+                <SectionHeading title={t('Community')} subtitle={t('Follow along, report a bug, or support the project.')} />
+                <div className="space-y-3">
+                    <div className="aip-card p-4 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                            <img
+                                src={evinProfile}
+                                alt=""
+                                className="w-[26px] h-[26px] rounded-full object-cover shrink-0"
+                                draggable={false}
+                            />
+                            <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                    <h4 className="aip-card-title">Evin John</h4>
+                                    <LiquidGlassBadge>{t('Creator')}</LiquidGlassBadge>
+                                </div>
+                                <p className="aip-meta truncate">I build software that stays out of the way.</p>
                             </div>
                         </div>
+                        {iconLinks(CREATOR_LINKS)}
                     </div>
 
-                    <div className="p-3 bg-bg-card/50">
-                        <div className="flex items-start gap-4">
-                            <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-400 shrink-0">
-                                <Database size={20} />
-                            </div>
-                            <div>
-                                <h5 className="text-sm font-bold text-text-primary mb-1">Hindsight LTM & Session Memory</h5>
-                                <p className="text-xs text-text-secondary leading-relaxed">
-                                    Combines a secure local sidecar vector database for document indexing with a time-decayed sliding transcript memory to retrieve relevant semantic context on-demand.
-                                </p>
-                            </div>
-                        </div>
+                    <div className="aip-card p-5 flex flex-col gap-3">
+                        {community.map(({ title, body, action }, i) => (
+                            <AboutRow key={title} title={title} body={body} first={i === 0}>
+                                {action}
+                            </AboutRow>
+                        ))}
                     </div>
                 </div>
             </div>
 
-            {/* Privacy Section */}
-            <div>
-                <h4 className="text-xs font-bold text-text-tertiary uppercase tracking-wider mb-2 px-1">{t('Privacy & Data')}</h4>
-                <div className="bg-bg-item-surface rounded-xl border border-border-subtle p-5 space-y-4">
-                    <div className="flex items-start gap-3">
-                        <Shield size={16} className="text-green-400 mt-0.5" />
-                        <div>
-                            <h5 className="text-sm font-medium text-text-primary">{t('Stealth & Control')}</h5>
-                            <p className="text-xs text-text-secondary mt-1 leading-relaxed">
-                                Features "Undetectable Mode" to hide from the dock and "Masquerading" to disguise as system apps. You control exactly what data leaves your device.
-                            </p>
-                        </div>
-                    </div>
-                    <div className="flex items-start gap-3">
-                        <MicOff size={16} className="text-red-500 mt-0.5" />
-                        <div>
-                            <h5 className="text-sm font-medium text-text-primary">{t('No Recording')}</h5>
-                            <p className="text-xs text-text-secondary mt-1 leading-relaxed">
-                                Natively listens only when active. It does not record video, take arbitrary screenshots without command, or perform background surveillance.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {/* Community Section */}
-            <div>
-                <h4 className="text-xs font-bold text-text-tertiary uppercase tracking-wider mb-2 px-1">{t('Community')}</h4>
-                <div className="space-y-4">
-                    {/* 0. Natively */}
-                    <div className="bg-bg-item-surface rounded-xl p-5">
-                        <div className="flex flex-col gap-4">
-                            <div className="flex items-start gap-4">
-                                <div className="w-12 h-12 rounded-full bg-bg-elevated border border-border-subtle flex items-center justify-center overflow-hidden shrink-0">
-                                    <img
-                                        src={nativelyIcon}
-                                        alt="Natively"
-                                        className="w-7 h-7 object-contain"
-                                        style={{ filter: isLight ? 'brightness(0)' : 'brightness(0) invert(1)', opacity: 0.9 }}
-                                        draggable={false}
-                                    />
-                                </div>
-                                <div className="pt-0.5">
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <h5 className="text-sm font-bold text-text-primary">Natively</h5>
-                                        <span className="text-[10px] font-medium px-1.5 py-[1px] rounded-full bg-accent-subtle text-accent-primary border border-[var(--accent-shadow-20)]">{t('Official')}</span>
-                                    </div>
-                                    <p className="text-xs text-text-secondary leading-relaxed max-w-lg">
-                                        An invisible AI assistant for your meetings, calls, and interviews.
-                                        <br />
-                                        Follow <span className="font-bold text-text-primary">Natively</span> for releases, tips, and community help.
-                                    </p>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-4 pl-[60px]">
-                                <a
-                                    href="https://natively.software"
-                                    onClick={(e) => handleOpenLink(e, "https://natively.software")}
-                                    className="text-text-tertiary hover:text-text-primary transition-colors"
-                                    title="Website"
-                                >
-                                    <Globe size={18} />
-                                </a>
-                                <a
-                                    href="https://t.me/nativelyaichat"
-                                    onClick={(e) => handleOpenLink(e, "https://t.me/nativelyaichat")}
-                                    className="text-text-tertiary hover:text-text-primary transition-colors"
-                                    title="Telegram"
-                                >
-                                    <Send size={18} />
-                                </a>
-                                <a
-                                    href="https://www.linkedin.com/company/nativley-ai"
-                                    onClick={(e) => handleOpenLink(e, "https://www.linkedin.com/company/nativley-ai")}
-                                    className="text-text-tertiary hover:text-text-primary transition-colors"
-                                    title="LinkedIn"
-                                >
-                                    <Linkedin size={18} />
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* 1. Founder Profile */}
-                    <div className="bg-bg-item-surface rounded-xl p-5">
-                        <div className="flex flex-col gap-4">
-                            <div className="flex items-start gap-4">
-                                <div className="w-12 h-12 rounded-full bg-bg-elevated border border-border-subtle flex items-center justify-center overflow-hidden shrink-0">
-                                    <img src={evinProfile} alt="Evin John" className="w-full h-full object-cover" />
-                                </div>
-                                <div className="pt-0.5">
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <h5 className="text-sm font-bold text-text-primary">Evin John</h5>
-                                        <span className={`text-[10px] font-medium px-1.5 py-[1px] rounded-full ${isLight ? 'bg-amber-100 text-amber-700 border border-amber-300' : 'bg-yellow-400/10 text-yellow-200 border border-yellow-400/5'}`}>{t('Creator')}</span>
-                                    </div>
-                                    <p className="text-xs text-text-secondary leading-relaxed max-w-lg">
-                                        I build software that stays out of the way.
-                                        <br />
-                                        <span className="font-bold text-text-primary">Natively</span> is made to feel fast, quiet, and respectful of your privacy.
-                                    </p>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-4 pl-[60px]">
-                                <a
-                                    href="https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant"
-                                    onClick={(e) => handleOpenLink(e, "https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant")}
-                                    className="text-text-tertiary hover:text-text-primary transition-colors"
-                                    title="GitHub"
-                                >
-                                    <Github size={18} />
-                                </a>
-                                <a
-                                    href="https://x.com/evinjohnn"
-                                    onClick={(e) => handleOpenLink(e, "https://x.com/evinjohnn")}
-                                    className="text-text-tertiary hover:text-text-primary transition-colors"
-                                    title="Twitter"
-                                >
-                                    <Twitter size={18} />
-                                </a>
-                                <a
-                                    href="https://www.linkedin.com/in/evinjohn"
-                                    onClick={(e) => handleOpenLink(e, "https://www.linkedin.com/in/evinjohn")}
-                                    className="text-text-tertiary hover:text-text-primary transition-colors"
-                                    title="LinkedIn"
-                                >
-                                    <Linkedin size={18} />
-                                </a>
-                                <a
-                                    href="https://www.instagram.com/evinjohnn/"
-                                    onClick={(e) => handleOpenLink(e, "https://www.instagram.com/evinjohnn/")}
-                                    className="text-text-tertiary hover:text-text-primary transition-colors"
-                                    title="Instagram"
-                                >
-                                    <Instagram size={18} />
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* 2. Star & Report */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <a
-                            href="https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant"
-                            onClick={(e) => handleOpenLink(e, "https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant")}
-                            className="bg-bg-item-surface border border-border-subtle rounded-xl p-5 transition-all group flex items-center gap-4 h-full hover:bg-white/10"
-                        >
-                            <div className="w-10 h-10 rounded-lg bg-yellow-500/10 flex items-center justify-center text-yellow-500 shrink-0 group-hover:scale-110 transition-transform">
-                                <Star size={20} className="transition-all group-hover:fill-current" />
-                            </div>
-                            <div>
-                                <h5 className="text-sm font-bold text-text-primary">{t('Star on GitHub')}</h5>
-                                <p className="text-xs text-text-secondary mt-0.5">{t('Love Natively? Support us by starring the repo.')}</p>
-                            </div>
-                        </a>
-
-                        <a
-                            href="https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant/issues"
-                            onClick={(e) => handleOpenLink(e, "https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant/issues")}
-                            className="bg-bg-item-surface border border-border-subtle rounded-xl p-5 transition-all group flex items-center gap-4 h-full hover:bg-white/10"
-                        >
-                            <div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center text-red-500 shrink-0 group-hover:scale-110 transition-transform">
-                                <Bug size={20} />
-                            </div>
-                            <div>
-                                <h5 className="text-sm font-bold text-text-primary">{t('Report an Issue')}</h5>
-                                <p className="text-xs text-text-secondary mt-0.5">{t('Found a bug? Let us know so we can fix it.')}</p>
-                            </div>
-                        </a>
-                    </div>
-
-                    {/* 3. Get in Touch */}
-                    <div className="bg-bg-item-surface rounded-xl border border-border-subtle p-5 flex flex-col md:flex-row items-center justify-between gap-4">
-                        <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 rounded-full bg-accent-subtle flex items-center justify-center text-accent-primary shadow-sm shadow-[var(--accent-shadow-20)]">
-                                <Mail size={18} className="opacity-80" />
-                            </div>
-                            <div>
-                                <h5 className="text-sm font-bold text-text-primary">{t('Get in Touch')}</h5>
-                                <p className="text-xs text-text-secondary mt-0.5">{t('Open for professional collaborations and job offers.')}</p>
-                            </div>
-                        </div>
-                        <a
-                            href="mailto:evinjohnignatious@gmail.com"
-                            onClick={(e) => handleOpenLink(e, "mailto:evinjohnignatious@gmail.com")}
-                            className="whitespace-nowrap px-4 py-2 bg-text-primary hover:bg-white/90 text-bg-main text-xs font-bold rounded-lg transition-all shadow hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 flex items-center gap-2"
-                        >
-                            <Mail size={14} />
-                            {t('Contact Me')}
-                        </a>
-                    </div>
-
-                    {/* 4. Support */}
-                    <div className="bg-bg-item-surface rounded-xl border border-border-subtle p-5 flex flex-col md:flex-row items-center justify-between gap-4">
-                        <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 rounded-full bg-pink-500/10 flex items-center justify-center text-pink-500 shadow-sm shadow-pink-500/5">
-                                <Heart size={18} fill="currentColor" className="opacity-80" />
-                            </div>
-                            <div>
-                                <h5 className="text-sm font-bold text-text-primary">{t('Support Development')}</h5>
-                                <p className="text-xs text-text-secondary mt-0.5">{t('Natively is independent source-available software.')}</p>
-                            </div>
-                        </div>
-                        <a
-                            href="https://buymeacoffee.com/evinjohnn"
-                            onClick={(e) => handleOpenLink(e, "https://buymeacoffee.com/evinjohnn")}
-                            className="whitespace-nowrap px-4 py-2 bg-text-primary hover:bg-white/90 text-bg-main text-xs font-bold rounded-lg transition-all shadow hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0"
-                        >
-                            {t('Support Project')}
-                        </a>
-                    </div>
-                </div>
-            </div>
-
-            {/* Version */}
-            <div className="pt-4 border-t border-border-subtle">
-                <p className="text-[11px] text-text-tertiary font-mono">
-                    {`Version ${appVersion} · Build ${buildCommit}`}
-                </p>
-            </div>
-        </div >
+            {/* Last child: first, it would pick up the space-y margin. */}
+            <style>{AIP_CSS}</style>
+        </div>
     );
 };

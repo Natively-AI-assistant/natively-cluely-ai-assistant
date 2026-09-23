@@ -231,6 +231,10 @@
   --legacy-action-disabled-bg: rgba(30, 58, 138, 0.3);
   --legacy-action-disabled-border: rgba(30, 64, 175, 0.3);
   --legacy-action-disabled-text: rgba(96, 165, 250, 0.4);
+
+  /* Scrim & overlay backdrops */
+  --scrim-backdrop: rgba(0, 0, 0, 0.60);
+  --scrim-backdrop-subtle: rgba(0, 0, 0, 0.40);
 }
 
 /* Phase-1 Settings-only accent override (dark mode), scoped via
@@ -379,6 +383,10 @@
   --legacy-action-disabled-bg: var(--bg-input);
   --legacy-action-disabled-border: var(--border-subtle);
   --legacy-action-disabled-text: var(--text-tertiary);
+
+  /* Scrim & overlay backdrops (Apple-style subtle dark tint) */
+  --scrim-backdrop: rgba(60, 60, 67, 0.18);
+  --scrim-backdrop-subtle: rgba(60, 60, 67, 0.12);
 }
 
 [data-theme='light'] .ai-response-card p,

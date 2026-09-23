@@ -121,6 +121,10 @@
   --legacy-action-disabled-bg: var(--bg-input);
   --legacy-action-disabled-border: var(--border-subtle);
   --legacy-action-disabled-text: var(--text-tertiary);
+
+  /* Scrim & overlay backdrops (Apple-style subtle dark tint) */
+  --scrim-backdrop: rgba(60, 60, 67, 0.18);
+  --scrim-backdrop-subtle: rgba(60, 60, 67, 0.12);
 }
 
 .ai-response-card p,

@@ -2,6 +2,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { isMac } from '../utils/platformUtils';
 import { useT } from '../i18n';
+import { useResolvedTheme } from '../hooks/useResolvedTheme';
 
 interface ReleaseNoteSection {
     title: string;
@@ -69,6 +70,7 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
     instructionsArch
 }) => {
     const t = useT();
+    const isLight = useResolvedTheme() === 'light';
     // Helper to format version string
     const formatVersion = (v: string) => {
         if (!v) return t('Unknown');
@@ -144,7 +146,7 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.3 }}
-                        className="absolute inset-0 bg-black/40"
+                        className={`absolute inset-0 ${isLight ? 'bg-black/15' : 'bg-black/40'}`}
                         onClick={onDismiss}
                     />
 
