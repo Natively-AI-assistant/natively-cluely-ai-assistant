@@ -58,6 +58,41 @@ describe('OpenAITranscriptTurnCoalescer', () => {
         assert.strictEqual(c.getPartialText(), null);
     });
 
+    // Measured live 2026-09-23 (gpt-4o-transcribe, server_vad): speech_stopped
+    // arrives FIRST — it is what commits the audio — and the transcription
+    // follows it. Before this, the stop returned nothing and the turn's final
+    // only surfaced as the orphan of the NEXT speech_started: a turn late.
+    test('LIVE ORDER: completed after speech_stopped finalizes the stopped turn', () => {
+        const c = new OpenAITranscriptTurnCoalescer();
+        c.onSpeechStarted();
+        assert.strictEqual(c.onSpeechStopped(), null, 'no text yet at the stop');
+        c.onDelta('Why did you');
+        assert.strictEqual(c.takeAwaitedFinal(), null, 'deltas alone do not finalize');
+        c.onCompleted('Why did you choose Postgres?');
+        assert.strictEqual(c.takeAwaitedFinal(), 'Why did you choose Postgres?');
+        assert.strictEqual(c.getPartialText(), null);
+        assert.strictEqual(c.takeAwaitedFinal(), null, 'one final per stopped turn');
+    });
+
+    test('completed arriving BEFORE the stop keeps the original behaviour (no early final)', () => {
+        const c = new OpenAITranscriptTurnCoalescer();
+        c.onSpeechStarted();
+        c.onCompleted('and');
+        assert.strictEqual(c.takeAwaitedFinal(), null, 'turn has not stopped');
+        assert.strictEqual(c.onSpeechStopped(), 'and');
+        c.onCompleted('late');
+        assert.strictEqual(c.takeAwaitedFinal(), null, 'stop already produced this turn\'s final');
+    });
+
+    test('a new speech_started clears a stale awaiting flag', () => {
+        const c = new OpenAITranscriptTurnCoalescer();
+        c.onSpeechStarted();
+        c.onSpeechStopped();
+        c.onSpeechStarted();
+        c.onCompleted('next turn word');
+        assert.strictEqual(c.takeAwaitedFinal(), null);
+    });
+
     test('reset clears all pending state', () => {
         const c = new OpenAITranscriptTurnCoalescer();
         c.onSpeechStarted();

@@ -290,6 +290,19 @@ describe('OpenAI: gpt-live-transcribe first, committed at the local speech end',
     done();
   });
 
+  test('server-VAD models: the final lands on the completed that FOLLOWS speech_stopped, not a turn later', () => {
+    // Live capture order (gpt-4o-transcribe): speech_stopped → delta… → completed.
+    const { stt, done } = ready(1);
+    const out = [];
+    stt.on('transcript', (t) => out.push(`${t.isFinal ? 'F' : 'P'}:${t.text}`));
+    stt._handleWsMessage({ type: 'input_audio_buffer.speech_started' });
+    stt._handleWsMessage({ type: 'input_audio_buffer.speech_stopped' });
+    stt._handleWsMessage({ type: 'conversation.item.input_audio_transcription.delta', delta: 'Why did' });
+    stt._handleWsMessage({ type: 'conversation.item.input_audio_transcription.completed', transcript: 'Why did you?' });
+    assert.deepEqual(out, ['P:Why did', 'F:Why did you?']);
+    done();
+  });
+
   test('stop() finalizes pending live text (nothing more will complete)', () => {
     const { stt } = ready();
     const finals = [];
