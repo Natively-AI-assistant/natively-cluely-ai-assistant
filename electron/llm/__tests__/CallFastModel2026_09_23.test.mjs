@@ -108,3 +108,26 @@ test('a good response comes back, scopes asserted and limiter acquired first', a
   assert.equal(await call(h), '{"is_ask":true}');
   assert.deepEqual(order, ['scopes', 'limiter', 'request']);
 });
+
+test('an answering fast model logs a stable, greppable marker', async () => {
+  // The spec asked for a `judgeRoute` telemetry value, but that field belongs to
+  // PR 583's judge-telemetry work, which this branch deliberately excludes.
+  // Threading a route back to the controller would change the judgeCandidate host
+  // signature across SimpleAutoAnswer, main.ts and every stub — out of proportion
+  // to this feature. A stable log marker keeps it diagnosable from a user debug
+  // log, which is how this area actually gets debugged.
+  const lines = [];
+  const realLog = console.log;
+  console.log = (...a) => lines.push(a.join(' '));
+  try {
+    const h = helper({
+      fastModelId: 'gpt-5.5',
+      _openaiClient: { chat: { completions: { create: async () => ({ choices: [{ message: { content: 'ok' } }] }) } } },
+    });
+    assert.equal(await call(h), 'ok');
+  } finally {
+    console.log = realLog;
+  }
+  assert.ok(lines.some((l) => l.includes('[LLMHelper] fast-model answered') && l.includes('gpt-5.5')),
+    `expected a fast-model marker naming the model; got: ${JSON.stringify(lines)}`);
+});
