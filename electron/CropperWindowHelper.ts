@@ -1,5 +1,6 @@
 import { BrowserWindow, screen, app, ipcMain, IpcMainEvent } from "electron"
 import path from "node:path"
+import { setVisibleOnAllWorkspacesKeepingDock } from "./utils/macDockPolicy"
 
 // Force production mode if running as packaged app — matches WindowHelper.ts's
 // isDev predicate. A stray NODE_ENV=development in a packaged launch's
@@ -22,8 +23,16 @@ const CROPPER_CONFIG = {
     /** Delay in ms before setting opacity to 1 (Windows opacity shield) */
     OPACITY_DELAY_MS: parseInt(process.env.CROPPER_OPACITY_DELAY || '60', 10),
 
-    /** Window type for the cropper window */
+    /** Window type for the cropper window (Linux; macOS uses MAC_WINDOW_TYPE) */
     WINDOW_TYPE: 'toolbar' as const,
+
+    /**
+     * macOS window type. Electron ignores 'toolbar' on macOS (a plain
+     * NSWindow), and a plain window can only cover another app's fullscreen
+     * Space after an activation-policy flip — the flip that left duplicate
+     * Dock tiles (utils/macDockPolicy.ts). An NSPanel covers it with no flip.
+     */
+    MAC_WINDOW_TYPE: 'panel' as const,
 
     /** Maximum retries for loading cropper URL */
     MAX_LOAD_RETRIES: 3,
@@ -96,9 +105,17 @@ function getCombinedDisplayBounds(): Electron.Rectangle {
  * The correction is additive — darwin gains the flag, win32 keeps it — so this
  * function changes NOTHING on Windows. See the inline note at the gate.
  *
- * `type: 'toolbar'` stays on every non-win32 platform exactly as before — it is
- * load-bearing for the macOS NSPanel stealth path (see createWindow), and Linux
- * has always received it.
+ * WINDOW TYPE — macOS gets `type: 'panel'`; Linux keeps `'toolbar'`; win32 gets
+ * none. Electron ignores 'toolbar' on macOS, so the cropper used to be a plain
+ * NSWindow there (and applyStealthToWindow's NSPanel-only attributes were
+ * no-ops on it). A plain window only covered another app's fullscreen Space
+ * because setVisibleOnAllWorkspaces flipped the activation policy — the flip
+ * behind the duplicate Dock tiles. As a panel it covers the fullscreen Space with
+ * no flip, and show() no longer activates the app. Verified on the real build
+ * over a real fullscreen app (2026-09-23), normal and undetectable mode: the
+ * cropper shows on that Space, Esc cancels, a drag captures the app's pixels.
+ * ElectronNSPanel subclasses ElectronNSWindow, so enableLargerThanScreen (below)
+ * still applies.
  */
 export function buildCropperWindowSettings(
     combinedBounds: Electron.Rectangle,
@@ -127,7 +144,9 @@ export function buildCropperWindowSettings(
         }
     };
 
-    if (platform !== 'win32') {
+    if (platform === 'darwin') {
+        settings.type = CROPPER_CONFIG.MAC_WINDOW_TYPE;
+    } else if (platform !== 'win32') {
         settings.type = CROPPER_CONFIG.WINDOW_TYPE;
     }
 
@@ -628,7 +647,7 @@ export class CropperWindowHelper {
         }
 
         if (process.platform === "darwin") {
-            this.cropperWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+            setVisibleOnAllWorkspacesKeepingDock(this.cropperWindow, true, true)
             this.cropperWindow.setAlwaysOnTop(true, "screen-saver")
         }
 

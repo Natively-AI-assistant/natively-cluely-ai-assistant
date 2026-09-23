@@ -18,7 +18,8 @@ import {
   easeLauncherResize,
   interpolateBounds,
 } from './utils/launcherResizeAnimation';
-import { attachNoActivate, isNoActivateManaged } from './utils/windowsFocusPolicy';
+import { attachNoActivate, isNoActivateManaged, restoreFocusableOffTaskbar } from './utils/windowsFocusPolicy';
+import { setVisibleOnAllWorkspacesKeepingDock } from './utils/macDockPolicy';
 import { resizeEnvelopeFor, OVERLAY_PANEL_INSET } from '../src/lib/overlayCustomSize.mjs';
 import { decideLauncherClose } from '../src/lib/launcherCloseDecision.mjs';
 
@@ -922,7 +923,9 @@ export class WindowHelper {
     }
 
     if (process.platform === 'darwin') {
-      this.overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+      // Never through the raw API: it hides the Dock tile as a side effect
+      // (see utils/macDockPolicy.ts — the duplicate-Dock-icon bug).
+      setVisibleOnAllWorkspacesKeepingDock(this.overlayWindow, true, true);
       this.overlayWindow.setHiddenInMissionControl(true);
       this.overlayWindow.setAlwaysOnTop(true, 'floating');
 
@@ -1472,8 +1475,10 @@ export class WindowHelper {
       // focus from the meeting app. Mouse interactivity does not need focusable
       // on Windows; typing is captured by the WH_KEYBOARD_LL stealth hook
       // without the window ever being focused (StealthKeyboardManager).
+      // Never the raw setFocusable(true): on Windows it re-adds a taskbar
+      // button (AddTab) on every hover — undetectable mode included.
       if (!isNoActivateManaged(this.overlayWindow)) {
-        this.overlayWindow.setFocusable(true);
+        restoreFocusableOffTaskbar(this.overlayWindow);
       }
     }
     auxWindows.forEach((w) => {
@@ -1482,7 +1487,7 @@ export class WindowHelper {
       } else {
         w.setIgnoreMouseEvents(false);
         // Same no-activate guard as the overlay body above.
-        if (!isNoActivateManaged(w)) w.setFocusable(true);
+        if (!isNoActivateManaged(w)) restoreFocusableOffTaskbar(w);
       }
     });
     if (!quiet) {
@@ -1659,7 +1664,7 @@ export class WindowHelper {
     });
     this.popoverCatcher.setContentProtection(this.contentProtection);
     if (isMac) {
-      this.popoverCatcher.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+      setVisibleOnAllWorkspacesKeepingDock(this.popoverCatcher, true, true);
       this.popoverCatcher.setHiddenInMissionControl(true);
       // relativeLevel -1: below the other 'floating' Natively windows, above
       // normal app windows — clicks on Natively still hit Natively; clicks
@@ -1762,7 +1767,7 @@ export class WindowHelper {
       // applyContentProtection).
       win.setContentProtection(this.contentProtection);
       if (process.platform === 'darwin') {
-        win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+        setVisibleOnAllWorkspacesKeepingDock(win, true, true);
         win.setHiddenInMissionControl(true);
         win.setAlwaysOnTop(true, 'floating');
         win.once('ready-to-show', () => {
