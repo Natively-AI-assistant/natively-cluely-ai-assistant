@@ -2071,7 +2071,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.2 }}
                     id="settings-backdrop"
-                    className={`fixed inset-0 z-50 flex items-center justify-center p-8 transition-colors duration-150 ${isPreviewingOpacity ? 'bg-transparent backdrop-blur-none pointer-events-none' : isLight ? 'bg-white/45' : 'bg-black/60'}`}
+                    className={`fixed inset-0 z-[300] flex items-center justify-center p-8 transition-colors duration-150 ${isPreviewingOpacity ? 'bg-transparent backdrop-blur-none pointer-events-none' : isLight ? 'bg-black/[0.06]' : 'bg-black/60'}`}
                     onClick={(e) => {
                         // Mirror Modes/Profile (App.tsx) close-on-outside-click.
                         // Skip when opacity slider preview is active — backdrop is
@@ -2098,7 +2098,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                             damping: 32,
                             mass: 1
                         }}
-                        className="bg-bg-elevated w-full max-w-4xl h-[80vh] rounded-2xl border border-border-subtle shadow-2xl overflow-hidden relative"
+                        className={`bg-bg-elevated w-full max-w-4xl h-[80vh] rounded-2xl border border-border-subtle ${isLight ? 'shadow-[0_0_0_1px_rgba(0,0,0,0.06),0_24px_48px_-12px_rgba(0,0,0,0.16),0_8px_16px_-6px_rgba(0,0,0,0.06)]' : 'shadow-2xl'} overflow-hidden relative`}
                     >
                         <div
                             id="settings-panel"
