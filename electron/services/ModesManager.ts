@@ -1372,7 +1372,7 @@ export class ModesManager {
         void (async () => {
             try {
                 const llmHelper = ModesManager.llmHelperForCompiler;
-                if (!llmHelper) return; // compiler not available in this context
+                if (!llmHelper || !llmHelper.hasAnyConfiguredProvider?.()) return; // compiler not available or no provider configured
                 // Scope gate: never call a cloud LLM for prompt compilation when post_call_summary
                 // is denied (the deterministic fallback covers it at summary time).
                 try {
@@ -1404,7 +1404,7 @@ export class ModesManager {
         void (async () => {
             try {
                 const llmHelper = ModesManager.llmHelperForCompiler;
-                if (!llmHelper) return;
+                if (!llmHelper || !llmHelper.hasAnyConfiguredProvider?.()) return;
                 try {
                     const { SettingsManager } = require('./SettingsManager');
                     if (SettingsManager.getInstance().get('providerDataScopes')?.post_call_summary === false) return;
