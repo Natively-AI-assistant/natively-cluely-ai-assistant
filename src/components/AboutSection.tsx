@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { useT } from '../i18n';
-import { Github, Twitter, Linkedin, Instagram, Globe, Send, ExternalLink } from 'lucide-react';
+import { Github, Twitter, Linkedin, Instagram, Globe, Send, Star, Bug, Mail, Heart } from 'lucide-react';
 import evinProfile from '../assets/evin.png';
 import nativelyIcon from './icon.png';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
@@ -10,8 +10,8 @@ import { LiquidGlassBadge } from '../ui-components/LiquidGlassBadge';
 
 // Built from the AI Providers panel's `.aip-*` system (the same one Retrieval
 // adopts), so About reads as part of Settings rather than its own UI: aip-card
-// surfaces, rows split by --aip-divider hairlines, neutral 1.75-stroke icons,
-// and colour only where something carries a state.
+// surfaces, rows split by --aip-divider hairlines, and colour only where
+// something carries a state.
 
 const WHATS_NEW: { title: string; body: string; badge?: string }[] = [
     { title: 'Direct Assist', body: 'Sends your last three minutes and reference files verbatim. Turn it on in AI Providers.', badge: 'Off by default' },
@@ -106,40 +106,38 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
     };
 
     const iconLinks = (links: typeof NATIVELY_LINKS) => (
-        <div className="flex items-center gap-0.5 shrink-0">
+        <div className="flex items-center gap-4 shrink-0">
             {links.map(({ label, url, Icon }) => (
                 <button
                     key={url}
                     onClick={() => openLink(url)}
-                    className="aip-btn"
-                    data-icon="true"
-                    data-variant="ghost"
+                    className="text-text-tertiary hover:text-text-primary transition-colors"
                     title={label}
                     aria-label={label}
                 >
-                    <Icon size={14} strokeWidth={1.75} />
+                    <Icon size={18} />
                 </button>
             ))}
         </div>
     );
 
-    const linkButton = (label: string, url: string, accent = false) => (
+    // The inverted pill About has always used for its calls to action. Hover dims
+    // it rather than swapping to white, which blanked the label in light theme.
+    const actionButton = (label: string, url: string, Icon: typeof Star) => (
         <button
             onClick={() => openLink(url)}
-            className="aip-btn shrink-0"
-            data-size="sm"
-            data-variant={accent ? 'accent' : 'ghost'}
+            className="shrink-0 whitespace-nowrap px-4 py-2 bg-text-primary text-bg-main text-xs font-bold rounded-lg transition-all shadow hover:opacity-90 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 flex items-center gap-2"
         >
-            <span className={accent ? undefined : 'uppercase tracking-wide'}>{label}</span>
-            <ExternalLink size={12} strokeWidth={1.75} />
+            <Icon size={14} />
+            {label}
         </button>
     );
 
     const community = [
-        { title: t('Star on GitHub'), body: t('Love Natively? Support us by starring the repo.'), action: linkButton(t('Star'), REPO_URL) },
-        { title: t('Report an Issue'), body: t('Found a bug? Let us know so we can fix it.'), action: linkButton(t('Report'), `${REPO_URL}/issues`) },
-        { title: t('Get in Touch'), body: t('Open for professional collaborations and job offers.'), action: linkButton(t('Contact Me'), 'mailto:evinjohnignatious@gmail.com') },
-        { title: t('Support Development'), body: t('Natively is independent source-available software.'), action: linkButton(t('Support Project'), DONATE_URL, true) },
+        { title: t('Star on GitHub'), body: t('Love Natively? Support us by starring the repo.'), action: actionButton(t('Star'), REPO_URL, Star) },
+        { title: t('Report an Issue'), body: t('Found a bug? Let us know so we can fix it.'), action: actionButton(t('Report'), `${REPO_URL}/issues`, Bug) },
+        { title: t('Get in Touch'), body: t('Open for professional collaborations and job offers.'), action: actionButton(t('Contact Me'), 'mailto:evinjohnignatious@gmail.com', Mail) },
+        { title: t('Support Development'), body: t('Natively is independent source-available software.'), action: actionButton(t('Support Project'), DONATE_URL, Heart) },
     ];
 
     return (
