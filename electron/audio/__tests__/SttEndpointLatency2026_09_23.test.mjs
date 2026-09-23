@@ -186,19 +186,23 @@ describe('ElevenLabs: finals every ~0.8 s of silence, not every ~36 s of audio',
     stt.isActive = false; stt.ws = null;
   });
 
-  test('"Answer now" commits — even with nothing buffered locally', () => {
+  // LIVE (2026-09-23): a commit with < 0.3 s of uncommitted audio is answered
+  // with commit_throttled AND the server closes the socket (1000,
+  // "commit_throttled"). The VAD's own commits are invisible until their
+  // transcript arrives, so the client can never know a manual commit is safe.
+  test('"Answer now" flushes pending audio but NEVER commits (a short commit kills the session)', () => {
     const stt = new ElevenLabsStreamingSTT('k');
     const msgs = [];
     stt.isActive = true; stt.isSessionReady = true; stt.setSampleRate(16000);
     stt.ws = { readyState: WS_OPEN, send: (p) => msgs.push(JSON.parse(p)), close() {} };
     stt.finalize();
-    assert.equal(msgs.length, 1);
-    assert.equal(msgs[0].commit, true);
-    assert.equal(msgs[0].audio_base_64, '');
+    assert.equal(msgs.length, 0, 'nothing buffered → nothing sent');
     stt.write(speech(50));
     stt.finalize();
-    assert.equal(msgs.at(-1).commit, true);
-    assert.equal(Buffer.from(msgs.at(-1).audio_base_64, 'base64').length, 50 * BYTES_PER_MS_16K);
+    assert.equal(msgs.length, 1);
+    assert.equal(msgs[0].commit, false);
+    assert.equal(Buffer.from(msgs[0].audio_base_64, 'base64').length, 50 * BYTES_PER_MS_16K);
+    assert.doesNotMatch(src('electron/audio/ElevenLabsStreamingSTT.ts'), /audioMessage\([^)]*,\s*true\)/);
     stt.isActive = false; stt.ws = null;
   });
 
