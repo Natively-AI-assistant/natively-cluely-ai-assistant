@@ -38,3 +38,21 @@ test('the Fast Model picker reports a refused write instead of showing success',
   assert.match(block, /success/,
     'the persistence boolean must control what the UI shows, not be discarded');
 });
+
+test('the picker offers only models the fast path can dispatch', () => {
+  const src = read('src/components/settings/AIProvidersSettings.tsx');
+  const i = src.indexOf('buildFastModelOptions');
+  assert.ok(i > -1, 'the picker must build its options through the filter, not inline');
+  const body = src.slice(i, i + 1400);
+  assert.match(body, /fastModelDispatchable/,
+    'options must be narrowed by the ids main says are dispatchable');
+  assert.match(body, /=== null\s*\?\s*\[\]/,
+    'before main answers, offer only Auto - otherwise the full unfiltered list flashes up as selectable');
+  // The saved pick must survive filtering, labelled, not vanish: dropping it
+  // renders an empty control while the id is still persisted.
+  assert.match(body, /not supported/, 'a saved-but-unsupported pick must stay visible and labelled');
+
+  const card = src.slice(src.indexOf("t('Background Model')"), src.indexOf("t('Background Model')") + 900);
+  assert.doesNotMatch(card, /\.\.\.buildAvailableModelOptions\(\)/,
+    'the unfiltered universe must not reach the picker');
+});

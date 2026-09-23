@@ -4758,6 +4758,47 @@ let isMultimodal = !!(imagePaths?.length);
   }
 
   /**
+   * Which provider family will actually serve this fast-model id, or null when
+   * NONE will.
+   *
+   * ONE resolver, used by callFastModel to dispatch AND by the renderer over IPC
+   * to filter the picker, so the list the user is offered cannot drift from the
+   * list the seam can run. A separate boolean beside callFastModel would drift
+   * the first time a branch changed, and invisibly - which is how the gateway
+   * egress bug got in.
+   */
+  private resolveFastModelFamily(modelId: string): 'openai' | 'groq' | 'gemini' | 'deepseek' | 'claude' | null {
+    if (!modelId) return null;
+    // Gateways are OpenAI-SHAPED but are NOT OpenAI. isOpenAiModel() self-excludes
+    // Groq and Fluxion but not these, and its final clause is `includes('openai')`
+    // - so `openrouter/openai/gpt-5.6-terra` (a stock picker preset) would be
+    // POSTed to api.openai.com on the user's OWN OpenAI key, carrying the judge
+    // prompt's meeting turns, for a prefixed id OpenAI rejects. Supporting them
+    // properly needs per-gateway clients plus routing-prefix stripping; until
+    // then they resolve to no family rather than leak. MUST stay first.
+    if (this.isOpenRouterModel(modelId) || this.isLiteLLMModel(modelId)
+        || this.isNvidiaNimModel(modelId) || this.isNinerouterModel(modelId)
+        || this.isFluxionModel(modelId)) {
+      return null;
+    }
+    if (this.isOpenAiModel(modelId)) return 'openai';
+    if (this.isGroqModel(modelId)) return 'groq';
+    if (this.isGeminiModel(modelId)) return 'gemini';
+    if (this.isDeepseekModel(modelId)) return 'deepseek';
+    if (this.isClaudeModel(modelId)) return 'claude';
+    return null;
+  }
+
+  /**
+   * Can the fast path actually run this model id? The Settings picker filters
+   * its options through this over IPC, so a user is never offered a model that
+   * would save, display, and silently do nothing.
+   */
+  public canDispatchFastModel(modelId: string): boolean {
+    return this.resolveFastModelFamily(modelId) !== null;
+  }
+
+  /**
    * One non-streaming call on the user's chosen FAST model.
    *
    * Returns null for every "not available" case — unset, no client, family
@@ -4782,18 +4823,8 @@ let isMultimodal = !!(imagePaths?.length);
       return null;
     };
 
-    // Gateways are OpenAI-SHAPED but are NOT OpenAI. isOpenAiModel() self-excludes
-    // Groq and Fluxion but not these, and its final clause is `includes('openai')`
-    // - so `openrouter/openai/gpt-5.6-terra` (a stock picker preset) would be
-    // POSTed to api.openai.com on the user's OWN OpenAI key, carrying the judge
-    // prompt's meeting turns, for a prefixed id OpenAI rejects. Supporting them
-    // properly needs per-gateway clients plus routing-prefix stripping; until then
-    // they fall through rather than leak.
-    if (this.isOpenRouterModel(modelId) || this.isLiteLLMModel(modelId)
-        || this.isNvidiaNimModel(modelId) || this.isNinerouterModel(modelId)
-        || this.isFluxionModel(modelId)) {
-      return notDispatchable();
-    }
+    const family = this.resolveFastModelFamily(modelId);
+    if (!family) return notDispatchable();
 
     // A caller with neither a signal nor a timeout would leave the request running
     // to the SDK default (10 min on OpenAI) long after its result is worthless.
@@ -4812,7 +4843,7 @@ let isMultimodal = !!(imagePaths?.length);
     };
 
     try {
-      if (this.isOpenAiModel(modelId) && this.openaiClient) {
+      if (family === 'openai' && this.openaiClient) {
         this.assertOutboundScopes('openai', message);
         await this.rateLimiters.openai?.acquire();
         const res = await this.openaiClient.chat.completions.create({
@@ -4824,7 +4855,7 @@ let isMultimodal = !!(imagePaths?.length);
         }, { signal: timer });
         return finish(res.choices?.[0]?.message?.content);
       }
-      if (this.isGroqModel(modelId) && this.groqClient && !this._groqLocalDisabled) {
+      if (family === 'groq' && this.groqClient && !this._groqLocalDisabled) {
         this.assertOutboundScopes('groq', message);
         await this.rateLimiters.groq?.acquire();
         const res = await this.createGroqCompletion(
@@ -4833,7 +4864,7 @@ let isMultimodal = !!(imagePaths?.length);
         );
         return finish(res.choices?.[0]?.message?.content);
       }
-      if (this.isGeminiModel(modelId) && this.client) {
+      if (family === 'gemini' && this.client) {
         this.assertOutboundScopes('gemini', message);
         await this.rateLimiters.gemini?.acquire();
         // @ts-ignore - abortSignal is accepted by the SDK's request config
@@ -4848,7 +4879,7 @@ let isMultimodal = !!(imagePaths?.length);
         const parts = res.candidates?.[0]?.content?.parts ?? [];
         return finish(res.text ?? (Array.isArray(parts) ? parts : [parts]).map((pt: any) => pt?.text ?? '').join(''));
       }
-      if (this.isDeepseekModel(modelId) && this.deepseekClient) {
+      if (family === 'deepseek' && this.deepseekClient) {
         this.assertOutboundScopes('deepseek', message);
         await this.rateLimiters.deepseek?.acquire();
         const res = await this.deepseekClient.chat.completions.create({
@@ -4860,7 +4891,7 @@ let isMultimodal = !!(imagePaths?.length);
         }, { signal: timer });
         return finish(res.choices?.[0]?.message?.content);
       }
-      if (this.isClaudeModel(modelId) && this.claudeClient) {
+      if (family === 'claude' && this.claudeClient) {
         this.assertOutboundScopes('claude', message);
         await this.rateLimiters.claude?.acquire();
         const res: any = await this.claudeClient.messages.create({
@@ -4869,8 +4900,8 @@ let isMultimodal = !!(imagePaths?.length);
         }, { signal: timer });
         return finish((res?.content ?? []).map((c: any) => (c?.type === 'text' ? c.text : '')).join(''));
       }
-      // Unrecognised id (a retired model, or a provider with no fast path):
-      // fall through rather than guessing a client.
+      // Family resolved but its client is not configured right now (key removed
+      // since the pick was saved). Fall through rather than guessing another.
       return notDispatchable();
     } catch (error) {
       if (opts.signal?.aborted) throw error;
