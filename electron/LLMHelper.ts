@@ -4836,7 +4836,13 @@ let isMultimodal = !!(imagePaths?.length);
       : opts.signal;
 
     const finish = (raw: string | null | undefined): string | null => {
-      const text = stripLeadingReasoningBlock(raw || '').trim();
+      let text = stripLeadingReasoningBlock(raw || '').trim();
+      // A model that ignores response_format returns ```json ... ``` and the
+      // caller's JSON.parse fails silently - no verdict, no error, no log.
+      // Observed live on OpenRouter 2026-09-24. We do send response_format, but
+      // not every gateway model honours it.
+      const fenced = text.match(/^```(?:[a-zA-Z]+)?\s*\n?([\s\S]*?)\n?```$/);
+      if (fenced) text = fenced[1].trim();
       if (!text) return null;
       // Stable, greppable marker: this is how a user's debug log shows whether
       // their pick is actually being used, and which model answered.
