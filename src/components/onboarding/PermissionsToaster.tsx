@@ -751,9 +751,13 @@ function PermItem({
       } : undefined}
       style={{
         display: 'flex', alignItems: 'center', gap: '10px',
+        // A granted row is a statement, not a control: no card, no border. The
+        // container is what says "you can act on this", so only the rows that
+        // still need something from the user keep one. Padding is unchanged so
+        // the rows hold their rhythm as they resolve.
         padding: '13px 14px', borderRadius: '12px',
-        background: glass,
-        border: `1px solid ${row.tone === 'granted' ? 'rgba(52,211,153,0.18)' : rule}`,
+        background: row.tone === 'granted' ? 'transparent' : glass,
+        border: `1px solid ${row.tone === 'granted' ? 'transparent' : rule}`,
         transition: 'border-color 300ms, transform 150ms',
         cursor: interactive ? 'pointer' : 'default',
       }}
@@ -789,13 +793,7 @@ function PermItem({
             <Loader2 size={17} strokeWidth={2} color={T.blue} />
           </motion.div>
         ) : row.tone === 'granted' ? (
-          <div aria-label="Access granted" style={{
-            width: '24px', height: '24px', borderRadius: '50%',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: 'rgba(52,211,153,0.16)', border: '1px solid rgba(52,211,153,0.3)',
-          }}>
-            <Check size={13} strokeWidth={3} color={T.green} />
-          </div>
+          <Check aria-label="Access granted" size={16} strokeWidth={2.75} color={T.green} />
         ) : row.tone === 'blocked' ? (
           <Lock size={15} strokeWidth={2} color={T.amber} />
         ) : row.tone === 'pending' ? null : (
