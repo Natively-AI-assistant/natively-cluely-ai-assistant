@@ -260,7 +260,7 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                             exit={{ opacity: 0 }}
                             transition={{ duration: 0.15 }}
                             style={{ top: backdropTop }}
-                            className={`fixed inset-0 ${isLight ? 'bg-black/[0.02] backdrop-blur-[2px]' : 'bg-black/30'} z-[90]`}
+                            className={`fixed inset-0 ${isLight ? 'bg-white/35' : 'bg-black/30'} z-[90]`}
                             onClick={close}
                         />
                     )}

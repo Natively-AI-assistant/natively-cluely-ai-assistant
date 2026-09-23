@@ -122,9 +122,9 @@
   --legacy-action-disabled-border: var(--border-subtle);
   --legacy-action-disabled-text: var(--text-tertiary);
 
-  /* Scrim & overlay backdrops (Apple-style airy blur with near-zero tint) */
-  --scrim-backdrop: rgba(60, 60, 67, 0.03);
-  --scrim-backdrop-subtle: rgba(60, 60, 67, 0.02);
+  /* Scrim & overlay backdrops (Frosted glass look without blur) */
+  --scrim-backdrop: rgba(255, 255, 255, 0.45);
+  --scrim-backdrop-subtle: rgba(255, 255, 255, 0.35);
 }
 
 .ai-response-card p,
