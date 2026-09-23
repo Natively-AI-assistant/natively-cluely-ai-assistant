@@ -532,7 +532,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     initialIsPremium = null,
     initialHasNativelyKey = false,
 }) => {
-    const isLight = useResolvedTheme() === 'light';
+    const resolvedTheme = useResolvedTheme();
+    const isLight = resolvedTheme === 'light';
     const { t, lang, setLang } = useLanguage();
     const [activeTab, setActiveTab] = useState(initialTab);
 
@@ -857,8 +858,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     });
 
     // When the theme changes and the user hasn't saved a custom value, reset to theme-aware default
-    const resolvedTheme = useResolvedTheme();
-    const isLight = resolvedTheme === 'light';
     useEffect(() => {
         const stored = localStorage.getItem('natively_overlay_opacity');
         const parsed = stored ? parseFloat(stored) : NaN;
