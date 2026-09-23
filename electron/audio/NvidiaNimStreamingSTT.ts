@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
 import { createNvcfStreamingRecognize } from './rivaProto';
+import { RealtimeSilenceTail } from './realtimeSilenceTail';
 import {
   DEFAULT_NVIDIA_NIM_STT_MODEL,
   NVIDIA_NIM_STT_MODEL_CONFIG,
@@ -25,6 +26,11 @@ const RECONNECT_MAX_ATTEMPTS = 10;
 // true with no stream and no reconnect, so every subsequent write() appended
 // here forever (~115 MB/hour) and none of it was ever sent.
 const MAX_BUFFERED_BYTES = 160 * 1024;
+// Real-time silence after the local VAD's speech end. No endpointing_config is
+// sent, so Riva endpoints on its own default silence window — counted in audio
+// time, which the native keepalive (20 ms per 100 ms) stretches ~5×.
+// hangover (>= 500) + 700 = 1200 ms of real silence. See realtimeSilenceTail.ts.
+export const NVIDIA_NIM_SILENCE_TAIL_MS = 700;
 
 /** NVIDIA-hosted Riva/NIM low-latency streaming ASR. */
 export class NvidiaNimStreamingSTT extends EventEmitter {
@@ -51,6 +57,11 @@ export class NvidiaNimStreamingSTT extends EventEmitter {
    * their own (the same pattern as the injected Clock elsewhere).
    */
   private readonly streamFactory: typeof createNvcfStreamingRecognize;
+  private readonly silenceTail = new RealtimeSilenceTail({
+    tailMs: NVIDIA_NIM_SILENCE_TAIL_MS,
+    format: () => ({ sampleRate: this.sampleRate, channels: this.channels }),
+    sink: (pcm) => this.sendAudio(pcm),
+  });
 
   constructor(
     apiKey: string,
@@ -93,6 +104,7 @@ export class NvidiaNimStreamingSTT extends EventEmitter {
   }
   stop() {
     this.active = false;
+    this.silenceTail.cancel();
     this.clearReconnectTimer();
     this.dropBuffer();
     try { this.stream?.end(); } catch {}
@@ -138,7 +150,19 @@ export class NvidiaNimStreamingSTT extends EventEmitter {
     try { dying.end(); } catch { /* already gone; the replacement is live */ }
   }
 
+  /** Local VAD: the speaker stopped. Keep Riva's endpointer clock real-time. */
+  notifySpeechEnded() {
+    if (!this.active) return;
+    this.silenceTail.start();
+  }
+
   write(chunk: Buffer) {
+    if (!this.active) return;
+    this.silenceTail.observe(chunk);
+    this.sendAudio(chunk);
+  }
+
+  private sendAudio(chunk: Buffer) {
     if (!this.active) return;
     if (!this.stream) {
       // No stream right now (pre-connect, or a reconnect in flight). Keep the
