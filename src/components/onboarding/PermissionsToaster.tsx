@@ -21,6 +21,7 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { X, Monitor, Mic, Settings, Check, Lock, Loader2 } from 'lucide-react';
 import nativelyIcon from '../../../assets/icon.png';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
+import { LiquidGlassButton } from '../../ui-components/LiquidGlassButton';
 import { describePermRow, allPermissionsResolved } from '../../lib/permissionRowPolicy.mjs';
 import type { RowPresentation } from '../../lib/permissionRowPolicy.mjs';
 
@@ -443,8 +444,22 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
 };
 
 // ─── Primary button ───────────────────────────────────────────
+// The shared Liquid Glass material (src/ui-components), not a hand-rolled
+// gradient with a gloss span.
+//
+//  - `lg-sm` because design.md measured the hero's 3px rim as visibly chunky
+//    by 44px; at this scale it collapses to a single hairline ring. Only its
+//    BOX is overridden below — the card's CTA is 48px, not a 30px settings row.
+//  - `lg-wide` because the width comes from the container, not the label.
+//    Without it the cap stops stay percentages of width and the specular is
+//    still climbing well past the corner (design.md's third sighting of that
+//    bug, after LiquidGlassBadge and the Profile Intelligence CTA).
+//  - `action` reads the host's own --legacy-action-bg, so this stays Natively's
+//    primary action colour rather than importing the reference green.
+//
+// Hover, press and the lens all live in the material; no framer wrapper.
 function PrimaryButton({
-  isLight, label, icon: Icon, onClick, disabled, variant = 'blue',
+  label, icon: Icon, onClick, disabled, variant = 'blue',
 }: {
   isLight: boolean;
   label: string;
@@ -453,44 +468,25 @@ function PrimaryButton({
   disabled?: boolean;
   variant?: 'blue' | 'green';
 }) {
-  const bg = variant === 'green'
-    ? 'linear-gradient(160deg, #34D399 0%, #10B981 50%, #059669 100%)'
-    : 'linear-gradient(160deg, #5B8EF0 0%, #3B6FE8 50%, #2D5FD4 100%)';
-  const glow = variant === 'green' ? 'rgba(16,185,129,' : 'rgba(37,99,235,';
-
   return (
-    <motion.button
+    <LiquidGlassButton
+      variant={variant === 'green' ? 'green' : 'action'}
+      className="lg-sm lg-wide"
       onClick={onClick}
       disabled={disabled}
-      whileHover={disabled ? {} : { scale: 1.01 }}
-      whileTap={disabled ? {} : { scale: 0.98 }}
+      icon={Icon ? <Icon size={15} strokeWidth={2} /> : undefined}
       style={{
-        width: '100%', height: '48px',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-        padding: '0 20px', borderRadius: '11px', border: 'none',
-        cursor: disabled ? 'default' : 'pointer',
+        width: '100%',
+        // lg-sm's box is a 30px settings row; this CTA keeps its 48px.
+        // lg-wide derives its cap stops from --lg-pill-h, so they follow.
+        ['--lg-pill-h' as string]: '48px',
+        ['--lg-label-size' as string]: '14px',
         opacity: disabled ? 0.55 : 1,
-        background: bg,
-        boxShadow: isLight
-          ? `0 6px 18px ${glow}0.25), inset 0 1px 0 rgba(255,255,255,0.2)`
-          : `0 8px 24px ${glow}0.35), inset 0 1px 0 rgba(255,255,255,0.2)`,
-        fontFamily: T.font, fontSize: '14px', fontWeight: 600, color: '#fff',
-        letterSpacing: '-0.01em',
-        position: 'relative', overflow: 'hidden',
-      }}
+        cursor: disabled ? 'default' : 'pointer',
+      } as React.CSSProperties}
     >
-      {/* Gloss highlight */}
-      <span aria-hidden style={{
-        position: 'absolute', top: '2px', left: '8px', right: '8px', height: '40%',
-        borderRadius: '9999px',
-        background: 'linear-gradient(to bottom, rgba(255,255,255,0.7), rgba(255,255,255,0.05))',
-        filter: 'blur(0.5px)', pointerEvents: 'none', zIndex: 1,
-      }} />
-      <span style={{ position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', gap: '8px' }}>
-        {Icon && <Icon size={14} strokeWidth={2} />}
-        {label}
-      </span>
-    </motion.button>
+      {label}
+    </LiquidGlassButton>
   );
 }
 
