@@ -6,7 +6,7 @@ import nativelyIcon from './icon.png';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { APP_FEATURE_VERSION } from '../utils/appVersion';
 import { AIP_CSS, AipBadge } from './settings/AIProvidersSettings';
-import { LiquidGlassBadge } from '../ui-components/LiquidGlassBadge';
+import { LiquidGlassButton } from '../ui-components/LiquidGlassButton';
 
 // Built from the AI Providers panel's `.aip-*` system (the same one Retrieval
 // adopts), so About reads as part of Settings rather than its own UI: aip-card
@@ -121,23 +121,40 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
         </div>
     );
 
-    // The inverted pill About has always used for its calls to action. Hover dims
-    // it rather than swapping to white, which blanked the label in light theme.
-    const actionButton = (label: string, url: string, Icon: typeof Star) => (
-        <button
-            onClick={() => openLink(url)}
-            className="shrink-0 whitespace-nowrap px-4 py-2 bg-text-primary text-bg-main text-xs font-bold rounded-lg transition-all shadow hover:opacity-90 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 flex items-center gap-2"
-        >
-            <Icon size={14} />
-            {label}
-        </button>
+    // Liquid Glass at UI scale. `clear` is the variant made for a flat panel in
+    // both themes: the card shows through and only the rim is added. Its label
+    // is `color: inherit` (and outranks a utility on the button itself), so the
+    // colour has to come from a parent.
+    // Hover: the glyph takes its own hue and fills in, with a small spring pop
+    // (overshoot curve on the way in, a fast plain ease-out on the way out, so
+    // it never lags the pointer). The fill is fill-opacity on currentColor
+    // because `fill: none` cannot interpolate. Line-art glyphs (bug, mail) only
+    // wash in, since a solid fill erases their inner strokes. Reduced motion
+    // keeps the colour and drops the pop.
+    const actionButton = (label: string, url: string, Icon: typeof Star, hue: string, solid = true) => (
+        <span className="shrink-0 text-text-primary">
+            <LiquidGlassButton
+                variant="clear"
+                className="lg-sm group [&_.lg-content]:text-text-primary"
+                icon={
+                    <Icon
+                        size={14}
+                        strokeWidth={1.75}
+                        className={`fill-current [fill-opacity:0] transition-[transform,color,fill-opacity] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:duration-[280ms] group-hover:ease-[cubic-bezier(0.34,1.56,0.64,1)] group-hover:scale-[1.12] motion-reduce:group-hover:scale-100 ${hue} ${solid ? 'group-hover:[fill-opacity:1]' : 'group-hover:[fill-opacity:0.28]'}`}
+                    />
+                }
+                onClick={() => openLink(url)}
+            >
+                {label}
+            </LiquidGlassButton>
+        </span>
     );
 
     const community = [
-        { title: t('Star on GitHub'), body: t('Love Natively? Support us by starring the repo.'), action: actionButton(t('Star'), REPO_URL, Star) },
-        { title: t('Report an Issue'), body: t('Found a bug? Let us know so we can fix it.'), action: actionButton(t('Report'), `${REPO_URL}/issues`, Bug) },
-        { title: t('Get in Touch'), body: t('Open for professional collaborations and job offers.'), action: actionButton(t('Contact Me'), 'mailto:evinjohnignatious@gmail.com', Mail) },
-        { title: t('Support Development'), body: t('Natively is independent source-available software.'), action: actionButton(t('Support Project'), DONATE_URL, Heart) },
+        { title: t('Star on GitHub'), body: t('Love Natively? Support us by starring the repo.'), action: actionButton(t('Star'), REPO_URL, Star, 'group-hover:text-[#D4A84B]') },
+        { title: t('Report an Issue'), body: t('Found a bug? Let us know so we can fix it.'), action: actionButton(t('Report'), `${REPO_URL}/issues`, Bug, 'group-hover:text-red-500', false) },
+        { title: t('Get in Touch'), body: t('Open for professional collaborations and job offers.'), action: actionButton(t('Contact Me'), 'mailto:evinjohnignatious@gmail.com', Mail, 'group-hover:text-accent-primary', false) },
+        { title: t('Support Development'), body: t('Natively is independent source-available software.'), action: actionButton(t('Support Project'), DONATE_URL, Heart, 'group-hover:text-pink-500') },
     ];
 
     return (
@@ -217,7 +234,12 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                             <div className="min-w-0">
                                 <div className="flex items-center gap-2">
                                     <h4 className="aip-card-title">Evin John</h4>
-                                    <LiquidGlassBadge>{t('Creator')}</LiquidGlassBadge>
+                                    <span
+                                        className="text-[10px] font-medium leading-none px-1.5 py-[3px] rounded-full border"
+                                        style={{ color: 'var(--aip-accent)', background: 'var(--aip-accent-muted)', borderColor: 'var(--aip-accent-border)' }}
+                                    >
+                                        {t('Creator')}
+                                    </span>
                                 </div>
                                 <p className="aip-meta truncate">I build software that stays out of the way.</p>
                             </div>

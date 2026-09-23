@@ -1,6 +1,7 @@
 import { BrowserWindow, screen, app, ipcMain, IpcMainEvent } from "electron"
 import path from "node:path"
 import { setVisibleOnAllWorkspacesKeepingDock } from "./utils/macDockPolicy"
+import { DEV_SERVER_URL } from './devServerUrl';
 
 // Force production mode if running as packaged app — matches WindowHelper.ts's
 // isDev predicate. A stray NODE_ENV=development in a packaged launch's
@@ -9,7 +10,7 @@ import { setVisibleOnAllWorkspacesKeepingDock } from "./utils/macDockPolicy"
 const isDev = process.env.NODE_ENV === "development" && !app.isPackaged
 
 const startUrl = isDev
-    ? "http://127.0.0.1:5180"
+    ? DEV_SERVER_URL
     : `file://${path.join(app.getAppPath(), "dist/index.html")}`
 
 /**
