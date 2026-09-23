@@ -2079,6 +2079,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   downloadExtensionModel: (id: string, modelKey: string) => ipcRenderer.invoke('extensions:download-model', id, modelKey),
   cancelExtensionModelDownload: (id: string, modelKey: string) => ipcRenderer.invoke('extensions:cancel-download', id, modelKey),
   browseExtensionRegistry: (url?: string) => ipcRenderer.invoke('extensions:browse-registry', url),
+  // Takes an EXTENSION ID, never a URL: main resolves the download itself.
+  installExtensionFromRegistry: (id: string) => ipcRenderer.invoke('extensions:install-from-registry', id),
   onExtensionModelProgress: (callback: (p: { id: string; modelKey: string; fraction: number }) => void) => {
     const subscription = (_e: any, payload: any) => callback(payload);
     ipcRenderer.on('extensions:model-progress', subscription);
