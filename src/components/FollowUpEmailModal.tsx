@@ -155,7 +155,7 @@ const FollowUpEmailModal: React.FC<FollowUpEmailModalProps> = ({ isOpen, onClose
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         onClick={onClose}
-                        className={`fixed inset-0 ${isLight ? 'bg-white/45' : 'bg-black/70'} z-50 transition-opacity`}
+                        className={`fixed inset-0 ${isLight ? 'bg-black/[0.06]' : 'bg-black/70'} z-[300] transition-opacity`}
                     />
 
                     {/* Modal Container */}
@@ -164,7 +164,7 @@ const FollowUpEmailModal: React.FC<FollowUpEmailModalProps> = ({ isOpen, onClose
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.95, y: 10 }}
                         transition={{ duration: 0.3, type: "spring", damping: 25, stiffness: 300 }}
-                        className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none"
+                        className="fixed inset-0 z-[300] flex items-center justify-center p-4 pointer-events-none"
                     >
                         {/* The Window */}
                         <div className="w-full max-w-[640px] bg-[#121212]/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/[0.08] flex flex-col pointer-events-auto overflow-hidden ring-1 ring-white/5">

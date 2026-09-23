@@ -568,11 +568,11 @@ ${contextString}`;
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.16 }}
-                    className="absolute inset-0 z-40 flex flex-col justify-end"
+                    className="fixed inset-0 z-[300] flex flex-col justify-end"
                     onClick={handleBackdropClick}
                 >
                     {/* Backdrop — dims only; the parent's opacity fade brings it in */}
-                    <div className={`absolute inset-0 ${isLightTheme ? 'bg-white/40' : 'bg-black/40'}`} />
+                    <div className={`absolute inset-0 ${isLightTheme ? 'bg-black/[0.06]' : 'bg-black/40'}`} />
 
                     {/* Chat Window - extends to bottom, leaves room for input */}
                     <motion.div
@@ -584,7 +584,7 @@ ${contextString}`;
                             height: { type: "spring", stiffness: 300, damping: 30, mass: 0.8 },
                             opacity: { duration: 0.2 }
                         }}
-                        className="relative mx-auto w-full max-w-[680px] mb-0 rounded-t-[24px] border-t border-x border-border-subtle shadow-2xl overflow-hidden flex flex-col"
+                        className={`relative mx-auto w-full max-w-[680px] mb-0 rounded-t-[24px] border-t border-x border-border-subtle ${isLightTheme ? 'shadow-[0_0_0_1px_rgba(0,0,0,0.06),0_-20px_48px_-12px_rgba(0,0,0,0.16)]' : 'shadow-2xl'} overflow-hidden flex flex-col`}
                         style={{ backgroundColor: chatWindowBg }}
                         onClick={(e) => e.stopPropagation()}
                     >

@@ -10,10 +10,11 @@ import { setVisibleOnAllWorkspacesKeepingDock } from "./utils/macDockPolicy"
 const isDev = process.env.NODE_ENV === "development" && !app.isPackaged
 
 const startUrl = isDev
-    ? "http://127.0.0.1:5180"
+    ? DEV_SERVER_URL
     : `file://${path.join(app.getAppPath(), "dist/index.html")}`
 
 import type { WindowHelper } from "./WindowHelper"
+import { DEV_SERVER_URL } from './devServerUrl';
 
 type WindowActivationOptions = {
     activate?: boolean

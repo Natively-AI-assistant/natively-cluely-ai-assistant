@@ -1161,7 +1161,7 @@ const App: React.FC = () => {
                       initial="initial"
                       animate="animate"
                       exit="exit"
-                      className={`fixed inset-0 z-50 flex items-center justify-center ${isLight ? 'bg-white/45' : 'bg-black/60'}`}
+                      className={`fixed inset-0 z-[300] flex items-center justify-center ${isLight ? 'bg-black/[0.06]' : 'bg-black/60'}`}
                       onClick={(event) => {
                         if (event.target !== event.currentTarget) return;
                         closeManagerPanel();
@@ -1180,7 +1180,7 @@ const App: React.FC = () => {
                           willChange: 'transform, opacity',
                           transformOrigin: 'center',
                         }}
-                        className="manager-panel-shell w-[820px] h-[600px] max-w-[95vw] max-h-[90vh] rounded-2xl overflow-hidden border border-border-muted bg-bg-elevated"
+                        className={`manager-panel-shell w-[820px] h-[600px] max-w-[95vw] max-h-[90vh] rounded-2xl overflow-hidden border border-border-muted bg-bg-elevated ${isLight ? 'shadow-[0_0_0_1px_rgba(0,0,0,0.06),0_24px_48px_-12px_rgba(0,0,0,0.16),0_8px_16px_-6px_rgba(0,0,0,0.06)]' : 'shadow-2xl'}`}
                       >
                         <AnimatePresence mode="wait" initial={false}>
                         <motion.div

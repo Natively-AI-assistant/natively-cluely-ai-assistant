@@ -13113,12 +13113,8 @@ let isMultimodal = !!(imagePaths?.length);
           }
         }
       }
-    } else {
-      console.log(`[LLMHelper] Gemini client not initialized — skipping Gemini Flash-Lite.`);
-    }
 
-    // ATTEMPT 4: Gemini Flash (with 2 retries = 3 attempts total)
-    if (this.client) {
+      // ATTEMPT 4: Gemini Flash (with 2 retries = 3 attempts total)
       console.log(`[LLMHelper] ⚠️ Flash-Lite exhausted. Switching to Gemini Flash...`);
       for (let attempt = 1; attempt <= 3; attempt++) {
         try {
@@ -13139,7 +13135,7 @@ let isMultimodal = !!(imagePaths?.length);
         }
       }
     } else {
-      console.log(`[LLMHelper] Gemini client not initialized — skipping Gemini Flash.`);
+      console.log(`[LLMHelper] Gemini client not initialized — skipping Gemini Flash-Lite / Flash.`);
     }
 
     // ATTEMPT 5: Gemini Pro

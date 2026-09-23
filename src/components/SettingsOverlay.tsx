@@ -651,7 +651,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
            click of a deep link did nothing at all. */
     }, [isOpen, initialTab, initialTabSeq]);
 
-    const { shortcuts, updateShortcut, resetShortcuts, conflicts } = useShortcuts();
+    const { shortcuts, updateShortcut, resetShortcuts, conflicts, globalShortcutsEnabled, setGlobalShortcutsEnabled } = useShortcuts();
     // Small badge shown next to a shortcut row when globalShortcut.register()
     // failed for it (another app/OS already owns that key combo). The
     // KeyRecorder right next to it is the fix — recording a new combo
@@ -2071,7 +2071,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.2 }}
                     id="settings-backdrop"
-                    className={`fixed inset-0 z-50 flex items-center justify-center p-8 transition-colors duration-150 ${isPreviewingOpacity ? 'bg-transparent backdrop-blur-none pointer-events-none' : isLight ? 'bg-white/45' : 'bg-black/60'}`}
+                    className={`fixed inset-0 z-[300] flex items-center justify-center p-8 transition-colors duration-150 ${isPreviewingOpacity ? 'bg-transparent backdrop-blur-none pointer-events-none' : isLight ? 'bg-black/[0.06]' : 'bg-black/60'}`}
                     onClick={(e) => {
                         // Mirror Modes/Profile (App.tsx) close-on-outside-click.
                         // Skip when opacity slider preview is active — backdrop is
@@ -2098,7 +2098,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                             damping: 32,
                             mass: 1
                         }}
-                        className="bg-bg-elevated w-full max-w-4xl h-[80vh] rounded-2xl border border-border-subtle shadow-2xl overflow-hidden relative"
+                        className={`bg-bg-elevated w-full max-w-4xl h-[80vh] rounded-2xl border border-border-subtle ${isLight ? 'shadow-[0_0_0_1px_rgba(0,0,0,0.06),0_24px_48px_-12px_rgba(0,0,0,0.16),0_8px_16px_-6px_rgba(0,0,0,0.06)]' : 'shadow-2xl'} overflow-hidden relative`}
                     >
                         <div
                             id="settings-panel"
@@ -3063,6 +3063,24 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                             <RotateCcw size={13} strokeWidth={2.5} />
                                             {t('Restore Default')}
                                         </button>
+                                    </div>
+
+                                    {/* Issue #517: one switch to stop Natively claiming keys OS-wide. */}
+                                    <div className="flex items-center justify-between gap-4 px-4 py-3 rounded-xl border border-border-subtle bg-bg-subtle/30">
+                                        <div>
+                                            <h4 className="text-sm font-bold text-text-primary">{t('Global shortcuts')}</h4>
+                                            <p className="text-xs text-text-secondary mt-0.5">
+                                                {globalShortcutsEnabled
+                                                    ? t('Shortcuts work even when another app is focused.')
+                                                    : t('Shortcuts work only while Natively is focused. Toggle Visibility stays global so you can always bring Natively back.')}
+                                            </p>
+                                        </div>
+                                        <SettingsToggle
+                                            checked={globalShortcutsEnabled}
+                                            label={t('Global shortcuts')}
+                                            onChange={() => setGlobalShortcutsEnabled(!globalShortcutsEnabled)}
+                                            className={globalShortcutsEnabled ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
+                                        />
                                     </div>
 
                                     {/* Surfaces globalShortcut.register() failures in bulk — e.g. on
