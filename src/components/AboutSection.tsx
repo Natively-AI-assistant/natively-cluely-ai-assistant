@@ -5,8 +5,46 @@ import {
     Heart, Linkedin, Instagram, Mail, MicOff, Star, Bug, Globe, Sparkles, Zap, Camera, LayoutGrid, User, Volume2, Activity, MessageSquare, Link, Smartphone, Calendar, ListOrdered, Boxes, Users, WifiOff, Send
 } from 'lucide-react';
 import evinProfile from '../assets/evin.png';
+import nativelyIcon from './icon.png';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { APP_FEATURE_VERSION } from '../utils/appVersion';
+
+// What's New for APP_FEATURE_VERSION, laid out as a bento grid: on a wide
+// panel the rows alternate 3+2 / 2+3 columns and the last tile runs full width.
+// `span` must stay a literal class string so Tailwind emits it.
+const WHATS_NEW: { icon: typeof Zap; title: string; body: string; span: string; hero?: boolean }[] = [
+    {
+        icon: Zap,
+        title: 'Direct Assist',
+        body: 'Your last three minutes and reference files, sent verbatim. Off by default — enable in AI Providers.',
+        span: 'md:col-span-2 lg:col-span-3',
+        hero: true,
+    },
+    {
+        icon: ListOrdered,
+        title: 'Your Own Reranker',
+        body: 'Hosted via Jina AI or OpenRouter, or run locally.',
+        span: 'lg:col-span-2',
+    },
+    {
+        icon: Cpu,
+        title: 'Lighter & Faster',
+        body: 'About a quarter less memory; windows open faster.',
+        span: 'lg:col-span-2',
+    },
+    {
+        icon: Activity,
+        title: 'Provider Failover',
+        body: 'OpenAI, Claude, DeepSeek, LiteLLM, NVIDIA NIM and custom endpoints fail over when stalled. Local stays local.',
+        span: 'md:col-span-2 lg:col-span-3',
+    },
+    {
+        icon: Boxes,
+        title: 'Your Embedding Model',
+        body: 'Gemini, OpenAI, Voyage AI, OpenRouter, Ollama or any OpenAI-compatible endpoint. In Retrieval.',
+        span: 'md:col-span-2 lg:col-span-5',
+    },
+];
 
 interface AboutSectionProps { }
 
@@ -69,81 +107,22 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
             {/* What's New Section */}
             <div>
                 <h4 className="text-xs font-bold text-text-tertiary uppercase tracking-wider mb-2 px-1">{`${t("What's New in")} v${APP_FEATURE_VERSION}`}</h4>
-                <div className="bg-bg-item-surface rounded-xl border border-border-subtle overflow-hidden">
-                    {/* 1. Direct Assist */}
-                    <div className="p-3 border-b border-border-subtle bg-bg-card/50">
-                        <div className="flex items-start gap-4">
-                            <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-400 shrink-0">
-                                <Zap size={20} />
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-2">
+                    {WHATS_NEW.map(({ icon: Icon, title, body, span, hero }) => (
+                        <div
+                            key={title}
+                            className={`${span} rounded-xl border bg-bg-item-surface p-3 ${hero ? 'border-[color:var(--accent-shadow-20)]' : 'border-border-subtle'}`}
+                            style={hero ? { backgroundImage: 'radial-gradient(120% 150% at 100% 0%, color-mix(in srgb, var(--accent-primary) 14%, transparent), transparent 65%)' } : undefined}
+                        >
+                            <div className="flex items-center gap-2 mb-1">
+                                <div className="w-6 h-6 rounded-md bg-accent-subtle text-accent-primary flex items-center justify-center shrink-0">
+                                    <Icon size={13} />
+                                </div>
+                                <h5 className="text-[13px] font-semibold text-text-primary leading-tight">{title}</h5>
                             </div>
-                            <div>
-                                <h5 className="text-sm font-bold text-text-primary mb-1">Direct Assist</h5>
-                                <p className="text-xs text-text-secondary leading-relaxed">
-                                    The model sees your last three minutes of conversation and your reference files verbatim — no retrieval, no summarising in between. Off by default; enable it in AI Providers.
-                                </p>
-                            </div>
+                            <p className="text-[11.5px] text-text-secondary leading-[1.55]">{body}</p>
                         </div>
-                    </div>
-
-                    {/* 2. Bring Your Own Reranker */}
-                    <div className="p-3 border-b border-border-subtle bg-bg-card/50">
-                        <div className="flex items-start gap-4">
-                            <div className="w-10 h-10 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-400 shrink-0">
-                                <ListOrdered size={20} />
-                            </div>
-                            <div>
-                                <h5 className="text-sm font-bold text-text-primary mb-1">Bring Your Own Reranker</h5>
-                                <p className="text-xs text-text-secondary leading-relaxed">
-                                    Choose what picks the material behind your answers — hosted through Jina AI or OpenRouter, or run locally. Installs from Hugging Face in Settings › Reranker.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* 3. Providers That Fail Over */}
-                    <div className="p-3 border-b border-border-subtle bg-bg-card/50">
-                        <div className="flex items-start gap-4">
-                            <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-400 shrink-0">
-                                <Activity size={20} />
-                            </div>
-                            <div>
-                                <h5 className="text-sm font-bold text-text-primary mb-1">Providers That Fail Over</h5>
-                                <p className="text-xs text-text-secondary leading-relaxed">
-                                    A stalled provider no longer costs you the answer. OpenAI, Claude, DeepSeek, LiteLLM, NVIDIA NIM and custom endpoints now switch to a spare, or retry in parallel. Local models are untouched.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* 4. Lighter and Faster */}
-                    <div className="p-3 border-b border-border-subtle bg-bg-card/50">
-                        <div className="flex items-start gap-4">
-                            <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-400 shrink-0">
-                                <Cpu size={20} />
-                            </div>
-                            <div>
-                                <h5 className="text-sm font-bold text-text-primary mb-1">Lighter and Faster</h5>
-                                <p className="text-xs text-text-secondary leading-relaxed">
-                                    Around a quarter less memory, and windows open faster. Each used to load the entire app — the tiny overlay toggle booted the Markdown and maths renderers just to draw a button.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* 5. Choose Your Embedding Model */}
-                    <div className="p-3 bg-bg-card/50">
-                        <div className="flex items-start gap-4">
-                            <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400 shrink-0">
-                                <Boxes size={20} />
-                            </div>
-                            <div>
-                                <h5 className="text-sm font-bold text-text-primary mb-1">Choose Your Embedding Model</h5>
-                                <p className="text-xs text-text-secondary leading-relaxed">
-                                    Set what finds your material: Gemini, OpenAI, Voyage AI, OpenRouter, Ollama or any OpenAI-compatible endpoint, each with a live Test. In Settings › Embeddings.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
+                    ))}
                 </div>
             </div>
 
@@ -210,64 +189,58 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
             <div>
                 <h4 className="text-xs font-bold text-text-tertiary uppercase tracking-wider mb-2 px-1">{t('Community')}</h4>
                 <div className="space-y-4">
-                    {/* 0. Official Website */}
-                    <div className="bg-bg-item-surface rounded-xl border border-border-subtle p-5 flex flex-col md:flex-row items-center justify-between gap-4">
-                        <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 rounded-full bg-accent-subtle flex items-center justify-center text-accent-primary shadow-sm shadow-[var(--accent-shadow-20)]">
-                                <Globe size={18} className="opacity-80" />
+                    {/* 0. Natively */}
+                    <div className="bg-bg-item-surface rounded-xl p-5">
+                        <div className="flex flex-col gap-4">
+                            <div className="flex items-start gap-4">
+                                <div className="w-12 h-12 rounded-full bg-bg-elevated border border-border-subtle flex items-center justify-center overflow-hidden shrink-0">
+                                    <img
+                                        src={nativelyIcon}
+                                        alt="Natively"
+                                        className="w-7 h-7 object-contain"
+                                        style={{ filter: isLight ? 'brightness(0)' : 'brightness(0) invert(1)', opacity: 0.9 }}
+                                        draggable={false}
+                                    />
+                                </div>
+                                <div className="pt-0.5">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <h5 className="text-sm font-bold text-text-primary">Natively</h5>
+                                        <span className="text-[10px] font-medium px-1.5 py-[1px] rounded-full bg-accent-subtle text-accent-primary border border-[var(--accent-shadow-20)]">{t('Official')}</span>
+                                    </div>
+                                    <p className="text-xs text-text-secondary leading-relaxed max-w-lg">
+                                        An invisible AI assistant for your meetings, calls, and interviews.
+                                        <br />
+                                        Follow <span className="font-bold text-text-primary">Natively</span> for releases, tips, and community help.
+                                    </p>
+                                </div>
                             </div>
-                            <div>
-                                <h5 className="text-sm font-bold text-text-primary">{t('Official Website')}</h5>
+                            <div className="flex items-center gap-4 pl-[60px]">
+                                <a
+                                    href="https://natively.software"
+                                    onClick={(e) => handleOpenLink(e, "https://natively.software")}
+                                    className="text-text-tertiary hover:text-text-primary transition-colors"
+                                    title="Website"
+                                >
+                                    <Globe size={18} />
+                                </a>
+                                <a
+                                    href="https://t.me/nativelyaichat"
+                                    onClick={(e) => handleOpenLink(e, "https://t.me/nativelyaichat")}
+                                    className="text-text-tertiary hover:text-text-primary transition-colors"
+                                    title="Telegram"
+                                >
+                                    <Send size={18} />
+                                </a>
+                                <a
+                                    href="https://www.linkedin.com/company/nativley-ai"
+                                    onClick={(e) => handleOpenLink(e, "https://www.linkedin.com/company/nativley-ai")}
+                                    className="text-text-tertiary hover:text-text-primary transition-colors"
+                                    title="LinkedIn"
+                                >
+                                    <Linkedin size={18} />
+                                </a>
                             </div>
                         </div>
-                        <a
-                            href="https://natively.software"
-                            onClick={(e) => handleOpenLink(e, "https://natively.software")}
-                            className="whitespace-nowrap px-4 py-2 bg-text-primary hover:bg-white/90 text-bg-main text-xs font-bold rounded-lg transition-all shadow hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 flex items-center gap-2"
-                        >
-                            <Globe size={14} />
-                            {t('Visit Website')}
-                        </a>
-                    </div>
-
-                    {/* 0.5. Telegram Community */}
-                    <div className="bg-bg-item-surface rounded-xl border border-border-subtle p-5 flex flex-col md:flex-row items-center justify-between gap-4">
-                        <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 rounded-full bg-sky-500/10 flex items-center justify-center text-sky-500 shadow-sm shadow-sky-500/5">
-                                <Send size={18} className="opacity-80" />
-                            </div>
-                            <div>
-                                <h5 className="text-sm font-bold text-text-primary">{t('Telegram Community')}</h5>
-                            </div>
-                        </div>
-                        <a
-                            href="https://t.me/nativelyaichat"
-                            onClick={(e) => handleOpenLink(e, "https://t.me/nativelyaichat")}
-                            className="whitespace-nowrap px-4 py-2 bg-text-primary hover:bg-white/90 text-bg-main text-xs font-bold rounded-lg transition-all shadow hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 flex items-center gap-2"
-                        >
-                            <Send size={14} />
-                            {t('Join Chat')}
-                        </a>
-                    </div>
-
-                    {/* 0.6. Natively LinkedIn */}
-                    <div className="bg-bg-item-surface rounded-xl border border-border-subtle p-5 flex flex-col md:flex-row items-center justify-between gap-4">
-                        <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-500 shadow-sm shadow-blue-500/5">
-                                <Linkedin size={18} className="opacity-80" />
-                            </div>
-                            <div>
-                                <h5 className="text-sm font-bold text-text-primary">{t('LinkedIn Company Page')}</h5>
-                            </div>
-                        </div>
-                        <a
-                            href="https://www.linkedin.com/company/nativley-ai"
-                            onClick={(e) => handleOpenLink(e, "https://www.linkedin.com/company/nativley-ai")}
-                            className="whitespace-nowrap px-4 py-2 bg-text-primary hover:bg-white/90 text-bg-main text-xs font-bold rounded-lg transition-all shadow hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 flex items-center gap-2"
-                        >
-                            <Linkedin size={14} />
-                            {t('Follow Page')}
-                        </a>
                     </div>
 
                     {/* 1. Founder Profile */}
@@ -400,19 +373,9 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                 </div>
             </div>
 
-            {/* Credits */}
+            {/* Version */}
             <div className="pt-4 border-t border-border-subtle">
-                <div>
-                    <h4 className="text-xs font-bold text-text-tertiary uppercase tracking-wider mb-3">{t('Core Technology')}</h4>
-                    <div className="flex flex-wrap gap-2">
-                        {['Groq', 'Gemini', 'OpenAI', 'Deepgram', 'ElevenLabs', 'Electron', 'React', 'Rust', 'Sharp', 'TypeScript', 'Tailwind CSS', 'Vite', 'Google Cloud', 'SQLite'].map(tech => (
-                            <span key={tech} className="px-2.5 py-1 rounded-md bg-bg-input border border-border-subtle text-[11px] font-medium text-text-secondary">
-                                {tech}
-                            </span>
-                        ))}
-                    </div>
-                </div>
-                <p className="mt-4 text-[11px] text-text-tertiary font-mono">
+                <p className="text-[11px] text-text-tertiary font-mono">
                     {`Version ${appVersion} · Build ${buildCommit}`}
                 </p>
             </div>
