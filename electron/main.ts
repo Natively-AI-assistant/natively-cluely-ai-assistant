@@ -1306,6 +1306,16 @@ import { ProviderStatusRegistry } from './services/ProviderStatusRegistry'
 import { decideToggle, decideDockTransition } from './services/toggleStateReducer'
 import { NativeOomTrace } from './utils/NativeOomTrace'
 import { setStealthHookAvailabilityProvider } from './utils/windowsFocusPolicy'
+import {
+  shouldPromoteToRegularAtStartup,
+  planDisguiseTitleWrites,
+  DOCK_ENFORCE_INTERVAL_MS,
+  DOCK_ENFORCE_MAX_ATTEMPTS,
+  DOCK_ENFORCE_STARTUP_MAX_ATTEMPTS,
+} from './utils/macDockPolicy'
+import { disguiseAppName } from './utils/disguiseAppName'
+import { appUserModelIdForDisguise } from './utils/windowsTaskbarPolicy'
+import { shouldOpenExternally } from './utils/windowOpenPolicy'
 import { ensureNativeModuleAbi } from './utils/nativeModuleGuard'
 
 // Opt-in only: this trace writes allowlisted process metadata and IPC byte estimates
@@ -7835,7 +7845,7 @@ export class AppState {
     wantUndetectable: boolean,
     targetFocusWindow: BrowserWindow | null,
     attempt: number,
-    maxAttempts: number = 6,
+    maxAttempts: number = DOCK_ENFORCE_MAX_ATTEMPTS,
   ): void {
     if (process.platform !== 'darwin') return;
 
@@ -7884,7 +7894,7 @@ export class AppState {
       const t = setTimeout(() => {
         this._dockReassertTimers = this._dockReassertTimers.filter((x) => x !== t);
         this._enforceDockState(wantUndetectable, targetFocusWindow, attempt + 1, maxAttempts);
-      }, 130);
+      }, DOCK_ENFORCE_INTERVAL_MS);
       this._dockReassertTimers.push(t);
     }
   }
@@ -7917,11 +7927,11 @@ export class AppState {
   // reset sharingType) and drive the dock to hidden, retrying against the OS
   // ground truth so a late ready-to-show dock re-show is corrected.
   public applyInitialUndetectableState(): void {
-    // Longer retry budget than the toggle path (~2.5s vs ~0.8s): at startup the
+    // Longer retry budget than the toggle path (~2.3s vs ~1.3s): at startup the
     // dock re-show lands at the launcher's ready-to-show, which on a cold launch
-    // can arrive later than the toggle path's 6-retry window. Extra isVisible()
+    // can arrive later than the toggle path's retry window. Extra isVisible()
     // re-checks are cheap and stop early via the isUndetectable guard.
-    this.reassertUndetectableStealth(18);
+    this.reassertUndetectableStealth(DOCK_ENFORCE_STARTUP_MAX_ATTEMPTS);
   }
 
   // Re-drive the app back to a fully-stealth state after any operation that can
@@ -7944,7 +7954,7 @@ export class AppState {
   // so it cannot be defeated by a dropped call or a late re-show. Cheap and safe
   // to call redundantly — it no-ops immediately off-darwin or when not
   // undetectable, and stops early via the isUndetectable guard inside the loop.
-  public reassertUndetectableStealth(maxAttempts: number = 10): void {
+  public reassertUndetectableStealth(maxAttempts: number = DOCK_ENFORCE_MAX_ATTEMPTS): void {
     if (process.platform !== 'darwin') return;
     if (!this.isUndetectable) return;
     // Collapse any in-flight enforcement chain from a PRIOR re-assert before
@@ -8117,25 +8127,19 @@ export class AppState {
 
     // NO runtime activation-policy churn here — and this is deliberate.
     //
-    // The dual-dock-icon bug is a STARTUP phenomenon: the app is born, paints a
-    // tile, THEN renames via app.setName()+CFBundleName, and the LaunchServices
-    // re-registration races into a second tile. That path is fully handled at
-    // startup by LSUIElement (the bundle is born tile-less) plus the one-shot
-    // accessory→regular promotion after createWindow() — see the whenReady block.
+    // Duplicate Dock tiles come from activation-policy churn (rapid
+    // regular↔accessory/UIElement flips), not from the rename — see
+    // utils/macDockPolicy.ts. The old code bracketed this rename in
+    // accessory→regular "to be safe", but that round-trip is exactly such a flip,
+    // and it also deactivates the whole application for a tick — the
+    // always-on-top overlay/launcher windows leave the foreground layer and snap
+    // back, producing a visible disappear/reappear flicker on every disguise
+    // switch. With no policy change the app never deactivates, so there is also
+    // nothing to re-focus.
     //
-    // At RUNTIME the app already owns a single stable 'regular' dock tile, and
-    // app.setName() updates that tile's label in place rather than spawning a
-    // duplicate. The old code still bracketed this rename in accessory→regular
-    // "to be safe", but that round-trip deactivates the whole application for a
-    // tick — the always-on-top overlay/launcher windows leave the foreground
-    // layer and snap back, producing a visible disappear/reappear flicker on
-    // every disguise switch. Trading a guaranteed flicker for a hypothetical
-    // duplicate tile is the wrong deal, so the bracket is gone. With no policy
-    // change the app never deactivates, so there is also nothing to re-focus.
-    //
-    // Stealth is unaffected: _applyDisguise() already skips app.setName() and
-    // app.dock.setIcon() when isUndetectable (the dock stays hidden), and we
-    // never promote activation policy here.
+    // Stealth: the Settings UI locks the disguise picker while undetectable is
+    // on, and _applyDisguise() skips app.setName()/app.dock.setIcon() and
+    // re-hides the tile after its process.title write if it ever runs then.
     this._applyDisguise(mode);
   }
 
@@ -8144,7 +8148,7 @@ export class AppState {
   }
 
   private _applyDisguise(mode: 'terminal' | 'settings' | 'activity' | 'none'): void {
-    let appName = "Natively";
+    const appName = disguiseAppName(mode, process.platform);
     let iconPath = "";
 
     const isWin = process.platform === 'win32';
@@ -8152,7 +8156,6 @@ export class AppState {
 
     switch (mode) {
       case 'terminal':
-        appName = isWin ? "Command Prompt " : "Terminal ";
         if (isWin) {
           iconPath = app.isPackaged
             ? path.join(process.resourcesPath, "assets/fakeicon/win/terminal.png")
@@ -8164,7 +8167,6 @@ export class AppState {
         }
         break;
       case 'settings':
-        appName = isWin ? "Settings " : "System Settings ";
         if (isWin) {
           iconPath = app.isPackaged
             ? path.join(process.resourcesPath, "assets/fakeicon/win/settings.png")
@@ -8176,7 +8178,6 @@ export class AppState {
         }
         break;
       case 'activity':
-        appName = isWin ? "Task Manager " : "Activity Monitor ";
         if (isWin) {
           iconPath = app.isPackaged
             ? path.join(process.resourcesPath, "assets/fakeicon/win/activity.png")
@@ -8189,7 +8190,6 @@ export class AppState {
         break;
       case 'none':
       default:
-        appName = "Natively";
         if (isMac) {
           iconPath = app.isPackaged
             ? path.join(process.resourcesPath, "natively.icns")
@@ -8208,12 +8208,16 @@ export class AppState {
 
     console.log(`[AppState] Applying disguise: ${mode} (${appName}) on ${process.platform}`);
 
-    // 1. Update process title (affects Activity Monitor / Task Manager)
-    process.title = appName;
+    // 1. Update process title (affects Activity Monitor / Task Manager).
+    // On macOS this write re-checks the app in with LaunchServices, which
+    // UNHIDES a hidden Dock tile — see planDisguiseTitleWrites below.
+    const titlePlan = planDisguiseTitleWrites(process.platform, this.isUndetectable);
+    const titleWritten = !(titlePlan.skipUnchangedWrite && process.title === appName);
+    if (titleWritten) process.title = appName;
 
-    // 2. Update app name (affects macOS Menu / Dock)
-    // Skip when undetectable — app.setName() causes macOS to re-register
-    // the app and re-show the dock icon even after dock.hide()
+    // 2. Update app name (affects macOS Menu / Dock label). On macOS
+    // app.setName() only stores the name; still skipped when undetectable so the
+    // stealth path makes no identity changes beyond the title above.
     if (!this.isUndetectable) {
       app.setName(appName);
     }
@@ -8222,10 +8226,12 @@ export class AppState {
       process.env.CFBundleName = appName.trim();
     }
 
-    // 3. Update App User Model ID (Windows Taskbar grouping)
+    // 3. Update App User Model ID (Windows Taskbar grouping). Undisguised, it
+    // is the installer shortcut's ID so the running window groups with a
+    // pinned Natively instead of adding a second button; each disguise keeps
+    // its own ID so it never groups with the real app. See windowsTaskbarPolicy.
     if (isWin) {
-      // Use unique AUMID per disguise to avoid grouping with the real app
-      app.setAppUserModelId(`com.natively.assistant.${mode}`);
+      app.setAppUserModelId(appUserModelIdForDisguise(mode));
     }
 
     // 4. Update Icons
@@ -8284,9 +8290,19 @@ export class AppState {
       this._disguiseTimers.push(ts);
     };
 
-    scheduleUpdate(200);
-    scheduleUpdate(1000);
-    scheduleUpdate(5000);
+    // Not while the macOS Dock must stay hidden: each re-assert unhides the
+    // tile, and the +5000ms one landed after startup enforcement had finished,
+    // leaving the icon up in undetectable mode for the rest of the session.
+    if (titlePlan.scheduleReasserts) {
+      scheduleUpdate(200);
+      scheduleUpdate(1000);
+      scheduleUpdate(5000);
+    }
+
+    // A write above has already unhidden the tile; hide it again now.
+    if (titlePlan.reassertStealthAfterWrite && titleWritten) {
+      this.reassertUndetectableStealth();
+    }
   }
 
   // Helper: broadcast an IPC event to all windows
@@ -8363,6 +8379,22 @@ async function initializeApp() {
     }
   });
 
+  // No renderer may open another Electron window: a target="_blank" link used
+  // to spawn a default BrowserWindow — its own taskbar button on Windows and no
+  // content protection, even in undetectable mode. https goes to the default
+  // browser (the 'open-external' rule); everything else is dropped. Registered
+  // before whenReady so it covers every window. See utils/windowOpenPolicy.ts.
+  app.on('web-contents-created', (_event, contents) => {
+    contents.setWindowOpenHandler(({ url }) => {
+      if (shouldOpenExternally(url)) {
+        shell.openExternal(url).catch((err) => console.warn('[Main] openExternal failed:', err?.message || err));
+      } else {
+        console.warn('[Main] Blocked window.open', { protocol: url.split(':')[0] });
+      }
+      return { action: 'deny' };
+    });
+  });
+
   // PHASE-2E: install lifecycle tracking BEFORE app.whenReady() so we never
   // miss a renderer crash, GPU crash, or worker death that occurs during
   // initial window creation.
@@ -8436,32 +8468,32 @@ async function initializeApp() {
     }
   }
 
-  // 2a. PRE-EMPTIVE dock hide / activation-policy clamp: must happen before ANY
-  // operation that causes macOS to register a dock entry (app.setName, the
-  // LaunchServices live-rename in _applyDisguise, BrowserWindow creation, etc.).
+  // 2a. PRE-EMPTIVE dock hide for a persisted-undetectable launch: the packaged
+  // bundle has no LSUIElement, so the process is born with a Dock tile. Hide it
+  // before any window exists; applyInitialUndetectableState() later converges it.
+  // The disguise title is written FIRST, while the born tile is still up: on
+  // macOS a process.title write re-checks the app in as a Foreground app, and
+  // doing it after the hide (as _applyDisguise used to) made born tile → hide →
+  // re-shown → re-hide within ~150ms, which left a duplicate tile up for the
+  // whole session. _applyDisguise then skips the identical rewrite.
   //
-  // DUAL-DOCK-ICON FIX: even in NORMAL (non-stealth) mode, applyInitialDisguise()
-  // → app.setName() + the native setProcessDisplayName() LaunchServices rename
-  // re-register the running app's LS identity. Doing that while the app is on the
-  // default 'regular' activation policy makes macOS paint a SECOND dock tile (the
-  // old identity's tile lingers while the renamed one registers) — the duplicate
-  // "Natively" icon multiple users reported. We therefore drop to 'accessory'
-  // (no dock tile) for the whole rename+window-creation window, then promote back
-  // to 'regular' exactly once AFTER createWindow() so a single, correctly-named
-  // tile appears together with the window. Stealth mode stays hidden via dock.hide()
-  // and is never promoted.
+  // Normal mode deliberately does NOTHING here. It used to clamp to 'accessory'
+  // and promote back to 'regular' after createWindow(), on the theory that the
+  // startup rename painted a second tile. Measured on the real build
+  // (2026-09-23) that round-trip was itself the duplicate-tile bug: a bundle
+  // born 'regular' went regular→accessory→regular, and with the DockHide() that
+  // setVisibleOnAllWorkspaces used to run per window, startup left 4 tiles and
+  // 2 after quit. With neither, the app shows exactly one tile. (app.setName()
+  // on macOS only stores a string; it re-registers nothing.) See
+  // utils/macDockPolicy.ts.
   // We read isUndetectable directly from settings here — AppState singleton isn't
   // constructed yet, so we cannot call appState.getUndetectable().
   if (process.platform === 'darwin') {
     // SettingsManager is already statically imported — no require() needed.
     const isUndetectableOnStartup = SettingsManager.getInstance().get('isUndetectable') ?? false;
     if (isUndetectableOnStartup) {
+      process.title = disguiseAppName(normalizeDisguiseMode(SettingsManager.getInstance().get('disguiseMode')), process.platform);
       if (app.dock) app.dock.hide();  // app.dock is macOS-only (undefined elsewhere); darwin gated at 7445
-    } else {
-      // Non-stealth: clamp to accessory (dock-tile-less) until the disguised
-      // name/icon is painted and the window exists. Do NOT promote to 'regular'
-      // here — that happens once after createWindow() below.
-      app.setActivationPolicy('accessory');
     }
   }
 
@@ -8910,14 +8942,11 @@ if (process.env.THINKING_MATRIX === '1') {
   // on 2026-09-05 with the classifier itself; its cache is swept above.
   // See docs/natively-router-final-answer-2026-09-05.md.
 
-  // DUAL-DOCK-ICON FIX (promotion half): now that the disguised name/icon are
-  // applied and the window exists, promote back to 'regular' so a SINGLE dock
-  // tile appears together with the window. Gated on darwin && !undetectable so
-  // stealth mode is never promoted (it must stay dock-tile-less). This pairs
-  // with the 'accessory' clamp in step 2a above — together they ensure the LS
-  // re-registration from app.setName()/setProcessDisplayName() happens while no
-  // tile is visible, so macOS never paints a second "Natively" icon.
-  if (process.platform === 'darwin' && !appState.getUndetectable()) {
+  // One-shot promotion to 'regular', only to ADD a missing tile: the dev
+  // Electron.app is patched to LSUIElement=1 and is born without one. A packaged
+  // bundle is born 'regular', so it is left alone (re-promoting is churn), and
+  // undetectable mode is never promoted.
+  if (shouldPromoteToRegularAtStartup(process.platform, appState.getUndetectable(), app.dock?.isVisible() ?? false)) {
     app.setActivationPolicy('regular');
   }
 
@@ -9217,9 +9246,16 @@ if (process.env.THINKING_MATRIX === '1') {
   app.on("activate", () => {
     console.log("App activated")
     if (process.platform === 'darwin') {
-      // Do NOT call dock.show() while a meeting is running — the dock icon
-      // appearing mid-meeting is a critical stealth failure.
-      if (!appState.getUndetectable() && !appState.getIsMeetingActive()) {
+      if (appState.getUndetectable()) {
+        // A LaunchServices re-open of the running app (clicking its pinned
+        // Dock icon, `open -a`, Spotlight) has ALREADY made it a Foreground
+        // app when this fires — measured: the tile came back ~5 ms before the
+        // event and stayed. Not calling dock.show() is not enough; drive the
+        // Dock back to hidden. (Identified in PR #595.)
+        appState.reassertUndetectableStealth();
+      } else if (!appState.getIsMeetingActive()) {
+        // Do NOT call dock.show() while a meeting is running — the dock icon
+        // appearing mid-meeting is a critical stealth failure.
         if (app.dock) app.dock.show();  // app.dock is macOS-only (undefined elsewhere); darwin gated at 8080
       }
     }
