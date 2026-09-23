@@ -4741,6 +4741,111 @@ let isMultimodal = !!(imagePaths?.length);
    * is down (the controller's deadline bounds the total wait either way).
    */
   /**
+   * The user's chosen fast model, or null. Read PER CALL rather than cached so a
+   * Settings change takes effect without restarting the helper.
+   */
+  private get fastModelId(): string | null {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      return CredentialsManager.getInstance().getFastModel();
+    } catch { return null; }
+  }
+
+  /**
+   * One non-streaming call on the user's chosen FAST model.
+   *
+   * Returns null for every "not available" case — unset, no client, family
+   * disabled, local-only, unrecognised id, provider failure, empty body — so the
+   * caller falls through to its own ladder unchanged. ONLY an abort throws, so a
+   * caller can tell a missing setting from a user cancellation; the judge needs
+   * that distinction because its deadline and supersede must propagate rather
+   * than quietly spend a ladder call.
+   */
+  private async callFastModel(
+    message: string,
+    opts: { signal?: AbortSignal; timeoutMs?: number; json?: boolean } = {},
+  ): Promise<string | null> {
+    const modelId = this.fastModelId;
+    if (!modelId) return null;
+    if (this.isLocalOnlyMode) return null;
+
+    const timer = opts.timeoutMs
+      ? AbortSignal.any([opts.signal, AbortSignal.timeout(opts.timeoutMs)].filter(Boolean) as AbortSignal[])
+      : opts.signal;
+
+    const finish = (raw: string | null | undefined): string | null => {
+      const text = stripLeadingReasoningBlock(raw || '').trim();
+      return text ? text : null;
+    };
+
+    try {
+      if (this.isOpenAiModel(modelId) && this.openaiClient) {
+        this.assertOutboundScopes('openai', message);
+        await this.rateLimiters.openai?.acquire();
+        const res = await this.openaiClient.chat.completions.create({
+          model: modelId,
+          messages: [{ role: 'user', content: message }],
+          max_completion_tokens: 512,
+          ...(opts.json ? { response_format: { type: 'json_object' as const } } : {}),
+          ...openaiReasoningParam(modelId),
+        }, { signal: timer });
+        return finish(res.choices?.[0]?.message?.content);
+      }
+      if (this.isGroqModel(modelId) && this.groqClient && !this._groqLocalDisabled) {
+        this.assertOutboundScopes('groq', message);
+        await this.rateLimiters.groq?.acquire();
+        const res = await this.createGroqCompletion(
+          { model: modelId, messages: [{ role: 'user', content: message }], temperature: 0, max_tokens: 256, stream: false },
+          { signal: timer },
+        );
+        return finish(res.choices?.[0]?.message?.content);
+      }
+      if (this.isGeminiModel(modelId) && this.client) {
+        this.assertOutboundScopes('gemini', message);
+        await this.rateLimiters.gemini?.acquire();
+        // @ts-ignore - abortSignal is accepted by the SDK's request config
+        const res = await this.client.models.generateContent({
+          model: modelId,
+          contents: [{ role: 'user', parts: [{ text: message }] }],
+          config: {
+            maxOutputTokens: 256, temperature: 0, abortSignal: timer,
+            ...(opts.json ? { responseMimeType: 'application/json' } : {}),
+          },
+        });
+        const parts = res.candidates?.[0]?.content?.parts ?? [];
+        return finish(res.text ?? (Array.isArray(parts) ? parts : [parts]).map((pt: any) => pt?.text ?? '').join(''));
+      }
+      if (this.isDeepseekModel(modelId) && this.deepseekClient) {
+        this.assertOutboundScopes('deepseek', message);
+        await this.rateLimiters.deepseek?.acquire();
+        const res = await this.deepseekClient.chat.completions.create({
+          model: modelId,
+          messages: [{ role: 'user', content: message }],
+          temperature: 0, max_tokens: 256,
+          ...(opts.json ? { response_format: { type: 'json_object' as const } } : {}),
+          ...DEEPSEEK_NO_THINKING,
+        }, { signal: timer });
+        return finish(res.choices?.[0]?.message?.content);
+      }
+      if (this.isClaudeModel(modelId) && this.claudeClient) {
+        this.assertOutboundScopes('claude', message);
+        await this.rateLimiters.claude?.acquire();
+        const res: any = await this.claudeClient.messages.create({
+          model: modelId, max_tokens: 256, temperature: 0,
+          messages: [{ role: 'user', content: message }],
+        }, { signal: timer });
+        return finish((res?.content ?? []).map((c: any) => (c?.type === 'text' ? c.text : '')).join(''));
+      }
+      // Unrecognised id (a retired model, or a provider with no fast path):
+      // fall through rather than guessing a client.
+      return null;
+    } catch (error) {
+      if (opts.signal?.aborted) throw error;
+      return null;
+    }
+  }
+
+  /**
    * The low-confidence QUERY REWRITE's model call (2026-09-20): exactly ONE rung,
    * aborted at its deadline. It first borrowed generateJudgeVerdict, and an
    * adversarial review read what that does without a Gemini key: it falls into
