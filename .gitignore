@@ -646,3 +646,6 @@ resources/models/Xenova/multilingual-e5-small/*
 # them with a multi-MB natively.db. Generated output, not a fixture.
 tests/e2e-modes/live-userdata/
 tests/e2e-modes/hosted-userdata-*/
+
+# Written by `npm run dev:agent` — per-worktree CDP port + session id.
+agent-browser.json
