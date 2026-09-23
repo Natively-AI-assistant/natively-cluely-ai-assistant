@@ -514,7 +514,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         : geminiNext ? geminiNext
         : modelAvailable('gpt-5.4') ? 'gpt-5.4'
         : modelAvailable('claude-sonnet-4-6') ? 'claude-sonnet-4-6'
-        : modelAvailable('qwen/qwen3.6-27b') ? 'qwen/qwen3.6-27b'
+        : modelAvailable('qwen/qwen3.8-27b') ? 'qwen/qwen3.8-27b'
         : modelAvailable('deepseek-v4-flash') ? 'deepseek-v4-flash'
         : (codexConfig.enabled === true && codexSignedIn && modelAvailable('codex-cli')) ? 'codex-cli'
         : (litellmFallbackModel && modelAvailable(litellmFallbackModel)) ? litellmFallbackModel
@@ -12763,6 +12763,9 @@ export function initializeIpcHandlers(appState: AppState): void {
               model: 'deepseek-v4-flash',
               max_tokens: 10,
               messages: [{ role: 'user', content: 'Hello' }],
+              // DeepSeek thinks by default; the probe only asks "is the key
+              // accepted?", so don't make the user wait out a reasoning pass.
+              thinking: { type: 'disabled' },
             },
             {
               headers: {

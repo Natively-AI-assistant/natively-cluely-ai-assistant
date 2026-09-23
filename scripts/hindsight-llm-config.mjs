@@ -68,7 +68,7 @@ function providerTable(env) {
     },
     {
       provider: 'groq', key: 'GROQ_API_KEY',
-      models: [ov('HINDSIGHT_LLM_GROQ', 'groq/qwen/qwen3.6-27b')],
+      models: [ov('HINDSIGHT_LLM_GROQ', 'groq/qwen/qwen3.8-27b')],
     },
     {
       // Ollama needs no API key — include when explicitly enabled (local fallback of last resort).

@@ -132,7 +132,8 @@ const GEMINI_PRO_MODEL = "gemini-3.1-pro-preview"
 // TEXT_HEDGE_ENABLED / GEMINI_TEXT_HEDGE_CONFIG knobs were removed.
 // Groq retired every Llama id it hosted: `llama-3.3-70b-versatile` shut down
 // 2026-08-16 and `meta-llama/llama-4-scout-17b-16e-instruct` on 2026-07-17.
-// `qwen/qwen3.6-27b` is the replacement for BOTH paths — it is the only model
+// `qwen/qwen3.8-27b` (successor to qwen3.6-27b, itself shut down 2026-09-14) is
+// the model for BOTH paths — it is the only model
 // left in Groq's catalogue that accepts image input, so text and vision share
 // one id. The user's pick in the model selector still wins; these are only the
 // baseline used when nothing is chosen and by the Fast Text / emergency paths.
@@ -158,6 +159,17 @@ const OPENAI_MODEL = "gpt-5.4"
 const CLAUDE_MODEL = "claude-sonnet-4-6"
 const DEEPSEEK_MODEL = "deepseek-v4-flash"
 const DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+// DeepSeek's chat API THINKS BY DEFAULT: `thinking.type` defaults to `enabled`
+// (reasoning_effort `high`), and in streaming the reasoning arrives in
+// `delta.reasoning_content` BEFORE the first `delta.content` token
+// (api-docs.deepseek.com/api/create-chat-completion). Every reader here takes
+// only `delta.content`, so a request without this field waits out the whole
+// hidden chain of thought before the overlay shows a word. The post-meeting
+// summary server has always sent it (benchmark/reports/REPORT.md: a probe that
+// dropped it returned reasoning_tokens 106 on a tiny prompt, the production
+// body 0); the interactive paths never did. A spread, not an inline literal:
+// the OpenAI SDK's request type has no `thinking` field.
+const DEEPSEEK_NO_THINKING = { thinking: { type: 'disabled' as const } }
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 // Optional on OpenRouter's side, and purely for their public leaderboards —
 // they are NOT auth and carry nothing about the user. Sent as constants so a
@@ -5035,8 +5047,12 @@ let isMultimodal = !!(imagePaths?.length);
     // used to pay a doomed full-payload round trip to the dead model before
     // laddering — callers keep passing the module const. Skip straight to the
     // fallback rung when this process has already seen the model die.
-    const { markGroqModelGone, isGroqModelKnownGone, groqReasoningParams } = require('./llm/groqModels') as typeof import('./llm/groqModels');
-    if (!opts?.strictModel && isGroqModelKnownGone(request?.model)) {
+    const { markGroqModelGone, isGroqModelKnownGone, isRetiredModelId, groqReasoningParams } = require('./llm/groqModels') as typeof import('./llm/groqModels');
+    // A RETIRED id with a named successor is known-gone before the first call,
+    // not after it: no process should pay a doomed round trip to learn what
+    // the deprecations page already says. (Retired ids without a successor
+    // return null below and take the normal path, as before.)
+    if (!opts?.strictModel && (isGroqModelKnownGone(request?.model) || isRetiredModelId(request?.model))) {
       const memoFallback = groqFallbackFor(request?.model);
       if (memoFallback) {
         return await this.createGroqCompletion({ ...request, model: memoFallback }, opts);
@@ -5390,6 +5406,7 @@ let isMultimodal = !!(imagePaths?.length);
         model,
         messages,
         max_tokens: this.getDeepseekMaxOutput(model),
+        ...DEEPSEEK_NO_THINKING,
       })),
       60000,
       `DeepSeek (${model})`
@@ -6334,14 +6351,14 @@ let isMultimodal = !!(imagePaths?.length);
       model: GROQ_VISION_MODEL,
       messages,
       temperature: 1,
-      // Groq caps qwen3.6-27b at 16,384 completion tokens. The old 28,672 was
+      // Groq caps qwen3.8-27b (as it did 3.6) at 16,384 completion tokens. The old 28,672 was
       // llama-4-scout's ceiling; asking for more than a model's limit is a 400,
       // not a silent clamp.
       max_completion_tokens: 16384,
       top_p: 1,
       stream: false as const,
       stop: null as string[] | null,
-      // GROQ_VISION_MODEL is qwen3.6-27b — a THINKING model. Without this the
+      // GROQ_VISION_MODEL is qwen3.8-27b — a THINKING model. Without this the
       // <think> block is returned as message.content and handed straight to the
       // caller (2026-09-03). Note this call deliberately does NOT go through
       // createGroqCompletion: that ladder falls back to a TEXT-ONLY model, which
@@ -6761,7 +6778,7 @@ let isMultimodal = !!(imagePaths?.length);
    * and Gemini-only for multimodal (images)
    *
    * TEXT-ONLY FALLBACK CHAIN:
-   * 1. Groq (qwen/qwen3.6-27b) - Primary
+   * 1. Groq (qwen/qwen3.8-27b) - Primary
    * 2. Gemini Flash - 1st fallback
    * 3. Gemini Flash + Pro parallel - 2nd fallback
    * 4. Gemini Flash retries (max 3) - Last resort
@@ -10185,7 +10202,7 @@ let isMultimodal = !!(imagePaths?.length);
       temperature: 1,
       top_p: 1,
       stop: null,
-      // Same as the non-streaming vision call above: qwen3.6-27b thinks out loud
+      // Same as the non-streaming vision call above: qwen3.8-27b thinks out loud
       // into delta.content, and this is the LATENCY-CRITICAL path (every
       // screenshot turn). Applied here rather than via createGroqCompletion
       // because that ladder's fallback rung is text-only.
@@ -10328,6 +10345,7 @@ let isMultimodal = !!(imagePaths?.length);
         temperature: INTERACTIVE_TEMPERATURE,
         seed: INTERACTIVE_SEED, // DeepSeek is OpenAI-compatible and honors seed
         max_tokens: this.getDeepseekMaxOutput(model),
+        ...DEEPSEEK_NO_THINKING, // else the first token waits out the default reasoning
       }, { signal: abortSignal });
     } catch (err: any) {
       // Hard-trip on billing/quota/auth failures so we don't burn 3 chain rotations

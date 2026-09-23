@@ -11368,6 +11368,7 @@ Provide only the answer, nothing else.`;
                           if (m === 'gemini-3.6-flash') return 'Gemini 3.6 Flash';
                           if (m === 'gemini-3.1-flash-lite') return 'Gemini 3.1 Flash Lite';
                           if (m === 'gemini-3.1-pro-preview') return 'Gemini 3.1 Pro';
+                          if (m === 'qwen/qwen3.8-27b') return 'Groq Qwen 3.8';
                           if (m === 'qwen/qwen3.6-27b') return 'Groq Qwen 3.6';
                           if (m === 'openai/gpt-oss-120b') return 'Groq GPT-OSS 120B';
                           if (m === 'openai/gpt-oss-20b') return 'Groq GPT-OSS 20B';
