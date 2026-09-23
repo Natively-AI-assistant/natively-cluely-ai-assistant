@@ -572,7 +572,7 @@ ${contextString}`;
                     onClick={handleBackdropClick}
                 >
                     {/* Backdrop — dims only; the parent's opacity fade brings it in */}
-                    <div className={`absolute inset-0 ${isLightTheme ? 'bg-black/[0.02] backdrop-blur-[3px]' : 'bg-black/40'}`} />
+                    <div className={`absolute inset-0 ${isLightTheme ? 'bg-white/40' : 'bg-black/40'}`} />
 
                     {/* Chat Window - extends to bottom, leaves room for input */}
                     <motion.div

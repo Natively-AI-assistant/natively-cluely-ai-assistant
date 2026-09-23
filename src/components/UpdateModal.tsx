@@ -146,7 +146,7 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.3 }}
-                        className={`absolute inset-0 ${isLight ? 'bg-black/[0.03] backdrop-blur-[4px]' : 'bg-black/40'}`}
+                        className={`absolute inset-0 ${isLight ? 'bg-white/45' : 'bg-black/40'}`}
                         onClick={onDismiss}
                     />
 
