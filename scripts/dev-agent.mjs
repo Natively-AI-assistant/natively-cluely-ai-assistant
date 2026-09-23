@@ -118,7 +118,11 @@ async function main() {
   const session = sessionId();
 
   mkdirSync(USER_DATA, { recursive: true });
-  writeFileSync(CONFIG, `${JSON.stringify({ cdp: cdpPort, session }, null, 2)}\n`);
+  // `cdp` is a STRING here, not a number: agent-browser's config parser rejects
+  // an integer outright ("invalid type: integer, expected a string") and then
+  // silently falls back to launching its OWN browser, so the agent ends up
+  // driving about:blank instead of the app.
+  writeFileSync(CONFIG, `${JSON.stringify({ cdp: String(cdpPort), session }, null, 2)}\n`);
 
   console.log(`[dev:agent] cdp=${cdpPort} renderer=${rendererPort} session=${session}`);
   console.log(`[dev:agent] userData=${USER_DATA}`);
