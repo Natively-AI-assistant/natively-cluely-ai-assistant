@@ -624,8 +624,8 @@ export class WindowHelper {
         if (mode === 'none') {
           if (isMac) {
             return app.isPackaged
-              ? path.join(process.resourcesPath, 'natively.icns')
-              : path.resolve(__dirname, '../../assets/natively.icns');
+              ? path.join(process.resourcesPath, 'assets', 'icon.png')
+              : path.resolve(__dirname, '../../assets/icon.png');
           } else if (isWin) {
             return app.isPackaged
               ? path.join(process.resourcesPath, 'assets/icons/win/icon.ico')
@@ -648,8 +648,8 @@ export class WindowHelper {
           // Defensive: unknown mode — use the real app icon, matching 'none'.
           if (isMac) {
             return app.isPackaged
-              ? path.join(process.resourcesPath, 'natively.icns')
-              : path.resolve(__dirname, '../../assets/natively.icns');
+              ? path.join(process.resourcesPath, 'assets', 'icon.png')
+              : path.resolve(__dirname, '../../assets/icon.png');
           } else if (isWin) {
             return app.isPackaged
               ? path.join(process.resourcesPath, 'assets/icons/win/icon.ico')
