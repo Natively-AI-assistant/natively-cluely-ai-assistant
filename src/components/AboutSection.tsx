@@ -125,12 +125,24 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
     // both themes: the card shows through and only the rim is added. Its label
     // is `color: inherit` (and outranks a utility on the button itself), so the
     // colour has to come from a parent.
-    const actionButton = (label: string, url: string, Icon: typeof Star) => (
+    // Hover: the glyph takes its own hue and fills in, with a small spring pop
+    // (overshoot curve on the way in, a fast plain ease-out on the way out, so
+    // it never lags the pointer). The fill is fill-opacity on currentColor
+    // because `fill: none` cannot interpolate. Line-art glyphs (bug, mail) only
+    // wash in, since a solid fill erases their inner strokes. Reduced motion
+    // keeps the colour and drops the pop.
+    const actionButton = (label: string, url: string, Icon: typeof Star, hue: string, solid = true) => (
         <span className="shrink-0 text-text-primary">
             <LiquidGlassButton
                 variant="clear"
-                className="lg-sm [&_.lg-content]:text-text-primary"
-                icon={<Icon size={14} strokeWidth={1.75} />}
+                className="lg-sm group [&_.lg-content]:text-text-primary"
+                icon={
+                    <Icon
+                        size={14}
+                        strokeWidth={1.75}
+                        className={`fill-current [fill-opacity:0] transition-[transform,color,fill-opacity] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:duration-[280ms] group-hover:ease-[cubic-bezier(0.34,1.56,0.64,1)] group-hover:scale-[1.12] motion-reduce:group-hover:scale-100 ${hue} ${solid ? 'group-hover:[fill-opacity:1]' : 'group-hover:[fill-opacity:0.28]'}`}
+                    />
+                }
                 onClick={() => openLink(url)}
             >
                 {label}
@@ -139,10 +151,10 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
     );
 
     const community = [
-        { title: t('Star on GitHub'), body: t('Love Natively? Support us by starring the repo.'), action: actionButton(t('Star'), REPO_URL, Star) },
-        { title: t('Report an Issue'), body: t('Found a bug? Let us know so we can fix it.'), action: actionButton(t('Report'), `${REPO_URL}/issues`, Bug) },
-        { title: t('Get in Touch'), body: t('Open for professional collaborations and job offers.'), action: actionButton(t('Contact Me'), 'mailto:evinjohnignatious@gmail.com', Mail) },
-        { title: t('Support Development'), body: t('Natively is independent source-available software.'), action: actionButton(t('Support Project'), DONATE_URL, Heart) },
+        { title: t('Star on GitHub'), body: t('Love Natively? Support us by starring the repo.'), action: actionButton(t('Star'), REPO_URL, Star, 'group-hover:text-[#D4A84B]') },
+        { title: t('Report an Issue'), body: t('Found a bug? Let us know so we can fix it.'), action: actionButton(t('Report'), `${REPO_URL}/issues`, Bug, 'group-hover:text-red-500', false) },
+        { title: t('Get in Touch'), body: t('Open for professional collaborations and job offers.'), action: actionButton(t('Contact Me'), 'mailto:evinjohnignatious@gmail.com', Mail, 'group-hover:text-accent-primary', false) },
+        { title: t('Support Development'), body: t('Natively is independent source-available software.'), action: actionButton(t('Support Project'), DONATE_URL, Heart, 'group-hover:text-pink-500') },
     ];
 
     return (
