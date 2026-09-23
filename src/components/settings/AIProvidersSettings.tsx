@@ -1178,7 +1178,7 @@ export const CLOUD_PROVIDERS = [
     // Also a gateway, but NOT opt-in: 36 models, and its catalogue endpoint is
     // scoped to the key's group. The one provider here with a second required
     // setting — see the protocol selector passed as `extraControls` below.
-    // Natively's partner link (sponsor): new sign-ups get $1 in API credit.
+    // Natively's partner link (sponsor): new sign-ups get $3 in API credit.
     { id: 'fluxion' as const, name: 'Fluxion AI', placeholder: 'sk-...', url: FLUXION_REFERRAL_URL },
     { id: 'groq'     as const, name: 'Groq',     placeholder: 'gsk_...',    url: 'https://console.groq.com/keys' },
     { id: 'openai'   as const, name: 'OpenAI',   placeholder: 'sk-...',     url: 'https://platform.openai.com/api-keys' },

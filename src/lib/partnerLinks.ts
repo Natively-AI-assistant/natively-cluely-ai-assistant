@@ -1,6 +1,6 @@
 /**
  * Fluxion AI sponsors Natively. This is Natively's own partner link: sign-ups
- * through it get $1 in API credit. It backs both the launcher's sponsor card
+ * through it get $3 in API credit. It backs both the launcher's sponsor card
  * and the Fluxion provider card's "Get API key".
  */
 export const FLUXION_REFERRAL_URL = 'https://fluxionai.world/register?source=github&campaign=natively&promo=NATIVELY';
