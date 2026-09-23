@@ -11,7 +11,7 @@ import {
     FollowUpQuestionsLLM, WhatToAnswerLLM,
     prepareTranscriptForWhatToAnswer, buildTemporalContext,
     AssistantResponse as LLMAssistantResponse, classifyIntent, hasQuestionSignal, planNextAssistantAction, PlannerDecision,
-    extractLatestQuestion, toCandidateFraming, planAnswer, validateAnswerStructure, isCompleteShortAnswer, detectExplicitCodingContract, detectAndExtractScaffoldMisfire, hasUnrecoveredScaffoldContamination, isScaffoldRegenerationEligible, isCodingAnswerType, isJdFactualLookupNotNegotiationAdvice, resolveFollowUp, resolveFollowUpOrClarify,
+    extractLatestQuestion, toCandidateFraming, planAnswer, validateAnswerStructure, isCompleteShortAnswer, detectExplicitCodingContract, isCodingContinuation, detectAndExtractScaffoldMisfire, hasUnrecoveredScaffoldContamination, isScaffoldRegenerationEligible, isCodingAnswerType, isJdFactualLookupNotNegotiationAdvice, resolveFollowUp, resolveFollowUpOrClarify,
     isLiveSessionMemoryEnabled, resolveLiveFollowup, toMemoryMode, toSurface, effectiveMemoryMode,
     resolveLiveSessionMemoryConfig, piTelemetry, ageBucket,
     buildContextRoute, summarizeContextRoute, shouldThrottleTrigger,
@@ -488,6 +488,8 @@ export class IntelligenceEngine extends EventEmitter {
     private static readonly MANUAL_CONTEXT_QUESTION_CHAR_LIMIT = 1000;
     private static readonly MANUAL_CONTEXT_ANSWER_CHAR_LIMIT = 2000;
     private static readonly TRANSCRIPT_CONTEXT_SUBSTANTIAL_CHARS = 80;
+    // A coding problem older than this is not "the current problem" any more (issue #539).
+    private static readonly ACTIVE_CODING_PROBLEM_MAX_AGE_MS = 30 * 60 * 1000;
 
     /**
      * Campaign-3 fix (2026-07-19, fix/answer-policy-engine). Returns true
@@ -2208,6 +2210,30 @@ export class IntelligenceEngine extends EventEmitter {
                     }
                 } catch { /* keep extractor result */ }
             }
+            // ACTIVE CODING PROBLEM (issue #539). The hot window is 180s, so by the
+            // time the interviewer says "show the solution in python" the problem
+            // statement has usually been evicted, and the fragment alone routes
+            // general_meeting_answer — live, the model then invented an unrelated
+            // count_ways(n). SessionTracker keeps the detected coding problem for
+            // the session; when the latest ask is a coding CONTINUATION, put that
+            // problem back in front of the model and plan against it. Gated on the
+            // continuation shape, so a fresh question never inherits a stale problem.
+            try {
+                const activeCoding = this.session.getDetectedCodingQuestion();
+                const problem = activeCoding.question?.trim() ?? '';
+                const latestAsk = (question || extractedQuestion.latestQuestion || '').trim();
+                const fresh = activeCoding.setAt != null && Date.now() - activeCoding.setAt <= IntelligenceEngine.ACTIVE_CODING_PROBLEM_MAX_AGE_MS;
+                if (problem && fresh && latestAsk && latestAsk.toLowerCase() !== problem.toLowerCase() && isCodingContinuation(latestAsk)) {
+                    const inWindow = preparedTranscript.toLowerCase().includes(problem.slice(0, 60).toLowerCase());
+                    if (!inWindow) preparedTranscript = `[INTERVIEWER]: ${problem}\n${preparedTranscript}`;
+                    if (!question) {
+                        extractedQuestion.latestQuestion = `${latestAsk} (follow-up to the coding problem: "${problem}")`;
+                        extractedQuestion.isFollowUp = true;
+                    }
+                    trace.mark('repair_used', { reason: 'active_coding_problem', spliced: !inWindow, source: activeCoding.source });
+                    console.log('[IntelligenceEngine] coding continuation resolved against the active coding problem', { spliced: !inWindow, source: activeCoding.source, ageMs: Date.now() - (activeCoding.setAt ?? Date.now()) });
+                }
+            } catch { /* keep extractor result */ }
             trace.mark('latest_question_extracted', {
                 questionType: extractedQuestion.questionType,
                 detectedSpeaker: extractedQuestion.detectedSpeaker,
