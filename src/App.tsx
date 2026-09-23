@@ -1161,7 +1161,7 @@ const App: React.FC = () => {
                       initial="initial"
                       animate="animate"
                       exit="exit"
-                      className={`fixed inset-0 z-50 flex items-center justify-center ${isLight ? 'bg-black/20' : 'bg-black/60'}`}
+                      className={`fixed inset-0 z-50 flex items-center justify-center ${isLight ? 'bg-white/45' : 'bg-black/60'}`}
                       onClick={(event) => {
                         if (event.target !== event.currentTarget) return;
                         closeManagerPanel();
