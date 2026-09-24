@@ -44,6 +44,9 @@ import ninerouterMark from '../../assets/provider-logos/ninerouter.png';
 // gradient disc with a four-point star. Full-colour, so an <img> like the
 // two above, and a simple disc, so it stays recognisable at the tile's 16px.
 import agentrouterMark from '../../assets/provider-logos/agentrouter.png';
+// Requesty's app icon, full colour, so a URL rendered with <img> like the
+// marks above.
+import requestyMark from '../../assets/provider-logos/requesty.png';
 // Our own app icon, for the Natively API row. Raster and full-colour, so it is a
 // URL rendered with <img> for the same reason as litellm.
 import nativelyIcon from '../../../assets/icon-512.png';
@@ -75,6 +78,7 @@ export const AI_PROVIDER_BRANDS: Record<string, { mono: string; brand: string }>
     // variants: OpenRouter lime, Voyage deep teal. The MARKS themselves take the
     // monochrome variant — see the README's "Colour vs monochrome".
     openrouter: { mono: 'OR', brand: '#C8FF00' },
+    requesty: { mono: 'RQ', brand: '#1677FF' },
     // Sidrune's brand is black and white (their logo pack has no colour), so
     // the wash is the same neutral grey as Ollama's, another one-colour mark.
     fluxion:  { mono: 'SR', brand: '#9CA3AF' },
@@ -113,6 +117,7 @@ export const AI_PROVIDER_MARK_IMAGES: Record<string, string> = {
     litellm: litellmMark,
     ninerouter: ninerouterMark,
     agentrouter: agentrouterMark,
+    requesty: requestyMark,
     natively: nativelyIcon,
 };
 

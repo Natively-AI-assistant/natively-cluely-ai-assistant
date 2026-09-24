@@ -148,7 +148,9 @@ export function readsImages(v: VisionVerdict, unknownMeans: boolean): boolean {
  * and LiteLLM, NVIDIA NIM and Fluxion in phase 3, where a saved test result can
  * say "no" for them. Unknown still seats them, as it always has.
  */
-const SEAT_ON_UNKNOWN = { ninerouter: true, openrouter: true, litellm: true, nvidia_nim: true, fluxion: true, agentrouter: false } as const;
+// Requesty seats on unknown like OpenRouter: a gateway the user picked, whose
+// upstream returns its own error for an image it cannot take.
+const SEAT_ON_UNKNOWN = { ninerouter: true, openrouter: true, requesty: true, litellm: true, nvidia_nim: true, fluxion: true, agentrouter: false } as const;
 
 /**
  * Whether a selected gateway model is seated for a screenshot. One function for
