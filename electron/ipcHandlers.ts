@@ -155,6 +155,10 @@ import { detectIncompleteNumericAnswer, completenessRegenFabricates, isDocGround
 // scope on every write.
 import { mergeProviderDataScopes } from './llm/ProviderRouter';
 import {
+  captureGenieSnapshot, saveGenieSnapshot, loadGenieSnapshot, listGenieSnapshots,
+  clearGenieSnapshots, pruneOldGenieSnapshots,
+} from './genieSnapshots';
+import {
   DirectAssistService,
   type DirectAssistRequestInput,
   type DirectAssistStreamEvent,
@@ -300,6 +304,27 @@ export function initializeIpcHandlers(appState: AppState): void {
     ipcMain.removeAllListeners(channel);
     ipcMain.on(channel, listener);
   };
+
+  // ── Genie snapshots (genieSnapshots.ts) ────────────────────────────────
+  // A popup card's genie warps one picture of the card. The capture reads the
+  // CALLING window's own compositor output (event.sender), never another
+  // window's, and never the screen.
+  void pruneOldGenieSnapshots();
+  safeHandle('genie-snapshot:capture', async (event, rect) => {
+    try { return await captureGenieSnapshot(event.sender, rect); } catch { return null; }
+  });
+  safeHandle('genie-snapshot:save', async (_, key: string, png: Uint8Array) => {
+    try { return await saveGenieSnapshot(key, Buffer.from(png)); } catch { return false; }
+  });
+  safeHandle('genie-snapshot:load', async (_, key: string) => {
+    try { return await loadGenieSnapshot(key); } catch { return null; }
+  });
+  safeHandle('genie-snapshot:list', async () => {
+    try { return await listGenieSnapshots(); } catch { return []; }
+  });
+  safeHandle('genie-snapshot:clear', async (_, prefix?: string) => {
+    try { await clearGenieSnapshots(typeof prefix === 'string' ? prefix : ''); return true; } catch { return false; }
+  });
 
   const broadcastCredentialsChanged = (): void => {
     BrowserWindow.getAllWindows().forEach((win) => {
@@ -15289,6 +15314,8 @@ export function initializeIpcHandlers(appState: AppState): void {
       // cross-tier rollback rather than call sequencing.
       const { deleteProfileTransactional } = require('./services/knowledge/deleteProfileTransactional') as typeof import('./services/knowledge/deleteProfileTransactional');
       deleteProfileTransactional(orchestrator, DocType.RESUME, 'resume');
+      // Pictures of Profile Intelligence show the résumé: they go with it.
+      void clearGenieSnapshots('profile').catch(() => {});
       return { success: true };
     } catch (error: any) {
       return { success: false, error: error.message };
@@ -15420,6 +15447,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       // there for why a Tier-1-only delete is a partial delete.
       const { deleteProfileTransactional } = require('./services/knowledge/deleteProfileTransactional') as typeof import('./services/knowledge/deleteProfileTransactional');
       deleteProfileTransactional(orchestrator, DocType.JD, 'jd');
+      void clearGenieSnapshots('profile').catch(() => {});
       return { success: true };
     } catch (error: any) {
       return { success: false, error: error.message };

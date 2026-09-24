@@ -65,9 +65,42 @@ export function genieHalfWidthAt(p, geom, y) {
   const slot = SLOT_WIDTH / 2;
   const along = clamp01((y - geom.top) / Math.max(1, geom.slotY - geom.top));
   // The top tenth holds its width, so the upper corners stay square.
-  const k = smooth(clamp01((along - 0.1) / 0.9));
+  const k = genieSide(clamp01((along - 0.1) / 0.9));
   const funnel = full + (slot - full) * k;
   return full + (funnel - full) * genieStretch(p);
+}
+
+/**
+ * How long the handles of each funnel side's Bezier are, as a share of the
+ * funnel's height. A side is a cubic Bezier from the card's edge down to the
+ * slot's, leaving the card straight down and arriving at the slot straight
+ * down (vertical tangents at both ends), the curve macOS draws. Handles of a
+ * third make it exactly smoothstep; macOS's are longer: the card holds its
+ * width further down, then necks in more decisively, a deeper S.
+ */
+export const SIDE_HANDLE = 0.55;
+
+/**
+ * The side curve: at `u` of the way down the funnel (0 at its top, 1 at the
+ * slot), how far the side has moved in from the card's edge to the slot's
+ * (0..1). The Bezier's control points in (inward, down) are (0, 0),
+ * (0, SIDE_HANDLE), (1, 1 - SIDE_HANDLE), (1, 1); `u` gives the height, so
+ * the Bezier's parameter is solved for it (monotone: bisection, 24 steps is
+ * well under a hundredth of a pixel).
+ */
+export function genieSide(u) {
+  if (u <= 0) return 0;
+  if (u >= 1) return 1;
+  const h = SIDE_HANDLE;
+  const down = t => 3 * (1 - t) * (1 - t) * t * h + 3 * (1 - t) * t * t * (1 - h) + t * t * t;
+  let lo = 0, hi = 1;
+  for (let i = 0; i < 24; i++) {
+    const mid = (lo + hi) / 2;
+    if (down(mid) < u) lo = mid; else hi = mid;
+  }
+  const t = (lo + hi) / 2;
+  // Inward: control points 0, 0, 1, 1.
+  return 3 * (1 - t) * t * t + t * t * t;
 }
 
 /** Opacity: solid until the last tenth, then it lands and is gone. */
@@ -181,4 +214,52 @@ export function genieBands(p, geom, rows) {
     const b = y1 - (geom.top + r0);
     return quadMatrix3d(width, r1 - r0, [[cx - h0, t], [cx + h0, t], [cx + h1, b], [cx - h1, b]]);
   });
+}
+
+/**
+ * The genie as a precomputed track, for the compositor to play.
+ *
+ * Driven from JavaScript, every frame of the genie is a main-thread write, and
+ * a popup opening is exactly when the main thread is busiest (the card
+ * mounting, its data landing). Blocks of 40 ms every 100 ms cost the pour 6
+ * of its ~33 frames: a hitch every tenth of a second. Handed to the
+ * compositor as Web Animations, the motion keeps going while the main thread
+ * is blocked.
+ *
+ * The samples are dense (120 a second) so the browser's blend between two
+ * neighbours stays tiny. It blends a matrix3d by decomposing it, which for
+ * these projective maps is not a straight line, so two neighbouring bands
+ * drift apart a little between samples; 8 ms apart that drift stays inside
+ * the bands' BAND_OVERLAP. (Holding each sample instead, steps(1, end),
+ * made a 60 Hz display advance one sample on some frames and three on
+ * others: uneven motion.)
+ *
+ *   from, to     genie progress at the start and end (1 = in the slot)
+ *   ease         t -> eased t, for the whole run
+ *   durationMs   length of the run
+ *   geom, rows   as for genieBands
+ *
+ * Returns keyframe offsets and, per offset, every band's transform, the band
+ * layer's opacity and the shadow stand-in's transform and opacity.
+ */
+export function genieTrack(from, to, ease, durationMs, geom, rows, hz = 120) {
+  const n = Math.max(2, Math.ceil((durationMs / 1000) * hz) + 1);
+  const offsets = [];
+  const bands = rows.map(() => []);
+  const layerOpacity = [];
+  const shadowTransform = [];
+  const shadowOpacity = [];
+  const height = geom.bottom - geom.top;
+  for (let i = 0; i < n; i++) {
+    const t = i / (n - 1);
+    const p = from + (to - from) * ease(t);
+    offsets.push(t);
+    genieBands(p, geom, rows).forEach((m, b) => bands[b].push(m));
+    layerOpacity.push(genieOpacity(p));
+    const { top, bottom } = genieEdges(p, geom);
+    const sy = Math.max(bottom - top, 0.5) / height;
+    shadowTransform.push(`translateY(${(top - geom.top).toFixed(2)}px) scaleY(${sy.toFixed(4)})`);
+    shadowOpacity.push(1 - genieStretch(p));
+  }
+  return { offsets, bands, layerOpacity, shadowTransform, shadowOpacity };
 }

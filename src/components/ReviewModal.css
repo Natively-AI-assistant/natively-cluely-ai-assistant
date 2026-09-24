@@ -14,22 +14,15 @@
    copy and the controls. No header bar — the close glyph floats over the
    plate. Every selector is namespaced .review-* so nothing leaks. */
 
-.review-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
+/* GenieModal's scrim and measured wrap (the card pours out of the bottom of
+   the window like every other popup). */
+.review-modal-genie-backdrop {
   background: radial-gradient(ellipse 90% 70% at 50% 42%, rgba(28, 22, 12, 0.82) 0%, rgba(0, 0, 0, 0.9) 100%);
 }
 
-.review-modal-viewport {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  pointer-events: none;
+.review-modal-genie-wrap {
+  width: 100%;
+  max-width: 616px;
 }
 
 /* Numeric-height endpoints only — `auto` is not an animatable value, so the

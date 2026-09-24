@@ -32,20 +32,21 @@ describe('Review modal — open/close state', () => {
             'an early return above <AnimatePresence> unmounts the boundary with its children; exit animations become dead code');
     });
 
-    test('the animated children are what mount and unmount', () => {
-        const presenceStart = LIVE.indexOf('<AnimatePresence>');
-        assert.ok(presenceStart >= 0, 'the modal must still use AnimatePresence');
-        const body = LIVE.slice(presenceStart);
-        assert.match(body, /\{isOpen\s*&&\s*\(/,
-            'backdrop and container must be conditional CHILDREN of AnimatePresence');
+    // 2026-09-23: the card now opens and closes with the genie through
+    // GenieModal, which owns presence: it stays mounted while `open` is false
+    // and plays the close before anything unmounts. The contract is the same,
+    // that the close can actually run, pinned on the new mechanism.
+    test('GenieModal owns presence, so the close plays before anything unmounts', () => {
+        assert.match(LIVE, /<GenieModal[\s\S]*open=\{isOpen && !closeRequested\}/,
+            'the card is open while the host says so and no close has been requested');
+        assert.doesNotMatch(LIVE, /<AnimatePresence>\s*\{isOpen\s*&&/,
+            'no second, framer-driven presence boundary around the card');
     });
 
-    test('both animated children still declare an exit variant', () => {
-        for (const key of ['backdrop', 'container']) {
-            const at = LIVE.indexOf(`key="${key}"`);
-            assert.ok(at > 0, `the ${key} motion element is missing`);
-            assert.match(LIVE.slice(at, at + 600), /exit=\{/, `${key} lost its exit variant`);
-        }
+    test('the host hears onClose only once the close has played', () => {
+        assert.match(LIVE, /onClosed=\{\(\) => \{ if \(closeRequestedRef\.current\) onClose\(\) \}\}/,
+            'the orchestrator unmounts on onClose, so reporting earlier would cut the genie off');
+        assert.match(LIVE, /const closeModal = \(\) => \{\s*closeRequestedRef\.current = true\s*setCloseRequested\(true\)/);
     });
 
     test('landing focus on the first star does not paint a rating', () => {

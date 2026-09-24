@@ -783,6 +783,12 @@ interface ElectronAPI {
 
   // Theme API
   getThemeMode: () => Promise<{ mode: 'system' | 'light' | 'dark'; resolved: 'light' | 'dark' }>;
+  // Genie snapshots (electron/genieSnapshots.ts): pictures of popup cards the genie warps.
+  genieSnapshotCapture?: (rect: { x: number; y: number; width: number; height: number }) => Promise<{ png: Uint8Array; width: number; height: number } | null>;
+  genieSnapshotSave?: (key: string, png: Uint8Array) => Promise<boolean>;
+  genieSnapshotLoad?: (key: string) => Promise<Uint8Array | null>;
+  genieSnapshotList?: () => Promise<string[]>;
+  genieSnapshotClear?: (prefix?: string) => Promise<boolean>;
   setThemeMode: (mode: 'system' | 'light' | 'dark') => Promise<void>;
   onThemeChanged: (
     callback: (data: { mode: 'system' | 'light' | 'dark'; resolved: 'light' | 'dark' }) => void,
@@ -1501,6 +1507,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
+  // Genie snapshots (electron/genieSnapshots.ts): pictures of popup cards the
+  // genie warps. capture reads this window's own compositor output.
+  genieSnapshotCapture: (rect: { x: number; y: number; width: number; height: number }) =>
+    ipcRenderer.invoke('genie-snapshot:capture', rect) as Promise<{ png: Uint8Array; width: number; height: number } | null>,
+  genieSnapshotSave: (key: string, png: Uint8Array) => ipcRenderer.invoke('genie-snapshot:save', key, png) as Promise<boolean>,
+  genieSnapshotLoad: (key: string) => ipcRenderer.invoke('genie-snapshot:load', key) as Promise<Uint8Array | null>,
+  genieSnapshotList: () => ipcRenderer.invoke('genie-snapshot:list') as Promise<string[]>,
+  genieSnapshotClear: (prefix?: string) => ipcRenderer.invoke('genie-snapshot:clear', prefix) as Promise<boolean>,
   // UX2: in-app TCC repair. Returns { ok, bundleId, results, promptRelaunch, message }.
   // Renderer should show the `message` and prompt the user to fully quit and reopen.
   repairTccPermissions: () => ipcRenderer.invoke('repair-tcc-permissions'),

@@ -21,6 +21,7 @@ import { Star, X, Lock, Check } from "lucide-react"
 // Co-located so a concurrent edit to index.css cannot silently strip the
 // modal's styling — every class here resolves to nothing without it.
 import "./ReviewModal.css"
+import { GenieModal } from "./ui/GenieModal"
 
 const MAX_CHARS = 300
 
@@ -193,16 +194,15 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
     // synchronously, so the flag is set and cleared around that single call and
     // can never swallow a later, genuine focus.
     const suppressStarFocusPreview = useRef(false)
-    useEffect(() => {
-        if (!isOpen) return
-        const t = window.setTimeout(() => {
-            const first = document.querySelector<HTMLButtonElement>('[data-review-star="1"]')
-            if (!first) return
-            suppressStarFocusPreview.current = true
-            try { first.focus() } finally { suppressStarFocusPreview.current = false }
-        }, 260)
-        return () => window.clearTimeout(t)
-    }, [isOpen])
+    // Runs from GenieModal's onOpened: mid-genie the card is hidden, and a
+    // hidden button cannot take focus, so this waits for the pour to land
+    // rather than for a fixed 260 ms.
+    const focusFirstStar = useCallback(() => {
+        const first = document.querySelector<HTMLButtonElement>('[data-review-star="1"]')
+        if (!first) return
+        suppressStarFocusPreview.current = true
+        try { first.focus() } finally { suppressStarFocusPreview.current = false }
+    }, [])
 
     // ESC closes; only when not mid-submit. On the first step this is a
     // soft dismissal ("Maybe later") so the prompt doesn't immediately reopen.
@@ -218,9 +218,9 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
     // The confirmation is a receipt, not a form — it dismisses itself.
     useEffect(() => {
         if (!isOpen || step !== "thanks") return
-        const t = window.setTimeout(() => onClose(), 5000)
+        const t = window.setTimeout(() => closeModal(), 5000)
         return () => window.clearTimeout(t)
-    }, [isOpen, step, onClose])
+    }, [isOpen, step])
 
     // Keep the plate mounted and animate between numeric heights reported by
     // the active step. Numeric endpoints are what make the Transitions.dev
@@ -250,9 +250,21 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
     const cardStyle: React.CSSProperties | undefined =
         reduced || cardHeight == null ? undefined : { height: cardHeight }
 
-    const closeModal = () => onClose()
+    // Every way out closes the card first (the genie) and tells the host from
+    // GenieModal's onClosed: the onboarding orchestrator unmounts this the
+    // moment it hears onClose, which would cut the close off.
+    const [closeRequested, setCloseRequested] = useState(false)
+    const closeRequestedRef = useRef(false)
+    useEffect(() => {
+        if (!isOpen) { closeRequestedRef.current = false; setCloseRequested(false) }
+    }, [isOpen])
+    const closeModal = () => {
+        closeRequestedRef.current = true
+        setCloseRequested(true)
+    }
 
     const dismissLaterAndClose = useCallback(() => {
+        if (closeRequestedRef.current) return
         // Use the ref so the soft-dismiss guard stays correct even if the
         // effect that owns this callback doesn't re-run on every step flip.
         if (stepRef.current === "review") void onDismissLater?.()
@@ -260,6 +272,7 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
     }, [onDismissLater])
 
     const dismissForeverAndClose = useCallback(() => {
+        if (closeRequestedRef.current) return
         if (stepRef.current === "review") void onDismissForever?.()
         closeModal()
     }, [onDismissForever])
@@ -352,43 +365,28 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
     const titleId = `review-modal-title-${step}`
     const busy = submitting || testimonialBusy
 
-    // Code-review 2026-08-12: this was `if (!isOpen) return null` ABOVE the
-    // AnimatePresence. Closing the modal unmounted the AnimatePresence together
-    // with its children on the very next render, and AnimatePresence can only
-    // animate children it outlives — it cannot animate its own unmount. Both
-    // `exit` variants below were therefore dead code and the modal hard-cut.
-    // The presence boundary now stays mounted (the parent renders this
-    // component unconditionally) and the CHILDREN are what come and go.
+    // Code-review 2026-08-12: closing used to unmount the presence boundary
+    // with its children, so the exit never played. GenieModal owns presence
+    // now: it stays mounted while `open` is false, plays the close, and only
+    // then reports (onClosed), so neither this component's parent nor the
+    // orchestrator can cut the animation off.
     return (
-        <AnimatePresence>
-            {isOpen && (
-            <motion.div
-                key="backdrop"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={rt(reduced, { duration: 0.2 })}
-                onClick={() => !busy && dismissLaterAndClose()}
-                className="review-modal-backdrop"
-            />
-            )}
-            {isOpen && (
-            <motion.div
-                key="container"
-                initial={{ opacity: 0, transform: reduced ? "none" : "translateY(10px) scale(0.985)" }}
-                animate={{ opacity: 1, transform: "translateY(0px) scale(1)" }}
-                exit={{ opacity: 0, transform: reduced ? "none" : "translateY(6px) scale(0.99)" }}
-                transition={rt(reduced, SPRING_SNAPPY)}
-                className="review-modal-viewport"
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby={titleId}
-            >
-                <motion.div
-                    initial={false}
-                    style={cardStyle}
-                    className="review-modal-shell"
-                >
+        <GenieModal
+            open={isOpen && !closeRequested}
+            label="ReviewModal"
+            zIndex={60}
+            onBackdropClick={() => { if (!busy) dismissLaterAndClose() }}
+            onOpened={focusFirstStar}
+            onClosed={() => { if (closeRequestedRef.current) onClose() }}
+            backdropClassName="review-modal-genie-backdrop"
+            padding={24}
+            wrapClassName="review-modal-genie-wrap"
+            cardClassName="review-modal-shell"
+            cardStyle={cardStyle}
+            cardProps={{ role: "dialog", "aria-modal": true, "aria-labelledby": titleId }}
+            shadow="0 44px 120px -34px rgba(0, 0, 0, 0.94), 0 8px 28px rgba(0, 0, 0, 0.5)"
+            radius={26}
+        >
                     <div className="review-modal-ambient" aria-hidden />
 
                     <button
@@ -402,7 +400,10 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
                     </button>
 
                     <div ref={measureRef} className="review-modal-measure">
-                        <AnimatePresence mode="wait">
+                        {/* The genie pours the card out with its first step in
+                            place; steps only slide in after that, or under
+                            reduced motion, where there is no genie. */}
+                        <AnimatePresence mode="wait" initial={reduced}>
                             {step === "review" && (
                                 <StepReview
                                     key="review"
@@ -458,10 +459,7 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
                             )}
                         </AnimatePresence>
                     </div>
-                </motion.div>
-            </motion.div>
-            )}
-        </AnimatePresence>
+        </GenieModal>
     )
 }
 
