@@ -3,7 +3,7 @@
 // End-of-trial card: pick a plan or fall back to your own API keys.
 //
 // Same two-pane family as the trial, support, review and upgrade cards (see
-// docs/notification-toaster-design.md): the words on a flat ground on the
+// SupportToaster.tsx for the ink table): the words on a flat ground on the
 // left, the image in its own inset panel on the right. It reuses the trial
 // invitation's flower, so the trial opens and closes on the same picture.
 //
