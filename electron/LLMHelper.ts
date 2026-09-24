@@ -144,6 +144,7 @@ const GEMINI_PRO_MODEL = "gemini-3.1-pro-preview"
 // vision chain is meant to fall through to another provider.
 const GROQ_MODEL = GROQ_PRIMARY_MODEL
 import { GROQ_VISION_MODEL } from './llm/groqModels'
+import { DEEPSEEK_DEFAULT_MODEL, deepseekWireModel, isDeepseekModelId } from './llm/deepseekModels'
 import { stripLeadingReasoningBlock } from './llm/reasoningTagFilter'
 import { describeNinerouterFailure, NINEROUTER_EMPTY_ANSWER } from './llm/ninerouterErrors'
 import { renderUserInstructionSystemLayer } from './llm/userInstructionContract'
@@ -157,7 +158,8 @@ const OLLAMA_VISION_CHAIN_PROBE_BUDGET_MS = 1500
 const OLLAMA_VISION_NEGATIVE_TTL_MS = 30_000
 const OPENAI_MODEL = "gpt-5.4"
 const CLAUDE_MODEL = "claude-sonnet-4-6"
-const DEEPSEEK_MODEL = "deepseek-v4-flash"
+// Current id and the retired-alias map live in llm/deepseekModels.ts.
+const DEEPSEEK_MODEL = DEEPSEEK_DEFAULT_MODEL
 const DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 // DeepSeek's chat API THINKS BY DEFAULT: `thinking.type` defaults to `enabled`
 // (reasoning_effort `high`), and in streaming the reasoning arrives in
@@ -2143,8 +2145,7 @@ export class LLMHelper {
   }
 
   private isDeepseekModel(modelId: string): boolean {
-    if (!modelId) return false;
-    return /^deepseek-v\d/.test(modelId.toLowerCase());
+    return isDeepseekModelId(modelId);
   }
 
   private isLiteLLMModel(modelId: string): boolean {
@@ -5395,7 +5396,7 @@ let isMultimodal = !!(imagePaths?.length);
 
     await this.rateLimiters.deepseek.acquire();
 
-    const model = modelId || (this.isDeepseekModel(this.currentModelId) ? this.currentModelId : DEEPSEEK_MODEL);
+    const model = deepseekWireModel(modelId || (this.isDeepseekModel(this.currentModelId) ? this.currentModelId : DEEPSEEK_MODEL));
 
     const messages: any[] = [];
     if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
@@ -10329,7 +10330,7 @@ let isMultimodal = !!(imagePaths?.length);
 
     await this.rateLimiters.deepseek.acquire();
 
-    const model = modelId || (this.isDeepseekModel(this.currentModelId) ? this.currentModelId : DEEPSEEK_MODEL);
+    const model = deepseekWireModel(modelId || (this.isDeepseekModel(this.currentModelId) ? this.currentModelId : DEEPSEEK_MODEL));
 
     const messages: any[] = [];
     if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
