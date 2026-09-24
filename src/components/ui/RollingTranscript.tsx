@@ -22,8 +22,14 @@ const RollingTranscript: React.FC<RollingTranscriptProps> = ({
 
     const intStatus = interviewerChannel?.status ?? 'connected';
     const micStatus = microphoneChannel?.status ?? 'connected';
-    const anyAwaitingAudio = intStatus === 'awaiting-audio' || micStatus === 'awaiting-audio';
-    const isNormal = intStatus === 'connected' && micStatus === 'connected' && !anyAwaitingAudio;
+    // Active/normal whenever at least one channel is connected and neither is failed or reconnecting.
+    // A silent mic awaiting audio (e.g. listening through headphones/Bluetooth) must not block
+    // system/interviewer transcript readiness.
+    const isNormal = (intStatus === 'connected' || micStatus === 'connected')
+        && intStatus !== 'failed'
+        && micStatus !== 'failed'
+        && intStatus !== 'reconnecting'
+        && micStatus !== 'reconnecting';
     const showTranscriptText = intStatus !== 'failed' && micStatus !== 'failed';
     const preparingMessage = intStatus === 'preparing'
         ? interviewerChannel?.error

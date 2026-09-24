@@ -38,8 +38,9 @@ import {
 import { getMeetingInterfaceTheme, setMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
 import { KeyRecorder } from './ui/KeyRecorder';
 import { Disclosure, DisclosureChevron } from './ui/AccordionSection';
-import { ProfileVisualizer, PremiumUpgradeModal } from '../premium';
+import { ProfileVisualizer } from '../premium';
 import GlassEffectLayer from './ui/GlassEffectLayer';
+import { GenieModal } from './ui/GenieModal';
 import { BrandMark, BrandMonogram } from './ui/BrandMark';
 import { LiquidGlassBadge } from '../ui-components/LiquidGlassBadge';
 import { LiquidGlassButton } from '../ui-components/LiquidGlassButton';
@@ -485,6 +486,11 @@ const SETTINGS_NAV_ORDER = [
    as aliases rather than repointed at the call site: AI Providers' lightweight
    notice is specifically about embeddings and should land on the Embedding
    sub-tab, not at the top of a combined page. */
+// The Settings card's drop shadow (#settings-panel-wrapper in index.css for
+// light, shadow-2xl for dark), carried by GenieModal's stand-in mid-genie.
+const SETTINGS_SHADOW_LIGHT = '0 20px 60px rgba(0,0,0,0.10), 0 6px 16px rgba(0,0,0,0.06)';
+const SETTINGS_SHADOW_DARK = '0 25px 50px -12px rgba(0,0,0,0.25)';
+
 const isRetrievalTab = (tab: string) =>
     tab === 'retrieval' || tab === 'embedding' || tab === 'reranker';
 
@@ -500,6 +506,8 @@ interface SettingsOverlayProps {
     initialTabSeq?: number;
     initialIsPremium?: boolean | null;
     initialHasNativelyKey?: boolean;
+    /** Close without the genie: the Modes / Profile manager is taking over. */
+    closeInstantly?: boolean;
 }
 
 /**
@@ -531,6 +539,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     initialTabSeq = 0,
     initialIsPremium = null,
     initialHasNativelyKey = false,
+    closeInstantly = false,
 }) => {
     const resolvedTheme = useResolvedTheme();
     const isLight = resolvedTheme === 'light';
@@ -2062,48 +2071,46 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     }, [isOpen, activeTab, selectedInput]);
 
     return (
-        <AnimatePresence>
-            {isOpen && (
-                <motion.div
-                    key="settings-modal"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.2 }}
-                    id="settings-backdrop"
-                    className={`fixed inset-0 z-[300] flex items-center justify-center p-8 transition-colors duration-150 ${isPreviewingOpacity ? 'bg-transparent backdrop-blur-none pointer-events-none' : isLight ? 'bg-black/[0.06]' : 'bg-black/60'}`}
-                    onClick={(e) => {
-                        // Mirror Modes/Profile (App.tsx) close-on-outside-click.
-                        // Skip when opacity slider preview is active — backdrop is
-                        // invisible but pointer-active; clicking during preview
-                        // would otherwise dismiss Settings mid-drag.
-                        if (e.target !== e.currentTarget) return;
-                        if (isPreviewingOpacity) return;
-                        onClose();
-                    }}
-                >
-                    <motion.div
-                        id="settings-panel-wrapper"
-                        // Phase-1 Soft Orchid rebrand scope: any future Settings dropdown/menu
-                        // that renders via createPortal(..., document.body) will mount OUTSIDE
-                        // this data-settings-theme scope and silently fall back to the blue
-                        // brand accent — portals must be scoped to this subtree (or avoided).
-                        data-settings-theme="periwinkle"
-                        initial={{ scale: 0.94, opacity: 0, y: 20 }}
-                        animate={{ scale: 1, opacity: 1, y: 0 }}
-                        exit={{ scale: 0.94, opacity: 0, y: 20 }}
-                        transition={{
-                            type: "spring",
-                            stiffness: 400,
-                            damping: 32,
-                            mass: 1
-                        }}
-                        className={`bg-bg-elevated w-full max-w-4xl h-[80vh] rounded-2xl border border-border-subtle ${isLight ? 'shadow-[0_0_0_1px_rgba(0,0,0,0.06),0_24px_48px_-12px_rgba(0,0,0,0.16),0_8px_16px_-6px_rgba(0,0,0,0.06)]' : 'shadow-2xl'} overflow-hidden relative`}
-                    >
+        <>
+            {/* Settings pours out of, and back into, the bottom of the window
+                like every other popup (GenieModal). */}
+            <GenieModal
+                open={isOpen}
+                label="SettingsOverlay"
+                snapshotKey="settings"
+                // The tab this open lands on: activeTab only catches up in an
+                // effect after the card mounts, too late to pick its picture.
+                openingView={initialTab}
+                snapshotPaused={isPreviewingOpacity}
+                closeInstantly={closeInstantly}
+                backdropId="settings-backdrop"
+                padding={32}
+                backdropClassName={`transition-colors duration-150 ${isPreviewingOpacity ? 'bg-transparent backdrop-blur-none pointer-events-none' : isLight ? 'bg-black/[0.06]' : 'bg-black/60'}`}
+                onBackdropClick={() => {
+                    // Mirror Modes/Profile (App.tsx) close-on-outside-click.
+                    // Skip when opacity slider preview is active — backdrop is
+                    // invisible but pointer-active; clicking during preview
+                    // would otherwise dismiss Settings mid-drag.
+                    if (isPreviewingOpacity) return;
+                    onClose();
+                }}
+                wrapClassName="w-full max-w-4xl h-[80vh]"
+                // Phase-1 Soft Orchid rebrand scope: any future Settings dropdown/menu
+                // that renders via createPortal(..., document.body) will mount OUTSIDE
+                // this data-settings-theme scope and silently fall back to the blue
+                // brand accent — portals must be scoped to this subtree (or avoided).
+                cardProps={{ id: 'settings-panel-wrapper', 'data-settings-theme': 'periwinkle' }}
+                cardClassName={`bg-bg-elevated rounded-2xl border border-border-subtle ${isLight ? 'shadow-[0_0_0_1px_rgba(0,0,0,0.06),0_24px_48px_-12px_rgba(0,0,0,0.16),0_8px_16px_-6px_rgba(0,0,0,0.06)]' : 'shadow-2xl'} overflow-hidden relative`}
+                shadow={isLight ? SETTINGS_SHADOW_LIGHT : SETTINGS_SHADOW_DARK}
+                radius={16}
+            >
                         <div
                             id="settings-panel"
+                            data-genie-view={activeTab}
                             className="flex w-full h-full"
-                            style={{ visibility: isPreviewingOpacity ? 'hidden' : 'visible' }}
+                            // Inherit rather than force 'visible': a forced value would show
+                            // the real panel through the card while GenieModal hides it mid-genie.
+                            style={{ visibility: isPreviewingOpacity ? 'hidden' : undefined }}
                         >
                         {/* Sidebar */}
                         <div className="w-64 bg-bg-sidebar flex flex-col border-r border-border-subtle">
@@ -2587,7 +2594,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 {/* Version */}
                                                 <div className="flex items-start justify-between gap-4 px-4 py-3">
                                                     <div className="flex items-start gap-4">
-                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle flex items-center justify-center text-text-tertiary shrink-0">
+                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
                                                             <BadgeCheck size={20} />
                                                         </div>
                                                         <div>
@@ -4360,10 +4367,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                             </motion.div>
                         </div>
                     </div>
-                    </motion.div>
-                </motion.div>
-            )
-            }
+            </GenieModal>
 
 
             {/* ------------------------------------------------------------------ */}
@@ -4380,7 +4384,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             >
                 <MockupNativelyInterface opacity={previewOverlayOpacity} theme={meetingInterfaceTheme} />
             </div>
-        </AnimatePresence >
+        </>
     );
 };
 
