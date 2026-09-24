@@ -39,7 +39,6 @@ import { trackAppOpen } from "./lib/toasterGating"
 import {
   JDAwarenessToaster,
   ProfileFeatureToaster,
-  PremiumPromoToaster,
   RemoteCampaignToaster,
   PremiumUpgradeModal,
   NativelyApiPromoToaster,
@@ -417,6 +416,13 @@ const App: React.FC = () => {
   const orchestratorAllowsAds = orchState
     ? orchState.activeToasterId === null
     : false;
+
+  // Dev-only: `?forceAd=natively_api` (or `jd`) opens that ad immediately,
+  // skipping the campaign scheduler, so its design can be checked by hand or
+  // by scripts/audit/toaster-preview.mjs.
+  const [forcedAd, setForcedAd] = useState<string | null>(() =>
+    import.meta.env.DEV ? new URLSearchParams(window.location.search).get('forceAd') : null
+  );
 
   const { activeAd, dismissAd } = useAdCampaigns(
     planDetails,
@@ -1343,8 +1349,8 @@ const App: React.FC = () => {
         {/* Ad toasters */}
         {!isolateModals && isLauncherMainView && !isSettingsOpen && (
           <NativelyApiPromoToaster
-            isOpen={activeAd === 'natively_api'}
-            onDismiss={() => dismissAd('natively_api')}
+            isOpen={activeAd === 'natively_api' || forcedAd === 'natively_api'}
+            onDismiss={() => { setForcedAd(null); dismissAd('natively_api'); }}
             onOpenSettings={(tab: string) => openSettingsExclusive(tab)}
           />
         )}
@@ -1356,16 +1362,9 @@ const App: React.FC = () => {
               onSetupProfile={() => openProfileExclusive()}
             />
             <JDAwarenessToaster
-              isOpen={activeAd === 'jd'}
-              onDismiss={dismissAd}
+              isOpen={activeAd === 'jd' || forcedAd === 'jd'}
+              onDismiss={() => { setForcedAd(null); dismissAd(); }}
               onSetupJD={() => openProfileExclusive()}
-            />
-            <PremiumPromoToaster
-              isOpen={activeAd === 'promo'}
-              onDismiss={dismissAd}
-              onUpgrade={() => {
-                setShowPremiumModal(true);
-              }}
             />
             <MaxUltraUpgradeToaster
               isOpen={activeAd === 'max_ultra_upgrade'}

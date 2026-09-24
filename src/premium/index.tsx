@@ -35,10 +35,6 @@ const _profileVis = import.meta.glob<any>(
   '../../premium/src/ProfileVisualizer.tsx',
   { eager: true }
 );
-const _promoToaster = import.meta.glob<any>(
-  '../../premium/src/PremiumPromoToaster.tsx',
-  { eager: true }
-);
 const _profileToaster = import.meta.glob<any>(
   '../../premium/src/ProfileFeatureToaster.tsx',
   { eager: true }
@@ -89,8 +85,6 @@ export const PremiumUpgradeModal: React.FC<any> =
 export const ProfileVisualizer: React.FC<any> =
   get(_profileVis, 'ProfileVisualizer', NullComponent);
 
-export const PremiumPromoToaster: React.FC<any> =
-  get(_promoToaster, 'PremiumPromoToaster', NullComponent);
 
 export const ProfileFeatureToaster: React.FC<any> =
   get(_profileToaster, 'ProfileFeatureToaster', NullComponent);

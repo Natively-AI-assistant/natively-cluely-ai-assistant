@@ -1,11 +1,12 @@
 // src/components/ReviewModal.tsx
-// In-app review + testimonial collection — "obsidian editorial".
+// In-app review + testimonial collection.
 //
-// The composition is a two-column plate, not a stacked card: a black left
-// plate carries an oversized display numeral that reacts live to the rating,
-// and the right column carries the editorial copy and the controls. There is
-// no header bar; the close glyph floats over the whole plate. Each step owns
-// its own grid, so the three states have genuinely different silhouettes.
+// Same two-pane family as the browser-extension and support cards: the copy
+// and controls on a flat ground on the left, the star art in its own inset
+// panel on the right. Steps 1 and 2 share that grid; the receipt (step 3)
+// deliberately leaves it for a centred single column. The art is the only
+// colour on the card apart from the gold of a chosen rating, which is taken
+// from it. Light and dark are one layout; only the CSS variables change.
 //
 // Behaviour is unchanged from the form it replaces:
 //   Step 1 ("review")      — rating 1-5 + optional 300-char note
@@ -389,14 +390,15 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
                     style={cardStyle}
                     className="review-modal-shell"
                 >
-                    <div className="review-modal-ambient" aria-hidden />
-
+                    {/* Steps 1-2 put the close over the (always light) art panel,
+                        so it takes dark ink there; on the receipt it sits on
+                        the ground and follows the theme. */}
                     <button
                         type="button"
                         onClick={dismissLaterAndClose}
                         disabled={busy}
                         aria-label="Close"
-                        className="review-close"
+                        className={`review-close${step === "thanks" ? "" : " is-over-art"}`}
                     >
                         <X size={16} strokeWidth={1.6} />
                     </button>
@@ -427,7 +429,6 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
                             {step === "testimonial" && (
                                 <StepTestimonial
                                     key="testimonial"
-                                    rating={rating}
                                     name={name}
                                     setName={setName}
                                     prefillName={prefillName}
@@ -467,14 +468,15 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
 
 // ─── Shared pieces ─────────────────────────────────────────────────────────
 
-/** The black left plate. Its content is the step's "cover". */
-const Plate: React.FC<{ eyebrow: string; children: React.ReactNode; caption?: string }> = ({
-    eyebrow, children, caption,
-}) => (
-    <aside className="review-plate">
-        <span className="review-plate-eyebrow">{eyebrow}</span>
-        <div className="review-plate-figure">{children}</div>
-        {caption && <span className="review-plate-caption">{caption}</span>}
+/**
+ * The art panel: the star, inset on the right, the same object on steps 1
+ * and 2 so the step swap reads as the copy changing beside a still image.
+ * Its slow push-in on hover is pure CSS (see .review-art-image), so it costs
+ * no React state and no re-render.
+ */
+const ArtPanel: React.FC = () => (
+    <aside className="review-art" aria-hidden>
+        <div className="review-art-image" />
     </aside>
 )
 
@@ -568,22 +570,8 @@ const StepReview: React.FC<StepReviewProps> = ({
 
     return (
         <StepFrame variant="review" reduced={reduced}>
-            <Plate eyebrow="REVIEW · 1 OF 3" caption={ratingWord}>
-                <AnimatePresence mode="popLayout" initial={false}>
-                    <motion.span
-                        key={shownRating}
-                        initial={reduced ? { opacity: 0 } : { opacity: 0, transform: "translateY(14px)" }}
-                        animate={{ opacity: 1, transform: "translateY(0px)" }}
-                        exit={reduced ? { opacity: 0 } : { opacity: 0, transform: "translateY(-14px)" }}
-                        transition={rt(reduced, { duration: 0.2, ease: EASE_EDITORIAL })}
-                        className="review-numeral"
-                    >
-                        {shownRating === 0 ? "—" : shownRating}
-                    </motion.span>
-                </AnimatePresence>
-            </Plate>
-
             <section className="review-column">
+                <span className="review-eyebrow">Review · 1 of 3</span>
                 <h2 id="review-modal-title-review" className="review-headline">
                     How is Natively<br />treating you?
                 </h2>
@@ -623,6 +611,22 @@ const StepReview: React.FC<StepReviewProps> = ({
                             <Star size={22} strokeWidth={1.5} />
                         </motion.button>
                     ))}
+                    {/* The live verdict. Keyed on shownRating so it swaps per
+                        value and previews on hover, as the numeral did. */}
+                    <span className="review-verdict" aria-live="polite">
+                        <AnimatePresence mode="popLayout" initial={false}>
+                            <motion.span
+                                key={shownRating}
+                                initial={reduced ? { opacity: 0 } : { opacity: 0, transform: "translateY(6px)" }}
+                                animate={{ opacity: 1, transform: "translateY(0px)" }}
+                                exit={reduced ? { opacity: 0 } : { opacity: 0, transform: "translateY(-6px)" }}
+                                transition={rt(reduced, { duration: 0.18, ease: EASE_EDITORIAL })}
+                                className={`review-verdict-word${shownRating ? " is-rated" : ""}`}
+                            >
+                                {ratingWord}
+                            </motion.span>
+                        </AnimatePresence>
+                    </span>
                 </div>
 
                 <div className="review-note">
@@ -674,6 +678,8 @@ const StepReview: React.FC<StepReviewProps> = ({
                     </div>
                 </div>
             </section>
+
+            <ArtPanel />
         </StepFrame>
     )
 }
@@ -681,7 +687,6 @@ const StepReview: React.FC<StepReviewProps> = ({
 // ─── Step 2: testimonial ──────────────────────────────────────────────────
 
 interface StepTestimonialProps {
-    rating: number
     name: string
     setName: (s: string) => void
     prefillName?: string
@@ -698,7 +703,7 @@ interface StepTestimonialProps {
 }
 
 const StepTestimonial: React.FC<StepTestimonialProps> = ({
-    rating, name, setName, prefillName = "", namePrefillSuggested, onAcceptNamePrefill,
+    name, setName, prefillName = "", namePrefillSuggested, onAcceptNamePrefill,
     busy, action, error, onSave, onKeepAnonymous, onDecline, reduced,
 }) => {
     // Save credits the review under `name` — a blank name has nothing to
@@ -708,11 +713,10 @@ const StepTestimonial: React.FC<StepTestimonialProps> = ({
 
     return (
         <StepFrame variant="credit" reduced={reduced}>
-            <Plate eyebrow="ATTRIBUTION · 2 OF 3" caption={`${rating} of 5 · recorded`}>
-                <span className="review-quote" aria-hidden>&ldquo;</span>
-            </Plate>
-
             <section className="review-column">
+                {/* Confirms step 1 landed. One count only: "2 of 3" is the step,
+                    and a second "x of 5" beside it read as a second counter. */}
+                <span className="review-eyebrow">Rating saved · 2 of 3</span>
                 <h2 id="review-modal-title-testimonial" className="review-headline">
                     Whose words<br />are these?
                 </h2>
@@ -797,6 +801,8 @@ const StepTestimonial: React.FC<StepTestimonialProps> = ({
                     </p>
                 </div>
             </section>
+
+            <ArtPanel />
         </StepFrame>
     )
 }
@@ -804,10 +810,10 @@ const StepTestimonial: React.FC<StepTestimonialProps> = ({
 // ─── Step 3: thanks ───────────────────────────────────────────────────────
 
 /**
- * The receipt. Deliberately NOT the two-column plate the other steps use: a
+ * The receipt. Deliberately NOT the two-pane grid the other steps use: a
  * terminal state has one short message, and forcing it into that grid left a
- * lone seal adrift in an otherwise empty plate. A centred single column is
- * both calmer and the third distinct silhouette the flow wants.
+ * lone seal adrift beside the art. A centred single column is both calmer and
+ * the third distinct silhouette the flow wants.
  *
  * The byline is shown verbatim rather than described, so the last thing the
  * user sees is exactly what will be published.
