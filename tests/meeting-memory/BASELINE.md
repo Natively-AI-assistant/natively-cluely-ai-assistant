@@ -112,9 +112,10 @@ The 11 wrong answers, by cause (each checked against the transcript around the p
   split into two finals "about 4" / "5 engineers", answered "Fifteen" (Q117; typed T3 read the same
   transcript as 45; the scorer's "in evidence" flag for Q117 matched the evidence id "live-45", not the fact).
 - Meeting speech fell out of the prompt (1, Q86): the What-to-answer "Conversation so far" window is the last
-  2,400 characters of the rolling context, and 57% of those characters (avg over 114 prompts) are the
-  assistant's own previous suggestions, which the history section repeats. About 2 minutes of speech
-  survive: "retries for up to twenty four hours", said 2.5 minutes earlier, was not in the prompt, and the
+  2,400 characters of the rolling context (asked for only its last 90 s), and 57% of those characters (avg
+  over 114 prompts) are the assistant's own previous suggestions. (Not duplicates, as first written here:
+  the bridge leaves a history exchange out when the window already holds its answer.) About 2 minutes of
+  speech survive: "retries for up to twenty four hours", said 2.5 minutes earlier, was not in the prompt, and the
   answer capped retries at "a few minutes".
 - Typed T2 "What numbers did she give for the webhook service?" was annotated "(follow-up to: 'Is there
   anything you would change in your design…')" and answered about the candidate's own design; the numbers
@@ -162,13 +163,19 @@ call volume, multichannel output) is gated out. The natively-api branch `fix/stt
 lets a run of 3 system-audio chunks ≥ 150 within 500 ms reopen the gate and keeps an open gate open on
 quiet voice (18 gate tests pass). It is not deployed.
 
-**The 118-question live mock interview, re-run on all fixes** (`mock-interview-fixed-1790261296474`, interviewer at full level). Hand-checked:
+**The 118-question live mock interview, re-run on all fixes.** The two columns are NOT a fix measurement:
+the "before" run had the interviewer 24 dB quiet (the rig), so every transcription row and most of the
+right-question gain are the rig. Q12, Q24, Q43, Q44, Q82, Q95 and Q117's number were transcription. What the
+app fixes bought, shown end to end, is Q86 ("capped by the 24-hour window", was "a few minutes"), T2 ("She
+set the load at 50 million events a day… up to 24 hours", was about the candidate's own design) and Q08 (no
+"…role on MySQL?" rewrite). The measurements that isolate the app are the replay and the `constraints`
+scenario above. (`mock-interview-fixed-1790261296474`, interviewer at full level). Hand-checked:
 
 | | before (`mock-interview-1790250804024`) | after |
 |---|---|---|
 | right question and on topic | 107/118 | 113/118 |
 | refused | 1 | 0 (the scorer flagged 3 full answers) |
-| memory-dependent questions with the earlier detail | 16/21 | 20/21 |
+| memory-dependent questions with the earlier detail | 16/21 | 19/21 (Q117: "did I say" answered as the candidate's six, not Maya's 45; Q06 gives no number) |
 | typed questions | 2/3 | 3/3 |
 | live-index probes | miss, rank 3 | miss, rank 1 |
 | interviewer questions missing from the transcript (<30% of words) / partial | 4 / 11 | 0 / 1 |
@@ -180,7 +187,26 @@ The 5 remaining misses:
 - One clipped opening clause at full level (Q31, "What is idempotency," never arrived). The note then made
   it "(referring to: TLS)". Not traced.
 - One incomplete answer (Q28, partitions: said ordering "stays intact").
+- Plus, on the right question: Q117 above; Q08 still went out "(referring to: Postgres)" (the model
+  ignored it). Self-contained questions now often carry "(follow-up to: <previous question>)" instead of a
+  junk note (Q84, Q89).
 
 Cost: the 35 questions that now read the meeting went from a 3.4 s to a 4.5 s median; questions that
 already read it went up 0.3 s. So the lookup costs about 0.7 s per general question in a live meeting
 (retrieval timeout 1.2 s).
+
+**The earlier reference scenarios, re-run on the final build** (`ref-final-*`, injected, 2 reps each).
+Hand-checked; the scorer's "denied" was a recall with a provenance hedge in 5 of 6 cases:
+
+| scenario | previous final build (hand) | this build (hand) |
+|---|---|---|
+| 13 typed turns, 5 facts | 10/10 | 10/10 |
+| 32 typed turns | 8/8 | 12/12 (3 runs; a CDP disconnect retried one) |
+| what-to-answer follow-up after 110 s | 2/2 | 2/2 |
+| one-hour meeting, typed + what-to-answer | 12/12 | 12/12 |
+| live interview, details said aloud 13-29 min earlier | 14/16 + 2 partial | 15/16 (1 write-load answer never named Elixir) |
+| a new meeting leaks the previous one | 0/2 | 0/2 |
+
+The "that came from you, not the call" hedge on typed facts is not new: 6/10 and 6/8 before, 7/10 and 8/12
+now. Not measured: a live meeting with files attached. A document question that does not name its
+document now shares evidence slots with the meeting.

@@ -1,18 +1,20 @@
 // tests/meeting-memory/live-audio/live-audio-harness.mjs
 //
 // One-hour LIVE meeting through the real capture stack and real STT:
-//   interviewer → `say` into BlackHole 2ch  → the meeting's OUTPUT device, so the
-//                 CoreAudio process tap captures it (system-audio channel);
-//   candidate   → `say` into BlackHole 16ch → the meeting's MIC (first channel).
-// Not the other way round (runs before 2026-09-24 were): the tap mixes the
-// output device down to mono by AVERAGING its channels, so a voice on 2 of 16
-// channels arrived 24 dB quiet (RMS ~330 vs ~5,500 through 2ch) — below the relay
-// VAD gate, which then dropped whole questions. That measured the rig, not a call.
+//   interviewer → `say` rendered to a file, played by ffmpeg on ALL 16 channels of
+//                 BlackHole 16ch → the meeting's OUTPUT device, so the CoreAudio
+//                 process tap captures it (system-audio channel);
+//   candidate   → `say` into BlackHole 2ch  → the meeting's MIC.
+// All 16 channels, not `say -a` (runs before 2026-09-24): the tap mixes the output
+// device down to mono by AVERAGING its channels, so `say`'s voice arrived 24 dB
+// quiet (RMS ~330 vs ~5,000) — under the relay VAD gate, which then dropped whole
+// questions. That measured the rig, not a call. (BlackHole 16ch cannot be the mic
+// instead: its input read silence here whatever was played into it.)
 // Nothing is injected. Probes use the overlay's own entry points: What-to-answer
 // (no question: resolved from the live transcript, like Cmd+Enter), typed
 // questions through the real overlay input, and the live index's semantic search.
 //
-// Prereqs: `brew install --cask blackhole-2ch blackhole-16ch`; the app running via
+// Prereqs: `brew install --cask blackhole-2ch blackhole-16ch` and `brew install ffmpeg`; the app running via
 // `NATIVELY_E2E=1 node scripts/dev-agent.mjs` with ambientChatEnabled=false in the
 // isolated profile; the dev Electron allowed to use the microphone and to record
 // system audio.
@@ -20,7 +22,8 @@
 //   node tests/meeting-memory/live-audio/live-audio-harness.mjs [--minutes N] [--label name]
 
 import { chromium } from 'playwright-core';
-import { spawn, execFileSync } from 'node:child_process';
+import { spawn, spawnSync, execFileSync } from 'node:child_process';
+import os from 'node:os';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -51,11 +54,26 @@ function sayDeviceId(name) {
   if (!line) throw new Error(`say has no output device "${name}" — is BlackHole installed?\n${out}`);
   return line.trim().split(/\s+/)[0];
 }
-const SAY_DEV = { interviewer: sayDeviceId('BlackHole 2ch'), user: sayDeviceId('BlackHole 16ch') };
+const SAY_DEV = { interviewer: sayDeviceId('BlackHole 16ch'), user: sayDeviceId('BlackHole 2ch') };
+function ffmpegDeviceIndex(name) {
+  const out = spawnSync('ffmpeg', ['-hide_banner', '-f', 'lavfi', '-i', 'anullsrc', '-t', '0.05', '-f', 'audiotoolbox', '-list_devices', 'true', '-'], { encoding: 'utf8' });
+  const m = String(out.stderr).match(new RegExp(`\\[(\\d+)\\]\\s+${name}\\b`));
+  if (!m) throw new Error(`ffmpeg sees no audio device "${name}" (brew install ffmpeg)`);
+  return m[1];
+}
+const INTERVIEWER_FFMPEG_DEV = ffmpegDeviceIndex('BlackHole 16ch');
+const PAN_ALL_16 = `pan=16c|${Array.from({ length: 16 }, (_, i) => `c${i}=c0`).join('|')}`;
 
 function speak(who, text) {
   return new Promise((resolve, reject) => {
-    const p = spawn('say', ['-v', VOICE[who], '-a', SAY_DEV[who], '-r', String(WPM), text], { stdio: 'ignore' });
+    let p;
+    if (who === 'interviewer') {
+      const f = path.join(os.tmpdir(), `mm-interviewer-${process.pid}.aiff`);
+      execFileSync('say', ['-v', VOICE[who], '-r', String(WPM), '-o', f, text]);
+      p = spawn('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-re', '-i', f, '-af', PAN_ALL_16, '-f', 'audiotoolbox', '-audio_device_index', INTERVIEWER_FFMPEG_DEV, '-'], { stdio: 'ignore' });
+    } else {
+      p = spawn('say', ['-v', VOICE[who], '-a', SAY_DEV[who], '-r', String(WPM), text], { stdio: 'ignore' });
+    }
     p.on('error', reject);
     p.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`say exited ${code}`))));
   });
@@ -163,8 +181,8 @@ const save = () => fs.writeFileSync(outFile, JSON.stringify(out, null, 2));
 
 const inputs = await evalIn('launcher', () => window.electronAPI.getInputDevices());
 const outputs = await evalIn('launcher', () => window.electronAPI.getOutputDevices());
-const mic = inputs.find((d) => /blackhole 16ch/i.test(d.name));
-const sys = outputs.find((d) => /blackhole 2ch/i.test(d.name));
+const mic = inputs.find((d) => /blackhole 2ch/i.test(d.name));
+const sys = outputs.find((d) => /blackhole 16ch/i.test(d.name));
 if (!mic || !sys) throw new Error(`BlackHole devices not visible to Natively: inputs=${JSON.stringify(inputs)} outputs=${JSON.stringify(outputs)}`);
 out.devices = { mic, sys, say: SAY_DEV };
 
