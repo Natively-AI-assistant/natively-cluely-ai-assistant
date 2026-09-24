@@ -138,9 +138,13 @@ export async function loadGenieSnapshot(key: string): Promise<Buffer | null> {
   }
 }
 
+/** Every kept key, oldest first: the renderer warms the newest it can hold. */
 export async function listGenieSnapshots(): Promise<string[]> {
-  const keys = new Set(memory.keys());
+  // The index is in the order the pictures were saved; pictures held only in
+  // memory (no keyring) were all taken this session, so they come after it.
+  const keys = new Set<string>();
   if (encrypted()) for (const e of await loadIndex()) keys.add(e.key);
+  for (const k of memory.keys()) keys.add(k);
   return [...keys];
 }
 

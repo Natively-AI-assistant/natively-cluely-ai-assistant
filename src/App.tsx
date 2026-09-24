@@ -31,7 +31,7 @@ import ReviewPromptHost from "./components/ReviewPromptHost"
 // the extension.
 import { getOrchestrator } from "./lib/onboarding/orchestrator.ts"
 import { isInternalCaptureDevice } from "../electron/audio/audioDeviceSelection.mjs"
-import { AlertCircle, RefreshCw } from "lucide-react"
+import { ProviderChangeNotice } from "./components/ProviderChangeNotice"
 import { clampOverlayOpacity, OVERLAY_OPACITY_DEFAULT, getDefaultOverlayOpacity } from "./lib/overlayAppearance"
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from './lib/meetingInterfaceTheme'
 import { isMac } from "./utils/platformUtils"
@@ -352,6 +352,10 @@ const App: React.FC = () => {
   const [incompatibleWarning, setIncompatibleWarning] = useState<{count: number; oldProvider: string; newProvider: string} | null>(null);
   // Automatic background re-index progress (fired after an embedding-model upgrade).
   const [reindexProgress, setReindexProgress] = useState<{done: number; total: number} | null>(null);
+  // Re-index was asked for and its first progress event has not arrived yet:
+  // the card shows 0 of the warning's count meanwhile instead of closing.
+  const [reindexPending, setReindexPending] = useState<number | null>(null);
+  const reindexShown = reindexProgress ?? (reindexPending != null ? { done: 0, total: reindexPending } : null);
   
   // API check
   const [hasNativelyApi, setHasNativelyApi] = useState<boolean>(false);
@@ -402,7 +406,15 @@ const App: React.FC = () => {
     ? orchState.activeToasterId === null
     : false;
 
-  const { activeAd, dismissAd } = useAdCampaigns(
+  // Dev-only: `?forceAd=<ad>` (natively_api, profile, jd, promo,
+  // max_ultra_upgrade) opens that ad immediately, skipping the campaign
+  // scheduler, so its design can be checked by hand or by
+  // scripts/audit/toaster-preview.mjs.
+  const [forcedAd, setForcedAd] = useState<string | null>(() =>
+    import.meta.env.DEV ? new URLSearchParams(window.location.search).get('forceAd') : null
+  );
+
+  const { activeAd: scheduledAd, dismissAd: dismissScheduledAd } = useAdCampaigns(
     planDetails,
     hasProfile,
     isAppReady,
@@ -412,6 +424,11 @@ const App: React.FC = () => {
     hasNativelyApi,
     orchestratorAllowsAds
   );
+  const activeAd = forcedAd ?? scheduledAd;
+  const dismissAd: typeof dismissScheduledAd = (...args) => {
+    if (forcedAd) { setForcedAd(null); return; }
+    return dismissScheduledAd(...args);
+  };
 
   // Start the onboarding orchestrator (launcher window only). Stages are
   // registered lazily; the drain loop only runs while foreground + homepage
@@ -880,8 +897,15 @@ const App: React.FC = () => {
   // Handlers
   const handleReindex = async () => {
     if (window.electronAPI?.reindexIncompatibleMeetings) {
+      setReindexPending(incompatibleWarning?.count ?? 0);
       setIncompatibleWarning(null);
-      await window.electronAPI.reindexIncompatibleMeetings();
+      try {
+        await window.electronAPI.reindexIncompatibleMeetings();
+      } finally {
+        // Resolves once the re-index is over (or failed to start): from here
+        // the progress events alone keep the card open.
+        setReindexPending(null);
+      }
     }
   };
 
@@ -1216,79 +1240,14 @@ const App: React.FC = () => {
       </AnimatePresence>
 
 
-      <AnimatePresence>
-        {incompatibleWarning && isDefault && (
-          <motion.div
-            initial={{ opacity: 0, y: 50, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="fixed bottom-6 right-6 z-50 pointer-events-auto"
-          >
-            <div className="bg-[#1A1A1A] border border-[#ff3333]/30 shadow-2xl rounded-2xl p-5 max-w-[340px] flex flex-col gap-3">
-              <div className="flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 text-[#ff3333] shrink-0 mt-0.5" />
-                <div>
-                  <h3 className="text-[#E0E0E0] font-medium text-sm">Provider Changed</h3>
-                  <p className="text-[#A0A0A0] text-xs mt-1 leading-relaxed">
-                    ⚠ {incompatibleWarning.count} meetings used your previous AI provider ({incompatibleWarning.oldProvider}) and won't appear in search results under {incompatibleWarning.newProvider}.
-                  </p>
-                </div>
-              </div>
-              <div className="flex gap-2 mt-1 justify-end">
-                <button 
-                  onClick={() => setIncompatibleWarning(null)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-[#A0A0A0] hover:text-white hover:bg-white/5 transition-colors"
-                >
-                  Dismiss
-                </button>
-                <button 
-                  onClick={handleReindex}
-                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#ff3333]/10 text-[#ff3333] hover:bg-[#ff3333]/20 transition-colors"
-                >
-                  Re-index automatically
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {reindexProgress && isDefault && (
-          <motion.div
-            initial={{ opacity: 0, y: 50, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="fixed bottom-6 right-6 z-50 pointer-events-auto"
-          >
-            <div className="bg-[#1A1A1A] border border-white/10 shadow-2xl rounded-2xl p-5 max-w-[340px] flex flex-col gap-3">
-              <div className="flex items-start gap-3">
-                <RefreshCw className={`w-5 h-5 text-[#A0A0A0] shrink-0 mt-0.5 ${reindexProgress.done < reindexProgress.total ? 'animate-spin' : ''}`} />
-                <div className="flex-1">
-                  <h3 className="text-[#E0E0E0] font-medium text-sm">
-                    {reindexProgress.done >= reindexProgress.total && reindexProgress.total > 0
-                      ? 'Search index updated'
-                      : 'Updating search index'}
-                  </h3>
-                  <p className="text-[#A0A0A0] text-xs mt-1 leading-relaxed">
-                    {reindexProgress.done >= reindexProgress.total && reindexProgress.total > 0
-                      ? 'Your past conversations are searchable again.'
-                      : `Re-indexing your past conversations for the upgraded AI model… ${reindexProgress.done}/${reindexProgress.total}`}
-                  </p>
-                  {reindexProgress.total > 0 && (
-                    <div className="mt-2 h-1 w-full rounded-full bg-white/10 overflow-hidden">
-                      <div
-                        className="h-full bg-[#E0E0E0] transition-all duration-500"
-                        style={{ width: `${Math.min(100, Math.round((reindexProgress.done / reindexProgress.total) * 100))}%` }}
-                      />
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Provider change + re-index: one notice in the bottom-right corner. */}
+      <ProviderChangeNotice
+        open={isDefault && (!!incompatibleWarning || !!reindexShown)}
+        warning={incompatibleWarning}
+        progress={reindexShown}
+        onDismiss={() => setIncompatibleWarning(null)}
+        onReindex={handleReindex}
+      />
 
       <div data-opacity-preview-surface="">
         {!isolateGlobalSurfaces && <UpdateBanner />}

@@ -20,6 +20,17 @@
 // Every changing element carries data-probe, so a probe can compare each band
 // copy against the live card frame by frame.
 //
+// `?corner=1` swaps in a notice in the bottom-right corner, the shape of
+// the quota and provider-change cards: no dim, the launcher still clickable
+// around it, pouring into a slot straight below itself. No kept picture
+// unless `&keep=1` (the Hindsight card keeps one).
+//
+// `?notices=1` mounts the REAL corner notices (NativelyQuotaBanner,
+// HindsightStatusBanner's floating card, ProviderChangeNotice) over whatever
+// backdrop the probe sets, fed by stand-ins for the IPC they listen to, and
+// driven by window.__notices: quota(), hindsight(state, reason?),
+// provider(), progress(done, total), clearProgress().
+//
 //   window.__genie.open() / .close()   drive it
 //   window.__genie.bands()             band copies present right now
 //   window.__genie.copyScroll()        scrollTop of the pane inside a copy
@@ -28,6 +39,9 @@ import { createRoot } from 'react-dom/client';
 import { motion } from 'framer-motion';
 import '../index.css';
 import { GenieModal } from '../components/ui/GenieModal';
+import { NativelyQuotaBanner } from '../components/NativelyQuotaBanner';
+import { HindsightStatusBanner } from '../components/HindsightStatusBanner';
+import { ProviderChangeNotice, type ProviderChangeWarning, type ReindexProgress } from '../components/ProviderChangeNotice';
 
 // Outside Electron there is no capturePage. A probe that wants pictures
 // exposes __genieCaptureShim: an UNCLIPPED Page.captureScreenshot (the same
@@ -52,6 +66,58 @@ if (!(window as any).electronAPI && (window as any).__genieCaptureShim) {
   };
 }
 
+const NOTICES = new URLSearchParams(location.search).get('notices') === '1';
+
+// The IPC the corner notices listen to, stood in for: a quota reading past
+// 90 % and a Hindsight status the driver pushes.
+let pushHindsight: ((s: { state: string; reason?: string; logPath?: string }) => void) | null = null;
+if (NOTICES) {
+  (window as any).electronAPI = {
+    ...(window as any).electronAPI,
+    getNativelyUsage: async () => ({
+      ok: true,
+      quota: {
+        ai: { used: 5_920_000, limit: 6_500_000 },
+        voice: { used: 571, limit: 600 },
+        knowledge: { embedding: { used: 1_890_000, limit: 2_000_000 }, reranker: { used: 900_000, limit: 5_000_000 } },
+      },
+    }),
+    onHindsightStatus: (handler: typeof pushHindsight) => { pushHindsight = handler; return () => { pushHindsight = null; }; },
+    openHindsightLog: async () => ({ ok: true }),
+    openExternal: () => {},
+  };
+}
+
+function NoticesStage() {
+  const [quotaKey, setQuotaKey] = useState(0);
+  const [warning, setWarning] = useState<ProviderChangeWarning | null>(null);
+  const [progress, setProgress] = useState<ReindexProgress | null>(null);
+  useEffect(() => {
+    (window as any).__notices = {
+      // A fresh quota banner: it checks usage 3 s after it mounts, as at start-up.
+      quota: () => setQuotaKey(k => k + 1),
+      hindsight: (state: string, reason?: string) =>
+        pushHindsight?.({ state, reason, logPath: state === 'spawning' || state === 'ready' ? undefined : '~/Library/Logs/Natively/hindsight-server.log' }),
+      provider: () => setWarning({ count: 12, oldProvider: 'OpenAI', newProvider: 'Gemini' }),
+      progress: (done: number, total: number) => setProgress({ done, total }),
+      clearProgress: () => setProgress(null),
+    };
+  }, []);
+  return (
+    <>
+      {quotaKey > 0 && <NativelyQuotaBanner key={quotaKey} />}
+      <HindsightStatusBanner variant="floating-card" />
+      <ProviderChangeNotice
+        open={!!warning || !!progress}
+        warning={warning}
+        progress={progress}
+        onDismiss={() => setWarning(null)}
+        onReindex={() => { setProgress({ done: 0, total: warning?.count ?? 0 }); setWarning(null); }}
+      />
+    </>
+  );
+}
+
 const params = new URLSearchParams(location.search);
 const NODES = Number(params.get('nodes') ?? 272);
 const CHURN = params.get('churn') === '1';
@@ -65,6 +131,8 @@ const HEIGHT_ANIM = params.get('height') === '1';
 const LOAD = Number(params.get('load') ?? 0);
 // `scroll=N` scrolls the card's pane on mount (default 300; 0 = opens at its top).
 const SCROLL = Number(params.get('scroll') ?? 300);
+const CORNER = params.get('corner') === '1';
+const KEEP = params.get('keep') === '1';
 
 function Card() {
   const paneRef = useRef<HTMLDivElement>(null);
@@ -162,6 +230,34 @@ function Harness() {
     <div className="h-screen w-screen p-10 text-text-primary" style={{ background: '#111' }}>
       <h1 className="text-2xl font-semibold">Launcher stand-in</h1>
       <p className="text-text-secondary mt-2">Card weight: about {NODES} nodes.</p>
+      {CORNER ? (
+        <GenieModal
+          open={open}
+          label="GenieHarnessCorner"
+          modal={false}
+          placement="bottom-right"
+          keepPictures={KEEP}
+          zIndex={9999}
+          padding={24}
+          wrapClassName="w-[320px]"
+          cardClassName="bg-[#1A1A1A] border border-amber-500/25 shadow-2xl rounded-2xl p-4 flex flex-col gap-3"
+          cardProps={{ 'data-harness-card': '' }}
+          shadow="0 25px 50px -12px rgba(0,0,0,0.25)"
+          radius={16}
+        >
+          <div className="text-[13px] font-semibold text-[#E0E0E0]">Natively quota almost full</div>
+          {['AI Usage', 'Embeddings', 'Voice Usage'].map((label, i) => (
+            <div key={label} className="flex items-center justify-between gap-2">
+              <span className="text-[12px] text-white/50">{label}</span>
+              <span className="text-[12px] font-medium tabular-nums text-amber-400">{(5.9 + i * 0.2).toFixed(1)}M / 6.5M ({91 + i * 3}%)</span>
+            </div>
+          ))}
+          <div className="flex items-center justify-between pt-0.5">
+            <span className="text-[11px] text-white/30">Resets on your next billing date</span>
+            <span className="text-[11px] font-semibold text-amber-400">Upgrade</span>
+          </div>
+        </GenieModal>
+      ) : (
       <GenieModal
         open={open}
         label="GenieHarness"
@@ -175,6 +271,7 @@ function Harness() {
       >
         {CHURN ? <ChurnCard /> : <Card />}
       </GenieModal>
+      )}
     </div>
   );
 }
@@ -188,4 +285,4 @@ style.textContent = `@keyframes genie-harness-entrance { from { opacity: 0; tran
   background-size: 200% 100%; animation: genie-harness-shimmer 1.2s linear infinite; }`;
 document.head.appendChild(style);
 
-createRoot(document.getElementById('harness-root')!).render(<Harness />);
+createRoot(document.getElementById('harness-root')!).render(NOTICES ? <NoticesStage /> : <Harness />);

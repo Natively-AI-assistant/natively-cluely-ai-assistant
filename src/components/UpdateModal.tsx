@@ -81,6 +81,7 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
     };
 
     const displayVersion = formatVersion(updateInfo?.version);
+    const genieView = `${displayVersion}|${status}|${instructionsArch ?? ''}`;
 
     const showFallback = !parsedNotes || (!parsedNotes.summary && (!parsedNotes.sections || parsedNotes.sections.length === 0));
 
@@ -140,9 +141,15 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
     return (
         // Pours out of, and back into, the bottom of the window like every
         // other popup (GenieModal).
+        // Its picture is of one version in one state: another version's
+        // "available" would pour out the wrong number. No picture is kept of a
+        // download (it changes every tick) or of an error (its message varies).
         <GenieModal
             open={isOpen}
             label="UpdateModal"
+            openingView={genieView}
+            keepPictures={status === 'idle' || status === 'ready' || status === 'instructions'}
+            cardProps={{ 'data-genie-view': genieView }}
             zIndex={9999}
             onBackdropClick={onDismiss}
             backdropClassName={`font-sans antialiased ${isLight ? 'bg-black/[0.06]' : 'bg-black/40'}`}
