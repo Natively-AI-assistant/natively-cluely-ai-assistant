@@ -20,6 +20,7 @@ import { motion, AnimatePresence, LayoutGroup, useReducedMotion } from 'framer-m
 import { AccordionSection, Disclosure } from '../ui/AccordionSection';
 import { InteractiveCard } from '../ui/InteractiveCard';
 import { FreeTrialModal } from '../trial/FreeTrialModal';
+import { useTrialRemaining } from '../trial/useTrialRemaining';
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../../lib/meetingInterfaceTheme';
 import { BEAT, EASE_ENTER, EASE_LEAVE, INK, SETTLE } from '../../lib/plansMotion';
 // Painted as a CSS mask, not rendered as an <img>: the asset is a white
@@ -470,33 +471,6 @@ function PlanAllowances({ limits }: { limits: NativelyPlanLimits | undefined }) 
   );
 }
 
-// ─── Trial countdown ─────────────────────────────────────────
-// A hook, not a component. This was an 11px clock chip in the section label's
-// `aside` — the right size for a status pill sitting beside three usage
-// meters. With the meters gone (see the active-trial card) the time IS the
-// card's statement, so the caller needs the value, not a rendering of it.
-function useTrialRemaining(expiresAt: string) {
-  const [remaining, setRemaining] = useState(() =>
-    Math.max(0, new Date(expiresAt).getTime() - Date.now()),
-  );
-  useEffect(() => {
-    const id = setInterval(() => {
-      setRemaining(Math.max(0, new Date(expiresAt).getTime() - Date.now()));
-    }, 1000);
-    return () => clearInterval(id);
-  }, [expiresAt]);
-  const totalSec = Math.ceil(remaining / 1000);
-  const m = Math.floor(totalSec / 60);
-  const s = totalSec % 60;
-  return {
-    /** `19:04`. Seconds are zero-padded so the string never changes width. */
-    clock: `${m}:${s.toString().padStart(2, '0')}`,
-    ended: remaining === 0,
-    /** The last two minutes, where the number stops being background. */
-    isWarning: remaining < 2 * 60 * 1000,
-  };
-}
-
 // ─── Active trial card ───────────────────────────────────────
 // This card used to carry a three-up grid of usage meters — AI, Voice,
 // Research, each an icon, a label, a used-over-limit pair and a track. The
@@ -916,6 +890,23 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
     };
   }, [refreshTrial]);
 
+  // Main ends the trial in two places this panel does not drive: storing a real
+  // Natively key (the purchase path, which can also be a key saved from the box
+  // above) and the BYOK exit. Without this the panel kept its own trialState and
+  // went on rendering "Free trial active" — with a live countdown — beside the
+  // key that had just superseded it.
+  useEffect(() => {
+    const off = window.electronAPI?.onTrialEnded?.(() => {
+      setTrialState(null);
+      setShowTrialModal(false);
+      if (trialPollRef.current) {
+        clearInterval(trialPollRef.current);
+        trialPollRef.current = null;
+      }
+    });
+    return () => off?.();
+  }, []);
+
   const handleStartTrial = async () => {
     setTrialLoading(true);
     setTrialError(null);
@@ -991,8 +982,13 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
     await window.electronAPI?.endTrialByok?.();
   };
 
-  const handleTrialDone = () => {
-    setTrialState(null);
+  // Closing the options card is NOT the same as ending the trial. This cleared
+  // trialState unconditionally, so opening "See your options" on a live trial
+  // and closing it again wiped the active-trial card and its countdown — the
+  // trial read as ended on the spot, with minutes still on the clock. Only the
+  // deliberate BYOK exit ends anything; the modal reports which happened.
+  const handleTrialDone = (reason: 'byok' | 'dismissed' = 'byok') => {
+    if (reason === 'byok') setTrialState(null);
     setShowTrialModal(false);
   };
 
@@ -1400,7 +1396,17 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
 
       {/* ── Free Trial Modal (post-trial) ─────────────── */}
       {showTrialModal && trialState && (
-        <FreeTrialModal usage={trialState.usage} onByok={handleByok} onDone={handleTrialDone} />
+        <FreeTrialModal
+          usage={trialState.usage}
+          onByok={handleByok}
+          onDone={handleTrialDone}
+          // Set only while the trial is actually running. That turns the card
+          // from the post-trial eulogy into the options card the "See your
+          // options" button promises — and gives it a way to close that is not
+          // "end my trial". On the expired path it stays undefined, so that
+          // card is byte-for-byte what it was.
+          activeTrialExpiresAt={trialState.active ? trialState.expiresAt : undefined}
+        />
       )}
 
       {/* ── Active trial status card ──────────────────── */}

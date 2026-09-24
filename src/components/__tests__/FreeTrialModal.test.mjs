@@ -67,7 +67,13 @@ test('dialog semantics point at elements that exist', () => {
 test('opens and closes through GenieModal; the done step closes before reporting', () => {
   assert.ok(rendered.includes('<GenieModal') && rendered.includes('open={open}'));
   assert.ok(rendered.includes('keepPictures={false}'), 'usage figures are per-trial, never a kept picture');
-  assert.ok(rendered.includes('onClosed={() => onDone?.()}'));
+  // onDone now reports WHY the card closed. Closing it is not the same as
+  // ending the trial: this card is also opened mid-trial from "See your
+  // options", where the host must keep the trial alive on a plain dismiss.
+  assert.ok(
+    rendered.includes("onClosed={() => onDone?.(endedRef.current ? 'byok' : 'dismissed')}"),
+    'the close must report whether the trial was actually ended',
+  );
   assert.ok(rendered.includes('onClick={() => setOpen(false)}'));
 });
 

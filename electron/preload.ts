@@ -288,6 +288,13 @@ interface ElectronAPI {
   convertTrial: (choice: string) => Promise<{ ok: boolean }>;
   endTrialByok: () => Promise<{ success: boolean; error?: string }>;
   onTrialEnded: (cb: (data: { choice: string }) => void) => () => void;
+  /** Emitted by `trial:start` so a trial claimed mid-session unlocks without a relaunch. */
+  onTrialStarted: (cb: (data: {
+    expiresAt: string;
+    startedAt: string;
+    usage?: { ai: number; ai_tokens?: number; stt_seconds: number; search: number };
+    limits?: object;
+  }) => void) => () => void;
   onModesActiveCleared: (cb: () => void) => () => void;
 
   // STT Provider Management
@@ -1685,6 +1692,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const sub = (_: any, data: any) => cb(data);
     ipcRenderer.on('trial-ended', sub);
     return () => ipcRenderer.removeListener('trial-ended', sub);
+  },
+  onTrialStarted: (cb: (data: any) => void) => {
+    const sub = (_: any, data: any) => cb(data);
+    ipcRenderer.on('trial-started', sub);
+    return () => ipcRenderer.removeListener('trial-started', sub);
   },
 
   // STT Provider Management

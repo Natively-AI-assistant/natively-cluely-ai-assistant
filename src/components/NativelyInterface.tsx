@@ -11353,6 +11353,13 @@ Provide only the answer, nothing else.`;
                           // currentModelId verbatim for a gateway, so below the
                           // displayName branch this chip renders the whole id.
                           if (m.startsWith('ninerouter/')) return gatewayModelLabel(m);
+                          // The managed route. LLMHelper.getCurrentModelDisplayName()
+                          // returns the id verbatim for it, so the displayName branch
+                          // below cannot name it and the chip fell through to `return m`
+                          // and rendered a lowercase "natively" — the one label a trial
+                          // user sees for the whole trial. 'Natively API' is what the
+                          // model picker and every settings row already call it.
+                          if (m === 'natively') return 'Natively API';
                           // For everything else, prefer the authoritative
                           // displayName from `getCurrentLlmConfig` (handles
                           // custom-provider UUIDs and any future model aliases

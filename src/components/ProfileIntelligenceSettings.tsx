@@ -1917,9 +1917,16 @@ function ProfileIntelligenceProGate({ onOpenNativelyAPI, onClose }: {
 // ─── Main export ──────────────────────────────────────────────────────────────
 export function ProfileIntelligenceSettings({
     onClose,
+    isTrialActive = false,
     onOpenNativelyAPI,
 }: {
     onClose: () => void;
+    /** An unexpired free trial grants the same access a Pro licence does. Owned by
+     *  App (the `trial-started` / `trial-ended` events), exactly as ModesSettings
+     *  receives it — this panel used to hardcode it to false, so a trial user was
+     *  shown the Unlock-Pro gate on every Profile Intelligence surface even though
+     *  main's own `isProOrTrialActive()` would have served every one of them. */
+    isTrialActive?: boolean;
     onOpenNativelyAPI?: () => void;
 }) {
     const cachedPremium = readPremiumCache();
@@ -1928,7 +1935,6 @@ export function ProfileIntelligenceSettings({
     const piToggleInit = useToggleInit();
     const [isPremium, setIsPremium] = useState(cachedPremium.isPremium);
     const [premiumPlan, setPremiumPlan] = useState<string>(cachedPremium.plan);
-    const [isTrialActive] = useState(false);
     // Upgrading, entering a licence key and managing Pro all live in Settings →
     // Plans & Billing. The manager hands over to it (App's openSettingsExclusive
     // closes this panel), and the licence is read again on the next mount.
