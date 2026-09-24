@@ -28,6 +28,9 @@ import {
 } from '../../llm/userInstructionContract';
 
 export interface ComposeInput {
+  /** The question was HEARD — asked aloud by the other person (what-to-answer),
+   *  not typed by the user. See HEARD_QUESTION_PERSPECTIVE. */
+  heardQuestion?: boolean;
   decision: Readonly<TurnDecision>;
   policy: ModePolicy;
   evidence: EvidenceItem[];
@@ -894,6 +897,16 @@ export function screenReferentNotice(evidenceBlock: string): string {
     + 'figure.\n\n';
 }
 
+/**
+ * Whose "I" a heard question uses (2026-09-24). What-to-answer answers a
+ * question the OTHER person asked aloud, so their "I", "my" and "our" are
+ * theirs. Measured in three live mock interviews: "How many engineers did I say
+ * are on our team?" (the interviewer's team, 45 — in the evidence) was answered
+ * with the candidate's own team of six every time.
+ */
+export const HEARD_QUESTION_PERSPECTIVE = '\n(Asked aloud by the other person in the meeting: in it, "I", "me", "my", '
+  + '"we" and "our" mean that speaker; "you" and "your" mean the user you are answering for.)';
+
 export function composePrompt(input: ComposeInput): ComposedPrompt {
   const { decision: d, policy, evidence } = input;
 
@@ -981,7 +994,7 @@ export function composePrompt(input: ComposeInput): ComposedPrompt {
   ].filter((s) => s.trim()).join('\n\n');
 
   const user = [
-    push('question', `# Question\n${d.resolvedQuestion}`),
+    push('question', `# Question\n${d.resolvedQuestion}${input.heardQuestion ? HEARD_QUESTION_PERSPECTIVE : ''}`),
     // The header carries the rule, not just a label (Pattern E, 2026-08-01):
     // some surfaces pass a raw transcript window here, in which the
     // assistant's own prior output appears. Without the rule in the section

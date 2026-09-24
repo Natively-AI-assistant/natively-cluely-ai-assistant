@@ -177,6 +177,9 @@ export const INTERVIEW_FACTS = {
   // in answers that denied knowing the team size.
   teamSize: { re: /\b(four|4)\s+engineers\b|\bteam of (four|4)\b|\b(four|4)[- ]person\b/i, label: 'user said: team of four engineers (min 5)' },
   deploy: { re: /nomad/i, label: 'interviewer said: they deploy with Nomad, not Kubernetes (min 12)' },
+  // Whose "our": the interviewer's twelve-person team, not the candidate's four
+  // (three live mock interviews answered the candidate's team, 2026-09-24).
+  ourTeam: { re: /\btwelve\b|\b12\b/i, label: "interviewer said: a twelve-person platform team (min 1); asked as 'did I say… our team'" },
 };
 
 const I = 'interviewer';
@@ -229,6 +232,7 @@ export const INTERVIEW_PROBES = [
   { fact: 'latency', text: 'Going back to that latency project you mentioned earlier, how did you actually measure the improvement?' },
   { fact: 'deploy', text: 'And how would your rollout approach change given how we deploy?' },
   { fact: 'teamSize', text: 'How did you split the work across the team on that migration?' },
+  { fact: 'ourTeam', text: 'Quick check before we go on, how many people did I say are on our platform team?' },
 ];
 
 /** Constraints the interviewer SETS early in a system-design round, then

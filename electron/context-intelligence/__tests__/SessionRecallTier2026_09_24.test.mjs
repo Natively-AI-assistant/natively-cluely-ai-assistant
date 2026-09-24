@@ -124,3 +124,17 @@ describe('the history header lets the model quote its own earlier answers', () =
     assert.match(all, /if they did not specify something, say so/);
   });
 });
+
+describe('a heard question says whose "I" it is', () => {
+  test('what-to-answer: "did I say… our team" is the speaker\'s; typed chat is unchanged', async () => {
+    const { composePrompt } = await load('generation/prompt-composer.js');
+    const { decide } = await load('orchestration/orchestrator.js');
+    const { MODE_POLICIES } = await load('policies/mode-policy-registry.js');
+    const q = 'How many engineers did I say are on our team?';
+    const base = { requestId: 'r', requestSequence: 1, modeId: 'general', scope: { userId: 'local', sessionId: 's' }, sessionId: 's', questionConfidence: 0.9 };
+    const wta = composePrompt({ decision: decide({ ...base, surface: 'what-to-answer', transcriptQuestion: q }), policy: MODE_POLICIES.general, evidence: [], heardQuestion: true });
+    assert.match(wta.user, /# Question\nHow many engineers did I say are on our team\?\n\(Asked aloud by the other person in the meeting: in it, "I", "me", "my", "we" and "our" mean that speaker/);
+    const typed = composePrompt({ decision: decide({ ...base, surface: 'manual-chat', manualQuestion: q }), policy: MODE_POLICIES.general, evidence: [] });
+    assert.doesNotMatch(typed.user, /Asked aloud by the other person/);
+  });
+});

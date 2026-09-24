@@ -559,6 +559,8 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
       realtimeInstruction: input.realtimeInstruction,
       defaultLengthDirective: input.defaultLengthDirective,
       conversationSummary: convoSummary,
+      // What-to-answer answers the OTHER person's question: their "I" is theirs.
+      heardQuestion: input.surface === 'what-to-answer',
       conversationHasContent: convoHasContent && Boolean(convoSummary),
       // Only TRUE when a screen line actually survived into the rendered
       // history — so a withheld `screenshots` scope cannot make the composer
