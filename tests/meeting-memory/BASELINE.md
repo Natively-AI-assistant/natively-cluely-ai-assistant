@@ -48,6 +48,10 @@ Still open: the model often adds "that came from your note, not the call" when r
 typed fact, and still pushes back when a fact is FIRST typed ("the $83,700 figure isn't in
 anything I can see") — it uses the figure anyway in most cases.
 
+After rebasing onto main (b4cf71af) one rep of each was re-run as a smoke (`rebased-*`), hand-checked:
+cross-meeting no leak; typed 5/5; follow-up recalled; interview 3/4 (the "our setup" question answered
+from the user's own project instead of the interviewer's stack — the remaining weak spot).
+
 Raw result files are gitignored (they carry full prompts). Baseline files:
 `baseline-nomode-typed-1790216608515`, `baseline-typed-long-1790215021308`,
 `baseline-interview-1790195707929`, `baseline-interview-technical-interview-1790195894414`,
