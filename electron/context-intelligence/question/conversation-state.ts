@@ -231,6 +231,16 @@ export function extractEntities(text: string): string[] {
     const before = text.slice(0, idx);
     const sentenceInitial = /(^|[.!?]\s*)$/.test(before);
     if (sentenceInitial && SENTENCE_STARTERS.has(token.split(/\s+/)[0].toLowerCase())) continue;
+    // Any sentence's first word is capitalised, so that capital says nothing
+    // (2026-09-24). SENTENCE_STARTERS only knew question words, and live STT
+    // starts a segment mid-sentence: "Balance or do it layer 4 versus layer
+    // 7?" (from "load balancer") made "Balance" an entity, and the next
+    // question went out as "And why does it matter? (referring to: Balance)".
+    // A plain Titlecase word there counts only when the text also capitalises
+    // it mid-sentence; acronyms, CamelCase and two-word names keep their
+    // own signal.
+    if (sentenceInitial && /^[A-Z][a-z0-9]+$/.test(token)
+        && !new RegExp(String.raw`[^.!?\s]\s+${token}\b`).test(text)) continue;
     add(token);
   }
   for (const m of text.matchAll(/\b([a-z]+[A-Z]\w+|\w+\.\w+|\w+_\w+)\b/g)) add(m[1]);
@@ -432,7 +442,18 @@ export function advance(prev: ConversationState | null, input: AdvanceInput): Co
   const base = prev && isSameConversation(prev, input.scope) ? prev : emptyState(input.scope);
 
   const fresh = extractEntities(input.question);
-  const merged = [...new Set([...fresh, ...base.activeEntities])].slice(0, MAX_ENTITIES);
+  // A self-contained question moves the conversation on (2026-09-24): its
+  // subject may simply be one no extractor recognises ("How do you find a slow
+  // query in production?"), and keeping the older topic then points the next
+  // pronoun PAST the question it follows. Measured in a live interview:
+  // "Postgres" from an MVCC question survived ten questions of a coding
+  // problem, and "Can you write the code for it?" went out as "(referring to:
+  // Postgres)". Only a turn that itself leans on the conversation (a pronoun,
+  // a bare follow-up, a fragment) carries the topic and entities forward.
+  const carries = isReferentialTurn(input.question);
+  const merged = carries
+    ? [...new Set([...fresh, ...base.activeEntities])].slice(0, MAX_ENTITIES)
+    : fresh.slice(0, MAX_ENTITIES);
   const persons = extractPersonEntities(input.question);
 
   return {
@@ -441,7 +462,7 @@ export function advance(prev: ConversationState | null, input: AdvanceInput): Co
     // Lowercase topics ("quantum computing", "a mutex") fall back to phrase
     // extraction — capitalisation-gated entities alone left activeTopic empty
     // for exactly the questions whose follow-ups need resolving (Defect D).
-    activeTopic: fresh[0] ?? extractTopicPhrase(input.question) ?? base.activeTopic,
+    activeTopic: fresh[0] ?? extractTopicPhrase(input.question) ?? (carries ? base.activeTopic : undefined),
     // Sticky: a turn about a technology must not evict the person (D9).
     activePerson: persons[0] ?? base.activePerson,
     activeEntities: merged,
@@ -528,6 +549,17 @@ const NONREFERENTIAL_POSSESSIVE_RE = /\b(?:its|their)\s+own\b/gi;
  * instead?") while excluding any turn long enough to state its own subject.
  */
 const PRONOUN_RESOLUTION_MAX_WORDS = 12;
+
+/** Does this turn lean on the conversation for its subject? The same triggers
+ *  resolveReference answers to: a pronoun in a short turn, a bare follow-up, a
+ *  rephrase/refinement request, a continuation fragment. */
+function isReferentialTurn(question: string): boolean {
+  const q = String(question ?? '').trim();
+  const qForPronouns = q.replace(NONREFERENTIAL_POSSESSIVE_RE, ' ');
+  const shortTurn = q.split(/\s+/).filter(Boolean).length <= PRONOUN_RESOLUTION_MAX_WORDS;
+  return (shortTurn && (PERSONAL_PRONOUN_RE.test(qForPronouns) || NONPERSON_PRONOUN_RE.test(qForPronouns)))
+    || isBareFollowUp(q) || isResponseRequest(q) || isRefinementFollowUp(q) || isContinuationFragment(q);
+}
 
 /**
  * A QUOTED span is the strongest statement of subject a user can make.
@@ -875,7 +907,15 @@ export function resolveReference(
 
   // No topic and no entity — a bare follow-up can still anchor to the previous
   // question itself ("Why not?" after "What is a mutex?").
-  if ((pronoun || bare) && state.previousQuestion) {
+  //
+  // Not on the strength of she/he alone (2026-09-24): a person is never a
+  // question. In a meeting "she" is usually the other speaker, and "What
+  // numbers did she give for the webhook service?" went out as a follow-up to
+  // the candidate's own last design answer — which the model then answered
+  // about, with the numbers sitting in its evidence. "What did he mean by
+  // that?" still anchors, on "that".
+  const nonPersonPronoun = shortTurn && NONPERSON_PRONOUN_RE.test(qForPronouns);
+  if ((nonPersonPronoun || bare) && state.previousQuestion) {
     return {
       resolved: `${q} (follow-up to: "${state.previousQuestion}")`,
       usedState: true,
