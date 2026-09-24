@@ -57,3 +57,27 @@ export function resolveDevPort(raw, fallback = 5180) {
   if (!Number.isInteger(n) || n < 1 || n > 65535) return fallback;
   return n;
 }
+
+/**
+ * The Electron command line for an agent instance.
+ *
+ * `--user-data-dir` is what actually isolates the profile. main.ts also moves
+ * userData with app.setPath() from NATIVELY_AGENT_USER_DATA, but that line runs
+ * AFTER the bundle's module initialisers, and CredentialsManager captures the
+ * credentials.enc path in one of them. Without the switch an agent instance
+ * read the developer's real keys, and a key saved from it overwrote them.
+ * Chromium applies the switch before any JS runs, and it is the same flag on
+ * every platform.
+ *
+ * Returned as an ARRAY for spawn() without a shell, so a path with spaces stays
+ * one argument on Windows and macOS alike.
+ *
+ * @param {string} root
+ * @param {number} cdpPort
+ * @param {string} userDataDir
+ * @returns {string[]}
+ */
+export function electronArgs(root, cdpPort, userDataDir) {
+  if (!userDataDir) throw new Error('electronArgs: an agent instance needs its own userData dir');
+  return [root, `--remote-debugging-port=${cdpPort}`, `--user-data-dir=${userDataDir}`];
+}
