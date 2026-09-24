@@ -172,6 +172,19 @@ interface ExtensionModel {
     };
 }
 
+/** A row from the published registry — discoverable, not yet installed. */
+interface RegistryExtension {
+    id: string;
+    name?: string;
+    latestVersion: string;
+    category: string;
+    modelLicenses?: string[];
+    /** Present only when a release published built artefacts for it. */
+    download?: { code: string; manifest: string; sha256: { code: string; manifest: string } };
+    /** Binaries it spawns but does not bundle, e.g. llama-server. */
+    requiresExternalRuntime?: string[];
+}
+
 interface InstalledExtension {
     id: string;
     name: string;
@@ -565,6 +578,9 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
     const [testing, setTesting] = useState(false);
     const [testResult, setTestResult] = useState<TestResult | null>(null);
     const [extensions, setExtensions] = useState<InstalledExtension[]>([]);
+    const [registry, setRegistry] = useState<RegistryExtension[]>([]);
+    const [registryError, setRegistryError] = useState<string | null>(null);
+    const [installingId, setInstallingId] = useState<string | null>(null);
     const [extensionsAvailable, setExtensionsAvailable] = useState(true);
     const [progress, setProgress] = useState<Record<string, number>>({});
     const [busyModel, setBusyModel] = useState<string | null>(null);
@@ -693,6 +709,15 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
         return () => { off?.(); };
     }, []);
 
+    const loadRegistry = useCallback(async () => {
+        // Never blocks the panel: a slow or unreachable registry leaves the
+        // installed list fully usable, and main falls back to its cache.
+        const res = await window.electronAPI.browseExtensionRegistry?.();
+        if (!res) return;
+        setRegistry((res.entries ?? []) as RegistryExtension[]);
+        setRegistryError(res.ok ? null : (res.error ?? 'registry_unreachable'));
+    }, []);
+
     const loadExtensions = useCallback(async () => {
         const res = await window.electronAPI.listExtensions?.();
         if (!res) return;
@@ -719,6 +744,9 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
         (async () => {
             try {
                 await Promise.all([refreshStatus(), loadCatalog(false), loadExtensions(), loadCatalogModels(), loadHostedProviders()]);
+                // Deliberately not awaited with the rest: the registry is a
+                // network call, and opening Settings must never wait on it.
+                void loadRegistry();
             } catch (e) {
                 // safeHandle does not wrap handler bodies, so a throwing IPC
                 // handler rejects here. The panel is already on screen; this
@@ -916,6 +944,18 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
         () => extensions.filter(e => e.type === 'reranker'),
         [extensions],
     );
+
+    /** Registry rows that can actually be installed: a published build, of the
+     *  right kind, and not already present. An entry without `download` is
+     *  discoverable but not installable in-app, so showing an Install button
+     *  for it would be a button that cannot work. */
+    const availableFromRegistry = useMemo(
+        () => registry.filter(e =>
+            e.category === 'reranker'
+            && Boolean(e.download)
+            && !extensions.some(installed => installed.id === e.id)),
+        [registry, extensions],
+    );
     const enabledRerankerCount = useMemo(
         () => rerankerExtensions.filter(e => e.enabled).length,
         [rerankerExtensions],
@@ -1015,6 +1055,24 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
             setBusyCatalogId(null);
         }
     }, [loadCatalogModels, t]);
+
+    const installFromRegistry = useCallback(async (id: string) => {
+        setInstallingId(id);
+        try {
+            // Only an ID crosses this boundary. Main resolves the download from
+            // the registry it fetched itself, checks https, the host on every
+            // redirect, the size and the sha256 — and still shows the trust
+            // prompt before anything is recorded.
+            const res = await window.electronAPI.installExtensionFromRegistry?.(id);
+            if (res?.success) {
+                await Promise.all([loadExtensions(), refreshStatus()]);
+            } else if (res?.error && res.error !== 'cancelled' && res.error !== 'install_refused') {
+                setRegistryError(res.error);
+            }
+        } finally {
+            setInstallingId(null);
+        }
+    }, [loadExtensions, refreshStatus]);
 
     const installFromFolder = useCallback(async () => {
         setInstalling(true);
@@ -2260,6 +2318,80 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                     )}
                 </div>
             </div>
+
+                {/* Available to install — fetched from the published registry.
+                    Metadata only until the user asks: choosing one downloads a
+                    built, sha256-verified artefact and then runs the ordinary
+                    trust prompt. */}
+                {availableFromRegistry.length > 0 && (
+                    <div className="aip-well p-2.5 space-y-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs aip-text font-medium">{t('Available to install')}</p>
+                            <button
+                                type="button"
+                                className="aip-btn-ghost"
+                                data-size="sm"
+                                onClick={() => void loadRegistry()}
+                            >{t('Refresh')}</button>
+                        </div>
+
+                        {availableFromRegistry.map(entry => {
+                            const runtime = entry.requiresExternalRuntime ?? [];
+                            const nonCommercial = (entry.modelLicenses ?? []).some(l => /NC/i.test(l));
+                            const busy = installingId === entry.id;
+                            return (
+                                <div key={entry.id} className="aip-card p-3 space-y-2">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div className="min-w-0 flex-1">
+                                            <p className="text-xs aip-text font-medium truncate">
+                                                {entry.name || entry.id}
+                                                {entry.latestVersion ? <span className="aip-muted"> {entry.latestVersion}</span> : null}
+                                            </p>
+                                            <p className="text-[10px] aip-muted truncate">
+                                                {(entry.modelLicenses ?? []).join(' · ') || t('Community extension')}
+                                            </p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            className="aip-btn shrink-0"
+                                            data-size="sm"
+                                            disabled={busy || !extensionsAvailable}
+                                            onClick={() => void installFromRegistry(entry.id)}
+                                        >
+                                            <Download size={12} strokeWidth={1.75} aria-hidden="true" />
+                                            <span>{busy ? t('Installing…') : t('Install')}</span>
+                                        </button>
+                                    </div>
+
+                                    {runtime.length > 0 && (
+                                        <div className="aip-inline-warn flex items-start gap-2" role="status">
+                                            <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
+                                            <span>{runtime.join(', ')} — {t('must be installed on your system. It is not bundled, and this extension will not run without it.')}</span>
+                                        </div>
+                                    )}
+
+                                    {nonCommercial && (
+                                        <div className="aip-inline-warn flex items-start gap-2" role="status">
+                                            <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
+                                            <span>{t('Non-commercial licence. You will be asked to acknowledge it before the model downloads.')}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+
+                        <p className="text-[10px] aip-muted">
+                            {t('Downloads are checked against a published checksum. That proves the file arrived intact — it is not a review of the code, which is why you are asked to approve every permission before it installs.')}
+                        </p>
+                    </div>
+                )}
+
+                {registryError && availableFromRegistry.length === 0 && rerankerExtensions.length === 0 && (
+                    <p className="text-[10px] aip-muted text-center">
+                        {t('Could not reach the extension registry. You can still install from a folder.')}
+                    </p>
+                )}
+
 
             {/* Provider Card 5: Candidates Selector — High-End Segmented Control.
                 Shown only where the pool size decides something: a hosted or
