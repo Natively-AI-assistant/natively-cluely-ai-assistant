@@ -94,7 +94,18 @@ async function injectChatter(n = 3) {
 
 async function startMeeting() {
   await endMeeting(); // a leftover meeting from an aborted run would be reused
-  const r = await evalIn('launcher', () => window.electronAPI.startMeeting({ audio: {} }), undefined, 60000);
+  // Silent virtual devices when installed. With `{}` the meeting captured the
+  // Mac's DEFAULT output device, so whatever was playing (a football stream,
+  // 2026-09-25) was transcribed into the test meeting — it resolved a
+  // what-to-answer probe to the commentary, and it is the user's audio.
+  const devices = await evalIn('launcher', async () => ({
+    inputs: await window.electronAPI.getInputDevices(), outputs: await window.electronAPI.getOutputDevices(),
+  }), undefined, 30000).catch(() => ({ inputs: [], outputs: [] }));
+  const mic = devices.inputs.find((d) => /blackhole 2ch/i.test(d.name));
+  const sys = devices.outputs.find((d) => /blackhole 16ch/i.test(d.name));
+  if (!mic || !sys) console.warn('  (BlackHole devices not found — the meeting will capture the default devices)');
+  const audio = mic && sys ? { inputDeviceId: mic.id, outputDeviceId: sys.id } : {};
+  const r = await evalIn('launcher', (a) => window.electronAPI.startMeeting({ audio: a }), audio, 60000);
   if (r && r.success === false) throw new Error(`startMeeting failed: ${r.error}`);
   await page('overlay');
   await sleep(2500);
