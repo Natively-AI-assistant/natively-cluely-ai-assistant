@@ -135,7 +135,7 @@ const { steps, estMinutes } = buildHour();
 const outDir = path.join(ROOT, 'tests', 'meeting-memory', 'results');
 fs.mkdirSync(outDir, { recursive: true });
 const outFile = path.join(outDir, `${label}-${Date.now()}.json`);
-const out = { label, estMinutes, startedAt: new Date().toISOString(), devices: {}, probes: [], timeline: [], notes: [] };
+const out = { label, estMinutes, startedAt: new Date().toISOString(), devices: {}, probes: [], timeline: [], notes: [], says: [] };
 const save = () => fs.writeFileSync(outFile, JSON.stringify(out, null, 2));
 
 const inputs = await evalIn('launcher', () => window.electronAPI.getInputDevices());
@@ -155,14 +155,22 @@ const t0 = Date.now();
 const minute = () => +(((Date.now() - t0) / 60000).toFixed(2));
 
 // Both channels must produce transcript before the hour starts.
+// The interviewer channel's final for an utterance can arrive only when the NEXT
+// interviewer utterance starts (relay VAD gate vs 20% keepalive cadence — see the
+// run notes), so the warm-up speaks the interviewer twice.
 await speak('interviewer', 'Hello, can you hear me clearly on your side?');
 await speak('user', 'Yes, I can hear you clearly, thank you.');
+await speak('interviewer', 'Great, let us get started then.');
 let warm = null;
-for (let i = 0; i < 30; i++) {
+const warmStart = Date.now();
+const fillers = ['Just checking the connection once more.', 'Alright, one more second.', 'Okay, I think we are ready.', 'Thanks for your patience.'];
+for (let i = 0; i < 75; i++) {
   warm = (await probe()).transcript;
   if ((warm?.bySpeaker?.interviewer ?? 0) > 0 && (warm?.bySpeaker?.user ?? 0) > 0) break;
+  if (i > 0 && i % 15 === 0) await speak('interviewer', fillers[(i / 15 - 1) % fillers.length]);
   await sleep(1000);
 }
+out.warmupSeconds = Math.round((Date.now() - warmStart) / 1000);
 out.warmup = warm;
 save();
 if (!((warm?.bySpeaker?.interviewer ?? 0) > 0 && (warm?.bySpeaker?.user ?? 0) > 0)) {
@@ -184,7 +192,9 @@ for (const step of steps) {
   if (appGone) { out.notes.push('APP_GONE'); break; }
   try {
     if (step.kind === 'say') {
+      const start = Date.now();
       await speak(step.who, step.text);
+      out.says.push({ who: step.who, text: step.text, start, end: Date.now() });
       await sleep(TURN_GAP_S * 1000);
     } else if (step.kind === 'wta') {
       await sleep(2500);  // a person's reaction time; lets the STT final land
