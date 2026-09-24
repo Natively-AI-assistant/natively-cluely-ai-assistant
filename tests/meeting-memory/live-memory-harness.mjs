@@ -21,12 +21,14 @@
 
 import { chromium } from 'playwright-core';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   TYPED_CHAT_FACTS, TYPED_CHAT_SCRIPT, TYPED_LONG_SCRIPT, CHATTER, HOUR_FACTS, buildHourTranscript, WTA_FOLLOWUP,
   INTERVIEW_FACTS, INTERVIEW_PROBES, buildInterviewTranscript, denialRe, score,
   CONSTRAINT_FACTS, CONSTRAINT_PROBES, CONSTRAINT_LEAK_RE, buildConstraintTranscript,
+  buildSessionHourTranscript, renderSessionScreenshot, SESSION_PLANTS, SESSION_FILLER, SESSION_PROBES, distinctiveWords,
 } from './scenarios.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -37,6 +39,7 @@ const scenario = args[0] ?? 'typed';
 const reps = Number(args[args.indexOf('--reps') + 1]) || 1;
 const label = args.includes('--label') ? args[args.indexOf('--label') + 1] : 'run';
 const modeTemplate = args.includes('--mode') ? args[args.indexOf('--mode') + 1] : null;
+const fillerTurns = args.includes('--filler') ? Number(args[args.indexOf('--filler') + 1]) : 42;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 function withTimeout(p, ms, what) {
@@ -136,6 +139,32 @@ async function typedTurn(text) {
     await sleep(400);
   }
   await sleep(1200); // answer-side sinks (recordAnswerSummary) run after done
+  const answer = state?.done ?? null;
+  return { answer, error: state?.err ?? (answer === null ? 'timeout' : null), ms: Date.now() - t0 };
+}
+
+/** A typed turn WITH a screenshot, through the IPC the meeting overlay uses when a
+ *  screenshot is attached (streamGeminiChat(message, imagePaths)). */
+async function typedTurnWithImage(text, imagePath) {
+  const overlay = await page('overlay');
+  await withTimeout(overlay.evaluate(({ value, img }) => {
+    const w = window;
+    try { w.__mmUnsub?.(); } catch { /* noop */ }
+    w.__mm = { tok: '', done: null, err: null };
+    const u1 = w.electronAPI.onGeminiStreamToken((t) => { w.__mm.tok += t; });
+    const u2 = w.electronAPI.onGeminiStreamDone((d) => { w.__mm.done = (d && typeof d.finalText === 'string') ? d.finalText : w.__mm.tok; });
+    const u3 = w.electronAPI.onGeminiStreamError((e) => { w.__mm.err = String(e); });
+    w.__mmUnsub = () => { u1(); u2(); u3(); };
+    w.electronAPI.streamGeminiChat(value, [img]).catch((e) => { w.__mm.err = String(e); });
+  }, { value: text, img: imagePath }), 15000, 'start image turn');
+  const t0 = Date.now();
+  let state = null;
+  while (Date.now() - t0 < 150000) {
+    state = await withTimeout(overlay.evaluate(() => window.__mm), 10000, 'poll stream');
+    if (state?.done !== null || state?.err !== null) break;
+    await sleep(400);
+  }
+  await sleep(1200);
   const answer = state?.done ?? null;
   return { answer, error: state?.err ?? (answer === null ? 'timeout' : null), ms: Date.now() - t0 };
 }
@@ -368,6 +397,69 @@ async function runConstraints() {
   return { liveMeetingId: live, results };
 }
 
+/** One turn of the session scenario on its surface. */
+async function sessionTurn(step, imagePath) {
+  if (step.surface === 'typed') return typedTurn(step.text);
+  if (step.surface === 'typed-image') return typedTurnWithImage(step.text, imagePath);
+  await inject([{ speaker: 'interviewer', text: step.interviewer, timestamp: Date.now() }]);
+  await sleep(1500);
+  return wtaTurn(undefined);
+}
+
+/** A one-hour session: every kind of content planted early, the ring rolled past
+ *  it by `filler` turns, then a follow-up about each (SESSION_PROBES). */
+async function runSessionHour({ filler = 42 } = {}) {
+  const img = await renderSessionScreenshot(path.join(os.tmpdir(), `mm-session-screen-${process.pid}.png`));
+  await startMeeting();
+  await inject(buildSessionHourTranscript(Date.now()));
+  const t0 = Date.now();
+  let live = null;
+  while (Date.now() - t0 < 90000) {
+    live = (await probe()).liveMeetingId;
+    if (live) break;
+    await sleep(2000);
+  }
+  await sleep(20000);
+  const planted = {};
+  for (const p of SESSION_PLANTS) {
+    const r = await sessionTurn(p, img);
+    planted[p.id] = { question: p.text ?? p.interviewer, answer: r.answer, ms: r.ms };
+    console.log(`  plant ${p.id.padEnd(14)} ${r.ms} ms · ${(r.answer ?? r.error ?? '').replace(/\s+/g, ' ').slice(0, 110)}`);
+  }
+  for (let i = 0; i < filler; i++) {
+    const q = SESSION_FILLER[i % SESSION_FILLER.length];
+    const r = await sessionTurn(i % 2 ? { surface: 'typed', text: q } : { surface: 'wta', interviewer: q }, img);
+    if (i % 10 === 9) console.log(`  filler ${i + 1}/${filler} (${r.ms} ms)`);
+  }
+  const before = await memoryState();
+  const ringTurns = before.allKeys.find((k) => k.key === before.engineKey)?.turns ?? null;
+  const results = [];
+  for (const pr of SESSION_PROBES) {
+    const r = await sessionTurn(pr, img);
+    const m = await memoryState();
+    const promptText = `${m.prompt?.system ?? ''}\n${m.prompt?.user ?? ''}`;
+    let result, inPrompt, detail = null;
+    if (pr.re) {
+      result = score(r.answer, pr.re);
+      if (result === 'recalled' && pr.also && !pr.also.test(r.answer)) result = 'partial';
+      inPrompt = pr.re.test(promptText);
+    } else {
+      const src = planted[pr.from];
+      const words = distinctiveWords(src?.answer, src?.question ?? '', pr.text ?? pr.interviewer ?? '');
+      const hit = words.filter((w) => new RegExp(`\\b${w}\\b`, 'i').test(r.answer ?? ''));
+      const inP = words.filter((w) => new RegExp(`\\b${w}\\b`, 'i').test(promptText));
+      detail = { words: words.length, hit: hit.length, inPrompt: inP.length, sample: hit.slice(0, 8) };
+      result = !r.answer ? 'error' : denialRe.test(r.answer) && hit.length < 3 ? 'denied' : hit.length >= 3 ? 'recalled' : 'wrong';
+      inPrompt = words.length > 0 && inP.length / words.length >= 0.4;
+    }
+    results.push({ id: pr.id, surface: pr.surface, probe: pr.text ?? pr.interviewer, answer: r.answer, ms: r.ms, result, inPrompt, detail,
+      promptSurface: m.prompt?.surface ?? null, promptUser: m.prompt?.user ?? null, conversationSummary: m.prompt?.conversationSummary ?? null });
+    console.log(`  probe ${pr.id.padEnd(18)} ${pr.surface.padEnd(5)} ${result.padEnd(8)} inPrompt=${inPrompt} ${r.ms} ms${detail ? ` words ${detail.hit}/${detail.words}` : ''}`);
+  }
+  await endMeeting();
+  return { liveMeetingId: live, filler, ringTurnsAtProbe: ringTurns, planted, results };
+}
+
 /** Meeting A is told a secret; meeting B (a different meeting) is asked for it.
  *  B must NOT know it — anything else is one meeting's conversation leaking
  *  into the next. Measured with no active mode, the default state. */
@@ -439,6 +531,8 @@ for (const sc of plan) {
       else if (sc === 'hour') data = await runHour();
       else if (sc === 'interview') data = await runInterview();
       else if (sc === 'constraints') data = await runConstraints();
+      else if (sc === 'session-hour') data = await runSessionHour({ filler: fillerTurns });
+      else if (sc === 'session-hour-short') data = await runSessionHour({ filler: 6 });
       else if (sc === 'cross-meeting') data = await runCrossMeeting();
       else throw new Error(`unknown scenario ${sc}`);
     } catch (e) {
