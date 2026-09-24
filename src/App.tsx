@@ -367,7 +367,10 @@ const App: React.FC = () => {
     /** Carried from /v1/trial/status so the banner does not hardcode allowances. */
     limits?: TrialLimits;
   } | null>(null);
-  const [showTrialExpiredModal, setShowTrialExpiredModal] = useState(false);
+  // Dev-only: `?forceTrialEnded=1` opens the end-of-trial card for a design check.
+  const [showTrialExpiredModal, setShowTrialExpiredModal] = useState(() =>
+    import.meta.env.DEV && new URLSearchParams(window.location.search).has('forceTrialEnded')
+  );
 
   const isManagerOpen = activeManagerPanel !== null;
   const managerContentVariants = {
