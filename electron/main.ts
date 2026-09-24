@@ -6365,6 +6365,10 @@ export class AppState {
     if (metadata) {
       this.intelligenceManager.setMeetingMetadata(metadata);
     }
+    // Every meeting gets its own conversation history, whether or not a mode
+    // is active (the dynamic-action session id below exists only WITH a mode,
+    // and without one every meeting shared one history — 2026-09-24).
+    this.intelligenceManager.beginMeetingConversation(`conv_${crypto.randomUUID()}`);
 
     // Phase 3 — bind dynamic action engine to this meeting + active mode.
     // Action store is per-(sessionId, modeId), so a fresh sessionId here gives

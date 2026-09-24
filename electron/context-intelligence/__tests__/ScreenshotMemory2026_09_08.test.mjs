@@ -176,16 +176,41 @@ test('a live speech window no longer suppresses the screenshot the user attached
   assert.match(t2.user, /walk me through the build failure/);
 });
 
-test('the merge does not duplicate the exchange the speech window already covers', async () => {
+test('the merge carries each exchange exactly once', async () => {
   const t2 = await liveTwoTurns('screenmem-nodupe');
-  // Only the screen-bearing turns are merged, each anchored to its question.
-  // Merging the ring's q/a as well would spend the conversation budget twice.
+  // Retargeted 2026-09-24. This used to assert the ring's answer was NOT
+  // merged, on the premise that the speech window "already covers the
+  // conversation". It does not: SPEECH_WINDOW here holds no answer at all, and
+  // measured live a follow-up two minutes later found neither the question nor
+  // the answer anywhere in its prompt. The exchange is merged — once.
   //
   // A RENDERED line is `[screen attached that turn] <text>`; the composer's own
   // section header also quotes the marker, with nothing after it, so the marker
   // alone is not a countable occurrence.
   assert.equal((t2.user.match(/\[screen attached that turn\] \S/g) ?? []).length, 1);
-  assert.equal((t2.user.match(/The link step failed\./g) ?? []).length, 0);
+  assert.equal((t2.user.match(/The link step failed\./g) ?? []).length, 1);
+});
+
+test('the shared unscoped bucket merges screen turns only — its exchanges are unrelated presses', async () => {
+  const sid = 'engine';
+  store.clearConversationState(sid);
+  await askTurn(sid, 'Implement a key rotation service', 1, { conversationSummary: SPEECH_WINDOW });
+  store.recordAnswerSummary(sid, 'ROTATIONANSWER use a versioned key map.');
+  const t2 = await askTurn(sid, 'Tell me about your experience with python', 2, { conversationSummary: SPEECH_WINDOW });
+  assert.ok(!/ROTATIONANSWER/.test(t2.user), 'an earlier unscoped press leaked into this one');
+  store.clearConversationState(sid);
+});
+
+test('an exchange the speech window really contains is not merged again', async () => {
+  const sid = 'screenmem-window-has-it';
+  store.clearConversationState(sid);
+  const answer = 'Use a token bucket per API key, refilled at the steady rate, rejecting when empty.';
+  await askTurn(sid, 'How would you design a rate limiter?', 1, { conversationSummary: SPEECH_WINDOW });
+  store.recordAnswerSummary(sid, answer);
+  const window = `${SPEECH_WINDOW}\n[ASSISTANT (PREVIOUS SUGGESTION)]: ${answer}`;
+  const t2 = await askTurn(sid, 'Which algorithm did you pick?', 2, { conversationSummary: window });
+  assert.equal((t2.user.match(/token bucket per API key/g) ?? []).length, 1,
+    'the window already carries this answer; merging the ring copy would spend the budget twice');
 });
 
 test('the merged screen line still honours the screenshots privacy scope', async () => {

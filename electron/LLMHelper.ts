@@ -10144,6 +10144,19 @@ let isMultimodal = !!(imagePaths?.length);
       } catch { return connectTimeoutMs; }
     })();
 
+    // E2E-only (NATIVELY_E2E=1): the request body as sent, minus image bytes.
+    // The what-to-answer path layers the legacy transcript packet under V3's
+    // composed prompt, so the meeting-memory harness must read what actually
+    // left the app, not what one layer composed.
+    if (process.env.NATIVELY_E2E === '1') {
+      try {
+        const g = globalThis as unknown as { __nativelyE2eOutbound?: unknown[] };
+        const ring = g.__nativelyE2eOutbound ?? (g.__nativelyE2eOutbound = []);
+        ring.push({ at: Date.now(), system: body.system ?? null, message: body.message ?? body.messages ?? null });
+        if (ring.length > 20) ring.splice(0, ring.length - 20);
+      } catch { /* harness capture only */ }
+    }
+
     const endpointUrl = `${NATIVELY_API_URL}/v1/chat`;
     const requestId = makeRequestId('nat_stream');
     const streamStartedAt = nowMs();

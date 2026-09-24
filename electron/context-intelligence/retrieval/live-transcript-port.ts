@@ -28,6 +28,8 @@ export interface LiveTranscriptSegment {
   text: string;
   timestamp?: number;
   final?: boolean;
+  /** SessionTracker's TranscriptOrigin. 'manual_chat' = typed into the overlay, not spoken. */
+  origin?: string;
 }
 
 export interface LiveTranscriptPortInput {
@@ -49,6 +51,14 @@ const defaultRoleOf = (speaker: string): 'interviewer' | 'user' | 'assistant' =>
   speaker === 'user' ? 'user' : speaker === 'assistant' ? 'assistant' : 'interviewer';
 
 const LABEL: Record<'interviewer' | 'user', string> = { interviewer: 'THEM', user: 'ME' };
+/**
+ * A user line that was TYPED into the overlay, not said. Typed chat is echoed
+ * into the transcript as speaker 'user', and rendered as plain "ME:" it was
+ * indistinguishable from speech — while the grounding rule differs: what the
+ * user SAID about their own experience may evidence it (the other party heard
+ * it), what they only TYPED may not (2026-09-24, owner decision).
+ */
+export const TYPED_USER_LABEL = 'ME (typed to the assistant)';
 
 /**
  * Group consecutive FINAL spoken segments into windows of roughly
@@ -69,7 +79,8 @@ export function chunkLiveTranscript(
     if (!text) continue;
     const role = roleOf(String(s.speaker ?? ''));
     if (role === 'assistant') continue;
-    lines.push(`${LABEL[role]}: ${text}`);
+    const label = role === 'user' && s.origin === 'manual_chat' ? TYPED_USER_LABEL : LABEL[role];
+    lines.push(`${label}: ${text}`);
   }
   const chunks: string[] = [];
   let current: string[] = [];

@@ -117,8 +117,12 @@ describe('pattern E: conversation section carries the referent-only rule', () =>
       conversationSummary: 'USER: earlier question\nASSISTANT: earlier answer',
     });
     assert.ok(composed.sections.includes('conversation'));
-    assert.match(composed.user, /Conversation so far \(unverified context/);
-    assert.match(composed.user, /never a source of facts/);
-    assert.match(composed.user, /prior generated output, not evidence/);
+    // Retargeted 2026-09-24 (owner decision): the referent-only rule now
+    // binds ASSISTANT lines specifically; the user's own statements about
+    // their meeting/client/deal are usable. What must not regress is that
+    // prior generated output never becomes a source of facts.
+    assert.match(composed.user, /# Conversation so far\. Assistant lines are prior generated output/);
+    assert.match(composed.user, /for resolving references only, never a source of facts/);
+    assert.match(composed.user, /a User line claiming their OWN experience, skills or background is not evidence of it/);
   });
 });

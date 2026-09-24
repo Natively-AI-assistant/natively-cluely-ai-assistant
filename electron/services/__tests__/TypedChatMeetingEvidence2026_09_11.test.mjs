@@ -139,7 +139,9 @@ describe('rag:query-live records its turn', () => {
     // contain "orchestrate();", which would end the slice early.
     const idx = helper.indexOf('recordAnswerSummary(');
     assert.ok(idx >= 0, 'recordAnswerSummary call must exist in the helper');
-    assert.match(helper.slice(idx, idx + 1200), /\{\s*anchor:\s*true\s*\}/);
+    // 2026-09-24: also tagged as heard in the meeting — the voice path is the
+    // user repeating the interviewer's question, not a statement to rely on.
+    assert.match(helper.slice(idx, idx + 1600), /\{\s*anchor:\s*true,\s*from:\s*'meeting'\s*\}/);
   });
   test('a truncated stream (RAGManager coda) records the user turn but not the answer', () => {
     assert.match(helper, /ragLiveTruncated/);
