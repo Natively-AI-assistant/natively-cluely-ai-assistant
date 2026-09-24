@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
+import { GenieModal } from './ui/GenieModal';
 import { Heart, X } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
@@ -38,18 +39,24 @@ export const SupportToaster: React.FC<SupportToasterProps> = ({ isOpen, onDismis
                     console.log("User returned from support link after >20s. Presuming donation.");
                     await window.electronAPI?.setDonationComplete();
                     setHasDonated(true);
-                    onDismiss();
+                    dismiss();
                 }
                 clickTimeRef.current = null;
             }
         };
         window.addEventListener('focus', handleFocus);
         return () => window.removeEventListener('focus', handleFocus);
-    }, [onDismiss]);
+    }, []);
 
-    const handleDismiss = () => {
-        onDismiss();
+    // The orchestrator unmounts this the moment it hears "dismissed", so the
+    // card closes itself first and reports once the genie has played.
+    const [open, setOpen] = useState(true);
+    const dismissedRef = React.useRef(false);
+    const dismiss = () => {
+        dismissedRef.current = true;
+        setOpen(false);
     };
+    const handleDismiss = dismiss;
 
     const handleSupport = () => {
         clickTimeRef.current = Date.now();
@@ -60,8 +67,6 @@ export const SupportToaster: React.FC<SupportToasterProps> = ({ isOpen, onDismis
         }
     };
 
-    if (!isOpen) return null;
-
     const t1 = isLight ? '#1C1C1E' : '#FFFFFF';
     const t2 = isLight ? 'rgba(0,0,0,0.76)' : 'rgba(255,255,255,0.72)';
     const t3 = isLight ? 'rgba(0,0,0,0.56)' : 'rgba(255,255,255,0.44)';
@@ -69,50 +74,56 @@ export const SupportToaster: React.FC<SupportToasterProps> = ({ isOpen, onDismis
     const rule = isLight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.08)';
 
     return (
-        <AnimatePresence>
-            {isOpen && (
-                <div className={`fixed inset-0 z-[9999] flex items-center justify-center ${isLight ? 'bg-black/[0.06]' : 'bg-black/60'}`}>
-                    <style>
-                        {`
-                            @keyframes support-border-flow {
-                                0%, 100% { background-position: 0% 50%; }
-                                50%       { background-position: 100% 50%; }
-                            }
-                            .support-border {
-                                background: linear-gradient(145deg,
-                                    rgba(255, 106, 92, 0.8),
-                                    rgba(229, 91, 77, 0.6),
-                                    rgba(244, 63, 94, 0.7),
-                                    rgba(255, 106, 92, 0.8)
-                                );
-                                background-size: 300% 300%;
-                                animation: support-border-flow 6s ease infinite;
-                            }
-                            .support-border-reduced {
-                                background: linear-gradient(145deg, rgba(255, 106, 92, 0.6), rgba(244, 63, 94, 0.5));
-                            }
-                            @keyframes waveMove {
-                                from { background-position-x: 0; }
-                                to { background-position-x: -32px; }
-                            }
-                        `}
-                    </style>
+        <>
+            <style>
+                {`
+                    @keyframes support-border-flow {
+                        0%, 100% { background-position: 0% 50%; }
+                        50%       { background-position: 100% 50%; }
+                    }
+                    .support-border {
+                        background: linear-gradient(145deg,
+                            rgba(255, 106, 92, 0.8),
+                            rgba(229, 91, 77, 0.6),
+                            rgba(244, 63, 94, 0.7),
+                            rgba(255, 106, 92, 0.8)
+                        );
+                        background-size: 300% 300%;
+                        animation: support-border-flow 6s ease infinite;
+                    }
+                    .support-border-reduced {
+                        background: linear-gradient(145deg, rgba(255, 106, 92, 0.6), rgba(244, 63, 94, 0.5));
+                    }
+                    @keyframes waveMove {
+                        from { background-position-x: 0; }
+                        to { background-position-x: -32px; }
+                    }
+                `}
+            </style>
 
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.94, y: 10 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.15, ease: [0.32, 0, 0.67, 0] } }}
-                        transition={{ type: "spring", stiffness: 450, damping: 35 }}
-                        className={cn(
-                            "relative w-[482px] overflow-hidden p-[1.5px]",
-                            reduced ? "support-border-reduced" : "support-border",
-                            "rounded-[24px]",
-                            isLight
-                                ? "shadow-[0_32px_64px_-16px_rgba(255,106,92,0.15),0_8px_32px_-8px_rgba(0,0,0,0.06)]"
-                                : "shadow-[0_48px_120px_-20px_rgba(0,0,0,0.95),0_0_80px_rgba(255,106,92,0.05)]",
-                            className
-                        )}
-                    >
+            {/* Pours out of, and back into, the bottom of the window like every
+                other popup (GenieModal). */}
+            <GenieModal
+                open={isOpen && open}
+                label="SupportToaster"
+                zIndex={9999}
+                onClosed={() => { if (dismissedRef.current) onDismiss(); }}
+                backdropClassName={isLight ? 'bg-black/[0.06]' : 'bg-black/60'}
+                wrapClassName="w-[482px] max-w-full"
+                cardClassName={cn(
+                    "overflow-hidden p-[1.5px]",
+                    reduced ? "support-border-reduced" : "support-border",
+                    "rounded-[24px]",
+                    isLight
+                        ? "shadow-[0_32px_64px_-16px_rgba(255,106,92,0.15),0_8px_32px_-8px_rgba(0,0,0,0.06)]"
+                        : "shadow-[0_48px_120px_-20px_rgba(0,0,0,0.95),0_0_80px_rgba(255,106,92,0.05)]",
+                    className
+                )}
+                shadow={isLight
+                    ? '0 32px 64px -16px rgba(255,106,92,0.15), 0 8px 32px -8px rgba(0,0,0,0.06)'
+                    : '0 48px 120px -20px rgba(0,0,0,0.95), 0 0 80px rgba(255,106,92,0.05)'}
+                radius={24}
+            >
                         {/* Main Container Panel */}
                         <div style={{
                             position: 'relative',
@@ -246,9 +257,7 @@ export const SupportToaster: React.FC<SupportToasterProps> = ({ isOpen, onDismis
                                 </div>
                             </div>
                         </div>
-                    </motion.div>
-                </div>
-            )}
-        </AnimatePresence>
+            </GenieModal>
+        </>
     );
 };

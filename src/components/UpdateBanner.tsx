@@ -175,8 +175,8 @@ const UpdateBanner: React.FC = () => {
         setStatus('idle'); // Reset error/downloading state so next event starts clean
     };
 
-    if (!isVisible) return null;
-
+    // Always rendered: UpdateModal's GenieModal plays the close after
+    // isVisible goes false, and an early return here would cut it off.
     return (
         <UpdateModal
             isOpen={isVisible}

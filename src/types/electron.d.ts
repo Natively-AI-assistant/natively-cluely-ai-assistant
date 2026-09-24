@@ -176,6 +176,12 @@ export interface ElectronAPI {
   onWindowMaximizedChanged: (callback: (isMaximized: boolean) => void) => () => void
   onEnsureExpanded: (callback: () => void) => () => void
   openExternal: (url: string) => Promise<void>
+  // Genie snapshots (electron/genieSnapshots.ts): pictures of popup cards the genie warps.
+  genieSnapshotCapture?: (rect: { x: number; y: number; width: number; height: number }) => Promise<{ png: Uint8Array; width: number; height: number } | null>
+  genieSnapshotSave?: (key: string, png: Uint8Array) => Promise<boolean>
+  genieSnapshotLoad?: (key: string) => Promise<Uint8Array | null>
+  genieSnapshotList?: () => Promise<string[]>
+  genieSnapshotClear?: (prefix?: string) => Promise<boolean>
   // UX2: in-app TCC repair. macOS only; returns { ok, bundleId, results, message, promptRelaunch }.
   repairTccPermissions: () => Promise<{
     ok: boolean
