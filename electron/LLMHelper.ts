@@ -167,10 +167,20 @@ const CLAUDE_MODEL = "claude-sonnet-4-6"
 // The small tiers are faster but miss real asks; gpt-5.5 is both faster AND more
 // accurate than the chat-model fallback it replaces. Re-run the eval before
 // changing this.
-// Sub-deadline for the fast rung inside the judge's 2500 ms budget. A slow pick
-// must not eat the whole budget: the measured Gemini flash-lite rung answers in
-// 750-1200 ms and has to stay reachable underneath.
-const FAST_MODEL_JUDGE_RUNG_TIMEOUT_MS = 1200
+// Sub-deadline for the fast rung inside the judge's 2500 ms budget.
+//
+// Measured 2026-09-24 against gemini-3.1-flash-lite on the REAL capped judge
+// prompt (~3039 tokens), thinking minimal, 7 runs:
+//   1085, 1104, 1119, 1419, 1722, 2096, 2213 ms   (median 1419)
+// The earlier 1200 ms was set from a 60-token synthetic call and would have
+// timed out 4 of those 7 — spending the latency and then falling through
+// anyway, which is worse than not having the rung.
+//
+// 1800 ms covers the median and most of the spread while leaving ~700 ms of the
+// judge budget for the ladder beneath. The variance here is real and the deeper
+// lever is prompt size: JUDGE_PROMPT_RULES alone is 7420 chars of the ~12.2k
+// total, so trimming the boilerplate would buy more than any timeout tuning.
+const FAST_MODEL_JUDGE_RUNG_TIMEOUT_MS = 1800
 // Ceiling for a fast call made with no caller signal (the preferFast callers).
 const FAST_MODEL_DEFAULT_TIMEOUT_MS = 8000
 const OPENAI_JUDGE_MODEL = "gpt-5.5"
