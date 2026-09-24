@@ -254,6 +254,15 @@ export class LiveRAGIndexer {
             let embeddedCount = 0;
             try {
                 await ForegroundGate.waitUntilIdle();
+                // E2E-only fault injection (NATIVELY_E2E=1, set by __e2e__:fail-live-embeds):
+                // lets the live harness prove the retry path on real meeting traffic.
+                if (process.env.NATIVELY_E2E === '1') {
+                    const g = globalThis as unknown as { __nativelyE2eFailLiveEmbeds?: number };
+                    if ((g.__nativelyE2eFailLiveEmbeds ?? 0) > 0) {
+                        g.__nativelyE2eFailLiveEmbeds = (g.__nativelyE2eFailLiveEmbeds ?? 0) - 1;
+                        throw new Error('E2E injected embedding failure');
+                    }
+                }
                 const { embeddings, space, provider, dimensions } = await this.embeddingPipeline.getEmbeddingsWithFallback(
                     batch.map((c) => c.text)
                 );
@@ -368,6 +377,16 @@ export class LiveRAGIndexer {
      */
     getIndexedChunkCount(): number {
         return this.indexedChunkCount;
+    }
+
+    /** Saved chunks still waiting for a vector (retried every tick). */
+    getPendingEmbedCount(): number {
+        return this.pendingEmbeds.length;
+    }
+
+    /** Chunks saved so far this session. */
+    getSavedChunkCount(): number {
+        return this.chunkCounter;
     }
 
     /**
