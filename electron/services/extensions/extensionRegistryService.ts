@@ -25,8 +25,19 @@ import * as path from 'path';
 import { fetchRemoteRegistry, stageFromDirectory, type RegistryEntry } from './ExtensionInstaller';
 import { downloadExtensionPayload, type DownloadOptions } from './ExtensionPayloadDownloader';
 
-/** Product address; redirects to the registry of the current release. */
-export const DEFAULT_REGISTRY_URL = 'https://natively.software/extensions/registry.json';
+/**
+ * Natively's own API, which PROXIES the registry rather than redirecting to it.
+ *
+ * A redirect would put the upstream URL in the Location header, so every client
+ * would learn where the registry is published — which defeats the point of not
+ * naming it in this binary. The proxy also gives one warm cache for everyone
+ * and keeps serving a stale copy when the upstream is briefly unreachable.
+ *
+ * The marketing site was the first choice, but it answers every path with the
+ * SPA shell: `/extensions/registry.json` returned 200 with `text/html`, which
+ * fails at JSON.parse rather than failing honestly.
+ */
+export const DEFAULT_REGISTRY_URL = 'https://api.natively.software/v1/extensions/registry.json';
 
 /** How long a fetched registry is reused before going back to the network. */
 export const REGISTRY_CACHE_TTL_MS = 15 * 60 * 1000;

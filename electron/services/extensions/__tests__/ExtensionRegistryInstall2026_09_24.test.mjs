@@ -179,7 +179,7 @@ const ENTRY = {
   id: 'demo-reranker', repo: 'o/r', version: '1.0.0', apiVersion: '1', category: 'reranker',
   modelLicenses: ['Apache-2.0'], requiresExternalRuntime: ['llama-server'], download: GOOD,
 };
-const REG_URL = 'https://natively.software/extensions/registry.json';
+const REG_URL = 'https://api.natively.software/v1/extensions/registry.json';
 
 function registryFetch(extensions, extra = {}) {
   const routes = { [REG_URL]: { body: registryBody(extensions) }, ...okRoutes, ...extra };
@@ -188,9 +188,11 @@ function registryFetch(extensions, extra = {}) {
 
 test('the default registry URL is a product address, not an account', () => {
   // Hardcoding the hosting account would put its name in every shipped
-  // app.asar, which anyone can extract.
+  // app.asar, which anyone can extract. It points at Natively's own API, which
+  // proxies rather than redirects — a redirect would leak the upstream in its
+  // Location header and undo exactly that.
   assert.equal(svc.DEFAULT_REGISTRY_URL, REG_URL);
-  assert.doesNotMatch(svc.DEFAULT_REGISTRY_URL, /github\.com/);
+  assert.doesNotMatch(svc.DEFAULT_REGISTRY_URL, /github\.com|githubusercontent/);
 });
 
 test('a non-https registry URL is refused', () => {
