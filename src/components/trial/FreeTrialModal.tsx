@@ -9,6 +9,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
+import { GenieModal } from '../ui/GenieModal';
 import { Zap, Key, ArrowRight, Loader2, CheckCircle, Brain, Mic, Flame, ShieldCheck } from 'lucide-react';
 import nativelyLogo from '../../assets/logo.webp';
 import {
@@ -136,6 +137,8 @@ interface TrialModalProps {
 
 type Step = 'choose' | 'wiping' | 'done';
 
+const FM_SHADOW = '0 56px 130px -24px rgba(0,0,0,.98), 0 0 80px rgba(139,92,246,.05)';
+
 export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onStandard, onDone }) => {
   const [step,  setStep]  = useState<Step>('choose');
   const [error, setError] = useState<string | null>(null);
@@ -150,6 +153,11 @@ export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onSta
   }, []);
 
   const openUrl = (url: string) => (window.electronAPI as any)?.openExternal?.(url);
+
+  // Both hosts unmount this the moment they hear onDone, so Continue closes
+  // the card first (the genie) and reports from GenieModal's onClosed.
+  const [open, setOpen] = useState(true);
+  const finish = onDone ? () => setOpen(false) : undefined;
 
   const handleByok = async () => {
     setStep('wiping');
@@ -173,22 +181,23 @@ export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onSta
         .fm-ring-r { background:linear-gradient(145deg,rgba(139,92,246,.55),rgba(99,102,241,.4)); }
       `}</style>
 
-      {/* Backdrop */}
-      <div style={{
-        position:'fixed', inset:0, zIndex:9999,
-        display:'flex', alignItems:'center', justifyContent:'center',
-        background:'radial-gradient(ellipse 80% 70% at 50% 50%,rgba(139,92,246,.07) 0%,rgba(0,0,0,.9) 100%)',
-        fontFamily: F,
-      } as React.CSSProperties}>
-
-        {/* Iridescent ring */}
-        <motion.div
-          initial={reduced ? {opacity:0} : {opacity:0,scale:.95,y:20,filter:'blur(8px)'}}
-          animate={reduced ? {opacity:1} : {opacity:1,scale:1,  y:0, filter:'blur(0px)'}}
-          transition={{type:'spring',stiffness:280,damping:24,mass:.85}}
-          className={reduced ? 'fm-ring-r' : 'fm-ring'}
-          style={{padding:'1.5px',borderRadius:'24px',boxShadow:'0 56px 130px -24px rgba(0,0,0,.98),0 0 80px rgba(139,92,246,.05)'}}
-        >
+      {/* Pours out of, and back into, the bottom of the window like every
+          other popup (GenieModal). */}
+      <GenieModal
+        open={open}
+        label="FreeTrialModal"
+        zIndex={9999}
+        onClosed={() => onDone?.()}
+        backdropStyle={{
+          background:'radial-gradient(ellipse 80% 70% at 50% 50%,rgba(139,92,246,.07) 0%,rgba(0,0,0,.9) 100%)',
+          fontFamily: F,
+        }}
+        wrapStyle={{ width:'471px', maxWidth:'100%' }}
+        cardClassName={reduced ? 'fm-ring-r' : 'fm-ring'}
+        cardStyle={{ padding:'1.5px', overflow:'visible', boxShadow: FM_SHADOW }}
+        shadow={FM_SHADOW}
+        radius={24}
+      >
           {/* Card shell */}
           <div style={{
             position:'relative', width:'468px',
@@ -215,7 +224,7 @@ export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onSta
 
             <div style={{padding:'22px 22px 24px',position:'relative',zIndex:6}}>
               {step==='wiping' && <WipingState />}
-              {step==='done'   && <DoneState onDone={onDone} />}
+              {step==='done'   && <DoneState onDone={finish} />}
               {step==='choose' && (
                 <ChooseState
                   usage={usage} plans={plans} error={error} reduced={reduced}
@@ -232,8 +241,7 @@ export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onSta
               )}
             </div>
           </div>
-        </motion.div>
-      </div>
+      </GenieModal>
     </>
   );
 };

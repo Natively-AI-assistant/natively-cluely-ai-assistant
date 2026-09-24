@@ -32,9 +32,15 @@ const source = readFileSync(resolve(__dirname, '../BrowserExtensionToaster.tsx')
 
 // What reaches the screen: the source with every comment removed. Copy and
 // styling rules apply to rendered code, not to prose explaining it.
-const rendered = source
+const stripComments = (text) => text
   .replace(/\/\*[\s\S]*?\*\//g, '')
   .replace(/^[^\n]*?\/\/[^\n]*$/gm, '');
+const rendered = stripComments(source);
+
+// The genie itself lives in useGenieCard (shared with the permissions card and
+// every GenieModal popup). Its contracts are asserted against the hook.
+const hookSource = readFileSync(resolve(__dirname, '../useGenieCard.ts'), 'utf8');
+const hook = stripComments(hookSource);
 
 // ─── Behaviour ──────────────────────────────────────────────────
 
@@ -107,27 +113,30 @@ test('every way out plays the genie before reporting to the host', () => {
   assert.equal(direct.length, 0, 'onDismiss called outside closeThen');
   assert.ok(handlers.includes('closeThen(onDismiss)'), 'Escape, backdrop and close');
   assert.ok(handlers.includes('closeThen(() => onDismiss())'), 'install');
-  assert.ok(rendered.includes('Promise.all([a, b]).then(() => { setDone(true); finishClose(); });'),
+  assert.ok(hook.includes('Promise.all([a, b]).then(() => { if (!live) return; setDone(true); finishClose(); });'),
     'reports once the card and scrim have both finished');
-  assert.ok(rendered.includes('const shown = (isOpen || testForceShow) && !done;'));
+  assert.ok(hook.includes('cleanup = () => { live = false; clearTimeout(t); a.stop(); b.stop(); stopTrack(); runRef.current = null; };'),
+    'a close the backstop already released cannot mark a later open as done');
+  assert.ok(hook.includes('const shown = isOpen && !done;'));
+  assert.ok(rendered.includes("useGenieCard(isOpen || testForceShow, 'BrowserExtensionToaster')"));
 });
 
 test('a close that never finishes animating still releases the slot', () => {
   // Chromium stops animation frames in a hidden window; the genie would never
   // complete and the onboarding queue would stall behind this card.
-  assert.ok(rendered.includes('setTimeout(finishClose, CLOSE_FALLBACK_MS)'));
-  const n = Number(source.match(/const CLOSE_FALLBACK_MS\s*=\s*(\d+)/)[1]);
-  const close = Number(source.match(/const GENIE_CLOSE\s*=\s*\{ duration: ([\d.]+)/)[1]) * 1000;
+  assert.ok(hook.includes('setTimeout(finishClose, CLOSE_FALLBACK_MS)'));
+  const n = Number(hookSource.match(/const CLOSE_FALLBACK_MS\s*=\s*(\d+)/)[1]);
+  const close = Number(hookSource.match(/const GENIE_CLOSE\s*=\s*\{ duration: ([\d.]+)/)[1]) * 1000;
   assert.ok(n > close + 100, 'the backstop must not cut a healthy close short');
   assert.ok(n <= 1000, 'but it must release the slot promptly');
 });
 
 test('the report fires once, however many ways out are taken', () => {
-  const closeThen = rendered.slice(rendered.indexOf('const closeThen'), rendered.indexOf('const finishClose'));
+  const closeThen = hook.slice(hook.indexOf('const closeThen'), hook.indexOf('const finishClose'));
   assert.ok(closeThen.includes('if (afterCloseRef.current) return;'));
   assert.ok(!/report\s*\(/.test(closeThen), 'closeThen only schedules the report; calling it here would unmount the card mid-genie');
-  const start = rendered.indexOf('const finishClose');
-  const finish = rendered.slice(start, rendered.indexOf('useEffect', start));
+  const start = hook.indexOf('const finishClose');
+  const finish = hook.slice(start, hook.indexOf('useEffect', start));
   assert.ok(finish.includes('afterCloseRef.current = null;'), 'cleared before the report, so the fallback cannot repeat it');
 });
 
@@ -137,47 +146,48 @@ test('clicks pass through while the card drains away', () => {
 });
 
 test('the genie is drawn by one per-frame write, straight to the DOM', () => {
-  assert.ok(source.includes("from './genieMotion.mjs'"));
-  assert.ok(rendered.includes("useEffect(() => genie.on('change', renderGenie), [genie, renderGenie]);"));
-  assert.ok(!/useTransform\(/.test(rendered), 'no per-property transforms recomputing the same frame');
-  assert.ok(rendered.includes('const r = wrapRef.current?.getBoundingClientRect();'),
+  assert.ok(hookSource.includes("from './genieMotion.mjs'"));
+  assert.ok(hook.includes("useEffect(() => genie.on('change', renderGenie), [genie, renderGenie]);"));
+  assert.ok(!/useTransform\(/.test(hook), 'no per-property transforms recomputing the same frame');
+  assert.ok(hook.includes('const r = wrapRef.current?.getBoundingClientRect();'),
     'the transformed card cannot report its resting position; the wrapper can');
-  assert.ok(rendered.includes('slotY: window.innerHeight - SLOT_INSET'), 'the slot is at the bottom of the window');
-  assert.ok(rendered.includes('animate(genie, 1, reduced ? REDUCED_FADE : GENIE_CLOSE)'));
-  assert.ok(rendered.includes('animate(genie, 0, reduced ? REDUCED_FADE : GENIE_OPEN)'));
+  assert.ok(hook.includes('slotY: window.innerHeight - SLOT_INSET'), 'the slot is at the bottom of the window');
+  assert.ok(hook.includes('animate(genie, 1, reduced ? REDUCED_FADE : GENIE_CLOSE)'));
+  assert.ok(hook.includes('animate(genie, 0, reduced ? REDUCED_FADE : GENIE_OPEN)'));
 });
 
 test('the content warps with the funnel: bands of the card, not a clipped card', () => {
-  assert.ok(rendered.includes('const transforms = genieBands(p, geom, rows);'));
-  assert.ok(rendered.includes("card.style.visibility = 'hidden';"),
+  assert.ok(hook.includes('const transforms = genieBands(p, geom, rows);'));
+  assert.ok(hook.includes("card.style.visibility = 'hidden';"),
     'visibility, not display: the wrapper must keep its size for the measurement');
-  // A band is a picture of the card, never a second dialog.
-  const build = rendered.slice(rendered.indexOf('const buildBands'), rendered.indexOf('const clearBands'));
+  // A band is a picture of the card, never a second dialog (sanitizeCopy).
+  const build = hook.slice(hook.indexOf('const buildBands'), hook.indexOf('const clearBands'));
+  assert.ok(build.includes('sanitizeCopy(copy);'));
   for (const attr of ['role', 'aria-modal', 'aria-labelledby', 'aria-describedby']) {
-    assert.ok(build.includes(`copy.removeAttribute('${attr}');`), attr);
+    assert.ok(hook.includes(`copy.removeAttribute('${attr}');`), attr);
   }
-  assert.ok(build.includes("querySelectorAll<HTMLElement>('[id]').forEach(el => el.removeAttribute('id'))"), 'no duplicate ids');
-  assert.ok(build.includes("el.style.willChange = 'auto';"), 'no layer per copy per promoted child');
+  assert.ok(hook.includes("querySelectorAll<HTMLElement>('[id]').forEach(el => el.removeAttribute('id'))"), 'no duplicate ids');
+  assert.ok(hook.includes("el.style.willChange = 'auto';"), 'no layer per copy per promoted child');
   assert.ok(rendered.includes('ref={bandsRef}') && /ref=\{bandsRef\}\s*aria-hidden\s*inert/.test(rendered),
     'the band layer is hidden from assistive tech and unreachable by keyboard');
 });
 
 test('the bands exist only while the genie runs', () => {
-  const rest = rendered.slice(rendered.indexOf('if (p <= 0.001 || !geom) {'), rendered.indexOf('if (!rowsRef.current'));
+  const rest = hook.slice(hook.indexOf('if ((p <= 0.001 && settling) || !geom) {'), hook.indexOf('if (!rowsRef.current'));
   assert.ok(rest.includes('clearBands();'));
   assert.ok(rest.includes("card.style.visibility = '';"));
 });
 
 test('if the bands cannot be built, the outline genie still runs', () => {
-  assert.ok(rendered.includes('bandsFailedRef.current = !buildBands();'));
-  assert.ok(rendered.includes('const f = genieFrame(p, geom);'));
+  assert.ok(hook.includes('bandsFailedRef.current = !buildBands();'));
+  assert.ok(hook.includes('const f = genieFrame(p, geom);'));
 });
 
 test('the shadow is moved, never re-rasterised', () => {
-  assert.ok(!/drop-shadow|filter: liftShadow/.test(rendered), 'no per-frame filter');
+  assert.ok(!/drop-shadow|filter: liftShadow/.test(rendered + hook), 'no per-frame filter');
   assert.ok(rendered.includes('boxShadow: isLight ? SHADOW_LIGHT : SHADOW_DARK'), 'the stand-in is the card\'s own shadow');
   assert.ok(rendered.includes("' + SHADOW_LIGHT") && rendered.includes("' + SHADOW_DARK"), 'shared with the card, so the hand-over is exact');
-  assert.ok(rendered.includes('shadow.style.opacity = String(1 - genieStretch(p));'), 'gone before the outline stops being a rectangle');
+  assert.ok(hook.includes('shadow.style.opacity = String(1 - genieStretch(p));'), 'gone before the outline stops being a rectangle');
 });
 
 test('the genie does not bring the content in twice', () => {
@@ -185,7 +195,7 @@ test('the genie does not bring the content in twice', () => {
 });
 
 test('reduced motion gets a plain fade, with no warp or travel', () => {
-  const reducedBranch = rendered.slice(rendered.indexOf('if (reduced) {'), rendered.indexOf('if (p <= 0.001 || !geom) {'));
+  const reducedBranch = hook.slice(hook.indexOf('if (reduced) {'), hook.indexOf('if ((p <= 0.001 && settling) || !geom) {'));
   assert.ok(reducedBranch.includes('card.style.opacity = String(1 - p);'));
   assert.ok(reducedBranch.includes('return;'));
 });
@@ -313,8 +323,8 @@ test('bands: each band sits on the funnel, and neighbours share an edge', () => 
 });
 
 test('closing is quicker than opening', () => {
-  const open = Number(source.match(/const GENIE_OPEN\s*=\s*\{ duration: ([\d.]+)/)[1]);
-  const close = Number(source.match(/const GENIE_CLOSE\s*=\s*\{ duration: ([\d.]+)/)[1]);
+  const open = Number(hookSource.match(/const GENIE_OPEN\s*=\s*\{ duration: ([\d.]+)/)[1]);
+  const close = Number(hookSource.match(/const GENIE_CLOSE\s*=\s*\{ duration: ([\d.]+)/)[1]);
   assert.ok(close < open);
 });
 
