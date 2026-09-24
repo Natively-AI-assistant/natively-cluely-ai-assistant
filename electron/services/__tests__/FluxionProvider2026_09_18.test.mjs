@@ -197,7 +197,7 @@ describe('the fluxion/ prefix is classified BEFORE every vendor branch', () => {
       "isKnownGroqModel(modelId)) return 'groq'",
       "includes('openai')) return 'openai'",
       "startsWith('claude-')) return 'claude'",
-      "test(modelId)) return 'deepseek'",
+      "isDeepseekModelId(modelId)) return 'deepseek'",
       "allProviders.some((p: any) => p?.id === modelId)) return 'custom'",
     ]);
   });
