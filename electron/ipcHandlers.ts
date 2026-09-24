@@ -333,6 +333,47 @@ export function initializeIpcHandlers(appState: AppState): void {
     });
   };
 
+  /**
+   * Re-sync the runtime after the stored Natively credential changed OUTSIDE the
+   * `set-natively-api-key` handler — i.e. from the trial paths, which write the
+   * sentinel key (or clear it) by calling CredentialsManager directly.
+   *
+   * CredentialsManager.setNativelyApiKey() auto-promotes the default model to
+   * 'natively' (and reverts it to Gemini Flash-Lite when the key is cleared), but
+   * it only touches the credentials FILE. Without this, two things stay stale
+   * until the next launch:
+   *
+   *   1. LLMHelper still holds the PREVIOUS model id, so a trial's requests keep
+   *      routing to gemini-3.1-flash-lite — a provider the trial user has no key
+   *      for — while the stored default says 'natively'. A routing bug, not a
+   *      cosmetic one.
+   *   2. The overlay's model chip and the settings panels read their state from
+   *      'model-changed' / 'credentials-changed', so they keep naming the old
+   *      model ("Gemini 3.1 Flash Lite") for the whole trial.
+   *
+   * `set-natively-api-key` has always done exactly this (see its own call site);
+   * the trial handlers simply never did. The trial deliberately does NOT go
+   * through that handler: its Pro auto-activation would send the sentinel to the
+   * server, have it refused, and call revertNativelyAutoDefaults() — undoing the
+   * promotion this exists to apply.
+   */
+  const syncNativelyModelRuntime = (): void => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cm = CredentialsManager.getInstance();
+      const defaultModel = cm.getDefaultModel();
+      const llmHelper = appState.processingHelper?.getLLMHelper?.();
+      if (llmHelper) {
+        const providers = [...(cm.getCurlProviders() || []), ...(cm.getCustomProviders() || [])];
+        llmHelper.setModel(defaultModel, providers);
+      }
+      appState.sendModelChanged(defaultModel);
+      broadcastCredentialsChanged();
+    } catch (e: any) {
+      console.warn('[IPC] syncNativelyModelRuntime failed:', e?.message);
+    }
+  };
+
   const refreshRuntimeDefaultIfUnavailable = async (): Promise<string | null> => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
@@ -658,6 +699,71 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (e) {
       /* non-fatal */
     }
+  };
+
+  /**
+   * Stand the runtime down when a trial has run out on its own.
+   *
+   * The BYOK exit (`trial:end-byok`) has always done this: clear the sentinel
+   * key, which makes CredentialsManager revert the default model and the STT
+   * provider off 'natively', then rebuild the pipeline. A trial that simply ran
+   * out of TIME did none of it. The renderer noticed (it stops the poll and
+   * shows the end-of-trial card) and main wiped the profile data, but the app
+   * stayed pointed at the managed route holding a token the server now refuses —
+   * so every request failed, and the model chip still read "Natively API".
+   *
+   * What it deliberately does NOT do:
+   *   • clear the trial token. `trial:get-local` reports `expired` from it, and
+   *     that is what re-opens the end-of-trial card on the next launch for a
+   *     user who quit before seeing it. It is already inert: `isProOrTrialActive`
+   *     checks the expiry, and the server refuses the token.
+   *   • touch a licence. Nothing about a trial lapsing says anything about a
+   *     licence the user actually holds, and `deactivate()` is not undoable.
+   *
+   * Idempotent, and safe to call from several windows at once: the guard and the
+   * credential write are both synchronous and share no await, so the second
+   * caller sees a key that is no longer the sentinel and returns immediately —
+   * which is what keeps two reconfigureSttProvider() rebuilds from racing.
+   */
+  const endExpiredTrialRuntime = async (reason: string): Promise<boolean> => {
+    let sttNeedsRebuild = false;
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cm = CredentialsManager.getInstance();
+      // No trial, or the user has since stored a real key (or this already ran):
+      // either way the sentinel is not what the app is holding, so there is
+      // nothing here to stand down.
+      if (!cm.getTrialToken()) return false;
+      if (cm.getNativelyApiKey() !== TRIAL_SENTINEL_KEY) return false;
+
+      console.log(`[IPC] ${reason} — reverting the trial's managed-route defaults`);
+      sttNeedsRebuild = cm.getSttProvider() === 'natively';
+      cm.setNativelyApiKey('');
+      const llmHelper = appState.processingHelper?.getLLMHelper?.();
+      if (llmHelper) llmHelper.setNativelyKey(null);
+      syncNativelyModelRuntime();
+
+      // An expired trial grants no Pro, so a premium mode must stop grounding
+      // answers — the same clean-up the BYOK exit performs. Gated on there being
+      // no real licence: a paying user whose trial happens to lapse keeps theirs.
+      let premium = false;
+      try {
+        const { LicenseManager } = require('../premium/electron/services/LicenseManager');
+        premium = LicenseManager.getInstance().isPremium();
+      } catch { /* premium module absent — treat as not premium */ }
+      if (!premium) clearActiveModeOnLicenseLoss();
+    } catch (e: any) {
+      console.warn('[IPC] endExpiredTrialRuntime failed:', e?.message);
+      return false;
+    }
+    // Outside the synchronous section on purpose: everything above has already
+    // committed, so a slow pipeline rebuild cannot leave the credentials and the
+    // runtime disagreeing if it throws.
+    if (sttNeedsRebuild) {
+      try { await appState.reconfigureSttProvider(); }
+      catch (e: any) { console.warn('[IPC] endExpiredTrialRuntime: STT rebuild failed:', e?.message); }
+    }
+    return true;
   };
 
   // --- NEW Test Helper ---
@@ -10651,6 +10757,16 @@ export function initializeIpcHandlers(appState: AppState): void {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
       const prevSttProvider = cm.getSttProvider();
+      // Captured BEFORE the write, because the write overwrites the trial
+      // sentinel. A live trial running underneath this save is a state both
+      // branches below have to answer for: an accepted key ends it, a refused
+      // key must give it back.
+      const trialExpiresAt = cm.getTrialExpiresAt();
+      const liveTrialUnderneath =
+        cm.getNativelyApiKey() === TRIAL_SENTINEL_KEY &&
+        !!cm.getTrialToken() &&
+        !!trialExpiresAt &&
+        new Date(trialExpiresAt).getTime() > Date.now();
       cm.setNativelyApiKey(apiKey);
 
       // Update LLMHelper immediately (same pattern as other provider keys)
@@ -10762,6 +10878,22 @@ export function initializeIpcHandlers(appState: AppState): void {
             }
             broadcastCredentialsChanged();
             keyRejection = { error: result.error };
+
+            // Give the trial back. The revert above lands on Gemini Flash-Lite,
+            // which for a trial user is a provider they have no key for — so a
+            // key the server refuses would have ended a trial that still had
+            // time on it, silently. This is not a rare path: a key bought
+            // minutes ago can be refused for hours while provisioning catches
+            // up, and pasting it straight in is exactly what a buyer does.
+            // Re-storing the sentinel re-promotes the model through the same
+            // auto-default path that set it during trial:start.
+            if (liveTrialUnderneath) {
+              console.log('[IPC] set-natively-api-key: key refused — restoring the running free trial');
+              cm.setNativelyApiKey(TRIAL_SENTINEL_KEY);
+              llmHelper.setNativelyKey(TRIAL_SENTINEL_KEY);
+              syncNativelyModelRuntime();
+              if (cm.getSttProvider() !== prevSttProvider) await appState.reconfigureSttProvider();
+            }
           } else {
             console.log('[IPC] set-natively-api-key: Pro not activated —', result.error);
             // This used to be the end of it: the key was saved, the UI said so, and
@@ -10812,6 +10944,27 @@ export function initializeIpcHandlers(appState: AppState): void {
             e?.message,
           );
         }
+      }
+
+      // Buying is one of the two deliberate ways a trial ends (the other is
+      // BYOK). Storing a real Natively key supersedes the trial's managed
+      // access, so the trial token goes and every window is told — otherwise
+      // "Free trial active", its countdown and its usage card kept rendering
+      // next to the key the user had just paid for, until the clock ran out.
+      //
+      // The condition is "the server did not REFUSE this key", not "Pro was
+      // activated". A standard-plan key is a real purchase and authenticates
+      // fine against /v1/chat; keying this on Pro activation would leave every
+      // Standard buyer staring at an active-trial card. `proPending` is likewise
+      // not a verdict on the key — it means the key is good and only the Pro
+      // entitlement is still settling. The one case that must NOT end the trial
+      // is a 4xx refusal, and the branch above hands the trial back there.
+      if (apiKey && liveTrialUnderneath && !keyRejection) {
+        cm.clearTrialToken();
+        console.log('[IPC] set-natively-api-key: real key stored — free trial ended (purchased)');
+        BrowserWindow.getAllWindows().forEach((win) => {
+          if (!win.isDestroyed()) win.webContents.send('trial-ended', { choice: 'purchased' });
+        });
       }
 
       return keyRejection
@@ -10981,13 +11134,48 @@ export function initializeIpcHandlers(appState: AppState): void {
 
         // Auto-configure natively as the model + STT provider during trial
         const prevSttProvider = cm.getSttProvider();
-        cm.setNativelyApiKey(TRIAL_SENTINEL_KEY); // sentinel — activates natively model routing
-        const newSttProvider = cm.getSttProvider();
-        if (newSttProvider !== prevSttProvider) {
-          await appState.reconfigureSttProvider();
+        // Defence in depth: the sentinel must never clobber a real key. The UI
+        // does not offer a trial to someone who already has one stored, but the
+        // write is unconditional and the cost of being wrong is a paid key
+        // replaced by '__trial__'.
+        const storedKey = cm.getNativelyApiKey();
+        if (storedKey && storedKey !== TRIAL_SENTINEL_KEY) {
+          // The UI does not offer a trial to someone who already has a key
+          // stored, but this write is unconditional and the cost of being wrong
+          // is a paid key replaced by '__trial__'. The trial itself is still
+          // live and still reported below; it simply does not seize the route.
+          console.warn('[IPC] trial:start: a real Natively key is stored — leaving it in place, not promoting the trial sentinel');
+        } else {
+          cm.setNativelyApiKey(TRIAL_SENTINEL_KEY); // sentinel — activates natively model routing
+          const newSttProvider = cm.getSttProvider();
+          if (newSttProvider !== prevSttProvider) {
+            await appState.reconfigureSttProvider();
+          }
+          const llmHelper = appState.processingHelper?.getLLMHelper?.();
+          if (llmHelper) llmHelper.setNativelyKey(TRIAL_SENTINEL_KEY);
+
+          // setNativelyKey() carries the CREDENTIAL, not the model: LLMHelper kept
+          // routing to whatever it was on (gemini-3.1-flash-lite for a fresh
+          // install) while credentials now said 'natively', and the overlay chip
+          // kept naming that model for the whole trial. Sync both.
+          syncNativelyModelRuntime();
         }
-        const llmHelper = appState.processingHelper?.getLLMHelper?.();
-        if (llmHelper) llmHelper.setNativelyKey(TRIAL_SENTINEL_KEY);
+
+        // Tell every window the trial is live. Without this the launcher only
+        // learned about a trial by reading the local token ON MOUNT, so a trial
+        // started mid-session left the countdown banner absent and — because the
+        // Modes and Profile Intelligence panels gate on that same state — both
+        // managers kept showing their Pro gate until the app was restarted.
+        BrowserWindow.getAllWindows().forEach((win) => {
+          if (!win.isDestroyed()) {
+            win.webContents.send('trial-started', {
+              expiresAt: data.expires_at ?? '',
+              startedAt: data.started_at ?? '',
+              usage: data.usage,
+              limits: data.limits,
+            });
+          }
+        });
       }
 
       const { trial_token, ...safeData } = data;
@@ -11005,8 +11193,17 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('trial:status', async () => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
-      const token = CredentialsManager.getInstance().getTrialToken();
+      const cm = CredentialsManager.getInstance();
+      const token = cm.getTrialToken();
       if (!token) return { ok: false, error: 'no_trial_token' };
+
+      // Before the network call, so an offline or failing poll still stands the
+      // runtime down once the local clock has passed the expiry. Both branches
+      // below return early, and the trial is just as over either way.
+      const localExpiry = cm.getTrialExpiresAt();
+      if (localExpiry && new Date(localExpiry).getTime() <= Date.now()) {
+        await endExpiredTrialRuntime('Trial expired (local clock)');
+      }
 
       const res = await fetch(`${NATIVELY_API_BASE}/v1/trial/status`, {
         headers: { 'x-trial-token': token },
@@ -11018,7 +11215,12 @@ export function initializeIpcHandlers(appState: AppState): void {
         return { ok: false, error: body.error || 'request_failed', status: res.status };
       }
 
-      return await res.json();
+      const data = (await res.json()) as any;
+      // The server's verdict wins: it can end a trial before this machine's
+      // clock says so, and /v1/trial/status answers 200 with `expired: true`
+      // rather than a 4xx, so this is the one reliable signal.
+      if (data?.expired) await endExpiredTrialRuntime('Trial expired (server)');
+      return data;
     } catch (error: any) {
       return { ok: false, error: error.message || 'network_error' };
     }
@@ -11031,14 +11233,21 @@ export function initializeIpcHandlers(appState: AppState): void {
       const cm = CredentialsManager.getInstance();
       const token = cm.getTrialToken();
       if (!token) return { hasToken: false, trialClaimed: cm.getTrialClaimed() };
+      const expired = cm.getTrialExpiresAt()
+        ? new Date(cm.getTrialExpiresAt()!).getTime() < Date.now()
+        : false;
+      // Launching after the trial lapsed reaches here and nothing else — the
+      // poll never starts, because the renderer returns early on an expired
+      // token. NOT awaited: this handler is documented as the no-network startup
+      // read, and the part that matters (the credential and model revert) runs
+      // synchronously anyway; only the STT rebuild is deferred.
+      if (expired) void endExpiredTrialRuntime('Trial expired (startup read)');
       return {
         hasToken: true,
         trialClaimed: true,
         expiresAt: cm.getTrialExpiresAt(),
         startedAt: cm.getTrialStartedAt(),
-        expired: cm.getTrialExpiresAt()
-          ? new Date(cm.getTrialExpiresAt()!).getTime() < Date.now()
-          : false,
+        expired,
       };
     } catch {
       return { hasToken: false, trialClaimed: false };
@@ -11257,6 +11466,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       cm.setNativelyApiKey('');
       const llmHelper = appState.processingHelper?.getLLMHelper?.();
       if (llmHelper) llmHelper.setNativelyKey(null);
+      // The mirror of the trial:start gap: setNativelyApiKey('') reverts the
+      // stored default off 'natively', but LLMHelper would keep routing there
+      // with a null key and the chip would keep reading "Natively API".
+      syncNativelyModelRuntime();
       await appState.reconfigureSttProvider();
 
       // 4. Deactivate Pro license (removes license.enc)

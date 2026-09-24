@@ -679,6 +679,29 @@ const App: React.FC = () => {
     const removeTrialListener = window.electronAPI?.onTrialEnded?.(() => {
       setActiveTrial(null);
       setShowTrialExpiredModal(false);
+      if (trialPollId) { clearInterval(trialPollId); trialPollId = null; }
+    });
+
+    // …and for a trial STARTED mid-session (trial:start IPC). Until this existed
+    // the trial state above was read exactly once, on mount, so pressing Start
+    // anywhere — the settings card or the promo toaster — left this component
+    // believing there was no trial: no countdown banner, and both Pro managers
+    // (Modes, Profile Intelligence) still showing their gate, until a relaunch.
+    const removeTrialStartedListener = window.electronAPI?.onTrialStarted?.((data) => {
+      setActiveTrial({
+        expiresAt: data?.expiresAt ?? '',
+        usage: data?.usage ?? { ai: 0, ai_tokens: 0, stt_seconds: 0, search: 0 },
+        limits: data?.limits as TrialLimits | undefined,
+      });
+      setShowTrialExpiredModal(false);
+      // Start the status poll if the mount path did not (it only starts one when
+      // a token already existed). Guarded so a re-issue of the same trial — the
+      // API is idempotent per hardware id — cannot leak a second interval, which
+      // would also be the only thing that ever notices this trial expiring.
+      if (!trialPollId) {
+        checkTrial();
+        trialPollId = setInterval(checkTrial, 30_000);
+      }
     });
 
     // ── Onboarding orchestrator — push user-state patches ─────
@@ -844,6 +867,7 @@ const App: React.FC = () => {
       if (removeLicenseListener) removeLicenseListener();
       if (trialPollId) clearInterval(trialPollId);
       if (removeTrialListener) removeTrialListener();
+      if (removeTrialStartedListener) removeTrialStartedListener();
       if (removeOpenSettingsTab) removeOpenSettingsTab();
     }
   }, []);
@@ -1225,6 +1249,7 @@ const App: React.FC = () => {
                       ) : (
                         <ProfileIntelligenceSettings
                           onClose={closeManagerPanel}
+                          isTrialActive={!!activeTrial}
                           onOpenNativelyAPI={() => openSettingsExclusive('plans')}
                         />
                       )}

@@ -14,9 +14,10 @@
 // popup (GenieModal).
 
 import React, { useEffect, useState } from 'react';
+import { useTrialRemaining } from './useTrialRemaining';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { GenieModal } from '../ui/GenieModal';
-import { ArrowRight, Loader2 } from 'lucide-react';
+import { ArrowRight, Loader2, X } from 'lucide-react';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import {
   formatCompact,
@@ -105,12 +106,32 @@ interface TrialModalProps {
   usage:      TrialUsage;
   onByok:     () => Promise<void>;
   onStandard?: () => Promise<void>;
-  onDone?:    () => void;
+  /**
+   * `'byok'` when the user deliberately ended the trial from this card and the
+   * wipe has finished; `'dismissed'` when they simply closed it.
+   *
+   * The distinction is load-bearing. This card is ALSO opened mid-trial, from
+   * "See your options" on the active-trial card, and closing it there must not
+   * end anything — the host used to clear its trial state on every close, so
+   * looking at the options read as the trial ending on the spot.
+   */
+  onDone?:    (reason: 'byok' | 'dismissed') => void;
+  /**
+   * Set ONLY when the trial is still running, to the moment it expires. It
+   * turns this from the post-trial card into an options card: honest copy (no
+   * "that was the trial" while minutes remain), a live countdown, a BYOK button
+   * that says it ends the trial, and — the part that was missing entirely — a
+   * way out that is not "end my trial".
+   *
+   * Left unset, every one of those is exactly as it was: the expiry card has no
+   * dismissal on purpose, because by then there is nothing to go back to.
+   */
+  activeTrialExpiresAt?: string;
 }
 
 type Step = 'choose' | 'wiping' | 'done';
 
-export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onStandard, onDone }) => {
+export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onStandard, onDone, activeTrialExpiresAt }) => {
   const [step,       setStep]       = useState<Step>('choose');
   const [error,      setError]      = useState<string | null>(null);
   const [plateHover, setPlateHover] = useState(false);
@@ -140,12 +161,22 @@ export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onSta
   // button closes the card first (the genie) and reports from onClosed.
   const [open, setOpen] = useState(true);
 
+  // Whether this card ENDED the trial, as opposed to merely being closed. Read
+  // in onClosed, which fires for both, and a ref rather than state because the
+  // genie's close animation outlives the render that sets it.
+  const endedRef = React.useRef(false);
+
   const handleByok = async () => {
     setStep('wiping');
     setError(null);
-    try   { await onByok(); setStep('done'); }
+    try   { await onByok(); endedRef.current = true; setStep('done'); }
     catch (e: any) { setError(e?.message || 'Something went wrong. Restart the app.'); setStep('choose'); }
   };
+
+  // The trial is still running and this is the options card, not the eulogy.
+  const isActiveTrial = !!activeTrialExpiresAt;
+  const { clock: trialClock, isWarning: trialIsWarning } = useTrialRemaining(activeTrialExpiresAt ?? '');
+  const dismiss = () => setOpen(false);
 
   const sttMin = (usage.stt_seconds / 60).toFixed(1);
   // `usage.search` is the CREDIT counter (2026-09-21): /v1/search bills each
@@ -179,7 +210,10 @@ export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onSta
       // another reading.
       keepPictures={false}
       zIndex={9999}
-      onClosed={() => onDone?.()}
+      // Only while the trial is live. Once it has expired there is nothing to
+      // dismiss back to, and the card is deliberately terminal.
+      onBackdropClick={isActiveTrial ? dismiss : undefined}
+      onClosed={() => onDone?.(endedRef.current ? 'byok' : 'dismissed')}
       // Dims, never blurs (3a9901ae4).
       backdropStyle={{ background: isLight ? 'rgba(10,10,18,0.30)' : 'rgba(0,0,0,0.80)' }}
       padding={16}
@@ -210,6 +244,34 @@ export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onSta
         padding: '36px 28px 28px 36px',
         display: 'flex', flexDirection: 'column',
       }}>
+        {/* The way out. Only while the trial is live, and only on the step that
+            has something to go back TO — mid-wipe there is no cancelling, and
+            the done step has its own button.
+
+            It is a corner control rather than a third item in the action row
+            below because that row is already two wide inside a 320px column;
+            a "Not now" beside them wrapped. */}
+        {isActiveTrial && step === 'choose' && (
+          <button
+            type="button"
+            onClick={dismiss}
+            aria-label="Close"
+            style={{
+              position: 'absolute', top: '14px', right: '10px',
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              width: '28px', height: '28px', borderRadius: '8px',
+              background: 'none', border: 0, padding: 0,
+              cursor: 'pointer', color: INK.faint,
+              transition: `color 200ms ${EASE_CSS}`,
+            }}
+            onMouseEnter={e => (e.currentTarget.style.color = INK.body)}
+            onMouseLeave={e => (e.currentTarget.style.color = INK.faint)}
+            onFocus={e => (e.currentTarget.style.color = INK.body)}
+            onBlur={e => (e.currentTarget.style.color = INK.faint)}
+          >
+            <X size={16} strokeWidth={1.9} aria-hidden />
+          </button>
+        )}
         <AnimatePresence mode="wait" initial={false}>
           {step === 'choose' && (
             <motion.div
@@ -222,7 +284,7 @@ export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onSta
                 fontSize: '12px', fontWeight: 500, letterSpacing: '-0.005em',
                 color: INK.quiet, margin: '0 0 18px',
               }}>
-                Natively trial ended
+                {isActiveTrial ? 'Natively free trial' : 'Natively trial ended'}
               </motion.div>
 
               <motion.h2 variants={item} id="trial-end-title" style={{
@@ -230,7 +292,7 @@ export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onSta
                 letterSpacing: '-0.032em', lineHeight: 1.08,
                 margin: '0 0 16px', color: INK.strong,
               }}>
-                That was the trial.
+                {isActiveTrial ? 'Your options.' : 'That was the trial.'}
               </motion.h2>
 
               <motion.p variants={item} id="trial-end-desc" style={{
@@ -238,9 +300,20 @@ export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onSta
                 color: INK.body, margin: 0, maxWidth: '320px',
                 textWrap: 'pretty',
               } as React.CSSProperties}>
-                You used {formatCompact(usage.ai_tokens ?? 0)} AI tokens, {sttMin} min
+                {isActiveTrial && (
+                  <>
+                    {/* The one number that is still moving, in the same amber the
+                        active-trial card and the usage rows use when time or an
+                        allowance runs low. */}
+                    <span className={`tabular-nums ${trialIsWarning ? 'text-amber-500' : ''}`}>{trialClock}</span>
+                    {' still left. '}
+                  </>
+                )}
+                You{isActiveTrial ? '’ve used' : ' used'} {formatCompact(usage.ai_tokens ?? 0)} AI tokens, {sttMin} min
                 of voice and {researchRunsUsed} research {researchRunsUsed === 1 ? 'run' : 'runs'}.
-                Pick a plan to carry on, or bring your own keys.
+                {isActiveTrial
+                  ? ' Nothing here ends your trial. Pick a plan when you are ready, or close this and carry on.'
+                  : ' Pick a plan to carry on, or bring your own keys.'}
               </motion.p>
 
               <motion.div variants={item} style={{
@@ -363,7 +436,7 @@ export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onSta
                     onFocus={e => (e.currentTarget.style.color = INK.body)}
                     onBlur={e => (e.currentTarget.style.color = INK.faint)}
                   >
-                    Use my own API keys
+                    {isActiveTrial ? 'End trial, use my own keys' : 'Use my own API keys'}
                   </button>
                 </div>
                 <div style={{ marginTop: '14px', fontSize: '11.5px', fontWeight: 500, color: INK.faint }}>

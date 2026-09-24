@@ -313,6 +313,8 @@ export interface ElectronAPI {
   endTrialByok:        () => Promise<{ success: boolean; error?: string }>
   wipeTrialProfileData: () => Promise<{ success: boolean; error?: string }>
   onTrialEnded:   (cb: (data: { choice: string }) => void) => () => void
+  /** Emitted by `trial:start`, so a trial claimed mid-session unlocks Pro surfaces without a relaunch. */
+  onTrialStarted: (cb: (data: { expiresAt: string; startedAt: string; usage?: { ai: number; ai_tokens?: number; stt_seconds: number; search: number }; limits?: { duration_ms: number; ai_requests: number; stt_minutes: number; search_requests: number } }) => void) => () => void
 
   // STT Provider Management
   setSttProvider: (provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech') => Promise<{ success: boolean; error?: string }>
