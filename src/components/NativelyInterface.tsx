@@ -8270,14 +8270,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
               },
             ]);
           } else {
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: genMessageId(),
-                role: 'system',
-                text: '⚠️ No speech detected. Try speaking closer to your microphone.',
-              },
-            ]);
+            // Issue #540: a healthy but silent mic (listening through headphones,
+            // Bluetooth or USB) means the user wants the other party answered.
+            // Hand off to What to Answer, which reads main's speaker-labelled
+            // transcript (recency window, question extraction, interim guard) and
+            // says so itself when there is nothing to answer. A failed or
+            // reconnecting mic keeps its diagnostic above instead. Read through
+            // handlersRef: this closure is from the Stop press, before the tail
+            // wait. Not awaited, so the Answer lock is released immediately.
+            void handlersRef.current.handleWhatToSay();
           }
           return;
         }
