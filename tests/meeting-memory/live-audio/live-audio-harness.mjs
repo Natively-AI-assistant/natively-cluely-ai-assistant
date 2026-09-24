@@ -20,7 +20,8 @@ import { spawn, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildHour, FACTS, WPM, TURN_GAP_S } from './interview-hour.mjs';
+import { buildHour, FACTS, WPM as HOUR_WPM, TURN_GAP_S as HOUR_GAP } from './interview-hour.mjs';
+import { buildMock, WPM as MOCK_WPM, TURN_GAP_S as MOCK_GAP } from './mock-tech-interview.mjs';
 import { denialRe } from '../scenarios.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -28,6 +29,9 @@ const ROOT = path.resolve(HERE, '..', '..', '..');
 const args = process.argv.slice(2);
 const label = args.includes('--label') ? args[args.indexOf('--label') + 1] : 'live-audio';
 const maxMinutes = args.includes('--minutes') ? Number(args[args.indexOf('--minutes') + 1]) : Infinity;
+const scriptName = args.includes('--script') ? args[args.indexOf('--script') + 1] : 'hour';
+const WPM = scriptName === 'mock' ? MOCK_WPM : HOUR_WPM;
+const TURN_GAP_S = scriptName === 'mock' ? MOCK_GAP : HOUR_GAP;
 const VOICE = { interviewer: 'Samantha', user: 'Daniel' };
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -113,7 +117,20 @@ async function wtaTurn() {
 }
 
 // ── scoring ──────────────────────────────────────────────────────────────────
-function factOf(expect) { return typeof expect === 'string' ? FACTS[expect] : { re: expect }; }
+function factOf(expect) {
+  if (typeof expect === 'string') return FACTS[expect];
+  if (expect instanceof RegExp) return { re: expect };
+  return expect;  // { re, also }
+}
+const contentWords = (t) => String(t ?? '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter((w) => w.length > 3);
+/** Share of the asked question's content words present in the question the prompt actually answered. */
+function questionOverlap(asked, promptQ) {
+  const a = [...new Set(contentWords(asked))];
+  if (!a.length) return 1;
+  const p = new Set(contentWords(promptQ));
+  return a.filter((w) => p.has(w)).length / a.length;
+}
+const promptQuestionOf = (u) => (String(u ?? '').match(/# Question\n([\s\S]*?)(?:\n\n#|$)/)?.[1] ?? '').trim();
 function score(answer, expect) {
   if (!answer) return 'error';
   const f = factOf(expect);
@@ -131,11 +148,13 @@ const where = (promptUser, re) => {
 };
 
 // ── run ──────────────────────────────────────────────────────────────────────
-const { steps, estMinutes } = buildHour();
+const built = scriptName === 'mock' ? buildMock() : buildHour();
+const { steps } = built;
+const estMinutes = built.estMinutes ?? null;
 const outDir = path.join(ROOT, 'tests', 'meeting-memory', 'results');
 fs.mkdirSync(outDir, { recursive: true });
 const outFile = path.join(outDir, `${label}-${Date.now()}.json`);
-const out = { label, estMinutes, startedAt: new Date().toISOString(), devices: {}, probes: [], timeline: [], notes: [], says: [] };
+const out = { label, script: scriptName, questions: built.questions ?? null, estMinutes, startedAt: new Date().toISOString(), devices: {}, probes: [], timeline: [], notes: [], says: [] };
 const save = () => fs.writeFileSync(outFile, JSON.stringify(out, null, 2));
 
 const inputs = await evalIn('launcher', () => window.electronAPI.getInputDevices());
@@ -201,10 +220,24 @@ for (const step of steps) {
       const r = await wtaTurn();
       const m = await probe({ prompts: 1 });
       const f = factOf(step.expect);
+      const promptUser = m.prompts?.[0]?.user ?? null;
       const rec = { kind: 'wta', id: step.id, minute: minute(), note: step.note, ...r, result: score(r.answer, step.expect),
-        ...where(m.prompts?.[0]?.user, f.re), promptUser: m.prompts?.[0]?.user ?? null, liveIndex: m.liveIndex };
+        ...where(promptUser, (step.memory ?? f.re)), promptUser, liveIndex: m.liveIndex };
+      if (step.asked) {
+        rec.asked = step.asked;
+        rec.promptQuestion = promptQuestionOf(promptUser);
+        rec.questionOverlap = +questionOverlap(step.asked, rec.promptQuestion).toFixed(2);
+        rec.denied = Boolean(r.answer) && denialRe.test(r.answer);
+        rec.relevant = Boolean(r.answer) && f.re.test(r.answer);
+        if (step.memory) {
+          rec.memoryNeeded = true;
+          rec.memoryRecalled = Boolean(r.answer) && step.memory.test(r.answer) && (!step.also || step.also.test(r.answer));
+        }
+        if (step.code) rec.codeProduced = /```|\bdef |\bfunction\b|=>|\bfor\s*\(|\bfunc\b/.test(r.answer ?? '');
+        if (step.story) rec.storyBeforeTold = true;
+      }
       out.probes.push(rec); save();
-      console.log(`[${rec.minute}] ${step.id} ${rec.result} (${r.ms}ms) q="${r.resolvedQuestion}"`);
+      console.log(`[${rec.minute}] ${step.id} ${rec.relevant === undefined ? rec.result : `rel=${rec.relevant}`}${rec.memoryNeeded ? ` mem=${rec.memoryRecalled}` : ''}${rec.questionOverlap !== undefined ? ` q=${rec.questionOverlap}` : ''} (${r.ms}ms)`);
     } else if (step.kind === 'typed') {
       const r = await typedTurn(step.text);
       const m = await probe({ prompts: 1 });
