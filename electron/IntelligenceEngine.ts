@@ -37,6 +37,7 @@ import { HARD_SYSTEM_PROMPT } from './llm/prompts';
 import type { ActiveModeInfo } from './llm/modeProfiles';
 import type { WhatToAnswerRequestSnapshot } from './llm/whatToAnswerRequestSnapshot';
 import { resolveCanonicalTurn } from './llm/resolveCanonicalTurn';
+import { speechWindowForPrompt } from './llm/conversationHistoryPolicy';
 import { performanceHooks, applyAdaptiveTtft, secondaryStreamObserver, slowWorkloadAdvice } from './llm/performance/wiring';
 import { estimateTokens } from './llm/modelCapabilities';
 import { mintTurnId } from './llm/turnIdentity';
@@ -3683,7 +3684,9 @@ export class IntelligenceEngine extends EventEmitter {
                         // labelled untrusted section. Without this, a live meeting
                         // question under V3 composed a no-evidence disclosure even
                         // though the answer was said out loud a minute ago.
-                        conversationSummary: _ctx.conversationWindow(90),
+                        // 180 s = everything SessionTracker still holds; the
+                        // window's character budget, not its age, is the cap.
+                        conversationSummary: _ctx.conversationWindow(180),
                         retrieval: _ctx.port as any,
                         // Hand the bridge THIS turn's routed verdict rather than
                         // letting it re-derive one from keywords — see
@@ -6696,8 +6699,9 @@ export class IntelligenceEngine extends EventEmitter {
                 // anti-pattern: it enters ONE named, untrusted, size-bounded
                 // section of a composed prompt — it does not substitute for a
                 // source decision, and evidence still comes only from the port.
+                // Speech only, whole lines — see speechWindowForPrompt.
                 conversationWindow: (sec: number) =>
-                    String((this.session as any)?.getFormattedContext?.(sec) ?? '').slice(-2400),
+                    speechWindowForPrompt(String((this.session as any)?.getFormattedContext?.(sec) ?? '')),
             };
         } catch { return null; }
     }

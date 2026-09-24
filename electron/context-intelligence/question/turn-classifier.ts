@@ -1559,7 +1559,18 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
   if (input.inLiveMeeting
       && input.policy.allowedSourceTypes.includes('MEETING_TRANSCRIPT')
       && !claims.has('MEETING_STATEMENT')
-      && ([...claims].some((c) => c.startsWith('USER_')) || types.has('FOLLOW_UP') || SAID_EARLIER_RE.test(q))) {
+      && ([...claims].some((c) => c.startsWith('USER_')) || types.has('FOLLOW_UP') || SAID_EARLIER_RE.test(q)
+        // A LOOKUP is the same case (2026-09-24): in a live meeting the value
+        // a question needs is as likely to have been SAID as written. In
+        // technical-interview "How much storage should we plan for the event
+        // archive at one kilobyte per event?" and "How would you key the Kafka
+        // topic for this?" claimed the document side only, and the
+        // interviewer's "keep every event for forty-five days" / "ordering per
+        // warehouse ID", said 26 minutes earlier, were never retrieved (0/4).
+        // A question that names its document ("what does section 3 of the
+        // design doc say…") is about that document and is left alone.
+        || (claims.has('DOCUMENT_FACT') && !DOCUMENT_RE.test(q) && !DOC_DEIXIS_RE.test(q)
+          && !mentionsAttachedFile(q, input.attachedFileNames)))) {
     types.add('MEETING_FACT'); noteWholeQ('MEETING_STATEMENT');
   }
 
@@ -1946,7 +1957,13 @@ export function classifyTurn(input: ClassificationInput): Classification {
     // consults document pools only and the evidence gate keeps the last word.
     const ambiguousOverDocuments = input.hasAttachedDocuments === true
       && DOCUMENT_FACT_RETRIEVAL_SOURCES.some((src) => input.policy.allowedSourceTypes.includes(src));
-    path = 'GROUNDED'; shouldRetrieve = requiredSourceTypes.length > 0 || followUp || ambiguousOverDocuments;
+    // The same holds for a live meeting (2026-09-24): the meeting is the
+    // material, and "How would you key the Kafka topic for this?" — AMBIGUOUS,
+    // no claim — went out with nothing while the interviewer's "ordering must
+    // hold per warehouse ID" sat in the meeting index.
+    const ambiguousInLiveMeeting = input.inLiveMeeting === true
+      && input.policy.allowedSourceTypes.includes('MEETING_TRANSCRIPT');
+    path = 'GROUNDED'; shouldRetrieve = requiredSourceTypes.length > 0 || followUp || ambiguousOverDocuments || ambiguousInLiveMeeting;
     reason = followUp ? 'follow-up may reference grounded content by pronoun' : 'ambiguous question — retrieve conservatively';
   } else {
     path = 'GROUNDED'; shouldRetrieve = true;

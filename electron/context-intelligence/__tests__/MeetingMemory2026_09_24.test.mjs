@@ -69,8 +69,17 @@ describe('a live meeting plans the transcript for personal and follow-up questio
   test('"told" about a third party is not a pointer back at this conversation', () => {
     // (a personal "what would you do" question reads the transcript by design —
     // this one is a general question with no second-person object)
-    const d = decision('Explain what it usually means when a vendor told customers an API is deprecated.', 'technical-interview', true);
-    assert.ok(!d.retrievalPlan.sourceTypes.includes('MEETING_TRANSCRIPT'), JSON.stringify(d.retrievalPlan.sourceTypes));
+    // Since 2026-09-24 a general question in a live meeting READS the meeting
+    // as context (LiveMeetingGeneralTurnContext) — what must not happen is a
+    // transcript CLAIM, which would grade it against what was said.
+    // It is judged against the same sentence with a neutral verb: other rules
+    // (a live-meeting lookup reads the meeting as an alternative) may apply to
+    // both, but "told" must add nothing of its own.
+    const claimsOf = (q) => decision(q, 'technical-interview', true).claimRequirements.map((c) => c.claimType).sort();
+    assert.deepEqual(
+      claimsOf('Explain what it usually means when a vendor told customers an API is deprecated.'),
+      claimsOf('Explain what it usually means when a vendor informed customers an API is deprecated.'),
+    );
   });
 
   test('a document question with no pointer back stays a document question in a live meeting', () => {
@@ -86,8 +95,11 @@ describe('a live meeting plans the transcript for personal and follow-up questio
   });
 
   test('a coding task in a live meeting is still not a transcript lookup', () => {
+    // It may READ the meeting as context (the problem's constraints are often
+    // spoken minutes earlier) but is never graded as a transcript lookup.
     const d = decision('write a function to reverse a linked list in python', 'technical-interview', true);
-    assert.ok(!d.retrievalPlan.sourceTypes.includes('MEETING_TRANSCRIPT'), JSON.stringify(d.retrievalPlan.sourceTypes));
+    assert.ok(!d.claimRequirements.some((c) => c.claimType === 'MEETING_STATEMENT'), JSON.stringify(d.claimRequirements));
+    assert.equal(d.retrievalPlan.path, 'FAST');
   });
 });
 
