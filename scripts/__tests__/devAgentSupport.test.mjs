@@ -2,7 +2,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  isReservedPort, killPlan, resolveDevPort, RESERVED_PORTS,
+  electronArgs, isReservedPort, killPlan, resolveDevPort, RESERVED_PORTS,
 } from '../devAgentSupport.mjs';
 
 describe('reserved ports', () => {
@@ -68,6 +68,36 @@ describe('resolveDevPort', () => {
     // no explanation of why.
     for (const bad of ['0', '-1', '99999', 'abc', '51.8']) {
       assert.equal(resolveDevPort(bad), 5180, `"${bad}" should fall back`);
+    }
+  });
+});
+
+describe('electronArgs', () => {
+  test('passes --user-data-dir, so credentials are isolated from the real profile', () => {
+    // app.setPath() alone ran after CredentialsManager had captured the real
+    // profile's credentials.enc path: agent instances read, and could
+    // overwrite, the developer's keys.
+    const args = electronArgs('/repo', 51234, '/repo/.agent/userdata');
+    assert.ok(args.includes('--user-data-dir=/repo/.agent/userdata'));
+  });
+
+  test('keeps the app root first and the CDP port', () => {
+    const args = electronArgs('/repo', 51234, '/repo/.agent/userdata');
+    assert.equal(args[0], '/repo');
+    assert.ok(args.includes('--remote-debugging-port=51234'));
+  });
+
+  test('a Windows path with spaces stays ONE argument', () => {
+    const dir = 'C:\\Users\\Some One\\natively\\.agent\\userdata';
+    const args = electronArgs('C:\\Users\\Some One\\natively', 51234, dir);
+    assert.equal(args.filter(a => a.startsWith('--user-data-dir=')).length, 1);
+    assert.ok(args.includes(`--user-data-dir=${dir}`));
+    assert.ok(args.every(a => typeof a === 'string'));
+  });
+
+  test('refuses to launch without a userData dir rather than use the real profile', () => {
+    for (const bad of ['', undefined, null]) {
+      assert.throws(() => electronArgs('/repo', 51234, bad), /own userData dir/);
     }
   });
 });

@@ -17,6 +17,7 @@ import os from "os"
 import { SystemAudioHealthClassifier } from "./audio/systemAudioHealthClassifier.mjs"
 import { FatalMainProcessCoordinator } from "./utils/fatalMainProcess"
 import { installResilientDnsLookup } from "./utils/resilientDnsLookup"
+import { resolveDebugLogPath } from "./utils/debugLogPath.mjs"
 import { MeetingLifecycleQueue, type MeetingLifecycleState } from "./audio/meetingLifecycleQueue"
 import { autoUpdater } from "electron-updater"
 import { summarizeUpdateDownload } from "./update/updateDownloadSummary"
@@ -332,7 +333,13 @@ let _logFile: string | null = null;
 const getLogFile = (): string | null => {
   if (_logFile) return _logFile;
   try {
-    _logFile = path.join(app.getPath('documents'), 'natively_debug.log');
+    // An agent instance (npm run dev:agent) logs into its own userData; see
+    // resolveDebugLogPath. Packaged builds always use Documents.
+    _logFile = resolveDebugLogPath({
+      isPackaged: app.isPackaged,
+      agentUserData: process.env.NATIVELY_AGENT_USER_DATA,
+      documentsDir: () => app.getPath('documents'),
+    });
     return _logFile;
   } catch {
     // app.ready may not have fired yet (including native module boot gates).

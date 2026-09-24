@@ -30,7 +30,7 @@ import { connect } from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import electronPath from 'electron';
-import { isReservedPort, killPlan } from './devAgentSupport.mjs';
+import { electronArgs, isReservedPort, killPlan } from './devAgentSupport.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const AGENT_DIR = path.join(ROOT, '.agent');
@@ -152,7 +152,9 @@ async function main() {
 
   await waitForPort(rendererPort);
 
-  const app = spawn(electronPath, [ROOT, `--remote-debugging-port=${cdpPort}`], {
+  // electronArgs adds --user-data-dir: NATIVELY_AGENT_USER_DATA alone left the
+  // credentials file pointing at the real profile (see devAgentSupport.mjs).
+  const app = spawn(electronPath, electronArgs(ROOT, cdpPort, USER_DATA), {
     cwd: ROOT,
     stdio: 'inherit',
     shell: false,
