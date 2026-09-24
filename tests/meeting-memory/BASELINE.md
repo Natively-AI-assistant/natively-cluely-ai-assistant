@@ -262,3 +262,8 @@ Right question 116/119, on topic 117/119, memory-dependent 20/22. Of the 5 score
 answers and 1 correctly declines to invent a mentoring story. Misses: Q06 (no number) and Q117 ("did I
 say… our team" answered with the candidate's six, fixed after this run). Two opening clauses were clipped
 at full level (Q40 "page 99", Q66).
+
+**"Did I say… our team", after 5de7ba26** (`persp-interview-*`, injected interview, both modes × 2): the
+interviewer's twelve-person team is recalled 4/4 ("You said twelve people on the platform team"). The
+three live mock interviews before the fix answered with the candidate's own team every time. The write-load
+answer uses the interviewer's setup in 4/4 (it denied the setup once in the earlier reference run).
