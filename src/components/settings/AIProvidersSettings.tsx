@@ -1189,6 +1189,9 @@ export const CLOUD_PROVIDERS = [
     // A gateway, not a vendor: its model list is opt-in (isOptInModelProvider),
     // and ONE key here also backs OpenRouter embeddings and reranking.
     { id: 'openrouter' as const, name: 'OpenRouter', placeholder: 'sk-or-v1-...', url: 'https://openrouter.ai/keys' },
+    // A gateway like OpenRouter (opt-in model list), but chat and vision only:
+    // this key does not back embeddings or reranking.
+    { id: 'requesty' as const, name: 'Requesty', placeholder: 'rqsty-...', url: 'https://app.requesty.ai/api-keys' },
 ];
 export type CloudProviderId = (typeof CLOUD_PROVIDERS)[number]['id'];
 
@@ -2324,6 +2327,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     const [deepseekApiKey, setDeepseekApiKey] = useState('');
     const [nvidiaNimApiKey, setNvidiaNimApiKey] = useState('');
     const [openrouterApiKey, setOpenrouterApiKey] = useState('');
+    const [requestyApiKey, setRequestyApiKey] = useState('');
     const [fluxionApiKey, setFluxionApiKey] = useState('');
     /**
      * Which wire protocol the user's Fluxion key speaks, which is a property
@@ -2385,6 +2389,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         deepseek: [deepseekApiKey, setDeepseekApiKey],
         nvidia_nim: [nvidiaNimApiKey, setNvidiaNimApiKey],
         openrouter: [openrouterApiKey, setOpenrouterApiKey],
+        requesty: [requestyApiKey, setRequestyApiKey],
         fluxion: [fluxionApiKey, setFluxionApiKey],
     };
 
@@ -2696,6 +2701,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         deepseek: creds.hasDeepseekKey || false,
                         nvidia_nim: creds.hasNvidiaNimKey || false,
                         openrouter: (creds as any).hasOpenrouterKey || false,
+                        requesty: (creds as any).hasRequestyKey || false,
                         fluxion: (creds as any).hasFluxionKey || false,
                         litellm: creds.hasLitellmBaseURL || false,
                         // Base URL, not key: a stock 9Router runs keyless.
@@ -2723,6 +2729,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     // Already prefixed on disk (`openrouter/<vendor>/<model>`), the same
                     // form the model list renders — see the LiteLLM note below.
                     if ((creds as any).openrouterPreferredModel) pm.openrouter = (creds as any).openrouterPreferredModel;
+                    if ((creds as any).requestyPreferredModel) pm.requesty = (creds as any).requestyPreferredModel;
                     // Already prefixed on disk (`fluxion/<model>`), same rule as above.
                     if ((creds as any).fluxionPreferredModel) pm.fluxion = (creds as any).fluxionPreferredModel;
                     // Only adopt the stored protocol when a key actually exists.
@@ -3643,6 +3650,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             if (provider === 'deepseek') result = await window.electronAPI.setDeepseekApiKey(key);
             if (provider === 'nvidia_nim') result = await window.electronAPI.setNvidiaNimApiKey(key);
             if (provider === 'openrouter') result = await window.electronAPI.setOpenrouterApiKey(key);
+            if (provider === 'requesty') result = await window.electronAPI.setRequestyApiKey(key);
             // No protocol is passed: the main process PROBES the key's group and
             // reports what it found. The group is a property of the key that the
             // key does not reveal, so asking the user was asking them to guess.
@@ -3856,6 +3864,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             if (provider === 'deepseek') result = await window.electronAPI.setDeepseekApiKey('');
             if (provider === 'nvidia_nim') result = await window.electronAPI.setNvidiaNimApiKey('');
             if (provider === 'openrouter') result = await window.electronAPI.setOpenrouterApiKey('');
+            if (provider === 'requesty') result = await window.electronAPI.setRequestyApiKey('');
             if (provider === 'fluxion') result = await window.electronAPI.setFluxionConfig({ apiKey: '' });
 
             if (result && result.success) {

@@ -72,7 +72,10 @@ const KNOWN_OLLAMA_NATIVE_CTX: Array<[RegExp, number]> = [
 // out of this list is silent: every lookup misses, the id falls to the unknown
 // branch, and 30 of the 47 models a stock instance serves — all vision-capable
 // by their own catalogue — come back supportsImages:false.
-const ROUTING_PREFIX_RE = /^(?:litellm|nvidia_nim|openrouter|fluxion|ninerouter)\//i;
+// Requesty takes both shapes: `requesty/openai/gpt-4o-mini` loses the vendor
+// segment like OpenRouter, and a managed policy id (`requesty/gpt-5.4-mini`)
+// has no vendor segment, so only the prefix comes off.
+const ROUTING_PREFIX_RE = /^(?:litellm|nvidia_nim|openrouter|requesty|fluxion|ninerouter)\//i;
 export function stripProviderRoutingPrefix(id: string): string {
   if (!ROUTING_PREFIX_RE.test(id)) return id;
   const withoutProvider = id.replace(ROUTING_PREFIX_RE, '');

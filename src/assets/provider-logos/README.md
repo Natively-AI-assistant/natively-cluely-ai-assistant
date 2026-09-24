@@ -94,6 +94,15 @@ If Fluxion ever publishes a simplified icon-sized mark, prefer it over the
 monogram. No licence statement accompanies any of these assets, so the mark is
 used purely nominatively, as stated at the top of this file.
 
+### Requesty
+
+`requesty.png` is Requesty's own app icon (`https://www.requesty.ai/apple-icon.png`,
+180x180), a blue speech bubble with a white prompt glyph. There is no lobehub
+entry for it. The artwork is full colour and mid-tone blue, so it reads on both
+tiles and is NOT in `WHITE_ON_TRANSPARENT_MARKS`. The `AI_PROVIDER_BRANDS` hex
+`#1677FF` is the icon's dominant colour. Used nominatively, as stated at the top
+of this file.
+
 ### Jina
 
 Added for the hosted Jina reranker in Settings → Reranker, which is the only way

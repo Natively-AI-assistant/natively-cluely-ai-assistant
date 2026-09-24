@@ -3,7 +3,7 @@ export const STANDARD_CLOUD_MODELS: Record<string, {
     ids: string[];
     names: string[];
     descs: string[];
-    pmKey: 'geminiPreferredModel' | 'openaiPreferredModel' | 'claudePreferredModel' | 'groqPreferredModel' | 'deepseekPreferredModel' | 'nvidia_nimPreferredModel' | 'openrouterPreferredModel' | 'fluxionPreferredModel';
+    pmKey: 'geminiPreferredModel' | 'openaiPreferredModel' | 'claudePreferredModel' | 'groqPreferredModel' | 'deepseekPreferredModel' | 'nvidia_nimPreferredModel' | 'openrouterPreferredModel' | 'requestyPreferredModel' | 'fluxionPreferredModel';
 }> = {
     gemini: {
         hasKeyCheck: (creds) => !!creds?.hasGeminiKey,
@@ -99,6 +99,22 @@ export const STANDARD_CLOUD_MODELS: Record<string, {
         names: ['Claude Sonnet 5 (OpenRouter)', 'GPT-5.6 Terra (OpenRouter)', 'Gemini 3.8 Flash (OpenRouter)'],
         descs: ['Balanced • Multimodal', 'Reasoning • Multimodal', 'Fastest • Multimodal'],
         pmKey: 'openrouterPreferredModel'
+    },
+    requesty: {
+        hasKeyCheck: (creds) => !!creds?.hasRequestyKey,
+        // Same role as OpenRouter's presets: something to show before "Refresh"
+        // reads the real catalogue. These are Requesty managed policy ids (GET
+        // /v1/models/managed), each routed across several upstreams, and each
+        // strips to a bare id the capability table knows. Opt-in like
+        // OpenRouter, so they start unticked. Verified live 2026-09-24.
+        ids: [
+            'requesty/claude-sonnet-5',
+            'requesty/gpt-5.6-terra',
+            'requesty/gemini-3.8-flash',
+        ],
+        names: ['Claude Sonnet 5 (Requesty)', 'GPT-5.6 Terra (Requesty)', 'Gemini 3.8 Flash (Requesty)'],
+        descs: ['Balanced • Multimodal', 'Reasoning • Multimodal', 'Fastest • Multimodal'],
+        pmKey: 'requestyPreferredModel'
     },
     fluxion: {
         hasKeyCheck: (creds) => !!creds?.hasFluxionKey,
@@ -233,7 +249,9 @@ export const prettifyModelId = (id: string): string => {
 // accounts. "Empty = all" would put a catalogue nobody chose into the
 // picker. Adding a member here REQUIRES the mirror in modelAvailable()
 // (ipcHandlers.ts); a drift-guard test pins the two together.
-export const isOptInModelProvider = (provider: string): boolean => provider === 'litellm' || provider === 'openrouter' || provider === 'ninerouter';
+// Requesty is opt-in for OpenRouter's reason: its full catalogue runs to
+// hundreds of models.
+export const isOptInModelProvider = (provider: string): boolean => provider === 'litellm' || provider === 'openrouter' || provider === 'requesty' || provider === 'ninerouter';
 
 /**
  * Does `modelId` survive `provider`'s allow-list?
@@ -407,6 +425,6 @@ export const NINEROUTER_THINKING_LEVELS = [
 
 export const gatewayModelLabel = (id: string): string => {
     if (!id) return '';
-    const segments = id.replace(/^(?:litellm|ninerouter|openrouter|nvidia_nim|fluxion)\//, '').split('/').filter(Boolean);
+    const segments = id.replace(/^(?:litellm|ninerouter|openrouter|requesty|nvidia_nim|fluxion)\//, '').split('/').filter(Boolean);
     return segments.length ? segments[segments.length - 1] : id;
 };
