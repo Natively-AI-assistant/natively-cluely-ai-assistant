@@ -113,6 +113,9 @@ export interface AntigravityStreamInput {
 
 export function resolveAntigravityWireModel(model: string): string {
   const normalized = model.toLowerCase().replace(/^models\//, '');
+  // The catalogue carries a `-tiered` twin for each of these families, and its
+  // own tieredModelIds.flash names gemini-3.8-flash-tiered.
+  if (normalized.startsWith('gemini-3.8-flash')) return 'gemini-3.8-flash-tiered';
   if (normalized.startsWith('gemini-3.7-flash')) return 'gemini-3.7-flash-tiered';
   if (normalized.startsWith('gemini-3.6-flash')) return 'gemini-3.6-flash-tiered';
   if (normalized === 'gemini-3.1-pro-high' || normalized === 'gemini-3.1-pro') {
@@ -161,7 +164,25 @@ export function antigravitySetupHeaders(accessToken: string): Record<string, str
   };
 }
 
-const ANTIGRAVITY_USER_AGENT = `antigravity/1.23.2 ${process.platform}/${process.arch}`;
+// Google gates the model catalogue on this version. As `antigravity/1.23.2` an
+// account was served nothing newer than Gemini 3.6 Flash; as the installed IDE's
+// 2.5.5 the same account, endpoint and project also got 3.7 and 3.8 Flash
+// (measured 2026-09-25, only the User-Agent differing). Still a hard-coded
+// constant, so it goes stale: when a model the Antigravity app shows is missing
+// here, raise it to the IDE's product.json `ideVersion`.
+export const ANTIGRAVITY_CLIENT_VERSION = '2.5.5';
+
+/**
+ * The IDE's own format, `antigravity/<ideVersion> <os>/<arch>`, with its Go-style
+ * names: Windows is `windows` (not `win32`), x64 is `amd64`, ia32 is `386`.
+ */
+export function buildAntigravityUserAgent(platform: NodeJS.Platform, arch: string): string {
+  const os = platform === 'win32' ? 'windows' : platform;
+  const cpu = arch === 'x64' ? 'amd64' : arch === 'ia32' ? '386' : arch;
+  return `antigravity/${ANTIGRAVITY_CLIENT_VERSION} ${os}/${cpu}`;
+}
+
+const ANTIGRAVITY_USER_AGENT = buildAntigravityUserAgent(process.platform, process.arch);
 
 export function buildAntigravityRequestPayload(input: {
   projectId: string;
@@ -195,9 +216,12 @@ export function buildAntigravityRequestPayload(input: {
     temperature: 0.45,
   };
   if (wireModel.startsWith('gemini')) {
+    // 3.8 rejects MINIMAL outright (HTTP 400 "Thinking level MINIMAL is not
+    // supported for this model", measured 2026-09-25); LOW answers. 3.7 was
+    // already sent LOW.
     generationConfig.thinkingConfig = wireModel.startsWith('gemini-2.5')
       ? { thinkingBudget: 0 }
-      : { thinkingLevel: wireModel.includes('3.7') ? 'low' : 'minimal' };
+      : { thinkingLevel: wireModel.includes('3.7') || wireModel.includes('3.8') ? 'low' : 'minimal' };
   }
 
   return {
