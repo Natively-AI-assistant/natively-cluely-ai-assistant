@@ -28,9 +28,6 @@ import type { RowPresentation } from '../../lib/permissionRowPolicy.mjs';
 
 const STORAGE_KEY = 'natively_perms_shown_v1';
 
-const SCREEN_SETTINGS_URI =
-  'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture';
-
 // ─── Design tokens ────────────────────────────────────────────
 const T = {
   font:  '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
@@ -194,7 +191,14 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
 
   const openScreenSettings = useCallback(() => {
     if (platform !== 'darwin') return;
-    window.electronAPI?.openExternal?.(SCREEN_SETTINGS_URI);
+    // Declared HERE, beside its darwin gate, not at module scope. The renderer
+    // must never even construct this scheme off macOS, and the cross-platform
+    // guard test reads the 1500 chars around each executable reference looking
+    // for exactly this check - a module-scope constant sits too far from any
+    // gate to be verifiable, which is what made it an offender.
+    const screenSettingsUri =
+      'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture';
+    window.electronAPI?.openExternal?.(screenSettingsUri);
   }, [platform]);
 
   const handleRowAction = useCallback(async (kind: RowKind, remedy: RowPresentation['remedy']) => {
