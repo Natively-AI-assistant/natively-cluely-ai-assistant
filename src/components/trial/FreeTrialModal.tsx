@@ -50,7 +50,7 @@ const PLANS: { key: PlanKey; name: string; price: number; times: number | null; 
  * less, rounded DOWN to the half so it never overstates (Ultra is 4.67× the
  * tokens and 5× the minutes: "4.5×").
  */
-export function timesStandard(plan: NativelyPlanLimits | undefined, standard: NativelyPlanLimits | undefined): number | null {
+function timesStandard(plan: NativelyPlanLimits | undefined, standard: NativelyPlanLimits | undefined): number | null {
   if (!plan || !standard || !standard.ai_tokens || !standard.transcription_minutes) return null;
   const r = Math.min(plan.ai_tokens / standard.ai_tokens, plan.transcription_minutes / standard.transcription_minutes);
   return Math.floor(r * 2) / 2;
