@@ -22,7 +22,7 @@
 
 import type { EvidenceScope } from '../contracts/types';
 import {
-  advance, appendTurn, resolveReference, MAX_SUMMARY_CHARS,
+  advance, appendTurn, resolveReference, MAX_SUMMARY_CHARS, SHARED_SESSION_BUCKET,
   type ConversationState, type ResolvedReference,
 } from './conversation-state';
 
@@ -62,7 +62,7 @@ export function getConversationState(sessionId: string): ConversationState | nul
  * session. It is a shared bucket by construction, so a caller that has its own
  * scope (a webContents id, say) must prefer that instead of collapsing into it.
  */
-export const NO_CONVERSATION_SCOPE = 'engine';
+export const NO_CONVERSATION_SCOPE = SHARED_SESSION_BUCKET;
 
 export function resolveConversationSessionId(
   meetingId: string | null | undefined,
@@ -72,6 +72,29 @@ export function resolveConversationSessionId(
   if (meeting) return `m:${meeting}`;
   const key = fallback === null || fallback === undefined ? '' : String(fallback).trim();
   return key ? `s:${key}` : NO_CONVERSATION_SCOPE;
+}
+
+/**
+ * The conversation key for the engine's surfaces, from what the engine knows
+ * about the current meeting. Pure so the choice is testable.
+ *
+ * `meetingConversationId` is minted at EVERY meeting start and cleared at its
+ * end. It exists because the only other per-meeting marker, the dynamic-action
+ * session id, is minted only when a mode is ACTIVE — and with no active mode
+ * (the default state) every meeting fell back to one constant key: 'engine' on
+ * what-to-answer, the overlay's webContents id on typed chat. Measured live
+ * (2026-09-24): the typed-chat ring grew 6 → 7 → 8 → 9 → 10 across four
+ * separate meetings, and a new meeting's first question carried the previous
+ * meeting's questions and answers in its history.
+ */
+export function meetingConversationKey(parts: {
+  meetingConversationId?: string | null;
+  dynamicSessionId?: string | null;
+  calendarEventId?: string | null;
+  metadataMeetingId?: string | null;
+}): string {
+  const marker = parts.meetingConversationId || parts.dynamicSessionId || parts.calendarEventId || null;
+  return resolveConversationSessionId(parts.metadataMeetingId || marker, marker);
 }
 
 export interface AdvanceTurnInput {
@@ -146,6 +169,8 @@ export function recordAnswerSummary(
      * newest" would move the anchor BACKWARDS onto a stale question.
      */
     anchor?: boolean;
+    /** Who asked — see HistoryTurn.from. Live surfaces pass 'meeting'. */
+    from?: 'meeting';
   },
 ): void {
   const s = store();
@@ -178,7 +203,7 @@ export function recordAnswerSummary(
     // (rather than only overwriting a single slot) is what lets turn N see
     // turn N-2. A turn whose stream was truncated never reaches this call, so
     // it correctly leaves no half-turn behind.
-    turns: appendTurn(cur.turns ?? [], turnQuestion, text, screenContext),
+    turns: appendTurn(cur.turns ?? [], turnQuestion, text, screenContext, opts?.from),
     // An ANCHORED write also moves the follow-up anchor (task 7b, issue #552,
     // live-verified): a voice turn answered and recorded via the live RAG
     // path, but the next TYPED "expand on that" resolved against whichever

@@ -470,13 +470,34 @@ export class IntelligenceEngine extends EventEmitter {
      * to make that class of drift impossible rather than merely fixed once.
      */
     public conversationSessionId(): string {
-        const meetingMarker = this.currentSessionId
-            ?? (this.session.getMeetingMetadata?.()?.calendarEventId)
-            ?? undefined;
-        const meetingId = (this.session as any)?.getMeetingMetadata?.()?.id ?? null;
-        const { resolveConversationSessionId } =
+        const { meetingConversationKey } =
             require('./context-intelligence/question/conversation-state-store');
-        return resolveConversationSessionId(meetingId ?? meetingMarker, meetingMarker);
+        return meetingConversationKey({
+            meetingConversationId: this.meetingConversationId,
+            dynamicSessionId: this.currentSessionId,
+            calendarEventId: this.session.getMeetingMetadata?.()?.calendarEventId ?? null,
+            metadataMeetingId: (this.session as any)?.getMeetingMetadata?.()?.id ?? null,
+        });
+    }
+
+    /** One conversation per meeting, mode or no mode — see meetingConversationKey. */
+    private meetingConversationId: string | null = null;
+
+    public beginMeetingConversation(id: string): void {
+        this.meetingConversationId = id;
+    }
+
+    /**
+     * The meeting is over: its conversation ring goes with it. Keeping it would
+     * hold the meeting's raw questions and answers in memory for no reader, and
+     * (before every meeting had its own key) hand them to the next meeting.
+     */
+    public endMeetingConversation(): void {
+        const key = this.conversationSessionId();
+        this.meetingConversationId = null;
+        try {
+            require('./context-intelligence/question/conversation-state-store').clearConversationState(key);
+        } catch { /* continuity only */ }
     }
     private currentDynamicActionModeId: string | null = null;
     private currentDynamicActionTemplateType: string | null = null;
@@ -1505,6 +1526,10 @@ export class IntelligenceEngine extends EventEmitter {
                 // nothing: an unprompted insight has no question, and a
                 // question-less turn is one appendTurn refuses anyway.
                 question,
+                // Every live turn's question was HEARD, not typed: the overlay's
+                // What-to-answer passes none (resolved from the transcript) and
+                // Auto Answer passes the detected interviewer question.
+                { from: 'meeting' },
             );
         } catch (error: any) {
             // NEVER silent: a lost turn leaves the next follow-up with no
@@ -3597,18 +3622,10 @@ export class IntelligenceEngine extends EventEmitter {
                         // spoken answers kept the new behaviour with no way to
                         // revert.
                         //
-                        // HONEST LIMIT, 2026-08-29: this is currently a NO-OP
-                        // here, and not because of anything on this line. The
-                        // ring is only ever WRITTEN by recordAnswerSummary,
-                        // whose single caller is ipcHandlers.ts (typed chat);
-                        // advanceConversationState never passes answerSummary,
-                        // so `AdvanceTurnInput.answerSummary` is dead and
-                        // `cs.turns` is permanently [] on what-to-answer,
-                        // assist and engine manual-chat. The flag therefore
-                        // skips an already-empty ring. It is passed anyway so
-                        // the rollback is correct the moment a writer exists —
-                        // but do not read this as "multi-turn history works on
-                        // this surface". It does not, yet.
+                        // The ring IS populated here now: recordLiveTurn wraps
+                        // runWhatShouldISay, and the bridge merges every ring
+                        // exchange the speech window does not already carry
+                        // (2026-09-24). So this flag really does roll it back.
                         multiTurnHistory: isIntelligenceFlagEnabled('chatHistoryMultiTurn'),
                         question: String(wtaTurnQuestion || ''),
                         modeTemplateType: _ctx.raw,
