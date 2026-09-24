@@ -46,8 +46,7 @@ test('tiers read as a multiple of Standard, from the catalog when it has arrived
 });
 
 test('timesStandard: the smaller ratio, rounded down to the half', () => {
-  const fn = source.slice(source.indexOf('export function timesStandard'), source.indexOf('function planGist'))
-    .replace('export function', 'function')
+  const fn = source.slice(source.indexOf('function timesStandard'), source.indexOf('function planGist'))
     .replace(/: NativelyPlanLimits \| undefined/g, '')
     .replace(/\): number \| null \{/, ') {');
   const timesStandard = new Function(`${fn}; return timesStandard;`)();
