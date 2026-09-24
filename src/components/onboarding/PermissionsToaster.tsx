@@ -18,7 +18,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, type MotionStyle } from 'framer-motion';
-import { X, Monitor, Mic, Settings, Check, Lock, Loader2, Sparkles } from 'lucide-react';
+import { X, Monitor, Mic, Check, Lock, Loader2 } from 'lucide-react';
 import nativelyIcon from '../../../assets/icon.png';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { LiquidGlassButton } from '../../ui-components/LiquidGlassButton';
@@ -389,17 +389,7 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
                       transition={{ ...SPRING.smooth, delay: 0.2 }}
                       style={{ marginTop: 'auto' }}
                     >
-                      <PrimaryButton
-                        isLight={isLight}
-                        disabled={checking}
-                        // On Windows the row itself carries the only real
-                        // action, so this is an acknowledgement — and it now
-                        // says so instead of claiming to open Settings while
-                        // actually dismissing the card.
-                        icon={isMac ? Settings : undefined}
-                        label={isMac ? 'Open Settings' : 'Got it'}
-                        onClick={isMac ? openScreenSettings : handleDismiss}
-                      />
+                      <QuietButton isLight={isLight} label="I'll do this later" onClick={handleDismiss} />
                     </motion.div>
                   </>
                 )}
@@ -496,6 +486,35 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
 //    primary action colour rather than importing the reference green.
 //
 // Hover, press and the lens all live in the material; no framer wrapper.
+// The unresolved card's footer is the way OUT, not a third way to fix
+// something. It used to be a full-width primary labelled "Open Settings" that
+// called the very same openScreenSettings as the Screen Recording row's own
+// button — two identical CTAs plus Microphone's "Grant" made three, and on
+// Windows the same control silently meant "dismiss" instead. The remedies
+// belong to the rows, which know which one they need; this only leaves.
+function QuietButton({ isLight, label, onClick }: {
+  isLight: boolean; label: string; onClick: () => void;
+}) {
+  const t2 = isLight ? 'rgba(28, 28, 30, 0.66)' : 'rgba(255, 255, 255, 0.62)';
+  const rule = isLight ? 'rgba(0, 0, 0, 0.1)' : 'rgba(255, 255, 255, 0.13)';
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        width: '100%', height: '44px', borderRadius: '22px',
+        background: 'transparent', border: `1px solid ${rule}`,
+        color: t2, fontSize: '13.5px', fontWeight: 550, letterSpacing: '-0.01em',
+        cursor: 'pointer', transition: 'border-color 200ms, color 200ms',
+      }}
+      onMouseEnter={e => { e.currentTarget.style.borderColor = isLight ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.26)'; }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = rule; }}
+    >
+      {label}
+    </button>
+  );
+}
+
 function PrimaryButton({
   label, icon: Icon, onClick, disabled, variant = 'blue',
 }: {
@@ -532,19 +551,17 @@ function PrimaryButton({
 // `allPermissionsResolved` used to be computed and then thrown away, so the
 // card kept demanding "Open Settings" from a user who had already granted
 // everything. This is what it renders now.
-// The completion state is not a second permissions list. Re-stating the two
-// things the user just granted is what made this column read as filler — the
-// heading already says they are granted, and the panel beside it says READY TO
-// GO a third time. So it answers the question the user actually has at this
-// point: what can it do now?
+// The completion state is not a second permissions list. Restating "Screen
+// Recording / Access granted" answered a question nobody still had — the
+// heading says they are granted and the panel beside it says READY TO GO.
 //
-// Three capabilities, one line each, in the order they happen: see, hear,
-// answer. Neutral icons, because green here is the colour of "granted" and
-// these are not statuses.
+// What it says instead is what the two permissions actually bought, in plain
+// terms: one line each, verb first, no capability the app does not literally
+// have. A third line here ("answer questions about what was said") was cut for
+// describing a feature in brochure language rather than stating a fact.
 const CAPABILITIES = [
-  { icon: Monitor,  label: 'Capture what\'s on your screen' },
-  { icon: Mic,      label: 'Transcribe speech as it happens' },
-  { icon: Sparkles, label: 'Answer questions about what was said' },
+  { icon: Monitor, label: "Sees what's on your screen" },
+  { icon: Mic,     label: "Hears what's said in the call" },
 ];
 
 function AllSetPanel({ isLight, reduced, onContinue }: {
@@ -571,7 +588,7 @@ function AllSetPanel({ isLight, reduced, onContinue }: {
         You're all set
       </h2>
       <p id="perm-toast-desc" style={{ fontSize: '13px', lineHeight: 1.65, color: t3, margin: '0 0 26px' }}>
-        Here's what Natively can do now.
+        Natively has everything it needs.
       </p>
 
       {/* The three lines take the column's slack and space themselves through
