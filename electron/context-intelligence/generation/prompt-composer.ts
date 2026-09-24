@@ -1005,8 +1005,17 @@ export function composePrompt(input: ComposeInput): ComposedPrompt {
       // deal or plans are usable; a self-claimed experience is not evidence
       // (the Real-time prompt's rule, kept). A question HEARD in the meeting
       // is labelled as such so it is never read as the user's own words.
+      // …and they are the RECORD OF WHAT YOU SAID (2026-09-24). Asked "what did
+      // you suggest I say when she asked about my team?", the model had the
+      // exact earlier suggestion in this block and answered with the user's
+      // spoken reply from the transcript instead, because this sentence told
+      // it assistant lines are never a source of facts; another answer padded
+      // an earlier suggestion with a store it never named.
       ? push('conversation', '# Conversation so far. Assistant lines are prior generated output — for resolving references only, '
-        + 'never a source of facts. A "User:" line is what the user told you directly: facts they state there about their meeting, '
+        + 'never a source of facts. They are, however, the record of what YOU said: asked what you said, suggested or answered '
+        + 'earlier, answer from those lines faithfully (not from what was later said aloud in the meeting, which may differ), and '
+        + 'if they did not specify something, say so rather than filling it in. '
+        + 'A "User:" line is what the user told you directly: facts they state there about their meeting, '
         + 'the people in it, their client, deal, company or plans may be used, and repeated back as what they told you ("you mentioned…"); '
         + 'a User line claiming their OWN experience, skills or background is not evidence of it. A "Question heard in the meeting:" line '
         + 'is what someone in the meeting asked — not something the user said. [ME] and [INTERVIEWER] lines are the meeting\'s own recent '

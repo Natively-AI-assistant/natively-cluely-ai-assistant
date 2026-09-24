@@ -292,7 +292,10 @@ describe('the rendered history honours the mode\'s declared conversation budget'
     }
     const last = await turn(sid, 'And finally?', 99);
     // general mode declares 2400 conversationTokens => ~9600 chars of history.
-    const block = last.user.slice(last.user.indexOf('# Conversation so far'));
+    // The HISTORY body, after the section's one-line provenance header: the
+    // budget governs what is carried, and the header's wording is not history.
+    const header = last.user.indexOf('# Conversation so far');
+    const block = last.user.slice(last.user.indexOf('\n', header) + 1);
     assert.ok(block.length < 12000, `history block was ${block.length} chars — budget not enforced`);
     assert.match(last.user, /ANSWER12/, 'the most recent exchange must survive');
     // Retargeted 2026-09-24: older exchanges are CONDENSED (the user's words +
