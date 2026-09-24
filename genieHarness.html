@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <!-- The launcher's own CSP (index.html), so the genie meets the same rules here as in the app:
+       without it a blob: picture worked in this page and failed in the app. -->
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com; img-src 'self' data: https:; connect-src 'self' https://generativelanguage.googleapis.com https://api.groq.com https://*.google-analytics.com https://analytics.google.com https://www.googletagmanager.com https://campaign-sand.vercel.app; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com;" />
+  <title>Genie Popup Harness (dev-only, not shipped)</title>
+</head>
+
+<body style="margin:0;background:#0b0b0c;">
+  <div id="harness-root"></div>
+  <script type="module" src="/src/dev/genieHarness.tsx"></script>
+</body>
+
+</html>

@@ -126,7 +126,8 @@ describe('Review modal — obsidian editorial composition', () => {
     });
 
     test('the confirmation self-dismisses at 5s with no Done button', () => {
-        assert.match(MODAL, /window\.setTimeout\(\(\) => onClose\(\), 5000\)/);
+        // Through closeModal, so the genie plays before the host hears onClose.
+        assert.match(MODAL, /window\.setTimeout\(\(\) => closeModal\(\), 5000\)/);
         assert.match(MODAL, /review-thanks-countdown/);
         assert.doesNotMatch(MODAL, />\s*Done\s*</);
     });

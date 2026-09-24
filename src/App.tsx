@@ -49,6 +49,8 @@ import {
 import { analytics } from "./lib/analytics/analytics.service"
 import { ErrorBoundary } from "./components/ErrorBoundary"
 import ModesSettings from "./components/settings/ModesSettings"
+import { GenieModal } from "./components/ui/GenieModal"
+import { GENIE_CLOSE_MS } from "./components/onboarding/useGenieCard"
 import { ProfileIntelligenceSettings } from "./components/ProfileIntelligenceSettings"
 import { useResolvedTheme } from "./hooks/useResolvedTheme"
 
@@ -86,6 +88,10 @@ type ManagerPanel = 'modes' | 'profile' | null
 type ManagerPanelDirection = 'forward' | 'backward'
 
 const MANAGER_EASE = [0.22, 0.61, 0.36, 1] as const
+// The manager card's drop shadow (.manager-panel-shell in index.css), carried
+// by GenieModal's stand-in while the card is mid-genie.
+const MANAGER_SHADOW_DARK = '0 24px 64px -24px rgba(0,0,0,0.72), 0 8px 24px -16px rgba(0,0,0,0.5)'
+const MANAGER_SHADOW_LIGHT = '0 24px 64px -24px rgba(0,0,0,0.18), 0 8px 24px -16px rgba(0,0,0,0.1)'
 const MANAGER_SHELL_EASE = [0.16, 1, 0.3, 1] as const
 const MANAGER_OPEN_EASE = [0.16, 1, 0.3, 1] as const
 const MANAGER_CLOSE_EASE = [0.3, 0.9, 0.2, 1] as const
@@ -238,6 +244,8 @@ const App: React.FC = () => {
      2026-09-15 before this fix. */
   const [settingsNav, setSettingsNav] = useState<{ tab: string; seq: number }>({ tab: 'general', seq: 0 });
   const [activeManagerPanel, setActiveManagerPanel] = useState<ManagerPanel>(null);
+  const lastManagerPanelRef = useRef<Exclude<ManagerPanel, null>>('modes');
+  if (activeManagerPanel) lastManagerPanelRef.current = activeManagerPanel;
   const [managerPanelDirection, setManagerPanelDirection] = useState<ManagerPanelDirection>('forward');
   const managerDialogRef = useRef<HTMLDivElement>(null);
   const managerOpenerRef = useRef<HTMLElement | null>(null);
@@ -284,34 +292,31 @@ const App: React.FC = () => {
     return () => cancelAnimationFrame(frame);
   }, [activeManagerPanel]);
 
-  useEffect(() => {
-    if (!activeManagerPanel) return;
-    const dialog = managerDialogRef.current;
-    if (!dialog) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Tab') return;
-      const focusable = getFocusableElements(dialog);
-      if (focusable.length === 0) {
-        event.preventDefault();
-        dialog.focus();
-        return;
-      }
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (document.activeElement === dialog) {
-        event.preventDefault();
-        (event.shiftKey ? last : first).focus();
-      } else if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    dialog.addEventListener('keydown', onKeyDown);
-    return () => dialog.removeEventListener('keydown', onKeyDown);
-  }, [activeManagerPanel]);
+  // Tab stays inside the manager. A handler on the card rather than an effect
+  // keyed on the panel: the card now mounts a render after the panel is set
+  // (it pours out through GenieModal), so an effect would find no dialog yet.
+  const handleManagerKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Tab') return;
+    const dialog = event.currentTarget;
+    const focusable = getFocusableElements(dialog);
+    if (focusable.length === 0) {
+      event.preventDefault();
+      dialog.focus();
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (document.activeElement === dialog) {
+      event.preventDefault();
+      (event.shiftKey ? last : first).focus();
+    } else if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }, []);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [isPremiumActive, setIsPremiumActive] = useState(false);
   const [hasLoadedLicense, setHasLoadedLicense] = useState(false);
@@ -364,29 +369,6 @@ const App: React.FC = () => {
   const [showTrialExpiredModal, setShowTrialExpiredModal] = useState(false);
 
   const isManagerOpen = activeManagerPanel !== null;
-  const managerBackdropVariants = {
-    initial: { opacity: 0 },
-    animate: reduceManagerMotion
-      ? { opacity: 1, transition: { duration: 0 } }
-      : { opacity: 1, transition: { duration: 0.34, ease: MANAGER_EASE } },
-    exit: reduceManagerMotion
-      ? { opacity: 0, transition: { duration: 0 } }
-      : { opacity: 0, transition: { duration: 0.18, ease: MANAGER_EASE } },
-  };
-  const managerCardTransition = reduceManagerMotion
-    ? { duration: 0 }
-    : { type: 'spring' as const, stiffness: 260, damping: 28, mass: 1 };
-  const managerCardVariants = {
-    initial: reduceManagerMotion
-      ? { opacity: 0 }
-      : { opacity: 0, scale: 0.92, y: 28 },
-    animate: reduceManagerMotion
-      ? { opacity: 1, transition: { duration: 0 } }
-      : { opacity: 1, scale: 1, y: 0, transition: managerCardTransition },
-    exit: reduceManagerMotion
-      ? { opacity: 0, transition: { duration: 0 } }
-      : { opacity: 0, scale: 0.96, y: 12, transition: { duration: 0.16, ease: MANAGER_EASE } },
-  };
   const managerContentVariants = {
     initial: reduceManagerMotion ? { opacity: 0 } : { opacity: 0, x: 10 },
     animate: reduceManagerMotion
@@ -489,14 +471,24 @@ const App: React.FC = () => {
   }, [isPremiumActive, hasProfile, hasNativelyApi, activeTrial]);
 
   // Pause the orchestrator while a foreground settings surface is open so
-  // toasters never appear over the user's settings interaction.
+  // toasters never appear over the user's settings interaction. On the way
+  // out, resume only once the card has poured back into the slot: a toaster
+  // pouring out of it at the same moment reads as a tangle.
+  const surfaceWasOpenRef = useRef(false);
   useEffect(() => {
     if (!isLauncherWindow && !isDefault) return;
     if (isSettingsOpen || isManagerOpen) {
+      surfaceWasOpenRef.current = true;
       emitOrchestratorEvent({ type: 'launcher:unmounted' });
-    } else {
-      emitOrchestratorEvent({ type: 'launcher:mounted' });
+      return;
     }
+    if (!surfaceWasOpenRef.current) {
+      emitOrchestratorEvent({ type: 'launcher:mounted' });
+      return;
+    }
+    surfaceWasOpenRef.current = false;
+    const t = setTimeout(() => emitOrchestratorEvent({ type: 'launcher:mounted' }), GENIE_CLOSE_MS);
+    return () => clearTimeout(t);
   }, [isSettingsOpen, isManagerOpen, isLauncherWindow, isDefault]);
 
   // Settings keeps priority; the shared manager owns a single Escape path for
@@ -1152,66 +1144,70 @@ const App: React.FC = () => {
                   initialTabSeq={settingsNav.seq}
                   initialIsPremium={hasLoadedLicense ? isPremiumActive : null}
                   initialHasNativelyKey={hasNativelyApi}
+                  closeInstantly={isManagerOpen}
                 />
-                <AnimatePresence>
+                {/* Modes and Profile Intelligence share one card, which pours out
+                    of and back into the bottom of the window like every other
+                    popup (GenieModal). The genie is keyed on the manager being
+                    open, not on which panel it shows, so switching panels keeps
+                    its crossfade. Handing over to Settings skips the close: only
+                    the incoming card pours. */}
+                <GenieModal
+                  open={activeManagerPanel !== null}
+                  label="ManagerPanel"
+                  // One picture set per panel. On close the panel is already
+                  // null, so the last one shown names it.
+                  snapshotKey={`manager:${activeManagerPanel ?? lastManagerPanelRef.current}`}
+                  // Profile Intelligence always opens on Identity; Modes opens
+                  // on whichever mode it restores, which the genie remembers.
+                  openingView={(activeManagerPanel ?? lastManagerPanelRef.current) === 'profile' ? 'identity' : undefined}
+                  closeInstantly={isSettingsOpen}
+                  onBackdropClick={closeManagerPanel}
+                  onOpened={() => managerDialogRef.current?.focus()}
+                  backdropClassName={isLight ? 'bg-black/[0.06]' : 'bg-black/60'}
+                  wrapClassName="w-[820px] h-[600px] max-w-[95vw] max-h-[90vh]"
+                  cardRef={managerDialogRef}
+                  cardClassName={`manager-panel-shell rounded-2xl border border-border-muted bg-bg-elevated ${isLight ? 'shadow-[0_0_0_1px_rgba(0,0,0,0.06),0_24px_48px_-12px_rgba(0,0,0,0.16),0_8px_16px_-6px_rgba(0,0,0,0.06)]' : 'shadow-2xl'}`}
+                  cardProps={{
+                    'data-testid': 'manager-panel-host',
+                    role: 'dialog',
+                    'aria-modal': true,
+                    'aria-label': activeManagerPanel === 'modes' ? 'Modes Manager' : 'Profile Intelligence',
+                    tabIndex: -1,
+                    onKeyDown: handleManagerKeyDown,
+                  }}
+                  shadow={isLight ? MANAGER_SHADOW_LIGHT : MANAGER_SHADOW_DARK}
+                  radius={16}
+                >
                   {activeManagerPanel && (
+                    <AnimatePresence mode="wait" initial={false}>
                     <motion.div
-                      key="manager-panel"
-                      variants={managerBackdropVariants}
+                      key={activeManagerPanel}
+                      data-testid={`manager-panel-${activeManagerPanel}`}
+                      variants={managerContentVariants}
                       initial="initial"
                       animate="animate"
                       exit="exit"
-                      className={`fixed inset-0 z-[300] flex items-center justify-center ${isLight ? 'bg-black/[0.06]' : 'bg-black/60'}`}
-                      onClick={(event) => {
-                        if (event.target !== event.currentTarget) return;
-                        closeManagerPanel();
-                      }}
+                      className="h-full w-full"
                     >
-                      <motion.div
-                        ref={managerDialogRef}
-                        data-testid="manager-panel-host"
-                        role="dialog"
-                        aria-modal="true"
-                        aria-label={activeManagerPanel === 'modes' ? 'Modes Manager' : 'Profile Intelligence'}
-                        tabIndex={-1}
-                        variants={managerCardVariants}
-                        onClick={(event) => event.stopPropagation()}
-                        style={{
-                          willChange: 'transform, opacity',
-                          transformOrigin: 'center',
-                        }}
-                        className={`manager-panel-shell w-[820px] h-[600px] max-w-[95vw] max-h-[90vh] rounded-2xl overflow-hidden border border-border-muted bg-bg-elevated ${isLight ? 'shadow-[0_0_0_1px_rgba(0,0,0,0.06),0_24px_48px_-12px_rgba(0,0,0,0.16),0_8px_16px_-6px_rgba(0,0,0,0.06)]' : 'shadow-2xl'}`}
-                      >
-                        <AnimatePresence mode="wait" initial={false}>
-                        <motion.div
-                          key={activeManagerPanel}
-                          data-testid={`manager-panel-${activeManagerPanel}`}
-                          variants={managerContentVariants}
-                          initial="initial"
-                          animate="animate"
-                          exit="exit"
-                          className="h-full w-full"
-                        >
-                          {activeManagerPanel === 'modes' ? (
-                            <ModesSettings
-                              onClose={closeManagerPanel}
-                              isPremium={isPremiumActive}
-                              isLoaded={hasLoadedLicense}
-                              isTrialActive={!!activeTrial}
-                              onOpenNativelyAPI={() => openSettingsExclusive('plans')}
-                            />
-                          ) : (
-                            <ProfileIntelligenceSettings
-                              onClose={closeManagerPanel}
-                              onOpenNativelyAPI={() => openSettingsExclusive('plans')}
-                            />
-                          )}
-                        </motion.div>
-                        </AnimatePresence>
-                      </motion.div>
+                      {activeManagerPanel === 'modes' ? (
+                        <ModesSettings
+                          onClose={closeManagerPanel}
+                          isPremium={isPremiumActive}
+                          isLoaded={hasLoadedLicense}
+                          isTrialActive={!!activeTrial}
+                          onOpenNativelyAPI={() => openSettingsExclusive('plans')}
+                        />
+                      ) : (
+                        <ProfileIntelligenceSettings
+                          onClose={closeManagerPanel}
+                          onOpenNativelyAPI={() => openSettingsExclusive('plans')}
+                        />
+                      )}
                     </motion.div>
+                    </AnimatePresence>
                   )}
-                </AnimatePresence>
+                </GenieModal>
                 <ToastViewport />
               </ToastProvider>
             </QueryClientProvider>
@@ -1401,10 +1397,12 @@ const App: React.FC = () => {
             // If user activated during post-trial modal, close it — they have a plan now
             setShowTrialExpiredModal(false);
             setActiveTrial(null);
-            // After activation, open settings to Profile Intelligence
+            // After activation, open settings to Profile Intelligence, once
+            // the upgrade card has poured back into the slot: two genies
+            // through it at once read as a tangle.
             setTimeout(() => {
               openProfileExclusive();
-            }, 300);
+            }, GENIE_CLOSE_MS);
           }}
           onDeactivated={() => { setIsPremiumActive(false); setPlanDetails({ isPremium: false }); }}
         />}

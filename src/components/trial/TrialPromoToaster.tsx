@@ -8,7 +8,8 @@
 // Violet/purple accent — consistent with the trial brand throughout the app.
 
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
+import { GenieModal } from '../ui/GenieModal';
 import { X, ArrowRight, MessageSquareCode, AudioLines, Compass } from 'lucide-react';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { TRIAL_FALLBACK_LIMITS, formatCompact } from '../../types/nativelyUsage';
@@ -37,7 +38,7 @@ interface Props {
   hasTrialToken:  boolean;
   onDismiss:      () => void;
   onStartTrial:   () => Promise<void>;
-  onManualSetup:  () => void;   // dismiss + open settings
+  onManualSetup:  () => void;   // open settings; the toaster reports its own dismiss
 }
 
 export const TrialPromoToaster: React.FC<Props> = ({
@@ -72,63 +73,53 @@ export const TrialPromoToaster: React.FC<Props> = ({
     setVisible(true);
   }, [isOpen]);
 
-  const handleDismiss = () => {
+  // The orchestrator unmounts this the moment it hears "dismissed", so every
+  // way out closes the card first (the genie) and reports from onClosed.
+  const afterCloseRef = React.useRef<(() => void) | null>(null);
+  const closeThen = (after: () => void) => {
+    if (afterCloseRef.current) return;
+    afterCloseRef.current = after;
     setVisible(false);
-    onDismiss();
   };
+
+  const handleDismiss = () => closeThen(onDismiss);
 
   const handleStartTrial = async () => {
     setStarting(true);
     setError(null);
     try {
       await onStartTrial();
-      setVisible(false);
+      closeThen(onDismiss);
     } catch (e: any) {
       setError(e.message || 'Could not start trial. Check your connection.');
       setStarting(false);
     }
   };
 
-  const handleManual = () => {
-    setVisible(false);
-    onManualSetup();
-  };
+  // Settings opens once this card has gone, so the two never pour at once.
+  const handleManual = () => closeThen(() => { onManualSetup(); onDismiss(); });
 
-  if (!visible) return null;
+  const trialShadow = isLight
+    ? '0 32px 64px -16px rgba(0, 0, 0, 0.12), 0 8px 32px -8px rgba(0, 0, 0, 0.04)'
+    : '0 48px 120px -20px rgba(0,0,0,0.9), 0 0 80px rgba(139,92,246,0.03)';
 
   return (
-    <AnimatePresence>
-      {/* Backdrop */}
-      <motion.div
-        key="trial-backdrop"
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        transition={{ duration: 0.24 }}
-        style={{
-          position: 'fixed', inset: 0, zIndex: 9998,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: isLight 
-            ? 'radial-gradient(ellipse 80% 70% at 50% 50%, rgba(139,92,246,0.04) 0%, rgba(0,0,0,0.3) 100%)'
-            : 'radial-gradient(ellipse 80% 70% at 50% 50%, rgba(139,92,246,0.08) 0%, rgba(0,0,0,0.84) 100%)',
-        } as React.CSSProperties}
-        onClick={e => { if (e.target === e.currentTarget) handleDismiss(); }}
-      >
-        {/* Core Outer Wrapper — Borderless Bento Grid container */}
-        <motion.div
-          key="trial-card"
-          initial={reduced ? { opacity: 0 } : { opacity: 0, scale: 0.93, y: 22, filter: 'blur(10px)' }}
-          animate={reduced ? { opacity: 1 } : { opacity: 1, scale: 1,    y: 0,  filter: 'blur(0px)' }}
-          exit={   reduced ? { opacity: 0 } : { opacity: 0, scale: 0.95, y: 14, filter: 'blur(4px)' }}
-          transition={{ type: 'spring', stiffness: 290, damping: 25, mass: 0.82 }}
-          style={{ 
-            padding: '0px', 
-            borderRadius: '28px', 
-            background: 'none',
-            border: 'none',
-            boxShadow: isLight
-              ? '0 32px 64px -16px rgba(0, 0, 0, 0.12), 0 8px 32px -8px rgba(0, 0, 0, 0.04)'
-              : '0 48px 120px -20px rgba(0,0,0,0.9), 0 0 80px rgba(139,92,246,0.03)'
-          }}
-        >
+    <GenieModal
+      open={visible}
+      label="TrialPromoToaster"
+      zIndex={9998}
+      onBackdropClick={handleDismiss}
+      onClosed={() => { const after = afterCloseRef.current; afterCloseRef.current = null; after?.(); }}
+      backdropStyle={{
+        background: isLight
+          ? 'radial-gradient(ellipse 80% 70% at 50% 50%, rgba(139,92,246,0.04) 0%, rgba(0,0,0,0.3) 100%)'
+          : 'radial-gradient(ellipse 80% 70% at 50% 50%, rgba(139,92,246,0.08) 0%, rgba(0,0,0,0.84) 100%)',
+      }}
+      wrapStyle={{ width: '468px', maxWidth: '100%' }}
+      cardStyle={{ background: 'none', border: 'none', boxShadow: trialShadow }}
+      shadow={trialShadow}
+      radius={22}
+    >
           {/* Inner Core Enclosure */}
           <div style={{
             position: 'relative', width: '468px', borderRadius: '22px', overflow: 'hidden',
@@ -173,7 +164,9 @@ export const TrialPromoToaster: React.FC<Props> = ({
                 </button>
               </div>
 
-              <motion.div variants={STAGGER} initial="hidden" animate="show" style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
+              {/* The genie pours the card out whole; the stagger only runs
+                  under reduced motion, where there is no genie. */}
+              <motion.div variants={STAGGER} initial={reduced ? 'hidden' : false} animate="show" style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
 
                 {/* Hero — large "10" number */}
                 <motion.div variants={ITEM} style={{ textAlign: 'center' }}>
@@ -294,9 +287,7 @@ export const TrialPromoToaster: React.FC<Props> = ({
               </motion.div>
             </div>
           </div>
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
+    </GenieModal>
   );
 };
 

@@ -1968,6 +1968,9 @@ export function ProfileIntelligenceSettings({
         extractionMode?: 'llm' | 'heuristic' | 'none';
     }>({ hasProfile: false, profileMode: false });
     const [profileUploading, setProfileUploading] = useState(false);
+    // The genie keeps a picture of this card to pour out on the next open
+    // (genieSnapshots.ts); it must never picture it half-loaded.
+    const [statusLoaded, setStatusLoaded] = useState(false);
     const [profileUploadStatus, setProfileUploadStatus] = useState<string | undefined>(undefined);
     const [profileError, setProfileError] = useState('');
     // Nothing sets `cancelled` any more — the X button used to, but that only
@@ -2109,7 +2112,7 @@ export function ProfileIntelligenceSettings({
             if (status?.resume_indexing_in_flight || status?.jd_indexing_in_flight) {
                 setAdoptTick(t => t + 1);
             }
-        }).catch(() => {});
+        }).catch(() => {}).finally(() => setStatusLoaded(true));
         window.electronAPI?.profileGetProfile?.().then((data: any) => {
             setProfileData(data);
             if (data?.coverLetter) setCoverLetter(data.coverLetter);
@@ -3739,7 +3742,8 @@ export function ProfileIntelligenceSettings({
 
     // ── Non-pro users see the gate (wait for license verification) ────────────
     if (!hasProfileAccess) {
-        if (!licenseLoaded) return null;
+        // Busy, not empty: an empty card would read as settled to the genie.
+        if (!licenseLoaded) return <div aria-busy="true" style={{ height: '100%' }} />;
         return (
             <ProfileIntelligenceProGate
                 onOpenNativelyAPI={onOpenNativelyAPI}
@@ -3752,6 +3756,7 @@ export function ProfileIntelligenceSettings({
         <div
             className="pi-root"
             data-theme={theme}
+            aria-busy={!statusLoaded || profileUploading || jdUploading}
             style={{
                 display: 'flex', height: '100%', background: 'var(--pi-bg)',
                 borderRadius: 16, overflow: 'hidden',
@@ -3843,7 +3848,7 @@ export function ProfileIntelligenceSettings({
                 {/* Scrollable content — key remounts the block on each switch, which
                     is what re-fires the directional blur-in below it. */}
                 <div ref={panelScrollRef} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '24px 32px', boxSizing: 'border-box' }}>
-                    <div key={activeSection} className="pi-panel-fade" data-dir={navDir}>
+                    <div key={activeSection} className="pi-panel-fade" data-dir={navDir} data-genie-view={activeSection}>
                         {(SECTION_RENDERERS[activeSection] ?? renderIdentity)()}
                     </div>
                 </div>

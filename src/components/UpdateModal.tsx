@@ -1,5 +1,6 @@
 import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
+import { GenieModal } from './ui/GenieModal';
 import { isMac } from '../utils/platformUtils';
 import { useT } from '../i18n';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
@@ -137,31 +138,19 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
     };
 
     return (
-        <AnimatePresence>
-            {isOpen && (
-                <div className="fixed inset-0 z-[9999] flex items-center justify-center font-sans antialiased">
-                    {/* Backdrop */}
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 0.3 }}
-                        className={`absolute inset-0 ${isLight ? 'bg-black/[0.06]' : 'bg-black/40'}`}
-                        onClick={onDismiss}
-                    />
-
-                    {/* Modal - Apple Style: Premium, Deep Shadow, Subtle Border */}
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.96, y: 8 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.96, y: 8 }}
-                        transition={{
-                            type: "spring",
-                            stiffness: 350,
-                            damping: 30
-                        }}
-                        className="relative w-[510px] h-[380px] bg-[#1E1E1E]/90 backdrop-blur-2xl rounded-xl shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] border border-white/[0.08] overflow-hidden flex flex-col"
-                    >
+        // Pours out of, and back into, the bottom of the window like every
+        // other popup (GenieModal).
+        <GenieModal
+            open={isOpen}
+            label="UpdateModal"
+            zIndex={9999}
+            onBackdropClick={onDismiss}
+            backdropClassName={`font-sans antialiased ${isLight ? 'bg-black/[0.06]' : 'bg-black/40'}`}
+            wrapClassName="w-[510px] h-[380px] max-w-full"
+            cardClassName="bg-[#1E1E1E]/90 backdrop-blur-2xl rounded-xl shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] border border-white/[0.08] flex flex-col"
+            shadow="0 50px 100px -20px rgba(0,0,0,0.5)"
+            radius={12}
+        >
                         {/* Content Container */}
                         {status === 'error' ? (
                             <div className="p-8 flex flex-col items-center justify-center h-full text-center">
@@ -386,10 +375,7 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
                                 </div>
                             </div>
                         )}
-                    </motion.div>
-                </div>
-            )}
-        </AnimatePresence>
+        </GenieModal>
     );
 };
 
