@@ -39,9 +39,7 @@ import { trackAppOpen } from "./lib/toasterGating"
 import {
   JDAwarenessToaster,
   ProfileFeatureToaster,
-  PremiumPromoToaster,
   RemoteCampaignToaster,
-  PremiumUpgradeModal,
   NativelyApiPromoToaster,
   MaxUltraUpgradeToaster,
   useAdCampaigns
@@ -317,7 +315,6 @@ const App: React.FC = () => {
       first.focus();
     }
   }, []);
-  const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [isPremiumActive, setIsPremiumActive] = useState(false);
   const [hasLoadedLicense, setHasLoadedLicense] = useState(false);
   const [planDetails, setPlanDetails] = useState<{ isPremium: boolean; plan?: string; provider?: string }>({ isPremium: false });
@@ -406,7 +403,7 @@ const App: React.FC = () => {
     ? orchState.activeToasterId === null
     : false;
 
-  // Dev-only: `?forceAd=<ad>` (natively_api, profile, jd, promo,
+  // Dev-only: `?forceAd=<ad>` (natively_api, profile, jd,
   // max_ultra_upgrade) opens that ad immediately, skipping the campaign
   // scheduler, so its design can be checked by hand or by
   // scripts/audit/toaster-preview.mjs.
@@ -1317,19 +1314,10 @@ const App: React.FC = () => {
               onDismiss={dismissAd}
               onSetupJD={() => openProfileExclusive()}
             />
-            <PremiumPromoToaster
-              isOpen={activeAd === 'promo'}
-              onDismiss={dismissAd}
-              onUpgrade={() => {
-                setShowPremiumModal(true);
-              }}
-            />
             <MaxUltraUpgradeToaster
               isOpen={activeAd === 'max_ultra_upgrade'}
               onDismiss={dismissAd}
-              onUpgrade={() => {
-                setShowPremiumModal(true);
-              }}
+              onUpgrade={() => openSettingsExclusive('plans')}
             />
 
             {/* Remote Campaigns Render Logic (Commented out)
@@ -1342,29 +1330,6 @@ const App: React.FC = () => {
           </>
         )}
 
-        {!isolateModals && <PremiumUpgradeModal
-          isOpen={showPremiumModal}
-          onClose={() => setShowPremiumModal(false)}
-          isPremium={isPremiumActive}
-          onActivated={() => {
-            setIsPremiumActive(true);
-            // Refresh full plan details after activation so ad targeting reflects the new plan
-            window.electronAPI?.licenseGetDetails?.()
-              .then(d => setPlanDetails(d ?? { isPremium: true }))
-              .catch(() => setPlanDetails({ isPremium: true }));
-            setShowPremiumModal(false);
-            // If user activated during post-trial modal, close it — they have a plan now
-            setShowTrialExpiredModal(false);
-            setActiveTrial(null);
-            // After activation, open settings to Profile Intelligence, once
-            // the upgrade card has poured back into the slot: two genies
-            // through it at once read as a tangle.
-            setTimeout(() => {
-              openProfileExclusive();
-            }, GENIE_CLOSE_MS);
-          }}
-          onDeactivated={() => { setIsPremiumActive(false); setPlanDetails({ isPremium: false }); }}
-        />}
       </div>
     </div>
     </ErrorBoundary>

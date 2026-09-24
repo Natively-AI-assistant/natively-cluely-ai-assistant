@@ -38,7 +38,7 @@ import {
 import { getMeetingInterfaceTheme, setMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
 import { KeyRecorder } from './ui/KeyRecorder';
 import { Disclosure, DisclosureChevron } from './ui/AccordionSection';
-import { ProfileVisualizer, PremiumUpgradeModal } from '../premium';
+import { ProfileVisualizer } from '../premium';
 import GlassEffectLayer from './ui/GlassEffectLayer';
 import { GenieModal } from './ui/GenieModal';
 import { BrandMark, BrandMonogram } from './ui/BrandMark';

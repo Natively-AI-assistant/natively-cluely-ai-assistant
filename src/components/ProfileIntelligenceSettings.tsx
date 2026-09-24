@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { ThinkingOrb } from 'thinking-orbs';
 import { useToggleInit } from './settings/useToggleInit';
-import { PremiumUpgradeModal, RoleInsightPanel } from '../premium';
+import { RoleInsightPanel } from '../premium';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { useLensTracking } from '../ui-components/LiquidGlassButton';
 import { truncateResumeSummary } from '../utils/resumeSummary.mjs';
@@ -1929,7 +1929,10 @@ export function ProfileIntelligenceSettings({
     const [isPremium, setIsPremium] = useState(cachedPremium.isPremium);
     const [premiumPlan, setPremiumPlan] = useState<string>(cachedPremium.plan);
     const [isTrialActive] = useState(false);
-    const [isPremiumModalOpen, setIsPremiumModalOpen] = useState(false);
+    // Upgrading, entering a licence key and managing Pro all live in Settings →
+    // Plans & Billing. The manager hands over to it (App's openSettingsExclusive
+    // closes this panel), and the licence is read again on the next mount.
+    const openPlans = () => onOpenNativelyAPI?.();
     const [licenseLoaded, setLicenseLoaded] = useState(false);
     const hasProfileAccess = isPremium || isTrialActive;
     const theme = useResolvedTheme();
@@ -2360,14 +2363,14 @@ export function ProfileIntelligenceSettings({
     // FileUploadEmpty stays: it also decides the "Requires Pro." hint, so it is
     // doing UI work, not just guarding — and a double gate here is idempotent.
     const browseResume = async () => {
-        if (!hasProfileAccess) { setIsPremiumModalOpen(true); return; }
+        if (!hasProfileAccess) { openPlans(); return; }
         const fileResult = await window.electronAPI?.profileSelectFile?.();
         if (fileResult?.cancelled || !fileResult?.filePath) return;
         await doResumeUpload(fileResult.filePath);
     };
 
     const browseJD = async () => {
-        if (!hasProfileAccess) { setIsPremiumModalOpen(true); return; }
+        if (!hasProfileAccess) { openPlans(); return; }
         const fileResult = await window.electronAPI?.profileSelectFile?.();
         if (fileResult?.cancelled || !fileResult?.filePath) return;
         await doJdUpload(fileResult.filePath);
@@ -2474,7 +2477,7 @@ export function ProfileIntelligenceSettings({
                     hint="Add your resume as real-time context."
                     hasAccess={hasProfileAccess}
                     onBrowse={browseResume}
-                    onNeedUpgrade={() => setIsPremiumModalOpen(true)}
+                    onNeedUpgrade={() => openPlans()}
                     enterClass={profileHandoff.arriving ? 'pi-handoff-in-self' : undefined}
                 />
             ) : (
@@ -2586,7 +2589,7 @@ export function ProfileIntelligenceSettings({
                     hint="Add a job description as real-time context."
                     hasAccess={hasProfileAccess}
                     onBrowse={browseJD}
-                    onNeedUpgrade={() => setIsPremiumModalOpen(true)}
+                    onNeedUpgrade={() => openPlans()}
                     enterClass={jdHandoff.arriving ? 'pi-handoff-in-self' : undefined}
                 />
             ) : (
@@ -3699,7 +3702,7 @@ export function ProfileIntelligenceSettings({
     const renderRoleInsight = () => (
         <RoleInsightPanel
             hasAccess={hasProfileAccess}
-            onNeedUpgrade={() => setIsPremiumModalOpen(true)}
+            onNeedUpgrade={() => openPlans()}
             onGoToProfile={() => goToSection('identity')}
         />
     );
@@ -3719,26 +3722,6 @@ export function ProfileIntelligenceSettings({
         isTrialActive && !isPremium  ? 'pi-cta--trial'   : '',
         !isPremium && !isTrialActive  ? 'pi-cta--shimmer' : '',
     ].filter(Boolean).join(' ');
-
-    // ── Shared premium-modal lifecycle handlers (used by both the gate and the
-    //    unlocked panel's own CTA, so activating/deactivating behaves the same
-    //    regardless of which surface triggered the modal) ──────────────────────
-    const handlePremiumActivated = async () => {
-        setIsPremium(true);
-        try {
-            const details = await window.electronAPI?.licenseGetDetails?.();
-            const plan = details?.plan ?? '';
-            if (plan) setPremiumPlan(plan);
-            writePremiumCache(true, plan);
-        } catch { writePremiumCache(true, premiumPlan); }
-        const status = await window.electronAPI?.profileGetStatus?.();
-        if (status) setProfileStatus(status);
-    };
-    const handlePremiumDeactivated = () => {
-        setIsPremium(false); setPremiumPlan('');
-        writePremiumCache(false, '');
-        setProfileStatus(prev => ({ ...prev, profileMode: false }));
-    };
 
     // ── Non-pro users see the gate (wait for license verification) ────────────
     if (!hasProfileAccess) {
@@ -3816,7 +3799,7 @@ export function ProfileIntelligenceSettings({
                 <div style={{ padding: '12px', borderTop: '1px solid var(--pi-border)', flexShrink: 0 }}>
                     <button
                         ref={ctaLens.ref}
-                        onClick={() => setIsPremiumModalOpen(true)}
+                        onClick={() => openPlans()}
                         onPointerMove={ctaLens.onPointerMove}
                         onFocus={ctaLens.onFocus}
                         className={ctaClass}
@@ -3853,14 +3836,6 @@ export function ProfileIntelligenceSettings({
                     </div>
                 </div>
             </div>
-
-            <PremiumUpgradeModal
-                isOpen={isPremiumModalOpen}
-                onClose={() => setIsPremiumModalOpen(false)}
-                isPremium={isPremium}
-                onActivated={handlePremiumActivated}
-                onDeactivated={handlePremiumDeactivated}
-            />
         </div>
     );
 }
