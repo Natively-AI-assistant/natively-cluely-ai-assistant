@@ -8,13 +8,16 @@
 // (OrchestratedToasterHost); this component owns the permanent dismiss flag
 // and auto-dismisses silently the moment the extension connects.
 //
+// It pours out of, and back into, the bottom of the window like every other
+// popup (GenieModal), warping one picture of itself the way macOS does.
+//
 // Chrome Web Store URL canonical source: src/components/settings/HelpSettings.tsx
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { motion, useReducedMotion, type MotionStyle } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { X, ArrowRight } from 'lucide-react';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import chromeArt from '../../assets/cards/chrome.jpg';
-import { useGenieCard } from './useGenieCard';
+import { GenieModal } from '../ui/GenieModal';
 
 const DISMISS_KEY = 'natively_ext_connect_dismissed_v1';
 const MIN_VERSION = '2.8.0';
@@ -163,14 +166,20 @@ export const BrowserExtensionToaster: React.FC<Props> = ({ isOpen, onDismiss, on
   const testForceShow = typeof window !== 'undefined'
     && new URLSearchParams(window.location.search).get('extToaster') === 'force';
 
-  // The macOS genie: entrance, scrim and close sequencing. Extracted to
-  // useGenieCard so the permissions card runs the identical animation rather
-  // than a second copy of it.
-  const {
-    shown: genieShown, closing, closeThen, scrim,
-    wrapRef, cardRef, bandsRef, shadowRef,
-  } = useGenieCard(isOpen || testForceShow, 'BrowserExtensionToaster');
-  const shown = genieShown;
+  // Starts closed, so the first thing the card does is pour out.
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    setVisible(isOpen || testForceShow);
+  }, [isOpen, testForceShow]);
+
+  // The orchestrator unmounts this the moment it hears "dismissed", so every
+  // way out closes the card first (the genie) and reports from onClosed.
+  const afterCloseRef = useRef<(() => void) | null>(null);
+  const closeThen = useCallback((after: () => void) => {
+    if (afterCloseRef.current) return;
+    afterCloseRef.current = after;
+    setVisible(false);
+  }, []);
 
   // ─── Dismiss handlers ───────────────────────────────────────
   // The permanent flag is written at once, not after the exit, so quitting
@@ -217,309 +226,276 @@ export const BrowserExtensionToaster: React.FC<Props> = ({ isOpen, onDismiss, on
 
   // ─── Escape key ─────────────────────────────────────────────
   useEffect(() => {
-    if (!shown || closing) return;
+    if (!visible) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') handlePermanentDismiss();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [shown, closing, handlePermanentDismiss]);
+  }, [visible, handlePermanentDismiss]);
 
-  // Reset transient interaction state whenever the card closes.
+  // Reset transient interaction state whenever the card closes. `opening`
+  // stays set through the close, so a picture of the card opening the store
+  // is never kept for the next open.
   useEffect(() => {
-    if (!shown || closing) { setPlateHover(false); setCtaActive(false); setCtaPressed(false); }
-    if (!shown) setOpening(false);
-  }, [shown, closing]);
+    if (!visible) { setPlateHover(false); setCtaActive(false); setCtaPressed(false); }
+  }, [visible]);
 
   const item = reduced ? ITEM_REDUCED : ITEM;
   const ctaDur = ctaActive ? CTA_IN : CTA_OUT;
 
   return (
-    <>
-      {shown && (
+    <GenieModal
+      open={visible}
+      label="BrowserExtensionToaster"
+      // A picture of the card opening the store is never one the next open shows.
+      keepPictures={!opening}
+      zIndex={9998}
+      onBackdropClick={handlePermanentDismiss}
+      onClosed={() => { const after = afterCloseRef.current; afterCloseRef.current = null; after?.(); }}
+      // Dims, never blurs: frosting the whole launcher behind the card left it
+      // unreadable (see 3a9901ae4, which set this for every onboarding scrim).
+      backdropStyle={{ background: isLight ? 'rgba(10,10,18,0.30)' : 'rgba(0,0,0,0.80)' }}
+      padding={16}
+      wrapStyle={{ width: '600px', maxWidth: '100%' }}
+      cardStyle={{
+        background: isLight ? '#F7F8FC' : '#1C1C1E',
+        /*
+          The edge inverts with the ground: a light hairline on the dark
+          card, a shadow on the light one, so the card sits on the app in
+          both themes rather than glowing against it in one.
+        */
+        boxShadow: isLight
+          ? 'inset 0 0 0 1px rgba(11,16,32,0.10),'
+            + ' inset 0 1px 0 rgba(255,255,255,0.80), ' + SHADOW_LIGHT
+          : 'inset 0 0 0 1px rgba(255,255,255,0.08),'
+          + ' inset 0 1px 0 rgba(255,255,255,0.06), ' + SHADOW_DARK,
+        fontFamily: FONT,
+        WebkitFontSmoothing: 'antialiased',
+      } as React.CSSProperties}
+      cardProps={{
+        role: 'dialog',
+        'aria-modal': true,
+        'aria-labelledby': 'ext-toast-title',
+        'aria-describedby': 'ext-toast-desc',
+        onPointerEnter: e => { if (!reduced && e.pointerType === 'mouse') setPlateHover(true); },
+        onPointerLeave: () => setPlateHover(false),
+      }}
+      shadow={isLight ? SHADOW_LIGHT : SHADOW_DARK}
+      radius={20}
+    >
+      {/*
+        ── SPLIT ─────────────────────────────────────────────────────
+
+        Two panes instead of a photograph with a caption. The type sits
+        on flat colour, so it needs no scrim and reads at full contrast;
+        the image sits in its own inset panel, so it is shown whole
+        rather than fading out under the text.
+
+        The panel is inset 8px from the card's top, right and bottom
+        edges with its own radius. That gap is what makes it read as a
+        separate object held inside the card rather than a second
+        column bleeding to the edge.
+
+        One layout for both themes. Only the ground and the ink
+        change; the image panel is the same object in each, because it
+        is a light photograph either way.
+      */}
+      <div style={{ display: 'flex', alignItems: 'stretch', minHeight: '440px' }}>
         <motion.div
-          key="ext-backdrop"
+          // The genie pours the card out whole; a stagger on top of
+          // it would bring the content in twice. Reduced motion has
+          // no genie, so the column still arrives tier by tier.
+          variants={STAGGER} initial={reduced ? 'hidden' : false} animate="show"
           style={{
-            opacity: scrim,
-            // While the card drains away the launcher is already live again.
-            pointerEvents: closing ? 'none' : 'auto',
-            position: 'fixed', inset: 0, zIndex: 9998,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            padding: '16px',
-            // Dims, never blurs: frosting the whole launcher behind the card
-            // left it unreadable (see 3a9901ae4, which set this for every
-            // onboarding scrim).
-            background: isLight ? 'rgba(10,10,18,0.30)' : 'rgba(0,0,0,0.80)',
-          } as MotionStyle}
-          onClick={e => { if (e.target === e.currentTarget) handlePermanentDismiss(); }}
+            position: 'relative', zIndex: 2,
+            flex: '1 1 58%', minWidth: 0,
+            padding: '40px 28px 34px 40px',
+            display: 'flex', flexDirection: 'column',
+          }}
         >
-          <motion.div
-            ref={wrapRef}
-            style={{ position: 'relative', width: '600px', maxWidth: '100%' }}
-          >
-            {/* The card's shadow, standing in for it mid-genie. */}
-            <div
-              ref={shadowRef}
-              aria-hidden
-              style={{
-                display: 'none', position: 'absolute', inset: 0,
-                borderRadius: '20px', transformOrigin: '50% 0', pointerEvents: 'none',
-                boxShadow: isLight ? SHADOW_LIGHT : SHADOW_DARK,
-              }}
-            />
-            <motion.div
-              key="ext-card"
-              ref={cardRef}
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="ext-toast-title"
-              aria-describedby="ext-toast-desc"
-              onPointerEnter={e => { if (!reduced && e.pointerType === 'mouse') setPlateHover(true); }}
-              onPointerLeave={() => setPlateHover(false)}
-              style={{
-                transformOrigin: '50% 0%',
-                position: 'relative',
-                width: '100%',
-                borderRadius: '20px',
-                overflow: 'hidden',
-                background: isLight ? '#F7F8FC' : '#1C1C1E',
-                /*
-                  The edge inverts with the ground: a light hairline on the dark
-                  card, a shadow on the light one, so the card sits on the app in
-                  both themes rather than glowing against it in one.
-                */
-                boxShadow: isLight
-                  ? 'inset 0 0 0 1px rgba(11,16,32,0.10),'
-                    + ' inset 0 1px 0 rgba(255,255,255,0.80), ' + SHADOW_LIGHT
-                  : 'inset 0 0 0 1px rgba(255,255,255,0.08),'
-                  + ' inset 0 1px 0 rgba(255,255,255,0.06), ' + SHADOW_DARK,
-                fontFamily: FONT,
-                WebkitFontSmoothing: 'antialiased',
-              } as MotionStyle}
-            >
-              {/*
-                ── SPLIT ─────────────────────────────────────────────────────
+          <motion.div variants={item} style={{
+            fontSize: '12px', fontWeight: 500, letterSpacing: '-0.005em',
+            color: INK.quiet, margin: '0 0 22px',
+          }}>
+            Natively for Chrome
+          </motion.div>
 
-                Two panes instead of a photograph with a caption. The type sits
-                on flat colour, so it needs no scrim and reads at full contrast;
-                the image sits in its own inset panel, so it is shown whole
-                rather than fading out under the text.
+          {/*
+            Light weight at display size. At 44px a 300 weight holds its
+            shape and reads as confident rather than loud; the same line
+            in semibold would compete with the image for attention.
+            Tracking closes up as size rises.
+          */}
+          <motion.h2 variants={item} id="ext-toast-title" style={{
+            fontSize: '44px', fontWeight: 300,
+            letterSpacing: '-0.035em', lineHeight: 1.02,
+            margin: '0 0 20px', color: INK.strong,
+          }}>
+            Skip the
+            <br />
+            Screenshot.
+          </motion.h2>
 
-                The panel is inset 8px from the card's top, right and bottom
-                edges with its own radius. That gap is what makes it read as a
-                separate object held inside the card rather than a second
-                column bleeding to the edge.
+          <motion.p variants={item} id="ext-toast-desc" style={{
+            fontSize: '13.5px', lineHeight: 1.55, letterSpacing: '-0.008em',
+            color: INK.body, margin: 0, maxWidth: '300px',
+            textWrap: 'pretty',
+          } as React.CSSProperties}>
+            The page you are on goes straight to the assistant, so every
+            answer starts with the full context and none of the copying.
+          </motion.p>
 
-                One layout for both themes. Only the ground and the ink
-                change; the image panel is the same object in each, because it
-                is a light photograph either way.
-              */}
-              <div style={{ display: 'flex', alignItems: 'stretch', minHeight: '440px' }}>
-                <motion.div
-                  // The genie pours the card out whole; a stagger on top of
-                  // it would bring the content in twice. Reduced motion has
-                  // no genie, so the column still arrives tier by tier.
-                  variants={STAGGER} initial={reduced ? 'hidden' : false} animate="show"
-                  style={{
-                    position: 'relative', zIndex: 2,
-                    flex: '1 1 58%', minWidth: 0,
-                    padding: '40px 28px 34px 40px',
-                    display: 'flex', flexDirection: 'column',
-                  }}
-                >
-                  <motion.div variants={item} style={{
-                    fontSize: '12px', fontWeight: 500, letterSpacing: '-0.005em',
-                    color: INK.quiet, margin: '0 0 22px',
-                  }}>
-                    Natively for Chrome
-                  </motion.div>
-
-                  {/*
-                    Light weight at display size. At 44px a 300 weight holds its
-                    shape and reads as confident rather than loud; the same line
-                    in semibold would compete with the image for attention.
-                    Tracking closes up as size rises.
-                  */}
-                  <motion.h2 variants={item} id="ext-toast-title" style={{
-                    fontSize: '44px', fontWeight: 300,
-                    letterSpacing: '-0.035em', lineHeight: 1.02,
-                    margin: '0 0 20px', color: INK.strong,
-                  }}>
-                    Skip the
-                    <br />
-                    Screenshot.
-                  </motion.h2>
-
-                  <motion.p variants={item} id="ext-toast-desc" style={{
-                    fontSize: '13.5px', lineHeight: 1.55, letterSpacing: '-0.008em',
-                    color: INK.body, margin: 0, maxWidth: '300px',
-                    textWrap: 'pretty',
-                  } as React.CSSProperties}>
-                    The page you are on goes straight to the assistant, so every
-                    answer starts with the full context and none of the copying.
-                  </motion.p>
-
-                  <motion.dl variants={item} style={{
-                    display: 'grid', gridTemplateColumns: 'repeat(3, auto)',
-                    justifyContent: 'start', columnGap: '34px',
-                    margin: '30px 0 0', padding: 0,
-                  }}>
-                    {FIGURES_STACKED.map(({ value, label }) => (
-                      <div key={value}>
-                        <dt style={{
-                          fontSize: '24px', fontWeight: 600, letterSpacing: '-0.03em',
-                          color: INK.strong, lineHeight: 1,
-                          fontVariantNumeric: 'tabular-nums',
-                        }}>
-                          {value}
-                        </dt>
-                        <dd style={{
-                          margin: '7px 0 0', fontSize: '12px', fontWeight: 500,
-                          letterSpacing: '-0.004em', color: INK.quiet, lineHeight: 1.2,
-                        }}>
-                          {label}
-                        </dd>
-                      </div>
-                    ))}
-                  </motion.dl>
-
-                  {/* marginTop: auto pins the action row to the bottom of the
-                      column however short the copy above it runs. */}
-                  <motion.div variants={item} style={{
-                    marginTop: 'auto', paddingTop: '34px',
-                    display: 'flex', alignItems: 'center', gap: '22px', flexWrap: 'wrap',
-                  }}>
-                    {/*
-                      Outlined, not filled. On a flat card a filled button is the
-                      strongest object on the page and pulls the eye off the
-                      image; a hairline outline says "button" at a fraction of the
-                      weight. Hover is three quiet channels on one curve: the
-                      outline and label brighten, a faint fill arrives, and the
-                      arrow travels 3px. Press compresses the whole thing.
-                    */}
-                    <button
-                      type="button"
-                      onClick={handleInstall}
-                      disabled={opening}
-                      onPointerEnter={e => { if (e.pointerType === 'mouse') setCtaActive(true); }}
-                      onPointerLeave={() => { setCtaActive(false); setCtaPressed(false); }}
-                      onPointerDown={() => setCtaPressed(true)}
-                      onPointerUp={() => setCtaPressed(false)}
-                      onFocus={e => { if (e.currentTarget.matches(':focus-visible')) setCtaActive(true); }}
-                      onBlur={() => setCtaActive(false)}
-                      style={{
-                        display: 'inline-flex', alignItems: 'center', gap: '8px',
-                        padding: '9px 14px',
-                        borderRadius: '9px',
-                        border: `1px solid ${isLight
-                          ? (ctaActive ? 'rgba(11,16,32,0.46)' : 'rgba(11,16,32,0.22)')
-                          : (ctaActive ? 'rgba(255,255,255,0.44)' : 'rgba(255,255,255,0.24)')}`,
-                        background: isLight
-                          ? (ctaActive ? 'rgba(11,16,32,0.04)' : 'rgba(11,16,32,0)')
-                          : (ctaActive ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0)'),
-                        outline: 'none',
-                        cursor: opening ? 'progress' : 'pointer',
-                        fontFamily: FONT,
-                        fontSize: '13px', fontWeight: 500, letterSpacing: '-0.01em',
-                        color: ctaActive ? INK.strong : (isLight ? 'rgba(11,16,32,0.84)' : 'rgba(255,255,255,0.88)'),
-                        opacity: opening ? 0.55 : 1,
-                        transform: ctaPressed && !reduced ? 'scale(0.97)' : 'none',
-                        transition:
-                          `border-color ${ctaDur}ms ${EASE_CSS}, background-color ${ctaDur}ms ${EASE_CSS},`
-                          + ` color ${ctaDur}ms ${EASE_CSS}, opacity 200ms ${EASE_CSS}, transform 120ms ${EASE_CSS}`,
-                      }}
-                    >
-                      <span>{opening ? 'Opening Chrome Web Store' : 'Add to Chrome'}</span>
-                      <ArrowRight
-                        size={14} strokeWidth={1.9} aria-hidden
-                        style={{
-                          flex: 'none',
-                          transform: ctaActive && !reduced ? 'translateX(3px)' : 'translateX(0)',
-                          transition: `transform ${ctaDur}ms ${EASE_CSS}`,
-                        }}
-                      />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleNotNow}
-                      style={{
-                        background: 'none', border: 0, padding: '9px 0',
-                        cursor: 'pointer', fontFamily: FONT,
-                        fontSize: '13px', fontWeight: 500, letterSpacing: '-0.008em',
-                        color: INK.faint,
-                        transition: `color 200ms ${EASE_CSS}`,
-                      }}
-                      onMouseEnter={e => (e.currentTarget.style.color = INK.body)}
-                      onMouseLeave={e => (e.currentTarget.style.color = INK.faint)}
-                      onFocus={e => (e.currentTarget.style.color = INK.body)}
-                      onBlur={e => (e.currentTarget.style.color = INK.faint)}
-                    >
-                      Not now
-                    </button>
-                  </motion.div>
-                </motion.div>
-
-                <div style={{ flex: '0 0 40%', padding: '8px 8px 8px 0', display: 'flex' }}>
-                  <div style={{
-                    position: 'relative', flex: 1,
-                    borderRadius: '14px', overflow: 'hidden',
-                    background: '#E6E8EE',
-                    boxShadow: isLight ? 'inset 0 0 0 1px rgba(11,16,32,0.07)' : 'none',
-                  }}>
-                    {/* The image. A slow push-in scoped to the panel, so the
-                        Chrome mark breathes while the column holds still. */}
-                    <div aria-hidden style={{
-                      position: 'absolute', inset: 0,
-                      backgroundImage: `url(${chromeArt})`,
-                      backgroundSize: 'cover',
-                      backgroundPosition: '92% 50%',
-                      transform: plateHover ? `scale(${1 + PLATE_ZOOM})` : 'scale(1)',
-                      transformOrigin: '70% 50%',
-                      transition: reduced
-                        ? undefined
-                        : `transform ${plateHover ? PLATE_ZOOM_IN : PLATE_ZOOM_OUT}ms ${EASE_CSS}`,
-                      willChange: reduced ? undefined : 'transform',
-                      pointerEvents: 'none',
-                    }} />
-
-                    {/* Close sits on the image panel, which is light in both
-                        themes, so its ink is dark in both. */}
-                    <button
-                      type="button"
-                      onClick={handlePermanentDismiss}
-                      aria-label="Close"
-                      style={{
-                        position: 'absolute', top: '8px', right: '8px', zIndex: 2,
-                        width: '30px', height: '30px',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        padding: 0, cursor: 'pointer',
-                        background: 'none', border: 0, borderRadius: '8px',
-                        color: CLOSE_LIGHT.rest,
-                        transition: `color 180ms ${EASE_CSS}, transform 160ms ${EASE_CSS}`,
-                      }}
-                      onMouseEnter={e => { e.currentTarget.style.color = CLOSE_LIGHT.hover; }}
-                      onMouseLeave={e => { e.currentTarget.style.color = CLOSE_LIGHT.rest; e.currentTarget.style.transform = 'scale(1)'; }}
-                      onMouseDown={e => { e.currentTarget.style.transform = 'scale(0.92)'; }}
-                      onMouseUp={e => { e.currentTarget.style.transform = 'scale(1)'; }}
-                    >
-                      <X size={14} strokeWidth={2} color="currentColor" />
-                    </button>
-                  </div>
-                </div>
+          <motion.dl variants={item} style={{
+            display: 'grid', gridTemplateColumns: 'repeat(3, auto)',
+            justifyContent: 'start', columnGap: '34px',
+            margin: '30px 0 0', padding: 0,
+          }}>
+            {FIGURES_STACKED.map(({ value, label }) => (
+              <div key={value}>
+                <dt style={{
+                  fontSize: '24px', fontWeight: 600, letterSpacing: '-0.03em',
+                  color: INK.strong, lineHeight: 1,
+                  fontVariantNumeric: 'tabular-nums',
+                }}>
+                  {value}
+                </dt>
+                <dd style={{
+                  margin: '7px 0 0', fontSize: '12px', fontWeight: 500,
+                  letterSpacing: '-0.004em', color: INK.quiet, lineHeight: 1.2,
+                }}>
+                  {label}
+                </dd>
               </div>
-            </motion.div>
-            {/* The genie's bands, present only while it runs. */}
-            <div
-              ref={bandsRef}
-              aria-hidden
-              inert
-              style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
-            />
+            ))}
+          </motion.dl>
+
+          {/* marginTop: auto pins the action row to the bottom of the
+              column however short the copy above it runs. */}
+          <motion.div variants={item} style={{
+            marginTop: 'auto', paddingTop: '34px',
+            display: 'flex', alignItems: 'center', gap: '22px', flexWrap: 'wrap',
+          }}>
+            {/*
+              Outlined, not filled. On a flat card a filled button is the
+              strongest object on the page and pulls the eye off the
+              image; a hairline outline says "button" at a fraction of the
+              weight. Hover is three quiet channels on one curve: the
+              outline and label brighten, a faint fill arrives, and the
+              arrow travels 3px. Press compresses the whole thing.
+            */}
+            <button
+              type="button"
+              onClick={handleInstall}
+              disabled={opening}
+              onPointerEnter={e => { if (e.pointerType === 'mouse') setCtaActive(true); }}
+              onPointerLeave={() => { setCtaActive(false); setCtaPressed(false); }}
+              onPointerDown={() => setCtaPressed(true)}
+              onPointerUp={() => setCtaPressed(false)}
+              onFocus={e => { if (e.currentTarget.matches(':focus-visible')) setCtaActive(true); }}
+              onBlur={() => setCtaActive(false)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '8px',
+                padding: '9px 14px',
+                borderRadius: '9px',
+                border: `1px solid ${isLight
+                  ? (ctaActive ? 'rgba(11,16,32,0.46)' : 'rgba(11,16,32,0.22)')
+                  : (ctaActive ? 'rgba(255,255,255,0.44)' : 'rgba(255,255,255,0.24)')}`,
+                background: isLight
+                  ? (ctaActive ? 'rgba(11,16,32,0.04)' : 'rgba(11,16,32,0)')
+                  : (ctaActive ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0)'),
+                outline: 'none',
+                cursor: opening ? 'progress' : 'pointer',
+                fontFamily: FONT,
+                fontSize: '13px', fontWeight: 500, letterSpacing: '-0.01em',
+                color: ctaActive ? INK.strong : (isLight ? 'rgba(11,16,32,0.84)' : 'rgba(255,255,255,0.88)'),
+                opacity: opening ? 0.55 : 1,
+                transform: ctaPressed && !reduced ? 'scale(0.97)' : 'none',
+                transition:
+                  `border-color ${ctaDur}ms ${EASE_CSS}, background-color ${ctaDur}ms ${EASE_CSS},`
+                  + ` color ${ctaDur}ms ${EASE_CSS}, opacity 200ms ${EASE_CSS}, transform 120ms ${EASE_CSS}`,
+              }}
+            >
+              <span>{opening ? 'Opening Chrome Web Store' : 'Add to Chrome'}</span>
+              <ArrowRight
+                size={14} strokeWidth={1.9} aria-hidden
+                style={{
+                  flex: 'none',
+                  transform: ctaActive && !reduced ? 'translateX(3px)' : 'translateX(0)',
+                  transition: `transform ${ctaDur}ms ${EASE_CSS}`,
+                }}
+              />
+            </button>
+
+            <button
+              type="button"
+              onClick={handleNotNow}
+              style={{
+                background: 'none', border: 0, padding: '9px 0',
+                cursor: 'pointer', fontFamily: FONT,
+                fontSize: '13px', fontWeight: 500, letterSpacing: '-0.008em',
+                color: INK.faint,
+                transition: `color 200ms ${EASE_CSS}`,
+              }}
+              onMouseEnter={e => (e.currentTarget.style.color = INK.body)}
+              onMouseLeave={e => (e.currentTarget.style.color = INK.faint)}
+              onFocus={e => (e.currentTarget.style.color = INK.body)}
+              onBlur={e => (e.currentTarget.style.color = INK.faint)}
+            >
+              Not now
+            </button>
           </motion.div>
         </motion.div>
-      )}
-    </>
+
+        <div style={{ flex: '0 0 40%', padding: '8px 8px 8px 0', display: 'flex' }}>
+          <div style={{
+            position: 'relative', flex: 1,
+            borderRadius: '14px', overflow: 'hidden',
+            background: '#E6E8EE',
+            boxShadow: isLight ? 'inset 0 0 0 1px rgba(11,16,32,0.07)' : 'none',
+          }}>
+            {/* The image. A slow push-in scoped to the panel, so the
+                Chrome mark breathes while the column holds still. */}
+            <div aria-hidden style={{
+              position: 'absolute', inset: 0,
+              backgroundImage: `url(${chromeArt})`,
+              backgroundSize: 'cover',
+              backgroundPosition: '92% 50%',
+              transform: plateHover ? `scale(${1 + PLATE_ZOOM})` : 'scale(1)',
+              transformOrigin: '70% 50%',
+              transition: reduced
+                ? undefined
+                : `transform ${plateHover ? PLATE_ZOOM_IN : PLATE_ZOOM_OUT}ms ${EASE_CSS}`,
+              willChange: reduced ? undefined : 'transform',
+              pointerEvents: 'none',
+            }} />
+
+            {/* Close sits on the image panel, which is light in both
+                themes, so its ink is dark in both. */}
+            <button
+              type="button"
+              onClick={handlePermanentDismiss}
+              aria-label="Close"
+              style={{
+                position: 'absolute', top: '8px', right: '8px', zIndex: 2,
+                width: '30px', height: '30px',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                padding: 0, cursor: 'pointer',
+                background: 'none', border: 0, borderRadius: '8px',
+                color: CLOSE_LIGHT.rest,
+                transition: `color 180ms ${EASE_CSS}, transform 160ms ${EASE_CSS}`,
+              }}
+              onMouseEnter={e => { e.currentTarget.style.color = CLOSE_LIGHT.hover; }}
+              onMouseLeave={e => { e.currentTarget.style.color = CLOSE_LIGHT.rest; e.currentTarget.style.transform = 'scale(1)'; }}
+              onMouseDown={e => { e.currentTarget.style.transform = 'scale(0.92)'; }}
+              onMouseUp={e => { e.currentTarget.style.transform = 'scale(1)'; }}
+            >
+              <X size={14} strokeWidth={2} color="currentColor" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </GenieModal>
   );
 };
 
