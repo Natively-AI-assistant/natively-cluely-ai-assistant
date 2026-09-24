@@ -374,6 +374,9 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
         <GenieModal
             open={isOpen && !closeRequested}
             label="ReviewModal"
+            // It opens reset (first step, no stars, no text), so only a
+            // picture of it untouched is one of what the next open shows.
+            keepPictures={step === "review" && rating === 0 && hoverRating === 0 && !text}
             zIndex={60}
             onBackdropClick={() => { if (!busy) dismissLaterAndClose() }}
             onOpened={focusFirstStar}

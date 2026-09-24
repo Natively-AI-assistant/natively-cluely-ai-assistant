@@ -186,6 +186,9 @@ export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onSta
       <GenieModal
         open={open}
         label="FreeTrialModal"
+        // Its usage figures are this trial's: a kept picture would pour out
+        // another reading.
+        keepPictures={false}
         zIndex={9999}
         onClosed={() => onDone?.()}
         backdropStyle={{

@@ -1,10 +1,11 @@
 // src/components/ui/GenieModal.tsx
 //
 // A popup card that opens and closes with the macOS genie: the same pour out
-// of, and back into, a slot at the bottom centre of the window that the
-// browser-extension and permissions cards use. Settings, the Modes and Profile
-// Intelligence manager, and the other launcher popups all go through here, so
-// every card in the app moves the same way.
+// of, and back into, a slot at the window's bottom edge (straight below the
+// card: the bottom centre, for a centred one) that the browser-extension and
+// permissions cards use. Settings, the Modes and Profile Intelligence manager,
+// the other launcher popups and the notices in the bottom-right corner all go
+// through here, so every card in the app moves the same way.
 //
 // The animation itself is useGenieCard's. This adds what those two toasters
 // never needed:
@@ -83,6 +84,24 @@ export interface GenieModalProps {
   openingView?: string;
   /** No pictures just now (Settings' opacity preview hides the card's content). */
   snapshotPaused?: boolean;
+  /**
+   * Keep pictures of this card for its next open (default). Off for a card
+   * whose content is new each time it opens, a quota reading or a server
+   * status: a kept picture would pour out last time's numbers. Its open pours
+   * the live card instead, and its close a fresh picture that is not kept.
+   */
+  keepPictures?: boolean;
+  /**
+   * A modal (default) sits over a dim that takes the clicks around it. A
+   * notice that leaves the app usable, a card in a corner, has no dim, and
+   * clicks beside it reach the app.
+   */
+  modal?: boolean;
+  /**
+   * Where the card sits in the window (default: centred). The genie pours
+   * into a slot at the window's bottom edge, straight below the card.
+   */
+  placement?: 'center' | 'bottom-right';
   zIndex?: number;
 
   backdropId?: string;
@@ -112,7 +131,7 @@ export interface GenieModalProps {
 
 export const GenieModal: React.FC<GenieModalProps> = ({
   open, label, children, onBackdropClick, onOpened, onClosed, closeInstantly = false, zIndex = 300,
-  snapshotKey, openingView, snapshotPaused = false,
+  snapshotKey, openingView, snapshotPaused = false, keepPictures = true, modal = true, placement = 'center',
   backdropId, backdropClassName, backdropStyle, padding,
   wrapClassName, wrapStyle,
   cardRef, cardClassName, cardStyle, cardProps,
@@ -125,6 +144,8 @@ export const GenieModal: React.FC<GenieModalProps> = ({
   const genieRef = useRef<GenieCard | null>(null);
   const pausedRef = useRef(snapshotPaused);
   pausedRef.current = snapshotPaused;
+  const keepRef = useRef(keepPictures);
+  keepRef.current = keepPictures;
   const openingViewRef = useRef(openingView);
   openingViewRef.current = openingView;
   // The open has landed (the picture, if any, has handed over).
@@ -150,7 +171,7 @@ export const GenieModal: React.FC<GenieModalProps> = ({
   const snapshots = useMemo<GenieSnapshotSource>(() => ({
     forOpen: () => {
       const card = genieRef.current?.cardRef.current;
-      if (!card) return null;
+      if (!card || !keepRef.current) return null;
       const view = openingViewRef.current ?? rememberedView(cardKey) ?? viewOf(card);
       const key = keyOf(view);
       return key ? getGenieSnapshot(key) : null;
@@ -159,7 +180,9 @@ export const GenieModal: React.FC<GenieModalProps> = ({
       const card = genieRef.current?.cardRef.current;
       if (!card || pausedRef.current) return null;
       const last = lastShotRef.current;
-      if (last && !changedSinceShotRef.current && last.key === keyOf(viewOf(card))) return last.snap;
+      // Not while pictures are off: the watch that would have seen the change
+      // that turned them off (a star clicked, a key typed) stopped with them.
+      if (keepRef.current && last && !changedSinceShotRef.current && last.key === keyOf(viewOf(card))) return last.snap;
       return captureGenieSnapshot(card, keepOnCloseRef.current);
     },
     settled: () => {
@@ -187,7 +210,7 @@ export const GenieModal: React.FC<GenieModalProps> = ({
     if (event === 'open') landedRef.current = false;
     if (event === 'close') {
       const card = genieRef.current?.cardRef.current;
-      keepOnCloseRef.current = card && !pausedRef.current && landedRef.current && isSettled(card) && !isScrolled(card)
+      keepOnCloseRef.current = card && keepRef.current && !pausedRef.current && landedRef.current && isSettled(card) && !isScrolled(card)
         ? keyOf(viewOf(card)) : null;
       const landed = () => { dispatch('closed'); onClosedRef.current?.(); };
       if (closeInstantlyRef.current) landed();
@@ -200,7 +223,7 @@ export const GenieModal: React.FC<GenieModalProps> = ({
   // switched. That picture is what the next open pours out. The first one
   // after an open also records which view the card opens into.
   useEffect(() => {
-    if (!open || !shown) return;
+    if (!open || !shown || !keepPictures) return;
     const card = genieRef.current?.cardRef.current;
     if (!card) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -249,7 +272,7 @@ export const GenieModal: React.FC<GenieModalProps> = ({
       card.removeEventListener('scroll', changed, true);
       card.removeEventListener('input', changed, true);
     };
-  }, [open, shown, cardKey, keyOf]);
+  }, [open, shown, cardKey, keyOf, keepPictures]);
 
   // What the card shows while it drains away: the last thing it showed open.
   const frozen = useRef(children);
@@ -273,25 +296,30 @@ export const GenieModal: React.FC<GenieModalProps> = ({
         stays solid all the way into the Dock. The backdrop element is still
         the one the host styles and Settings' opacity preview reaches by id.
       */}
-      <motion.div
-        id={backdropId}
-        className={backdropClassName}
-        style={{
-          position: 'fixed', inset: 0, zIndex,
-          ...backdropStyle,
-          opacity: scrim,
-          // While the card drains away the app behind it is already live again.
-          // Otherwise the host's own class decides (Settings' opacity preview
-          // turns pointer events off on the scrim).
-          ...(closing ? { pointerEvents: 'none' } : null),
-        } as MotionStyle}
-        onClick={e => { if (e.target === e.currentTarget && !closing) onBackdropClick?.(); }}
-      />
-      {/* The card's layer: clicks outside the card fall through to the dim. */}
+      {modal && (
+        <motion.div
+          id={backdropId}
+          className={backdropClassName}
+          style={{
+            position: 'fixed', inset: 0, zIndex,
+            ...backdropStyle,
+            opacity: scrim,
+            // While the card drains away the app behind it is already live again.
+            // Otherwise the host's own class decides (Settings' opacity preview
+            // turns pointer events off on the scrim).
+            ...(closing ? { pointerEvents: 'none' } : null),
+          } as MotionStyle}
+          onClick={e => { if (e.target === e.currentTarget && !closing) onBackdropClick?.(); }}
+        />
+      )}
+      {/* The card's layer: clicks outside the card fall through to the dim,
+          or, with no dim, to the app. */}
       <div
         style={{
           position: 'fixed', inset: 0, zIndex,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          display: 'flex',
+          alignItems: placement === 'bottom-right' ? 'flex-end' : 'center',
+          justifyContent: placement === 'bottom-right' ? 'flex-end' : 'center',
           padding, pointerEvents: 'none',
         }}
       >

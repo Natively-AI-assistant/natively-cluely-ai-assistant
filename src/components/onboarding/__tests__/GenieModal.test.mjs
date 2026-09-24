@@ -2,8 +2,9 @@
  * GenieModal.test.mjs
  *
  * Every launcher popup (Settings, the Modes / Profile Intelligence manager,
- * Update, Review, the trial and support cards) opens and closes with the same
- * macOS genie as the browser-extension toaster, through GenieModal.
+ * Update, Review, the trial and support cards, and the notices in the
+ * bottom-right corner) opens and closes with the same macOS genie as the
+ * browser-extension toaster, through GenieModal.
  *
  *   1. The presence latch (geniePresence.mjs) and the compositor track
  *      (genieMotion.mjs) are pure, so they are EXECUTED here, not read.
@@ -190,8 +191,8 @@ test('GenieModal: the dim and the card are siblings, so the card never fades wit
   const backdrop = modal.slice(modal.indexOf('<motion.div'), modal.indexOf('/>', modal.indexOf('<motion.div')));
   assert.ok(backdrop.includes('opacity: scrim,'), 'the dim fades');
   assert.ok(!backdrop.includes('ref={wrapRef}'), 'and holds nothing');
-  assert.ok(/position: 'fixed', inset: 0, zIndex,\s*display: 'flex', alignItems: 'center', justifyContent: 'center',\s*padding, pointerEvents: 'none',/.test(modal),
-    'the card rides its own click-through layer');
+  assert.ok(/position: 'fixed', inset: 0, zIndex,\s*display: 'flex',\s*alignItems: placement === 'bottom-right' \? 'flex-end' : 'center',\s*justifyContent: placement === 'bottom-right' \? 'flex-end' : 'center',\s*padding, pointerEvents: 'none',/.test(modal),
+    'the card rides its own click-through layer, centred unless it is a corner notice');
 });
 
 // ─── The hook, for heavy cards (source) ─────────────────────────
@@ -250,6 +251,9 @@ const POPUPS = {
   'components/SupportToaster.tsx': 'Support',
   'components/trial/TrialPromoToaster.tsx': 'Trial promo',
   'components/trial/FreeTrialModal.tsx': 'Trial ended',
+  'components/NativelyQuotaBanner.tsx': 'Quota notice',
+  'components/HindsightStatusBanner.tsx': 'Long-term memory notice',
+  'components/ProviderChangeNotice.tsx': 'Provider change / re-index notice',
 };
 
 for (const [file, name] of Object.entries(POPUPS)) {
@@ -345,7 +349,7 @@ test('pictures: never of a card that is loading, covered or mid-landing', () => 
   assert.ok(snaps.includes('return isUncovered(card);'));
   assert.ok(modal.includes('const bandsBusy = (genieRef.current?.bandsRef.current?.childElementCount ?? 0) > 0;'),
     'not while the landing picture is still over the card');
-  assert.ok(/keepOnCloseRef\.current = card && !pausedRef\.current && landedRef\.current && isSettled\(card\)/.test(modal),
+  assert.ok(/keepOnCloseRef\.current = card && keepRef\.current && !pausedRef\.current && landedRef\.current && isSettled\(card\)/.test(modal),
     'the close decides whether to keep its picture while the card can still be hit-tested');
 });
 
@@ -386,7 +390,7 @@ test('pictures: no picture means the outline genie on the real card, never live 
 });
 
 test('pictures: an unchanged card closes at once on its last picture', () => {
-  assert.ok(modal.includes('if (last && !changedSinceShotRef.current && last.key === keyOf(viewOf(card))) return last.snap;'));
+  assert.ok(modal.includes('if (keepRef.current && last && !changedSinceShotRef.current && last.key === keyOf(viewOf(card))) return last.snap;'));
   assert.ok(modal.includes("if (records.some(r => r.type !== 'attributes' || (r.target !== card && r.attributeName !== 'style'))) changed();"),
     'a hover recolouring a row inline is not a change (it re-photographed Modes every second)');
 });
@@ -422,4 +426,146 @@ test('pictures never go through an image URL: the launcher CSP blocks blob: imag
   assert.ok(hook.includes("band.appendChild(pictureSlice(snap, r0, h, height, radius));"), 'strips are canvases');
   const harness = read('../genieHarness.html');
   assert.ok(harness.includes('Content-Security-Policy'), 'the harness meets the same rules as the app');
+});
+
+// ─── Notices in the corner ──────────────────────────────────────
+
+test('corner notice: pours straight down into a slot under itself, gently, and is gone in it', () => {
+  const { genieHalfWidthAt, SLOT_WIDTH } = genieMod;
+  // The quota card: 320 x 170, 24 px in from the corner of an 800 px window.
+  const geom = { top: 800 - 24 - 170, bottom: 800 - 24, width: 320, slotY: 800 - SLOT_INSET };
+  const ease = t => t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
+  const track = genieTrack(0, 1, ease, 600, geom, genieBandRows(170, 22));
+  assert.equal(track.layerOpacity.at(-1), 0, 'gone in the slot');
+  // The funnel is the card's own column: never wider than the card, and at
+  // the slot exactly the slot's width, however close the card sits to it.
+  for (const p of [0.2, 0.45, 0.7, 1]) {
+    for (let y = geom.top; y <= geom.slotY; y += 4) {
+      assert.ok(genieHalfWidthAt(p, geom, y) <= geom.width / 2 + 1e-9, `p ${p}, y ${y}`);
+    }
+  }
+  assert.ok(Math.abs(genieHalfWidthAt(1, geom, geom.slotY) - SLOT_WIDTH / 2) < 1e-9);
+  let prev = null, worst = 0;
+  for (let i = 0; i <= 36; i++) {
+    const { top } = genieEdges(ease(i / 36), geom);
+    if (prev !== null) worst = Math.max(worst, Math.abs(top - prev));
+    prev = top;
+  }
+  assert.ok(worst <= 60, `top edge moves ${worst.toFixed(0)} px in one 60 Hz frame`);
+});
+
+test('GenieModal: a notice has no dim, so the app stays usable around it', () => {
+  assert.ok(/\{modal && \(\s*<motion\.div\s+id=\{backdropId\}/.test(modal), 'the dim is only a modal\'s');
+  assert.ok(modal.includes("snapshotKey, openingView, snapshotPaused = false, keepPictures = true, modal = true, placement = 'center',"),
+    'a modal, centred, keeping pictures, unless the host says otherwise');
+});
+
+test('the corner notices go through GenieModal as notices, and stay mounted so the close can play', () => {
+  const quota = code('components/NativelyQuotaBanner.tsx');
+  assert.ok(!/if \(!visible\) return null;/.test(quota), 'no early return before the genie');
+  const hind = code('components/HindsightStatusBanner.tsx');
+  const floating = hind.slice(hind.indexOf("if (variant === 'floating-card') {"));
+  assert.ok(hind.indexOf("if (variant === 'floating-card') {") < hind.indexOf("if (!status || status.state === 'ready' || dismissed) return null;"),
+    'the floating card is decided before the early returns');
+  assert.ok(floating.includes("cardProps={{ role: 'status', 'aria-live': 'polite', 'data-genie-view': view }}"), 'still announced politely');
+  const app = code('App.tsx');
+  const notice = code('components/ProviderChangeNotice.tsx');
+  assert.ok(/<ProviderChangeNotice\s+open=\{isDefault && \(!!incompatibleWarning \|\| !!reindexShown\)\}\s+warning=\{incompatibleWarning\}\s+progress=\{reindexShown\}/.test(app),
+    'warning and re-index are one card');
+  for (const [src, where] of [[quota, 'quota'], [floating, 'hindsight'], [notice, 'provider change']]) {
+    assert.ok(src.includes('modal={false}') && src.includes('placement="bottom-right"'), `${where}: a notice in the corner`);
+  }
+  assert.ok(!/<AnimatePresence>\s*\{(incompatibleWarning|reindexProgress) && isDefault/.test(app), 'no framer entrance left for either');
+  // Re-index turns the warning into progress in place: the card does not close in between.
+  assert.ok(app.includes('setReindexPending(incompatibleWarning?.count ?? 0);\n      setIncompatibleWarning(null);'));
+});
+
+// ─── Pictures: only of what the next open shows ─────────────────
+
+test('pictures: a card whose content is new each time keeps none', () => {
+  assert.ok(/forOpen: \(\) => \{\s*const card = genieRef\.current\?\.cardRef\.current;\s*if \(!card \|\| !keepRef\.current\) return null;/.test(modal), 'no picture to open with');
+  assert.ok(modal.includes('keepOnCloseRef.current = card && keepRef.current &&'), 'none kept at the close');
+  assert.ok(modal.includes('if (!open || !shown || !keepPictures) return;'), 'none taken while open');
+  assert.ok(modal.includes('if (keepRef.current && last && !changedSinceShotRef.current'), 'the close never reuses a picture from before they were turned off');
+  assert.ok(code('components/NativelyQuotaBanner.tsx').includes('keepPictures={false}'), 'quota readings');
+  assert.ok(code('components/trial/FreeTrialModal.tsx').includes('keepPictures={false}'), 'trial usage');
+  assert.ok(code('components/ProviderChangeNotice.tsx').includes('keepPictures={false}'), 'provider change / re-index counts');
+});
+
+test('pictures: a card showing one of several things is keyed by which', () => {
+  const update = code('components/UpdateModal.tsx');
+  assert.ok(update.includes("const genieView = `${displayVersion}|${status}|${instructionsArch ?? ''}`;"));
+  assert.ok(update.includes('openingView={genieView}') && update.includes("cardProps={{ 'data-genie-view': genieView }}"));
+  assert.ok(update.includes("keepPictures={status === 'idle' || status === 'ready' || status === 'instructions'}"), 'never of a download or an error');
+  const hind = code('components/HindsightStatusBanner.tsx');
+  assert.ok(hind.includes("const view = status ? `${status.state}|${hashOf(status.reason ?? '')}` : undefined;"), 'state, and the reason hashed');
+});
+
+test('pictures: a card that opens reset keeps only its untouched picture', () => {
+  assert.ok(code('components/ReviewModal.tsx').includes('keepPictures={step === "review" && rating === 0 && hoverRating === 0 && !text}'));
+});
+
+test('pictures (premium): the upgrade card is keyed by licence state and never keeps a typed key', { skip: !existsSync(resolve(SRC, '../premium/src/PremiumUpgradeModal.tsx')) && 'premium not checked out' }, () => {
+  const up = code('../premium/src/PremiumUpgradeModal.tsx');
+  assert.ok(up.includes("openingView={isPremium ? 'active' : 'upgrade'}"));
+  assert.ok(up.includes("keepPictures={!licenseKey && status === 'idle'}"));
+});
+
+// ─── Pictures in memory (executed) ──────────────────────────────
+
+// genieSnapshots.ts is TypeScript with no imports; a Node that strips types
+// (22.18+, 23.6+) runs it directly. Older ones skip.
+let snapsMod = null;
+try { snapsMod = await import('../genieSnapshots.ts'); } catch { /* no type stripping */ }
+
+test('pictures in memory: this theme only, newest first, held to a budget, least recently used out', { skip: !snapsMod && 'this Node cannot import .ts' }, async () => {
+  // Settings-sized pictures: 896 x 640 at 2x is 9.2 MB decoded, so 7 fit in 64 MiB.
+  const W = 896, H = 640, DPR = 2;
+  const key = (view, theme = 'dark') => `settings|${view}|${W}x${H}|${theme}|en|${DPR}`;
+  const listed = [
+    ...Array.from({ length: 10 }, (_, i) => key(`tab${i}`)),   // oldest first
+    key('tab0', 'light'),                                       // another theme: never matches now
+  ];
+  const decoded = [];
+  const saved = [];
+  globalThis.window = {
+    devicePixelRatio: DPR,
+    electronAPI: {
+      genieSnapshotList: async () => listed,
+      genieSnapshotLoad: async k => { decoded.push(k); return new Uint8Array([1]); },
+      genieSnapshotCapture: async () => ({ png: new Uint8Array([2]), width: W * DPR, height: H * DPR }),
+      genieSnapshotSave: async k => { saved.push(k); return true; },
+    },
+  };
+  globalThis.document = {
+    visibilityState: 'visible',
+    documentElement: { getAttribute: a => (a === 'data-theme' ? 'dark' : a === 'lang' ? 'en' : null), classList: { contains: () => false } },
+  };
+  globalThis.createImageBitmap = async () => ({ width: W * DPR, height: H * DPR, close() {} });
+  try {
+    await snapsMod.warmGenieSnapshots();
+    assert.ok(!decoded.includes(key('tab0', 'light')), 'another theme is never decoded');
+    assert.deepEqual(decoded, [3, 4, 5, 6, 7, 8, 9].map(i => key(`tab${i}`)), 'the newest seven, the most the budget holds');
+    assert.equal(snapsMod.getGenieSnapshot(key('tab2')), null, 'older ones stay on disk');
+    // Used: tab3 becomes the most recent. A new capture then evicts tab4, the
+    // least recently used, not tab3.
+    assert.ok(snapsMod.getGenieSnapshot(key('tab3')));
+    const card = { getBoundingClientRect: () => ({ left: 0, top: 0, width: W, height: H }) };
+    assert.ok(await snapsMod.captureGenieSnapshot(card, key('tab10')));
+    assert.deepEqual(saved, [key('tab10')]);
+    assert.ok(snapsMod.getGenieSnapshot(key('tab10')), 'the new one is held');
+    assert.ok(snapsMod.getGenieSnapshot(key('tab3')), 'the used one stays');
+    assert.equal(snapsMod.getGenieSnapshot(key('tab4')), null, 'the least recently used goes');
+    // A close's picture is only returned, never held.
+    const close = await snapsMod.captureGenieSnapshot(card, null);
+    assert.equal(close.transient, true);
+  } finally {
+    delete globalThis.window; delete globalThis.document; delete globalThis.createImageBitmap;
+  }
+});
+
+test('the main process lists pictures oldest first, so the renderer can warm the newest', () => {
+  const main = read('../electron/genieSnapshots.ts');
+  assert.ok(/if \(encrypted\(\)\) for \(const e of await loadIndex\(\)\) keys\.add\(e\.key\);\s*for \(const k of memory\.keys\(\)\) keys\.add\(k\);/.test(main));
+  assert.ok(main.includes('others.sort((a, b) => a.savedAt - b.savedAt);'), 'the index is kept in save order');
 });

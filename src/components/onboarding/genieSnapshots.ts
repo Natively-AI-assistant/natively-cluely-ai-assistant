@@ -47,8 +47,23 @@ type Api = {
 
 const api = (): Api | undefined => (typeof window !== 'undefined' ? (window as any).electronAPI : undefined);
 
+// Decoded pictures in memory, least recently used first. A Settings-sized
+// picture is ~9 MB decoded at 2x, and one is taken of every tab or mode a
+// card settles on, so memory is held to a budget. A picture that falls out
+// stays on disk and is decoded again at the next start-up.
+const MEMORY_BUDGET_BYTES = 64 * 1024 * 1024;
 const store = new Map<string, GenieSnapshot>();
 let warmed: Promise<void> | null = null;
+
+const bytesOf = (snap: GenieSnapshot) => snap.bitmap.width * snap.bitmap.height * 4;
+
+/** What a kept key's picture costs decoded, read off the key. */
+function decodedBytesOfKey(key: string): number {
+  const parts = key.split('|');
+  const size = /^(\d+)x(\d+)$/.exec(parts[2] ?? '');
+  const dpr = Number(parts[parts.length - 1]) || 1;
+  return size ? Math.round(Number(size[1]) * dpr) * Math.round(Number(size[2]) * dpr) * 4 : Infinity;
+}
 
 /** The view a card is showing: its nearest `data-genie-view`, or 'default'. */
 export function viewOf(card: Element): string {
@@ -80,14 +95,24 @@ async function toSnapshot(png: Uint8Array, width: number, height: number): Promi
 }
 
 function remember(key: string, snap: GenieSnapshot): void {
-  // The picture it replaces may still be pouring out of the slot: it is left
-  // to the garbage collector rather than closed under a running genie.
+  // A picture replaced or evicted may still be pouring out of the slot: it is
+  // left to the garbage collector rather than closed under a running genie.
+  store.delete(key);
   store.set(key, snap);
+  let total = 0;
+  for (const s of store.values()) total += bytesOf(s);
+  for (const [k, s] of store) {
+    if (total <= MEMORY_BUDGET_BYTES || k === key) break;
+    store.delete(k);
+    total -= bytesOf(s);
+  }
 }
 
 /**
  * Bring the kept pictures into memory, decoded, so an open can use one
- * without waiting. Runs once, when the page is idle.
+ * without waiting. Runs once, when the page is idle, and only for pictures
+ * taken in the current theme, language and pixel ratio (no other can match
+ * a key now), newest first, as many as the memory budget holds.
  */
 export function warmGenieSnapshots(): Promise<void> {
   if (warmed) return warmed;
@@ -95,14 +120,25 @@ export function warmGenieSnapshots(): Promise<void> {
     const run = async () => {
       const a = api();
       try {
-        const keys = (await a?.genieSnapshotList?.()) ?? [];
+        const env = `|${environment()}`;
+        // Listed oldest first (electron/genieSnapshots.ts).
+        const listed = ((await a?.genieSnapshotList?.()) ?? []).filter(k => k.endsWith(env));
+        const keys: string[] = [];
+        let budget = MEMORY_BUDGET_BYTES;
+        for (let i = listed.length - 1; i >= 0; i--) {
+          const cost = decodedBytesOfKey(listed[i]);
+          if (cost > budget) break;
+          budget -= cost;
+          keys.unshift(listed[i]);
+        }
         for (const key of keys) {
           if (store.has(key)) continue;
           const png = await a?.genieSnapshotLoad?.(key);
           const size = /\|(\d+)x(\d+)\|/.exec(key);
           if (!png || !size) continue;
           const snap = await toSnapshot(png, Number(size[1]), Number(size[2]));
-          if (snap && !store.has(key)) store.set(key, snap);
+          // A capture taken meanwhile is newer: it stays.
+          if (snap && !store.has(key)) remember(key, snap);
         }
       } catch { /* the cards fall back to the live-copy genie */ }
       resolve();
@@ -115,7 +151,12 @@ export function warmGenieSnapshots(): Promise<void> {
 
 /** The kept picture for a key, if there is one and it is decoded. */
 export function getGenieSnapshot(key: string): GenieSnapshot | null {
-  return store.get(key) ?? null;
+  const snap = store.get(key);
+  if (!snap) return null;
+  // Used: now the most recent.
+  store.delete(key);
+  store.set(key, snap);
+  return snap;
 }
 
 // What a loading card shows: an explicit aria-busy, a progress bar, a spinner
