@@ -275,7 +275,6 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
         busy={requesting === 'microphone'}
         reduced={reduced}
         isLight={isLight}
-        divider={isMac}
       />
     </motion.div>
   );
@@ -374,7 +373,7 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
                 </div>
 
                 {allResolved ? (
-                  <AllSetPanel isLight={isLight} reduced={reduced} onContinue={handleDismiss} />
+                  <AllSetPanel isLight={isLight} reduced={reduced} onContinue={handleDismiss} rows={permRows} />
                 ) : (
                   <>
                     {/* Title + subtitle */}
@@ -571,31 +570,14 @@ function PrimaryButton({
 // `allPermissionsResolved` used to be computed and then thrown away, so the
 // card kept demanding "Open Settings" from a user who had already granted
 // everything. This is what it renders now.
-// The completion state is not a second permissions list. Restating "Screen
-// Recording / Access granted" answered a question nobody still had — the
-// heading says they are granted and the panel beside it says READY TO GO.
-//
-// What it says instead is what the two permissions actually bought, in plain
-// terms: one line each, verb first, no capability the app does not literally
-// have. A third line here ("answer questions about what was said") was cut for
-// describing a feature in brochure language rather than stating a fact.
-const CAPABILITIES = [
-  { icon: Monitor, label: "Sees what's on your screen" },
-  { icon: Mic,     label: "Hears what's said in the call" },
-];
-
-function AllSetPanel({ isLight, reduced, onContinue }: {
+// Same two rows as every other state — the card does not change shape when the
+// permissions come good, only the heading, each row's status and the footer.
+function AllSetPanel({ isLight, reduced, onContinue, rows }: {
   isLight: boolean; reduced: boolean; onContinue: () => void;
+  rows: React.ReactNode;
 }) {
   const t1 = isLight ? '#1C1C1E' : '#FFFFFF';
-  const t2 = isLight ? 'rgba(28, 28, 30, 0.72)' : 'rgba(255, 255, 255, 0.78)';
   const t3 = isLight ? 'rgba(28, 28, 30, 0.48)' : 'rgba(255, 255, 255, 0.44)';
-  const iconColor = isLight ? 'rgba(28, 28, 30, 0.42)' : 'rgba(255, 255, 255, 0.46)';
-
-  const rise = (delay: number) => (reduced
-    ? { initial: { opacity: 0 }, animate: { opacity: 1 }, transition: { duration: 0.2, delay } }
-    : { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 },
-        transition: { type: 'spring' as const, stiffness: 240, damping: 22, delay } });
 
   return (
     <motion.div
@@ -607,27 +589,14 @@ function AllSetPanel({ isLight, reduced, onContinue }: {
       <h2 id="perm-toast-title" style={{ fontSize: '24px', fontWeight: 700, letterSpacing: '-0.03em', color: t1, margin: '0 0 8px', lineHeight: 1.2 }}>
         You're all set
       </h2>
-      <p id="perm-toast-desc" style={{ fontSize: '13px', lineHeight: 1.65, color: t3, margin: '0 0 26px' }}>
+      <p id="perm-toast-desc" style={{ fontSize: '13px', lineHeight: 1.65, color: t3, margin: '0 0 24px' }}>
         Natively has everything it needs.
       </p>
 
-      {/* The three lines take the column's slack and space themselves through
-          it, so the completion state fills its 440 instead of stacking at the
-          top and stranding the gap above the button. */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-evenly', gap: '18px' }}>
-        {CAPABILITIES.map(({ icon: Ico, label }, i) => (
-          <motion.div key={label} {...rise(0.08 + i * 0.07)}
-            style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <Ico size={17} strokeWidth={1.75} color={iconColor} style={{ flexShrink: 0 }} />
-            <span style={{ fontSize: '13.5px', fontWeight: 500, color: t2, letterSpacing: '-0.012em' }}>
-              {label}
-            </span>
-          </motion.div>
-        ))}
-      </div>
+      {rows}
 
-      {/* marginTop:auto keeps the action on the 440 floor, as in the other state. */}
-      <div style={{ paddingTop: '26px' }}>
+      {/* marginTop:auto holds the action on the 440 floor, as in every other state. */}
+      <div style={{ marginTop: 'auto' }}>
         <PrimaryButton isLight={isLight} variant="green" label="Continue" onClick={onContinue} />
       </div>
     </motion.div>
@@ -789,7 +758,7 @@ function GuideResolved({ isLight, colors, t3 }: {
 // flip itself green, and clicking a granted row does nothing, because nothing
 // was revoked.
 function PermItem({
-  icon: Icon, label, row, busy, reduced, isLight, divider = false,
+  icon: Icon, label, row, busy, reduced, isLight,
 }: {
   icon:     React.ElementType;
   label:    string;
@@ -797,8 +766,6 @@ function PermItem({
   busy:     boolean;
   reduced:  boolean;
   isLight:  boolean;
-  /** A row precedes this one. Draws a hairline once the container is gone. */
-  divider?: boolean;
 }) {
   const t1 = isLight ? '#1C1C1E' : '#FFFFFF';
   const t3 = isLight ? 'rgba(28, 28, 30, 0.48)' : 'rgba(255, 255, 255, 0.44)';
@@ -817,15 +784,12 @@ function PermItem({
       transition={reduced ? { duration: 0 } : { type: 'spring', stiffness: 260, damping: 24 }}
       style={{
         display: 'flex', alignItems: 'center', gap: '10px',
-        // A granted row is a statement, not a control: no card, no border. The
-        // container is what says "you can act on this", so only the rows that
-        // still need something from the user keep one. Padding is unchanged so
-        // the rows hold their rhythm as they resolve.
+        // Every row keeps its container, granted or not, so the card is the
+        // same object in all four states and only the status inside it moves.
+        // Granted borrows a faint green edge rather than losing its box.
         padding: '13px 14px', borderRadius: '12px',
-        background: row.tone === 'granted' ? 'transparent' : glass,
-        border: `1px solid ${row.tone === 'granted' ? 'transparent' : rule}`,
-        // Without a container the rows need something to read as a list.
-        ...(row.tone === 'granted' && divider ? { borderTop: `1px solid ${rule}` } : {}),
+        background: glass,
+        border: `1px solid ${row.tone === 'granted' ? 'rgba(52,211,153,0.18)' : rule}`,
         transition: 'border-color 300ms',
       }}
     >
