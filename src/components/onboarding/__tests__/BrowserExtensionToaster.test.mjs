@@ -37,10 +37,12 @@ const stripComments = (text) => text
   .replace(/^[^\n]*?\/\/[^\n]*$/gm, '');
 const rendered = stripComments(source);
 
-// The genie itself lives in useGenieCard (shared with the permissions card and
-// every GenieModal popup). Its contracts are asserted against the hook.
+// The card opens and closes through GenieModal, like every other popup; the
+// genie itself lives in useGenieCard underneath it. Their contracts are
+// asserted against those files.
 const hookSource = readFileSync(resolve(__dirname, '../useGenieCard.ts'), 'utf8');
 const hook = stripComments(hookSource);
+const modal = stripComments(readFileSync(resolve(__dirname, '../../ui/GenieModal.tsx'), 'utf8'));
 
 // ─── Behaviour ──────────────────────────────────────────────────
 
@@ -92,7 +94,9 @@ test('auto-dismisses the moment the extension connects', () => {
 
 test('Escape and backdrop click both dismiss permanently', () => {
   assert.ok(source.includes("if (e.key === 'Escape') handlePermanentDismiss();"));
-  assert.ok(source.includes('if (e.target === e.currentTarget) handlePermanentDismiss();'));
+  assert.ok(rendered.includes('onBackdropClick={handlePermanentDismiss}'));
+  assert.ok(modal.includes('if (e.target === e.currentTarget && !closing) onBackdropClick?.();'),
+    'a click on the dim, not on the card');
 });
 
 test('"Not now" dismisses permanently and reports the skip', () => {
@@ -118,7 +122,30 @@ test('every way out plays the genie before reporting to the host', () => {
   assert.ok(hook.includes('cleanup = () => { live = false; clearTimeout(t); a.stop(); b.stop(); stopTrack(); runRef.current = null; };'),
     'a close the backstop already released cannot mark a later open as done');
   assert.ok(hook.includes('const shown = isOpen && !done;'));
-  assert.ok(rendered.includes("useGenieCard(isOpen || testForceShow, 'BrowserExtensionToaster')"));
+  // The card keeps its own open state and reports once GenieModal says the
+  // close has played.
+  assert.ok(rendered.includes('open={visible}'));
+  assert.ok(rendered.includes('setVisible(isOpen || testForceShow);'));
+  assert.ok(rendered.includes('onClosed={() => { const after = afterCloseRef.current; afterCloseRef.current = null; after?.(); }}'));
+  const own = rendered.slice(rendered.indexOf('const closeThen'), rendered.indexOf('const persistDismiss'));
+  assert.ok(own.includes('if (afterCloseRef.current) return;'), 'the first way out wins');
+  assert.ok(own.includes('setVisible(false);'));
+  assert.ok(!/after\s*\(/.test(own), 'closeThen only schedules the report');
+});
+
+test('pours out of one picture of itself, like every other popup', () => {
+  // useGenieCard on its own has no pictures, so it pours dozens of live copies
+  // of the card: the stutter the picture genie replaced. GenieModal hands it
+  // the pictures.
+  assert.ok(source.includes("import { GenieModal } from '../ui/GenieModal';"));
+  assert.ok(rendered.includes('<GenieModal') && rendered.includes('label="BrowserExtensionToaster"'));
+  assert.ok(!/useGenieCard/.test(rendered), 'no direct hook: that is the live-copy genie');
+  assert.ok(modal.includes('const genie = useGenieCard(presence.mounted, label, {') && modal.includes('    snapshots,'),
+    'GenieModal gives the hook its pictures');
+  // A picture of the card opening the store must not be the next open's.
+  assert.ok(rendered.includes('keepPictures={!opening}'));
+  const reset = rendered.slice(rendered.indexOf('if (!visible) { setPlateHover(false);'), rendered.indexOf('const item = reduced'));
+  assert.ok(!reset.includes('setOpening(false)'), 'opening stays set through the close picture');
 });
 
 test('a close that never finishes animating still releases the slot', () => {
@@ -142,7 +169,8 @@ test('the report fires once, however many ways out are taken', () => {
 
 test('clicks pass through while the card drains away', () => {
   // Otherwise "Add to Chrome" could still be hit mid-close.
-  assert.ok(rendered.includes("pointerEvents: closing ? 'none' : 'auto'"));
+  assert.ok(modal.includes("pointerEvents: closing ? 'none' : 'auto'"));
+  assert.ok(modal.includes("...(closing ? { pointerEvents: 'none' } : null)"), 'the dim too');
 });
 
 test('the genie is drawn by one per-frame write, straight to the DOM', () => {
@@ -168,7 +196,7 @@ test('the content warps with the funnel: bands of the card, not a clipped card',
   }
   assert.ok(hook.includes("querySelectorAll<HTMLElement>('[id]').forEach(el => el.removeAttribute('id'))"), 'no duplicate ids');
   assert.ok(hook.includes("el.style.willChange = 'auto';"), 'no layer per copy per promoted child');
-  assert.ok(rendered.includes('ref={bandsRef}') && /ref=\{bandsRef\}\s*aria-hidden\s*inert/.test(rendered),
+  assert.ok(modal.includes('ref={bandsRef}') && /ref=\{bandsRef\}\s*aria-hidden\s*inert/.test(modal),
     'the band layer is hidden from assistive tech and unreachable by keyboard');
 });
 
@@ -185,7 +213,8 @@ test('if the bands cannot be built, the outline genie still runs', () => {
 
 test('the shadow is moved, never re-rasterised', () => {
   assert.ok(!/drop-shadow|filter: liftShadow/.test(rendered + hook), 'no per-frame filter');
-  assert.ok(rendered.includes('boxShadow: isLight ? SHADOW_LIGHT : SHADOW_DARK'), 'the stand-in is the card\'s own shadow');
+  assert.ok(rendered.includes('shadow={isLight ? SHADOW_LIGHT : SHADOW_DARK}'), 'the stand-in is the card\'s own shadow');
+  assert.ok(modal.includes('boxShadow: shadow,'));
   assert.ok(rendered.includes("' + SHADOW_LIGHT") && rendered.includes("' + SHADOW_DARK"), 'shared with the card, so the hand-over is exact');
   assert.ok(hook.includes('shadow.style.opacity = String(1 - genieStretch(p));'), 'gone before the outline stops being a rectangle');
 });
@@ -331,10 +360,10 @@ test('closing is quicker than opening', () => {
 // ─── Accessibility ──────────────────────────────────────────────
 
 test('dialog semantics point at elements that exist', () => {
-  assert.ok(rendered.includes('role="dialog"'));
-  assert.ok(rendered.includes('aria-modal="true"'));
-  assert.ok(rendered.includes('aria-labelledby="ext-toast-title"') && rendered.includes('id="ext-toast-title"'));
-  assert.ok(rendered.includes('aria-describedby="ext-toast-desc"') && rendered.includes('id="ext-toast-desc"'));
+  assert.ok(rendered.includes("role: 'dialog'"));
+  assert.ok(rendered.includes("'aria-modal': true"));
+  assert.ok(rendered.includes("'aria-labelledby': 'ext-toast-title'") && rendered.includes('id="ext-toast-title"'));
+  assert.ok(rendered.includes("'aria-describedby': 'ext-toast-desc'") && rendered.includes('id="ext-toast-desc"'));
   assert.ok(rendered.includes('aria-label="Close"'));
 });
 
