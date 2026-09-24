@@ -296,6 +296,11 @@ export class CropperWindowHelper {
                     this.hideOrClose();
                 });
                 this.isEscapeRegistered = registered;
+                if (!registered) {
+                    // Another app holds Escape. The no-activate cropper never gets
+                    // keyboard focus, so it can now only be dismissed by the timeout.
+                    console.warn('[CropperWindowHelper] Could not register global Escape (held by another app?) — cancel falls back to the selection timeout');
+                }
             }
         } catch (e) {
             console.error('[CropperWindowHelper] Failed to register global Escape shortcut:', e);
@@ -567,6 +572,16 @@ export class CropperWindowHelper {
                 this.cropperWindow.showInactive();
             } else {
                 this.cropperWindow.show();
+            }
+            // showInactive() is SW_SHOWNOACTIVATE, which is not expected to change
+            // the z-order, and nothing activates the window any more to raise it.
+            // The cropper is preloaded at startup, so any always-on-top window
+            // shown since then (Zoom's share toolbar, say) would sit above it.
+            // moveTop() raises it without activating (SWP_NOACTIVATE).
+            try {
+                this.cropperWindow.moveTop();
+            } catch (e) {
+                console.error('[CropperWindowHelper] moveTop failed:', e);
             }
             this.cropperWindow.setContentProtection(this.isUndetectable);
 

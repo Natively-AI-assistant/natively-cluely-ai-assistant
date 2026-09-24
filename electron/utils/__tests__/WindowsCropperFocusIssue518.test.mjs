@@ -37,59 +37,46 @@ describe('Issue #518: Windows selective screenshot focus policy', () => {
     );
   });
 
-  test('CropperWindowHelper applyOpacityShield uses showInactive on Windows', () => {
-    // Extract the win32 branch of applyOpacityShield
-    const shieldStart = cropperSource.indexOf('private applyOpacityShield(');
-    assert.ok(shieldStart !== -1, 'applyOpacityShield must exist');
-    const shieldBody = cropperSource.slice(shieldStart, shieldStart + 1200);
+  // Source between two markers, with // comments stripped so a comment that
+  // says "do NOT call focus()" can neither satisfy nor trip an assertion.
+  const between = (from, to) => {
+    const s = cropperSource.indexOf(from);
+    const e = cropperSource.indexOf(to, s + from.length);
+    assert.ok(s !== -1 && e !== -1, `markers not found: ${from} … ${to}`);
+    return cropperSource.slice(s, e).replace(/\/\/.*$/gm, '');
+  };
+  // The win32 arm ends at the OUTER else. The first `} else {` inside it is the
+  // show() fallback for stubs without showInactive — slicing to that one left
+  // the opacity timer (where the #518 focus() lived) outside the assertion.
+  const shield = between('private applyOpacityShield(', 'private applyCombinedBounds(');
+  const outerElse = shield.search(/\}\s*else\s*\{\s*this\.cropperWindow\.setContentProtection/);
+  const win32Arm = shield.slice(shield.indexOf("process.platform === 'win32'"), outerElse);
+  const otherArm = shield.slice(outerElse);
 
-    const win32Arm = shieldBody.slice(
-      shieldBody.indexOf("process.platform === 'win32'"),
-      shieldBody.indexOf('} else {'),
-    );
-    assert.ok(win32Arm.length > 0, 'win32 branch in applyOpacityShield not found');
-
-    assert.match(
-      win32Arm,
-      /showInactive\(\)/,
-      'BUG (#518): applyOpacityShield on Windows must use showInactive() instead of activating show().',
-    );
+  test('applyOpacityShield on Windows shows inactive, raises without activating, never focuses', () => {
+    assert.ok(outerElse > 0, 'applyOpacityShield must keep its non-win32 arm');
+    assert.match(win32Arm, /\.showInactive\(\)/, 'BUG (#518): Windows must use showInactive(), not show().');
+    assert.match(win32Arm, /\.moveTop\(\)/, 'showInactive keeps the stale z-order slot; moveTop() must raise the cropper.');
+    assert.doesNotMatch(win32Arm, /\.focus\(\)/, 'BUG (#518): focus() on Windows blurs the foreground app.');
   });
 
-  test('CropperWindowHelper applyOpacityShield NEVER calls focus() on Windows', () => {
-    const shieldStart = cropperSource.indexOf('private applyOpacityShield(');
-    assert.ok(shieldStart !== -1, 'applyOpacityShield must exist');
-    const shieldBody = cropperSource.slice(shieldStart, shieldStart + 1200);
-
-    const win32Arm = shieldBody.slice(
-      shieldBody.indexOf("process.platform === 'win32'"),
-      shieldBody.indexOf('} else {'),
-    );
-    assert.ok(win32Arm.length > 0, 'win32 branch in applyOpacityShield not found');
-
-    assert.doesNotMatch(
-      win32Arm,
-      /\.focus\(\)/,
-      'BUG (#518): applyOpacityShield on Windows must NOT call focus() — calling focus() deactivates ' +
-        'the foreground application and emits browser blur/focus transitions.',
-    );
+  test('applyOpacityShield keeps the macOS/Linux arm unchanged (show + focus)', () => {
+    assert.match(otherArm, /\.show\(\)/);
+    assert.match(otherArm, /\.focus\(\)/);
   });
 
-  test('CropperWindowHelper manages global Escape shortcut for non-activating cancellation on Windows', () => {
-    assert.match(
-      cropperSource,
-      /globalShortcut/,
-      'CropperWindowHelper must import and use globalShortcut for non-activating Escape cancellation.',
-    );
-    assert.match(
-      cropperSource,
-      /registerEscapeShortcut|globalShortcut\.register\(\s*['"]Escape['"]/,
-      'CropperWindowHelper must register global Escape shortcut during cropper session.',
-    );
-    assert.match(
-      cropperSource,
-      /unregisterEscapeShortcut|globalShortcut\.unregister\(\s*['"]Escape['"]/,
-      'CropperWindowHelper must unregister global Escape shortcut when cropper closes or cancels.',
-    );
+  test('the global Escape is win32-only, armed by showCropper, and released on every exit path', () => {
+    assert.match(cropperSource, /registerEscapeShortcut\(\): void \{\s*if \(process\.platform !== 'win32'\) return;/);
+    assert.match(between('public async showCropper(', 'return new Promise('), /this\.registerEscapeShortcut\(\)/);
+    for (const [from, to] of [
+      ['private resolveCurrentSelection(', 'private rejectCurrentSelection('],
+      ['private rejectCurrentSelection(', 'public setContentProtection('],
+      ['private hideOrClose(', 'public closeWindow('],
+      ['public dispose(', 'Clear opacity timeout'],
+      ["on('closed'", 'before-input-event'],
+      ['this.beforeQuitHandler = () => {', "app.on('before-quit'"],
+    ]) {
+      assert.match(between(from, to), /this\.unregisterEscapeShortcut\(\)/, `${from} must release the global Escape`);
+    }
   });
 });
