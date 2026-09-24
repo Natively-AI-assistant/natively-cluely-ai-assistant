@@ -80,3 +80,42 @@ Raw result files are gitignored (they carry full prompts). Baseline files:
 `baseline-nomode-wta-followup-1790216737093`, `baseline-hour-1790215346935`,
 `baseline-cross-meeting-1790216514894`. After: `postfix-*` (cross-meeting, wta-followup,
 typed-long, hour) and `postfix3-*` (interview ×2 modes, typed) from the final build.
+
+## Mock technical interview, 118 questions, real capture and real STT (2026-09-24)
+
+`live-audio/mock-tech-interview.mjs`, 45 minutes: background, fundamentals with pushback, a merge-intervals
+problem broken down by the interviewer (clarify → approach → walkthrough → complexity → code → tests → edge cases
+→ stream variant), top-k, a webhook system design with the interviewer's numbers, behavioural, and a recall
+wrap-up. What-to-answer pressed after every interviewer question, 3 typed questions, 2 index probes. Scored
+by `analyze-mock.mjs`, then every miss hand-checked (`mock-interview-1790250804024`).
+
+| measure | scored | hand-checked |
+|---|---|---|
+| answered | 118/118 | 118/118, median 4.0 s, p90 4.7 s |
+| answered the question just asked, on topic | 106/118 | 107/118 (Q42, Q88, Q106 were scorer misses; Q86 was a wrong answer) |
+| memory-dependent questions with the earlier detail | 15/21 | 16/21 (Q76 was a scorer miss) |
+| recall wrap-up (details from min 1-35, asked min 38-45) | 9/10 | 9/10 |
+| coding ask produced code | 1/1 | 1/1 |
+| typed | 2/3 | 2/3 |
+
+The 11 wrong answers, by cause (each checked against the transcript around the press, question end + 2.5 s):
+- The question's start, or all of it, never reached the transcript (7). Short interviewer questions right
+  after the candidate stopped were lost whole (Q43 "How does a circuit breaker work?", Q63 "How would you
+  test your function?", Q82 "What does the high-level architecture look like?", 2.4-3.4 s each), so
+  What-to-answer answered the previous question. Others lost their opening clause: "What causes a deadlock,
+  and how do you prevent one?" arrived as "And how do you prevent one?" (Q12, Q24, Q44), "How big is your
+  team…" as "Is your team…" (Q08). The referent annotation then filled the gap wrongly ("(referring to:
+  Balance)", "role on MySQL?").
+- Transcribed after the press (1, Q68): "Suppose interval" arrived on time; the rest of the sentence was
+  finalized 20 s later.
+- Misheard (2): "idempotency" → "What potency … (referring to: URL)" (Q95); "about forty five engineers"
+  split into two finals "about 4" / "5 engineers", answered "Fifteen" (Q117; typed T3 read the same
+  transcript as 45; the scorer's "in evidence" flag for Q117 matched the evidence id "live-45", not the fact).
+- Meeting speech fell out of the prompt (1, Q86): the What-to-answer "Conversation so far" window is the last
+  2,400 characters of the rolling context, and 57% of those characters (avg over 114 prompts) are the
+  assistant's own previous suggestions, which the history section repeats. About 2 minutes of speech
+  survive: "retries for up to twenty four hours", said 2.5 minutes earlier, was not in the prompt, and the
+  answer capped retries at "a few minutes".
+- Typed T2 "What numbers did she give for the webhook service?" was annotated "(follow-up to: 'Is there
+  anything you would change in your design…')" and answered about the candidate's own design; the numbers
+  were in its evidence.
