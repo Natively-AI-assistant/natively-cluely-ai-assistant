@@ -31,6 +31,11 @@
 // driven by window.__notices: quota(), hindsight(state, reason?),
 // provider(), progress(done, total), clearProgress().
 //
+// `?cards=1` mounts the REAL Natively API card (premium; nothing without it)
+// and Trial promo, driven by window.__cards: nap(open), setKey(hasKey) for
+// which Natively API variant the next open picks, trial(open) (remounted per
+// open, as the orchestrator does) and trialOutcome('fail' | 'hang').
+//
 //   window.__genie.open() / .close()   drive it
 //   window.__genie.bands()             band copies present right now
 //   window.__genie.copyScroll()        scrollTop of the pane inside a copy
@@ -42,6 +47,8 @@ import { GenieModal } from '../components/ui/GenieModal';
 import { NativelyQuotaBanner } from '../components/NativelyQuotaBanner';
 import { HindsightStatusBanner } from '../components/HindsightStatusBanner';
 import { ProviderChangeNotice, type ProviderChangeWarning, type ReindexProgress } from '../components/ProviderChangeNotice';
+import { TrialPromoToaster } from '../components/trial/TrialPromoToaster';
+import { NativelyApiPromoToaster } from '../premium';
 
 // Outside Electron there is no capturePage. A probe that wants pictures
 // exposes __genieCaptureShim: an UNCLIPPED Page.captureScreenshot (the same
@@ -86,6 +93,49 @@ if (NOTICES) {
     openHindsightLog: async () => ({ ok: true }),
     openExternal: () => {},
   };
+}
+
+const CARDS = new URLSearchParams(location.search).get('cards') === '1';
+let cardsHasKey = false;
+let trialOutcome: 'fail' | 'hang' = 'fail';
+if (CARDS) {
+  (window as any).electronAPI = {
+    ...(window as any).electronAPI,
+    getStoredCredentials: async () => ({ hasGeminiKey: cardsHasKey }),
+    openExternal: () => {},
+  };
+}
+
+function CardsStage() {
+  const [nap, setNap] = useState(false);
+  const [trial, setTrial] = useState(false);
+  const [trialKey, setTrialKey] = useState(0);
+  useEffect(() => {
+    (window as any).__cards = {
+      nap: (open: boolean) => setNap(open),
+      setKey: (has: boolean) => { cardsHasKey = has; },
+      trial: (open: boolean) => { if (open) setTrialKey(k => k + 1); setTrial(open); },
+      trialOutcome: (o: 'fail' | 'hang') => { trialOutcome = o; },
+    };
+  }, []);
+  return (
+    <>
+      <NativelyApiPromoToaster isOpen={nap} onDismiss={() => setNap(false)} onOpenSettings={() => {}} />
+      {trialKey > 0 && (
+        <TrialPromoToaster
+          key={trialKey}
+          isOpen={trial}
+          hasNativelyKey={false}
+          hasTrialToken={false}
+          onDismiss={() => setTrial(false)}
+          onStartTrial={() => trialOutcome === 'hang'
+            ? new Promise<void>(() => {})
+            : Promise.reject(new Error('Could not start trial. Check your connection.'))}
+          onManualSetup={() => {}}
+        />
+      )}
+    </>
+  );
 }
 
 function NoticesStage() {
@@ -285,4 +335,4 @@ style.textContent = `@keyframes genie-harness-entrance { from { opacity: 0; tran
   background-size: 200% 100%; animation: genie-harness-shimmer 1.2s linear infinite; }`;
 document.head.appendChild(style);
 
-createRoot(document.getElementById('harness-root')!).render(NOTICES ? <NoticesStage /> : <Harness />);
+createRoot(document.getElementById('harness-root')!).render(CARDS ? <CardsStage /> : NOTICES ? <NoticesStage /> : <Harness />);
