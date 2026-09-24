@@ -173,7 +173,9 @@ export const WTA_FOLLOWUP = {
 export const INTERVIEW_FACTS = {
   stack: { re: /elixir/i, label: "interviewer's stack: Elixir services on one Postgres primary (min 1)" },
   latency: { re: /900|140\s*(ms|milli)/i, label: 'user said: p99 900 ms → 140 ms via gRPC at Brightline Freight (min 3)' },
-  teamSize: { re: /\bfour\b|\b4\b/i, label: 'user said: team of four engineers (min 5)' },
+  // The planted phrase only: a bare "four" matched "four phases" / "four steps"
+  // in answers that denied knowing the team size.
+  teamSize: { re: /\b(four|4)\s+engineers\b|\bteam of (four|4)\b|\b(four|4)[- ]person\b/i, label: 'user said: team of four engineers (min 5)' },
   deploy: { re: /nomad/i, label: 'interviewer said: they deploy with Nomad, not Kubernetes (min 12)' },
 };
 
@@ -228,3 +230,20 @@ export const INTERVIEW_PROBES = [
   { fact: 'deploy', text: 'And how would your rollout approach change given how we deploy?' },
   { fact: 'teamSize', text: 'How did you split the work across the team on that migration?' },
 ];
+
+// A DENIAL can quote the fact while rejecting it ("Q-47 isn't something you've
+// established"), so "the answer contains the fact" is not recall. Denial wins.
+export const denialRe = /(don'?t|do not|can'?t|cannot|couldn'?t)\s+(have|see|find|recall|know|confirm|verify)|isn'?t (in|anywhere|something)|not (in|anywhere in) (the|this|anything|what)|never (came up|mentioned|said|established|named)|didn'?t (say|mention|tell|give|name)|haven'?t (said|told|given|shared|mentioned)|nothing (you'?ve|in (this|the|what)|here)|no (record|mention|information|figure|number) |unverified|not (mentioned|provided|specified|available|established)|wasn'?t (mentioned|shared|stated)/i;
+
+export function score(answer, re) {
+  if (!answer) return 'error';
+  if (denialRe.test(answer)) return 'denied';
+  return re.test(answer) ? 'recalled' : 'wrong';
+}
+
+/** The fact regex for a result record, by scenario — used to re-score saved runs. */
+export function factRegexFor(scenario, fact) {
+  if (scenario === 'interview') return INTERVIEW_FACTS[fact]?.re;
+  if (scenario === 'hour') return HOUR_FACTS[fact]?.re;
+  return TYPED_CHAT_FACTS[fact]?.re;
+}

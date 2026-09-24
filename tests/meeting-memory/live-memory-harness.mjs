@@ -11,7 +11,7 @@
 //
 // Usage:
 //   node tests/meeting-memory/live-memory-harness.mjs <scenario> [--reps N] [--label name]
-//   scenarios: typed | typed-quiet | typed-wta | typed-long | wta-followup | hour | interview | all
+//   scenarios: typed | typed-quiet | typed-wta | typed-long | wta-followup | hour | interview | cross-meeting | all
 //   --mode <templateType>   run with a mode of that template active (e.g. technical-interview)
 //
 // For every turn it records the answer, the model that served it, the V3
@@ -25,7 +25,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   TYPED_CHAT_FACTS, TYPED_CHAT_SCRIPT, TYPED_LONG_SCRIPT, CHATTER, HOUR_FACTS, buildHourTranscript, WTA_FOLLOWUP,
-  INTERVIEW_FACTS, INTERVIEW_PROBES, buildInterviewTranscript,
+  INTERVIEW_FACTS, INTERVIEW_PROBES, buildInterviewTranscript, denialRe, score,
 } from './scenarios.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -173,15 +173,7 @@ function factLocation(prompt, re) {
   };
 }
 
-// A DENIAL can quote the fact while rejecting it ("Q-47 isn't something you've
-// established"), so "the answer contains the fact" is not recall. Denial wins.
-const denialRe = /(don'?t|do not|can'?t|cannot|couldn'?t)\s+(have|see|find|recall|know|confirm|verify)|isn'?t (in|anywhere|something)|not (in|anywhere in) (the|this|anything|what)|never (came up|mentioned|said|established|named)|didn'?t (say|mention|tell|give|name)|haven'?t (said|told|given|shared|mentioned)|nothing (you'?ve|in (this|the|what)|here)|no (record|mention|information|figure|number) |unverified|not (mentioned|provided|specified|available|established)|wasn'?t (mentioned|shared|stated)/i;
-
-function score(answer, re) {
-  if (!answer) return 'error';
-  if (denialRe.test(answer)) return 'denied';
-  return re.test(answer) ? 'recalled' : 'wrong';
-}
+// Scoring lives in scenarios.mjs so summarize.mjs can re-score saved answers.
 
 // ── scenarios ───────────────────────────────────────────────────────────────
 
@@ -338,6 +330,30 @@ async function runInterview() {
   return { liveMeetingId: live, results };
 }
 
+/** Meeting A is told a secret; meeting B (a different meeting) is asked for it.
+ *  B must NOT know it — anything else is one meeting's conversation leaking
+ *  into the next. Measured with no active mode, the default state. */
+async function runCrossMeeting() {
+  await startMeeting();
+  await injectChatter(2);
+  await typedTurn('Just between us for this call: the vendor shortlist codename is PINEAPPLE-SEVEN. Acknowledge briefly.');
+  await endMeeting();
+  await startMeeting();
+  await injectChatter(2);
+  const r = await typedTurn('What was the vendor shortlist codename I told you?');
+  const m = await memoryState();
+  const promptText = `${m.prompt?.system ?? ''}\n${m.prompt?.user ?? ''}`;
+  const rec = {
+    leakInPrompt: /PINEAPPLE/i.test(promptText),
+    leakInHistory: /PINEAPPLE/i.test(m.prompt?.conversationSummary ?? ''),
+    answerLeaks: /PINEAPPLE/i.test(r.answer ?? ''),
+    answer: r.answer, engineKey: m.engineKey, ring: m.allKeys,
+  };
+  console.log(`  cross-meeting leakInPrompt=${rec.leakInPrompt} answerLeaks=${rec.answerLeaks} key=${rec.engineKey}`);
+  await endMeeting();
+  return rec;
+}
+
 /** Activate (creating if needed) a mode of the given template; null deactivates. */
 async function activateMode(templateType) {
   if (templateType === null) {
@@ -345,7 +361,10 @@ async function activateMode(templateType) {
     return;
   }
   if (!templateType) return;
-  await e2e('__e2e__:enable-pro').catch(() => {});
+  // Never call __e2e__:enable-pro here: it WRITES a fake trial token through
+  // CredentialsManager, and before dev:agent passed --user-data-dir that write
+  // landed in the developer's real credentials.enc (2026-09-24). The isolated
+  // profile carries a copied license; a pro_required failure below is loud.
   const all = await evalIn('launcher', () => window.electronAPI.modesGetAll());
   const list = Array.isArray(all) ? all : (all?.modes ?? []);
   let mode = list.find((m) => (m.templateType ?? m.template_type) === templateType);
@@ -364,7 +383,7 @@ async function activateMode(templateType) {
 const identity = await probe();
 if (!identity?.success) throw new Error('memory-probe hook missing — is this the harness build with NATIVELY_E2E=1?');
 
-const plan = scenario === 'all' ? ['typed', 'typed-quiet', 'typed-wta', 'typed-long', 'wta-followup', 'hour', 'interview'] : [scenario];
+const plan = scenario === 'all' ? ['typed', 'typed-quiet', 'typed-wta', 'typed-long', 'wta-followup', 'hour', 'interview', 'cross-meeting'] : [scenario];
 fs.mkdirSync(RESULTS_DIR, { recursive: true });
 const out = { label, mode: modeTemplate ?? 'general (no active mode)', startedAt: new Date().toISOString(), runs: [] };
 const outFile = path.join(RESULTS_DIR, `${label}-${scenario}${modeTemplate ? `-${modeTemplate}` : ''}-${Date.now()}.json`);
@@ -381,6 +400,7 @@ for (const sc of plan) {
       else if (sc === 'wta-followup') data = await runWtaFollowup();
       else if (sc === 'hour') data = await runHour();
       else if (sc === 'interview') data = await runInterview();
+      else if (sc === 'cross-meeting') data = await runCrossMeeting();
       else throw new Error(`unknown scenario ${sc}`);
     } catch (e) {
       data = { error: String(e?.stack || e) };

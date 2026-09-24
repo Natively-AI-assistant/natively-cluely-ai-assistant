@@ -15,6 +15,24 @@ const files = argv.flatMap((a) => (a.endsWith('.json')
   : fs.readdirSync(DIR).filter((f) => f.startsWith(`${a}-`) && f.endsWith('.json')).map((f) => path.join(DIR, f))));
 const runs = files.flatMap((f) => JSON.parse(fs.readFileSync(f, 'utf8')).runs);
 
+// RE-SCORE every stored answer with the CURRENT scorer and fact regexes, so a
+// tightened matcher applies to baseline and post-fix runs alike (the raw files
+// keep whatever the harness scored at run time).
+const { score, factRegexFor } = await import('./scenarios.mjs');
+const evidenceOf = (u) => { const i = (u ?? '').indexOf('# Evidence'); return i >= 0 ? u.slice(i) : ''; };
+for (const r of runs) {
+  const recs = r.turns ? r.turns.filter((t) => t.kind === 'probe') : (r.results ?? []);
+  for (const x of recs) {
+    const re = factRegexFor(r.scenario, x.fact);
+    if (!re) continue;
+    x.result = score(x.answer, re);
+    if (typeof x.promptUser === 'string') {
+      x.factInEvidence = re.test(evidenceOf(x.promptUser));
+      if (r.scenario === 'interview' || r.scenario === 'hour') x.factInPrompt = re.test(x.promptUser);
+    }
+  }
+}
+
 const pct = (n, d) => (d ? `${n}/${d} (${Math.round((100 * n) / d)}%)` : 'n/a');
 const out = [];
 
@@ -99,6 +117,32 @@ if (iv.length) {
   for (const [k, e] of cells) out.push(`| ${k} | ${pct(e.recalled, e.n)} | ${pct(e.denied, e.n)} | ${pct(e.wrong + e.error, e.n)} | ${pct(e.inPrompt, e.n)} | ${pct(e.inEv, e.n)} | ${pct(e.inHist, e.n)} |`);
   const all = iv.flatMap((r) => r.results);
   out.push(`\n**Interview detail recall: ${pct(all.filter((x) => x.result === 'recalled').length, all.length)}**`);
+}
+
+const cm = runs.filter((r) => r.scenario === 'cross-meeting' && r.leakInPrompt !== undefined);
+if (cm.length) {
+  out.push(`\n## a new meeting must not know the previous meeting's conversation — ${cm.length} run(s)`);
+  out.push(`Previous meeting's secret in the new meeting's prompt: ${pct(cm.filter((r) => r.leakInPrompt).length, cm.length)}`);
+  out.push(`New meeting's answer repeats it: ${pct(cm.filter((r) => r.answerLeaks).length, cm.length)}`);
+}
+
+// Cost of memory: wall time per answered probe/turn (send → stream done) and
+// the size of the composed user prompt for probes. Medians, since one slow
+// provider response should not move the comparison.
+const median = (xs) => { const s = xs.filter((x) => Number.isFinite(x)).sort((a, b) => a - b); return s.length ? s[Math.floor(s.length / 2)] : NaN; };
+const costRows = [];
+for (const sc of ['typed', 'typed-long', 'interview', 'hour', 'wta-followup']) {
+  const rs = runs.filter((r) => r.scenario === sc);
+  const recs = rs.flatMap((r) => (r.turns ? r.turns.filter((t) => t.kind === 'probe') : (r.results ?? [])));
+  const ms = recs.map((x) => x.ms);
+  const chars = recs.map((x) => (typeof x.promptUser === 'string' ? x.promptUser.length : NaN));
+  if (recs.length) costRows.push(`| ${sc} | ${recs.length} | ${Math.round(median(ms))} | ${Math.round(median(chars))} |`);
+}
+if (costRows.length) {
+  out.push('\n## cost — median per probe');
+  out.push('| scenario | probes | answer time (ms) | composed user prompt (chars) |');
+  out.push('|---|---|---|---|');
+  out.push(...costRows);
 }
 
 const failed = runs.filter((r) => r.error);
