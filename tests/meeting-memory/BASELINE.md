@@ -237,3 +237,28 @@ under 20 ms at 400 exchanges and fired on 17 typed and 10 what-to-answer turns.
 **The account's AI quota ran out mid-run** (`ai_quota_exceeded`, 6,500,333 / 6,500,000 ai_tokens, resets
 2026-10-21). Every live run here spends the real account's quota; the last 3 probes of rep 2 and the
 control run after the fix answered "the model failed before generating an answer".
+
+**Clean re-run, silent devices** (`sess-clean`, 2 reps, hand-checked): 15/16 exact, 1 partial. That rep's
+URL-shortener recall added "something like Redis", which the original never named. The `sess-final`
+reps before it were contaminated: the meeting captured the Mac's default output device, where a football
+stream was playing, so What-to-answer resolved "It's Dani Olmo" as the question. Injected scenarios now
+start meetings on BlackHole.
+
+**Live-audio mock interview with session probes** (`mock-session2-1790284761913`, 119 questions, 0 playback failures, real STT).
+Four typed items were planted at minute 5 and asked about at minutes 47-49 (~110 exchanges later); a
+screenshot question was also spoken at minute 47:
+
+| probe | result |
+|---|---|
+| offer band typed at min 5 | ✓ 212k base |
+| screenshot, typed | ✓ "ERR-7Q41 … reconcileLedgerV3() at ledger/sync.go:88" |
+| screenshot, spoken, what-to-answer | ✓ reconcileLedgerV3() |
+| manual one-liner | ✓ verbatim |
+| follow-up chain (top-10 terms) | ✓ |
+| what the overlay suggested for "what does your team work on" (min 1.5) | ✓ quotes the suggestion (was the spoken reply before a3924c02) |
+| T1 constraints / T2 design numbers / T3 team summary | ✓ ✓ ✓ |
+
+Right question 116/119, on topic 117/119, memory-dependent 20/22. Of the 5 scorer "refusals", 4 are full
+answers and 1 correctly declines to invent a mentoring story. Misses: Q06 (no number) and Q117 ("did I
+say… our team" answered with the candidate's six, fixed after this run). Two opening clauses were clipped
+at full level (Q40 "page 99", Q66).
