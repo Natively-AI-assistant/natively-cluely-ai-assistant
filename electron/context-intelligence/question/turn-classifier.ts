@@ -1532,6 +1532,48 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
 
   if (input.isFollowUp || isBareFollowUp(q)) types.add('FOLLOW_UP');
 
+  // LIVE MEETING, PERSONAL OR FOLLOW-UP TURN (2026-09-24, measured live).
+  //
+  // In an interview the user states their own experience OUT LOUD, and the
+  // interviewer comes back to it ten or twenty minutes later without restating
+  // it: "Going back to that latency project you mentioned earlier, how did you
+  // measure the improvement?". Those turns claim USER_* (or are FOLLOW_UPs),
+  // whose authority is résumé/profile/documents — so General planned NOTHING,
+  // Technical Interview planned the résumé alone, and the transcript that
+  // holds the answer was never read: 2 of 16 details recalled across four
+  // live runs (tests/meeting-memory, interview scenario), each miss answered
+  // "I don't have the specifics of that project".
+  //
+  // Same shape as the inferred-claim rule above (issue #552): the meeting side
+  // is claimed as an ALTERNATIVE, so answerability grades each side honestly,
+  // and only when a meeting port was actually built for this turn. Which lines
+  // of the transcript may evidence a PERSONAL fact is the composer's rule
+  // (the user's own spoken words, never the other party's).
+  //
+  // A question that POINTS BACK at the conversation ("given what I told you
+  // about our setup", "you mentioned earlier", "going back to") is about what
+  // was said whatever else it claims: measured in Technical Interview, "Given
+  // what I told you about our setup, how would you tackle our write-load
+  // problem?" was claimed DOCUMENT_FACT by another branch, planned only
+  // documents, and answered "I don't have the details of your setup" 4 of 4.
+  if (input.inLiveMeeting
+      && input.policy.allowedSourceTypes.includes('MEETING_TRANSCRIPT')
+      && !claims.has('MEETING_STATEMENT')
+      && ([...claims].some((c) => c.startsWith('USER_')) || types.has('FOLLOW_UP') || SAID_EARLIER_RE.test(q)
+        // A LOOKUP is the same case (2026-09-24): in a live meeting the value
+        // a question needs is as likely to have been SAID as written. In
+        // technical-interview "How much storage should we plan for the event
+        // archive at one kilobyte per event?" and "How would you key the Kafka
+        // topic for this?" claimed the document side only, and the
+        // interviewer's "keep every event for forty-five days" / "ordering per
+        // warehouse ID", said 26 minutes earlier, were never retrieved (0/4).
+        // A question that names its document ("what does section 3 of the
+        // design doc say…") is about that document and is left alone.
+        || (claims.has('DOCUMENT_FACT') && !DOCUMENT_RE.test(q) && !DOC_DEIXIS_RE.test(q)
+          && !mentionsAttachedFile(q, input.attachedFileNames)))) {
+    types.add('MEETING_FACT'); noteWholeQ('MEETING_STATEMENT');
+  }
+
   // A meta-request is not a question about the sources, so it carries no claim
   // and needs no retrieval. Returning early keeps prompt-shaped document text
   // out of the candidate pool entirely.
@@ -1689,6 +1731,13 @@ const NON_RETRIEVABLE: readonly SourceType[] = ['CONVERSATION_STATE'];
 // is widened unconditionally, and does not need this gate: it runs against
 // chunks that were actually retrieved, and a retrieved chunk is proof a document
 // exists.
+/** A pointer back at the conversation itself — see the live-meeting rule in detectTypes. */
+// `told you` / `told me` with no lead-in, and "at the start": live STT drops the
+// first words of an utterance ("Given what I told you about our setup at the
+// start" arrived as "told you about our setup at the start…", measured
+// 2026-09-24), so the pattern cannot depend on the lead-in.
+const SAID_EARLIER_RE = /\btold\s+(?:you|me)\b|\b(?:at|from)\s+the\s+(?:start|beginning)\s+of\s+(?:the|this|our)\s+(?:call|meeting|conversation|interview)\b|\bat\s+the\s+start\b(?=[^?]*\?)|\b(?:what|as|like)\s+(?:i|we|you)\s+(?:told\s+(?:you|me)|said|mentioned|described|explained)\b|\b(?:you|i|we)\s+(?:mentioned|said|told\s+(?:me|you)|described)\s+(?:earlier|before|at\s+the\s+start)\b|\bgoing\s+back\s+to\b|\b(?:earlier|before)\s+you\s+(?:said|mentioned)\b/i;
+
 const claimToSource = (claim: ClaimType, hasDocuments: boolean, anchored: readonly SourceType[] = [], profileOnlyDocuments = false): SourceType[] => {
   const authoritative = (hasDocuments ? claimAuthority(claim) : CLAIM_AUTHORITY[claim]).authoritative;
   if (!authoritative.length) return [];
@@ -1908,7 +1957,13 @@ export function classifyTurn(input: ClassificationInput): Classification {
     // consults document pools only and the evidence gate keeps the last word.
     const ambiguousOverDocuments = input.hasAttachedDocuments === true
       && DOCUMENT_FACT_RETRIEVAL_SOURCES.some((src) => input.policy.allowedSourceTypes.includes(src));
-    path = 'GROUNDED'; shouldRetrieve = requiredSourceTypes.length > 0 || followUp || ambiguousOverDocuments;
+    // The same holds for a live meeting (2026-09-24): the meeting is the
+    // material, and "How would you key the Kafka topic for this?" — AMBIGUOUS,
+    // no claim — went out with nothing while the interviewer's "ordering must
+    // hold per warehouse ID" sat in the meeting index.
+    const ambiguousInLiveMeeting = input.inLiveMeeting === true
+      && input.policy.allowedSourceTypes.includes('MEETING_TRANSCRIPT');
+    path = 'GROUNDED'; shouldRetrieve = requiredSourceTypes.length > 0 || followUp || ambiguousOverDocuments || ambiguousInLiveMeeting;
     reason = followUp ? 'follow-up may reference grounded content by pronoun' : 'ambiguous question — retrieve conservatively';
   } else {
     path = 'GROUNDED'; shouldRetrieve = true;

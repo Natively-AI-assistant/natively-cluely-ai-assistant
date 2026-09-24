@@ -75,8 +75,15 @@ describe('WTA keeps the active coding problem for a coding continuation (#539)',
   test('a behavioural question after the coding problem does NOT inherit it', async () => {
     const prompt = await press([...earlier, [3, 'interviewer', 'Tell me about your experience with python']]);
     assert.ok(prompt, 'the provider was called');
-    assert.doesNotMatch(prompt, /rotate the active encryption key/);
     assert.doesNotMatch(prompt, /follow-up to the coding problem/);
+    // 2026-09-24: in a live meeting a personal question also reads the
+    // transcript (details the user said aloud), and this fixture's whole
+    // meeting is one retrievable window — so the old problem may appear as
+    // quoted MEETING_TRANSCRIPT evidence. It must appear NOWHERE else: not as
+    // the question, not as the active coding problem.
+    const outsideTranscriptEvidence = prompt.replace(
+      /<evidence[^>]*source_type="MEETING_TRANSCRIPT"[^>]*>[\s\S]*?<\/evidence>/g, '');
+    assert.doesNotMatch(outsideTranscriptEvidence, /rotate the active encryption key/);
   });
 
   // The old turns can still reach the prompt through the durable meeting-transcript

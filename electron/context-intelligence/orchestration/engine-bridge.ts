@@ -14,7 +14,13 @@
 // never "no answer".
 
 import { isContextIntelligenceV3Enabled } from '../contracts/flag';
-import { MAX_TURN_SCREEN_CHARS } from '../question/conversation-state';
+import { MAX_TURN_SCREEN_CHARS, type HistoryTurn } from '../question/conversation-state';
+import { renderHistory } from '../question/history-render';
+
+/** Allowance for the history RECALL tier: up to three older exchanges the
+ *  question is about, with their screen text (history-render.ts). */
+const RECALL_BUDGET_CHARS = 4000;
+import { NO_CONVERSATION_SCOPE } from '../question/conversation-state-store';
 import { orchestrate, type AnswerRequest, type RetrievalPort } from './orchestrator';
 import { composePrompt } from '../generation/prompt-composer';
 import { resolveModePolicy, isModeId, type ModeId } from '../policies/mode-policy-registry';
@@ -46,6 +52,20 @@ function redactTracePayload<T>(payload: T): unknown {
  * caller passed through.
  */
 const COMPLETED_EXCHANGE_RE = /^(?:Assistant:|Previous answer)/m;
+
+/**
+ * Whether a live speech window already carries this answer. SessionTracker
+ * renders an assistant turn as "[ASSISTANT (PREVIOUS SUGGESTION)]: <text>", so
+ * the answer's opening words — whitespace-collapsed, gist line dropped — are
+ * the stable thing to look for. Too short an opening is not evidence either
+ * way and is treated as absent (a duplicated line costs less than a lost one).
+ */
+export function speechWindowContains(speech: string, answer: string): boolean {
+  const norm = (x: string) => x.replace(/\[\[GIST\]\][^\n]*/g, '').replace(/\s+/g, ' ').trim();
+  const probe = norm(answer).slice(0, 60);
+  if (probe.length < 24) return false;
+  return norm(speech).includes(probe);
+}
 
 export interface BridgeInput {
   surface: AnswerSurface;
@@ -305,11 +325,6 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
     // rollback still could not reach live spoken answers. They pass it now.
     // If a new buildV3Prompt call site appears, it needs the flag too.
     //
-    // And a THIRD half is still missing: only ipcHandlers calls
-    // recordAnswerSummary, so the ring is never populated on those surfaces and
-    // the flag there currently skips an empty ring. See IntelligenceEngine's
-    // call site for the full note.
-    //
     // A caller-supplied summary is only "content" when it actually holds a
     // COMPLETED EXCHANGE, which is what ComposeInput.conversationHasContent
     // documents. Mere presence was the old test, and the live spoken surfaces
@@ -339,6 +354,8 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
      *  withheldScopes once that set exists, so the [V3] line and the debug
      *  collector both show the withholding rather than a silent drop. */
     let historyScreenWithheld = false;
+    /** Older exchanges the history RECALL tier brought back (log only). */
+    let historyRecalled = 0;
     if (!convoSummary) {
       try {
         const { getConversationState } = require('../question/conversation-state-store');
@@ -350,7 +367,7 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
         // the exchange in the order it happened.
         // The toggle. OFF skips the ring entirely and falls through to the
         // one-turn block below, which is exactly what shipped before the fix.
-        let turns: Array<{ q: string; a: string; screen?: string }> =
+        const turns: HistoryTurn[] =
           input.multiTurnHistory === false ? [] : (cs?.turns ?? []);
         // Only a COMPLETED exchange counts as something to answer from. The
         // question-only fallback below is rendered for continuity, but it is
@@ -358,81 +375,47 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
         // on the strength of it.
         convoHasContent = turns.length > 0;
         if (turns.length) {
-          // ENFORCE the mode's declared conversation budget, oldest dropped
-          // first. The ring is already bounded by construction, but a full ring
-          // of long answers is ~4k tokens — well past every mode's declared
-          // conversationTokens, a field the packer never read. Honouring it
-          // here keeps the declaration true instead of decorative.
+          // ENFORCE the mode's declared conversation budget. The ring retains
+          // more than that (MAX_HISTORY_TURNS), so renderHistory spends it on
+          // the NEWEST exchanges in full and gives older ones — the user's own
+          // words plus a one-line gist — a second allowance of the same size,
+          // sized off the mode so a deliberately small budget (seminar) stays
+          // small. Before, anything past the allowance was simply dropped, and
+          // measured live that was every fact typed more than a few exchanges
+          // back (2026-09-24, tests/meeting-memory).
           const budgetChars = Math.max(0, (policy.contextBudget?.conversationTokens ?? 600) * 4);
-          // Decided BEFORE the budget loop, because the loop must not charge for
+          // Decided BEFORE rendering, because the budget must not charge for
           // text it will not send. Billing a withheld screen line against the
           // conversation budget evicted older turns to make room for something
           // that is then dropped — so denying the `screenshots` scope silently
           // shortened a user's history as well as redacting it.
+          //
+          // SCREEN TEXT IS SCREENSHOT DATA, WHEREVER IT TRAVELS. These lines
+          // are rendered into convoSummary, which is dropped only when the
+          // TRANSCRIPT scope is denied and tagged only as `transcript` in
+          // packedDataScopes; the evidence filter only sees EvidenceItems, so
+          // prose walks past it. The policy is read HERE (before orchestrate)
+          // and live every turn, never cached: esbuild inlines this module into
+          // every entry bundle and a cached copy would go stale.
           const screensDenied = isScopeDenied('screenshots', readProviderScopePolicy());
-          // Screen text gets its OWN allowance rather than competing with the
-          // exchanges for the conversation budget. Sharing one budget meant a
-          // single screenshot (up to MAX_TURN_SCREEN_CHARS) consumed the whole
-          // ~2400-char conversation allowance and evicted every older turn — so
-          // attaching a screenshot silently shortened the user's history, and a
-          // second screenshot evicted the first. They are different content
-          // answering different questions; one budget could only trade them off.
-          const screenBudgetChars = MAX_TURN_SCREEN_CHARS * 2;
-          let spent = 0;
-          let screenSpent = 0;
-          const kept: typeof turns = [];
-          for (let i = turns.length - 1; i >= 0; i--) {
-            const t = turns[i];
-            const cost = t.q.length + t.a.length + 32;
-            // Always keep the most recent exchange, even if it alone overruns:
-            // dropping it would leave a follow-up with no antecedent at all.
-            if (kept.length && spent + cost > budgetChars) break;
-            spent += cost;
-            // Newest-first, so the most recent screens win the screen budget.
-            // A turn whose screen does not fit still keeps its q/a — losing the
-            // picture must not cost the user the exchange as well.
-            const screenCost = screensDenied ? 0 : (t.screen?.length ?? 0);
-            if (screenCost && screenSpent + screenCost > screenBudgetChars) {
-              kept.unshift({ q: t.q, a: t.a });
-              continue;
-            }
-            screenSpent += screenCost;
-            kept.unshift(t);
-          }
-          turns = kept;
-          // SCREEN TEXT IS SCREENSHOT DATA, WHEREVER IT TRAVELS.
-          //
-          // These lines are rendered into convoSummary, which is dropped only
-          // when the TRANSCRIPT scope is denied and tagged only as `transcript`
-          // in packedDataScopes. So a user who denied `screenshots` for their
-          // provider had the SCREEN_CONTEXT evidence correctly withheld by
-          // filterEvidenceByProviderScopes — and the same text delivered anyway
-          // inside this history line, for up to 10 turns. The evidence filter
-          // only sees EvidenceItems; prose walks past it.
-          //
-          // Same class as the transcript drop below ("the one door the filter
-          // does not cover"), which is exactly why it needs the same treatment.
-          //
-          // The policy is read HERE rather than reusing the one below, because
-          // the history is rendered before orchestrate() runs. Reading it twice
-          // is correct by this module's own rule: the policy is read live every
-          // turn and never cached, since esbuild inlines this file into every
-          // entry bundle and a cached copy would go stale outside the bundle
-          // that wrote it.
-          const hadScreen = turns.some((t) => t.screen);
-          const renderedScreen = hadScreen && !screensDenied;
-          historyScreenWithheld = hadScreen && screensDenied;
-          const rendered = turns.map((t) => [
-            `User: ${t.q}`,
-            // The screenshot the user attached on that turn, as text. The image
-            // is long gone from the payload by now; this is all a follow-up has.
-            ...(t.screen && !screensDenied ? [`[screen attached that turn] ${t.screen}`] : []),
-            `Assistant: ${t.a}`,
-          ].join('\n')).join('\n\n');
-          historyCarriesScreenText = renderedScreen;
+          const rendered = renderHistory(turns, {
+            budgetChars,
+            digestBudgetChars: budgetChars,
+            // Screen text gets its OWN allowance: sharing one budget meant a
+            // single screenshot consumed the whole conversation allowance and
+            // evicted every older turn.
+            screenBudgetChars: MAX_TURN_SCREEN_CHARS * 2,
+            screensDenied,
+            // Older exchanges this question is about, in full (RECALL tier).
+            query: question,
+            recallBudgetChars: RECALL_BUDGET_CHARS,
+          });
+          historyScreenWithheld = rendered.screenWithheld;
+          historyCarriesScreenText = rendered.carriesScreen;
+          historyRecalled = rendered.recalledCount;
           // The CURRENT question is not in the ring yet (its answer does not
           // exist), so nothing here duplicates it.
-          convoSummary = rendered;
+          convoSummary = rendered.text;
         } else if (cs?.previousQuestion) {
           // Fallback for a turn already in flight when the ring was empty —
           // e.g. the first turn after an upgrade, or a caller that advances
@@ -454,47 +437,52 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
       // because no microphone records a screenshot. Choosing between them threw
       // away the only record of every screenshot the user ever attached.
       //
-      // Only the screen-bearing turns are merged, each anchored to its own
-      // question. The q/a text is deliberately NOT merged: the speech window
-      // already covers the conversation, and appending the ring's copy would
-      // duplicate every exchange and spend the conversation budget twice.
+      // The speech window is also SHORT: the last 60-90 seconds, cut to its
+      // last 2,400 characters. It was assumed to "already cover the
+      // conversation", so only screen-bearing turns were merged — measured
+      // live (2026-09-24, tests/meeting-memory wta-followup), a follow-up asked
+      // two minutes after a what-to-answer turn got "I don't have the earlier
+      // detail on which algorithm you picked", 2 runs of 2. So every ring
+      // exchange the window does NOT contain is merged, through the same
+      // renderer as typed chat, within the mode's budget minus what the
+      // window already spends.
       try {
         const { getConversationState } = require('../question/conversation-state-store');
         const cs = getConversationState(req.sessionId);
-        const screenTurns = (cs?.turns ?? []).filter((t: { screen?: string }) => t.screen);
-        if (screenTurns.length) {
-          const screensDenied = isScopeDenied('screenshots', readProviderScopePolicy());
-          historyScreenWithheld = screensDenied;
-          if (!screensDenied) {
-            // BUDGETED, newest-first — the same allowance the ring branch above
-            // enforces for the same content. Without it this mapped EVERY
-            // screen-bearing turn: measured, 10 turns at MAX_TURN_SCREEN_CHARS
+        const ringTurns: HistoryTurn[] = cs?.turns ?? [];
+        const sharedBucket = req.sessionId === NO_CONVERSATION_SCOPE;
+        if (ringTurns.length) {
+          const speech = String(convoSummary ?? '');
+          const budgetChars = Math.max(0, (policy.contextBudget?.conversationTokens ?? 600) * 4);
+          const rendered = renderHistory(ringTurns, {
+            budgetChars: Math.max(0, budgetChars - speech.length),
+            digestBudgetChars: budgetChars,
+            // BUDGETED like the ring branch. Unbudgeted, 10 screen turns once
             // put 80,000 characters of screen text into an 83,072-character
-            // prompt, five times the allowance this file declares a few lines
-            // up, on every what-to-answer and assist turn of the session.
-            const screenBudgetChars = MAX_TURN_SCREEN_CHARS * 2;
-            let screenSpent = 0;
-            const keptScreens: Array<{ q: string; screen?: string }> = [];
-            for (let i = screenTurns.length - 1; i >= 0; i--) {
-              const t = screenTurns[i];
-              const cost = (t.screen?.length ?? 0) + (t.q?.length ?? 0) + 32;
-              // Always keep the most recent screen even if it alone overruns:
-              // dropping it would answer a follow-up about the screen the user
-              // is most likely to mean with nothing at all.
-              if (keptScreens.length && screenSpent + cost > screenBudgetChars) break;
-              screenSpent += cost;
-              keptScreens.unshift(t);
-            }
-            // Same per-turn shape the ring branch renders, so the composer's
-            // "[screen attached that turn]" exception recognizes both.
-            const merged = keptScreens.map((t: { q: string; screen?: string }) => [
-              `User: ${t.q}`,
-              `[screen attached that turn] ${t.screen}`,
-            ].join('\n')).join('\n\n');
-            convoSummary = `${convoSummary}\n\n${merged}`;
-            historyCarriesScreenText = true;
-            // The merged block IS a completed observation to answer from, which
-            // a bare speech window is not.
+            // prompt on every what-to-answer and assist turn.
+            screenBudgetChars: MAX_TURN_SCREEN_CHARS * 2,
+            screensDenied: isScopeDenied('screenshots', readProviderScopePolicy()),
+            // Dedupe against the ACTUAL window text, not "was it recent": the
+            // 2,400-char cut lands inside the 90 seconds, so recency alone
+            // could leave a turn in neither place. A screen turn is never
+            // skipped — no microphone records a screenshot.
+            //
+            // The SHARED bucket (no meeting, no session) is not a conversation
+            // identity: every unscoped what-to-answer press writes to it, so
+            // its exchanges are unrelated to one another and rendering them
+            // would carry one press's question into the next. It keeps the
+            // screen-only merge it always had.
+            exclude: (t) => !t.screen && (sharedBucket || speechWindowContains(speech, t.a)),
+            query: question,
+            recallBudgetChars: RECALL_BUDGET_CHARS,
+          });
+          historyScreenWithheld = rendered.screenWithheld;
+          historyRecalled = rendered.recalledCount;
+          if (rendered.turnCount) {
+            convoSummary = `${speech}\n\n${rendered.text}`;
+            historyCarriesScreenText = rendered.carriesScreen;
+            // The merged exchanges ARE completed turns to answer from, which a
+            // bare speech window is not.
             convoHasContent = true;
           }
         }
@@ -571,6 +559,8 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
       realtimeInstruction: input.realtimeInstruction,
       defaultLengthDirective: input.defaultLengthDirective,
       conversationSummary: convoSummary,
+      // What-to-answer answers the OTHER person's question: their "I" is theirs.
+      heardQuestion: input.surface === 'what-to-answer',
       conversationHasContent: convoHasContent && Boolean(convoSummary),
       // Only TRUE when a screen line actually survived into the rendered
       // history — so a withheld `screenshots` scope cannot make the composer
@@ -686,6 +676,11 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
         })),
         answerability: result.trace.answerability,
         fallback: result.trace.fallbackUsed,
+        // Timings and history reach (2026-09-24): how long the lookups took
+        // and how many older exchanges the RECALL tier brought back.
+        retrievalMs: Math.round(result.trace.latency?.retrievalMs ?? 0),
+        orchestrateMs: Math.round(result.trace.latency?.totalMs ?? 0),
+        historyRecalled,
         // Privacy withholding (2026-08-01). Identity/counts only. A turn that
         // answered thinly because the user switched a data scope off was
         // previously indistinguishable in the logs from a retrieval miss.
@@ -782,6 +777,23 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
         legacyPath: `v3-${input.surface}${input.pathTag ? `-${input.pathTag}` : ''}`,
       } as never);
     } catch { /* observability must never break an answer */ }
+
+    // E2E-only (NATIVELY_E2E=1, never set in a shipped app): the composed
+    // prompt as handed to the transport, so the conversation-memory harness can
+    // tell "the fact never reached the prompt" from "it was there and the model
+    // did not use it". Read back through `__e2e__:memory-probe`.
+    if (process.env.NATIVELY_E2E === '1') {
+      try {
+        const g = globalThis as unknown as { __nativelyE2eV3Prompts?: unknown[] };
+        const ring = g.__nativelyE2eV3Prompts ?? (g.__nativelyE2eV3Prompts = []);
+        ring.push({
+          at: Date.now(), surface: input.surface, sessionId: req.sessionId,
+          scope: req.scope, conversationSummary: convoSummary ?? null,
+          system: composed.system, user: composed.user,
+        });
+        if (ring.length > 40) ring.splice(0, ring.length - 40);
+      } catch { /* harness capture only */ }
+    }
 
     return {
       system: composed.system,
