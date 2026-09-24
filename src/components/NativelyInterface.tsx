@@ -1312,8 +1312,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const answerStopInFlightRef = useRef(false);
   const [manualTranscript, setManualTranscript] = useState('');
   const manualTranscriptRef = useRef<string>('');
-  const interviewerRecordingInputRef = useRef<string>('');
-  const interviewerRecordingPartialRef = useRef<string>('');
   const [showTranscript, setShowTranscript] = useState(() => {
     const stored = localStorage.getItem('natively_interviewer_transcript');
     return stored !== 'false';
@@ -5033,8 +5031,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // recording must not prepend its words to the next meeting's question.
       manualTranscriptRef.current = '';
       voiceInputRef.current = '';
-      interviewerRecordingInputRef.current = '';
-      interviewerRecordingPartialRef.current = '';
       isRecordingRef.current = false;
       answerStopInFlightRef.current = false;
       setIsManualRecording(false);
@@ -6806,22 +6802,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           return; // Safety check for any other speaker types
         }
 
-        // Issue #540: When Answer recording is active, also capture interviewer speech
-        // arriving via system audio (e.g. SCK over headphones/Bluetooth/USB).
-        // This ensures the question can be answered even if the user does not speak into a mic.
-        if (isRecordingRef.current) {
-          if (transcript.final) {
-            interviewerRecordingInputRef.current = mergeTranscriptChunks(
-              interviewerRecordingInputRef.current,
-              transcript.text,
-            );
-            interviewerRecordingPartialRef.current = '';
-            answerTailWaiterRef.current!.notifyFinal();
-          } else {
-            interviewerRecordingPartialRef.current = transcript.text;
-          }
-        }
-
         // Route to rolling transcript bar — partials debounced; finals commit immediately.
         if (!transcript.final) {
           if (!interviewerSpeakingRef.current) {
@@ -7318,19 +7298,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     analytics.trackCommandExecuted('what_to_say');
 
     try {
-      // The rolling bar is already capped at 8 KiB. Keep the latest few STT
-      // segments so a question split by punctuation/finalization stays intact,
-      // while older meeting discussion cannot become the primary request.
-      const directTranscriptSnapshot = pendingRollingPartialRef.current
-        ? mergeRollingTranscriptPartial(rollingTranscript, pendingRollingPartialRef.current)
-        : rollingTranscript;
-      const interviewerRequest = directTranscriptSnapshot
-        .split('  ·  ')
-        .slice(-4)
-        .join('  ·  ')
-        .trim()
-        .slice(-8192);
-
       if (directAssistEnabled) {
         // Direct screenshot requests never trigger automatic page capture. A
         // deliberate, already-captured page is still consumed once and can ride
@@ -7349,6 +7316,18 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
               : message,
           ));
         }
+        // The rolling bar is already capped at 8 KiB. Keep the latest few STT
+        // segments so a question split by punctuation/finalization stays intact,
+        // while older meeting discussion cannot become the primary request.
+        const directTranscriptSnapshot = pendingRollingPartialRef.current
+          ? mergeRollingTranscriptPartial(rollingTranscript, pendingRollingPartialRef.current)
+          : rollingTranscript;
+        const interviewerRequest = directTranscriptSnapshot
+          .split('  ·  ')
+          .slice(-4)
+          .join('  ·  ')
+          .trim()
+          .slice(-8192);
         const hasScreenshots = currentAttachments.length > 0;
         const directWhatToSayPayload = buildDirectWhatToSayPayload({
           interviewerRequest,
@@ -7463,9 +7442,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
             }
           : undefined;
 
-      // Pass imagePath if attached, and forward interviewerRequest from rolling transcript if available
+      // Pass imagePath if attached
       const result = await window.electronAPI.generateWhatToSay(
-        interviewerRequest || undefined,
+        undefined,
         currentAttachments.length > 0 ? currentAttachments.map((s) => s.path) : undefined,
         options,
       );
@@ -8250,10 +8229,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         // Event-driven: resolves the moment a FINAL user chunk is merged, and
         // is bounded so an empty recording still returns promptly.
         await answerTailWaiterRef.current!.wait({
-          hasCapturedFinal: voiceInputRef.current.trim().length > 0
-            || interviewerRecordingInputRef.current.trim().length > 0,
-          hasPendingInterim: manualTranscriptRef.current.trim().length > 0 || providerReportsPending
-            || interviewerRecordingPartialRef.current.trim().length > 0,
+          hasCapturedFinal: voiceInputRef.current.trim().length > 0,
+          hasPendingInterim: manualTranscriptRef.current.trim().length > 0 || providerReportsPending,
         });
         isRecordingRef.current = false;
         answerStopInFlightRef.current = false;
@@ -8263,7 +8240,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         const currentAttachments = attachedContext;
         setAttachedContext([]);
 
-        const rawMicQuestion = mergeTranscriptChunks(
+        const question = mergeTranscriptChunks(
           voiceInputRef.current,
           manualTranscriptRef.current,
         ).trim();
@@ -8271,31 +8248,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         voiceInputRef.current = '';
         setManualTranscript('');
         manualTranscriptRef.current = '';
-
-        // Issue #540: If no user microphone speech was captured, fall back to interviewer speech
-        // captured during the recording window (e.g. system audio over headphones/Bluetooth/USB),
-        // or the latest interviewer question from the rolling transcript bar.
-        const recordedInterviewer = mergeTranscriptChunks(
-          interviewerRecordingInputRef.current,
-          interviewerRecordingPartialRef.current,
-        ).trim();
-        interviewerRecordingInputRef.current = '';
-        interviewerRecordingPartialRef.current = '';
-
-        const directTranscriptSnapshot = pendingRollingPartialRef.current
-          ? mergeRollingTranscriptPartial(rollingTranscript, pendingRollingPartialRef.current)
-          : rollingTranscript;
-        const rollingInterviewerQuestion = directTranscriptSnapshot
-          .split('  ·  ')
-          .slice(-4)
-          .join('  ·  ')
-          .trim()
-          .slice(-8192);
-
-        const question = mergeTranscriptChunks(
-          rawMicQuestion || recordedInterviewer || rollingInterviewerQuestion,
-          '',
-        ).trim();
 
         if (!question && currentAttachments.length === 0) {
           if (sttUserStatus === 'failed' && sttUserError) {
@@ -8318,14 +8270,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
               },
             ]);
           } else {
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: genMessageId(),
-                role: 'system',
-                text: '⚠️ No speech detected. Try speaking closer to your microphone.',
-              },
-            ]);
+            // Issue #540: a healthy but silent mic (listening through headphones,
+            // Bluetooth or USB) means the user wants the other party answered.
+            // Hand off to What to Answer, which reads main's speaker-labelled
+            // transcript (recency window, question extraction, interim guard) and
+            // says so itself when there is nothing to answer. A failed or
+            // reconnecting mic keeps its diagnostic above instead. Read through
+            // handlersRef: this closure is from the Stop press, before the tail
+            // wait. Not awaited, so the Answer lock is released immediately.
+            void handlersRef.current.handleWhatToSay();
           }
           return;
         }
@@ -8484,8 +8437,6 @@ Provide only the answer, nothing else.`;
       setVoiceInput('');
       voiceInputRef.current = '';
       setManualTranscript('');
-      interviewerRecordingInputRef.current = '';
-      interviewerRecordingPartialRef.current = '';
       isRecordingRef.current = true; // Update ref immediately
       setIsManualRecording(true);
 
