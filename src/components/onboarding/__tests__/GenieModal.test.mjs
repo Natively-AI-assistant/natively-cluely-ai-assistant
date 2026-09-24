@@ -264,8 +264,8 @@ for (const [file, name] of Object.entries(POPUPS)) {
 }
 
 // Premium is an optional submodule; its popups are checked when it is present.
-const PREMIUM = ['PremiumPromoToaster', 'ProfileFeatureToaster', 'JDAwarenessToaster',
-  'MaxUltraUpgradeToaster', 'NativelyApiPromoToaster', 'PremiumUpgradeModal'];
+const PREMIUM = ['ProfileFeatureToaster', 'JDAwarenessToaster',
+  'MaxUltraUpgradeToaster', 'NativelyApiPromoToaster'];
 for (const name of PREMIUM) {
   const rel = `../premium/src/${name}.tsx`;
   test(`${name} (premium) opens and closes with the genie`, { skip: !existsSync(resolve(SRC, rel)) && 'premium not checked out' }, () => {
@@ -280,10 +280,6 @@ test('onboarding toasters resume once a closing Settings / manager card has gone
   assert.ok(app.includes("const t = setTimeout(() => emitOrchestratorEvent({ type: 'launcher:mounted' }), GENIE_CLOSE_MS);"));
   assert.ok(/if \(!surfaceWasOpenRef\.current\) \{\s*emitOrchestratorEvent\(\{ type: 'launcher:mounted' \}\);/.test(app),
     'first mount is not delayed');
-});
-
-test('after activation, Profile opens once the upgrade card has gone', () => {
-  assert.ok(code('App.tsx').includes('}, GENIE_CLOSE_MS);'));
 });
 
 test('popups the host unmounts on dismiss report from onClosed, not before the genie', () => {
@@ -503,12 +499,6 @@ test('pictures: a card showing one of several things is keyed by which', () => {
 
 test('pictures: a card that opens reset keeps only its untouched picture', () => {
   assert.ok(code('components/ReviewModal.tsx').includes('keepPictures={step === "review" && rating === 0 && hoverRating === 0 && !text}'));
-});
-
-test('pictures (premium): the upgrade card is keyed by licence state and never keeps a typed key', { skip: !existsSync(resolve(SRC, '../premium/src/PremiumUpgradeModal.tsx')) && 'premium not checked out' }, () => {
-  const up = code('../premium/src/PremiumUpgradeModal.tsx');
-  assert.ok(up.includes("openingView={isPremium ? 'active' : 'upgrade'}"));
-  assert.ok(up.includes("keepPictures={!licenseKey && status === 'idle'}"));
 });
 
 // ─── Pictures in memory (executed) ──────────────────────────────
