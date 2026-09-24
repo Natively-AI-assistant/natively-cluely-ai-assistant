@@ -37,11 +37,17 @@ interface SettingsLike {
   get(key: string): unknown;
 }
 
-const HEALTH_TIMEOUT_MS = 1000;       // match OllamaManager.checkIsRunning
+// Hindsight's /health endpoint acquires a database-pool connection. On a cold
+// local sidecar that can legitimately take a few seconds while Postgres and the
+// embedding service settle; 1s made a healthy server look unavailable to the
+// packaged app even though the endpoint eventually returned 200.
+const HEALTH_TIMEOUT_MS = 10000;
 const AVAILABILITY_TTL_MS = 30_000;   // cache health so per-retain/recall calls are cheap
 const AUTH_FAILURE_TTL_MS = 5 * 60_000; // cache 401/403 longer — don't spam a rejected key
 const SPAWN_POLL_INTERVAL_MS = 5000;  // poll for readiness (like OllamaManager)
 const SPAWN_MAX_ATTEMPTS = 36;        // 36 * 5s = 180s (first boot downloads embedding models)
+const USER_MANAGED_RETRY_MS = 30_000; // user-run sidecars may finish booting after Electron
+const USER_MANAGED_INITIAL_RETRY_MS = 5000;
 const SYNTHETIC_LOCAL_BASEURL = 'http://localhost:8888'; // bundled dev server's default port
 
 /**
@@ -102,6 +108,8 @@ export class HindsightManager {
   private isAppManaged = false;
   private serverProcess: ChildProcess | null = null;
   private pollInterval: NodeJS.Timeout | null = null;
+  /** Retry discovery for a user-run sidecar without ever taking ownership of it. */
+  private userManagedProbeTimer: NodeJS.Timeout | null = null;
   private spawnAttempts = 0;
   /** Session-local enablement used by auto-start. Never persisted across crashes. */
   private sessionMemoryOverride = false;
@@ -462,6 +470,39 @@ export class HindsightManager {
   }
 
   /**
+   * Keep discovering a user-managed Hindsight sidecar after a cold-start timeout.
+   * This is deliberately separate from pollUntilReady(): no process is spawned,
+   * and stopSync() only cancels the timer. A sidecar started after Electron, or
+   * one whose first database-pool health check is slow, therefore transitions to
+   * ready without requiring a settings edit or app restart.
+   */
+  private watchForUserManagedServer(delayMs: number = USER_MANAGED_INITIAL_RETRY_MS): void {
+    if (this.userManagedProbeTimer || this.isAppManaged || this.serverProcess) return;
+    this.userManagedProbeTimer = setTimeout(async () => {
+      this.userManagedProbeTimer = null;
+      try {
+        if (this.isAppManaged || this.serverProcess || !this.memoryFlagOn()) return;
+        const healthy = await this.healthCheck();
+        if (healthy) {
+          console.log('[HindsightManager] user-managed server became ready — connecting.', {
+            baseUrl: this.getHindsightConfig()?.baseUrl,
+          });
+          this.broadcastStatus('ready');
+          return;
+        }
+      } catch { /* retry below; healthCheck is already non-throwing */ }
+      this.watchForUserManagedServer(USER_MANAGED_RETRY_MS);
+    }, delayMs);
+    this.userManagedProbeTimer.unref?.();
+  }
+
+  private clearUserManagedProbe(): void {
+    if (!this.userManagedProbeTimer) return;
+    clearTimeout(this.userManagedProbeTimer);
+    this.userManagedProbeTimer = null;
+  }
+
+  /**
    * Build a PATH that works when the app is launched from Finder (GUI), not a terminal.
    *
    * macOS GUI apps inherit a MINIMAL PATH (typically just /usr/bin:/bin:/usr/sbin:/sbin),
@@ -565,6 +606,7 @@ export class HindsightManager {
 
       const healthy = await this.healthCheck();
       if (healthy) {
+        this.clearUserManagedProbe();
         // CRITICAL: only declare "not app-managed" if we weren't the ones who spawned it.
         // A second start() (from a debounced auto-save) hitting the healthy branch used
         // to clobber isAppManaged = false unconditionally → stopSync() short-circuited →
@@ -580,6 +622,7 @@ export class HindsightManager {
       const cmd = this.autoStartCommand();
       if (!cmd) {
         console.log('[HindsightManager] server not running + auto-start off/unset — staying Noop until a server appears.', { baseUrl: cfg.baseUrl });
+        this.watchForUserManagedServer();
         return;
       }
 
@@ -991,6 +1034,7 @@ export class HindsightManager {
   stopSync(): void {
     try {
       if (this.pollInterval) { clearInterval(this.pollInterval); this.pollInterval = null; }
+      this.clearUserManagedProbe();
       if (!this.isAppManaged || !this.serverProcess?.pid) return;
       const pid = this.serverProcess.pid;
       if (process.platform === 'win32') {

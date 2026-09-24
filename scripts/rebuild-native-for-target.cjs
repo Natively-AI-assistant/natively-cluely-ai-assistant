@@ -51,7 +51,9 @@ const path = require('path');
 
 // Kept in sync with scripts/rebuild-native-electron.js MODULES and
 // electron/lib/nativeArch.mjs TARGETS.
-const MODULES = ['better-sqlite3', 'keytar'];
+const MODULES = process.platform === 'linux'
+  ? ['better-sqlite3']
+  : ['better-sqlite3', 'keytar'];
 
 /**
  * electron-builder invokes beforePack with a context object that includes the
@@ -90,7 +92,7 @@ module.exports = async function beforePack(context) {
     '--arch', archName,
     '--version', electronVersion,
     '--build-from-source',
-    '--which-module', MODULES.join(','),
+    '--only', MODULES.join(','),
   ];
 
   // Run node DIRECTLY (no `arch` wrapper). @electron/rebuild passes `--arch` to

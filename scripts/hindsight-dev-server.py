@@ -26,12 +26,18 @@ PORT = int(os.environ.get("HINDSIGHT_PORT", "8888"))
 
 # Provider + key. Gemini is supported by the Hindsight server; the app already has
 # GEMINI_API_KEY. Fall back to other common keys if a different provider is preferred.
-PROVIDER = os.environ.get("HINDSIGHT_LLM_PROVIDER", "gemini")
+PROVIDER = os.environ.get(
+    "HINDSIGHT_LLM_PROVIDER",
+    os.environ.get("HINDSIGHT_API_LLM_PROVIDER", "gemini"),
+)
 API_KEY = (
     os.environ.get("HINDSIGHT_API_LLM_API_KEY")
     or os.environ.get("GEMINI_API_KEY")
     or os.environ.get("GOOGLE_API_KEY")
     or os.environ.get("OPENAI_API_KEY")
+    or os.environ.get("ANTHROPIC_API_KEY")
+    or os.environ.get("DEEPSEEK_API_KEY")
+    or os.environ.get("GROQ_API_KEY")
 )
 # A sensible default Gemini model; override via HINDSIGHT_LLM_MODEL if the server
 # rejects it (the smoke test will surface that).

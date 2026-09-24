@@ -111,14 +111,18 @@ const REQUIRED_WORKER_FILES = [
 // packaged build had no check that sqlite-vec-windows-x64, keytar, or the Rust
 // native-module actually landed under app.asar.unpacked, even though
 // package.json lists sqlite-vec-windows-x64 as a real shipped
-// optionalDependency. Entries shared by both platforms (better-sqlite3,
-// keytar) use an identical relative path on every OS, so they live in COMMON.
+// optionalDependency. Linux adds the same gate for its glibc native packages.
+// better-sqlite3 is shared by every platform; keytar is intentionally not
+// shared because Linux uses Electron safeStorage and does not require the
+// optional libsecret native addon.
 // onnxruntime-node/bin is checked per-platform sub-directory
 // (bin/napi-v6/<platform>), not the bare bin/ dir — a bare-directory check
 // would pass even if the OTHER platform's binaries were the only ones
 // unpacked.
 const REQUIRED_UNPACKED_NATIVE_COMMON = [
   'node_modules/better-sqlite3/build/Release/better_sqlite3.node',
+];
+const REQUIRED_UNPACKED_NATIVE_KEYTAR = [
   'node_modules/keytar/build/Release/keytar.node',
 ];
 const REQUIRED_UNPACKED_NATIVE_DARWIN = [
@@ -152,6 +156,15 @@ const REQUIRED_UNPACKED_NATIVE_WIN32 = [
 // first, falls back to gnu) — checked with checkAny, not checkFile.
 const REQUIRED_UNPACKED_NATIVE_WIN32_ANY = [
   ['native-module/index.win32-x64-msvc.node', 'native-module/index.win32-x64-gnu.node'],
+];
+const REQUIRED_UNPACKED_NATIVE_LINUX = [
+  'node_modules/onnxruntime-node/bin/napi-v6/linux',
+];
+const REQUIRED_UNPACKED_NATIVE_LINUX_ANY = [
+  [['node_modules/@img/sharp-linux-x64/lib', 'node_modules/@img/sharp-linux-arm64/lib'], 'sharp Linux native'],
+  [['node_modules/@img/sharp-libvips-linux-x64/lib', 'node_modules/@img/sharp-libvips-linux-arm64/lib'], 'sharp libvips Linux native'],
+  [['node_modules/sqlite-vec-linux-x64/vec0.so', 'node_modules/sqlite-vec-linux-arm64/vec0.so'], 'sqlite-vec Linux extension'],
+  [['native-module/index.linux-x64-gnu.node', 'native-module/index.linux-arm64-gnu.node'], 'Linux Rust native module'],
 ];
 
 const errors = [];
@@ -209,7 +222,11 @@ function resolveResourcesDir(appArg) {
   const macResources = path.join(abs, 'Contents', 'Resources');
   if (exists(macResources)) return { resources: macResources, platform: 'darwin' };
   const winResources = path.join(abs, 'resources');
-  if (exists(winResources)) return { resources: winResources, platform: 'win32' };
+  if (exists(winResources)) {
+    const linuxNative = path.join(winResources, 'app.asar.unpacked', 'native-module', 'index.linux-x64-gnu.node');
+    const linuxNativeArm = path.join(winResources, 'app.asar.unpacked', 'native-module', 'index.linux-arm64-gnu.node');
+    return { resources: winResources, platform: exists(linuxNative) || exists(linuxNativeArm) ? 'linux' : 'win32' };
+  }
   if (exists(path.join(abs, 'app.asar.unpacked')) || exists(path.join(abs, 'models'))) {
     return { resources: abs, platform: null };
   }
@@ -228,9 +245,9 @@ function verifyPackaged(appArg, platformArg) {
   // resources/ wrapper); detection wins when it found one, since the actual
   // directory structure is stronger evidence than a caller-supplied guess.
   const platform = detectedPlatform || platformArg;
-  if (platform !== 'darwin' && platform !== 'win32') {
+  if (platform !== 'darwin' && platform !== 'win32' && platform !== 'linux') {
     errors.push(
-      `Could not determine target platform for ${appArg} — pass --platform darwin|win32 explicitly.`,
+      `Could not determine target platform for ${appArg} — pass --platform darwin|win32|linux explicitly.`,
     );
     return;
   }
@@ -245,9 +262,17 @@ function verifyPackaged(appArg, platformArg) {
   }
 
   // Native binaries & modules that must be present in the packaged app.
-  const platformNative = platform === 'darwin' ? REQUIRED_UNPACKED_NATIVE_DARWIN : REQUIRED_UNPACKED_NATIVE_WIN32;
-  for (const rel of [...REQUIRED_UNPACKED_NATIVE_COMMON, ...platformNative]) {
+  const platformNative = platform === 'darwin'
+    ? REQUIRED_UNPACKED_NATIVE_DARWIN
+    : platform === 'linux' ? REQUIRED_UNPACKED_NATIVE_LINUX : REQUIRED_UNPACKED_NATIVE_WIN32;
+  const platformKeytar = platform === 'linux' ? [] : REQUIRED_UNPACKED_NATIVE_KEYTAR;
+  for (const rel of [...REQUIRED_UNPACKED_NATIVE_COMMON, ...platformKeytar, ...platformNative]) {
     checkAny(unpacked, [rel], `unpacked native asset ${rel}`);
+  }
+  if (platform === 'linux') {
+    for (const [candidates, label] of REQUIRED_UNPACKED_NATIVE_LINUX_ANY) {
+      checkAny(unpacked, candidates, `unpacked native asset (${label})`);
+    }
   }
   if (platform === 'win32') {
     for (const candidates of REQUIRED_UNPACKED_NATIVE_WIN32_ANY) {

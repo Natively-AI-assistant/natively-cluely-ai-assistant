@@ -32,6 +32,18 @@ if [ -f .env ]; then
   done < <(grep -E '^(GEMINI_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|DEEPSEEK_API_KEY|GROQ_API_KEY|OPENAI_API_BASE|LITELLM_BASE_URL)=' .env || true)
 fi
 
+# Hindsight's own OpenAI-compatible provider reads HINDSIGHT_API_LLM_BASE_URL.
+# Keep it aligned with the OpenAI/LiteLLM base used by the router above; without
+# this mapping the startup health check and retain path fall back to api.openai.com
+# even though the router is correctly pointed at a local gateway.
+if [ -z "${HINDSIGHT_API_LLM_BASE_URL:-}" ]; then
+  if [ -n "${OPENAI_API_BASE:-}" ]; then
+    export HINDSIGHT_API_LLM_BASE_URL="$OPENAI_API_BASE"
+  elif [ -n "${LITELLM_BASE_URL:-}" ]; then
+    export HINDSIGHT_API_LLM_BASE_URL="$LITELLM_BASE_URL"
+  fi
+fi
+
 # Resolve a python3 that ACTUALLY has the `hindsight` package. A machine can have several
 # python3 installs (Homebrew, python.org framework, /usr/bin, pyenv); `hindsight-all` is only
 # in the one the user pip-installed into. Picking the first python3 on PATH (as `exec python3`
@@ -39,11 +51,14 @@ fi
 # exit-1. Probe candidates in order and pick the first that can import it.
 pick_python() {
   local c
+  local user_data_root="${XDG_DATA_HOME:-$HOME/.local/share}"
   # 1. explicit override, 2. PATH python3/python, 3. common concrete install locations.
   for c in \
     "${HINDSIGHT_PYTHON:-}" \
     "$(command -v python3 || true)" \
     "$(command -v python || true)" \
+    "$PWD/.venv/bin/python" \
+    "$user_data_root/natively-hindsight-venv/bin/python" \
     /usr/local/bin/python3 \
     /opt/homebrew/bin/python3 \
     /Library/Frameworks/Python.framework/Versions/*/bin/python3 \

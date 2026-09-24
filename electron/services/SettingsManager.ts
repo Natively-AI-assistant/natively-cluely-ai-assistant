@@ -92,6 +92,10 @@ export interface AppSettings {
     // `<setting>Explicit` = `hindsightMemoryEnabledExplicit` (read by
     // HindsightManager.hindsightMemoryExplicitlyOff()).
     hindsightMemoryEnabledExplicit?: boolean;
+    // When enabled, completed meeting summaries are copied to the local
+    // Obsidian vault and Agent Mesh sidecar. Raw transcript turns are never
+    // exported by this integration.
+    localKnowledgeSyncEnabled?: boolean;
     knowledgeMode?: boolean;
     phoneMirrorEnabled?: boolean;
     phoneMirrorExposeOnLan?: boolean;

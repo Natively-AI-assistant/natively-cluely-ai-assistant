@@ -314,7 +314,7 @@ export async function runLocalFallbackPreflight(options: { ollamaSelected?: bool
       return { ok: false, message: `${bundledModelId} model files missing from packaged resources/models/` };
     }));
 
-    // 3. Packaged native binaries (Rust audio module, sqlite-vec, sharp, better-sqlite3, keytar).
+    // 3. Packaged native binaries (Rust audio module, sqlite-vec, sharp, better-sqlite3).
     checks.push(await timedCheck('rust native audio module', async () => checkNativeModuleUnpacked()));
     checks.push(await timedCheck('rust native audio module loadable', async () => tryRequireNativeModule()));
     checks.push(await timedCheck('better-sqlite3 native', async () => checkUnpackedNativeDir('node_modules/better-sqlite3/build/Release/better_sqlite3.node')));
@@ -325,8 +325,8 @@ export async function runLocalFallbackPreflight(options: { ollamaSelected?: bool
     // user "Please reinstall Natively" on a perfectly good install. (Dev mode
     // short-circuits checkUnpacked*, which is why it never showed up locally.)
     //
-    // The darwin branch is byte-for-byte what shipped before; only the win32
-    // branch is new. Linux gets neither (as before) rather than a guess.
+    // Linux uses the glibc package families and does not require keytar;
+    // Electron safeStorage is the credential path there.
     if (process.platform === 'darwin') {
       checks.push(await timedCheck('sharp darwin-arm64 native', async () => checkUnpackedNativeDir('node_modules/@img/sharp-darwin-arm64/lib')));
       checks.push(await timedCheck('sharp darwin-x64 native', async () => checkUnpackedNativeDir('node_modules/@img/sharp-darwin-x64/lib')));
@@ -341,6 +341,9 @@ export async function runLocalFallbackPreflight(options: { ollamaSelected?: bool
       // below selects these checks by exactly those prefixes.
       checks.push(await timedCheck('sharp win32 native', async () => checkUnpackedNativePrefix('node_modules/@img', 'sharp-win32-', 'sharp Windows binary')));
       checks.push(await timedCheck('sqlite-vec windows extension', async () => checkUnpackedNativePrefix('node_modules', 'sqlite-vec-windows-', 'sqlite-vec Windows extension')));
+    } else if (process.platform === 'linux') {
+      checks.push(await timedCheck('sharp linux native', async () => checkUnpackedNativePrefix('node_modules/@img', 'sharp-linux-', 'sharp Linux binary')));
+      checks.push(await timedCheck('sqlite-vec linux extension', async () => checkUnpackedNativePrefix('node_modules', 'sqlite-vec-linux-', 'sqlite-vec Linux extension')));
     }
 
     // 4. Ollama optional path.

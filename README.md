@@ -40,7 +40,7 @@ If you’re looking for a hosted desktop recording API, consider checking out [R
 <br/>
 
 [![License](https://img.shields.io/badge/License-Personal%20Use%20Source-blue?style=flat-square)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows-blueviolet?style=flat-square)](https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant/releases)
+[![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-blueviolet?style=flat-square)](https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant/releases)
 [![Downloads](https://img.shields.io/github/downloads/evinjohnn/natively-cluely-ai-assistant/total?style=flat-square&color=success)](https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant/releases)
 ![Repo Views](https://img.shields.io/badge/Views-1.8M-red?style=flat-square)
 [![Stars](https://img.shields.io/github/stars/evinjohnn/natively-cluely-ai-assistant?style=flat-square&color=gold)](https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant)
@@ -65,7 +65,7 @@ If you’re looking for a hosted desktop recording API, consider checking out [R
   </a>
 </p>
 
-<small>Requires macOS 12+ (Apple Silicon & Intel) or Windows 10/11</small>
+<small>Requires macOS 12+ (Apple Silicon & Intel), Windows 10/11, or a Linux desktop with PipeWire/PulseAudio</small>
 
 <br/>
 
@@ -222,7 +222,7 @@ Natively delivers <500ms end-to-end latency using Rust-based native audio captur
 
 ### vs Pluely — lightweight but limited
 
-Pluely is a solid lightweight alternative (~10MB, Tauri-based) and it has Linux support, which Natively does not yet offer. Credit where it is due.
+Pluely is a solid lightweight alternative (~10MB, Tauri-based). Natively now also supports Linux source builds; published installers remain available for macOS and Windows.
 
 But Pluely is a basic overlay. It has no local RAG, no meeting history, no dual audio channels, and no dashboard. Natively is a complete intelligence system: it remembers your past meetings via local vector search, separates system audio from your microphone, and gives you a full management dashboard with export to Markdown, JSON, and Text.
 
@@ -254,7 +254,7 @@ Parakeet AI offers basic live meeting assistance but has no persistent memory, n
 
 ### Where we're not there yet
 
-- **No Linux support** — we are actively looking for maintainers to help bring Natively to Linux
+- **No published Linux installer yet** — Linux source builds are supported, with system audio captured through the PipeWire/PulseAudio compatibility layer; distro-specific packaging still needs maintainers
 - **API key setup overhead** — you need to bring your own API keys (or install Ollama), which adds initial setup friction compared to all-in-one cloud tools
 - **No built-in mock interview mode** — Final Round AI has dedicated mock interview practice; Natively focuses on live, real-time assistance
 
@@ -552,6 +552,7 @@ You explicitly control:
 - Node.js (v22.6+ required)
 - Git
 - Rust (required for native audio capture)
+- Linux (Debian/Ubuntu/Kali): `build-essential`, `pkg-config`, `libasound2-dev`, and `pulseaudio-utils` (`parec` is used for PipeWire/PulseAudio monitor capture)
 - Xcode 26+ with the macOS 26 SDK (required only to build the Apple Speech helper or package Natively for macOS)
 
 ### AI Credentials & Speech Providers
@@ -619,6 +620,44 @@ Setup Summary:
 
 ---
 
+### Optional local Hindsight, Agent Mesh & Obsidian memory
+
+The long-term-memory companion is optional and stays local. On distributions
+that enforce PEP 668, use a user-owned virtual environment rather than
+overriding the system Python:
+
+```bash
+python3 -m venv ~/.local/share/natively-hindsight-venv
+~/.local/share/natively-hindsight-venv/bin/python -m pip install --upgrade pip hindsight-all
+```
+
+Then start the companion from this project folder:
+
+```bash
+HINDSIGHT_PYTHON=~/.local/share/natively-hindsight-venv/bin/python \
+  bash scripts/hindsight-start.sh
+```
+
+For a local LiteLLM/Agent Mesh gateway, point Hindsight at its OpenAI-compatible
+endpoint (use the gateway's own local key; a ChatGPT subscription sign-in is not
+an API key):
+
+```bash
+HINDSIGHT_LLM_PROVIDER=openai HINDSIGHT_LLM_MODEL=local-fast \
+HINDSIGHT_LLM_OPENAI=openai/local-fast \
+OPENAI_API_KEY=local-gateway-key OPENAI_API_BASE=http://127.0.0.1:4000/v1 \
+HINDSIGHT_API_LLM_API_KEY=local-gateway-key \
+HINDSIGHT_PYTHON=~/.local/share/natively-hindsight-venv/bin/python \
+  bash scripts/hindsight-start.sh
+```
+
+When `NATIVELY_LOCAL_KNOWLEDGE_SYNC=on` is set, completed summaries are also
+written to `03_Projects/Natively/Meetings` in the local Obsidian vault and
+registered in Agent Mesh. The default vault is
+`~/AI-Second-Brain/AI-Second-Brain-Vault`; override it with
+`NATIVELY_OBSIDIAN_VAULT_PATH`. Only generated summaries are synchronized — raw
+transcripts are not copied.
+
 ## Development Setup
 
 ### Clone the Repository
@@ -632,6 +671,12 @@ cd natively-cluely-ai-assistant
 
 ```bash
 npm install
+```
+
+On Debian-family Linux distributions, install the native build and audio tools first:
+
+```bash
+sudo apt install build-essential pkg-config libasound2-dev pulseaudio-utils
 ```
 
 ### Build Native Audio Module (Rust)
@@ -803,7 +848,7 @@ Create local `SKILL.md` files to give the AI specialized instructions for any ta
 
 Natively understands that _listening_ to a meeting and _talking_ to an AI are different tasks. We treat them separately:
 
-- **System Audio (The Meeting):** Captures high-fidelity audio directly from your OS (fully supported on both macOS and Windows). It "hears" what your colleagues are saying without interference from your room noise.
+- **System Audio (The Meeting):** Captures high-fidelity audio directly from your OS (CoreAudio on macOS, WASAPI on Windows, and a PipeWire/PulseAudio monitor on Linux). It "hears" what your colleagues are saying without interference from your room noise.
 - **Sample Rate Auto-Detection**: Dynamically detects and syncs true hardware sample rates (e.g., automatically handling 48kHz audio interfaces or external microphones without distortion or downsampling artifacts).
 - **Two-Stage Silence Processing**: Combines adaptive RMS thresholds with **WebRTC Machine Learning VAD** to reject typing and fan noise.
 - **Microphone Input (Your Voice):** A dedicated channel for your voice commands and dictation. Toggle it instantly to ask Natively a private question without muting your meeting software.
@@ -964,7 +1009,7 @@ This project does not encourage misuse or deception.
 
 ## Known Limitations
 
-- Linux support is limited and actively looking for maintainers
+- Linux source builds are supported; there is not yet a published Linux installer, and stealth/window integration can vary by desktop environment
 - Initial setup requires bringing your own API keys or installing Ollama
 - No built-in mock interview mode (focus is on live, real-time assistance)
 

@@ -1872,10 +1872,18 @@ export class WindowHelper {
       if (!pill || pill.isDestroyed() || !overlay || overlay.isDestroyed()) return;
       const p = pill.getBounds();
       const o = overlay.getBounds();
+      // Linux window managers can briefly report an incomplete Rectangle while
+      // an auxiliary transparent window is being mapped. Passing that value to
+      // Chromium's native setPosition() throws synchronously and used to take
+      // down an otherwise healthy packaged app during startup.
+      if (![p.x, p.y, p.width, p.height, o.x, o.y, o.width, o.height].every(Number.isFinite)) {
+        console.warn('[WindowHelper] Skipping auxiliary-window sync with invalid window bounds.', { pill: p, overlay: o });
+        return;
+      }
       // The overlay follows so the pill keeps its "centered, PILL_GAP above
       // the shell" relationship — from the user's hand the whole group moves.
       const targetX = Math.round(p.x + p.width / 2 - o.width / 2);
-      const targetY = p.y + p.height + WindowHelper.PILL_GAP;
+      const targetY = Math.round(p.y + p.height + WindowHelper.PILL_GAP);
       // 1px tolerance: centering rounds (odd width deltas), so the forward and
       // reverse computations can disagree by 1px. Without the tolerance that
       // disagreement could ping-pong pill↔overlay into a slow positional
@@ -1884,7 +1892,21 @@ export class WindowHelper {
       if (Math.abs(targetX - o.x) <= 1 && Math.abs(targetY - o.y) <= 1) return;
       this.auxSyncing = true;
       try {
-        overlay.setPosition(targetX, targetY);
+        try {
+          overlay.setPosition(targetX, targetY);
+        } catch (error) {
+          // Some Linux window managers can reject an auxiliary-window move
+          // during the map/configure transition. The sync is best-effort; a
+          // rejected move must not take down the main process.
+          console.warn('[WindowHelper] Auxiliary-window position rejected; keeping current position.', {
+            targetX,
+            targetY,
+            pill: p,
+            overlay: o,
+            error,
+          });
+          return;
+        }
         this.overlayBounds = overlay.getBounds();
         this.positionToggleWindow();
       } finally {

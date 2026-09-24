@@ -38,7 +38,12 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const MODULES = ['better-sqlite3', 'keytar'];
+// keytar is optional on Linux. Electron safeStorage is the credential store
+// used there, while keytar requires the libsecret development package to
+// compile. Keep it in the native rebuild set on macOS/Windows only.
+const MODULES = process.platform === 'linux'
+  ? ['better-sqlite3']
+  : ['better-sqlite3', 'keytar'];
 
 // Shared hardware-arch probe — see electron/lib/nativeArch.mjs for the why.
 const { detectHardwareArch } = require('../electron/lib/nativeArch.cjs');
@@ -84,7 +89,7 @@ function main() {
     '--arch', arch,
     '--version', electronVersion,
     '--build-from-source',
-    '--which-module', MODULES.join(','),
+    '--only', MODULES.join(','),
   ];
 
   console.log(
