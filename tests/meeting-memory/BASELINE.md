@@ -119,3 +119,68 @@ The 11 wrong answers, by cause (each checked against the transcript around the p
 - Typed T2 "What numbers did she give for the webhook service?" was annotated "(follow-up to: 'Is there
   anything you would change in your design…')" and answered about the candidate's own design; the numbers
   were in its evidence.
+
+## Confirm, then fix: the mock interview's four causes (2026-09-24, evening)
+
+**Wrong referent notes: confirmed offline, fixed.** Replaying the mock run's question sequence through
+`advance()` + `resolveReference()` reproduced 110/118 prompt questions byte for byte. 23 got a note and about
+20 were wrong. Causes: an STT segment's capitalised first word taken as an entity ("Balance", "Between",
+"Step", "Suppose"), a topic slot that outlived ten unrelated questions ("Postgres"), and she/he anchored to
+the previous question. After the fix, the junk-word and stale-topic notes are gone and most notes point at
+the question just before. `LiveReferentNotes2026_09_24` (17 tests) failed 11 before and passes after.
+Separately, the session memory rewrote "How big is your team, and what is your role on it?" as "…role on
+MySQL?" even when the question arrived unclipped: `SessionFollowupLocalAntecedent2026_09_24`.
+
+Remaining: a note still comes from the immediately previous question, so after a digression ("What is
+MVCC?") the return question "How would you key the Kafka topic for this?" goes out "(referring to: MVCC)".
+The model ignored it in 4 of 5 answers.
+
+**Constraints said long ago: confirmed in the app, fixed.** New `constraints` scenario (injected design
+round, unguessable requirements 26 minutes back, questions that need them without pointing back, concept
+controls). Hand-checked:
+
+| | before | after |
+|---|---|---|
+| general, 4 constraint questions × 2 | 4/8 (misses absent from the prompt) | 7/8 (the miss is the MVCC note) |
+| technical-interview, × 1 completed rep | 0/4 | 4/4 |
+| concept controls clean (no design numbers, no hedging) | 6/6 | 6/6 |
+
+A design or coding question took the fast path and retrieved nothing. In technical-interview a value lookup
+claimed documents only, and an ambiguous question retrieved nothing. Now in a live meeting those read the
+meeting (a fast turn gets the MEETING pool with no claim, so it stays FULL with no absence notice), and the
+what-to-answer speech window is speech only, whole lines, 180 s.
+
+**Clipped question starts: traced; mostly the rig.** Level probe through the app's own native system
+capture (`.agent/level-probe.cjs`, RMS per WebSocket message as the relay computes it): with `say -a
+"BlackHole 16ch"` the questions peaked at RMS 438-553 (p50 ~350), because the tap averages the device's 16
+channels to mono. The relay VAD gate (natively-api `lib/vadGate.js`: reopens only on one chunk ≥ 450,
+replays 400 ms) then dropped "How does a circuit breaker work?" and "What does the high-level architecture
+look like?" whole, and cut "What causes a deadlock," from Q12. Those are exactly the live misses. The same
+voice at full level measures p50 ~5,000 and loses nothing. The live rig now plays the interviewer on all 16
+channels. The product exposure is real but narrower: any source under ~−37 dBFS (quiet participant, low
+call volume, multichannel output) is gated out. The natively-api branch `fix/stt-vad-gate-quiet-onset`
+lets a run of 3 system-audio chunks ≥ 150 within 500 ms reopen the gate and keeps an open gate open on
+quiet voice (18 gate tests pass). It is not deployed.
+
+**The 118-question live mock interview, re-run on all fixes** (`mock-interview-fixed-1790261296474`, interviewer at full level). Hand-checked:
+
+| | before (`mock-interview-1790250804024`) | after |
+|---|---|---|
+| right question and on topic | 107/118 | 113/118 |
+| refused | 1 | 0 (the scorer flagged 3 full answers) |
+| memory-dependent questions with the earlier detail | 16/21 | 20/21 |
+| typed questions | 2/3 | 3/3 |
+| live-index probes | miss, rank 3 | miss, rank 1 |
+| interviewer questions missing from the transcript (<30% of words) / partial | 4 / 11 | 0 / 1 |
+| what-to-answer median / p90 | 4.0 s / 4.7 s | 4.5 s / 5.1 s |
+
+The 5 remaining misses:
+- Late finals (Q10, Q73, Q74). The question's final arrived 5 s and 23 s after the interviewer stopped, and
+  the press at +2.5 s saw "What is the difference between" and "Good. Good. Let us do a second…".
+- One clipped opening clause at full level (Q31, "What is idempotency," never arrived). The note then made
+  it "(referring to: TLS)". Not traced.
+- One incomplete answer (Q28, partitions: said ordering "stays intact").
+
+Cost: the 35 questions that now read the meeting went from a 3.4 s to a 4.5 s median; questions that
+already read it went up 0.3 s. So the lookup costs about 0.7 s per general question in a live meeting
+(retrieval timeout 1.2 s).
