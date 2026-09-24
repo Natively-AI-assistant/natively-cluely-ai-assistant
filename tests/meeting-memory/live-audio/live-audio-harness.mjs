@@ -1,9 +1,13 @@
 // tests/meeting-memory/live-audio/live-audio-harness.mjs
 //
 // One-hour LIVE meeting through the real capture stack and real STT:
-//   interviewer → `say` into BlackHole 16ch → the meeting's OUTPUT device, so the
+//   interviewer → `say` into BlackHole 2ch  → the meeting's OUTPUT device, so the
 //                 CoreAudio process tap captures it (system-audio channel);
-//   candidate   → `say` into BlackHole 2ch  → the meeting's MIC.
+//   candidate   → `say` into BlackHole 16ch → the meeting's MIC (first channel).
+// Not the other way round (runs before 2026-09-24 were): the tap mixes the
+// output device down to mono by AVERAGING its channels, so a voice on 2 of 16
+// channels arrived 24 dB quiet (RMS ~330 vs ~5,500 through 2ch) — below the relay
+// VAD gate, which then dropped whole questions. That measured the rig, not a call.
 // Nothing is injected. Probes use the overlay's own entry points: What-to-answer
 // (no question: resolved from the live transcript, like Cmd+Enter), typed
 // questions through the real overlay input, and the live index's semantic search.
@@ -47,7 +51,7 @@ function sayDeviceId(name) {
   if (!line) throw new Error(`say has no output device "${name}" — is BlackHole installed?\n${out}`);
   return line.trim().split(/\s+/)[0];
 }
-const SAY_DEV = { interviewer: sayDeviceId('BlackHole 16ch'), user: sayDeviceId('BlackHole 2ch') };
+const SAY_DEV = { interviewer: sayDeviceId('BlackHole 2ch'), user: sayDeviceId('BlackHole 16ch') };
 
 function speak(who, text) {
   return new Promise((resolve, reject) => {
@@ -159,8 +163,8 @@ const save = () => fs.writeFileSync(outFile, JSON.stringify(out, null, 2));
 
 const inputs = await evalIn('launcher', () => window.electronAPI.getInputDevices());
 const outputs = await evalIn('launcher', () => window.electronAPI.getOutputDevices());
-const mic = inputs.find((d) => /blackhole 2ch/i.test(d.name));
-const sys = outputs.find((d) => /blackhole 16ch/i.test(d.name));
+const mic = inputs.find((d) => /blackhole 16ch/i.test(d.name));
+const sys = outputs.find((d) => /blackhole 2ch/i.test(d.name));
 if (!mic || !sys) throw new Error(`BlackHole devices not visible to Natively: inputs=${JSON.stringify(inputs)} outputs=${JSON.stringify(outputs)}`);
 out.devices = { mic, sys, say: SAY_DEV };
 

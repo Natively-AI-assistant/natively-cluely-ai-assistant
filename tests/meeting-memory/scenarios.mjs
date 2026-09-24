@@ -231,6 +231,50 @@ export const INTERVIEW_PROBES = [
   { fact: 'teamSize', text: 'How did you split the work across the team on that migration?' },
 ];
 
+/** Constraints the interviewer SETS early in a system-design round, then
+ *  questions that need them without pointing back ("how would you design the
+ *  retry policy?", never "given what I said…"). Values are unguessable so an
+ *  answer can only carry them if the meeting reached the prompt. Measured
+ *  2026-09-24 in the live mock interview: "retries for up to twenty four
+ *  hours", said 2.5 minutes earlier, was in neither the speech window nor the
+ *  evidence, and the retry-policy answer capped retries at "a few minutes". */
+export const CONSTRAINT_FACTS = {
+  retry: { re: /\b36\b|thirty[- ]six/i, label: 'retries continue for up to thirty-six hours (min 4)' },
+  key: { re: /warehouse/i, label: 'ordering must hold per warehouse ID (min 4)' },
+  peak: { re: /4,?200|forty[- ]two hundred|\b14\b|fourteen/i, label: 'peak 4,200 events/s (→ 14 consumers at 300/s) (min 4)' },
+  retention: { re: /\b45\b|forty[- ]five|1\.35|1,?350/i, label: 'keep events 45 days at 30 million a day (min 4)' },
+};
+
+export function buildConstraintTranscript(nowMs) {
+  const at = (min) => Math.round(nowMs - (30 - min) * 60 * 1000);
+  const segs = [
+    { speaker: I, text: "Let's do a design round. We run webhook delivery for a logistics platform: about thirty million events a day, at-least-once delivery, retries continue for up to thirty-six hours before we give up, and ordering must hold per warehouse ID.", timestamp: at(3.5) },
+    { speaker: ME, text: 'Got it. What does peak look like compared to the average?', timestamp: at(4) },
+    { speaker: I, text: 'Peak is about four thousand two hundred events a second, and we have to keep every event for forty-five days for audits.', timestamp: at(4.3) },
+    { speaker: ME, text: 'Okay, that is plenty to start from.', timestamp: at(4.6) },
+  ];
+  let min = 5;
+  for (let round = 0; round < 3; round++) {
+    for (const [speaker, text] of INTERVIEW_FILLER) {
+      segs.push({ speaker, text, timestamp: at(min) });
+      min += 24 / (INTERVIEW_FILLER.length * 3);
+    }
+  }
+  return segs.sort((a, b) => a.timestamp - b.timestamp);
+}
+
+/** Asked NOW by the interviewer, answered by what-to-answer. `control` probes
+ *  need no meeting context: they must not hedge or drag the design numbers in. */
+export const CONSTRAINT_PROBES = [
+  { fact: 'retry', text: 'How would you design the retry policy?' },
+  { control: true, text: 'What is MVCC?' },
+  { fact: 'key', text: 'How would you key the Kafka topic for this?' },
+  { fact: 'peak', text: 'If one consumer handles three hundred events a second, how many consumers do we need at peak?' },
+  { control: true, text: 'How does consistent hashing work?' },
+  { fact: 'retention', text: 'How much storage should we plan for the event archive at one kilobyte per event?' },
+];
+export const CONSTRAINT_LEAK_RE = /warehouse|thirty[- ]six|\b36\b|4,?200|forty[- ]five days|\b45 days/i;
+
 // A DENIAL can quote the fact while rejecting it ("Q-47 isn't something you've
 // established"), so "the answer contains the fact" is not recall. Denial wins.
 export const denialRe = /(don'?t|do not|can'?t|cannot|couldn'?t)\s+(have|see|find|recall|know|confirm|verify)|isn'?t (in|anywhere|something)|not (in|anywhere in) (the|this|anything|what)|never (came up|mentioned|said|established|named)|didn'?t (say|mention|tell|give|name)|haven'?t (said|told|given|shared|mentioned)|nothing (you'?ve|in (this|the|what)|here)|no (record|mention|information|figure|number) |unverified|not (mentioned|provided|specified|available|established)|wasn'?t (mentioned|shared|stated)/i;
@@ -245,5 +289,6 @@ export function score(answer, re) {
 export function factRegexFor(scenario, fact) {
   if (scenario === 'interview') return INTERVIEW_FACTS[fact]?.re;
   if (scenario === 'hour') return HOUR_FACTS[fact]?.re;
+  if (scenario === 'constraints') return CONSTRAINT_FACTS[fact]?.re;
   return TYPED_CHAT_FACTS[fact]?.re;
 }

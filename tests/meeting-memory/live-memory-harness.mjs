@@ -26,6 +26,7 @@ import { fileURLToPath } from 'node:url';
 import {
   TYPED_CHAT_FACTS, TYPED_CHAT_SCRIPT, TYPED_LONG_SCRIPT, CHATTER, HOUR_FACTS, buildHourTranscript, WTA_FOLLOWUP,
   INTERVIEW_FACTS, INTERVIEW_PROBES, buildInterviewTranscript, denialRe, score,
+  CONSTRAINT_FACTS, CONSTRAINT_PROBES, CONSTRAINT_LEAK_RE, buildConstraintTranscript,
 } from './scenarios.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -330,6 +331,43 @@ async function runInterview() {
   return { liveMeetingId: live, results };
 }
 
+/** A design round: the interviewer sets unguessable constraints 26 minutes
+ *  back, then asks design questions that need them WITHOUT pointing back, plus
+ *  concept controls that must stay clean. Answered by what-to-answer. */
+async function runConstraints() {
+  await startMeeting();
+  await inject(buildConstraintTranscript(Date.now()));
+  const t0 = Date.now();
+  let live = null;
+  while (Date.now() - t0 < 90000) {
+    live = (await probe()).liveMeetingId;
+    if (live) break;
+    await sleep(2000);
+  }
+  await sleep(20000);
+  const results = [];
+  for (const p of CONSTRAINT_PROBES) {
+    await inject([{ speaker: 'interviewer', text: p.text, timestamp: Date.now() }]);
+    await sleep(1500);
+    const r = await wtaTurn(undefined);
+    const m = await memoryState();
+    const f = p.control ? null : CONSTRAINT_FACTS[p.fact];
+    const leaked = p.control && CONSTRAINT_LEAK_RE.test(r.answer ?? '');
+    const rec = {
+      fact: p.fact ?? 'control', control: Boolean(p.control), probe: p.text, answer: r.answer, error: r.error, ms: r.ms,
+      resolvedQuestion: r.resolvedQuestion,
+      result: p.control ? (!r.answer ? 'error' : denialRe.test(r.answer) ? 'denied' : leaked ? 'leaked' : 'clean') : score(r.answer, f.re),
+      ...(f ? factLocation(m.prompt, f.re) : {}),
+      promptSurface: m.prompt?.surface ?? null, promptUser: m.prompt?.user ?? null,
+    };
+    results.push(rec);
+    console.log(`  ${rec.fact.padEnd(9)} ${rec.result} inPrompt=${rec.factInPrompt} inEvidence=${rec.factInEvidence} ms=${r.ms}`);
+    await inject([{ speaker: 'user', text: (r.answer ?? '').replace(/\[\[GIST\]\].*$/s, '').slice(0, 400) || 'Sure.', timestamp: Date.now() }]);
+  }
+  await endMeeting();
+  return { liveMeetingId: live, results };
+}
+
 /** Meeting A is told a secret; meeting B (a different meeting) is asked for it.
  *  B must NOT know it — anything else is one meeting's conversation leaking
  *  into the next. Measured with no active mode, the default state. */
@@ -400,6 +438,7 @@ for (const sc of plan) {
       else if (sc === 'wta-followup') data = await runWtaFollowup();
       else if (sc === 'hour') data = await runHour();
       else if (sc === 'interview') data = await runInterview();
+      else if (sc === 'constraints') data = await runConstraints();
       else if (sc === 'cross-meeting') data = await runCrossMeeting();
       else throw new Error(`unknown scenario ${sc}`);
     } catch (e) {
