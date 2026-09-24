@@ -210,3 +210,30 @@ Hand-checked; the scorer's "denied" was a recall with a provenance hedge in 5 of
 The "that came from you, not the call" hedge on typed facts is not new: 6/10 and 6/8 before, 7/10 and 8/12
 now. Not measured: a live meeting with files attached. A document question that does not name its
 document now shares evidence slots with the meeting.
+
+## One-hour session, every kind of content (2026-09-24, late)
+
+`session-hour`: speech from both sides backdated across an hour (facts at minutes 1-2); then live, in order:
+a typed fact, a screenshot (Pillow-rendered, unguessable ERR-7Q41 / reconcileLedgerV3()), a manual
+question, a what-to-answer suggestion and a follow-up chain; then 42 unrelated exchanges; then a follow-up
+about each through typed chat and what-to-answer. Hand-checked:
+
+| item (asked ~45 exchanges later) | before | after, rep 1 | after, rep 2 |
+|---|---|---|---|
+| interviewer's speech (pager SLA 7 min) | ✓ | ✓ | ✓ |
+| interviewee's speech (build 40 → 6 min), what-to-answer | ✓ | ✓ | ✓ |
+| typed fact (offer band 212k) | ✓ | ✓ | ✓ |
+| screenshot error code, typed | ✗ "I don't have a screenshot" | ✓ ERR-7Q41 | ✓ |
+| screenshot function, what-to-answer | ✗ "never came through" | ✓ reconcileLedgerV3() | ✓ |
+| manual answer (backpressure one-liner) | ✗ re-invented | ✓ verbatim | not measured (quota) |
+| what-to-answer suggestion (URL shortener storage) | partial (from a gist) | ✓ | not measured (quota) |
+| follow-up chain (top-10 terms) | ✗ "I never gave you an answer" | ✓ | not measured (quota) |
+
+Control with 6 filler exchanges before the fix: 8/8, all in the prompt. The loss was eviction (ring at
+40) and screen text carried only for the newest turns. Timings from the `[V3]` line after the fix: meeting
+lookup median 703 ms / p90 1,095 ms (typed), 812 / 1,228 ms (what-to-answer); the recall tier itself is
+under 20 ms at 400 exchanges and fired on 17 typed and 10 what-to-answer turns.
+
+**The account's AI quota ran out mid-run** (`ai_quota_exceeded`, 6,500,333 / 6,500,000 ai_tokens, resets
+2026-10-21). Every live run here spends the real account's quota; the last 3 probes of rep 2 and the
+control run after the fix answered "the model failed before generating an answer".
