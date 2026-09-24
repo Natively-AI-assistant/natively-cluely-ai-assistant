@@ -18413,7 +18413,27 @@ export function initializeIpcHandlers(appState: AppState): void {
 
     // Conversation-memory harness: the V3 conversation ring per session key
     // (scope + turns) and the last composed V3 prompts (engine-bridge capture).
-    safeHandle('__e2e__:memory-probe', async (_event, params?: { prompts?: number; clear?: boolean }) => {
+    // Semantic search over the LIVE meeting index only (the JIT chunks), so the
+    // harness can score what the embedding path retrieves on its own.
+    safeHandle('__e2e__:live-index-search', async (_event, params: { query: string; topK?: number }) => {
+      try {
+        const rag = appState.getRAGManager?.();
+        const meetingId = rag?.getLiveMeetingId?.();
+        if (!rag || !meetingId) return { success: false, error: 'live index not queryable yet' };
+        const res = await rag.getRetriever().retrieve(params.query, { meetingId, topK: params.topK ?? 3, maxTokens: 4000 });
+        return { success: true, chunks: (res?.chunks ?? []).map((c: any) => ({ text: c.text, similarity: c.similarity, chunkIndex: c.chunkIndex })) };
+      } catch (e: any) {
+        return { success: false, error: e?.message || String(e) };
+      }
+    });
+
+    // Fail the next N live-index embedding batches (LiveRAGIndexer fault injection).
+    safeHandle('__e2e__:fail-live-embeds', async (_event, n: number) => {
+      (globalThis as any).__nativelyE2eFailLiveEmbeds = Math.max(0, Number(n) || 0);
+      return { success: true };
+    });
+
+    safeHandle('__e2e__:memory-probe', async (_event, params?: { prompts?: number; clear?: boolean; transcriptTail?: number }) => {
       const g = globalThis as any;
       const store: Map<string, any> | undefined = g.__nativelyV3ConversationStateV1__;
       const states = store
@@ -18434,7 +18454,16 @@ export function initializeIpcHandlers(appState: AppState): void {
       const outboundRing: any[] = Array.isArray(g.__nativelyE2eOutbound) ? g.__nativelyE2eOutbound : [];
       const outbound = outboundRing.slice(-(params?.prompts ?? 1));
       if (params?.clear) g.__nativelyE2eOutbound = [];
-      return { success: true, states, prompts, outbound, conversationSessionId, liveMeetingId };
+      let liveIndex: unknown = null;
+      try { liveIndex = appState.getRAGManager?.()?.getLiveIndexStats?.() ?? null; } catch { /* no rag */ }
+      let transcript: unknown = null;
+      try {
+        const segs = appState.getIntelligenceManager?.()?.getCurrentMeetingTranscript?.() ?? [];
+        const bySpeaker: Record<string, number> = {};
+        for (const s of segs) bySpeaker[s.speaker] = (bySpeaker[s.speaker] ?? 0) + 1;
+        transcript = { count: segs.length, bySpeaker, last: segs.slice(-(params?.transcriptTail ?? 4)) };
+      } catch { /* no session */ }
+      return { success: true, states, prompts, outbound, conversationSessionId, liveMeetingId, liveIndex, transcript };
     });
 
     // CONTEXT OS H1: drive the REAL manual chat path (gemini-chat-stream logic)

@@ -1,0 +1,251 @@
+// tests/meeting-memory/live-audio/live-audio-harness.mjs
+//
+// One-hour LIVE meeting through the real capture stack and real STT:
+//   interviewer → `say` into BlackHole 16ch → the meeting's OUTPUT device, so the
+//                 CoreAudio process tap captures it (system-audio channel);
+//   candidate   → `say` into BlackHole 2ch  → the meeting's MIC.
+// Nothing is injected. Probes use the overlay's own entry points: What-to-answer
+// (no question: resolved from the live transcript, like Cmd+Enter), typed
+// questions through the real overlay input, and the live index's semantic search.
+//
+// Prereqs: `brew install --cask blackhole-2ch blackhole-16ch`; the app running via
+// `NATIVELY_E2E=1 node scripts/dev-agent.mjs` with ambientChatEnabled=false in the
+// isolated profile; the dev Electron allowed to use the microphone and to record
+// system audio.
+//
+//   node tests/meeting-memory/live-audio/live-audio-harness.mjs [--minutes N] [--label name]
+
+import { chromium } from 'playwright-core';
+import { spawn, execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { buildHour, FACTS, WPM, TURN_GAP_S } from './interview-hour.mjs';
+import { denialRe } from '../scenarios.mjs';
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.resolve(HERE, '..', '..', '..');
+const args = process.argv.slice(2);
+const label = args.includes('--label') ? args[args.indexOf('--label') + 1] : 'live-audio';
+const maxMinutes = args.includes('--minutes') ? Number(args[args.indexOf('--minutes') + 1]) : Infinity;
+const VOICE = { interviewer: 'Samantha', user: 'Daniel' };
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+function withTimeout(p, ms, what) {
+  let t;
+  return Promise.race([p, new Promise((_, rej) => { t = setTimeout(() => rej(new Error(`timeout: ${what}`)), ms); })]).finally(() => clearTimeout(t));
+}
+
+// ── audio devices ────────────────────────────────────────────────────────────
+function sayDeviceId(name) {
+  const out = execFileSync('say', ['-a', '?'], { encoding: 'utf8' });
+  const line = out.split('\n').find((l) => l.includes(name));
+  if (!line) throw new Error(`say has no output device "${name}" — is BlackHole installed?\n${out}`);
+  return line.trim().split(/\s+/)[0];
+}
+const SAY_DEV = { interviewer: sayDeviceId('BlackHole 16ch'), user: sayDeviceId('BlackHole 2ch') };
+
+function speak(who, text) {
+  return new Promise((resolve, reject) => {
+    const p = spawn('say', ['-v', VOICE[who], '-a', SAY_DEV[who], '-r', String(WPM), text], { stdio: 'ignore' });
+    p.on('error', reject);
+    p.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`say exited ${code}`))));
+  });
+}
+
+// ── app ──────────────────────────────────────────────────────────────────────
+const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'agent-browser.json'), 'utf8'));
+const browser = await withTimeout(chromium.connectOverCDP(`http://127.0.0.1:${cfg.cdp}`), 20000, 'connectOverCDP');
+let appGone = false;
+browser.on('disconnected', () => { appGone = true; });
+async function page(win) {
+  for (let i = 0; i < 40; i++) {
+    const p = browser.contexts().flatMap((c) => c.pages()).find((pg) => {
+      try { return !pg.isClosed() && new URL(pg.url()).searchParams.get('window') === win; } catch { return false; }
+    });
+    if (p) return p;
+    await sleep(250);
+  }
+  throw new Error(appGone ? 'APP_GONE' : `no live page for window=${win}`);
+}
+const evalIn = async (win, fn, arg, ms = 30000) => withTimeout((await page(win)).evaluate(fn, arg), ms, `evaluate in ${win}`);
+const e2e = (channel, ...a) => evalIn('launcher', ([c, rest]) => window.electronAPI.e2eInvoke(c, ...rest), [channel, a], 90000);
+const probe = (opts = {}) => e2e('__e2e__:memory-probe', opts);
+
+async function typedTurn(text) {
+  const overlay = await page('overlay');
+  await overlay.evaluate(() => {
+    const w = window;
+    try { w.__mmUnsub?.(); } catch { /* noop */ }
+    w.__mm = { tok: '', done: null, err: null };
+    const u1 = w.electronAPI.onGeminiStreamToken((t) => { w.__mm.tok += t; });
+    const u2 = w.electronAPI.onGeminiStreamDone((d) => { w.__mm.done = (d && typeof d.finalText === 'string') ? d.finalText : w.__mm.tok; });
+    const u3 = w.electronAPI.onGeminiStreamError((e) => { w.__mm.err = String(e); });
+    w.__mmUnsub = () => { u1(); u2(); u3(); };
+  });
+  const ok = await overlay.evaluate(async (value) => {
+    const el = document.querySelector('[data-testid="overlay-chat-input"]');
+    if (!el) return false;
+    el.focus();
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, value);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 150));
+    el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true }));
+    return true;
+  }, text);
+  if (!ok) throw new Error('overlay input missing');
+  const t0 = Date.now();
+  let st = null;
+  while (Date.now() - t0 < 120000) {
+    st = await overlay.evaluate(() => window.__mm);
+    if (st?.done !== null || st?.err !== null) break;
+    await sleep(400);
+  }
+  await sleep(1200);
+  return { answer: st?.done ?? null, error: st?.err ?? (st?.done == null ? 'timeout' : null), ms: Date.now() - t0 };
+}
+
+async function wtaTurn() {
+  const t0 = Date.now();
+  const r = await evalIn('overlay', () => window.electronAPI.generateWhatToSay(), undefined, 150000);
+  await sleep(1500);
+  return { answer: r?.answer ?? null, error: r?.error ?? null, resolvedQuestion: r?.question ?? null, ms: Date.now() - t0 };
+}
+
+// ── scoring ──────────────────────────────────────────────────────────────────
+function factOf(expect) { return typeof expect === 'string' ? FACTS[expect] : { re: expect }; }
+function score(answer, expect) {
+  if (!answer) return 'error';
+  const f = factOf(expect);
+  if (denialRe.test(answer)) return 'denied';
+  return f.re.test(answer) && (!f.also || f.also.test(answer)) ? 'recalled' : 'wrong';
+}
+const where = (promptUser, re) => {
+  const u = promptUser ?? '';
+  const ev = u.indexOf('# Evidence');
+  const conv = u.indexOf('# Conversation so far');
+  return {
+    inEvidence: ev >= 0 && re.test(u.slice(ev)),
+    inHistory: conv >= 0 && re.test(u.slice(conv, ev > conv ? ev : undefined)),
+  };
+};
+
+// ── run ──────────────────────────────────────────────────────────────────────
+const { steps, estMinutes } = buildHour();
+const outDir = path.join(ROOT, 'tests', 'meeting-memory', 'results');
+fs.mkdirSync(outDir, { recursive: true });
+const outFile = path.join(outDir, `${label}-${Date.now()}.json`);
+const out = { label, estMinutes, startedAt: new Date().toISOString(), devices: {}, probes: [], timeline: [], notes: [] };
+const save = () => fs.writeFileSync(outFile, JSON.stringify(out, null, 2));
+
+const inputs = await evalIn('launcher', () => window.electronAPI.getInputDevices());
+const outputs = await evalIn('launcher', () => window.electronAPI.getOutputDevices());
+const mic = inputs.find((d) => /blackhole 2ch/i.test(d.name));
+const sys = outputs.find((d) => /blackhole 16ch/i.test(d.name));
+if (!mic || !sys) throw new Error(`BlackHole devices not visible to Natively: inputs=${JSON.stringify(inputs)} outputs=${JSON.stringify(outputs)}`);
+out.devices = { mic, sys, say: SAY_DEV };
+
+await evalIn('launcher', () => window.electronAPI.endMeeting()).catch(() => {});
+await sleep(3000);
+const started = await evalIn('launcher', (a) => window.electronAPI.startMeeting({ audio: a }), { inputDeviceId: mic.id, outputDeviceId: sys.id }, 90000);
+if (started && started.success === false) throw new Error(`startMeeting failed: ${started.error}`);
+await page('overlay');
+await sleep(4000);
+const t0 = Date.now();
+const minute = () => +(((Date.now() - t0) / 60000).toFixed(2));
+
+// Both channels must produce transcript before the hour starts.
+await speak('interviewer', 'Hello, can you hear me clearly on your side?');
+await speak('user', 'Yes, I can hear you clearly, thank you.');
+let warm = null;
+for (let i = 0; i < 30; i++) {
+  warm = (await probe()).transcript;
+  if ((warm?.bySpeaker?.interviewer ?? 0) > 0 && (warm?.bySpeaker?.user ?? 0) > 0) break;
+  await sleep(1000);
+}
+out.warmup = warm;
+save();
+if (!((warm?.bySpeaker?.interviewer ?? 0) > 0 && (warm?.bySpeaker?.user ?? 0) > 0)) {
+  throw new Error(`a channel produced no transcript during warm-up: ${JSON.stringify(warm)}`);
+}
+console.log('warm-up ok', JSON.stringify(warm.bySpeaker));
+
+const snap = async (tag) => {
+  try {
+    const r = await probe();
+    out.timeline.push({ minute: minute(), tag, liveIndex: r.liveIndex, transcript: { count: r.transcript?.count, bySpeaker: r.transcript?.bySpeaker }, liveMeetingId: r.liveMeetingId });
+    save();
+  } catch (e) { out.notes.push(`snapshot failed at ${minute()}: ${e.message}`); }
+};
+const ticker = setInterval(() => { snap('tick'); }, 60000);
+
+for (const step of steps) {
+  if (minute() > maxMinutes) break;
+  if (appGone) { out.notes.push('APP_GONE'); break; }
+  try {
+    if (step.kind === 'say') {
+      await speak(step.who, step.text);
+      await sleep(TURN_GAP_S * 1000);
+    } else if (step.kind === 'wta') {
+      await sleep(2500);  // a person's reaction time; lets the STT final land
+      const r = await wtaTurn();
+      const m = await probe({ prompts: 1 });
+      const f = factOf(step.expect);
+      const rec = { kind: 'wta', id: step.id, minute: minute(), note: step.note, ...r, result: score(r.answer, step.expect),
+        ...where(m.prompts?.[0]?.user, f.re), promptUser: m.prompts?.[0]?.user ?? null, liveIndex: m.liveIndex };
+      out.probes.push(rec); save();
+      console.log(`[${rec.minute}] ${step.id} ${rec.result} (${r.ms}ms) q="${r.resolvedQuestion}"`);
+    } else if (step.kind === 'typed') {
+      const r = await typedTurn(step.text);
+      const m = await probe({ prompts: 1 });
+      const rec = { kind: step.plant ? 'plant' : 'typed', id: step.id, minute: minute(), text: step.text, ...r };
+      if (!step.plant) {
+        const f = factOf(step.expect);
+        Object.assign(rec, { result: score(r.answer, step.expect), ...where(m.prompts?.[0]?.user, f.re) });
+      }
+      rec.promptUser = m.prompts?.[0]?.user ?? null;
+      out.probes.push(rec); save();
+      console.log(`[${rec.minute}] ${step.id} ${rec.result ?? 'planted'} (${r.ms}ms)`);
+    } else if (step.kind === 'index') {
+      const r = await e2e('__e2e__:live-index-search', { query: step.query, topK: 3 });
+      const f = factOf(step.expect);
+      const top = r?.chunks ?? [];
+      const rec = { kind: 'index', id: step.id, minute: minute(), query: step.query, ok: r?.success ?? false, error: r?.error ?? null,
+        hitRank: top.findIndex((c) => f.re.test(c.text) && (!f.also || f.also.test(c.text))), top };
+      out.probes.push(rec); save();
+      console.log(`[${rec.minute}] ${step.id} rank=${rec.hitRank} ${rec.error ?? ''}`);
+    } else if (step.kind === 'act' && step.name === 'fail-embeds') {
+      await e2e('__e2e__:fail-live-embeds', step.arg);
+      out.notes.push(`injected ${step.arg} live-index embedding failures at minute ${minute()}`);
+      await snap('fail-embeds');
+    } else if (step.kind === 'mark') {
+      await snap(`section ${step.minute} (est ${step.estMin})`);
+      console.log(`--- minute ${minute()} (script ${step.minute}, est ${step.estMin})`);
+    }
+  } catch (e) {
+    out.notes.push(`step ${step.kind} ${step.id ?? ''} failed at ${minute()}: ${e.message}`);
+    save();
+    if (appGone || String(e.message).includes('APP_GONE')) break;
+  }
+}
+clearInterval(ticker);
+await snap('end');
+
+// The full real transcript and the live index's own chunks, before the meeting
+// ends (post-meeting processing replaces the live chunks).
+try {
+  const full = await probe({ transcriptTail: 100000 });
+  out.transcript = full.transcript?.last ?? [];
+} catch (e) { out.notes.push(`transcript dump failed: ${e.message}`); }
+try {
+  const db = path.join(ROOT, '.agent', 'userdata', 'natively.db');
+  const rows = execFileSync('sqlite3', ['-readonly', '-json', db, "select chunk_index, speaker, cleaned_text from chunks where meeting_id='live-meeting-current' order by chunk_index"], { encoding: 'utf8' });
+  out.liveChunks = rows.trim() ? JSON.parse(rows) : [];
+} catch (e) { out.notes.push(`chunk dump failed: ${e.message}`); }
+save();
+
+await evalIn('launcher', () => window.electronAPI.endMeeting()).catch(() => {});
+out.finishedAt = new Date().toISOString();
+save();
+console.log(`results: ${path.relative(ROOT, outFile)}`);
+process.exit(0);
