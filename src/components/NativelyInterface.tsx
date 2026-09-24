@@ -11375,6 +11375,8 @@ Provide only the answer, nothing else.`;
                           if (m === 'openai/gpt-oss-20b') return 'Groq GPT-OSS 20B';
                           if (m === 'gpt-5.4') return 'GPT 5.4';
                           if (m === 'claude-sonnet-4-6') return 'Sonnet 4.6';
+                          // Retired 2026-09-10; DeepSeek serves it as deepseek-flash (V4.1).
+                          if (m === 'deepseek-v4-flash') return 'DeepSeek V4.1 Flash';
                           return m;
                         })()}
                       </span>

@@ -43,8 +43,11 @@ export const STANDARD_CLOUD_MODELS: Record<string, {
     },
     deepseek: {
         hasKeyCheck: (creds) => !!creds?.hasDeepseekKey,
-        ids: ['deepseek-v4-flash', 'deepseek-v4-pro'],
-        names: ['DeepSeek V4 Flash', 'DeepSeek V4 Pro'],
+        // DeepSeek retired deepseek-v4-flash on 2026-09-10; deepseek-flash is
+        // V4.1-Flash (api-docs.deepseek.com/updates). Mirrors
+        // electron/llm/deepseekModels.ts.
+        ids: ['deepseek-flash', 'deepseek-v4-pro'],
+        names: ['DeepSeek V4.1 Flash', 'DeepSeek V4 Pro'],
         descs: ['Fast • Text-only', 'Reasoning • Text-only'],
         pmKey: 'deepseekPreferredModel'
     },

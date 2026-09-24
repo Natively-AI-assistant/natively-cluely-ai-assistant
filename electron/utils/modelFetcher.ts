@@ -4,6 +4,7 @@
  */
 
 import axios from 'axios';
+import { DEEPSEEK_DEFAULT_MODEL, DEEPSEEK_PRO_MODEL, isDeepseekModelId } from '../llm/deepseekModels';
 
 export interface ProviderModel {
     id: string;
@@ -395,12 +396,14 @@ export function pickLatestSnapshotPerModel<T extends { id?: string; created_at?:
 
 // ─── DeepSeek ────────────────────────────────────────────────────────────────
 
-// Documented current DeepSeek text models; used as fallback if /models call fails
-// or returns an unexpected shape. deepseek-chat / deepseek-reasoner are deprecated
-// (2026-07-24) and intentionally excluded.
+// Documented current DeepSeek models (api-docs.deepseek.com/quick_start/pricing);
+// used as fallback if /models call fails or returns an unexpected shape.
+// deepseek-chat / deepseek-reasoner were discontinued 2026-07-24, and
+// deepseek-v4-flash was retired 2026-09-10 in favour of deepseek-flash — all
+// intentionally excluded (see llm/deepseekModels.ts).
 const DEEPSEEK_DEFAULT_MODELS: ProviderModel[] = [
-    { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
-    { id: 'deepseek-v4-pro', label: 'deepseek-v4-pro' },
+    { id: DEEPSEEK_DEFAULT_MODEL, label: DEEPSEEK_DEFAULT_MODEL },
+    { id: DEEPSEEK_PRO_MODEL, label: DEEPSEEK_PRO_MODEL },
 ];
 
 async function fetchDeepSeekModels(apiKey: string): Promise<ProviderModel[]> {
@@ -422,7 +425,7 @@ async function fetchDeepSeekModels(apiKey: string): Promise<ProviderModel[]> {
 
         const filtered = models.filter((m: any) => {
             const id = (m.id || '').toLowerCase();
-            if (!/^deepseek-v\d/.test(id)) return false;
+            if (!isDeepseekModelId(id)) return false;
             if (excludePatterns.some(p => id.includes(p))) return false;
             return true;
         });

@@ -40,7 +40,7 @@ const harness = (reply) => {
   self.isProviderDisabled = () => false;
   self.assertOutboundScopes = () => {};
   self.rateLimiters = { deepseek: { acquire: async () => {} } };
-  self.currentModelId = 'deepseek-v4-flash';
+  self.currentModelId = 'deepseek-flash';
   return { self, seen };
 };
 
@@ -57,7 +57,7 @@ describe('DeepSeek interactive requests switch thinking off', () => {
     assert.equal(seen.length, 1);
     assert.deepEqual(seen[0].thinking, { type: 'disabled' });
     assert.equal(seen[0].stream, true);
-    assert.equal(seen[0].model, 'deepseek-v4-flash');
+    assert.equal(seen[0].model, 'deepseek-flash');
   });
 
   test('a user-picked deepseek-v4-pro gets it too — the default is per API, not per model', async () => {
