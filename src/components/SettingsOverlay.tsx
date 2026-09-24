@@ -2594,7 +2594,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 {/* Version */}
                                                 <div className="flex items-start justify-between gap-4 px-4 py-3">
                                                     <div className="flex items-start gap-4">
-                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle flex items-center justify-center text-text-tertiary shrink-0">
+                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
                                                             <BadgeCheck size={20} />
                                                         </div>
                                                         <div>
