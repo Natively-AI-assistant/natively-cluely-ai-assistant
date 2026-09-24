@@ -111,7 +111,12 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
     boxShadow: isLight
       ? '0 32px 80px rgba(0,0,0,0.12), 0 0 1px rgba(0,0,0,0.12)'
       : '0 40px 100px rgba(0,0,0,0.9), 0 0 1px rgba(255,255,255,0.08)',
-    overlayBg: isLight ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.6)',
+    // Light used to veil in WHITE (rgba(255,255,255,0.45)), which over an
+    // already-light launcher changed almost nothing — measured 253,253,254
+    // behind the card, so the card floated with no dim while every other
+    // toaster dimmed. A scrim's job is to push the page back; that needs a
+    // dark wash in both themes, lighter on light so the page stays readable.
+    overlayBg: isLight ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.6)',
     rightBg: isLight ? '#EEEFF2' : 'rgba(0,0,0,0.3)',
     rightBorderLeft: isLight ? '1px solid rgba(0,0,0,0.07)' : '1px solid rgba(255,255,255,0.1)',
     // Off-white grey on the dark panel, a darker grey on the light one —
@@ -769,8 +774,12 @@ function PermItem({
 }) {
   const t1 = isLight ? '#1C1C1E' : '#FFFFFF';
   const t3 = isLight ? 'rgba(28, 28, 30, 0.48)' : 'rgba(255, 255, 255, 0.44)';
-  const rule = isLight ? 'rgba(0, 0, 0, 0.08)' : 'rgba(255, 255, 255, 0.1)';
-  const glass = isLight ? 'rgba(0, 0, 0, 0.03)' : 'rgba(255, 255, 255, 0.06)';
+  // On light the row was 245,245,245 on a 253,253,254 card — eight levels of
+  // separation, and only the granted rows were legible at all because their
+  // green edge carried them. An outstanding row, which is the one the user
+  // actually needs to see, had nothing. Dark was already fine and is untouched.
+  const rule = isLight ? 'rgba(0, 0, 0, 0.14)' : 'rgba(255, 255, 255, 0.1)';
+  const glass = isLight ? 'rgba(0, 0, 0, 0.05)' : 'rgba(255, 255, 255, 0.06)';
 
   const accent =
     row.tone === 'granted' ? T.green :
