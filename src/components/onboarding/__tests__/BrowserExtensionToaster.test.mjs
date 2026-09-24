@@ -391,8 +391,8 @@ for (const [name, groundHex] of [['INK_DARK', '#1C1C1E'], ['INK_LIGHT', '#F7F8FC
 // ─── Design contracts ───────────────────────────────────────────
 
 test('one split layout serves both themes', () => {
-  assert.ok(source.includes("import beBlack from '../../../assets/BE-black.png'"));
-  assert.ok(/backgroundImage:\s*`url\(\$\{beBlack\}\)`/.test(rendered), 'the panel shows BE-black');
+  assert.ok(source.includes("import chromeArt from '../../assets/cards/chrome.jpg'"));
+  assert.ok(/backgroundImage:\s*`url\(\$\{chromeArt\}\)`/.test(rendered), 'the panel shows the Chrome art');
   assert.ok(!/earthbg|earthwhite/i.test(source), 'the earth plates are gone');
   // No per-theme layout branch: only colours may depend on the theme.
   assert.ok(!/isLight\s*\?\s*\(\s*</.test(rendered), 'no JSX forked on the theme');

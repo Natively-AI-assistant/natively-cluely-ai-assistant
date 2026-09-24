@@ -13,7 +13,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, useReducedMotion, type MotionStyle } from 'framer-motion';
 import { X, ArrowRight } from 'lucide-react';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
-import beBlack from '../../../assets/BE-black.png';
+import chromeArt from '../../assets/cards/chrome.jpg';
 import { useGenieCard } from './useGenieCard';
 
 const DISMISS_KEY = 'natively_ext_connect_dismissed_v1';
@@ -468,10 +468,10 @@ export const BrowserExtensionToaster: React.FC<Props> = ({ isOpen, onDismiss, on
                     boxShadow: isLight ? 'inset 0 0 0 1px rgba(11,16,32,0.07)' : 'none',
                   }}>
                     {/* The image. A slow push-in scoped to the panel, so the
-                        sphere breathes while the column holds still. */}
+                        Chrome mark breathes while the column holds still. */}
                     <div aria-hidden style={{
                       position: 'absolute', inset: 0,
-                      backgroundImage: `url(${beBlack})`,
+                      backgroundImage: `url(${chromeArt})`,
                       backgroundSize: 'cover',
                       backgroundPosition: '92% 50%',
                       transform: plateHover ? `scale(${1 + PLATE_ZOOM})` : 'scale(1)',

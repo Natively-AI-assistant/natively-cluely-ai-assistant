@@ -4,8 +4,8 @@
 //
 // Same two-pane family as the trial, support, review and upgrade cards (see
 // SupportToaster.tsx for the ink table): the words on a flat ground on the
-// left, the image in its own inset panel on the right. It reuses the trial
-// invitation's flower, so the trial opens and closes on the same picture.
+// left, the image in its own inset panel on the right: an hourglass, for
+// the trial's time running out.
 //
 // Unlike the rest of the family it has no close: the trial token is gone, so
 // the app has no AI until the user chooses one of the paths below.
@@ -23,7 +23,7 @@ import {
   formatCompact,
   type NativelyPlanLimits, type TrialUsage,
 } from '../../types/nativelyUsage';
-import flowerArt from '../../assets/cards/flower.jpg';
+import timerArt from '../../assets/cards/timer.jpg';
 
 const PLAN_STANDARD_URL = 'https://checkout.dodopayments.com/buy/pdt_0NbFixGmD8CSeawb5qvVl';
 const PLAN_PRO_URL      = 'https://checkout.dodopayments.com/buy/pdt_0NcM6Aw0IWdspbsgUeCLA';
@@ -515,7 +515,7 @@ export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onSta
         }}>
           <div aria-hidden style={{
             position: 'absolute', inset: 0,
-            backgroundImage: `url(${flowerArt})`,
+            backgroundImage: `url(${timerArt})`,
             backgroundSize: 'cover',
             backgroundPosition: '90% 50%',
             transform: plateHover ? `scale(${1 + PLATE_ZOOM})` : 'scale(1)',
