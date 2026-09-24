@@ -263,19 +263,37 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
   // two or more mode files because that is the only case with a measured
   // benefit, and it costs evidence tokens on every grounded turn it applies to.
   const multiFile = (req.attachedSourceCount ?? 0) >= 2 && cls.shouldRetrieve;
+
+  // A GENERAL question in a LIVE MEETING still reads the meeting (2026-09-24).
+  // "How would you design the retry policy?" needs no private source, so it
+  // took the fast path and retrieved nothing — and the interviewer's own
+  // requirements, set minutes earlier ("retries for up to twenty four hours",
+  // "ordering per merchant"), existed only in speech the prompt no longer
+  // held. Measured in a live mock interview: the answer capped retries at "a
+  // few minutes"; in the injected design round, 2 of 4 constraint-dependent
+  // questions missed a constraint said 26 minutes back that the meeting index
+  // held. Only the MEETING pool is added, and no claim: the turn stays FAST,
+  // so a meeting that never mentioned the subject costs nothing but the
+  // lookup — answerability stays FULL and no absence notice is written — and
+  // the meeting ports' relevance floors keep unrelated talk out.
+  const meetingContextForGeneralTurn = cls.path === 'FAST' && !cls.shouldRetrieve
+    && Boolean(req.inLiveMeeting)
+    && !cls.questionTypes.includes('META_REQUEST')
+    && policy.retrievalPolicy.enabled
+    && policy.allowedSourceTypes.includes('MEETING_TRANSCRIPT');
   const acceptedBase = multiFile
     ? Math.max(policy.retrievalPolicy.maximumAcceptedEvidence, MULTI_FILE_EVIDENCE.accepted)
     : policy.retrievalPolicy.maximumAcceptedEvidence;
 
   const retrievalPlan: RetrievalPlan = {
     path: cls.path,
-    shouldRetrieve: cls.shouldRetrieve,
+    shouldRetrieve: cls.shouldRetrieve || meetingContextForGeneralTurn,
     // When no claim named a source, retrieval used to fan out to EVERY allowed
     // type — "Reverse a linked list in Python" retrieved six résumé/JD chunks
     // (deep-run 2, issue 5). An unclaimed retrieval consults document pools
     // only; identity pools (résumé/JD/profile) are reachable solely through
     // claims that name them.
-    sourceTypes: cls.shouldRetrieve
+    sourceTypes: meetingContextForGeneralTurn ? ['MEETING_TRANSCRIPT'] : cls.shouldRetrieve
       ? (cls.requiredSourceTypes.length
         ? cls.requiredSourceTypes
         : policy.allowedSourceTypes.filter((s) =>
