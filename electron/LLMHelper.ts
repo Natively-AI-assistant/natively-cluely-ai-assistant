@@ -5125,9 +5125,24 @@ let isMultimodal = !!(imagePaths?.length);
       } catch { if (aborted()) throw abortError(); }
     }
     if (aborted()) throw abortError();
-    // Nothing small is configured (Codex CLI / Ollama / custom / Natively-only
-    // users): the structured ladder still answers, bounded by the controller's
-    // deadline.
+    // Natively-only users have no small rung above, so without this their judge
+    // reached /v1/chat via the structured ladder carrying the ACTIVE MODE's
+    // system prompt - and in an interview mode the server routed a yes/no
+    // verdict to gemini-3.8-flash, which is slower AND cannot take thinkingLevel
+    // 'minimal' (it 400s and falls back to 'low', paying thinking overhead every
+    // consult). `purpose:'decision'` pins gemini-3.1-flash-lite server-side.
+    if (this.nativelyKey) {
+      try {
+        const text = await this.generateWithNatively(message, undefined, undefined, {
+          purpose: 'decision', timeoutMs: FAST_MODEL_JUDGE_RUNG_TIMEOUT_MS, signal,
+        });
+        if (text) return text;
+      } catch { if (aborted()) throw abortError(); }
+    }
+    if (aborted()) throw abortError();
+
+    // Nothing small is configured (Codex CLI / Ollama / custom): the structured
+    // ladder still answers, bounded by the controller's deadline.
     // NOT preferFast: rung 0 already tried the fast model with the caller's signal.
     // Re-entering here would bill it a second time, milliseconds after it failed,
     // on a request that carries no signal and so cannot be cancelled.
@@ -5476,7 +5491,7 @@ let isMultimodal = !!(imagePaths?.length);
   /**
    * Routes AI generation through the Natively API backend (Gemini-powered).
    */
-  private async generateWithNatively(userMessage: string, systemPrompt?: string, imagePaths?: string[], opts?: { purpose?: 'extraction'; timeoutMs?: number; signal?: AbortSignal }): Promise<string> {
+  private async generateWithNatively(userMessage: string, systemPrompt?: string, imagePaths?: string[], opts?: { purpose?: 'extraction' | 'decision'; timeoutMs?: number; signal?: AbortSignal }): Promise<string> {
     this.assertOutboundScopes('natively', userMessage, imagePaths);
     // Prefer the in-memory field; fall back to CredentialsManager for the direct-routing path
     // where currentModelId === 'natively' but setNativelyKey() wasn't called yet.

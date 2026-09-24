@@ -91,3 +91,42 @@ test('the terminal ladder rung does not re-enter the fast path', async () => {
   await h.generateJudgeVerdict('prompt').catch(() => {});
   assert.equal(fastCalls, 1, 'a second billed call to the model that just failed, and it is uncancellable');
 });
+
+// --- Natively-only users: a small judge rung that pins the server's fast tier ---
+//
+// Without this, a Natively-only user's judge falls through to the structured
+// ladder and reaches /v1/chat carrying the ACTIVE MODE's system prompt. In an
+// interview mode the server routed that yes/no verdict to gemini-3.8-flash,
+// which is slower AND cannot take thinkingLevel 'minimal' (it 400s and falls
+// back to 'low'). `purpose:'decision'` pins gemini-3.1-flash-lite server-side
+// (natively-api lib/flashModelPicker.js).
+test('a Natively user gets a judge rung that asks for the decision tier', async () => {
+  let seen = null;
+  let ladderRan = false;
+  const h = judgeHelper({ nativelyKey: 'nat_test' });
+  h.callFastModel = async () => null;
+  h.generateWithNatively = async (_msg, _sys, _imgs, opts) => { seen = opts; return '{"is_ask":true}'; };
+  h.generateContentStructured = async () => { ladderRan = true; return '{}'; };
+  assert.equal(await h.generateJudgeVerdict('prompt'), '{"is_ask":true}');
+  assert.equal(seen?.purpose, 'decision', 'must tell the server this is a yes/no decision');
+  assert.ok(seen?.timeoutMs, 'the judge rung must be bounded');
+  assert.equal(ladderRan, false, 'the rung answered, so the ladder must not also run');
+});
+
+test('a failing Natively rung still falls through to the ladder', async () => {
+  const h = judgeHelper({ nativelyKey: 'nat_test' });
+  h.callFastModel = async () => null;
+  h.generateWithNatively = async () => { throw new Error('503'); };
+  h.generateContentStructured = async () => '{"ladder":true}';
+  assert.equal(await h.generateJudgeVerdict('prompt'), '{"ladder":true}');
+});
+
+test('with no Natively key the rung is skipped entirely', async () => {
+  let called = false;
+  const h = judgeHelper({ nativelyKey: null });
+  h.callFastModel = async () => null;
+  h.generateWithNatively = async () => { called = true; return 'x'; };
+  h.generateContentStructured = async () => '{"ladder":true}';
+  assert.equal(await h.generateJudgeVerdict('prompt'), '{"ladder":true}');
+  assert.equal(called, false);
+});
