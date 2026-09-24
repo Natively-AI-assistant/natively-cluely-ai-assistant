@@ -18,7 +18,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, type MotionStyle } from 'framer-motion';
-import { X, Monitor, Mic, Check, Lock, Loader2 } from 'lucide-react';
+import { X, Monitor, Mic, Settings, Check, Lock, Loader2, Circle } from 'lucide-react';
 import nativelyIcon from '../../../assets/icon.png';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { LiquidGlassButton } from '../../ui-components/LiquidGlassButton';
@@ -216,6 +216,22 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
     }
   }, [refreshStatus, openScreenSettings]);
 
+  // The rows only report status now, so the card has exactly one action and it
+  // lives in the footer. It resolves the FIRST outstanding permission, which is
+  // what "Open Settings" can honestly mean when two are listed.
+  //
+  // It routes through handleRowAction rather than opening a pane directly, so a
+  // microphone that has never been asked still gets the macOS consent prompt
+  // ('request'). That matters: until an app has requested once, it does not
+  // appear in System Settings > Privacy > Microphone at all, so sending a fresh
+  // install straight to Settings would strand it with nothing to toggle.
+  const openSettingsForNext = useCallback(async () => {
+    const screen = platform === 'darwin' ? describePermRow(platform, 'screen', scrStatus) : null;
+    const mic = describePermRow(platform, 'microphone', micStatus);
+    if (screen && screen.tone !== 'granted') { await handleRowAction('screen', screen.remedy); return; }
+    if (mic.tone !== 'granted') await handleRowAction('microphone', mic.remedy);
+  }, [platform, scrStatus, micStatus, handleRowAction]);
+
   // The host unmounts us the moment it hears onDismiss, which would cut the
   // genie off — so close first, report after.
   const handleDismiss = useCallback(() => {
@@ -248,7 +264,6 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
           label="Screen Recording"
           row={describePermRow(platform, 'screen', scrStatus)}
           busy={requesting === 'screen'}
-          onAction={r => handleRowAction('screen', r)}
           reduced={reduced}
           isLight={isLight}
         />
@@ -258,7 +273,6 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
         label="Microphone"
         row={describePermRow(platform, 'microphone', micStatus)}
         busy={requesting === 'microphone'}
-        onAction={r => handleRowAction('microphone', r)}
         reduced={reduced}
         isLight={isLight}
         divider={isMac}
@@ -389,7 +403,13 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
                       transition={{ ...SPRING.smooth, delay: 0.2 }}
                       style={{ marginTop: 'auto' }}
                     >
-                      <QuietButton isLight={isLight} label="I'll do this later" onClick={handleDismiss} />
+                      <PrimaryButton
+                        isLight={isLight}
+                        disabled={checking}
+                        icon={Settings}
+                        label="Open Settings"
+                        onClick={openSettingsForNext}
+                      />
                     </motion.div>
                   </>
                 )}
@@ -769,13 +789,12 @@ function GuideResolved({ isLight, colors, t3 }: {
 // flip itself green, and clicking a granted row does nothing, because nothing
 // was revoked.
 function PermItem({
-  icon: Icon, label, row, busy, onAction, reduced, isLight, divider = false,
+  icon: Icon, label, row, busy, reduced, isLight, divider = false,
 }: {
   icon:     React.ElementType;
   label:    string;
   row:      RowPresentation;
   busy:     boolean;
-  onAction: (remedy: RowPresentation['remedy']) => void;
   reduced:  boolean;
   isLight:  boolean;
   /** A row precedes this one. Draws a hairline once the container is gone. */
@@ -792,18 +811,10 @@ function PermItem({
     row.tone === 'pending' ? (isLight ? 'rgba(28,28,30,0.35)' : 'rgba(255,255,255,0.35)') :
     T.blue;
 
-  const interactive = row.actionable && !busy;
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
       transition={reduced ? { duration: 0 } : { type: 'spring', stiffness: 260, damping: 24 }}
-      onClick={interactive ? () => onAction(row.remedy) : undefined}
-      role={interactive ? 'button' : undefined}
-      tabIndex={interactive ? 0 : undefined}
-      onKeyDown={interactive ? (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onAction(row.remedy); }
-      } : undefined}
       style={{
         display: 'flex', alignItems: 'center', gap: '10px',
         // A granted row is a statement, not a control: no card, no border. The
@@ -815,11 +826,8 @@ function PermItem({
         border: `1px solid ${row.tone === 'granted' ? 'transparent' : rule}`,
         // Without a container the rows need something to read as a list.
         ...(row.tone === 'granted' && divider ? { borderTop: `1px solid ${rule}` } : {}),
-        transition: 'border-color 300ms, transform 150ms',
-        cursor: interactive ? 'pointer' : 'default',
+        transition: 'border-color 300ms',
       }}
-      whileHover={interactive ? { scale: 1.005 } : {}}
-      whileTap={interactive ? { scale: 0.995 } : {}}
     >
       {/* The icon carries the row's state in its colour alone — no squircle
           well behind it. A tinted, bordered tile per row read as a second
@@ -854,15 +862,11 @@ function PermItem({
         ) : row.tone === 'blocked' ? (
           <Lock size={15} strokeWidth={2} color={T.amber} />
         ) : row.tone === 'pending' ? null : (
-          <span style={{
-            padding: '5px 9px', borderRadius: '7px',
-            background: isLight ? 'rgba(0,122,255,0.1)' : 'rgba(0,122,255,0.18)',
-            border: `1px solid ${isLight ? 'rgba(0,122,255,0.2)' : 'rgba(0,122,255,0.28)'}`,
-            fontSize: '11px', fontWeight: 600, color: isLight ? '#0A6CD8' : '#6BAEFF',
-            letterSpacing: '-0.01em', whiteSpace: 'nowrap',
-          }}>
-            {row.actionLabel}
-          </span>
+          // Not granted yet. A hollow circle against the granted row's filled
+          // check reads as "outstanding" at a glance, without dressing a
+          // status up as a button the way the blue action pill did.
+          <Circle aria-label="Not granted" size={15} strokeWidth={1.75}
+            color={isLight ? 'rgba(28,28,30,0.28)' : 'rgba(255,255,255,0.3)'} />
         )}
       </div>
     </motion.div>
