@@ -145,7 +145,8 @@ describe('history past the budget is condensed, not dropped', () => {
   });
 
   test('the ring retains a meeting\'s worth of turns, still bounded', () => {
-    assert.ok(MAX_HISTORY_TURNS >= 30 && MAX_HISTORY_TURNS <= 100);
+    // A whole session (an hour-long interview is ~120 exchanges), still bounded.
+    assert.ok(MAX_HISTORY_TURNS >= 200 && MAX_HISTORY_TURNS <= 1000);
     let t = [];
     for (let i = 0; i < MAX_HISTORY_TURNS + 5; i++) t = appendTurn(t, `q${i}`, `a${i}`);
     assert.equal(t.length, MAX_HISTORY_TURNS);

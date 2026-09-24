@@ -16,6 +16,10 @@
 import { isContextIntelligenceV3Enabled } from '../contracts/flag';
 import { MAX_TURN_SCREEN_CHARS, type HistoryTurn } from '../question/conversation-state';
 import { renderHistory } from '../question/history-render';
+
+/** Allowance for the history RECALL tier: up to three older exchanges the
+ *  question is about, with their screen text (history-render.ts). */
+const RECALL_BUDGET_CHARS = 4000;
 import { NO_CONVERSATION_SCOPE } from '../question/conversation-state-store';
 import { orchestrate, type AnswerRequest, type RetrievalPort } from './orchestrator';
 import { composePrompt } from '../generation/prompt-composer';
@@ -350,6 +354,8 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
      *  withheldScopes once that set exists, so the [V3] line and the debug
      *  collector both show the withholding rather than a silent drop. */
     let historyScreenWithheld = false;
+    /** Older exchanges the history RECALL tier brought back (log only). */
+    let historyRecalled = 0;
     if (!convoSummary) {
       try {
         const { getConversationState } = require('../question/conversation-state-store');
@@ -400,9 +406,13 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
             // evicted every older turn.
             screenBudgetChars: MAX_TURN_SCREEN_CHARS * 2,
             screensDenied,
+            // Older exchanges this question is about, in full (RECALL tier).
+            query: question,
+            recallBudgetChars: RECALL_BUDGET_CHARS,
           });
           historyScreenWithheld = rendered.screenWithheld;
           historyCarriesScreenText = rendered.carriesScreen;
+          historyRecalled = rendered.recalledCount;
           // The CURRENT question is not in the ring yet (its answer does not
           // exist), so nothing here duplicates it.
           convoSummary = rendered.text;
@@ -463,8 +473,11 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
             // would carry one press's question into the next. It keeps the
             // screen-only merge it always had.
             exclude: (t) => !t.screen && (sharedBucket || speechWindowContains(speech, t.a)),
+            query: question,
+            recallBudgetChars: RECALL_BUDGET_CHARS,
           });
           historyScreenWithheld = rendered.screenWithheld;
+          historyRecalled = rendered.recalledCount;
           if (rendered.turnCount) {
             convoSummary = `${speech}\n\n${rendered.text}`;
             historyCarriesScreenText = rendered.carriesScreen;
@@ -661,6 +674,11 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
         })),
         answerability: result.trace.answerability,
         fallback: result.trace.fallbackUsed,
+        // Timings and history reach (2026-09-24): how long the lookups took
+        // and how many older exchanges the RECALL tier brought back.
+        retrievalMs: Math.round(result.trace.latency?.retrievalMs ?? 0),
+        orchestrateMs: Math.round(result.trace.latency?.totalMs ?? 0),
+        historyRecalled,
         // Privacy withholding (2026-08-01). Identity/counts only. A turn that
         // answered thinly because the user switched a data scope off was
         // previously indistinguishable in the logs from a retrieval miss.

@@ -139,8 +139,14 @@ export const MAX_SUMMARY_CHARS = 280;
  *  a 30-exchange session were evicted by count before anyone asked about them.
  *  Retention and prompt cost are now separate decisions — what reaches the
  *  prompt is bounded by the mode's conversation budget in renderHistory (newest
- *  in full, older condensed), not by how many turns the ring keeps. */
-export const MAX_HISTORY_TURNS = 40;
+ *  in full, older condensed), not by how many turns the ring keeps.
+ *
+ *  Was 40 (2026-09-24): an hour-long interview is ~120 exchanges, and the ring
+ *  is the ONLY record of typed chat, answers and screenshot analyses (the
+ *  meeting index holds speech). 400 covers a long session; renderHistory's
+ *  RECALL tier brings back the older exchanges a question is about. Worst case
+ *  ~4 MB per session (every turn at every cap), typically a few hundred KB. */
+export const MAX_HISTORY_TURNS = 400;
 /** Per-answer cap in the ring. Deliberately far above MAX_SUMMARY_CHARS (280),
  *  which truncated a screenshot description mid-sentence and dropped the
  *  details every follow-up then asked about. */
