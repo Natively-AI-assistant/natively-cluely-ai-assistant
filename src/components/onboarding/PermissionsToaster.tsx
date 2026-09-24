@@ -18,7 +18,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, type MotionStyle } from 'framer-motion';
-import { X, Monitor, Mic, Settings, Check, Lock, Loader2 } from 'lucide-react';
+import { X, Monitor, Mic, Settings, Check, Lock, Loader2, Sparkles } from 'lucide-react';
 import nativelyIcon from '../../../assets/icon.png';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { LiquidGlassButton } from '../../ui-components/LiquidGlassButton';
@@ -360,7 +360,7 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
                 </div>
 
                 {allResolved ? (
-                  <AllSetPanel isLight={isLight} reduced={reduced} onContinue={handleDismiss} rows={permRows} />
+                  <AllSetPanel isLight={isLight} reduced={reduced} onContinue={handleDismiss} />
                 ) : (
                   <>
                     {/* Title + subtitle */}
@@ -532,12 +532,33 @@ function PrimaryButton({
 // `allPermissionsResolved` used to be computed and then thrown away, so the
 // card kept demanding "Open Settings" from a user who had already granted
 // everything. This is what it renders now.
-function AllSetPanel({ isLight, reduced, onContinue, rows }: {
+// The completion state is not a second permissions list. Re-stating the two
+// things the user just granted is what made this column read as filler — the
+// heading already says they are granted, and the panel beside it says READY TO
+// GO a third time. So it answers the question the user actually has at this
+// point: what can it do now?
+//
+// Three capabilities, one line each, in the order they happen: see, hear,
+// answer. Neutral icons, because green here is the colour of "granted" and
+// these are not statuses.
+const CAPABILITIES = [
+  { icon: Monitor,  label: 'Capture what\'s on your screen' },
+  { icon: Mic,      label: 'Transcribe speech as it happens' },
+  { icon: Sparkles, label: 'Answer questions about what was said' },
+];
+
+function AllSetPanel({ isLight, reduced, onContinue }: {
   isLight: boolean; reduced: boolean; onContinue: () => void;
-  rows: React.ReactNode;
 }) {
   const t1 = isLight ? '#1C1C1E' : '#FFFFFF';
+  const t2 = isLight ? 'rgba(28, 28, 30, 0.72)' : 'rgba(255, 255, 255, 0.78)';
   const t3 = isLight ? 'rgba(28, 28, 30, 0.48)' : 'rgba(255, 255, 255, 0.44)';
+  const iconColor = isLight ? 'rgba(28, 28, 30, 0.42)' : 'rgba(255, 255, 255, 0.46)';
+
+  const rise = (delay: number) => (reduced
+    ? { initial: { opacity: 0 }, animate: { opacity: 1 }, transition: { duration: 0.2, delay } }
+    : { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 },
+        transition: { type: 'spring' as const, stiffness: 240, damping: 22, delay } });
 
   return (
     <motion.div
@@ -549,15 +570,27 @@ function AllSetPanel({ isLight, reduced, onContinue, rows }: {
       <h2 id="perm-toast-title" style={{ fontSize: '24px', fontWeight: 700, letterSpacing: '-0.03em', color: t1, margin: '0 0 8px', lineHeight: 1.2 }}>
         You're all set
       </h2>
-      <p id="perm-toast-desc" style={{ fontSize: '13px', lineHeight: 1.65, color: t3, margin: '0 0 24px' }}>
-        Natively has everything it needs to capture and transcribe your meetings.
+      <p id="perm-toast-desc" style={{ fontSize: '13px', lineHeight: 1.65, color: t3, margin: '0 0 26px' }}>
+        Here's what Natively can do now.
       </p>
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-        {rows}
+      {/* The three lines take the column's slack and space themselves through
+          it, so the completion state fills its 440 instead of stacking at the
+          top and stranding the gap above the button. */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-evenly', gap: '18px' }}>
+        {CAPABILITIES.map(({ icon: Ico, label }, i) => (
+          <motion.div key={label} {...rise(0.08 + i * 0.07)}
+            style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <Ico size={17} strokeWidth={1.75} color={iconColor} style={{ flexShrink: 0 }} />
+            <span style={{ fontSize: '13.5px', fontWeight: 500, color: t2, letterSpacing: '-0.012em' }}>
+              {label}
+            </span>
+          </motion.div>
+        ))}
       </div>
 
-      <div>
+      {/* marginTop:auto keeps the action on the 440 floor, as in the other state. */}
+      <div style={{ paddingTop: '26px' }}>
         <PrimaryButton isLight={isLight} variant="green" label="Continue" onClick={onContinue} />
       </div>
     </motion.div>

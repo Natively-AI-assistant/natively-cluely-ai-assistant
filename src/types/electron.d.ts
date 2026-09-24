@@ -675,7 +675,22 @@ export interface ElectronAPI {
   acknowledgeExtensionLicense: (id: string, modelKey: string) => Promise<{ success: boolean; error?: string }>
   downloadExtensionModel: (id: string, modelKey: string) => Promise<{ success: boolean; status?: unknown; error?: string; message?: string }>
   cancelExtensionModelDownload: (id: string, modelKey: string) => Promise<{ success: boolean; error?: string }>
-  browseExtensionRegistry: (url?: string) => Promise<{ ok: boolean; entries: Array<{ id: string; repo: string; latestVersion: string; apiVersion: string; category: string; modelLicenses?: string[] }> }>
+  browseExtensionRegistry: (url?: string) => Promise<{
+    ok: boolean
+    cached?: boolean
+    error?: string | null
+    entries: Array<{
+      id: string; repo: string; latestVersion: string; apiVersion: string; category: string
+      modelLicenses?: string[]
+      name?: string
+      /** Present only when the registry came from a release with built artefacts. */
+      download?: { code: string; manifest: string; sha256: { code: string; manifest: string }; bytes?: { code: number; manifest: number } }
+      /** Binaries the extension spawns but does not bundle, e.g. llama-server. */
+      requiresExternalRuntime?: string[]
+    }>
+  }>
+  /** Takes an extension ID, never a URL — main resolves the download itself. */
+  installExtensionFromRegistry: (id: string) => Promise<{ success: boolean; id?: string; error?: string; errors?: string[]; warnings?: string[] }>
   onExtensionModelProgress: (callback: (p: { id: string; modelKey: string; fraction: number }) => void) => () => void
 
   testReranker: (choice?: { model?: string }) => Promise<{
