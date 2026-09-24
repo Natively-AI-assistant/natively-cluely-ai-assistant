@@ -161,6 +161,9 @@ export const TrialPromoToaster: React.FC<Props> = ({
     <GenieModal
       open={visible}
       label="TrialPromoToaster"
+      // It opens fresh (the orchestrator remounts it), so a picture of it
+      // starting or showing an error is never one of what the next open shows.
+      keepPictures={!starting && !error}
       zIndex={9998}
       onBackdropClick={() => { if (!starting) handleDismiss(); }}
       onClosed={() => { const after = afterCloseRef.current; afterCloseRef.current = null; after?.(); }}
