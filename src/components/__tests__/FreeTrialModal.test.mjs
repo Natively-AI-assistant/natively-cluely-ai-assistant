@@ -71,9 +71,9 @@ test('opens and closes through GenieModal; the done step closes before reporting
   assert.ok(rendered.includes('onClick={() => setOpen(false)}'));
 });
 
-test('toaster family: flat ground, flower panel, neutral outlined CTA, no glow or blur', () => {
+test('toaster family: flat ground, hourglass panel, neutral outlined CTA, no glow or blur', () => {
   assert.ok(rendered.includes("background: isLight ? '#F7F8FC' : '#1C1C1E'"));
-  assert.ok(source.includes("import flowerArt from '../../assets/cards/flower.jpg'"));
+  assert.ok(source.includes("import timerArt from '../../assets/cards/timer.jpg'"));
   assert.ok(!/#8B5CF6|#7C3AED|#A78BFA|#6D28D9/i.test(rendered), 'no violet left in the chrome');
   assert.ok(!/backdropFilter|backdrop-blur|fm-ring|feTurbulence/.test(rendered), 'no ring, grain or blur');
   assert.ok(!/textTransform:\s*'uppercase'/.test(rendered), 'no tracked-out caps');
