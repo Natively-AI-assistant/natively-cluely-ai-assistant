@@ -18431,7 +18431,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       try { conversationSessionId = appState.getIntelligenceManager?.()?.conversationSessionId?.() ?? null; } catch { /* no engine */ }
       let liveMeetingId: string | null = null;
       try { liveMeetingId = appState.getRAGManager?.()?.getLiveMeetingId?.() ?? null; } catch { /* no rag */ }
-      return { success: true, states, prompts, conversationSessionId, liveMeetingId };
+      const outboundRing: any[] = Array.isArray(g.__nativelyE2eOutbound) ? g.__nativelyE2eOutbound : [];
+      const outbound = outboundRing.slice(-(params?.prompts ?? 1));
+      if (params?.clear) g.__nativelyE2eOutbound = [];
+      return { success: true, states, prompts, outbound, conversationSessionId, liveMeetingId };
     });
 
     // CONTEXT OS H1: drive the REAL manual chat path (gemini-chat-stream logic)
