@@ -105,3 +105,22 @@ describe('fast', () => {
     assert.ok(per < 20, `${per.toFixed(1)} ms per question`);
   });
 });
+
+describe('the history header lets the model quote its own earlier answers', () => {
+  test('"what did you suggest" is answered from the Assistant lines, faithfully', async () => {
+    const { composePrompt } = await load('generation/prompt-composer.js');
+    const { decide } = await load('orchestration/orchestrator.js');
+    const { MODE_POLICIES } = await load('policies/mode-policy-registry.js');
+    const d = decide({ requestId: 'r', requestSequence: 1, surface: 'manual-chat', modeId: 'general',
+      scope: { userId: 'local', sessionId: 's' }, sessionId: 's', manualQuestion: 'What did you suggest I say about my team earlier?' });
+    const c = composePrompt({ decision: d, policy: MODE_POLICIES.general, evidence: [],
+      conversationSummary: 'Question heard in the meeting: What does your team work on?\nAssistant: I work on the ledger service.' });
+    const all = `${c.system}\n${c.user}`;
+    // The referent-only rule is kept…
+    assert.match(all, /for resolving references only, never a source of facts/);
+    // …with the one thing assistant lines ARE a record of.
+    assert.match(all, /the record of what YOU said/);
+    assert.match(all, /not from what was later said aloud in the meeting/);
+    assert.match(all, /if they did not specify something, say so/);
+  });
+});
