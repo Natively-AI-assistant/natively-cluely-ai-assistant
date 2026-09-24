@@ -448,6 +448,8 @@ test('a verdict that arrives after the meeting moved on is still recorded as sta
   await flush(); await flush();
   const judged = h.state.events.filter(e => e.name === 'auto_answer_judged');
   assert.ok(judged.some(e => e.judgeOutcome === 'stale'), 'the superseded call reports stale');
+});
+
 // ── Latency work (2026-09-22): question-shaped candidates always prefetch ──
 // Live telemetry (9 auto answers, Deepgram + gpt-5.6-luna): the judge took
 // 1.2-2.5 s and the answer's first token another 0.7-2.7 s, SERIALLY, because
