@@ -1,11 +1,12 @@
 // src/components/ReviewModal.tsx
-// In-app review + testimonial collection — "obsidian editorial".
+// In-app review + testimonial collection.
 //
-// The composition is a two-column plate, not a stacked card: a black left
-// plate carries an oversized display numeral that reacts live to the rating,
-// and the right column carries the editorial copy and the controls. There is
-// no header bar; the close glyph floats over the whole plate. Each step owns
-// its own grid, so the three states have genuinely different silhouettes.
+// Same two-pane family as the browser-extension and support cards: the copy
+// and controls on a flat ground on the left, the star art in its own inset
+// panel on the right. Steps 1 and 2 share that grid; the receipt (step 3)
+// deliberately leaves it for a centred single column. The art is the only
+// colour on the card apart from the gold of a chosen rating, which is taken
+// from it. Light and dark are one layout; only the CSS variables change.
 //
 // Behaviour is unchanged from the form it replaces:
 //   Step 1 ("review")      — rating 1-5 + optional 300-char note
@@ -21,8 +22,15 @@ import { Star, X, Lock, Check } from "lucide-react"
 // Co-located so a concurrent edit to index.css cannot silently strip the
 // modal's styling — every class here resolves to nothing without it.
 import "./ReviewModal.css"
+import { GenieModal } from "./ui/GenieModal"
+import { useResolvedTheme } from "../hooks/useResolvedTheme"
 
 const MAX_CHARS = 300
+
+// The card's drop shadow (--rv-shadow's outer layer), for the stand-in that
+// carries it while the genie runs.
+const SHADOW_LIGHT = "0 30px 70px -28px rgba(16, 24, 40, 0.40)"
+const SHADOW_DARK  = "0 40px 90px -30px rgba(0, 0, 0, 0.85)"
 
 // ─── Spring presets ────────────────────────────────────────────────────────
 // Defined once at module level so they are never recreated on render.
@@ -121,6 +129,7 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
     updateTestimonial,
 }) => {
     const reduced = useReducedMotion() ?? false
+    const isLight = useResolvedTheme() === "light"
     const [step, setStep] = useState<Step>("review")
     // Read the latest step inside ESC/keydown handlers without making the
     // effect's dependency array include `step` (which would re-attach the
@@ -193,16 +202,15 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
     // synchronously, so the flag is set and cleared around that single call and
     // can never swallow a later, genuine focus.
     const suppressStarFocusPreview = useRef(false)
-    useEffect(() => {
-        if (!isOpen) return
-        const t = window.setTimeout(() => {
-            const first = document.querySelector<HTMLButtonElement>('[data-review-star="1"]')
-            if (!first) return
-            suppressStarFocusPreview.current = true
-            try { first.focus() } finally { suppressStarFocusPreview.current = false }
-        }, 260)
-        return () => window.clearTimeout(t)
-    }, [isOpen])
+    // Runs from GenieModal's onOpened: mid-genie the card is hidden, and a
+    // hidden button cannot take focus, so this waits for the pour to land
+    // rather than for a fixed 260 ms.
+    const focusFirstStar = useCallback(() => {
+        const first = document.querySelector<HTMLButtonElement>('[data-review-star="1"]')
+        if (!first) return
+        suppressStarFocusPreview.current = true
+        try { first.focus() } finally { suppressStarFocusPreview.current = false }
+    }, [])
 
     // ESC closes; only when not mid-submit. On the first step this is a
     // soft dismissal ("Maybe later") so the prompt doesn't immediately reopen.
@@ -218,9 +226,9 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
     // The confirmation is a receipt, not a form — it dismisses itself.
     useEffect(() => {
         if (!isOpen || step !== "thanks") return
-        const t = window.setTimeout(() => onClose(), 5000)
+        const t = window.setTimeout(() => closeModal(), 5000)
         return () => window.clearTimeout(t)
-    }, [isOpen, step, onClose])
+    }, [isOpen, step])
 
     // Keep the plate mounted and animate between numeric heights reported by
     // the active step. Numeric endpoints are what make the Transitions.dev
@@ -250,9 +258,21 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
     const cardStyle: React.CSSProperties | undefined =
         reduced || cardHeight == null ? undefined : { height: cardHeight }
 
-    const closeModal = () => onClose()
+    // Every way out closes the card first (the genie) and tells the host from
+    // GenieModal's onClosed: the onboarding orchestrator unmounts this the
+    // moment it hears onClose, which would cut the close off.
+    const [closeRequested, setCloseRequested] = useState(false)
+    const closeRequestedRef = useRef(false)
+    useEffect(() => {
+        if (!isOpen) { closeRequestedRef.current = false; setCloseRequested(false) }
+    }, [isOpen])
+    const closeModal = () => {
+        closeRequestedRef.current = true
+        setCloseRequested(true)
+    }
 
     const dismissLaterAndClose = useCallback(() => {
+        if (closeRequestedRef.current) return
         // Use the ref so the soft-dismiss guard stays correct even if the
         // effect that owns this callback doesn't re-run on every step flip.
         if (stepRef.current === "review") void onDismissLater?.()
@@ -260,6 +280,7 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
     }, [onDismissLater])
 
     const dismissForeverAndClose = useCallback(() => {
+        if (closeRequestedRef.current) return
         if (stepRef.current === "review") void onDismissForever?.()
         closeModal()
     }, [onDismissForever])
@@ -352,57 +373,49 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
     const titleId = `review-modal-title-${step}`
     const busy = submitting || testimonialBusy
 
-    // Code-review 2026-08-12: this was `if (!isOpen) return null` ABOVE the
-    // AnimatePresence. Closing the modal unmounted the AnimatePresence together
-    // with its children on the very next render, and AnimatePresence can only
-    // animate children it outlives — it cannot animate its own unmount. Both
-    // `exit` variants below were therefore dead code and the modal hard-cut.
-    // The presence boundary now stays mounted (the parent renders this
-    // component unconditionally) and the CHILDREN are what come and go.
+    // Code-review 2026-08-12: closing used to unmount the presence boundary
+    // with its children, so the exit never played. GenieModal owns presence
+    // now: it stays mounted while `open` is false, plays the close, and only
+    // then reports (onClosed), so neither this component's parent nor the
+    // orchestrator can cut the animation off.
     return (
-        <AnimatePresence>
-            {isOpen && (
-            <motion.div
-                key="backdrop"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={rt(reduced, { duration: 0.2 })}
-                onClick={() => !busy && dismissLaterAndClose()}
-                className="review-modal-backdrop"
-            />
-            )}
-            {isOpen && (
-            <motion.div
-                key="container"
-                initial={{ opacity: 0, transform: reduced ? "none" : "translateY(10px) scale(0.985)" }}
-                animate={{ opacity: 1, transform: "translateY(0px) scale(1)" }}
-                exit={{ opacity: 0, transform: reduced ? "none" : "translateY(6px) scale(0.99)" }}
-                transition={rt(reduced, SPRING_SNAPPY)}
-                className="review-modal-viewport"
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby={titleId}
-            >
-                <motion.div
-                    initial={false}
-                    style={cardStyle}
-                    className="review-modal-shell"
-                >
-                    <div className="review-modal-ambient" aria-hidden />
-
+        <GenieModal
+            open={isOpen && !closeRequested}
+            label="ReviewModal"
+            // It opens reset (first step, no stars, no text), so only a
+            // picture of it untouched is one of what the next open shows.
+            keepPictures={step === "review" && rating === 0 && hoverRating === 0 && !text}
+            zIndex={60}
+            onBackdropClick={() => { if (!busy) dismissLaterAndClose() }}
+            onOpened={focusFirstStar}
+            onClosed={() => { if (closeRequestedRef.current) onClose() }}
+            backdropClassName="review-modal-genie-backdrop"
+            padding={16}
+            wrapClassName="review-modal-genie-wrap"
+            cardClassName="review-modal-shell"
+            cardStyle={cardStyle}
+            cardProps={{ role: "dialog", "aria-modal": true, "aria-labelledby": titleId }}
+            shadow={isLight ? SHADOW_LIGHT : SHADOW_DARK}
+            radius={20}
+        >
+                    {/* Steps 1-2 put the close over the (always light) art panel,
+                        so it takes dark ink there; on the receipt it sits on
+                        the ground and follows the theme. */}
                     <button
                         type="button"
                         onClick={dismissLaterAndClose}
                         disabled={busy}
                         aria-label="Close"
-                        className="review-close"
+                        className={`review-close${step === "thanks" ? "" : " is-over-art"}`}
                     >
                         <X size={16} strokeWidth={1.6} />
                     </button>
 
                     <div ref={measureRef} className="review-modal-measure">
-                        <AnimatePresence mode="wait">
+                        {/* The genie pours the card out with its first step in
+                            place; steps only slide in after that, or under
+                            reduced motion, where there is no genie. */}
+                        <AnimatePresence mode="wait" initial={reduced}>
                             {step === "review" && (
                                 <StepReview
                                     key="review"
@@ -427,7 +440,6 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
                             {step === "testimonial" && (
                                 <StepTestimonial
                                     key="testimonial"
-                                    rating={rating}
                                     name={name}
                                     setName={setName}
                                     prefillName={prefillName}
@@ -458,23 +470,21 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
                             )}
                         </AnimatePresence>
                     </div>
-                </motion.div>
-            </motion.div>
-            )}
-        </AnimatePresence>
+        </GenieModal>
     )
 }
 
 // ─── Shared pieces ─────────────────────────────────────────────────────────
 
-/** The black left plate. Its content is the step's "cover". */
-const Plate: React.FC<{ eyebrow: string; children: React.ReactNode; caption?: string }> = ({
-    eyebrow, children, caption,
-}) => (
-    <aside className="review-plate">
-        <span className="review-plate-eyebrow">{eyebrow}</span>
-        <div className="review-plate-figure">{children}</div>
-        {caption && <span className="review-plate-caption">{caption}</span>}
+/**
+ * The art panel: the star, inset on the right, the same object on steps 1
+ * and 2 so the step swap reads as the copy changing beside a still image.
+ * Its slow push-in on hover is pure CSS (see .review-art-image), so it costs
+ * no React state and no re-render.
+ */
+const ArtPanel: React.FC = () => (
+    <aside className="review-art" aria-hidden>
+        <div className="review-art-image" />
     </aside>
 )
 
@@ -568,22 +578,8 @@ const StepReview: React.FC<StepReviewProps> = ({
 
     return (
         <StepFrame variant="review" reduced={reduced}>
-            <Plate eyebrow="REVIEW · 1 OF 3" caption={ratingWord}>
-                <AnimatePresence mode="popLayout" initial={false}>
-                    <motion.span
-                        key={shownRating}
-                        initial={reduced ? { opacity: 0 } : { opacity: 0, transform: "translateY(14px)" }}
-                        animate={{ opacity: 1, transform: "translateY(0px)" }}
-                        exit={reduced ? { opacity: 0 } : { opacity: 0, transform: "translateY(-14px)" }}
-                        transition={rt(reduced, { duration: 0.2, ease: EASE_EDITORIAL })}
-                        className="review-numeral"
-                    >
-                        {shownRating === 0 ? "—" : shownRating}
-                    </motion.span>
-                </AnimatePresence>
-            </Plate>
-
             <section className="review-column">
+                <span className="review-eyebrow">Review · 1 of 3</span>
                 <h2 id="review-modal-title-review" className="review-headline">
                     How is Natively<br />treating you?
                 </h2>
@@ -623,6 +619,22 @@ const StepReview: React.FC<StepReviewProps> = ({
                             <Star size={22} strokeWidth={1.5} />
                         </motion.button>
                     ))}
+                    {/* The live verdict. Keyed on shownRating so it swaps per
+                        value and previews on hover, as the numeral did. */}
+                    <span className="review-verdict" aria-live="polite">
+                        <AnimatePresence mode="popLayout" initial={false}>
+                            <motion.span
+                                key={shownRating}
+                                initial={reduced ? { opacity: 0 } : { opacity: 0, transform: "translateY(6px)" }}
+                                animate={{ opacity: 1, transform: "translateY(0px)" }}
+                                exit={reduced ? { opacity: 0 } : { opacity: 0, transform: "translateY(-6px)" }}
+                                transition={rt(reduced, { duration: 0.18, ease: EASE_EDITORIAL })}
+                                className={`review-verdict-word${shownRating ? " is-rated" : ""}`}
+                            >
+                                {ratingWord}
+                            </motion.span>
+                        </AnimatePresence>
+                    </span>
                 </div>
 
                 <div className="review-note">
@@ -674,6 +686,8 @@ const StepReview: React.FC<StepReviewProps> = ({
                     </div>
                 </div>
             </section>
+
+            <ArtPanel />
         </StepFrame>
     )
 }
@@ -681,7 +695,6 @@ const StepReview: React.FC<StepReviewProps> = ({
 // ─── Step 2: testimonial ──────────────────────────────────────────────────
 
 interface StepTestimonialProps {
-    rating: number
     name: string
     setName: (s: string) => void
     prefillName?: string
@@ -698,7 +711,7 @@ interface StepTestimonialProps {
 }
 
 const StepTestimonial: React.FC<StepTestimonialProps> = ({
-    rating, name, setName, prefillName = "", namePrefillSuggested, onAcceptNamePrefill,
+    name, setName, prefillName = "", namePrefillSuggested, onAcceptNamePrefill,
     busy, action, error, onSave, onKeepAnonymous, onDecline, reduced,
 }) => {
     // Save credits the review under `name` — a blank name has nothing to
@@ -708,11 +721,10 @@ const StepTestimonial: React.FC<StepTestimonialProps> = ({
 
     return (
         <StepFrame variant="credit" reduced={reduced}>
-            <Plate eyebrow="ATTRIBUTION · 2 OF 3" caption={`${rating} of 5 · recorded`}>
-                <span className="review-quote" aria-hidden>&ldquo;</span>
-            </Plate>
-
             <section className="review-column">
+                {/* Confirms step 1 landed. One count only: "2 of 3" is the step,
+                    and a second "x of 5" beside it read as a second counter. */}
+                <span className="review-eyebrow">Rating saved · 2 of 3</span>
                 <h2 id="review-modal-title-testimonial" className="review-headline">
                     Whose words<br />are these?
                 </h2>
@@ -797,6 +809,8 @@ const StepTestimonial: React.FC<StepTestimonialProps> = ({
                     </p>
                 </div>
             </section>
+
+            <ArtPanel />
         </StepFrame>
     )
 }
@@ -804,10 +818,10 @@ const StepTestimonial: React.FC<StepTestimonialProps> = ({
 // ─── Step 3: thanks ───────────────────────────────────────────────────────
 
 /**
- * The receipt. Deliberately NOT the two-column plate the other steps use: a
+ * The receipt. Deliberately NOT the two-pane grid the other steps use: a
  * terminal state has one short message, and forcing it into that grid left a
- * lone seal adrift in an otherwise empty plate. A centred single column is
- * both calmer and the third distinct silhouette the flow wants.
+ * lone seal adrift beside the art. A centred single column is both calmer and
+ * the third distinct silhouette the flow wants.
  *
  * The byline is shown verbatim rather than described, so the last thing the
  * user sees is exactly what will be published.

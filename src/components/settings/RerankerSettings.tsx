@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { AlertCircle, Check, ChevronDown, Download, ExternalLink, Filter, FolderOpen, HardDrive, KeyRound, Loader2, Monitor, Puzzle, RefreshCw, Search, Server, ShieldAlert, Trash2, X } from 'lucide-react';
+import { AlertCircle, Check, ChevronDown, Download, ExternalLink, Filter, FolderOpen, HardDrive, KeyRound, Loader2, Monitor, RefreshCw, Search, Server, ShieldAlert, Trash2, X } from 'lucide-react';
 import { useT } from '../../i18n';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { AIP_ACTIVE_SELECT_CONTAINER, AIP_CSS, AipBadge, AipModelList, AipProviderMark, AipSelect, AipSwitch, type AipSelectOption, type AipTone } from './AIProvidersSettings';
@@ -1484,7 +1484,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                 const isSelected = status.provider === p.id;
                 // status.hasApiKey is the presence flag for the SELECTED
                 // provider. Preferring the per-provider flag but falling back
-                // to it keeps the badge honest if discovery degraded.
+                // to it keeps the key field honest if discovery degraded.
                 const hasKey = p.hasApiKey || (isSelected && status.hasApiKey);
                 const draft = keyDrafts[p.id] ?? '';
                 const saving = savingKeyFor === p.id;
@@ -1513,8 +1513,6 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                             <AipProviderMark provider={p.id} name={p.name} />
                             <h4 className="aip-card-title truncate min-w-0">{t(p.name)}</h4>
                             <div className="ml-auto flex items-center gap-2 shrink-0">
-                                <AipBadge tone={hasKey ? 'ok' : 'warn'} label={hasKey ? t('Key set') : t('No key')} />
-
                                 {byok && (
                                     <button
                                         type="button"
@@ -2061,7 +2059,6 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                 <div className="aip-well p-2.5 space-y-2.5">
                     {rerankerExtensions.length === 0 ? (
                         <div className="text-center py-6 px-4 space-y-2 border border-dashed border-[var(--aip-border-strong)] rounded-md">
-                            <Puzzle size={20} className="mx-auto aip-faint" aria-hidden="true" />
                             <p className="text-xs aip-text font-medium">{t('No custom extensions installed')}</p>
                             <p className="text-[10px] aip-muted max-w-xs mx-auto">
                                 {t('Install a local reranker extension from a folder to use custom scoring models.')}

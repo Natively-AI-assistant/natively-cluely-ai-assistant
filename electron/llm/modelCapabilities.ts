@@ -92,7 +92,7 @@ function isCloudIdentifier(id: string): boolean {
   if (s.startsWith('claude-')) return true;
   // DeepSeek cloud API (OpenAI-compatible). The local Ollama "deepseek-coder"
   // family is handled by the isOllama branch above.
-  if (/^deepseek-v\d/.test(s)) return true;
+  if (isDeepseekModelId(s)) return true;
   return false;
 }
 
@@ -129,6 +129,7 @@ function isLargeGroqModel(id: string): boolean {
 // encoded in four uncoordinated places; a vision-model swap that missed one
 // silently re-armed the "Groq vision refused" bug).
 import { groqSupportsImages } from './groqModels';
+import { isDeepseekModelId } from './deepseekModels';
 import { modelNameSuggestsVision } from './visionCapability';
 
 // Parse parameter size from an Ollama model id like "llama3.1:8b" or "qwen2.5-coder:14b".

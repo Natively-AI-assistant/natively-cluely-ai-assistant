@@ -58,7 +58,6 @@ const GUARDED_FILES = [
   'src/components/ProfileIntelligenceSettings.tsx',
   'src/components/ui/AccordionSection.tsx', // shared disclosure primitive used by several guarded files above
   'premium/src/ModesSettings.tsx',
-  'premium/src/PremiumUpgradeModal.tsx',
   'premium/src/ProfileVisualizer.tsx',
 ];
 

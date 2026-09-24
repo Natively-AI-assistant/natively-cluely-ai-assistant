@@ -97,6 +97,7 @@ function repairFirstUsefulMs(llmHelper: any, minMs: number = 7000, turnKey?: obj
 import { stripPriorAssistantTurns } from './llm/conversationHistoryPolicy';
 import { performanceHooks, applyAdaptiveTtft, secondaryStreamObserver } from './llm/performance/wiring';
 import { estimateTokens as _estimatePerfTokens } from './llm/modelCapabilities';
+import { DEEPSEEK_DEFAULT_MODEL, isDeepseekModelId } from './llm/deepseekModels';
 import { mintTurnId } from './llm/turnIdentity';
 import type { StreamRouteOptions } from './llm/streamContextPolicy';
 import { buildProfileJitPrompt } from './llm/ProfileJitPromptBuilder';
@@ -154,6 +155,10 @@ import { detectIncompleteNumericAnswer, completenessRegenFabricates, isDocGround
 // to carry its own copy, which had already drifted and was erasing an enforced
 // scope on every write.
 import { mergeProviderDataScopes } from './llm/ProviderRouter';
+import {
+  captureGenieSnapshot, saveGenieSnapshot, loadGenieSnapshot, listGenieSnapshots,
+  clearGenieSnapshots, pruneOldGenieSnapshots,
+} from './genieSnapshots';
 import {
   DirectAssistService,
   type DirectAssistRequestInput,
@@ -301,6 +306,27 @@ export function initializeIpcHandlers(appState: AppState): void {
     ipcMain.on(channel, listener);
   };
 
+  // ── Genie snapshots (genieSnapshots.ts) ────────────────────────────────
+  // A popup card's genie warps one picture of the card. The capture reads the
+  // CALLING window's own compositor output (event.sender), never another
+  // window's, and never the screen.
+  void pruneOldGenieSnapshots();
+  safeHandle('genie-snapshot:capture', async (event, rect) => {
+    try { return await captureGenieSnapshot(event.sender, rect); } catch { return null; }
+  });
+  safeHandle('genie-snapshot:save', async (_, key: string, png: Uint8Array) => {
+    try { return await saveGenieSnapshot(key, Buffer.from(png)); } catch { return false; }
+  });
+  safeHandle('genie-snapshot:load', async (_, key: string) => {
+    try { return await loadGenieSnapshot(key); } catch { return null; }
+  });
+  safeHandle('genie-snapshot:list', async () => {
+    try { return await listGenieSnapshots(); } catch { return []; }
+  });
+  safeHandle('genie-snapshot:clear', async (_, prefix?: string) => {
+    try { await clearGenieSnapshots(typeof prefix === 'string' ? prefix : ''); return true; } catch { return false; }
+  });
+
   const broadcastCredentialsChanged = (): void => {
     BrowserWindow.getAllWindows().forEach((win) => {
       if (!win.isDestroyed()) win.webContents.send('credentials-changed');
@@ -380,7 +406,9 @@ export function initializeIpcHandlers(appState: AppState): void {
         // routing. Keep this a superset of the fetcher's admitted prefixes.
         if (modelId.startsWith('gpt-') || modelId.startsWith('o1-') || modelId.startsWith('o3-') || modelId.startsWith('o4-') || modelId.includes('openai')) return 'openai';
         if (modelId.startsWith('claude-')) return 'claude';
-        if (/^deepseek-v/i.test(modelId)) return 'deepseek';
+        // THE shared predicate (deepseekModels.ts); the `/^deepseek-v/i` that
+        // stood here missed `deepseek-flash`, DeepSeek's current id.
+        if (isDeepseekModelId(modelId)) return 'deepseek';
         // Custom providers use arbitrary ids, so this must be an identity lookup and
         // must come last — anything matching a built-in prefix above is that
         // provider, not a custom one. Without it these classify as 'unknown' and
@@ -443,7 +471,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         if (isKnownGroqModel(modelId)) return has(cm.getGroqApiKey());
         if (modelId.startsWith('gpt-') || modelId.startsWith('o1-') || modelId.startsWith('o3-') || modelId.startsWith('o4-') || modelId.includes('openai')) return has(cm.getOpenaiApiKey());
         if (modelId.startsWith('claude-')) return has(cm.getClaudeApiKey());
-        if (/^deepseek-v/i.test(modelId)) return has(cm.getDeepseekApiKey());
+        if (isDeepseekModelId(modelId)) return has(cm.getDeepseekApiKey());
         // Intentional conservative fallback: unknown model ids may belong to saved
         // custom providers/extensions this helper cannot classify. Do not reset them
         // automatically; execution-time routing remains the source of truth.
@@ -516,7 +544,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         : modelAvailable('gpt-5.4') ? 'gpt-5.4'
         : modelAvailable('claude-sonnet-4-6') ? 'claude-sonnet-4-6'
         : modelAvailable('qwen/qwen3.8-27b') ? 'qwen/qwen3.8-27b'
-        : modelAvailable('deepseek-v4-flash') ? 'deepseek-v4-flash'
+        : modelAvailable(DEEPSEEK_DEFAULT_MODEL) ? DEEPSEEK_DEFAULT_MODEL
         : (codexConfig.enabled === true && codexSignedIn && modelAvailable('codex-cli')) ? 'codex-cli'
         : (litellmFallbackModel && modelAvailable(litellmFallbackModel)) ? litellmFallbackModel
         // OpenRouter's equivalent, and cheaper than LiteLLM's: no catalogue
@@ -12781,7 +12809,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           response = await axios.post(
             'https://api.deepseek.com/chat/completions',
             {
-              model: 'deepseek-v4-flash',
+              model: DEEPSEEK_DEFAULT_MODEL,
               max_tokens: 10,
               messages: [{ role: 'user', content: 'Hello' }],
               // DeepSeek thinks by default; the probe only asks "is the key
@@ -15295,6 +15323,8 @@ export function initializeIpcHandlers(appState: AppState): void {
       // cross-tier rollback rather than call sequencing.
       const { deleteProfileTransactional } = require('./services/knowledge/deleteProfileTransactional') as typeof import('./services/knowledge/deleteProfileTransactional');
       deleteProfileTransactional(orchestrator, DocType.RESUME, 'resume');
+      // Pictures of Profile Intelligence show the résumé: they go with it.
+      void clearGenieSnapshots('profile').catch(() => {});
       return { success: true };
     } catch (error: any) {
       return { success: false, error: error.message };
@@ -15426,6 +15456,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       // there for why a Tier-1-only delete is a partial delete.
       const { deleteProfileTransactional } = require('./services/knowledge/deleteProfileTransactional') as typeof import('./services/knowledge/deleteProfileTransactional');
       deleteProfileTransactional(orchestrator, DocType.JD, 'jd');
+      void clearGenieSnapshots('profile').catch(() => {});
       return { success: true };
     } catch (error: any) {
       return { success: false, error: error.message };

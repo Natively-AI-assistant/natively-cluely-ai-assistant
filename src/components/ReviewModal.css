@@ -1,482 +1,510 @@
 /* src/components/ReviewModal.css
-   Obsidian editorial — the in-app review modal.
+   The in-app review modal.
 
    Co-located with the component and imported from it rather than living in
    index.css. index.css is edited concurrently by other work in this repo and
    these rules were twice reverted out from under the component, which renders
    the modal invisible (every class resolves to nothing). Keeping them next to
-   their only consumer removes that whole class of failure, and Vite bundles a
-   component-level CSS import identically.
+   their only consumer removes that whole class of failure.
 
-   The composition is a two-column plate, not a stacked card: a near-black left
-   plate carries the step's "cover" (a display numeral tracking the live
-   rating, a pull-quote mark, a seal); the right column carries the editorial
-   copy and the controls. No header bar — the close glyph floats over the
-   plate. Every selector is namespaced .review-* so nothing leaks. */
+   Same two-pane family as the browser-extension and support cards: the copy
+   and controls on a flat ground on the left, the star art in an inset panel on
+   the right. One layout for both themes; everything that differs between them
+   is a --rv-* variable, so the rules below never branch on the theme.
 
-.review-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  background: radial-gradient(ellipse 90% 70% at 50% 42%, rgba(28, 22, 12, 0.82) 0%, rgba(0, 0, 0, 0.9) 100%);
-}
+   Ink tiers are the family's measured values (see SupportToaster.tsx):
+     dark  #1C1C1E  strong 15.2  body 8.0  quiet 5.4  faint 4.9
+     light #F7F8FC  strong 17.8  body 6.5  quiet 6.0  faint 4.6
+   Gold is the one accent, lifted from the star art, and it is only used where
+   a rating has been chosen or a field is live. #E3B341 on dark is 8.7:1 and
+   #9A6B00 on light is 4.4:1, both above the 3:1 non-text bar for a filled
+   star. Every selector is namespaced .review-* so nothing leaks. */
 
-.review-modal-viewport {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  pointer-events: none;
-}
-
-/* Numeric-height endpoints only — `auto` is not an animatable value, so the
+/* Numeric-height endpoints only: `auto` is not an animatable value, so the
    component measures the active step and feeds pixels in. */
 .review-modal-shell {
+  --rv-ground: #1C1C1E;
+  --rv-strong: #F2F2F4;
+  --rv-body: rgba(255, 255, 255, 0.66);
+  --rv-quiet: rgba(255, 255, 255, 0.52);
+  --rv-faint: rgba(255, 255, 255, 0.48);
+  --rv-rule: rgba(255, 255, 255, 0.10);
+  --rv-outline: rgba(255, 255, 255, 0.24);
+  --rv-outline-strong: rgba(255, 255, 255, 0.44);
+  --rv-fill: rgba(255, 255, 255, 0.06);
+  --rv-gold: #E3B341;
+  --rv-gold-soft: rgba(227, 179, 65, 0.12);
+  --rv-error-ink: #FCA5A5;
+  --rv-error-fill: rgba(248, 113, 113, 0.08);
+  --rv-error-rule: rgba(248, 113, 113, 0.22);
+  --rv-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 40px 90px -30px rgba(0, 0, 0, 0.85);
+
   position: relative;
   width: 100%;
-  max-width: 616px;
+  max-width: 600px;
   overflow: hidden;
-  border: 1px solid rgba(214, 178, 106, 0.15);
-  /* Generous shell curve. `overflow: hidden` clips the left plate to match, so
-     the plate needs no radius of its own on either breakpoint. */
-  border-radius: 26px;
-  background: #0b0a09;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    0 44px 120px -34px rgba(0, 0, 0, 0.94),
-    0 8px 28px rgba(0, 0, 0, 0.5);
+  border-radius: 20px;
+  color: var(--rv-strong);
+  background: var(--rv-ground);
+  box-shadow: var(--rv-shadow);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
   pointer-events: auto;
   transition: height 300ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* Grain. Above the plate fills, below the content. */
-.review-modal-shell::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  opacity: 0.03;
-  mix-blend-mode: overlay;
-  pointer-events: none;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-size: 200px;
+[data-theme='light'] .review-modal-shell {
+  --rv-ground: #F7F8FC;
+  --rv-strong: #0B1020;
+  --rv-body: rgba(11, 16, 32, 0.68);
+  --rv-quiet: rgba(11, 16, 32, 0.66);
+  --rv-faint: rgba(11, 16, 32, 0.58);
+  --rv-rule: rgba(11, 16, 32, 0.12);
+  --rv-outline: rgba(11, 16, 32, 0.22);
+  --rv-outline-strong: rgba(11, 16, 32, 0.46);
+  --rv-fill: rgba(11, 16, 32, 0.04);
+  --rv-gold: #9A6B00;
+  --rv-gold-soft: rgba(154, 107, 0, 0.10);
+  --rv-error-ink: #B42318;
+  --rv-error-fill: rgba(180, 35, 24, 0.06);
+  --rv-error-rule: rgba(180, 35, 24, 0.20);
+  --rv-shadow:
+    inset 0 0 0 1px rgba(11, 16, 32, 0.10),
+    inset 0 1px 0 rgba(255, 255, 255, 0.80),
+    0 30px 70px -28px rgba(16, 24, 40, 0.40);
 }
 
-.review-modal-ambient {
-  position: absolute;
-  top: -40%;
-  left: -10%;
-  z-index: 0;
-  width: 60%;
-  height: 180%;
-  pointer-events: none;
-  background: radial-gradient(ellipse at center, rgba(214, 178, 106, 0.13) 0%, transparent 68%);
-  animation: review-ambient 9s ease-in-out infinite;
+/* GenieModal's scrim. Dims, never blurs (3a9901ae4): frosting the whole
+   launcher behind the card left it unreadable. */
+.review-modal-genie-backdrop {
+  background: rgba(0, 0, 0, 0.80);
+}
+[data-theme='light'] .review-modal-genie-backdrop { background: rgba(10, 10, 18, 0.30); }
+
+.review-modal-genie-wrap {
+  width: 600px;
+  max-width: 100%;
 }
 
 .review-modal-measure {
   position: relative;
-  z-index: 2;
+  z-index: 1;
 }
 
+/* On steps 1-2 the close sits over the art panel, which is light in both
+   themes, so it takes dark ink there. On the receipt it sits on the ground
+   and follows the theme. */
 .review-close {
   position: absolute;
-  top: 14px;
-  right: 14px;
-  z-index: 4;
+  top: 16px;
+  right: 16px;
+  z-index: 3;
   display: grid;
   width: 30px;
   height: 30px;
   place-items: center;
   border: 0;
-  border-radius: 50%;
-  color: rgba(255, 255, 255, 0.32);
+  border-radius: 8px;
+  color: var(--rv-faint);
   background: transparent;
   cursor: pointer;
-  transition: color 140ms ease, background-color 140ms ease;
+  transition: color 180ms cubic-bezier(0.23, 1, 0.32, 1), transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.review-close:hover:not(:disabled) { background: rgba(248, 113, 113, 0.1); }
-.review-close:hover:not(:disabled) { color: #f87171; }
-.review-close:focus-visible { outline: 1px solid rgba(214, 178, 106, 0.6); outline-offset: 2px; }
+.review-close.is-over-art { color: rgba(11, 16, 32, 0.55); }
+.review-close:hover:not(:disabled) { color: var(--rv-strong); }
+.review-close.is-over-art:hover:not(:disabled) { color: rgba(11, 16, 32, 0.92); }
+.review-close:active:not(:disabled) { transform: scale(0.92); }
+.review-close:focus-visible { outline: 1px solid var(--rv-gold); outline-offset: 2px; }
 .review-close:disabled { opacity: 0.3; cursor: default; }
 
-/* ── The two-column grid. Each step sets its own left-plate width. ─────── */
-.review-grid { display: grid; align-items: stretch; }
-.review-grid-review { grid-template-columns: 186px 1fr; }
-.review-grid-credit { grid-template-columns: 186px 1fr; }
+/* ── The two-pane grid ─────────────────────────────────────────────────── */
+.review-grid { display: grid; align-items: stretch; min-height: 420px; }
+.review-grid-review { grid-template-columns: minmax(0, 1fr) 40%; }
+.review-grid-credit { grid-template-columns: minmax(0, 1fr) 40%; }
 
-/* The receipt is a centred single column, not the plate grid — see StepThanks.
-   A terminal state has one short message; the plate left a lone seal adrift in
-   an empty half. This is also the third distinct silhouette in the flow. */
-.review-receipt {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 52px 32px 46px;
-  text-align: center;
-}
-.review-receipt-headline {
-  margin: 22px 0 0;
-  color: #f2ede4;
-  font-family: CelebMF, var(--font-system);
-  font-size: 30px;
-  font-weight: 500;
-  letter-spacing: -0.03em;
-  line-height: 1.1;
-}
-.review-receipt-note {
-  margin: 20px 0 0;
-  color: rgba(255, 255, 255, 0.3);
-  font-size: 9.5px;
-  font-weight: 650;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-}
-/* Shown instead of the byline when attribution never ran — see StepThanks. */
-.review-receipt-only {
-  max-width: 340px;
-  margin: 14px 0 0;
-  color: rgba(255, 255, 255, 0.44);
-  font-size: 12.5px;
-  line-height: 1.55;
-}
-
-/* The byline is the payload: show the exact string that will be published. */
-.review-byline {
-  max-width: 380px;
-  margin: 9px 0 0;
-  color: #d6b26a;
-  font-family: CelebMF, var(--font-system);
-  font-size: 19px;
-  letter-spacing: -0.012em;
-  line-height: 1.3;
-  overflow-wrap: anywhere;
-}
-
-/* ── Left plate ────────────────────────────────────────────────────────── */
-.review-plate {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  /* Content stacks from the top; the caption is pushed down by its own
-     `margin-top: auto` so it still sits on the floor without space-between
-     stranding the figure in the middle. */
-  padding: 26px 22px;
-  border-right: 1px solid rgba(214, 178, 106, 0.13);
-  background: linear-gradient(168deg, #131110 0%, #080706 100%);
-}
-.review-plate-eyebrow {
-  color: rgba(214, 178, 106, 0.62);
-  font-size: 8.5px;
-  font-weight: 700;
-  letter-spacing: 0.22em;
-  line-height: 1.4;
-}
-/* Anchored just under the eyebrow, NOT stretched. With `flex: 1 1 auto` the
-   figure absorbed all the slack and space-between pushed the caption to the
-   floor, leaving a large dead void mid-plate — visible immediately once this
-   was actually rendered rather than reasoned about. */
-.review-plate-figure {
-  display: flex;
-  align-items: flex-start;
-  justify-content: flex-start;
-  margin-top: 18px;
-}
-/* Sits directly under the figure, not pinned to the plate floor. Anchoring it
-   at the bottom left a dead band through the plate's middle at every step —
-   only visible once rendered. Eyebrow → figure → caption now read as one
-   block, and the plate's height is free to follow the right column. */
-.review-plate-caption {
-  margin-top: 10px;
-  color: rgba(255, 255, 255, 0.42);
-  font-size: 10.5px;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.055em;
-}
-
-.review-numeral {
-  display: block;
-  color: #e8dcc4;
-  font-family: CelebMF, var(--font-system);
-  font-size: 92px;
-  font-weight: 500;
-  letter-spacing: -0.06em;
-  line-height: 0.82;
-  text-shadow: 0 0 46px rgba(214, 178, 106, 0.26);
-}
-
-/* Georgia FIRST, not CelebMF. CelebMF's “ is two narrow ticks — at 108px it
-   read as a pair of stray marks rather than a quotation mark. Georgia has a
-   true ball-terminal open-quote and ships on macOS and Windows alike. */
-.review-quote {
-  display: block;
-  margin-top: -34px;
-  color: rgba(214, 178, 106, 0.42);
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 118px;
-  line-height: 1;
-}
-
-/* Sole hero of the receipt, so it carries more presence than a plate figure:
-   a double ring (border + spread shadow) reads as a wax seal / stamp. */
-.review-seal {
-  display: grid;
-  width: 62px;
-  height: 62px;
-  place-items: center;
-  border: 1px solid rgba(214, 178, 106, 0.45);
-  border-radius: 50%;
-  color: #e8dcc4;
-  background: radial-gradient(circle at 50% 34%, rgba(214, 178, 106, 0.22), rgba(214, 178, 106, 0.07));
-  box-shadow:
-    0 0 0 7px rgba(214, 178, 106, 0.06),
-    0 0 44px -8px rgba(214, 178, 106, 0.55),
-    inset 0 1px 0 rgba(255, 255, 255, 0.14);
-}
-
-/* ── Right column ──────────────────────────────────────────────────────── */
 .review-column {
   display: flex;
   flex-direction: column;
-  padding: 30px 30px 26px;
+  min-width: 0;
+  padding: 40px 28px 34px 40px;
 }
 
+/* ── The art panel ─────────────────────────────────────────────────────── */
+/* Inset 8px from the card's top, right and bottom with its own radius: that
+   gap is what makes it read as an object held inside the card rather than a
+   second column bleeding to the edge. */
+.review-art {
+  display: flex;
+  padding: 8px 8px 8px 0;
+}
+.review-art-image {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+  border-radius: 14px;
+  background: #EDF0F5;
+}
+/* The picture lives on a pseudo-element so it can be scaled inside the
+   clipped, rounded frame without the frame itself growing. */
+.review-art-image::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: url("../assets/cards/star.jpg") 88% 50% / cover no-repeat;
+  transform-origin: 70% 50%;
+  /* Release (700ms) is quicker than the push-in (1100ms, below). */
+  transition: transform 700ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+/* Light card and light panel are close in value; a hairline keeps the panel
+   reading as a separate object. */
+[data-theme='light'] .review-art-image::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px rgba(11, 16, 32, 0.07);
+  pointer-events: none;
+}
+/* The art breathes in under a real pointer while the copy holds still. Slow
+   on purpose: an image settling, not a control answering a click. */
+@media (hover: hover) and (pointer: fine) {
+  .review-modal-shell:hover .review-art-image::before {
+    transform: scale(1.05);
+    transition-duration: 1100ms;
+  }
+}
+
+/* ── Type ──────────────────────────────────────────────────────────────── */
+.review-eyebrow {
+  margin: 0 0 22px;
+  color: var(--rv-quiet);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Light weight at display size, as on the other cards: it holds its shape at
+   34px and reads as confident rather than loud. */
 .review-headline {
   margin: 0;
-  color: #f2ede4;
-  font-family: CelebMF, var(--font-system);
-  font-size: 27px;
-  font-weight: 500;
+  color: var(--rv-strong);
+  font-size: 34px;
+  font-weight: 300;
   letter-spacing: -0.032em;
-  line-height: 1.12;
+  line-height: 1.08;
 }
 .review-standfirst {
-  margin: 10px 0 0;
-  max-width: 340px;
-  color: rgba(255, 255, 255, 0.44);
-  font-size: 12.5px;
+  max-width: 300px;
+  margin: 16px 0 0;
+  color: var(--rv-body);
+  font-size: 13.5px;
   line-height: 1.55;
+  letter-spacing: -0.008em;
+  text-wrap: pretty;
 }
 
-/* Stars sit on a hairline rule, aligned left with the headline. */
+/* ── Step 1: the rating ────────────────────────────────────────────────── */
 .review-rating-rail {
   display: flex;
+  align-items: center;
   gap: 2px;
-  margin: 22px 0 0;
-  padding-bottom: 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  margin: 26px 0 0;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--rv-rule);
 }
 .review-star {
   display: grid;
-  width: 38px;
-  height: 38px;
+  width: 36px;
+  height: 36px;
   place-items: center;
   border: 0;
-  border-radius: 12px;
-  color: rgba(255, 255, 255, 0.17);
+  border-radius: 10px;
+  color: var(--rv-faint);
   background: transparent;
   cursor: pointer;
-  transition: color 130ms ease, background-color 130ms ease;
+  transition: color 160ms ease, background-color 160ms ease;
 }
-.review-star[data-filled] { color: #d6b26a; }
+.review-star[data-filled] { color: var(--rv-gold); }
 .review-star[data-filled] svg { fill: currentColor; }
-.review-star:hover:not(:disabled) { background: rgba(214, 178, 106, 0.08); }
-.review-star:focus-visible { outline: 1px solid rgba(214, 178, 106, 0.65); outline-offset: -2px; }
+.review-star:hover:not(:disabled) { background: var(--rv-gold-soft); }
+.review-star:focus-visible { outline: 1px solid var(--rv-gold); outline-offset: -2px; }
 .review-star:disabled { cursor: default; }
+
+/* The live verdict next to the stars. Fixed width so a longer word never
+   nudges the stars. */
+.review-verdict {
+  position: relative;
+  display: inline-flex;
+  width: 92px;
+  margin-left: 10px;
+  overflow: hidden;
+}
+.review-verdict-word {
+  display: block;
+  color: var(--rv-faint);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.008em;
+  white-space: nowrap;
+}
+.review-verdict-word.is-rated { color: var(--rv-strong); }
 
 .review-note { position: relative; margin-top: 16px; }
 .review-note-input {
   width: 100%;
   padding: 0 30px 0 0;
   border: 0;
-  color: #eae5dc;
+  color: var(--rv-strong);
   background: transparent;
   font-family: inherit;
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: 13.5px;
+  line-height: 1.55;
   resize: none;
 }
-.review-note-input::placeholder { color: rgba(255, 255, 255, 0.24); }
+.review-note-input::placeholder { color: var(--rv-faint); }
 .review-note-input:focus { outline: none; }
 .review-counter {
   position: absolute;
   top: 1px;
   right: 0;
-  color: rgba(255, 255, 255, 0.3);
-  font-size: 10.5px;
+  color: var(--rv-faint);
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
-.review-counter.is-close { color: #d6b26a; }
+.review-counter.is-close { color: var(--rv-gold); }
 
-/* Signature line — an input on a rule, not a boxed field. */
+/* ── Step 2: the signature ─────────────────────────────────────────────── */
+/* An input on a rule, not a boxed field. */
 .review-signature { position: relative; margin: 26px 0 0; }
 .review-signature-input {
   width: 100%;
   padding: 0 0 10px;
   border: 0;
-  color: #f2ede4;
+  color: var(--rv-strong);
   background: transparent;
-  font-family: CelebMF, var(--font-system);
+  font-family: inherit;
   font-size: 21px;
-  letter-spacing: -0.015em;
+  font-weight: 300;
+  letter-spacing: -0.02em;
 }
-.review-signature-input::placeholder { color: rgba(255, 255, 255, 0.2); }
+.review-signature-input::placeholder { color: var(--rv-faint); }
 .review-signature-input:focus { outline: none; }
 .review-signature-rule {
   display: block;
-  height: 2px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.14);
-  transition: background-color 180ms ease;
+  height: 1px;
+  background: var(--rv-outline);
+  transition: background-color 200ms ease;
 }
-.review-signature-input:focus + .review-signature-rule { background: rgba(214, 178, 106, 0.65); }
+.review-signature-input:focus + .review-signature-rule { background: var(--rv-gold); }
 
 .review-prefill {
   align-self: flex-start;
   margin-top: 12px;
   padding: 0;
   border: 0;
-  color: rgba(255, 255, 255, 0.36);
+  color: var(--rv-faint);
   background: transparent;
-  cursor: pointer;
-  font-size: 11px;
-  transition: color 130ms ease;
-}
-.review-prefill strong { color: #d6b26a; font-weight: 550; }
-.review-prefill:hover { color: rgba(255, 255, 255, 0.6); }
-
-.review-error {
-  margin: 14px 0 0;
-  padding: 9px 13px;
-  border: 1px solid rgba(248, 113, 113, 0.2);
-  border-radius: 14px;
-  color: #fca5a5;
-  background: rgba(248, 113, 113, 0.07);
-  font-size: 11.5px;
-  line-height: 1.5;
-}
-
-/* Actions pinned to the bottom of the column. */
-.review-actions { margin-top: auto; padding-top: 24px; }
-.review-choice { display: flex; gap: 8px; }
-
-.review-cta,
-.review-ghost {
-  display: inline-flex;
-  min-height: 40px;
-  flex: 1 1 auto;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border: 1px solid transparent;
-  /* Pill. Half of min-height (40px) so the caps stay optically centred. */
-  border-radius: 999px;
-  padding: 0 22px;
   cursor: pointer;
   font-family: inherit;
   font-size: 12px;
-  font-weight: 650;
-  letter-spacing: 0.035em;
-  text-transform: uppercase;
-  transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
+  transition: color 160ms ease;
 }
-.review-cta {
-  color: #12100c;
-  background: #d6b26a;
-  box-shadow: 0 10px 30px -16px rgba(214, 178, 106, 0.9);
-}
-.review-cta:hover:not(:disabled) { background: #e6c884; }
-.review-cta:disabled {
-  cursor: not-allowed;
-  color: rgba(255, 255, 255, 0.26);
-  background: rgba(255, 255, 255, 0.05);
-  box-shadow: none;
-}
-.review-ghost {
-  color: rgba(255, 255, 255, 0.72);
-  border-color: rgba(255, 255, 255, 0.15);
-  background: transparent;
-}
-.review-ghost:hover:not(:disabled) { color: #fff; border-color: rgba(255, 255, 255, 0.32); }
-.review-ghost:disabled { opacity: 0.45; cursor: default; }
-.review-cta:focus-visible,
-.review-ghost:focus-visible { outline: 1px solid rgba(214, 178, 106, 0.75); outline-offset: 2px; }
+.review-prefill strong { color: var(--rv-strong); font-weight: 550; }
+.review-prefill:hover { color: var(--rv-body); }
 
-.review-quiet-row { display: flex; gap: 18px; margin-top: 14px; }
-.review-quiet {
-  padding: 0;
-  border: 0;
-  color: rgba(255, 255, 255, 0.4);
+.review-error {
+  margin: 14px 0 0;
+  padding: 9px 12px;
+  border: 1px solid var(--rv-error-rule);
+  border-radius: 10px;
+  color: var(--rv-error-ink);
+  background: var(--rv-error-fill);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* ── Actions ───────────────────────────────────────────────────────────── */
+/* Pinned to the bottom of the column however short the copy above runs. */
+.review-actions { margin-top: auto; padding-top: 28px; }
+/* Step 1 matches the other cards: the button and its quiet way out share a
+   baseline. */
+.review-grid-review .review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 22px;
+}
+.review-choice { display: flex; flex-wrap: wrap; gap: 10px; }
+
+/* Outlined, not filled, as on the other cards: a filled button would be the
+   loudest object on the card and pull the eye off the art. Hover strengthens
+   the outline and label and adds a faint fill; press compresses it (the
+   component's whileTap). Release is quicker than arrival. */
+.review-cta,
+.review-ghost {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 14px;
+  border: 1px solid var(--rv-outline);
+  border-radius: 9px;
+  color: var(--rv-strong);
   background: transparent;
   cursor: pointer;
   font-family: inherit;
-  font-size: 11px;
-  transition: color 130ms ease;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  transition:
+    border-color 280ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 280ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 280ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.review-quiet.is-faint { color: rgba(255, 255, 255, 0.24); }
-.review-quiet:hover:not(:disabled) { color: rgba(255, 255, 255, 0.78); }
+.review-ghost { border-color: var(--rv-rule); color: var(--rv-body); }
+.review-cta:hover:not(:disabled),
+.review-ghost:hover:not(:disabled) {
+  border-color: var(--rv-outline-strong);
+  color: var(--rv-strong);
+  background: var(--rv-fill);
+  transition-duration: 420ms;
+}
+.review-cta:disabled,
+.review-ghost:disabled { opacity: 0.45; cursor: not-allowed; }
+.review-cta:focus-visible,
+.review-ghost:focus-visible { outline: 1px solid var(--rv-gold); outline-offset: 2px; }
+
+.review-quiet-row { display: flex; gap: 22px; }
+.review-quiet {
+  padding: 9px 0;
+  border: 0;
+  color: var(--rv-quiet);
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.008em;
+  transition: color 200ms ease;
+}
+.review-quiet.is-faint { color: var(--rv-faint); }
+.review-quiet:hover:not(:disabled) { color: var(--rv-strong); }
 .review-quiet:disabled { opacity: 0.4; cursor: default; }
-.review-quiet:focus-visible { outline: none; text-decoration: underline; }
+.review-quiet:focus-visible { outline: none; text-decoration: underline; text-underline-offset: 3px; }
+
+/* F1: the explicit decline path. Quiet, but a real focusable control. */
+.review-decline {
+  margin: 14px 0 0;
+  padding: 2px 0;
+  border: 0;
+  color: var(--rv-faint);
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12.5px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color 200ms ease;
+}
+.review-decline:hover:not(:disabled) { color: var(--rv-body); }
+.review-decline:disabled { opacity: 0.4; cursor: default; }
 
 .review-fineprint {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin: 14px 0 0;
-  color: rgba(255, 255, 255, 0.26);
-  font-size: 10px;
-  letter-spacing: 0.01em;
+  margin: 12px 0 0;
+  color: var(--rv-faint);
+  font-size: 11.5px;
+  /* Keeps a lone last word ("request.") off its own line. */
+  text-wrap: pretty;
 }
 
-/* F1: the explicit decline path — quiet, but a real focusable control, not
-   fine print. Sits between the send buttons and the privacy promise. */
-.review-decline {
-  margin: 10px 0 0;
-  padding: 2px 0;
-  background: none;
-  border: none;
-  color: rgba(255, 255, 255, 0.45);
-  font-size: 12px;
-  letter-spacing: 0.01em;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  cursor: pointer;
-}
-.review-decline:hover:not(:disabled) { color: rgba(255, 255, 255, 0.7); }
-.review-decline:disabled { opacity: 0.4; cursor: default; }
-
+/* Takes the colour of the button it sits in, so one rule serves both. */
 .review-spinner {
   display: block;
   width: 12px;
   height: 12px;
+  border: 2px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-top-color: currentColor;
   border-radius: 50%;
-  border: 2px solid;
 }
-.review-spinner-ink { border-color: rgba(0, 0, 0, 0.25); border-top-color: #12100c; }
-.review-spinner-ivory { border-color: rgba(255, 255, 255, 0.2); border-top-color: rgba(255, 255, 255, 0.85); }
 
+/* ── Step 3: the receipt ───────────────────────────────────────────────── */
+/* A centred single column, not the two-pane grid: a terminal state has one
+   short message, and the grid left a lone seal adrift beside the art. */
+.review-receipt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 56px 32px 48px;
+  text-align: center;
+}
+.review-seal {
+  display: grid;
+  width: 60px;
+  height: 60px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--rv-gold) 50%, transparent);
+  border-radius: 50%;
+  color: var(--rv-gold);
+  background: var(--rv-gold-soft);
+  box-shadow: 0 0 0 7px color-mix(in srgb, var(--rv-gold) 7%, transparent);
+}
+.review-receipt-headline {
+  margin: 22px 0 0;
+  color: var(--rv-strong);
+  font-size: 34px;
+  font-weight: 300;
+  letter-spacing: -0.032em;
+  line-height: 1.08;
+}
+.review-receipt-note {
+  margin: 18px 0 0;
+  color: var(--rv-quiet);
+  font-size: 12px;
+  font-weight: 500;
+}
+/* Shown instead of the byline when attribution never ran (see StepThanks). */
+.review-receipt-only {
+  max-width: 340px;
+  margin: 14px 0 0;
+  color: var(--rv-body);
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+/* The byline is the payload: show the exact string that will be published. */
+.review-byline {
+  max-width: 380px;
+  margin: 6px 0 0;
+  color: var(--rv-strong);
+  font-size: 19px;
+  font-weight: 400;
+  letter-spacing: -0.015em;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+/* Shows how long until the receipt dismisses itself. */
 .review-thanks-timer {
   width: 68px;
   height: 2px;
   margin-top: 30px;
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.09);
+  background: var(--rv-rule);
 }
 .review-thanks-countdown {
   display: block;
   height: 100%;
-  background: #d6b26a;
+  background: var(--rv-gold);
   transform-origin: left center;
   animation: review-countdown 5s linear forwards;
-}
-
-@keyframes review-ambient {
-  0%, 100% { opacity: 0.55; }
-  50% { opacity: 1; }
 }
 
 @keyframes review-countdown {
@@ -486,28 +514,20 @@
 
 @media (prefers-reduced-motion: reduce) {
   .review-modal-shell { transition: none; }
-  .review-modal-ambient { animation: none; opacity: 0.75; }
+  .review-art-image::before,
+  .review-modal-shell:hover .review-art-image::before { transition: none; transform: none; }
   .review-thanks-countdown { animation: none; transform: scaleX(1); }
 }
 
+/* Narrow windows: the art makes way for the copy. */
 @media (max-width: 620px) {
   .review-grid-review,
-  .review-grid-credit { grid-template-columns: 1fr; }
-  .review-plate {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    padding: 16px 22px;
-    border-right: 0;
-    border-bottom: 1px solid rgba(214, 178, 106, 0.13);
-  }
-  .review-plate-figure { min-height: 0; justify-content: center; }
-  .review-numeral { font-size: 46px; }
-  .review-quote { margin-top: -14px; font-size: 54px; }
-  .review-column { padding: 24px 22px 22px; }
-  .review-headline { font-size: 23px; }
-  .review-choice { flex-direction: column; }
+  .review-grid-credit { grid-template-columns: 1fr; min-height: 0; }
+  .review-art { display: none; }
+  .review-close.is-over-art { color: var(--rv-faint); }
+  .review-column { padding: 30px 24px 24px; }
+  .review-headline,
+  .review-receipt-headline { font-size: 28px; }
   .review-receipt { padding: 44px 24px 38px; }
-  .review-receipt-headline { font-size: 26px; }
   .review-byline { font-size: 17px; }
 }
