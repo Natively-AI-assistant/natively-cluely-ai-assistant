@@ -61,7 +61,11 @@ function ffmpegDeviceIndex(name) {
   if (!m) throw new Error(`ffmpeg sees no audio device "${name}" (brew install ffmpeg)`);
   return m[1];
 }
-const INTERVIEWER_FFMPEG_DEV = ffmpegDeviceIndex('BlackHole 16ch');
+// Resolved PER LINE, by name: indexes shift when a device comes or goes. A run
+// on 2026-09-25 lost 93 interviewer lines from minute 15 when "iPhone
+// Microphone" (index 0, a Continuity device) dropped out and index 1 became
+// BlackHole 2ch. Never play to anything but the named virtual device.
+ffmpegDeviceIndex('BlackHole 16ch'); // fail fast at start if it is missing
 const PAN_ALL_16 = `pan=16c|${Array.from({ length: 16 }, (_, i) => `c${i}=c0`).join('|')}`;
 
 function speak(who, text) {
@@ -70,12 +74,12 @@ function speak(who, text) {
     if (who === 'interviewer') {
       const f = path.join(os.tmpdir(), `mm-interviewer-${process.pid}.aiff`);
       execFileSync('say', ['-v', VOICE[who], '-r', String(WPM), '-o', f, text]);
-      p = spawn('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-re', '-i', f, '-af', PAN_ALL_16, '-f', 'audiotoolbox', '-audio_device_index', INTERVIEWER_FFMPEG_DEV, '-'], { stdio: 'ignore' });
+      p = spawn('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-re', '-i', f, '-af', PAN_ALL_16, '-f', 'audiotoolbox', '-audio_device_index', ffmpegDeviceIndex('BlackHole 16ch'), '-'], { stdio: 'ignore' });
     } else {
-      p = spawn('say', ['-v', VOICE[who], '-a', SAY_DEV[who], '-r', String(WPM), text], { stdio: 'ignore' });
+      p = spawn('say', ['-v', VOICE[who], '-a', sayDeviceId('BlackHole 2ch'), '-r', String(WPM), text], { stdio: 'ignore' });
     }
     p.on('error', reject);
-    p.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`say exited ${code}`))));
+    p.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`${who === 'interviewer' ? 'ffmpeg' : 'say'} exited ${code}`))));
   });
 }
 
