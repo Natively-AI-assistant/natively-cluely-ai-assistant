@@ -3,6 +3,21 @@ import WebSocket from 'ws';
 import { RECOGNITION_LANGUAGES, EnglishVariant } from '../config/languages';
 import { TRIAL_SENTINEL_KEY } from '../config/constants';
 import { streamingStttWsOptions } from './dnsHelpers';
+import { RealtimeSilenceTail } from './realtimeSilenceTail';
+
+/**
+ * Real-time silence guaranteed after the local VAD says speech ended.
+ *
+ * The relay's Soniox endpointer finalizes after 900 ms of AUDIO silence, but
+ * after the native hangover the client sends one 20 ms keepalive per 100 ms
+ * (audio clock at 1/5 speed), and the relay's VAD gate stops forwarding after
+ * 2.5 s of wall time without voice — before Soniox has seen its 900 ms. The
+ * utterance then stayed unfinal until the speaker talked again: measured live
+ * (2026-09-24), interviewer sentences finalized up to a minute late, and the
+ * user's reply landed in the middle of them. Same value as the direct Soniox
+ * provider (SONIOX_SILENCE_TAIL_MS), same mechanism (PR 599).
+ */
+export const NATIVELY_SILENCE_TAIL_MS = 1200;
 import {
     resolveRelaySession as defaultResolveRelaySession,
     buildFallbackChain,
@@ -89,6 +104,11 @@ export class NativelyProSTT extends EventEmitter {
     private intentionalClose   = false;  // set true before deliberate closeUpstream() to suppress auto-reconnect
     private sampleRate    = 16000;
     private audioChannels = 1;
+    private readonly silenceTail = new RealtimeSilenceTail({
+        tailMs: NATIVELY_SILENCE_TAIL_MS,
+        format: () => ({ sampleRate: this.sampleRate, channels: this.audioChannels }),
+        sink: (pcm) => this.sendLive(pcm),
+    });
     private buffer: Buffer[] = [];
     // Soft cap: at 48 kHz stereo / 20 ms frames a chunk is ~3.8 KB, so 500 chunks
     // ≈ 10 s of audio. Above this, the disconnect window has clearly exceeded
@@ -335,8 +355,12 @@ export class NativelyProSTT extends EventEmitter {
         }
     }
 
-    /** No-op — Natively API server handles VAD internally */
-    public notifySpeechEnded(): void {}
+    /** Local VAD: the speaker stopped. Keep the relay's endpointer clock real-time
+     *  until it can finalize (see NATIVELY_SILENCE_TAIL_MS). */
+    public notifySpeechEnded(): void {
+        if (!this.isActive) return;
+        this.silenceTail.start();
+    }
 
     /** No-op — Natively API server finalizes via VAD; no client-side flush available */
     public finalize(): void {}
@@ -378,6 +402,7 @@ export class NativelyProSTT extends EventEmitter {
 
     public stop(): void {
         this.isActive         = false;
+        this.silenceTail.cancel();
         this._chunksSent      = 0;
         this.intentionalClose = false;  // Reset so a subsequent start() can reconnect normally
 
@@ -429,6 +454,7 @@ export class NativelyProSTT extends EventEmitter {
 
     public write(chunk: Buffer): void {
         if (!this.isActive) return;
+        this.silenceTail.observe(chunk);
 
         if (!this.isConnected || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
             this.buffer.push(chunk);
@@ -457,6 +483,13 @@ export class NativelyProSTT extends EventEmitter {
             console.log(`[NativelyProSTT:${this.channel}] Sent chunk #${this._chunksSent} (${chunk.length}B) to server`);
         }
         this.ws.send(chunk);
+    }
+
+    /** Injected silence goes straight to an OPEN socket and is never buffered:
+     *  a tail that cannot be delivered now is worthless later. */
+    private sendLive(pcm: Buffer): void {
+        if (!this.isActive || !this.isConnected || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+        this.ws.send(pcm);
     }
 
     // ── Internal ──────────────────────────────────────────────
