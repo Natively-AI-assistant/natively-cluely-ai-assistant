@@ -275,6 +275,102 @@ export const CONSTRAINT_PROBES = [
 ];
 export const CONSTRAINT_LEAK_RE = /warehouse|thirty[- ]six|\b36\b|4,?200|forty[- ]five days|\b45 days/i;
 
+/** A ONE-HOUR SESSION holding every kind of content the overlay keeps, planted
+ *  early, then enough turns that the conversation ring (MAX_HISTORY_TURNS = 40)
+ *  rolls past them, then a follow-up about each through typed chat and
+ *  what-to-answer (2026-09-24). Speech is backdated across the hour; the live
+ *  turns run now, in order. */
+export function buildSessionHourTranscript(nowMs) {
+  const at = (min) => Math.round(nowMs - (60 - min) * 60 * 1000);
+  const segs = [
+    { speaker: I, text: 'Quick thing about the team before we start: our on-call rotation has eleven engineers, and the pager SLA is seven minutes.', timestamp: at(1) },
+    { speaker: ME, text: 'Got it. At my last job I cut our CI build time from forty minutes down to six by sharding the test suite across runners.', timestamp: at(2) },
+  ];
+  let min = 3;
+  for (let round = 0; round < 7; round++) {
+    for (const [speaker, text] of INTERVIEW_FILLER) {
+      segs.push({ speaker, text, timestamp: at(min) });
+      min += 55 / (INTERVIEW_FILLER.length * 7);
+    }
+  }
+  return segs.sort((a, b) => a.timestamp - b.timestamp);
+}
+
+/** Lines drawn onto the screenshot (unguessable, so only the image can carry them). */
+export const SESSION_SCREEN_LINES = [
+  'CI  Build #4471  FAILED',
+  'reconcileLedgerV3() raised ERR-7Q41',
+  'balance drift 0.0031 on shard kestrel-09',
+  'at ledger/sync.go:88',
+];
+
+/** Render SESSION_SCREEN_LINES to a PNG (Pillow). Returns the path. */
+export async function renderSessionScreenshot(file) {
+  const { execFileSync } = await import('node:child_process');
+  const py = [
+    'from PIL import Image, ImageDraw, ImageFont',
+    'import sys, json',
+    'lines = json.loads(sys.argv[2])',
+    'img = Image.new("RGB", (1280, 420), (24, 26, 33))',
+    'd = ImageDraw.Draw(img)',
+    'f = ImageFont.load_default(size=34)',
+    'd.rectangle([0, 0, 1280, 56], fill=(180, 40, 40))',
+    'for i, line in enumerate(lines):',
+    '    d.text((40, 14 + i * 90 if i else 12), line, font=f, fill=(255, 255, 255) if i == 0 else (230, 230, 210))',
+    'img.save(sys.argv[1])',
+  ].join('\n');
+  execFileSync('python3', ['-c', py, file, JSON.stringify(SESSION_SCREEN_LINES)]);
+  return file;
+}
+
+/** Planted at the start of the live part, in order. */
+export const SESSION_PLANTS = [
+  { id: 'typed-fact', surface: 'typed', text: 'Quick note for later: the recruiter told me the offer band tops out at 212k base.' },
+  { id: 'screen', surface: 'typed-image', text: "What's the error on my screen?" },
+  { id: 'manual-answer', surface: 'typed', text: 'Give me a one-line way to explain backpressure.' },
+  { id: 'wta-answer', surface: 'wta', interviewer: 'How would you design a URL shortener for our marketing team?' },
+  { id: 'chain', surface: 'typed', text: 'Which algorithm would you use to find the top ten most frequent search terms in a day of logs?' },
+];
+
+/** Unrelated turns that push the plants out of the 40-turn ring. */
+export const SESSION_FILLER = [
+  'What is the difference between a process and a thread?', 'How does a B-tree index speed up a query?',
+  'What is MVCC?', 'Explain the CAP theorem in simple terms.', 'What is consistent hashing?',
+  'What is a write-ahead log?', 'How does TCP differ from UDP?', 'What is a race condition?',
+  'How does garbage collection work in Go?', 'What is the N+1 query problem?', 'What is eventual consistency?',
+  'How do database transactions stay isolated?', 'What is a load balancer health check?', 'What is sharding?',
+  'How does a CDN work?', 'What is a mutex?', 'What is a deadlock?', 'What is DNS caching?',
+  'What does idempotent mean for an API?', 'What is a message queue for?', 'How does OAuth work?',
+  'What is the difference between REST and gRPC?', 'What is a bloom filter?', 'What is a circuit breaker?',
+  'What is optimistic locking?', 'What is a hash map collision?', 'What is tail latency?',
+  'How do you find a memory leak?', 'What is blue-green deployment?', 'What is a feature flag?',
+  'What is a materialized view?', 'What is two-phase commit?', 'How does Raft elect a leader?',
+  'What is a vector clock?', 'What is a heap data structure?', 'What is dynamic programming?',
+  'What is a trie?', 'How does quicksort work?', 'What is Big O notation?', 'What is a closure?',
+  'What is dependency injection?', 'What is a race detector?', 'What is back-of-the-envelope estimation?',
+  'What is a connection pool?',
+];
+
+/** Follow-ups at the end. `re` checks a planted fact; `from` compares with a planted ANSWER. */
+export const SESSION_PROBES = [
+  { id: 'interviewer-speech', surface: 'typed', text: 'What did the interviewer say the pager SLA is?', re: /\bseven\b|\b7\b/i },
+  { id: 'interviewee-speech', surface: 'wta', interviewer: 'Remind me, how much did you cut the build time at your last job?', re: /(six|\b6\b)/i, also: /forty|\b40\b/i },
+  { id: 'typed-fact', surface: 'typed', text: 'What did I tell you the offer band tops out at?', re: /212/ },
+  { id: 'screen', surface: 'typed', text: 'What was the error code on the screenshot I showed you earlier?', re: /7Q41/i },
+  { id: 'screen-wta', surface: 'wta', interviewer: 'Which function failed in the build you had up on your screen earlier?', re: /reconcileLedgerV3/i },
+  { id: 'manual-answer', surface: 'typed', text: 'What one-liner did you give me for backpressure earlier?', from: 'manual-answer' },
+  { id: 'wta-answer', surface: 'wta', interviewer: 'Going back to the URL shortener you described earlier, what did you say you would use for storage?', from: 'wta-answer' },
+  { id: 'chain', surface: 'typed', text: 'Why did you pick that approach for the top ten search terms earlier?', from: 'chain' },
+];
+
+const STOP_WORDS = new Set('about above after again against their there these those which while would could should where being other every because before between during under until whose within without really still maybe might first second third think thing things using based answer answers question questions going'.split(' '));
+/** Distinctive words of a planted answer (≥5 letters, not in either question). */
+export function distinctiveWords(answer, ...exclude) {
+  const ex = new Set(exclude.join(' ').toLowerCase().match(/[a-z0-9]{5,}/g) ?? []);
+  const words = String(answer ?? '').replace(/\[\[GIST\]\].*$/s, '').toLowerCase().match(/[a-z0-9]{5,}/g) ?? [];
+  return [...new Set(words)].filter((w) => !STOP_WORDS.has(w) && !ex.has(w));
+}
+
 // A DENIAL can quote the fact while rejecting it ("Q-47 isn't something you've
 // established"), so "the answer contains the fact" is not recall. Denial wins.
 export const denialRe = /(don'?t|do not|can'?t|cannot|couldn'?t)\s+(have|see|find|recall|know|confirm|verify)|isn'?t (in|anywhere|something)|not (in|anywhere in) (the|this|anything|what)|never (came up|mentioned|said|established|named)|didn'?t (say|mention|tell|give|name)|haven'?t (said|told|given|shared|mentioned)|nothing (you'?ve|in (this|the|what)|here)|no (record|mention|information|figure|number) |unverified|not (mentioned|provided|specified|available|established)|wasn'?t (mentioned|shared|stated)/i;

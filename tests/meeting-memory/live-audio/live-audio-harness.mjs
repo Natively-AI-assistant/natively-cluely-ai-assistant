@@ -29,7 +29,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildHour, FACTS, WPM as HOUR_WPM, TURN_GAP_S as HOUR_GAP } from './interview-hour.mjs';
 import { buildMock, WPM as MOCK_WPM, TURN_GAP_S as MOCK_GAP } from './mock-tech-interview.mjs';
-import { denialRe } from '../scenarios.mjs';
+import { denialRe, distinctiveWords, renderSessionScreenshot } from '../scenarios.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..', '..', '..');
@@ -97,6 +97,31 @@ async function page(win) {
 const evalIn = async (win, fn, arg, ms = 30000) => withTimeout((await page(win)).evaluate(fn, arg), ms, `evaluate in ${win}`);
 const e2e = (channel, ...a) => evalIn('launcher', ([c, rest]) => window.electronAPI.e2eInvoke(c, ...rest), [channel, a], 90000);
 const probe = (opts = {}) => e2e('__e2e__:memory-probe', opts);
+
+/** A typed turn WITH a screenshot — the IPC the meeting overlay uses when one is attached. */
+async function typedTurnWithImage(text, imagePath) {
+  const overlay = await page('overlay');
+  await overlay.evaluate(({ value, img }) => {
+    const w = window;
+    try { w.__mmUnsub?.(); } catch { /* noop */ }
+    w.__mm = { tok: '', done: null, err: null };
+    const u1 = w.electronAPI.onGeminiStreamToken((t) => { w.__mm.tok += t; });
+    const u2 = w.electronAPI.onGeminiStreamDone((d) => { w.__mm.done = (d && typeof d.finalText === 'string') ? d.finalText : w.__mm.tok; });
+    const u3 = w.electronAPI.onGeminiStreamError((e) => { w.__mm.err = String(e); });
+    w.__mmUnsub = () => { u1(); u2(); u3(); };
+    w.electronAPI.streamGeminiChat(value, [img]).catch((e) => { w.__mm.err = String(e); });
+  }, { value: text, img: imagePath });
+  const t0 = Date.now();
+  let st = null;
+  while (Date.now() - t0 < 150000) {
+    st = await overlay.evaluate(() => window.__mm);
+    if (st?.done !== null || st?.err !== null) break;
+    await sleep(400);
+  }
+  await sleep(1200);
+  return { answer: st?.done ?? null, error: st?.err ?? (st?.done == null ? 'timeout' : null), ms: Date.now() - t0 };
+}
+const SCREEN_PNG = await renderSessionScreenshot(path.join(os.tmpdir(), `mm-live-screen-${process.pid}.png`));
 
 async function typedTurn(text) {
   const overlay = await page('overlay');
@@ -261,10 +286,18 @@ for (const step of steps) {
       out.probes.push(rec); save();
       console.log(`[${rec.minute}] ${step.id} ${rec.relevant === undefined ? rec.result : `rel=${rec.relevant}`}${rec.memoryNeeded ? ` mem=${rec.memoryRecalled}` : ''}${rec.questionOverlap !== undefined ? ` q=${rec.questionOverlap}` : ''} (${r.ms}ms)`);
     } else if (step.kind === 'typed') {
-      const r = await typedTurn(step.text);
+      const r = step.image ? await typedTurnWithImage(step.text, SCREEN_PNG) : await typedTurn(step.text);
       const m = await probe({ prompts: 1 });
       const rec = { kind: step.plant ? 'plant' : 'typed', id: step.id, minute: minute(), text: step.text, ...r };
-      if (!step.plant) {
+      if (step.from) {
+        // Recall of an earlier ANSWER: its distinctive words must come back.
+        const src = out.probes.find((p) => p.id === step.from);
+        const words = distinctiveWords(src?.answer, src?.text ?? src?.asked ?? '', step.text);
+        const hit = words.filter((w) => new RegExp(`\\b${w}\\b`, 'i').test(r.answer ?? ''));
+        const inP = words.filter((w) => new RegExp(`\\b${w}\\b`, 'i').test(m.prompts?.[0]?.user ?? ''));
+        Object.assign(rec, { result: !r.answer ? 'error' : hit.length >= 3 ? 'recalled' : denialRe.test(r.answer) ? 'denied' : 'wrong',
+          fromWords: { total: words.length, hit: hit.length, inPrompt: inP.length, sample: hit.slice(0, 8) }, original: src?.answer ?? null });
+      } else if (!step.plant) {
         const f = factOf(step.expect);
         Object.assign(rec, { result: score(r.answer, step.expect), ...where(m.prompts?.[0]?.user, f.re) });
       }

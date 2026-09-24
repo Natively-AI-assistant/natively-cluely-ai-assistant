@@ -33,6 +33,10 @@ const Q = (text, expect, opts = {}) => {
   return [say('interviewer', text), { kind: 'wta', id: `Q${String(qn).padStart(2, '0')}${opts.tag ? `-${opts.tag}` : ''}`, asked: text, expect, ...opts }];
 };
 const typed = (id, text, expect, also) => ({ kind: 'typed', id, text, expect: { re: expect, also } });
+/** Typed into the overlay early and NOT probed now — asked about at the end. */
+const plant = (id, text, opts = {}) => ({ kind: 'typed', id, text, plant: true, ...opts });
+/** A typed follow-up about an earlier ANSWER (scored against that answer's words). */
+const recall = (id, text, from) => ({ kind: 'typed', id, text, from });
 const index = (id, query, expect) => ({ kind: 'index', id, query, expect: { re: expect } });
 const mark = (name) => ({ kind: 'mark', minute: name });
 
@@ -65,6 +69,13 @@ export function buildMock() {
     ...Q('What are you looking for in your next role?', ANY),
     C('Bigger scale problems, especially around distributed data, and a team that cares about reliability as much as speed.'),
     S('That lines up well with what we do. Let us move into some fundamentals.'),
+    // Session content that never enters the meeting index (typed chat, a
+    // screenshot, manual answers) — asked about again in the wrap-up, ~100
+    // exchanges later (2026-09-24).
+    plant('P-offer', 'Quick note for later: the recruiter told me the offer band tops out at 212k base.'),
+    plant('P-screen', "What's the error on my screen?", { image: true }),
+    plant('P-manual', 'Give me a one-line way to explain backpressure.'),
+    plant('P-chain', 'Which algorithm would you use to find the top ten most frequent search terms in a day of logs?'),
     mark(10),
 
     // ── B. Fundamentals, with pushback and discussion ──────────────────────
@@ -310,11 +321,18 @@ export function buildMock() {
     C('Merchant ID.'),
     ...Q('How many engineers did I say are on our team?', /forty[- ]five|\b45\b/i, { memory: /forty[- ]five|\b45\b/i, tag: 'mem-45' }),
     C('About forty five.'),
+    ...Q('Which function failed in the build you had up on your screen earlier?', /reconcileLedgerV3/i, { memory: /reconcileLedgerV3/i, tag: 'mem-screen' }),
+    C('The ledger reconciliation function, version three.'),
     ...Q('Do you have any questions for me?', ANY),
     C('Yes, how does the payments platform team split on call between Go services and the Kafka infrastructure?'),
     S('Good question. Platform owns Kafka, and each service team owns its own on call. Thanks Arjun, that is all from me today.'),
     C('Thank you, Maya.'),
     typed('T3-summary', 'Summarize what the interviewer told me about their team and stack.', /\bgo\b|golang/i, /postgres|kafka|merchant|forty[- ]five|45/i),
+    typed('T4-offer', 'What did I tell you the offer band tops out at?', /212/),
+    typed('T5-screen', 'What was the error code on the screenshot I showed you earlier?', /7Q41/i),
+    recall('T6-manual', 'What one-liner did you give me for backpressure earlier?', 'P-manual'),
+    recall('T7-chain', 'Why did you pick that approach for the top ten search terms earlier?', 'P-chain'),
+    recall('T8-wta', 'What did you suggest I say when she asked what my team works on day to day?', 'Q02'),
     index('X2-ledger', 'peak transactions per second of the ledger', /12,?000|twelve thousand/i),
     mark(70),
   ];
