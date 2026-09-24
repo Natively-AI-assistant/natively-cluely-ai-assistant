@@ -16,6 +16,7 @@
 import { isContextIntelligenceV3Enabled } from '../contracts/flag';
 import { MAX_TURN_SCREEN_CHARS, type HistoryTurn } from '../question/conversation-state';
 import { renderHistory } from '../question/history-render';
+import { NO_CONVERSATION_SCOPE } from '../question/conversation-state-store';
 import { orchestrate, type AnswerRequest, type RetrievalPort } from './orchestrator';
 import { composePrompt } from '../generation/prompt-composer';
 import { resolveModePolicy, isModeId, type ModeId } from '../policies/mode-policy-registry';
@@ -439,6 +440,7 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
         const { getConversationState } = require('../question/conversation-state-store');
         const cs = getConversationState(req.sessionId);
         const ringTurns: HistoryTurn[] = cs?.turns ?? [];
+        const sharedBucket = req.sessionId === NO_CONVERSATION_SCOPE;
         if (ringTurns.length) {
           const speech = String(convoSummary ?? '');
           const budgetChars = Math.max(0, (policy.contextBudget?.conversationTokens ?? 600) * 4);
@@ -454,7 +456,13 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
             // 2,400-char cut lands inside the 90 seconds, so recency alone
             // could leave a turn in neither place. A screen turn is never
             // skipped — no microphone records a screenshot.
-            exclude: (t) => !t.screen && speechWindowContains(speech, t.a),
+            //
+            // The SHARED bucket (no meeting, no session) is not a conversation
+            // identity: every unscoped what-to-answer press writes to it, so
+            // its exchanges are unrelated to one another and rendering them
+            // would carry one press's question into the next. It keeps the
+            // screen-only merge it always had.
+            exclude: (t) => !t.screen && (sharedBucket || speechWindowContains(speech, t.a)),
           });
           historyScreenWithheld = rendered.screenWithheld;
           if (rendered.turnCount) {

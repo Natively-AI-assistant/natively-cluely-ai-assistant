@@ -191,6 +191,16 @@ test('the merge carries each exchange exactly once', async () => {
   assert.equal((t2.user.match(/The link step failed\./g) ?? []).length, 1);
 });
 
+test('the shared unscoped bucket merges screen turns only — its exchanges are unrelated presses', async () => {
+  const sid = 'engine';
+  store.clearConversationState(sid);
+  await askTurn(sid, 'Implement a key rotation service', 1, { conversationSummary: SPEECH_WINDOW });
+  store.recordAnswerSummary(sid, 'ROTATIONANSWER use a versioned key map.');
+  const t2 = await askTurn(sid, 'Tell me about your experience with python', 2, { conversationSummary: SPEECH_WINDOW });
+  assert.ok(!/ROTATIONANSWER/.test(t2.user), 'an earlier unscoped press leaked into this one');
+  store.clearConversationState(sid);
+});
+
 test('an exchange the speech window really contains is not merged again', async () => {
   const sid = 'screenmem-window-has-it';
   store.clearConversationState(sid);
