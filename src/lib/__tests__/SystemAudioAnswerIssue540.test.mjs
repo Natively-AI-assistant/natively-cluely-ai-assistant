@@ -5,12 +5,16 @@
 //
 // 1. RollingTranscript: isNormal indicator must be active/true when interviewerChannel
 //    is 'connected', even if microphoneChannel is still 'awaiting-audio' (e.g. user wearing headphones).
-// 2. NativelyInterface handleAnswerNow: if no user mic speech was captured, it must fall back
-//    to interviewer speech captured during recording or recent interviewer question from rollingTranscript
-//    instead of failing with "No speech detected. Try speaking closer to your microphone."
-// 3. NativelyInterface handleWhatToSay: forwards visible rollingTranscript interviewer request to
-//    generateWhatToSay even when directAssist is false.
-// 4. electron/main.ts finalizeMicSTT: flushes both user and interviewer STT providers if present.
+// 2. handleAnswerNow: a healthy but silent mic hands off to What to Answer (main's
+//    speaker-labelled transcript) instead of "No speech detected". A failed or
+//    reconnecting mic keeps its diagnostic.
+// 3. Only USER chunks may wake the Answer/Stop tail waiter (AnswerNowTranscriptTail2026_09_11):
+//    an interviewer final landing first closed the gate and truncated or replaced the
+//    dictated question.
+// 4. handleWhatToSay's legacy path keeps passing `undefined`: main extracts the question.
+//    A rolling-bar blob as `question` skipped the user-asked-last repair and follow-up
+//    resolution, and became the retrieval query.
+// 5. electron/main.ts finalizeMicSTT flushes ONLY the user mic.
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
@@ -34,19 +38,23 @@ const mainSource = fs.readFileSync(
   'utf8',
 );
 
+// Slice [start, end) and fail loudly when a marker moves, so a renamed anchor
+// cannot turn these guards into vacuous passes.
+function between(source, startMarker, endMarker) {
+  const from = source.indexOf(startMarker);
+  assert.ok(from >= 0, `marker not found: ${startMarker}`);
+  const to = source.indexOf(endMarker, from + startMarker.length);
+  assert.ok(to > from, `end marker not found after start: ${endMarker}`);
+  return source.slice(from, to);
+}
+
 describe('Issue #540: RollingTranscript readiness with headphone/system audio', () => {
   test('RollingTranscript.tsx isNormal allows interviewer connected while mic is awaiting-audio', () => {
-    // The previous implementation had:
-    //   const anyAwaitingAudio = intStatus === 'awaiting-audio' || micStatus === 'awaiting-audio';
-    //   const isNormal = intStatus === 'connected' && micStatus === 'connected' && !anyAwaitingAudio;
-    // which blocked the green indicator whenever mic was awaiting-audio.
     assert.doesNotMatch(
       rollingTranscriptSource,
       /const anyAwaitingAudio\s*=\s*intStatus === ['"]awaiting-audio['"] \|\| micStatus === ['"]awaiting-audio['"]/,
       'RollingTranscript must not block readiness just because one channel is awaiting-audio',
     );
-
-    // Verify isNormal evaluates to true when interviewer is connected and mic is awaiting-audio
     assert.match(
       rollingTranscriptSource,
       /const isNormal\s*=\s*\(intStatus === ['"]connected['"]\s*\|\|\s*micStatus === ['"]connected['"]\)/,
@@ -55,66 +63,83 @@ describe('Issue #540: RollingTranscript readiness with headphone/system audio', 
   });
 });
 
-describe('Issue #540: handleAnswerNow system audio fallback', () => {
-  test('onNativeAudioTranscript tracks interviewer speech and wakes tail waiter during manual recording', () => {
+describe('Issue #540: a silent mic on Answer/Stop hands off to What to Answer', () => {
+  const handleAnswerNowBlock = between(
+    interfaceSource,
+    'const handleAnswerNow = async () => {',
+    'const selectSkill = useCallback',
+  );
+  const emptyBranch = between(
+    handleAnswerNowBlock,
+    'if (!question && currentAttachments.length === 0) {',
+    'const userMessageId = genMessageId();',
+  );
+
+  test('the question still comes from the user mic only', () => {
     assert.match(
+      handleAnswerNowBlock,
+      /const question = mergeTranscriptChunks\(\s*voiceInputRef\.current,\s*manualTranscriptRef\.current,\s*\)\.trim\(\);/,
+    );
+    assert.doesNotMatch(interfaceSource, /interviewerRecording/);
+  });
+
+  test('failed and reconnecting diagnostics come first, the handoff is the last branch', () => {
+    const failedAt = emptyBranch.indexOf("sttUserStatus === 'failed'");
+    const reconnectingAt = emptyBranch.indexOf("sttUserStatus === 'reconnecting'");
+    const handoffAt = emptyBranch.indexOf('void handlersRef.current.handleWhatToSay();');
+    assert.ok(failedAt >= 0 && reconnectingAt > failedAt, 'mic diagnostics are kept');
+    assert.ok(handoffAt > reconnectingAt, 'the handoff runs only when the mic is healthy');
+    assert.doesNotMatch(emptyBranch, /No speech detected/);
+  });
+
+  test('the handoff reads the latest handler and does not hold the Answer lock', () => {
+    // A bare `handleWhatToSay()` here would be the Stop-press closure, captured
+    // before the multi-second tail wait; `await` would keep 'answer_now' in flight
+    // for the whole What to Answer generation.
+    assert.doesNotMatch(emptyBranch, /await\s+handlersRef\.current\.handleWhatToSay/);
+    assert.doesNotMatch(emptyBranch, /(?<!\.)\bhandleWhatToSay\(/);
+  });
+});
+
+describe('Issue #540: only user chunks wake the Stop tail waiter', () => {
+  test('notifyFinal is called once, from the user-recording branch', () => {
+    const calls = interfaceSource.match(/answerTailWaiterRef\.current!\.notifyFinal\(\)/g) ?? [];
+    assert.equal(calls.length, 1);
+    const userBranch = between(
       interfaceSource,
-      /interviewerRecordingInputRef/,
-      'NativelyInterface must track interviewer audio arriving during manual recording',
+      "if (isRecordingRef.current && transcript.speaker === 'user') {",
+      '// Ignore user mic transcripts when not recording',
     );
+    assert.match(userBranch, /answerTailWaiterRef\.current!\.notifyFinal\(\)/);
   });
 
-  test('handleAnswerNow falls back to interviewer transcript when mic captured no speech', () => {
-    const handleAnswerNowBlock = interfaceSource.slice(
-      interfaceSource.indexOf('const handleAnswerNow = async () => {'),
-      interfaceSource.indexOf('const selectSkill = useCallback'),
-    );
-    assert.match(
-      handleAnswerNowBlock,
-      /interviewerRecordingInputRef/,
-      'handleAnswerNow must check interviewer speech captured during recording',
-    );
-    assert.match(
-      handleAnswerNowBlock,
-      /rollingTranscript/,
-      'handleAnswerNow must check rollingTranscript when mic speech is empty',
-    );
+  test('the Stop tail wait is sized by the user channel only', () => {
+    const waitArgs = between(interfaceSource, 'await answerTailWaiterRef.current!.wait({', '});');
+    assert.match(waitArgs, /hasCapturedFinal: voiceInputRef\.current\.trim\(\)\.length > 0,/);
+    assert.doesNotMatch(waitArgs, /interviewer/i);
   });
 });
 
-describe('Issue #540: handleWhatToSay forwards rolling transcript to generateWhatToSay', () => {
-  test('handleWhatToSay passes interviewerRequest to generateWhatToSay when directAssist is disabled', () => {
-    const handleWhatToSayBlock = interfaceSource.slice(
-      interfaceSource.indexOf('const handleWhatToSay = async (promptInstruction?: string | React.MouseEvent) => {'),
-      interfaceSource.indexOf('const handleClarify = async () => {'),
+describe('Issue #540: handleWhatToSay legacy path still lets main extract the question', () => {
+  test('generateWhatToSay receives undefined, not a rolling-bar blob', () => {
+    const handleWhatToSayBlock = between(
+      interfaceSource,
+      'const handleWhatToSay = async (promptInstruction?: string | React.MouseEvent) => {',
+      'const handleClarify = async () => {',
     );
-    assert.match(
-      handleWhatToSayBlock,
-      /generateWhatToSay\(\s*interviewerRequest/,
-      'handleWhatToSay must forward interviewerRequest from rolling transcript to generateWhatToSay',
-    );
+    assert.match(handleWhatToSayBlock, /generateWhatToSay\(\s*undefined,/);
+    assert.doesNotMatch(handleWhatToSayBlock, /generateWhatToSay\(\s*interviewerRequest/);
   });
 });
 
-describe('Issue #540: main.ts finalizeMicSTT finalizes interviewer STT as well', () => {
-  test('finalizeMicSTT checks both googleSTT_User and googleSTT (interviewer)', () => {
-    const mainSourceUpdated = fs.readFileSync(
-      path.resolve(root, 'electron/main.ts'),
-      'utf8',
+describe('Issue #540: main.ts finalizeMicSTT flushes the user mic only', () => {
+  test('finalizeMicSTT never force-finalizes the interviewer channel', () => {
+    const finalizeBlock = between(
+      mainSource,
+      'public finalizeMicSTT(): { pending: boolean } {',
+      '\n  }\n',
     );
-    const finalizeBlock = mainSourceUpdated.slice(
-      mainSourceUpdated.indexOf('public finalizeMicSTT(): { pending: boolean } {'),
-      mainSourceUpdated.indexOf('public finalizeMicSTT(): { pending: boolean } {') + 500,
-    );
-    assert.match(
-      finalizeBlock,
-      /this\.googleSTT\?\.finalize/,
-      'finalizeMicSTT must flush interviewer STT provider (this.googleSTT) if available',
-    );
-    assert.match(
-      finalizeBlock,
-      /this\.googleSTT_User\?\.finalize/,
-      'finalizeMicSTT must flush user STT provider (this.googleSTT_User) if available',
-    );
+    assert.match(finalizeBlock, /this\.googleSTT_User\?\.finalize/);
+    assert.doesNotMatch(finalizeBlock, /this\.googleSTT\??\.finalize/);
   });
 });
