@@ -59,6 +59,20 @@ describe('a live meeting plans the transcript for personal and follow-up questio
     assert.ok(d.retrievalPlan.sourceTypes.includes('MEETING_TRANSCRIPT'), JSON.stringify(d.retrievalPlan.sourceTypes));
   });
 
+  test('the pointer back survives real STT truncation (measured live: "Given what I" was dropped)', () => {
+    const d = decision('told you about our setup at the start, how would you tackle our right load problem?', 'general', true);
+    assert.ok(d.retrievalPlan.sourceTypes.includes('MEETING_TRANSCRIPT'), JSON.stringify(d.retrievalPlan.sourceTypes));
+    const t = decision('As I told you earlier, how would you handle the migration?', 'technical-interview', true);
+    assert.ok(t.retrievalPlan.sourceTypes.includes('MEETING_TRANSCRIPT'), JSON.stringify(t.retrievalPlan.sourceTypes));
+  });
+
+  test('"told" about a third party is not a pointer back at this conversation', () => {
+    // (a personal "what would you do" question reads the transcript by design —
+    // this one is a general question with no second-person object)
+    const d = decision('Explain what it usually means when a vendor told customers an API is deprecated.', 'technical-interview', true);
+    assert.ok(!d.retrievalPlan.sourceTypes.includes('MEETING_TRANSCRIPT'), JSON.stringify(d.retrievalPlan.sourceTypes));
+  });
+
   test('a document question with no pointer back stays a document question in a live meeting', () => {
     const d = decision('What does section 3 of the design doc say about sharding?', 'technical-interview', true);
     assert.ok(!d.retrievalPlan.sourceTypes.includes('MEETING_TRANSCRIPT'), JSON.stringify(d.retrievalPlan.sourceTypes));
