@@ -14889,7 +14889,13 @@ export function initializeIpcHandlers(appState: AppState): void {
         // `previousQuestion` so the NEXT typed follow-up ("expand on that")
         // resolves against THIS voice turn instead of whatever typed question
         // preceded it (task 7b, issue #552, live-verified).
-        { anchor: true },
+        //
+        // `from: 'meeting'`: this is the voice path — the user repeating the
+        // interviewer's question aloud (the renderer's own prompt says so), a
+        // question relayed from the meeting rather than something the user
+        // told the assistant. Rendered as "User:" it would now read as a
+        // statement the model may rely on (2026-09-24 grounding policy).
+        { anchor: true, from: 'meeting' },
       );
     } catch { /* continuity only */ }
     try {
