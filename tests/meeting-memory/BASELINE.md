@@ -52,6 +52,28 @@ After rebasing onto main (b4cf71af) one rep of each was re-run as a smoke (`reba
 cross-meeting no leak; typed 5/5; follow-up recalled; interview 3/4 (the "our setup" question answered
 from the user's own project instead of the interviewer's stack — the remaining weak spot).
 
+## One-hour live meeting, real capture and real STT (2026-09-24)
+
+`tests/meeting-memory/live-audio/`: the interviewer spoken into BlackHole 16ch (the meeting's output
+device, taken by the CoreAudio tap), the candidate into BlackHole 2ch (the meeting's mic), Soniox via the
+Natively relay, nothing injected. Details planted at known minutes, asked 14-58 minutes later. Hand-checked.
+
+| route | first hour | final hour (all fixes) |
+|---|---|---|
+| typed question about a detail 20-58 min back | 6/6 | 6/6 |
+| What-to-answer on the interviewer's follow-up (details from min 1-6, asked 47-56 min later) | 3/4 | 4/4 |
+| live-index semantic search, top 3 | 4/4 | 4/4 (all rank 1) |
+| 3 injected embedding failures at min ~26 | pending 3 → 0 in ~2 min | pending 3 → 0 in ~2 min |
+| the hour's real transcript through the chunker: Q/A in one chunk, before → after | 0/167 → 167/167 | 0/188 → 188/188 |
+
+Found by the live run and fixed on this branch: the hosted STT path never finalized an interviewer
+STATEMENT followed by silence within 15 s (4/4) — after the fix 0.5-2.0 s (4/4); and an STT-truncated
+"…told you about our setup…" missed the transcript.
+
+Still open (STT relay / native capture, not memory): the first words of an utterance are clipped
+("What does good code review…" → "Code review…"), words split mid-word ("man aged", "cach ing"), and an
+open question asked before any story was told can get an invented one (W1/W3).
+
 Raw result files are gitignored (they carry full prompts). Baseline files:
 `baseline-nomode-typed-1790216608515`, `baseline-typed-long-1790215021308`,
 `baseline-interview-1790195707929`, `baseline-interview-technical-interview-1790195894414`,
