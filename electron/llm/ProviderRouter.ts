@@ -1,3 +1,5 @@
+import { DEEPSEEK_DEFAULT_MODEL } from './deepseekModels';
+
 export type LLMProviderId = 'natively' | 'groq' | 'codex' | 'gemini_flash' | 'gemini_pro' | 'openai' | 'claude' | 'deepseek' | 'ollama';
 export type ProviderCapability = 'chat' | 'stream_chat' | 'structured' | 'vision';
 export type ProviderAttemptStatus = 'available' | 'unavailable';
@@ -601,7 +603,7 @@ export class ProviderRouter {
             'groq': 'qwen/qwen3.8-27b',
             'openai': 'gpt-5.4',
             'claude': 'claude-sonnet-4-6',
-            'deepseek': 'deepseek-v4-flash',
+            'deepseek': DEEPSEEK_DEFAULT_MODEL,
             'natively': 'default',
             'codex': 'default'
         };

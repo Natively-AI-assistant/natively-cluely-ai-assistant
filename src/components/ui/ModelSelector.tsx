@@ -104,6 +104,9 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSe
         if (model === 'openai/gpt-oss-20b') return 'Groq GPT-OSS 20B';
         if (model === 'gpt-5.4') return 'GPT 5.4';
         if (model === 'claude-sonnet-4-6') return 'Sonnet 4.6';
+        // Legacy: DeepSeek retired deepseek-v4-flash on 2026-09-10 and now serves
+        // it as deepseek-flash (V4.1), which is what a persisted pick actually gets.
+        if (model === 'deepseek-v4-flash') return 'DeepSeek V4.1 Flash';
 
         // Check dynamic cloud models
         const cloud = cloudModels.find(m => m.id === model);
