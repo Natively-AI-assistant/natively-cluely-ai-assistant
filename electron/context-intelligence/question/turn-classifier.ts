@@ -1721,7 +1721,11 @@ const NON_RETRIEVABLE: readonly SourceType[] = ['CONVERSATION_STATE'];
 // chunks that were actually retrieved, and a retrieved chunk is proof a document
 // exists.
 /** A pointer back at the conversation itself — see the live-meeting rule in detectTypes. */
-const SAID_EARLIER_RE = /\b(?:what|as|like)\s+(?:i|we|you)\s+(?:told\s+(?:you|me)|said|mentioned|described|explained)\b|\b(?:you|i|we)\s+(?:mentioned|said|told\s+(?:me|you)|described)\s+(?:earlier|before|at\s+the\s+start)\b|\bgoing\s+back\s+to\b|\b(?:earlier|before)\s+you\s+(?:said|mentioned)\b/i;
+// `told you` / `told me` with no lead-in, and "at the start": live STT drops the
+// first words of an utterance ("Given what I told you about our setup at the
+// start" arrived as "told you about our setup at the start…", measured
+// 2026-09-24), so the pattern cannot depend on the lead-in.
+const SAID_EARLIER_RE = /\btold\s+(?:you|me)\b|\b(?:at|from)\s+the\s+(?:start|beginning)\s+of\s+(?:the|this|our)\s+(?:call|meeting|conversation|interview)\b|\bat\s+the\s+start\b(?=[^?]*\?)|\b(?:what|as|like)\s+(?:i|we|you)\s+(?:told\s+(?:you|me)|said|mentioned|described|explained)\b|\b(?:you|i|we)\s+(?:mentioned|said|told\s+(?:me|you)|described)\s+(?:earlier|before|at\s+the\s+start)\b|\bgoing\s+back\s+to\b|\b(?:earlier|before)\s+you\s+(?:said|mentioned)\b/i;
 
 const claimToSource = (claim: ClaimType, hasDocuments: boolean, anchored: readonly SourceType[] = [], profileOnlyDocuments = false): SourceType[] => {
   const authoritative = (hasDocuments ? claimAuthority(claim) : CLAIM_AUTHORITY[claim]).authoritative;
