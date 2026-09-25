@@ -41,18 +41,22 @@ export function cleanOrphanedPartialFiles(destDir: string): void {
       const meta = parts[1].split('.');
       const pid = Number(meta[0]);
       const timestamp = Number(meta[1]);
-      let isDead = false;
+      let isConfirmedDead = false;
       if (Number.isFinite(pid) && pid > 0) {
         try {
           process.kill(pid, 0);
+          // Process is currently running — never delete an active download's partial file
+          continue;
         } catch (e: any) {
           if (e.code === 'ESRCH') {
-            isDead = true;
+            isConfirmedDead = true;
           }
         }
       }
-      // If the creating process is dead, or if the partial file is older than 10 minutes, clean it up
-      if (isDead || (Number.isFinite(timestamp) && now - timestamp > 10 * 60 * 1000)) {
+
+      // Only delete if the creating process is confirmed dead, or unparseable and stale (> 24 hours)
+      const isStaleOrphan = !Number.isFinite(pid) && Number.isFinite(timestamp) && (now - timestamp > 24 * 60 * 60 * 1000);
+      if (isConfirmedDead || isStaleOrphan) {
         try {
           fs.unlinkSync(path.join(destDir, entry));
         } catch {
