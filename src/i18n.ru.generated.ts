@@ -28,6 +28,7 @@ export const RU_GENERATED: Record<string, string> = {
     'Hide evidence': 'Скрыть источники',
     'Show evidence': 'Показать источники',
     'This looks like a': 'Похоже на:',
+    'Back': 'Назад',
     'Better template available': 'Доступен более подходящий шаблон',
     'Regenerate notes as': 'Пересоздать заметки как',
     'From earlier meetings': 'Из прошлых встреч',

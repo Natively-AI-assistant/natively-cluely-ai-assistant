@@ -124,6 +124,7 @@ export const ES_GENERATED: Record<string, string> = {
     "Automatically scroll to the latest message as new responses arrive": "Desplaza automáticamente al último mensaje a medida que llegan nuevas respuestas",
     "Autonomous Registry Sync:": "Autonomous Registry Sync:",
     "Available Variables": "Variables disponibles",
+    "Back": "Atrás",
     "Because code is run locally, you must have the appropriate interpreters installed on your device and exposed in your system PATH:": "Because code is run locally, you must have the appropriate interpreters installed on your device and exposed in your system PATH:",
     "Below the provider list, specify the Language you will be speaking (e.g., English). Most importantly, select your specific regional Accent / Region mapping (e.g., en-US vs en-GB vs en-IN) — STT backends use this to greatly improve transcription accuracy based on regional inflections.": "Below the provider list, specify the Language you will be speaking (e.g., English). Most importantly, select your specific regional Accent / Region mapping (e.g., en-US vs en-GB vs en-IN) — STT backends use this to greatly improve transcription accuracy based on regional inflections.",
     "Benefits": "Benefits",
