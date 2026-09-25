@@ -2774,8 +2774,19 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 // If we set fastResponseMode before hasStoredKey is populated, the enforcement
                 // effect below fires with canUseFastMode=false and immediately resets fast mode
                 // to false — writing that reset back to SettingsManager on every startup.
-                // @ts-ignore
-                const creds = await window.electronAPI?.getStoredCredentials?.();
+                //
+                // The persisted default model is read in the SAME round trip, not after
+                // the Codex / Antigravity / custom-provider loads below. Read last, the
+                // `useState` initial value stayed on screen for that whole chain, and
+                // once hasStoredKey made it a real option (any Gemini key does) the
+                // Active Model picker showed Gemini for a beat before switching to the
+                // actual default, e.g. Natively API. Both setters now land in one render.
+                const [creds, persistedDefault] = await Promise.all([
+                    // @ts-ignore
+                    window.electronAPI?.getStoredCredentials?.(),
+                    window.electronAPI?.getDefaultModel?.().catch(() => null),
+                ]);
+                if (persistedDefault?.model) setDefaultModel(persistedDefault.model);
                 if (creds) {
                     setHasStoredKey({
                         gemini: creds.hasGeminiKey,
@@ -2878,13 +2889,6 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 const custom = await window.electronAPI?.getCustomProviders();
                 if (custom) {
                     setCustomProviders(custom);
-                }
-
-                // Load persisted default model
-                // @ts-ignore
-                const result = await window.electronAPI?.getDefaultModel();
-                if (result && result.model) {
-                    setDefaultModel(result.model);
                 }
 
                 // Load the persisted fast model. null on disk means "Auto".
