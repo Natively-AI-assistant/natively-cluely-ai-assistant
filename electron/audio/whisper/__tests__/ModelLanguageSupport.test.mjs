@@ -51,6 +51,7 @@ const OFFICIAL_WHISPER_NAMES = new Set([
   'romanian', 'polish', 'dutch', 'arabic', 'hindi', 'swedish', 'norwegian',
   'danish', 'czech', 'hungarian', 'vietnamese', 'thai', 'greek', 'bulgarian',
   'hebrew', 'malay', 'finnish',
+  'croatian', 'estonian', 'latvian', 'lithuanian', 'maltese', 'slovak', 'slovenian',
 ]);
 
 test('every catalog model has a language-support entry with keys drawn from RECOGNITION_LANGUAGES', () => {
@@ -123,6 +124,14 @@ test('Parakeet TDT allows exactly the 25 European languages it supports plus aut
   assert.ok(s.allowedLanguageKeys.includes('spanish'));
   assert.ok(s.allowedLanguageKeys.includes('russian'));
   assert.ok(s.allowedLanguageKeys.includes('ukrainian'));
+  // The 7 European languages verified to be selectable
+  assert.ok(s.allowedLanguageKeys.includes('croatian'));
+  assert.ok(s.allowedLanguageKeys.includes('estonian'));
+  assert.ok(s.allowedLanguageKeys.includes('latvian'));
+  assert.ok(s.allowedLanguageKeys.includes('lithuanian'));
+  assert.ok(s.allowedLanguageKeys.includes('maltese'));
+  assert.ok(s.allowedLanguageKeys.includes('slovak'));
+  assert.ok(s.allowedLanguageKeys.includes('slovenian'));
   // Asian/Middle-Eastern languages NOT supported by Parakeet
   assert.equal(s.allowedLanguageKeys.includes('japanese'), false);
   assert.equal(s.allowedLanguageKeys.includes('chinese'), false);
