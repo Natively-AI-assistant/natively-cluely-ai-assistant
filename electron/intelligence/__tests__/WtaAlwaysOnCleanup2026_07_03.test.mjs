@@ -15,13 +15,16 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../../..');
 const src = fs.readFileSync(path.join(repoRoot, 'electron/IntelligenceEngine.ts'), 'utf8');
+// The LIVE path's gate, not the file's first mention: since 2026-09-25 the
+// speculative-reveal path (revealSpeculativeAnswer, earlier in the file) checks
+// the same flag, and a bare indexOf found that one instead.
 
 describe('WTA always-on minimal cleanup', () => {
   test('cleanup runs OUTSIDE the answerDiversityGuard flag gate', () => {
     // The always-on block must appear BEFORE the flag-gated normalizer and must
     // itself not be wrapped in isIntelligenceFlagEnabled('answerDiversityGuard').
     const alwaysOn = src.indexOf('ALWAYS-ON minimal cleanup');
-    const flagGate = src.indexOf("isIntelligenceFlagEnabled('answerDiversityGuard')");
+    const flagGate = src.indexOf("isIntelligenceFlagEnabled('answerDiversityGuard')", src.indexOf('private async runWhatShouldISayInner('));
     assert.ok(alwaysOn > 0, 'always-on cleanup block present');
     assert.ok(flagGate > alwaysOn, 'always-on cleanup precedes the flag-gated normalizer');
     // Between the always-on marker and its close, there must be no flag check.
@@ -30,7 +33,7 @@ describe('WTA always-on minimal cleanup', () => {
   });
   test('schema-stub guard runs unconditionally (before the flag gate too)', () => {
     const stub = src.indexOf('isLeakedSchemaStub(fullAnswer)');
-    const flagGate = src.indexOf("isIntelligenceFlagEnabled('answerDiversityGuard')");
+    const flagGate = src.indexOf("isIntelligenceFlagEnabled('answerDiversityGuard')", src.indexOf('private async runWhatShouldISayInner('));
     assert.ok(stub > 0 && stub < flagGate, 'schema-stub guard precedes the flag gate');
   });
   test('cleanup skips coding answers (fences/labels are real there)', () => {

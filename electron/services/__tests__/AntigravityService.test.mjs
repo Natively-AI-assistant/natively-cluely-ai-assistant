@@ -140,9 +140,39 @@ test('Antigravity filters and orders only quota-bearing public models', async ()
   assert.deepEqual(models.map(model => model.id), [
     'gemini-3.6-flash-low', 'gemini-3-flash', 'zeta-flash', 'alpha-pro',
   ]);
+  assert.equal(mod.resolveAntigravityWireModel('gemini-3.8-flash-high'), 'gemini-3.8-flash-tiered');
   assert.equal(mod.resolveAntigravityWireModel('models/Gemini-3.7-flash-low'), 'gemini-3.7-flash-tiered');
   assert.equal(mod.resolveAntigravityWireModel('gemini-3.6-flash-low'), 'gemini-3.6-flash-tiered');
   assert.equal(mod.resolveAntigravityWireModel('gemini-3.1-pro-high'), 'gemini-pro-agent');
+});
+
+test('Antigravity User-Agent matches the IDE format on macOS and Windows', async () => {
+  const mod = await loadService();
+  const v = mod.ANTIGRAVITY_CLIENT_VERSION;
+  // Google withholds newer models (3.7/3.8 Flash) from the old 1.23.2 identity.
+  assert.notEqual(v, '1.23.2');
+  assert.equal(mod.buildAntigravityUserAgent('darwin', 'arm64'), `antigravity/${v} darwin/arm64`);
+  assert.equal(mod.buildAntigravityUserAgent('darwin', 'x64'), `antigravity/${v} darwin/amd64`);
+  // The IDE sends Go-style names; Node's win32/x64/ia32 are never on its wire.
+  assert.equal(mod.buildAntigravityUserAgent('win32', 'x64'), `antigravity/${v} windows/amd64`);
+  assert.equal(mod.buildAntigravityUserAgent('win32', 'ia32'), `antigravity/${v} windows/386`);
+  assert.equal(mod.buildAntigravityUserAgent('win32', 'arm64'), `antigravity/${v} windows/arm64`);
+});
+
+test('Antigravity keeps the labelled 3.7/3.8 Flash tiers and drops their unlabelled -tiered twins', async () => {
+  const mod = await loadService();
+  // Shape of the real 2026-09-25 catalogue: every family has an unlabelled
+  // `-tiered` routing entry beside the labelled tiers the picker should show.
+  const entry = (displayName) => ({ displayName, quotaInfo: { remainingFraction: 1 }, isInternal: false });
+  const models = mod.parseAntigravityModels({ models: {
+    'gemini-3.8-flash-high': entry('Gemini 3.8 Flash (High)'),
+    'gemini-3.8-flash-low': entry('Gemini 3.8 Flash (Low)'),
+    'gemini-3.8-flash-tiered': entry(''),
+    'gemini-3.7-flash-medium': entry('Gemini 3.7 Flash (Medium)'),
+    'gemini-3.7-flash-tiered': entry(''),
+    'gemini-3.6-flash-low': entry('Gemini 3.6 Flash (Low)'),
+  } }).map(model => model.id);
+  assert.deepEqual(models, ['gemini-3.6-flash-low', 'gemini-3.7-flash-medium', 'gemini-3.8-flash-high', 'gemini-3.8-flash-low']);
 });
 
 test('Antigravity request payload and SSE parser match the Code Assist wire shape', async () => {
@@ -167,6 +197,11 @@ test('Antigravity request payload and SSE parser match the Code Assist wire shap
     temperature: 0.45,
     thinkingConfig: { thinkingLevel: 'low' },
   });
+  // Google 400s 3.8 on MINIMAL; 3.6 still takes it.
+  const thinking = (model) => mod.buildAntigravityRequestPayload({ projectId: 'p', model, userPrompt: 'q' })
+    .request.generationConfig.thinkingConfig;
+  assert.deepEqual(thinking('gemini-3.8-flash-high'), { thinkingLevel: 'low' });
+  assert.deepEqual(thinking('gemini-3.6-flash-low'), { thinkingLevel: 'minimal' });
   assert.deepEqual(mod.parseAntigravityEvent(JSON.stringify({ response: {
     candidates: [{ content: { parts: [
       { text: 'Hello ' }, { thought: true, text: 'hidden' }, { text: 'world' },
@@ -568,7 +603,7 @@ test('Voice-app project fallback requires model access and preserves discovered 
         modelCalls++;
         assert.equal(JSON.parse(init.body).project, 'rising-fact-p41fc');
         assert.equal(init.headers.Authorization, 'Bearer access');
-        assert.match(init.headers['User-Agent'], /^antigravity\/1\.23\.2 /);
+        assert.equal(init.headers['User-Agent'], mod.buildAntigravityUserAgent(process.platform, process.arch));
         return jsonResponse(modelBody, modelStatus);
       }
       assert.ok(url.endsWith(':onboardUser'));

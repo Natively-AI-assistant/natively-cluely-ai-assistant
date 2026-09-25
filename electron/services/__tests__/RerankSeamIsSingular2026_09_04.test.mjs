@@ -60,7 +60,7 @@ test('exactly one production file reaches the extension seam', () => {
   );
 
   assert.deepEqual(
-    callers.map((f) => path.relative(repoRoot, f)),
+    callers.map((f) => path.relative(repoRoot, f).split(path.sep).join('/')),
     ['electron/services/modes/ModeHybridRetriever.ts'],
     'an extension reranker must be resolved at one seam only. A second resolvePort() ' +
     'call means two rerank stages: the budget race no longer bounds the work, and a ' +

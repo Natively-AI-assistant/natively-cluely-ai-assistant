@@ -1,254 +1,345 @@
-import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
-import { Heart, X } from 'lucide-react';
-import { cn } from '../lib/utils';
+// src/components/SupportToaster.tsx
+//
+// "Support the developer" invitation.
+//
+// Presentational: the onboarding orchestrator decides when it opens
+// (OrchestratedToasterHost), and on dismiss the host records the showing with
+// DonationManager so the cooldown starts.
+//
+// Same two-pane composition as the browser-extension card, so the onboarding
+// set reads as one family: the words on a flat ground on the left, the image
+// in its own inset panel on the right. The heart in the image carries all of
+// the card's colour; the type and the button stay neutral.
+//
+// It pours out of, and back into, the bottom of the window like every other
+// popup (GenieModal).
+import React, { useState, useEffect, useRef } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
+import { X, ArrowRight } from 'lucide-react';
+import { GenieModal } from './ui/GenieModal';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
+import supportArt from '../assets/cards/support.jpg';
+
+const SUPPORT_URL = 'https://buymeacoffee.com/evinjohnn';
+
+// Returning to the app after this long from the support page is taken as a
+// donation, and the card retires itself.
+const PRESUMED_DONATION_MS = 20_000;
+
+// ─── Tokens ────────────────────────────────────────────────────
+const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif';
+
+/*
+  Ink per ground, measured rather than estimated (see the contrast test):
+
+    dark  #1C1C1E   strong 15.2  body 8.0  quiet 5.4  faint 4.9
+    light #F7F8FC   strong 17.8  body 6.5  quiet 6.0  faint 4.6
+
+  "faint" is the decline, which is a control, so it has to clear 4.5:1 even
+  while staying the quietest thing on the card. Identical to the extension
+  card's sets on purpose: the two sit next to each other in the same flow.
+*/
+const INK_DARK = {
+  strong: '#F2F2F4',
+  body:   'rgba(255,255,255,0.66)',
+  quiet:  'rgba(255,255,255,0.52)',
+  faint:  'rgba(255,255,255,0.48)',
+};
+const INK_LIGHT = {
+  strong: '#0B1020',
+  body:   'rgba(11,16,32,0.68)',
+  quiet:  'rgba(11,16,32,0.66)',
+  faint:  'rgba(11,16,32,0.58)',
+};
+
+// One curve for every eased property, so all motion shares a temperament.
+const EASE_CSS = 'cubic-bezier(0.23, 1, 0.32, 1)';
+
+// Panel zoom: the image pushes in under the pointer while the words hold
+// still. Slow on purpose; it is an image breathing, not a control answering.
+const PLATE_ZOOM     = 0.05;
+const PLATE_ZOOM_IN  = 1100;
+const PLATE_ZOOM_OUT = 700;
+
+// CTA hover. The exit is quicker than the entrance.
+const CTA_IN  = 420;
+const CTA_OUT = 280;
+
+// The close sits on the image panel, which is light in both themes. Rest
+// clears the 3:1 WCAG 1.4.11 asks of a control, as on the extension card.
+const CLOSE_INK = { rest: 'rgba(11,16,32,0.55)', hover: 'rgba(11,16,32,0.92)' };
+
+// The card's drop shadow, shared with the stand-in that carries it mid-genie.
+const SHADOW_LIGHT = '0 30px 70px -28px rgba(16,24,40,0.40)';
+const SHADOW_DARK  = '0 40px 90px -30px rgba(0,0,0,0.85)';
+
+// The genie is the entrance: the column is in place when the card pours out.
+// Under reduced motion there is no genie, so the column fades in instead.
+const STAGGER = { hidden: {}, show: { transition: { staggerChildren: 0.05 } } };
+const ITEM = {
+  hidden: { opacity: 0 },
+  show:   { opacity: 1, transition: { duration: 0.3 } },
+};
 
 interface SupportToasterProps {
-    isOpen: boolean;
-    onDismiss: () => void;
-    className?: string;
+  isOpen: boolean;
+  onDismiss: () => void;
+  className?: string;
 }
 
 export const SupportToaster: React.FC<SupportToasterProps> = ({ isOpen, onDismiss, className }) => {
-    const isLight = useResolvedTheme() === 'light';
-    const reduced = useReducedMotion() ?? false;
-    const [hasDonated, setHasDonated] = useState(false);
-    const [isButtonHovered, setIsButtonHovered] = useState(false);
+  const [plateHover, setPlateHover] = useState(false);
+  const [ctaActive, setCtaActive]   = useState(false);
+  const [ctaPressed, setCtaPressed] = useState(false);
+  const reduced = useReducedMotion() ?? false;
+  const isLight = useResolvedTheme() === 'light';
+  const INK = isLight ? INK_LIGHT : INK_DARK;
 
-    // Fetch donation status once on mount — orchestrator already gates via
-    // DonationManager.shouldShowToaster equivalent. We still fetch so the
-    // hasDonated UI works correctly.
-    useEffect(() => {
-        if (!window.electronAPI?.getDonationStatus) return;
-        window.electronAPI.getDonationStatus()
-            .then(status => setHasDonated(status.hasDonated))
-            .catch(e => console.error('Failed to check donation status:', e));
-    }, []);
+  // The orchestrator unmounts this the moment it hears "dismissed", so the
+  // card closes itself first and reports once the genie has played.
+  const [open, setOpen] = useState(true);
+  const dismissedRef = useRef(false);
+  const dismiss = () => {
+    dismissedRef.current = true;
+    setOpen(false);
+  };
 
+  // When the user left for the support page. Set on click, read on refocus.
+  const clickTimeRef = useRef<number | null>(null);
 
-
-    const clickTimeRef = React.useRef<number | null>(null);
-
-    useEffect(() => {
-        const handleFocus = async () => {
-            if (clickTimeRef.current) {
-                const elapsed = Date.now() - clickTimeRef.current;
-                if (elapsed > 20000) { // 20 seconds
-                    console.log("User returned from support link after >20s. Presuming donation.");
-                    await window.electronAPI?.setDonationComplete();
-                    setHasDonated(true);
-                    onDismiss();
-                }
-                clickTimeRef.current = null;
-            }
-        };
-        window.addEventListener('focus', handleFocus);
-        return () => window.removeEventListener('focus', handleFocus);
-    }, [onDismiss]);
-
-    const handleDismiss = () => {
-        onDismiss();
+  // Coming back after a while from the support page is treated as a donation.
+  useEffect(() => {
+    const handleFocus = async () => {
+      if (clickTimeRef.current === null) return;
+      const elapsed = Date.now() - clickTimeRef.current;
+      clickTimeRef.current = null;
+      if (elapsed > PRESUMED_DONATION_MS) {
+        await window.electronAPI?.setDonationComplete?.();
+        dismiss();
+      }
     };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, []);
 
-    const handleSupport = () => {
-        clickTimeRef.current = Date.now();
-        if (window.electronAPI?.openExternal) {
-            window.electronAPI.openExternal('https://buymeacoffee.com/evinjohnn');
-        } else {
-            window.open('https://buymeacoffee.com/evinjohnn', '_blank');
-        }
-    };
+  // Escape closes it, like every other card in the onboarding set.
+  useEffect(() => {
+    if (!isOpen || !open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') dismiss(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isOpen, open]);
 
-    if (!isOpen) return null;
+  // Reset transient interaction state whenever the card closes.
+  useEffect(() => {
+    if (!isOpen || !open) { setPlateHover(false); setCtaActive(false); setCtaPressed(false); }
+  }, [isOpen, open]);
 
-    const t1 = isLight ? '#1C1C1E' : '#FFFFFF';
-    const t2 = isLight ? 'rgba(0,0,0,0.76)' : 'rgba(255,255,255,0.72)';
-    const t3 = isLight ? 'rgba(0,0,0,0.56)' : 'rgba(255,255,255,0.44)';
-    const t4 = isLight ? 'rgba(0,0,0,0.36)' : 'rgba(255,255,255,0.26)';
-    const rule = isLight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.08)';
+  const handleSupport = () => {
+    clickTimeRef.current = Date.now();
+    if (window.electronAPI?.openExternal) {
+      window.electronAPI.openExternal(SUPPORT_URL);
+    } else {
+      window.open(SUPPORT_URL, '_blank');
+    }
+  };
 
-    return (
-        <AnimatePresence>
-            {isOpen && (
-                <div className={`fixed inset-0 z-[9999] flex items-center justify-center ${isLight ? 'bg-black/20' : 'bg-black/60'}`}>
-                    <style>
-                        {`
-                            @keyframes support-border-flow {
-                                0%, 100% { background-position: 0% 50%; }
-                                50%       { background-position: 100% 50%; }
-                            }
-                            .support-border {
-                                background: linear-gradient(145deg,
-                                    rgba(255, 106, 92, 0.8),
-                                    rgba(229, 91, 77, 0.6),
-                                    rgba(244, 63, 94, 0.7),
-                                    rgba(255, 106, 92, 0.8)
-                                );
-                                background-size: 300% 300%;
-                                animation: support-border-flow 6s ease infinite;
-                            }
-                            .support-border-reduced {
-                                background: linear-gradient(145deg, rgba(255, 106, 92, 0.6), rgba(244, 63, 94, 0.5));
-                            }
-                            @keyframes waveMove {
-                                from { background-position-x: 0; }
-                                to { background-position-x: -32px; }
-                            }
-                        `}
-                    </style>
+  const ctaDur = ctaActive ? CTA_IN : CTA_OUT;
 
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.94, y: 10 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.15, ease: [0.32, 0, 0.67, 0] } }}
-                        transition={{ type: "spring", stiffness: 450, damping: 35 }}
-                        className={cn(
-                            "relative w-[482px] overflow-hidden p-[1.5px]",
-                            reduced ? "support-border-reduced" : "support-border",
-                            "rounded-[24px]",
-                            isLight
-                                ? "shadow-[0_32px_64px_-16px_rgba(255,106,92,0.15),0_8px_32px_-8px_rgba(0,0,0,0.06)]"
-                                : "shadow-[0_48px_120px_-20px_rgba(0,0,0,0.95),0_0_80px_rgba(255,106,92,0.05)]",
-                            className
-                        )}
-                    >
-                        {/* Main Container Panel */}
-                        <div style={{
-                            position: 'relative',
-                            width: '100%',
-                            borderRadius: '22px',
-                            overflow: 'hidden',
-                            background: isLight 
-                                ? 'linear-gradient(155deg, rgba(254, 252, 255, 0.98) 0%, rgba(248, 244, 255, 0.99) 100%)'
-                                : 'linear-gradient(155deg, rgba(16,10,12,0.99) 0%, rgba(8,5,6,1) 100%)',
-                            paddingBottom: '28px',
-                            fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
-                        }}>
-                            {/* Catch-light */}
-                            <div aria-hidden style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '1px', background: isLight ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.12)', pointerEvents: 'none', zIndex: 5 }} />
+  return (
+    <GenieModal
+      open={isOpen && open}
+      label="SupportToaster"
+      zIndex={9999}
+      onBackdropClick={dismiss}
+      onClosed={() => { if (dismissedRef.current) onDismiss(); }}
+      // Dims, never blurs (3a9901ae4): frosting the whole launcher behind the
+      // card left it unreadable.
+      backdropStyle={{ background: isLight ? 'rgba(10,10,18,0.30)' : 'rgba(0,0,0,0.80)' }}
+      padding={16}
+      wrapStyle={{ width: '600px', maxWidth: '100%' }}
+      cardClassName={className}
+      cardStyle={{
+        background: isLight ? '#F7F8FC' : '#1C1C1E',
+        // A shadow on the light card and a light hairline on the dark one, so
+        // it sits on the app in both themes. No coloured border: a red
+        // outline is how an error is drawn, not a thank-you.
+        boxShadow: isLight
+          ? 'inset 0 0 0 1px rgba(11,16,32,0.10), inset 0 1px 0 rgba(255,255,255,0.80), ' + SHADOW_LIGHT
+          : 'inset 0 0 0 1px rgba(255,255,255,0.08), inset 0 1px 0 rgba(255,255,255,0.06), ' + SHADOW_DARK,
+        fontFamily: FONT,
+        WebkitFontSmoothing: 'antialiased',
+      } as React.CSSProperties}
+      cardProps={{
+        role: 'dialog',
+        'aria-modal': true,
+        'aria-labelledby': 'support-toast-title',
+        'aria-describedby': 'support-toast-desc',
+        onPointerEnter: e => { if (!reduced && e.pointerType === 'mouse') setPlateHover(true); },
+        onPointerLeave: () => setPlateHover(false),
+      }}
+      shadow={isLight ? SHADOW_LIGHT : SHADOW_DARK}
+      radius={20}
+    >
+      <div style={{ display: 'flex', alignItems: 'stretch', minHeight: '400px' }}>
+        <motion.div
+          variants={STAGGER} initial={reduced ? 'hidden' : false} animate="show"
+          style={{
+            position: 'relative', zIndex: 2,
+            flex: '1 1 58%', minWidth: 0,
+            padding: '40px 28px 34px 40px',
+            display: 'flex', flexDirection: 'column',
+          }}
+        >
+          <motion.div variants={ITEM} style={{
+            fontSize: '12px', fontWeight: 500, letterSpacing: '-0.005em',
+            color: INK.quiet, margin: '0 0 22px',
+          }}>
+            Support Natively
+          </motion.div>
 
-                            {/* Radial Glow */}
-                            <div className={`absolute top-0 left-0 right-0 h-[300px] bg-gradient-to-b pointer-events-none ${isLight ? 'from-rose-500/[0.03] to-transparent' : 'from-rose-500/[0.06] to-transparent'}`} />
+          {/*
+            Light weight at display size, as on the extension card. The size
+            steps down from 44px because "Used by thousands." is the longer
+            line and has to hold on one line in the column.
+          */}
+          <motion.h2 variants={ITEM} id="support-toast-title" style={{
+            fontSize: '34px', fontWeight: 300,
+            letterSpacing: '-0.032em', lineHeight: 1.08,
+            margin: '0 0 20px', color: INK.strong,
+          }}>
+            Built by one.
+            <br />
+            Used by thousands.
+          </motion.h2>
 
-                            {/* SVG Noise Grain Overlay */}
-                            <div aria-hidden style={{
-                                position: 'absolute', inset: 0, borderRadius: '22px', pointerEvents: 'none', zIndex: 4, opacity: isLight ? 0.015 : 0.028, mixBlendMode: 'overlay',
-                                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E")`,
-                                backgroundSize: '180px 180px',
-                            }} />
+          <motion.p variants={ITEM} id="support-toast-desc" style={{
+            fontSize: '13.5px', lineHeight: 1.55, letterSpacing: '-0.008em',
+            color: INK.body, margin: 0, maxWidth: '300px',
+            textWrap: 'pretty',
+          } as React.CSSProperties}>
+            Natively is built and maintained by one developer. If it's part
+            of your daily workflow, your support keeps it moving forward.
+          </motion.p>
 
-                            {/* Top header with dismiss button */}
-                            <div className="relative z-10 w-full flex justify-between items-center px-6 pt-5 pb-3" style={{ borderBottom: `1px solid ${rule}` }}>
-                                <span style={{ fontSize: '10.5px', fontWeight: 660, letterSpacing: '0.15em', textTransform: 'uppercase', color: t2 }}>
-                                    Support Natively
-                                </span>
-                                <button onClick={handleDismiss} aria-label="Dismiss"
-                                    className="w-7 h-7 flex items-center justify-center rounded-full opacity-45 transition-all animate-none"
-                                    style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-                                    onMouseEnter={e => { e.currentTarget.style.opacity = '0.8'; e.currentTarget.style.background = isLight ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.1)'; }}
-                                    onMouseLeave={e => { e.currentTarget.style.opacity = '0.45'; e.currentTarget.style.background = 'transparent'; }}>
-                                    <X size={13} strokeWidth={2.3} color={isLight ? '#000' : '#fff'} />
-                                </button>
-                            </div>
+          {/* marginTop: auto pins the action row to the bottom of the
+              column however short the copy above it runs. */}
+          <motion.div variants={ITEM} style={{
+            marginTop: 'auto', paddingTop: '34px',
+            display: 'flex', alignItems: 'center', gap: '22px', flexWrap: 'wrap',
+          }}>
+            {/*
+              Outlined, matching the extension card. Hover strengthens the
+              outline and label, adds a faint fill and moves the arrow 3px;
+              press compresses the whole button.
+            */}
+            <button
+              type="button"
+              onClick={handleSupport}
+              onPointerEnter={e => { if (e.pointerType === 'mouse') setCtaActive(true); }}
+              onPointerLeave={() => { setCtaActive(false); setCtaPressed(false); }}
+              onPointerDown={() => setCtaPressed(true)}
+              onPointerUp={() => setCtaPressed(false)}
+              onFocus={e => { if (e.currentTarget.matches(':focus-visible')) setCtaActive(true); }}
+              onBlur={() => setCtaActive(false)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '8px',
+                padding: '9px 14px',
+                borderRadius: '9px',
+                border: `1px solid ${isLight
+                  ? (ctaActive ? 'rgba(11,16,32,0.46)' : 'rgba(11,16,32,0.22)')
+                  : (ctaActive ? 'rgba(255,255,255,0.44)' : 'rgba(255,255,255,0.24)')}`,
+                background: isLight
+                  ? (ctaActive ? 'rgba(11,16,32,0.04)' : 'rgba(11,16,32,0)')
+                  : (ctaActive ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0)'),
+                outline: 'none',
+                cursor: 'pointer',
+                fontFamily: FONT,
+                fontSize: '13px', fontWeight: 500, letterSpacing: '-0.01em',
+                color: ctaActive ? INK.strong : (isLight ? 'rgba(11,16,32,0.84)' : 'rgba(255,255,255,0.88)'),
+                transform: ctaPressed && !reduced ? 'scale(0.97)' : 'none',
+                transition:
+                  `border-color ${ctaDur}ms ${EASE_CSS}, background-color ${ctaDur}ms ${EASE_CSS},`
+                  + ` color ${ctaDur}ms ${EASE_CSS}, transform 120ms ${EASE_CSS}`,
+              }}
+            >
+              <span>Support the Builder</span>
+              <ArrowRight
+                size={14} strokeWidth={1.9} aria-hidden
+                style={{
+                  flex: 'none',
+                  transform: ctaActive && !reduced ? 'translateX(3px)' : 'translateX(0)',
+                  transition: `transform ${ctaDur}ms ${EASE_CSS}`,
+                }}
+              />
+            </button>
 
-                            {/* Content Container */}
-                            <div className="relative z-10 w-full flex flex-col items-center pt-[32px]">
+            <button
+              type="button"
+              onClick={dismiss}
+              style={{
+                background: 'none', border: 0, padding: '9px 0',
+                cursor: 'pointer', fontFamily: FONT,
+                fontSize: '13px', fontWeight: 500, letterSpacing: '-0.008em',
+                color: INK.faint,
+                transition: `color 200ms ${EASE_CSS}`,
+              }}
+              onMouseEnter={e => (e.currentTarget.style.color = INK.body)}
+              onMouseLeave={e => (e.currentTarget.style.color = INK.faint)}
+              onFocus={e => (e.currentTarget.style.color = INK.body)}
+              onBlur={e => (e.currentTarget.style.color = INK.faint)}
+            >
+              Maybe later
+            </button>
+          </motion.div>
+        </motion.div>
 
-                                {/* Icon - Liquid Fill Effect */}
-                                <div className="relative mb-[24px] w-[32px] h-[32px]">
-                                    <div className="absolute inset-0 bg-[#FF6A5C] blur-[32px] opacity-15 rounded-full" />
+        <div style={{ flex: '0 0 40%', padding: '8px 8px 8px 0', display: 'flex' }}>
+          <div style={{
+            position: 'relative', flex: 1,
+            borderRadius: '14px', overflow: 'hidden',
+            background: '#EDF0F5',
+            boxShadow: isLight ? 'inset 0 0 0 1px rgba(11,16,32,0.07)' : 'none',
+          }}>
+            {/* The image. A slow push-in scoped to the panel, so the heart
+                breathes while the column holds still. */}
+            <div aria-hidden style={{
+              position: 'absolute', inset: 0,
+              backgroundImage: `url(${supportArt})`,
+              backgroundSize: 'cover',
+              backgroundPosition: '88% 50%',
+              transform: plateHover ? `scale(${1 + PLATE_ZOOM})` : 'scale(1)',
+              transformOrigin: '70% 50%',
+              transition: reduced
+                ? undefined
+                : `transform ${plateHover ? PLATE_ZOOM_IN : PLATE_ZOOM_OUT}ms ${EASE_CSS}`,
+              willChange: reduced ? undefined : 'transform',
+              pointerEvents: 'none',
+            }} />
 
-                                    {/* 1. The Liquid Container (Masked to Heart Shape) */}
-                                    <div
-                                        className="absolute inset-0 z-10"
-                                        style={{
-                                            maskImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z'/%3E%3C/svg%3E")`,
-                                            WebkitMaskImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z'/%3E%3C/svg%3E")`,
-                                            maskSize: 'contain',
-                                            WebkitMaskSize: 'contain',
-                                            maskRepeat: 'no-repeat',
-                                            WebkitMaskRepeat: 'no-repeat',
-                                            maskPosition: 'center',
-                                            WebkitMaskPosition: 'center',
-                                        }}
-                                    >
-                                        {/* The Water */}
-                                        <motion.div
-                                            initial={{ height: "0%" }}
-                                            animate={{ height: isButtonHovered ? "100%" : "0%" }}
-                                            transition={{ duration: 1.5, ease: "easeInOut" }}
-                                            className="absolute bottom-0 left-0 right-0 w-full bg-[#FF6A5C]"
-                                            style={{
-                                                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='20' viewBox='0 0 100 20' preserveAspectRatio='none'%3E%3Cpath d='M0 20 V10 Q25 0 50 10 T100 10 V20 H0 Z' fill='%23FF6A5C' /%3E%3C/svg%3E")`,
-                                                backgroundSize: '32px 100%',
-                                                backgroundRepeat: 'repeat-x',
-                                            }}
-                                        >
-                                            {/* Inner Wave Top - Sits at the top of the filling column */}
-                                            <div
-                                                className="absolute -top-[5px] left-0 right-0 h-[10px] w-full"
-                                                style={{
-                                                    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='20' viewBox='0 0 100 20' preserveAspectRatio='none'%3E%3Cpath d='M0 20 V10 Q25 0 50 10 T100 10 V20 H0 Z' fill='%23FF6A5C' /%3E%3C/svg%3E")`,
-                                                    backgroundSize: '32px 100%',
-                                                    animation: 'waveMove 1s linear infinite',
-                                                }}
-                                            />
-                                        </motion.div>
-                                    </div>
-
-                                    {/* 2. Outline Overlay (Sit on top) */}
-                                    <Heart
-                                        size={32}
-                                        className="text-[#FF6A5C] drop-shadow-[0_0_12px_rgba(255,106,92,0.4)] relative z-20 pointer-events-none"
-                                        strokeWidth={1.5}
-                                    />
-                                </div>
-
-                                {/* Typography */}
-                                <div className="text-center px-[40px] mb-[28px]">
-                                    <h3 style={{ color: t1 }} className="text-[26px] font-[750] leading-[1.2] tracking-[-0.02em] mb-[12px] antialiased">
-                                        Built by one.<br />
-                                        Used by thousands.
-                                    </h3>
-                                    <p style={{ color: t3 }} className="text-[13.5px] leading-[1.6] max-w-[340px] mx-auto font-medium antialiased">
-                                        Natively is built and maintained by one developer. If it's part of your daily workflow, your support keeps it moving forward.
-                                    </p>
-                                </div>
-
-                                {/* Actions */}
-                                <div className="w-full px-[46px] flex flex-col gap-4 relative">
-                                    <motion.button
-                                        onClick={handleSupport}
-                                        onMouseEnter={() => setIsButtonHovered(true)}
-                                        onMouseLeave={() => setIsButtonHovered(false)}
-                                        whileHover={{ scale: 1.012, filter: 'brightness(1.04)' }}
-                                        whileTap={{ scale: 0.985 }}
-                                        className="relative w-full h-[52px] rounded-[15px] bg-gradient-to-r from-[#FF6A5C] to-[#E55B4D] text-white font-bold text-[15.5px] tracking-wide transition-all shadow-[0_8px_24px_rgba(255,106,92,0.25)] overflow-hidden flex items-center justify-center border-none cursor-pointer"
-                                    >
-                                        {/* 3D Jelly Gloss Highlight */}
-                                        <span className="absolute top-[2px] left-[8px] right-[8px] h-[40%] rounded-full bg-gradient-to-b from-white/70 to-white/5 filter blur-[0.5px] pointer-events-none z-10" />
-
-                                        {/* Shimmer */}
-                                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/15 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite]" />
-                                        <span className="relative z-20">Support the Builder</span>
-                                    </motion.button>
-
-                                    {/* Social Proof & Dismiss */}
-                                    <div className="flex flex-col items-center gap-2.5 mt-1">
-                                        <button
-                                            onClick={handleDismiss}
-                                            className={`text-[11px] font-bold uppercase tracking-[0.2em] mt-1 transition-colors duration-200 border-none bg-none cursor-pointer ${isLight ? 'text-black/30 hover:text-black/50' : 'text-white/30 hover:text-white/50'}`}
-                                        >
-                                            Maybe later
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </motion.div>
-                </div>
-            )}
-        </AnimatePresence>
-    );
+            <button
+              type="button"
+              onClick={dismiss}
+              aria-label="Close"
+              style={{
+                position: 'absolute', top: '8px', right: '8px', zIndex: 2,
+                width: '30px', height: '30px',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                padding: 0, cursor: 'pointer',
+                background: 'none', border: 0, borderRadius: '8px',
+                color: CLOSE_INK.rest,
+                transition: `color 180ms ${EASE_CSS}, transform 160ms ${EASE_CSS}`,
+              }}
+              onMouseEnter={e => { e.currentTarget.style.color = CLOSE_INK.hover; }}
+              onMouseLeave={e => { e.currentTarget.style.color = CLOSE_INK.rest; e.currentTarget.style.transform = 'scale(1)'; }}
+              onMouseDown={e => { e.currentTarget.style.transform = 'scale(0.92)'; }}
+              onMouseUp={e => { e.currentTarget.style.transform = 'scale(1)'; }}
+            >
+              <X size={14} strokeWidth={2} color="currentColor" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </GenieModal>
+  );
 };

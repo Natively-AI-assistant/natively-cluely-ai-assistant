@@ -399,9 +399,9 @@ describe('exhaustion error propagation', () => {
         stt.mode = 'ws';
         // Position the state machine on the *last* WS model with one failure
         // short of the trip.
-        // WS_MODELS has 2 entries; index 1 is the last. Set wsFailures so the
+        // WS_MODELS has 3 entries (gpt-live-transcribe first since 2026-09-23); index 2 is the last. Set wsFailures so the
         // next _handleWsClose advances past the array end and triggers REST.
-        stt.wsModelIndex = 1;
+        stt.wsModelIndex = 2; // the LAST of WS_MODELS (live, 4o, 4o-mini)
         stt.wsFailures = 2; // MAX_WS_FAILURES_PER_MODEL - 1; next++ flips it.
         const errors = [];
         stt.on('error', (e) => errors.push(e));
@@ -521,7 +521,7 @@ describe('lifecycle — post-stop safety', () => {
         stt.isActive = true;
         stt.shouldReconnect = true;
         stt.mode = 'ws';
-        stt.wsModelIndex = 1;
+        stt.wsModelIndex = 2; // the LAST of WS_MODELS (live, 4o, 4o-mini)
         stt.wsFailures = 2; // primed for exhaustion on next close
         stt.on('error', () => {}); // exhaustion emits 'error' — absorb so EE doesn't throw
         stt._handleWsClose(1006, Buffer.from('synthetic'));
@@ -657,7 +657,7 @@ describe('fallback — ring-buffer transfer', () => {
         stt.ringBuffer = [seed];
         stt.ringBufferBytes = seed.length;
         // Prime exhaustion.
-        stt.wsModelIndex = 1;
+        stt.wsModelIndex = 2; // the LAST of WS_MODELS (live, 4o, 4o-mini)
         stt.wsFailures = 2;
         stt.on('error', () => {}); // exhaustion emits 'error' — absorb
 

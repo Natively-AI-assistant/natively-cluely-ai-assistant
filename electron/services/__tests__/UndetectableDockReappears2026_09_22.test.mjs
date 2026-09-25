@@ -87,14 +87,11 @@ const stripComments = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s
 const MAIN_CODE = stripComments(MAIN);
 
 describe('main.ts wiring', () => {
-  test('every process.title write is gated through shouldWriteProcessTitle', () => {
-    const writes = MAIN_CODE.match(/process\.title\s*=/g) || [];
-    assert.ok(writes.length >= 2, 'expected the sync write and the re-assert timer in _applyDisguise');
-    const gates = MAIN_CODE.match(/shouldWriteProcessTitle\(/g) || [];
-    assert.ok(
-      gates.length >= writes.length,
-      `${writes.length} process.title write(s) but only ${gates.length} shouldWriteProcessTitle() gate(s)`,
-    );
+  test('disabling undetectable mode reapplies the disguise', () => {
+    const start = MAIN_CODE.indexOf('public setUndetectable(');
+    assert.ok(start >= 0, 'setUndetectable not found');
+    const body = MAIN_CODE.slice(start, start + 2500);
+    assert.match(body, /this\._applyDisguise\(this\.disguiseMode\)/);
   });
 
   test("the 'activate' handler re-asserts stealth instead of merely skipping dock.show()", () => {

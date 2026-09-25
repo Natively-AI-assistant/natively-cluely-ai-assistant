@@ -1,0 +1,118 @@
+/*
+  The launcher's "Start Natively" / "Meeting ongoing" pill.
+
+  All of the pill's motion lives here, in one place, because it used to be
+  split between Tailwind classes and an inline style and the inline style won:
+  `style={{ transition: 'box-shadow …' }}` resets every transition longhand, so
+  `transition-transform duration-200` never applied and the hover scale, the
+  brightness filter and the press all jumped in a single frame.
+
+  The hover is one state on one clock: the lift, the shadow bloom and the
+  light layer share a duration and a curve, so the pill brightens, rises and
+  casts further as one material rather than three effects in sequence. The
+  base rule's curve is the hover-OUT (the transition that applies is the one
+  on the state being entered), so the return is set a step slower than the
+  arrival and settles instead of snapping back. No delay on either side.
+
+  The curve is a critically damped spring (damping 1.0, no overshoot), the
+  default Apple ships for UI that nothing was thrown at:
+      x(t) = 1 − (1 + ωt)·e^(−ωt),  ωT = 7.5  (99.5% settled at T)
+  sampled into linear(), max error 0.005. Unlike a cubic ease-out it leaves
+  from rest, so the pill eases into the lift instead of lurching, then takes
+  the long, quiet settle a spring has. Over 420ms that is response ≈ 0.35s:
+  half-way at 94ms, 90% at 218ms. The return runs 500ms (response ≈ 0.42s).
+
+  The press stays quick on purpose: feedback belongs on pointer-down, so it
+  front-loads on an ease-out, and the release rises back on the hover spring.
+*/
+.launcher-cta {
+    --cta-spring: linear(0, 0.0102 2%, 0.0369 4%, 0.0754 6%, 0.1219 8%, 0.1734 10%,
+        0.2275 12%, 0.2826 14%, 0.3643 17%, 0.4422 20%, 0.5145 23%, 0.6007 27%,
+        0.6749 31%, 0.7513 36%, 0.8222 42%, 0.8815 49%, 0.9266 57%, 0.9604 67%,
+        0.9826 80%, 1);
+    --cta-press-ease: cubic-bezier(0.22, 1, 0.36, 1);
+    --cta-in: 420ms;
+    --cta-out: 500ms;
+    --cta-press: 140ms;
+
+    /* The coloured bloom follows the state: set inline by the component as an
+       r, g, b triple plus its resting alpha (sky idle, emerald in a meeting),
+       so the idle ↔ meeting change is a box-shadow transition like any other. */
+    --cta-glow: 14, 165, 233;
+    --cta-glow-a: 0.4;
+
+    box-shadow:
+        inset 0 1px 1px rgba(255, 255, 255, 0.7),
+        inset 0 -1px 2px rgba(0, 0, 0, 0.1),
+        0 2px 10px rgba(var(--cta-glow), var(--cta-glow-a)),
+        0 0 0 1px rgba(255, 255, 255, 0.15);
+    transition:
+        transform var(--cta-out) var(--cta-spring),
+        box-shadow var(--cta-out) var(--cta-spring);
+}
+
+/*
+  The light layer replaces the old `hover:brightness-110`. A filter on the
+  whole button lifted the label, the logo and the rim by the same 10%, which
+  reads as a flat exposure bump. This lights the BODY only (it sits under the
+  z-20 content) and does it from above: strongest across the top face where
+  the highlight band already is, fading toward the bottom, the way a surface
+  brightens when it is brought closer to a light.
+*/
+.launcher-cta-light {
+    background:
+        radial-gradient(120% 110% at 50% 0%, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0) 72%),
+        linear-gradient(to top right, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.05) 50%, rgba(255, 255, 255, 0.1));
+    opacity: 0;
+    transition: opacity var(--cta-out) var(--cta-spring);
+}
+
+/* Only where a real pointer exists: on a touch screen :hover sticks after the
+   tap. Guarded with :not(:disabled) so a dead button never half-hovers. */
+@media (hover: hover) and (pointer: fine) {
+    .launcher-cta:not(:disabled):hover {
+        transform: scale(1.015);
+        box-shadow:
+            inset 0 1px 1px rgba(255, 255, 255, 0.8),
+            inset 0 -1px 2px rgba(0, 0, 0, 0.1),
+            0 6px 18px -2px rgba(var(--cta-glow), calc(var(--cta-glow-a) + 0.15)),
+            0 0 0 1px rgba(255, 255, 255, 0.2);
+        transition:
+            transform var(--cta-in) var(--cta-spring),
+            box-shadow var(--cta-in) var(--cta-spring);
+    }
+
+    .launcher-cta:not(:disabled):hover .launcher-cta-light {
+        opacity: 1;
+        transition: opacity var(--cta-in) var(--cta-spring);
+    }
+}
+
+/*
+  The press lands on pointer-down and is quick: the pill gives (the house
+  Liquid Glass press, scale .985) and the bloom pulls back in to its resting
+  spread, as if pushed toward the surface. Release re-enters :hover and takes
+  its 420ms spring back up. Declared after the hover block because both are
+  (0,3,0) and the press has to win while the pointer is down.
+*/
+.launcher-cta:not(:disabled):active {
+    transform: scale(0.985);
+    box-shadow:
+        inset 0 1px 1px rgba(255, 255, 255, 0.7),
+        inset 0 -1px 2px rgba(0, 0, 0, 0.1),
+        0 2px 10px rgba(var(--cta-glow), var(--cta-glow-a)),
+        0 0 0 1px rgba(255, 255, 255, 0.15);
+    transition:
+        transform var(--cta-press) var(--cta-press-ease),
+        box-shadow var(--cta-press) var(--cta-press-ease);
+}
+
+/* Reduced motion drops the movement and keeps the light: a brightening is not
+   vestibular, so the hover still answers, it just no longer grows. */
+@media (prefers-reduced-motion: reduce) {
+    .launcher-cta,
+    .launcher-cta:not(:disabled):hover,
+    .launcher-cta:not(:disabled):active {
+        transform: none !important;
+    }
+}

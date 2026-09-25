@@ -61,33 +61,26 @@
   /* ─── Meeting notes → Usage tab, user question bubble ─────────────────────
      This bubble is the only chromatic element in the whole view — the AI answer
      below it is an open canvas of grey text — so it carries the entire accent
-     moment, and it therefore tracks --periwinkle-300 rather than holding a
-     private hue.
+     moment. Its fill is the Settings toggle's ON colour, --toggle-on (#6688F5,
+     defined with the toggle further down), by owner instruction: the bubble
+     and the switches read as one colour, and retuning the toggle moves both.
 
-     ACCESSIBILITY EXCEPTION, SEVERE — the foreground is white by explicit
-     owner instruction, on a fill the palette calibrates for a DARK foreground.
-     White measures 2.21:1 on the top gradient stop and 2.55:1 on the bottom,
-     against a 4.5:1 WCAG AA floor for normal text (15px regular, so the 3:1
-     large-text allowance does not apply); neither stop clears even the 3:1 bar
-     used for non-text UI. --periwinkle-on-accent-dark on this same fill gives
-     8.35:1, which is what the 300 step was designed for. Two ways to keep
-     white legible if this is ever revisited: swap the foreground back, or
-     point --bubble-user-bg at --periwinkle-600 (white clears AA there at
-     5.23:1, as light mode already does). Both stops are pinned in
-     PeriwinkleContrastGuard.test.mjs.
+     Light mode lifts the fill 25% toward white (the [data-theme='light']
+     block), still mixed from --toggle-on. It used to swap in --periwinkle-600,
+     which read as a dark purple slab on the light pane. The material itself —
+     the original Liquid Glass (the measured pill, as .lg-action draws it),
+     with nothing painted around the card and no hover effect — is .lg-bubble
+     in src/ui-components/LiquidGlassButton.css, which reads these two tokens.
 
-     --bubble-user-bg MUST stay a solid colour: it is consumed through
-     Tailwind's bg-[var(...)], which compiles to `background-color`, and a
-     gradient value there is silently dropped. The gradient rides
-     background-image in .bubble-user instead.
-
-     Dark-mode values; the light-theme override lives in the
-     [data-theme='light'] block. Every stop is asserted in
-     PeriwinkleContrastGuard.test.mjs. */
-  --bubble-user-bg: var(--periwinkle-300);
+     ACCESSIBILITY EXCEPTION — the foreground is white by explicit owner
+     instruction. White measures 3.28:1 on the dark-theme fill and 2.35:1 on
+     the lighter light-theme fill, against a 4.5:1 WCAG AA floor for normal
+     text (15px regular, so the 3:1 large-text allowance does not apply).
+     --periwinkle-on-accent-dark gives 5.63:1 and 7.85:1 on the same fills —
+     swapping --bubble-user-fg to it is the one-token fix if this is ever
+     revisited. Pinned in PeriwinkleContrastGuard.test.mjs. */
+  --bubble-user-bg: var(--toggle-on);
   --bubble-user-fg: #FFFFFF;
-  --bubble-user-grad-to: #AC96E5;
-  --bubble-user-glow: rgba(185, 161, 246, 0.28);
 
   /* --- SEMANTIC TOKEN SYSTEM (DEFAULT: DARK) --- */
   /* Reference Image Matching */
@@ -231,6 +224,10 @@
   --legacy-action-disabled-bg: rgba(30, 58, 138, 0.3);
   --legacy-action-disabled-border: rgba(30, 64, 175, 0.3);
   --legacy-action-disabled-text: rgba(96, 165, 250, 0.4);
+
+  /* Scrim & overlay backdrops */
+  --scrim-backdrop: rgba(0, 0, 0, 0.60);
+  --scrim-backdrop-subtle: rgba(0, 0, 0, 0.40);
 }
 
 /* Phase-1 Settings-only accent override (dark mode), scoped via
@@ -256,130 +253,120 @@
   --btn-primary-shadow-color: color-mix(in srgb, var(--periwinkle-500) 20%, transparent);
 }
 
+/* Natively light theme, Apple-style revision.
+   Built on Apple's own light system values: grouped background #F2F2F7,
+   apple.com surfaces #F5F5F7 / #FBFBFD, label #1D1D1F, separator hue rgb(60,60,67).
+   Large areas sit on soft cool gray; cards are near white islands, never #FFFFFF.
+   Periwinkle accent unchanged. */
+
 [data-theme='light'] {
-  /* ─── LIGHT MODE — Professional SaaS Standard ────────────────────────────
-     Synthesised from Linear, Vercel, Stripe, Figma, Notion design systems.
+  /* Canvas and surfaces */
+  --bg-primary: #F2F2F7;
+  --bg-secondary: #EBEBF0;
+  --bg-main: #F2F2F7;
+  --bg-sidebar: #EBEBF0;
+  --bg-elevated: #FBFBFD;
+  --bg-card: #FBFBFD;
+  --bg-input: #EFEFF4;
+  --bg-component: #E5E5EA;
 
-     Rules used by every top product design team:
-       1. Canvas is near-white gray (#F5F5F5), never pure white — not harsh
-       2. Cards are #FFFFFF — elevated via SHADOW, not thick borders
-       3. Borders: rgba(0,0,0,0.07) — structural only, barely visible
-       4. Text: #111827 → #6B7280 → #9CA3AF (gray-900/500/400, WCAG AA)
-       5. Separation = whitespace first, shadow second, border last
-       6. Accent: blue-600 (#2563EB) — accessible, confident, not electric
+  /* Text */
+  --text-primary: #1D1D1F;
+  --text-secondary: #6E6E73;
+  --text-tertiary: #86868B;
+  --text-danger: #D70015;
 
-     Settings modal visual stack:
-       #F5F5F5 canvas  →  #FFFFFF sidebar/frame  →  #FFFFFF cards (shadow)
-     ─────────────────────────────────────────────────────────────────────── */
-
-  /* ── Canvas / page layer ── */
-  --bg-primary:        #fafafa;   /* App page / list canvas — neutral near-white  */
-  --bg-secondary:      #f5f5f5;   /* Header / nav bar chrome                      */
-
-  /* ── Settings modal surfaces ── */
-  --bg-main:           #fafafa;   /* Content body — the recessed canvas           */
-  --bg-sidebar:        #FFFFFF;   /* Sidebar — white panel, matches modal frame   */
-  --bg-elevated:       #FFFFFF;   /* Modal outer frame & dropdowns                */
-  --bg-card:           #FFFFFF;   /* Section cards — white, depth via shadow      */
-  --bg-input:          #F9FAFB;   /* Inputs — hairline tint (gray-50)             */
-
-  /* ── Interactive elements ── */
-  --bg-component:      #F3F4F6;   /* Secondary button fill (gray-100)             */
-  --bg-item-surface:   #EAECEF;   /* Row hover — clearly visible against canvas   */
-  --bg-item-active:    rgba(37, 99, 235, 0.09); /* Blue-tinted selection (Linear/Notion style) */
-  --badge-beta-bg:     #FFCC00;   /* systemYellow (light appearance)              */
-  --badge-beta-fg:     #1C1C1E;   /* near-black — ~11:1 on the yellow             */
-  --bg-row-hover:      #E1E4E8;   /* Neutral list-row hover (see dark-theme note) */
-  --text-danger:       #B91C1C;   /* Destructive label — red-700 for contrast on light fills */
-  --bg-toggle-switch:  #D1D5DB;   /* Toggle off-state track (gray-300)            */
-
-  /* ── Typography — Tailwind gray scale, proven for readability ── */
-  --text-primary:      #111827;   /* gray-900 — near-black, warm                  */
-  --text-secondary:    #6B7280;   /* gray-500 — comfortable secondary             */
-  --text-tertiary:     #9CA3AF;   /* gray-400 — soft hints and labels             */
-
-  /* ── Meeting-notes generation placeholder (see :root for the rationale) ── */
-  --mn-skel-strong:    rgba(0, 0, 0, 0.12);
-  --mn-skel-base:      rgba(0, 0, 0, 0.075);
-  --mn-skel-soft:      rgba(0, 0, 0, 0.055);
-
-  /* ── Borders — barely-there structural lines ── */
-  --border-subtle:     rgba(0, 0, 0, 0.07);   /* card outlines, dividers          */
-  --border-muted:      rgba(0, 0, 0, 0.11);   /* inputs, tables                   */
-
-  /* ── Accent — promoted from Settings-only to the app-wide default (Phase 2) ── */
-  --accent-primary:    var(--periwinkle-600);
-  --accent-muted:      color-mix(in srgb, var(--periwinkle-600) 10%, transparent);
-
-  --bg-component:      #F3F4F6;
-
-  /* ── Overlay system (in-meeting floating UI) ── */
-  /* Frosted white glass — lighter than dark mode for less visual weight    */
-  --overlay-bg:              rgba(255, 255, 255, 0.82);
-  --overlay-border:          rgba(0, 0, 0, 0.09);
-  --overlay-border-soft:     rgba(0, 0, 0, 0.06);
-  --overlay-undetectable-ring: rgba(0, 0, 0, 0.42);
-  --overlay-panel-bg:        rgb(255 255 255 / calc(0.22 + (var(--overlay-opacity) * 0.50)));
-  --overlay-pill-bg:         rgb(255 255 255 / calc(0.18 + (var(--overlay-opacity) * 0.42)));
-  --overlay-transcript-bg:   rgb(0 0 0 / calc(0.003 + (var(--overlay-opacity) * 0.016)));
-  --overlay-chip-bg:         rgba(255, 255, 255, 0.20);
-  --overlay-chip-hover-bg:   rgba(243, 244, 246, 0.32);
-  --overlay-input-bg:        rgba(255, 255, 255, 0.24);
-  --overlay-input-hover-bg:  rgba(255, 255, 255, 0.38);
-  --overlay-input-focus-bg:  rgba(239, 246, 255, 0.46);
-  --overlay-control-bg:      rgba(255, 255, 255, 0.24);
-  --overlay-control-hover-bg:rgba(243, 244, 246, 0.38);
-  --overlay-code-bg:         rgba(249, 250, 251, 0.22);
-  --overlay-code-border:     rgba(0, 0, 0, 0.08);
-  --overlay-code-header-bg:  rgba(243, 244, 246, 0.28);
-  --overlay-inline-code-bg:  rgba(229, 229, 229, 0.62);
-  --overlay-icon-bg:         rgba(255, 255, 255, 0.22);
-  --overlay-icon-hover-bg:   rgba(243, 244, 246, 0.36);
-  --overlay-panel-shadow:    rgb(0 0 0 / calc(0.04 + (var(--overlay-opacity) * 0.08)));
-  --overlay-pill-shadow:     rgb(0 0 0 / calc(0.02 + (var(--overlay-opacity) * 0.05)));
-  --overlay-text-primary:    rgba(17, 24, 39, 0.95);
-  --overlay-text-secondary:  rgba(55, 65, 81, 0.85);
-  --overlay-text-muted:      rgba(107, 114, 128, 0.90);
-  --overlay-text-placeholder:rgba(156, 163, 175, 0.90);
-  --overlay-text-strong:     #111827;
-  /* Dark lavender: this scope puts dark text on a near-white overlay, so the
-     light lavender above would be invisible here. 5.33:1 on white. */
-  --hotword-color:           #6D5AC7;
-  --overlay-shell-blur:      calc(2px + (var(--overlay-opacity) * 18px));
-  --overlay-pill-blur:       calc(2px + (var(--overlay-opacity) * 12px));
-  --overlay-transcript-blur: calc(var(--overlay-opacity) * 5px);
-
-
-  /* Primary Action Button (Light) — promoted to the accent (Phase 2) */
+  /* Accent: periwinkle unchanged */
+  --periwinkle-600: #8050D4;
+  --periwinkle-700: #643EA6;
+  --periwinkle-800: #492E7A;
+  --accent-primary: var(--periwinkle-600);
+  --accent-text: var(--periwinkle-700);
   --btn-primary-bg: var(--periwinkle-600);
   --btn-primary-hover: var(--periwinkle-700);
-  --btn-primary-disabled-bg: var(--bg-input); /* #F9FAFB */
-  --btn-primary-disabled-border: var(--border-subtle);
-  --btn-primary-disabled-text: var(--text-tertiary);
-  --btn-primary-shadow-color: color-mix(in srgb, var(--periwinkle-600) 15%, transparent);
-
-  --accent-subtle: color-mix(in srgb, var(--periwinkle-600) 8%, transparent);
   --accent-hover: var(--periwinkle-700);
   --accent-pressed: var(--periwinkle-800);
   --accent-strong: var(--periwinkle-700);
-  --accent-border: color-mix(in srgb, var(--periwinkle-600) 24%, transparent);
-  --accent-focus: color-mix(in srgb, var(--periwinkle-600) 40%, transparent);
-  --accent-shadow-20: color-mix(in srgb, var(--periwinkle-600) 18%, transparent);
-  --on-accent: var(--periwinkle-on-accent-light);
-  --on-accent-surface: color-mix(in srgb, var(--periwinkle-on-accent-light) 18%, transparent);
+  --on-accent: #FFFFFF;
+  --on-accent-surface: color-mix(in srgb, #FFF 18%, transparent);
+  --accent-muted: color-mix(in srgb, #8050D4 10%, transparent);
+  --accent-border: color-mix(in srgb, #8050D4 24%, transparent);
+  --accent-focus: color-mix(in srgb, #8050D4 40%, transparent);
+  --btn-primary-disabled-bg: var(--bg-component);
+  --btn-primary-disabled-text: var(--text-tertiary);
+  --btn-primary-shadow-color: color-mix(in srgb, var(--periwinkle-600) 15%, transparent);
 
-  /* Question bubble, light theme. The dark-mode lavender-pink is tuned for a
-     near-black ground and loses its separation on the #f5f5f5 pane, so light
-     keeps the solid periwinkle-600 + white it already had.
-     grad-to and glow MUST be redeclared here even though the hue is unchanged:
-     .bubble-user references them unconditionally, and an undefined custom
-     property drops the entire declaration silently — leaving light mode with
-     no gradient and no shadow, with nothing to indicate why. */
-  --bubble-user-bg: var(--periwinkle-600);
-  --bubble-user-fg: #FFFFFF;
-  --bubble-user-grad-to: #764AC3;
-  --bubble-user-glow: rgba(128, 80, 212, 0.28);
+  /* Interactive (Apple systemGray5 / systemGray4 steps) */
+  --bg-item-surface: #E5E5EA;
+  --bg-item-active: color-mix(in srgb, #8050D4 12%, transparent);
+  --bg-row-hover: #DEDEE3;
+  --badge-beta-bg: #FFCC00;
+  --badge-beta-fg: #1C1C1E;
+  --bg-toggle-switch: #D1D1D6;
 
+  /* Borders: Apple separator hue */
+  --border-subtle: rgba(60, 60, 67, 0.12);
+  --border-muted: rgba(60, 60, 67, 0.18);
+
+  /* Shadows */
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 2px 8px rgba(0, 0, 0, 0.04);
+  --shadow-popover: 0 8px 24px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.06);
+
+  /* Meeting notes and Q/A bubbles. On the light pane the question bubble takes
+     the toggle colour lifted 25% toward white (~#8CA6F8), by owner request
+     (15% first, then "lighten the colour a shade down"):
+     the full --toggle-on read too heavy there. Still mixed from --toggle-on, so
+     retuning the toggle moves both themes. White on it is 2.35:1 (see :root). */
+  --bubble-user-bg: color-mix(in srgb, var(--toggle-on) 75%, #FFFFFF);
+  --ai-response-text: #1D1D1F;
+  --ai-response-link: #0066CC;
+  --mn-skel-strong: rgba(60, 60, 67, 0.14);
+  --mn-skel-base: rgba(60, 60, 67, 0.09);
+  --mn-skel-soft: rgba(60, 60, 67, 0.06);
+
+  /* Floating overlay, Apple thick material */
+  --overlay-bg: rgba(242, 242, 247, 0.82);
+  --overlay-border: rgba(60, 60, 67, 0.14);
+  --overlay-border-soft: rgba(60, 60, 67, 0.08);
+  --overlay-undetectable-ring: rgba(0, 0, 0, 0.42);
+  --overlay-panel-bg: rgb(242 242 247 / calc(0.22 + (var(--overlay-opacity) * 0.50)));
+  --overlay-pill-bg: rgba(251, 251, 253, 0.55);
+  --overlay-transcript-bg: rgb(0 0 0 / calc(0.003 + (var(--overlay-opacity) * 0.016)));
+  --overlay-chip-bg: rgba(251, 251, 253, 0.40);
+  --overlay-chip-hover-bg: rgba(235, 235, 240, 0.55);
+  --overlay-input-bg: rgba(251, 251, 253, 0.60);
+  --overlay-input-hover-bg: rgba(251, 251, 253, 0.75);
+  --overlay-input-focus-bg: rgba(251, 251, 253, 0.92);
+  --overlay-control-bg: rgba(118, 118, 128, 0.12);
+  --overlay-control-hover-bg: rgba(118, 118, 128, 0.18);
+  --overlay-code-bg: rgba(242, 242, 247, 0.45);
+  --overlay-code-border: rgba(60, 60, 67, 0.10);
+  --overlay-code-header-bg: rgba(229, 229, 234, 0.50);
+  --overlay-inline-code-bg: rgba(220, 220, 225, 0.65);
+  --overlay-icon-bg: rgba(118, 118, 128, 0.12);
+  --overlay-icon-hover-bg: rgba(118, 118, 128, 0.18);
+  --overlay-panel-shadow: rgb(0 0 0 / calc(0.04 + (var(--overlay-opacity) * 0.08)));
+  --overlay-pill-shadow: rgb(0 0 0 / calc(0.02 + (var(--overlay-opacity) * 0.05)));
+  --overlay-text-primary: rgba(29, 29, 31, 0.96);
+  --overlay-text-secondary: rgba(110, 110, 115, 0.95);
+  --overlay-text-muted: rgba(134, 134, 139, 0.95);
+  --overlay-text-placeholder: rgba(134, 134, 139, 0.90);
+  --overlay-text-strong: #1D1D1F;
+  --hotword-color: #6D5AC7;
+  --overlay-shell-blur: calc(2px + (var(--overlay-opacity) * 18px));
+  --overlay-pill-blur: calc(2px + (var(--overlay-opacity) * 12px));
+  --overlay-transcript-blur: calc(var(--overlay-opacity) * 5px);
+
+  /* Liquid glass */
+  --glass-fill: hsl(240 20% 97% / var(--glass-frost));
+  --glass-rim: 0 0 2px 1px color-mix(in oklch, black, transparent 88%) inset;
+  --glass-drop: 0 4px 16px rgba(0, 0, 0, 0.05), 0 8px 24px rgba(0, 0, 0, 0.05);
+  --lg-clear-bg: rgba(118, 118, 128, 0.10);
+  --lg-clear-hover: rgba(118, 118, 128, 0.16);
+  --lg-clear-lens: rgba(118, 118, 128, 0.08);
+  --lg-clear-underside: inset 0 -1px 0 rgba(60, 60, 67, 0.08);
+
+  /* Legacy action button tokens */
   --legacy-action-bg: #2563EB;
   --legacy-action-hover: #1d4ed8;
   --legacy-action-fg: #FFFFFF;
@@ -390,7 +377,18 @@
   --legacy-action-disabled-bg: var(--bg-input);
   --legacy-action-disabled-border: var(--border-subtle);
   --legacy-action-disabled-text: var(--text-tertiary);
+
+  /* Scrim & overlay backdrops (Apple macOS Sheet dimming: subtle 6% tint without blur) */
+  --scrim-backdrop: rgba(0, 0, 0, 0.06);
+  --scrim-backdrop-subtle: rgba(0, 0, 0, 0.04);
 }
+
+[data-theme='light'] .ai-response-card p,
+[data-theme='light'] .ai-response-card li,
+[data-theme='light'] .ai-response-card h1,
+[data-theme='light'] .ai-response-card h2,
+[data-theme='light'] .ai-response-card h3 { color: var(--ai-response-text); }
+[data-theme='light'] .ai-response-card a { color: var(--ai-response-link); }
 
 /* Phase-1 Settings-only accent override (light mode), scoped via
    data-settings-theme so the rest of the app keeps the blue brand accent. */
@@ -2652,37 +2650,6 @@ body {
   font-weight: 600;
 }
 
-/* Meeting notes → Usage tab, user question bubble.
-
-   Three separable layers, deliberately kept apart so a future "it looks wrong"
-   can be bisected: the flat fill, the vertical gradient, and the hue-tinted
-   glow. Tokens live in the :root / [data-theme='light'] blocks.
-
-   Why a class rather than Tailwind utilities: bg-[var(--bubble-user-bg)]
-   compiles to `background-color`, which cannot hold a gradient — assigning one
-   there fails silently and leaves a transparent bubble with white text on the
-   dark pane.
-
-   The gradient runs DOWNWARD (base → darker). Lightening it upward was tested
-   and drops white text to 4.01:1, below AA; darkening keeps the lightest pixel
-   at the top stop, so the worst white contrast anywhere in the fill is the
-   4.699:1 asserted in the guard test.
-
-   The glow and the inset highlight sit outside the 10px text padding, so
-   neither touches legibility. On a flat dark ground salience comes from chroma
-   rather than luminance, and bleeding a faint tinted halo into the surrounding
-   neutral grey is what makes the bubble read as a lit object instead of a
-   pasted swatch. */
-.bubble-user {
-  background-color: var(--bubble-user-bg);
-  background-image: linear-gradient(180deg, var(--bubble-user-bg) 0%, var(--bubble-user-grad-to) 100%);
-  color: var(--bubble-user-fg);
-  box-shadow:
-    0 1px 1px rgba(0, 0, 0, 0.28),
-    0 6px 18px -8px var(--bubble-user-glow),
-    inset 0 1px 0 rgba(255, 255, 255, 0.14);
-}
-
 /* ── Streaming word materialization ────────────────────────────────────────
    Each newly revealed word (see src/lib/textRevealAnimation.mjs) is wrapped
    in a span carrying these animations plus a NEGATIVE animation-delay equal
@@ -2788,6 +2755,17 @@ body {
   color: var(--overlay-text-secondary);
   background: color-mix(in srgb, var(--hotword-color, #C4B5FD) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--hotword-color, #C4B5FD) 24%, transparent);
+}
+
+/* In meeting notes the chip also takes .lg-chip, the subtle Apple-style glass
+   from src/ui-components/LiquidGlassButton.css. The glass ring replaces the
+   flat border, so the border goes and its 1px moves into the padding: the
+   box stays 25px tall and nothing around it shifts. The live overlay's chip
+   is untouched. */
+.overlay-gist-chip.lg-chip {
+  --lg-chip-tint: var(--hotword-color, #C4B5FD);
+  border: 0;
+  padding: 4px 11px;
 }
 
 .overlay-gist-chip::before {
@@ -3172,6 +3150,14 @@ html[data-platform="linux"] body {
   overflow: hidden;
 }
 
+/* The launcher matches the 16px macOS gives its window natively (where the
+   rounding comes from the OS, not from CSS — nothing to change there). Only
+   the launcher: the aux windows keep 8px. */
+html[data-platform="win32"][data-window="launcher"] body,
+html[data-platform="linux"][data-window="launcher"] body {
+  border-radius: 16px !important;
+}
+
 /* ───────────────────────────────────────────────────────────────────────
    Natively API - New Interactive Pricing switchboard (Liquid Glass)
    ─────────────────────────────────────────────────────────────────────── */
@@ -3312,26 +3298,15 @@ html[data-platform="linux"] body {
   border: 1.5px solid transparent !important;
   position: relative !important;
   overflow: hidden !important;
-  /* `transform` is deliberately NOT transitioned here. InteractiveCard writes
-     transform: scale(...) inline from a spring on every frame; a CSS transition
-     on the same property re-smooths each of those writes, so the press spring
-     arrives late and mushy. Framer owns transform, CSS owns the material.
-     (The .pricing-card-* rules keep transform in their lists — those cards are
-     not wrapped in InteractiveCard.)
-
-     THIS LIST IS THE LEAVE HALF. A transition declared on the base rule runs
-     when :hover stops matching; the one on the :hover rule runs on enter. That
-     is how the asymmetry below is achieved without JS.
-     The curve changed, not just the clock, and that is the point:
-     cubic-bezier(0.23, 1, 0.32, 1) puts ~83% of the travel in the first 30% of
-     the duration, so at 180ms all perceptible motion was over in ~54ms — it was
-     animating and still reading as instant. Raising the duration on that curve
-     only lengthens an invisible tail. easeOutCubic spreads the travel out.
-     Leave is the SLOWER half here, which inverts the usual "exit fast" rule
-     because nothing is exiting: this is ambient light on a surface that stays
-     put, and light that snaps off is exactly what reads as un-animated. */
+  /* The card has no hover state and nothing moves it, so `transform` is not
+     in this list and this is the only transition the card has: the tier
+     switch and the [data-active] change ease box-shadow and border-color on
+     easeOutCubic, and background-color rides along on the tier switch's clock
+     (the pill's 250ms smooth-out), so the committed fill cross-fades instead
+     of jumping. */
   transition: box-shadow 420ms cubic-bezier(0.33, 1, 0.68, 1),
-              border-color 420ms cubic-bezier(0.33, 1, 0.68, 1) !important;
+              border-color 420ms cubic-bezier(0.33, 1, 0.68, 1),
+              background-color 250ms cubic-bezier(0.22, 1, 0.36, 1) !important;
 }
 
 /* Glass shine gloss highlight on liquid glass detail cards */
@@ -3507,19 +3482,11 @@ html[data-platform="linux"] body {
     0 1px 3px rgba(0, 0, 0, 0.22) !important;
 }
 
-/* NO border brighten on hover for the API detail card. It used to brighten its
-   edge to rgba(255,255,255,0.30) here, mirroring .pricing-card-yearly:hover —
-   but on a card that is already a saturated fill with a lit rim, the edge
-   flicking brighter under the pointer read as the card being selected rather
-   than merely pointed at, which the active-state border is what actually means.
-   Hover feedback is now the cursor-tracked spotlight (InteractiveCard) plus the
-   per-tier bloom near the end of this file — both of which change the card's
-   LIGHT, not its outline.
-   The rule that lived here declared `border-color` and a `box-shadow`; only
-   the border was ever live, since the per-tier bloom is later in source at
-   equal specificity and every detail card carries both classes (see
-   NativelyApiSettings.tsx:896). Deleted whole rather than trimmed, so nothing
-   is left implying the shadow here does something. Same for the `modern`
+/* NO border brighten on hover for the API detail card, and no hover state at
+   all: on a card that is already a saturated fill with a lit rim, any change
+   under the pointer read as the card being selected, which is what the
+   active-state border actually means. The rule that lived here declared
+   `border-color` and a `box-shadow`; it was deleted whole, as was the `modern`
    twin that used to sit near the features panel. */
 
 /* ──── Premium Graphics & Specular Upgrades (Liquid Glass Theme) ──── */
@@ -3928,26 +3895,15 @@ html[data-platform="linux"] body {
   border: 1.5px solid transparent !important;
   position: relative !important;
   overflow: hidden !important;
-  /* `transform` is deliberately NOT transitioned here. InteractiveCard writes
-     transform: scale(...) inline from a spring on every frame; a CSS transition
-     on the same property re-smooths each of those writes, so the press spring
-     arrives late and mushy. Framer owns transform, CSS owns the material.
-     (The .pricing-card-* rules keep transform in their lists — those cards are
-     not wrapped in InteractiveCard.)
-
-     THIS LIST IS THE LEAVE HALF. A transition declared on the base rule runs
-     when :hover stops matching; the one on the :hover rule runs on enter. That
-     is how the asymmetry below is achieved without JS.
-     The curve changed, not just the clock, and that is the point:
-     cubic-bezier(0.23, 1, 0.32, 1) puts ~83% of the travel in the first 30% of
-     the duration, so at 180ms all perceptible motion was over in ~54ms — it was
-     animating and still reading as instant. Raising the duration on that curve
-     only lengthens an invisible tail. easeOutCubic spreads the travel out.
-     Leave is the SLOWER half here, which inverts the usual "exit fast" rule
-     because nothing is exiting: this is ambient light on a surface that stays
-     put, and light that snaps off is exactly what reads as un-animated. */
+  /* The card has no hover state and nothing moves it, so `transform` is not
+     in this list and this is the only transition the card has: the tier
+     switch and the [data-active] change ease box-shadow and border-color on
+     easeOutCubic, and background-color rides along on the tier switch's clock
+     (the pill's 250ms smooth-out), so the committed fill cross-fades instead
+     of jumping. */
   transition: box-shadow 420ms cubic-bezier(0.33, 1, 0.68, 1),
-              border-color 420ms cubic-bezier(0.33, 1, 0.68, 1) !important;
+              border-color 420ms cubic-bezier(0.33, 1, 0.68, 1),
+              background-color 250ms cubic-bezier(0.22, 1, 0.36, 1) !important;
 }
 
 /* Card Specific variations (Modern) — same four hues, same depth ladder as
@@ -4967,7 +4923,8 @@ html[data-platform="linux"] body {
   .natively-api-selector-pill-track {
     transition: none !important;
   }
-  .natively-api-selector-tab:active {
+  .natively-api-selector-tab:active,
+  :root [data-interface-theme] .natively-api-selector-tab:active {
     transform: none !important;
   }
   .natively-api-detail-card > div,
@@ -7907,16 +7864,19 @@ html[data-platform="linux"] body {
   z-index: 1 !important;
 }
 
-/* Light: same construction, no hue. Bottom stop lands on --bg-item-surface
-   (#EAECEF) so the plaque resolves into the section's own card colour instead
-   of a tint of it; the top stays near-white to keep the vertical lift. */
+/* Light: same construction, no hue — but CLEAN at the bottom. It used to fall
+   to #EAECEF with an inner bottom shade and an 18px floor blur; on a white page
+   those three stacked into a grey smudge along the lower edge (the owner's
+   word), which the dark card hides. Now it stays near-white top to bottom, the
+   inner bottom shade is gone, and the floor is a crisp contact shadow plus a
+   faint lift, so the edge reads as an edge. */
 [data-theme='light'] .natively-key-card {
-  background: linear-gradient(180deg, #FDFDFD 0%, #EAECEF 100%) !important;
-  border: 1px solid rgba(0, 0, 0, 0.09) !important;
+  background: linear-gradient(180deg, #FFFFFF 0%, #F8F8FA 100%) !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.95),
-    inset 0 -14px 26px rgba(0, 0, 0, 0.035),
-    0 6px 18px rgba(0, 0, 0, 0.07) !important;
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    0 1px 2px rgba(0, 0, 0, 0.05),
+    0 4px 12px rgba(0, 0, 0, 0.035) !important;
 }
 
 [data-theme='light'] .natively-key-card::before {
@@ -8087,9 +8047,12 @@ html[data-platform="linux"] body {
   }
 }
 
+/* --lgc-z is only defined on the Pro pricing CTAs. Without the 0px fallback the
+   whole transform was invalid at computed-value time here, so Activate / Start
+   free trial / See your options never pressed: they just lost the hover lift. */
 .natively-key-cta[data-state='ready']:active,
 .natively-key-cta[data-state='secondary']:active {
-  transform: translateZ(var(--lgc-z)) scale(0.985) !important;
+  transform: translateZ(var(--lgc-z, 0px)) scale(0.985) !important;
   box-shadow: 0 2px 6px rgba(69, 79, 184, 0.24) !important;
 }
 
@@ -8495,181 +8458,15 @@ html[data-platform="linux"] body {
   }
 
   .natively-key-cta[data-state='ready']:hover,
-  .natively-key-cta[data-state='ready']:active {
+  .natively-key-cta[data-state='ready']:active,
+  .natively-key-cta[data-state='secondary']:hover,
+  .natively-key-cta[data-state='secondary']:active {
     transform: none !important;
   }
 }
 
 
 
-
-/* The generic light-theme hover that used to sit here is GONE, and the comment
-   with it claimed its box-shadow was live. It was not: at (0,4,0) it ties the
-   per-tier light hovers below, which come later in source, and every render of
-   this card carries a tier class (NativelyApiSettings.tsx:896). Nothing it
-   declared ever painted. */
-
-
-/* The ENTER half of the card's asymmetric hover. Declares `transition` and
-   nothing else: no box-shadow, so it cannot participate in (or violate) the
-   four-slot contract, and at (0,3,0) it outranks the base rule's leave timing
-   from anywhere in the file.
-   cubic-bezier(0.32, 0.72, 0, 1) moves immediately — no ease-in sluggishness —
-   but spreads the travel across the middle (~55% at the 30% mark, against the
-   old curve's 83%), which is what makes the arrival legible rather than instant. */
-@media (hover: hover) and (pointer: fine) {
-  [data-interface-theme] .natively-api-detail-card:hover {
-    transition: box-shadow 260ms cubic-bezier(0.32, 0.72, 0, 1),
-                border-color 260ms cubic-bezier(0.32, 0.72, 0, 1) !important;
-  }
-}
-
-
-/* Per-tier hover bloom. The Pro purchase cards glow in their OWN hue on hover
-   (.pricing-card-yearly:hover uses its blue, lifetime its violet); a neutral
-   grey glow here read as a different control. Deepens the resting shadow the
-   committed-fill block already carries rather than introducing one.
-   Obeys the four-slot contract above the committed fills: slot 1 repeats each
-   tier's RESTING rim byte-for-byte, so the hairline against the border does not
-   move; hover lives entirely in the floor (slot 2), the tier-hued ambient
-   bloom (slot 3) and the contact shadow (slot 4). */
-@media (hover: hover) and (pointer: fine) {
-  [data-interface-theme] .natively-api-detail-card-standard:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.16),
-      inset 0 -3px 8px rgba(0, 0, 0, 0.40),
-      0 12px 32px rgba(60, 107, 105, 0.28),
-      0 4px 12px rgba(0, 0, 0, 0.25) !important;
-  }
-  [data-interface-theme] .natively-api-detail-card-pro:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.17),
-      inset 0 -3px 8px rgba(0, 0, 0, 0.40),
-      0 12px 32px rgba(17, 89, 153, 0.28),
-      0 4px 12px rgba(0, 0, 0, 0.25) !important;
-  }
-  [data-interface-theme] .natively-api-detail-card-max:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.18),
-      inset 0 -3px 8px rgba(0, 0, 0, 0.40),
-      0 12px 32px rgba(102, 60, 104, 0.28),
-      0 4px 12px rgba(0, 0, 0, 0.25) !important;
-  }
-  [data-interface-theme] .natively-api-detail-card-ultra:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.20),
-      inset 0 -3px 8px rgba(0, 0, 0, 0.40),
-      0 12px 32px rgba(111, 37, 66, 0.28),
-      0 4px 12px rgba(0, 0, 0, 0.25) !important;
-  }
-}
-
-
-/* Active + hover. Without these the per-tier bloom above — (0,3,0), later in
-   source than every [data-active="true"] rule — would win on the CURRENT plan's
-   card and replace its tier-hued rim with the generic one, i.e. the active
-   card's outline would change on hover. That is exactly the border-highlight
-   behaviour being removed, and it also breaks the four-slot contract's promise
-   that slot 1 never moves. These sit at (0,4,0) so they outrank it, repeat the
-   active rim verbatim, and let hover act only on slots 2-4. */
-@media (hover: hover) and (pointer: fine) {
-  [data-interface-theme] .natively-api-detail-card-standard[data-active="true"]:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(165, 209, 207, 0.72),
-      inset 0 -3px 8px rgba(0, 0, 0, 0.50),
-      0 12px 32px rgba(60, 107, 105, 0.28),
-      0 4px 12px rgba(0, 0, 0, 0.25) !important;
-  }
-  [data-interface-theme] .natively-api-detail-card-pro[data-active="true"]:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(151, 199, 241, 0.78),
-      inset 0 -3px 8px rgba(0, 0, 0, 0.50),
-      0 12px 32px rgba(17, 89, 153, 0.28),
-      0 4px 12px rgba(0, 0, 0, 0.25) !important;
-  }
-  [data-interface-theme] .natively-api-detail-card-max[data-active="true"]:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(203, 175, 204, 0.84),
-      inset 0 -3px 8px rgba(0, 0, 0, 0.50),
-      0 12px 32px rgba(102, 60, 104, 0.28),
-      0 4px 12px rgba(0, 0, 0, 0.25) !important;
-  }
-  [data-interface-theme] .natively-api-detail-card-ultra[data-active="true"]:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(207, 160, 179, 0.90),
-      inset 0 -3px 8px rgba(0, 0, 0, 0.50),
-      0 12px 32px rgba(111, 37, 66, 0.28),
-      0 4px 12px rgba(0, 0, 0, 0.25) !important;
-  }
-}
-
-
-/* Light-theme per-tier hover bloom (mirrors the dark rules above and the
-   Pro cards' own light hovers). */
-@media (hover: hover) and (pointer: fine) {
-  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-standard:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.55),
-      inset 0 -2.5px 6px rgba(0, 0, 0, 0.06),
-      0 12px 28px rgba(60, 107, 105, 0.18),
-      0 4px 12px rgba(15, 23, 42, 0.05) !important;
-  }
-  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-pro:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.60),
-      inset 0 -2.5px 6px rgba(0, 0, 0, 0.06),
-      0 12px 28px rgba(17, 89, 153, 0.18),
-      0 4px 12px rgba(15, 23, 42, 0.05) !important;
-  }
-  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-max:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.65),
-      inset 0 -2.5px 6px rgba(0, 0, 0, 0.06),
-      0 12px 28px rgba(102, 60, 104, 0.18),
-      0 4px 12px rgba(15, 23, 42, 0.05) !important;
-  }
-  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-ultra:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.70),
-      inset 0 -2.5px 6px rgba(0, 0, 0, 0.06),
-      0 12px 28px rgba(111, 37, 66, 0.18),
-      0 4px 12px rgba(15, 23, 42, 0.05) !important;
-  }
-}
-
-
-/* Light active + hover — (0,5,0), outranking the light per-tier bloom (0,4,0)
-   for the same reason as the dark pair above. */
-@media (hover: hover) and (pointer: fine) {
-  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-standard[data-active="true"]:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.9),
-      inset 0 -2.5px 6px rgba(0, 0, 0, 0.05),
-      0 12px 28px rgba(60, 107, 105, 0.18),
-      0 4px 12px rgba(15, 23, 42, 0.05) !important;
-  }
-  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-pro[data-active="true"]:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.9),
-      inset 0 -2.5px 6px rgba(0, 0, 0, 0.05),
-      0 12px 28px rgba(17, 89, 153, 0.18),
-      0 4px 12px rgba(15, 23, 42, 0.05) !important;
-  }
-  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-max[data-active="true"]:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.9),
-      inset 0 -2.5px 6px rgba(0, 0, 0, 0.05),
-      0 12px 28px rgba(102, 60, 104, 0.18),
-      0 4px 12px rgba(15, 23, 42, 0.05) !important;
-  }
-  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-ultra[data-active="true"]:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.9),
-      inset 0 -2.5px 6px rgba(0, 0, 0, 0.05),
-      0 12px 28px rgba(111, 37, 66, 0.18),
-      0 4px 12px rgba(15, 23, 42, 0.05) !important;
-  }
-}
 
 /* ------------------------------------------------------------------ */
 /* Settings — section entrance stagger                                 */
@@ -8703,7 +8500,12 @@ html[data-platform="linux"] body {
 @keyframes settings-stagger-in {
   from {
     opacity: 0;
-    transform: translateY(7px);
+    /* Signed by SettingsOverlay's section motion.div (--settings-stagger-dy):
+       entering a section ABOVE the current one in the nav, the container
+       settles downward, so its children must too. A fixed +7px made them
+       rise against a falling container and bunch up. 7px is the fallback
+       for any other data-settings-stagger host. */
+    transform: translateY(var(--settings-stagger-dy, 7px));
   }
   to {
     opacity: 1;
@@ -8789,7 +8591,10 @@ html[data-platform="linux"] body {
     /* Hardcoded on purpose, same as --toggle-off/-thumb: every toggle in the
        app reads identically regardless of theme or panel, ignoring each
        caller's own track token (bg-accent-primary, --pi-accent, --aip-accent,
-       Phone Mirror's amber LAN switch, …) and the app's periwinkle accent. */
+       Phone Mirror's amber LAN switch, …) and the app's periwinkle accent.
+       --toggle-on also fills the meeting notes Usage question bubble
+       (--bubble-user-bg; lifted toward white in light mode), so retuning it
+       repaints that bubble too. */
     --toggle-off: #474949;
     --toggle-on: #6688F5;
     --toggle-thumb: #e1ebfe;
@@ -8806,10 +8611,14 @@ html[data-platform="linux"] body {
     background: var(--toggle-off);
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
+    /* opacity + filter so a switch that becomes disabled fades to 0.5, and the
+       hover brighten eases in, instead of both snapping. */
     transition:
         background 220ms cubic-bezier(0.4, 0, 0.2, 1),
         box-shadow 180ms ease,
-        transform 120ms ease;
+        transform 120ms ease,
+        opacity 150ms ease-out,
+        filter 150ms ease-out;
 }
 .t-toggle:disabled { cursor: not-allowed; opacity: 0.5; }
 .t-toggle[data-on="true"] { background: var(--toggle-on); }
@@ -8971,7 +8780,9 @@ html[data-platform="linux"] body {
   transition:
     transform var(--tabs-dur) var(--tabs-ease),
     width     var(--tabs-dur) var(--tabs-ease);
-  will-change: transform, width;
+  /* transform only: width is a layout property, so a will-change hint for it
+     reserves a layer and composites nothing. */
+  will-change: transform;
   z-index: 0;
   pointer-events: none;
 }
@@ -9780,8 +9591,14 @@ html[data-platform="linux"] body {
    describes for a light ground, where there is no bounce for a bottom rim to
    catch and the surface sits ON the page rather than floating in it. */
 [data-theme='light'] [data-interface-theme] .natively-api-detail-card {
+  /* Four slots, [inset rim, inset floor, outer ambient, outer contact], like
+     every other card shadow, so a rule that later differs from this one
+     interpolates instead of snapping. Rim and ambient are transparent: they
+     paint nothing and only keep the list shape. */
   box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0),
     inset 0 -1px 0 rgba(15, 23, 42, 0.10),
+    0 0 0 rgba(15, 23, 42, 0),
     0 6px 18px rgba(15, 23, 42, 0.12) !important;
 }
 
@@ -9974,14 +9791,15 @@ html[data-platform="linux"] body {
   z-index: 1 !important;
   pointer-events: none !important;
   border-radius: inherit !important;
-  opacity: 0.55 !important;
+  /* Fixed at what used to be the hover strength: the grid is always shown and
+     the card has no hover state. */
+  opacity: 0.8 !important;
   mix-blend-mode: normal !important;
   background-color: transparent !important;
   background-image:
     linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px) !important;
   background-size: 24px 24px !important;
-  transition: opacity 180ms cubic-bezier(0.23, 1, 0.32, 1) !important;
 }
 
 /* On a light ground a white grid is invisible, so it inverts to ink — the same
@@ -9994,7 +9812,10 @@ html[data-platform="linux"] body {
     linear-gradient(rgba(16, 22, 43, 0.030) 1px, transparent 1px),
     linear-gradient(90deg, rgba(16, 22, 43, 0.030) 1px, transparent 1px) !important;
 }
+/* `opacity` restated here: the light veil suppressor further up sits at
+   (0,3,1) and would otherwise hide the grid, leaving it visible only on hover. */
 [data-theme='light'] [data-interface-theme] .natively-api-detail-card::before {
+  opacity: 0.8 !important;
   background-image:
     linear-gradient(rgba(16, 22, 43, 0.090) 1px, transparent 1px),
     linear-gradient(90deg, rgba(16, 22, 43, 0.090) 1px, transparent 1px) !important;
@@ -10003,8 +9824,7 @@ html[data-platform="linux"] body {
 /* hover brightened the grid before; it still does */
 @media (hover: hover) and (pointer: fine) {
   [data-interface-theme] .pricing-card-yearly:hover::before,
-  [data-interface-theme] .pricing-card-lifetime:hover::before,
-  [data-interface-theme] .natively-api-detail-card:hover::before {
+  [data-interface-theme] .pricing-card-lifetime:hover::before {
     opacity: 0.8 !important;
   }
 }
@@ -10207,9 +10027,10 @@ html[data-platform="linux"] body {
 
    Rendered at 3 / 4 / 6 / 8px at device scale 1 before choosing: 3px is where
    the specular still reads as a highlight, and by 6px it separates into a
-   visible band and the bar starts reading as a capsule. The heights are
-   therefore UNCHANGED (3px, 2px for the Knowledge sub-rows) — this is the
-   material fitted to the existing rhythm, not a resize.
+   visible band and the bar starts reading as a capsule. The heights were
+   therefore kept at 3px (2px for the Knowledge sub-rows) — UNTIL 2026-09-25,
+   when the owner asked for the Liquid Glass fill in the Settings toggle's
+   colour: that capsule read is now the point, so the bars are 6px (4px).
 
    NO `[data-interface-theme]` PREFIX, deliberately. Every other pricing rule in
    this file is anchored on that attribute, and half of them on a specific VALUE
@@ -10233,12 +10054,20 @@ html[data-platform="linux"] body {
     inset 0 -1px 0 rgba(255, 255, 255, 0.055);
 }
 
+/* The fill is now the Liquid Glass body at bar scale (design.md, .lg-sky's
+   light-body lighting): the flat hue with a specular sheen on the top face that
+   dies by the middle, a crisp top rim, and a faint underside. At 6px (4px for
+   the Knowledge sub-rows) the sheen reads as glass; at the old 3px it could
+   only be a line. */
 .natively-meter-fill {
   height: 100%;
   border-radius: 999px;
-  background: var(--meter-hue);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.40) 0%, rgba(255, 255, 255, 0) 60%),
+    var(--meter-hue);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12),
     0 0 6px -1px var(--meter-hue);
 }
 
@@ -10277,8 +10106,11 @@ html[data-platform="linux"] body {
    Deliberately NOT `--accent-primary` itself: that token is contrast-guarded
    (PeriwinkleContrastGuard.test.mjs) and used across the app, and nothing about
    a usage meter should move if the app's accent is ever retuned. */
-.natively-meter-fill { --meter-hue: hsl(234 48% 68%); }
-[data-theme='light'] .natively-meter-fill { --meter-hue: hsl(236 38% 39%); }
+/* By owner request the resting fill is now the Settings toggle's ON colour
+   (--toggle-on, #6688F5, the same in both themes), so a meter reads as the
+   same control family as every switch in Settings. It still leaves amber the
+   loudest thing on the bar: relative luminance 0.27 against amber's 0.44. */
+.natively-meter-fill { --meter-hue: var(--toggle-on); }
 .natively-meter-fill--high { --meter-hue: #f59e0b; }
 .natively-meter-fill--over { --meter-hue: #ef4444; }
 
@@ -10295,6 +10127,189 @@ html[data-platform="linux"] body {
 }
 [data-theme='light'] .natively-meter-fill {
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.40),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
     inset 0 -1px 0 rgba(16, 22, 43, 0.14);
+}
+/* ── Stealth-typing caret ──────────────────────────────────────────────
+   On Windows the overlay is WS_EX_NOACTIVATE and the chat input is
+   readOnly while the hook is engaged, so the OS draws no caret: the box
+   looks dead even though keystrokes ARE being delivered through
+   StealthKeyboardManager. That ambiguity is the "it didn't take charge"
+   confusion. This mirrors the input's text invisibly (to occupy the same
+   width) and draws a blinking pipe right after it, so "Natively has your
+   keystrokes" is visible. macOS takes real DOM focus and gets the native
+   caret, so this only renders while stealthTapActive. */
+.nat-caret-mirror {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  border: 1px solid transparent; /* match the input's border box exactly */
+  border-radius: 0.75rem;        /* rounded-xl */
+  white-space: pre;
+  overflow: hidden;
+  pointer-events: none;
+  /* No `font: inherit`. This rule lands after `@tailwind utilities`, so the
+     shorthand overrode the element's own `text-[13px] leading-relaxed` and the
+     mirror measured the text at the wrapper's 16px while the input drew it at
+     13px — the caret drifted ~1.5px further right with every character. The
+     family and weight already inherit; the size comes from those classes. */
+}
+/* Takes width, paints nothing — the real input still renders the glyphs. */
+.nat-caret-mirror > .nat-caret-text {
+  visibility: hidden;
+  flex: none;
+}
+.nat-caret {
+  flex: none;
+  display: inline-block;
+  width: 1.5px;
+  height: 1.15em;
+  border-radius: 1px;
+  background: var(--accent-primary);
+  animation: nat-caret-blink 1.06s steps(1, end) infinite;
+}
+@keyframes nat-caret-blink {
+  0%, 49%   { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+/* A caret that never stops moving is a problem for vestibular sensitivity,
+   and a steady bar still communicates "input is live". */
+@media (prefers-reduced-motion: reduce) {
+  .nat-caret { animation: none; opacity: 1; }
+}
+
+/* ── Error notice shake (transitions.dev #12, "error state shake") ───────
+   Sync surfaces four failure states — status load, enable/disable, LAN
+   reset, browser-context save — and every one of them arrived through the
+   same `notice()` helper as the informational ones: a 250ms height+opacity
+   collapse. An error that enters exactly like a tip is not feedback, it is
+   just more content. This gives the alert notices, and only those, the
+   percussive hint the recipe is for.
+
+   Ported values, not invented ones: 6px throw, 4px overshoot, 80/60/80/60ms
+   segments (280ms total), and the per-stop `animation-timing-function` that
+   lets each leg follow its own curve — the whole point of the recipe, and the
+   thing a single eased keyframe cannot reproduce. The %-stops are the
+   cumulative segment durations: 28.57 / 57.14 / 78.57 / 100.
+
+   `--shake-ease` is cubic-bezier(0.22, 1, 0.36, 1), which is already this
+   app's smooth-out curve (--aip-ease-out, EASE_SMOOTH_OUT in
+   PhoneMirrorSettings), so it needs no new easing vocabulary.
+
+   Replay is keyed in React rather than by the reference's
+   remove-class/reflow/re-add dance: the notice is re-keyed on its message, so
+   a NEW error remounts the node and the animation runs again, while a
+   re-render with the same message leaves it alone. No reflow, no timers, and
+   nothing to clean up on unmount.
+
+   transform only — it composites, and it cannot disturb the height the
+   Collapse above it is animating at the same time. */
+/* No will-change: the class stays on the notice after its one shake, so a
+   hint would pin a compositor layer on it for as long as it is shown. */
+.t-notice-shake {
+  animation: t-notice-shake 280ms linear;
+}
+@keyframes t-notice-shake {
+  0%     { transform: translateX(0);     animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1); }
+  28.57% { transform: translateX(6px);   animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1); }
+  57.14% { transform: translateX(-6px);  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1); }
+  78.57% { transform: translateX(4px);   animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1); }
+  100%   { transform: translateX(0); }
+}
+
+/* Required by the recipe. A shake is pure emphasis — there is no information
+   in it that the red border and the alert role do not already carry — so it
+   is dropped entirely rather than shortened. */
+@media (prefers-reduced-motion: reduce) {
+  .t-notice-shake { animation: none !important; transform: none !important; }
+}
+
+/* ── Tooltip open/close (transitions.dev 17) ──────────────────────────
+   Verbatim from transitions/tooltip.md.
+   A hover/focus tooltip that fades + scales in with a short appear-delay
+   but disappears immediately on leave. Pure CSS. */
+:root {
+  --tt-in-dur: 150ms;
+  --tt-out-dur: 50ms;
+  --tt-scale: 0.98;
+  --tt-delay: 80ms;
+  --tt-in-ease: ease-out;
+  --tt-out-ease: ease-out;
+  --tt-bg: rgba(28, 28, 32, 0.85);
+  --tt-fg: rgba(255, 255, 255, 0.62);
+  --tt-border: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme='light'] {
+  --tt-bg: rgba(244, 245, 247, 0.92);
+  --tt-fg: rgba(35, 39, 47, 0.68);
+  --tt-border: rgba(0, 0, 0, 0.08);
+}
+
+.t-tt-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.t-tt {
+  position: absolute;
+  top: calc(100% + 5px);
+  bottom: auto;
+  left: 50%;
+  transform: translate(-50%, 0) scale(var(--tt-scale));
+  transform-origin: 50% 0%;
+  padding: 3px 7px;
+  border-radius: 5px;
+  background: var(--tt-bg);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: var(--tt-fg);
+  font-size: 10.5px;
+  font-weight: 450;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  border: 1px solid var(--tt-border);
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.18),
+    0 1px 2px rgba(0, 0, 0, 0.12);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 50;
+  transition:
+    opacity   var(--tt-out-dur) var(--tt-out-ease),
+    transform var(--tt-out-dur) var(--tt-out-ease);
+}
+
+.t-tt[data-side='top'] {
+  top: auto;
+  bottom: calc(100% + 5px);
+  transform-origin: 50% 100%;
+}
+
+[data-theme='light'] .t-tt {
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.06),
+    0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.t-tt-wrap:hover .t-tt,
+.t-tt-trigger:focus-visible + .t-tt {
+  opacity: 1;
+  transform: translate(-50%, 0) scale(1);
+  transition-duration: var(--tt-in-dur);
+  transition-timing-function: var(--tt-in-ease);
+  transition-delay: var(--tt-delay);
+}
+
+.t-tt-wrap:has(:disabled):hover .t-tt {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-tt { transition: none !important; }
 }

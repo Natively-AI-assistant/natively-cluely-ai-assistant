@@ -154,15 +154,27 @@ describe('IntelligenceEngine source wiring (static check — no engine instantia
   });
 
   test('the WTA output-shape block calls applyAnswerContract, not normalizeOutputShape, and passes the guard', () => {
-    const gateStart = src.indexOf("isIntelligenceFlagEnabled('answerDiversityGuard')");
+    const gateStart = src.indexOf("isIntelligenceFlagEnabled('answerDiversityGuard')", src.indexOf('private async runWhatShouldISayInner('));
     assert.ok(gateStart >= 0, 'the answerDiversityGuard flag gate should exist');
     const block = src.slice(gateStart, gateStart + 700);
     assert.match(block, /applyAnswerContract\(/);
     assert.match(block, /guard:\s*this\.wtaDiversityGuard/);
   });
 
+  test('an adopted prefetch (speculative reveal) is guarded too', () => {
+    // 2026-09-25: the most common Auto Answer path returned before the live
+    // path's guard, so an adopted prefetch was never checked nor recorded.
+    const start = src.indexOf('private revealSpeculativeAnswer(');
+    assert.ok(start > 0, 'revealSpeculativeAnswer present');
+    const body = src.slice(start, src.indexOf("this.emit('suggested_answer_token'", start));
+    assert.match(body, /isIntelligenceFlagEnabled\('answerDiversityGuard'\)/, 'flag-gated like the live path');
+    assert.match(body, /applyAnswerContract\(/, 'same facade as the live path when the run carried a plan');
+    assert.match(body, /guard: this\.wtaDiversityGuard/, 'same per-meeting guard');
+    assert.match(body, /this\.wtaDiversityGuard\.record\(/, 'no plan → record so the next answer is checked against it');
+  });
+
   test('a repetition-check trace mark is emitted regardless of whether a repair fired (observability)', () => {
-    const gateStart = src.indexOf("isIntelligenceFlagEnabled('answerDiversityGuard')");
+    const gateStart = src.indexOf("isIntelligenceFlagEnabled('answerDiversityGuard')", src.indexOf('private async runWhatShouldISayInner('));
     const block = src.slice(gateStart, gateStart + 1500);
     assert.match(block, /trace\.mark\('wta_diversity_guard_checked'/);
   });

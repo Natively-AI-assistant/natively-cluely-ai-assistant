@@ -171,7 +171,13 @@ export function wordsOf(text: string, options: WordsOfOptions = {}): string[] {
     // Remaining in-word apostrophes (contractions): drop them so the word stays
     // one token ("dont", "cant") rather than splitting into a dropped fragment.
     .replace(/['’]/g, '')
-    .replace(/[^a-z0-9\s-]/g, ' ')
+    // Keep letters, combining marks and digits of EVERY script (2026-09-22).
+    // This was `[^a-z0-9\s-]`, which turned a pure Hindi or Malayalam question
+    // into zero tokens, so ModeHybridRetriever.retrieve() short-circuited to its
+    // fallback before the (multilingual) embedder ever saw the query. Marks
+    // (\p{M}) must stay: Devanagari vowel signs and virama are combining marks,
+    // and dropping them splits a word mid-syllable. ASCII input is unchanged.
+    .replace(/[^\p{L}\p{M}\p{N}\s-]/gu, ' ')
     .split(/\s+/)
     .filter(shortNumerics ? keepToken : (word) => word.length > 2);
 

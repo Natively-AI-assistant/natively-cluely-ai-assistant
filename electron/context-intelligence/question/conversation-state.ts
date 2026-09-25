@@ -10,7 +10,8 @@
 // production, so on the rest a single fabrication becomes self-reinforcing.
 //
 // Two rules follow, and both are enforced here rather than in a prompt:
-//   1. State is SIZE-BOUNDED and reset on meeting change (§12.3).
+//   1. State is SIZE-BOUNDED and reset on meeting change (§12.3) — a change of
+//      CONVERSATION, not of one turn's evidence filter (see conversationKey).
 //   2. Prior assistant output is a REFERENT, never evidence. It can tell you what
 //      "it" refers to; it can never support a factual claim.
 
@@ -41,10 +42,26 @@ export interface HistoryTurn {
    * "what was in that screenshot?".
    */
   screen?: string;
+  /**
+   * Who asked. 'meeting' = a question HEARD in the meeting (what-to-answer and
+   * Auto Answer resolve it from the transcript, so it is usually the other
+   * party's line); absent = the user's own typed words. Rendering a heard
+   * question as "User:" would put the interviewer's words in the user's mouth.
+   */
+  from?: 'meeting';
 }
 
 export interface ConversationState {
   scopeId: string;
+  /**
+   * The CONVERSATION this state belongs to — `conversationKey(scope)` — as
+   * opposed to `scopeId`, the evidence scope of the latest turn. They differ
+   * only by the meetingId a turn carries as an evidence filter; see
+   * conversationKey for why that must not reset the history. Optional so a
+   * state written before this field existed is still readable (it falls back
+   * to the exact scopeId comparison).
+   */
+  conversationId?: string;
   activeTopic?: string;
   /**
    * The PERSON the conversation is about (deep-test D9, 2026-08-01). A single
@@ -115,9 +132,21 @@ export interface ConversationState {
 
 export const MAX_ENTITIES = 8;
 export const MAX_SUMMARY_CHARS = 280;
-/** Turns retained per scope. Legacy keeps 100; V3 keeps a bounded window
- *  because its state is also carried into the prompt every turn. */
-export const MAX_HISTORY_TURNS = 10;
+/** Turns retained per scope. Legacy keeps 100; V3 keeps a bounded window.
+ *
+ *  Was 10, which is a few minutes of an active meeting: measured live
+ *  (2026-09-24, tests/meeting-memory typed-long), facts the user typed early in
+ *  a 30-exchange session were evicted by count before anyone asked about them.
+ *  Retention and prompt cost are now separate decisions — what reaches the
+ *  prompt is bounded by the mode's conversation budget in renderHistory (newest
+ *  in full, older condensed), not by how many turns the ring keeps.
+ *
+ *  Was 40 (2026-09-24): an hour-long interview is ~120 exchanges, and the ring
+ *  is the ONLY record of typed chat, answers and screenshot analyses (the
+ *  meeting index holds speech). 400 covers a long session; renderHistory's
+ *  RECALL tier brings back the older exchanges a question is about. Worst case
+ *  ~4 MB per session (every turn at every cap), typically a few hundred KB. */
+export const MAX_HISTORY_TURNS = 400;
 /** Per-answer cap in the ring. Deliberately far above MAX_SUMMARY_CHARS (280),
  *  which truncated a screenshot description mid-sentence and dropped the
  *  details every follow-up then asked about. */
@@ -146,18 +175,35 @@ export const MAX_TURN_SCREEN_CHARS = 8000;
 export const SCREEN_TRUNCATION_MARKER =
   '\n[TRUNCATED: the rest of this screen transcription is NOT available. Do not infer or extrapolate anything from the missing part.]';
 
+/** Per-turn cap on the USER side of a history exchange.
+ *
+ *  This was MAX_SUMMARY_CHARS (280), a cap sized for a one-line referent. But
+ *  the user's message is the part of history that holds what they TOLD the
+ *  overlay, and people put context first and the ask last. Measured live
+ *  (2026-09-24, tests/meeting-memory): a 370-char context message was stored
+ *  as "...anything that sound", the go-live date at char ~390 never reached a
+ *  later prompt, and the only surviving mention was the assistant's own
+ *  "I don't have the 14 November deadline" — which the model then repeated
+ *  back, 3 runs out of 3. Same size as the answer cap: the two sides of an
+ *  exchange are worth the same room. */
+export const MAX_TURN_QUESTION_CHARS = 1200;
+
 /** Append a completed exchange, oldest-evicted. Pure; never mutates `turns`. */
 export function appendTurn(
-  turns: readonly HistoryTurn[], q: string, a: string, screen?: string,
+  turns: readonly HistoryTurn[], q: string, a: string, screen?: string, from?: HistoryTurn['from'],
 ): HistoryTurn[] {
-  const question = String(q ?? '').slice(0, MAX_SUMMARY_CHARS);
+  const rawQuestion = String(q ?? '');
+  // Marked when cut, so a truncated message never reads as the whole of it.
+  const question = rawQuestion.length > MAX_TURN_QUESTION_CHARS
+    ? `${rawQuestion.slice(0, MAX_TURN_QUESTION_CHARS)}…`
+    : rawQuestion;
   const answer = String(a ?? '').slice(0, MAX_TURN_ANSWER_CHARS);
   if (!question.trim() || !answer.trim()) return [...turns];
   const rawShot = String(screen ?? '').trim();
   const shot = rawShot.length > MAX_TURN_SCREEN_CHARS
     ? rawShot.slice(0, MAX_TURN_SCREEN_CHARS) + SCREEN_TRUNCATION_MARKER
     : rawShot;
-  return [...turns, { q: question, a: answer, ...(shot ? { screen: shot } : {}) }]
+  return [...turns, { q: question, a: answer, ...(shot ? { screen: shot } : {}), ...(from ? { from } : {}) }]
     .slice(-MAX_HISTORY_TURNS);
 }
 
@@ -191,6 +237,16 @@ export function extractEntities(text: string): string[] {
     const before = text.slice(0, idx);
     const sentenceInitial = /(^|[.!?]\s*)$/.test(before);
     if (sentenceInitial && SENTENCE_STARTERS.has(token.split(/\s+/)[0].toLowerCase())) continue;
+    // Any sentence's first word is capitalised, so that capital says nothing
+    // (2026-09-24). SENTENCE_STARTERS only knew question words, and live STT
+    // starts a segment mid-sentence: "Balance or do it layer 4 versus layer
+    // 7?" (from "load balancer") made "Balance" an entity, and the next
+    // question went out as "And why does it matter? (referring to: Balance)".
+    // A plain Titlecase word there counts only when the text also capitalises
+    // it mid-sentence; acronyms, CamelCase and two-word names keep their
+    // own signal.
+    if (sentenceInitial && /^[A-Z][a-z0-9]+$/.test(token)
+        && !new RegExp(String.raw`[^.!?\s]\s+${token}\b`).test(text)) continue;
     add(token);
   }
   for (const m of text.matchAll(/\b([a-z]+[A-Z]\w+|\w+\.\w+|\w+_\w+)\b/g)) add(m[1]);
@@ -298,9 +354,53 @@ export function extractPersonEntities(text: string): string[] {
   return out;
 }
 
+/**
+ * The shared session bucket used when a caller has no conversation scope of
+ * its own (no meeting, no sender). Re-exported by the store as
+ * NO_CONVERSATION_SCOPE; defined here because the identity rule below needs it
+ * and the store already depends on this module.
+ */
+export const SHARED_SESSION_BUCKET = 'engine';
+
+/**
+ * The identity of a CONVERSATION, which is not the evidence scope of one turn.
+ *
+ * Inside one meeting the evidence scope DRIFTS by design, because its
+ * meetingId is a retrieval filter (scopeAdmits admits JIT chunks only for the
+ * id the turn carries), not a name for the conversation:
+ *
+ *   typed chat, index not live yet   u:local|s:m:<session>
+ *   typed chat, index live           u:local|m:live-meeting-current|s:m:<session>
+ *   what-to-answer                   u:local|m:<session marker>|s:m:<session>
+ *
+ * `advance()` compared the full scope and reset on every one of those
+ * transitions. Measured live (2026-09-24, tests/meeting-memory): the ring held
+ * 7 turns, the JIT index came online, and the next turn saw 1 — everything the
+ * user had told the overlay was gone, a few messages into every meeting.
+ *
+ * A real session id already names the meeting (resolveConversationSessionId
+ * derives `m:<meeting>` for one, `s:<sender>` outside one), so under it the
+ * meetingId is dropped from the identity. Without a session id, or under the
+ * shared bucket, the meetingId IS the only meeting identity and stays in: a
+ * different meeting must still reset (§12.3; ConversationState.test's reversal
+ * corpus).
+ */
+export function conversationKey(scope: EvidenceScope): string {
+  const session = String(scope.sessionId ?? '').trim();
+  if (!session || session === SHARED_SESSION_BUCKET) return scopeKey(scope);
+  return scopeKey({ ...scope, meetingId: undefined });
+}
+
+/** Whether `scope` continues the conversation `state` was recorded in. */
+export function isSameConversation(state: ConversationState, scope: EvidenceScope): boolean {
+  if (state.scopeId === scopeKey(scope)) return true;
+  return state.conversationId !== undefined && state.conversationId === conversationKey(scope);
+}
+
 export function emptyState(scope: EvidenceScope): ConversationState {
   return {
     scopeId: scopeKey(scope),
+    conversationId: conversationKey(scope),
     activeEntities: [],
     turns: [],
     previousEvidenceIds: [],
@@ -344,18 +444,31 @@ const boundDecision = (d: PriorTurnDecision): PriorTurnDecision => ({
  */
 export function advance(prev: ConversationState | null, input: AdvanceInput): ConversationState {
   const sid = scopeKey(input.scope);
-  const base = prev && prev.scopeId === sid ? prev : emptyState(input.scope);
+  // Same CONVERSATION, not same evidence scope — see conversationKey.
+  const base = prev && isSameConversation(prev, input.scope) ? prev : emptyState(input.scope);
 
   const fresh = extractEntities(input.question);
-  const merged = [...new Set([...fresh, ...base.activeEntities])].slice(0, MAX_ENTITIES);
+  // A self-contained question moves the conversation on (2026-09-24): its
+  // subject may simply be one no extractor recognises ("How do you find a slow
+  // query in production?"), and keeping the older topic then points the next
+  // pronoun PAST the question it follows. Measured in a live interview:
+  // "Postgres" from an MVCC question survived ten questions of a coding
+  // problem, and "Can you write the code for it?" went out as "(referring to:
+  // Postgres)". Only a turn that itself leans on the conversation (a pronoun,
+  // a bare follow-up, a fragment) carries the topic and entities forward.
+  const carries = isReferentialTurn(input.question);
+  const merged = carries
+    ? [...new Set([...fresh, ...base.activeEntities])].slice(0, MAX_ENTITIES)
+    : fresh.slice(0, MAX_ENTITIES);
   const persons = extractPersonEntities(input.question);
 
   return {
     scopeId: sid,
+    conversationId: conversationKey(input.scope),
     // Lowercase topics ("quantum computing", "a mutex") fall back to phrase
     // extraction — capitalisation-gated entities alone left activeTopic empty
     // for exactly the questions whose follow-ups need resolving (Defect D).
-    activeTopic: fresh[0] ?? extractTopicPhrase(input.question) ?? base.activeTopic,
+    activeTopic: fresh[0] ?? extractTopicPhrase(input.question) ?? (carries ? base.activeTopic : undefined),
     // Sticky: a turn about a technology must not evict the person (D9).
     activePerson: persons[0] ?? base.activePerson,
     activeEntities: merged,
@@ -442,6 +555,17 @@ const NONREFERENTIAL_POSSESSIVE_RE = /\b(?:its|their)\s+own\b/gi;
  * instead?") while excluding any turn long enough to state its own subject.
  */
 const PRONOUN_RESOLUTION_MAX_WORDS = 12;
+
+/** Does this turn lean on the conversation for its subject? The same triggers
+ *  resolveReference answers to: a pronoun in a short turn, a bare follow-up, a
+ *  rephrase/refinement request, a continuation fragment. */
+function isReferentialTurn(question: string): boolean {
+  const q = String(question ?? '').trim();
+  const qForPronouns = q.replace(NONREFERENTIAL_POSSESSIVE_RE, ' ');
+  const shortTurn = q.split(/\s+/).filter(Boolean).length <= PRONOUN_RESOLUTION_MAX_WORDS;
+  return (shortTurn && (PERSONAL_PRONOUN_RE.test(qForPronouns) || NONPERSON_PRONOUN_RE.test(qForPronouns)))
+    || isBareFollowUp(q) || isResponseRequest(q) || isRefinementFollowUp(q) || isContinuationFragment(q);
+}
 
 /**
  * A QUOTED span is the strongest statement of subject a user can make.
@@ -653,7 +777,9 @@ export function resolveReference(
   //
   // Scope is OPTIONAL so callers that genuinely have none behave exactly as
   // before; only a caller that knows its scope gets the check.
-  if (scope && isRetrievalFixEnabled('referentScopeCheck') && state.scopeId !== scopeKey(scope)) {
+  // Conversation identity, the same rule advance() applies: a meetingId drift
+  // inside one session is not a scope change (see conversationKey).
+  if (scope && isRetrievalFixEnabled('referentScopeCheck') && !isSameConversation(state, scope)) {
     return { resolved: q, usedState: false, reason: 'SCOPE_CHANGED' };
   }
 
@@ -787,7 +913,15 @@ export function resolveReference(
 
   // No topic and no entity — a bare follow-up can still anchor to the previous
   // question itself ("Why not?" after "What is a mutex?").
-  if ((pronoun || bare) && state.previousQuestion) {
+  //
+  // Not on the strength of she/he alone (2026-09-24): a person is never a
+  // question. In a meeting "she" is usually the other speaker, and "What
+  // numbers did she give for the webhook service?" went out as a follow-up to
+  // the candidate's own last design answer — which the model then answered
+  // about, with the numbers sitting in its evidence. "What did he mean by
+  // that?" still anchors, on "that".
+  const nonPersonPronoun = shortTurn && NONPERSON_PRONOUN_RE.test(qForPronouns);
+  if ((nonPersonPronoun || bare) && state.previousQuestion) {
     return {
       resolved: `${q} (follow-up to: "${state.previousQuestion}")`,
       usedState: true,

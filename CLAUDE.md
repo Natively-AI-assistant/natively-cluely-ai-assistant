@@ -516,6 +516,37 @@ A test suite that only executes the current platform branch is insufficient for 
 
 ---
 
+## Agent UI testing via CDP
+
+Agents test renderer UI with agent-browser over CDP, not computer use.
+Before first use in a session, run: agent-browser skills get core
+and: agent-browser skills get electron
+
+Start an isolated instance per worktree with: npm run dev:agent
+dev:agent is a Node launcher (no shell scripts, must work on macOS and Windows).
+It must, only when !app.isPackaged:
+  pick a free CDP port, never 9222 or 9229
+  write a gitignored ./agent-browser.json with that port as "cdp"
+  and a worktree session id (agent-browser session id --scope worktree --prefix natively) as "session"
+  set userData to a worktree-local dir, skip the single-instance lock,
+  and use a per-worktree renderer dev server port
+
+Then, from the worktree root:
+  agent-browser tab                   # list targets; ids look like t1, t2
+  agent-browser tab t2                # switch by id or label, not integers
+  agent-browser snapshot -i
+  agent-browser console
+  agent-browser errors
+  agent-browser network requests
+Re-snapshot after every UI change; refs go stale.
+
+Never use --auto-connect. Stop the app through the launcher, not agent-browser close.
+Never enable the debugging port in packaged builds.
+
+Scope: renderer DOM, console and network only. Main process, IPC, native
+audio/capture, shortcuts, window levels, click-through and permissions still
+require physical macOS and Windows verification.
+
 ## Build and packaging validation
 
 When a change affects build or packaging configuration, inspect both:
@@ -651,3 +682,5 @@ When physical verification on the other operating system is unavailable:
 The operating system running Claude Code is an execution environment, not the scope of the product.
 
 Every change must be designed for Natively's complete supported platform surface: macOS and Windows.
+
+

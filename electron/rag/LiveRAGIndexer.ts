@@ -14,6 +14,13 @@ import { EmbeddingPipeline } from './EmbeddingPipeline';
 
 const INDEXING_INTERVAL_MS = 30_000;  // 30 seconds
 const MIN_NEW_SEGMENTS = 3;           // Don't chunk unless we have enough new content
+/** Chunks per embedding call. One call used to carry the whole new slice, so a
+ *  burst (a long pause, a parked tick) could exceed the pipeline's 30 s
+ *  timeout and fail as a unit. */
+const EMBED_BATCH_SIZE = 16;
+/** Upper bound on embedding calls in one tick, so a large retry backlog cannot
+ *  hold the indexer for minutes; the rest waits for the next tick. */
+const MAX_EMBED_BATCHES_PER_TICK = 8;
 
 export class LiveRAGIndexer {
     private vectorStore: VectorStore;
@@ -33,6 +40,24 @@ export class LiveRAGIndexer {
     private indexedSegmentCount = 0;  // High-water mark: segments already chunked
     private chunkCounter = 0;         // Running chunk index
     private indexedChunkCount = 0;    // Total chunks with embeddings
+    /**
+     * Saved chunks that still have no vector (2026-09-24). A failed or
+     * not-yet-ready embedding used to leave them unembedded for the rest of the
+     * meeting — the high-water mark moved on and nothing came back for them —
+     * so that stretch of speech was invisible to semantic search until the
+     * post-meeting re-index. They now wait here and are retried every tick.
+     */
+    private pendingEmbeds: Array<{ id: number; text: string }> = [];
+    /** Chunks with a vector in the current space — re-queued if the space changes. */
+    private embeddedChunks: Array<{ id: number; text: string }> = [];
+    /**
+     * The trailing QUESTION turn of the previous tick's slice. Each tick chunks
+     * only its own new speech, so a question asked just before a tick and its
+     * answer given just after it landed in different chunks — the split the
+     * exchange chunker exists to avoid. The question is re-chunked with the
+     * next slice (it also stays in its own chunk: overlap, not a move).
+     */
+    private questionCarry: RawSegment[] = [];
     private isProcessing = false;     // Guard against concurrent ticks
     /**
      * F-414: the promise of the tick currently in flight. stop()'s "final
@@ -68,6 +93,9 @@ export class LiveRAGIndexer {
         this.indexedSegmentCount = 0;
         this.chunkCounter = 0;
         this.indexedChunkCount = 0;
+        this.pendingEmbeds = [];
+        this.embeddedChunks = [];
+        this.questionCarry = [];
         this.isProcessing = false;
         this.isActive = true;
 
@@ -114,8 +142,10 @@ export class LiveRAGIndexer {
         // F-414: the batching threshold is a THROUGHPUT optimisation for the
         // periodic tick. Applying it to the final flush too meant a meeting
         // ending with 1-2 unindexed segments always lost them.
-        if (!force && newSegmentCount < MIN_NEW_SEGMENTS) return;  // Not enough new content
-        if (force && newSegmentCount <= 0) return;
+        // Pending embeddings are retried even when nobody has spoken since.
+        const hasPending = this.pendingEmbeds.length > 0;
+        if (!force && newSegmentCount < MIN_NEW_SEGMENTS && !hasPending) return;  // Not enough new content
+        if (force && newSegmentCount <= 0 && !hasPending) return;
 
         this.isProcessing = true;
         const meetingId = this.meetingId;
@@ -159,89 +189,125 @@ export class LiveRAGIndexer {
             const newSegments = this.allSegments.slice(sliceStart);
             const processedUpTo = sliceStart + newSegments.length;
 
-            // 2. Preprocess
-            const cleaned = preprocessTranscript(newSegments);
-            if (cleaned.length === 0) {
-                if (this.stillOwns(sessionToken)) this.indexedSegmentCount = processedUpTo;
-                return;
-            }
-
-            // 3. Chunk with offset index
-            const chunks = chunkTranscript(meetingId, cleaned);
-            if (chunks.length === 0) {
-                if (this.stillOwns(sessionToken)) this.indexedSegmentCount = processedUpTo;
-                return;
-            }
-
-            // Re-index chunks to continue from where we left off
-            const indexedChunks: Chunk[] = chunks.map((chunk, i) => ({
-                ...chunk,
-                chunkIndex: this.chunkCounter + i,
-            }));
-
-            // 4. Save chunks to DB (without embeddings initially)
-            const chunkIds = this.vectorStore.saveChunks(indexedChunks);
-            this.chunkCounter += indexedChunks.length;
-
-            console.log(`[LiveRAGIndexer] Saved ${indexedChunks.length} chunks (${this.chunkCounter} total) for meeting ${meetingId}`);
-
-            // 5. Embed the new chunks as one coherent batch. getEmbeddingsWithFallback()
-            // returns metadata from the SAME provider that produced the vectors, so a
-            // primary→fallback promotion cannot leave early chunks in the old space while
-            // the meeting is stamped with the new one.
-            if (this.embeddingPipeline.isReady()) {
-                // Foreground gate (manual regression 2026-06-12): yield to any
-                // in-flight manual/WTA answer before the synchronous DB writes below.
-                const { ForegroundGate } = require('../services/ForegroundGate') as typeof import('../services/ForegroundGate');
-                let embeddedCount = 0;
-                try {
-                    await ForegroundGate.waitUntilIdle();
-                    const { embeddings, space, provider, dimensions } = await this.embeddingPipeline.getEmbeddingsWithFallback(
-                        indexedChunks.map((chunk) => chunk.text)
-                    );
-                    // R-16b: the two awaits above park up to ~90s. If a newer session
-                    // claimed the indexer meanwhile, these chunk rows were already
-                    // purged by startLiveIndexing's F-411 delete, so storing them
-                    // writes vec0 rows resolving to nothing — and the stamps below
-                    // would describe THIS session's provider on the NEXT session's
-                    // meeting row (the live id is a constant, so it addresses both).
-                    if (!this.stillOwns(sessionToken)) {
-                        console.warn(
-                            `[LiveRAGIndexer] discarding a parked embedding batch for ${meetingId}: `
-                            + 'a newer live session owns the indexer.'
-                        );
-                        return;
-                    }
-                    // R-21: settle the meeting's embedding space BEFORE storing this
-                    // batch. Re-stamping now discards the old space's vectors, so
-                    // doing it afterwards would wipe the batch we just wrote.
-                    if (provider && space && dimensions
-                        && this.vectorStore.restampMeetingSpaceOnChange?.(meetingId, provider, dimensions, space)) {
-                        this.indexedChunkCount = 0;  // every prior chunk just lost its vector
-                    }
-                    for (let i = 0; i < chunkIds.length && i < embeddings.length; i++) {
-                        this.vectorStore.storeEmbedding(chunkIds[i], embeddings[i]);
-                        embeddedCount++;
-                    }
-                    if (embeddedCount > 0 && provider && space && dimensions) {
-                        this.vectorStore.stampMeetingSpaceIfUnset(meetingId, provider, dimensions, space);
-                    }
-                } catch (err) {
-                    console.warn(`[LiveRAGIndexer] Failed to embed live chunk batch for ${meetingId}:`, err);
+            // 2-4. Chunk and save any new speech; the chunks join the pending queue.
+            if (newSegments.length > 0) {
+                const toChunk = [...this.questionCarry, ...newSegments];
+                const cleaned = preprocessTranscript(toChunk);
+                // Carry this slice's trailing question turn into the next tick.
+                const lastTurn = cleaned[cleaned.length - 1];
+                if (lastTurn && (lastTurn.isQuestion || /\?\s*$/.test(lastTurn.text))) {
+                    const speaker = toChunk[toChunk.length - 1].speaker;
+                    let k = toChunk.length;
+                    while (k > 0 && toChunk[k - 1].speaker === speaker && toChunk.length - k < 3) k--;
+                    this.questionCarry = toChunk.slice(k);
+                } else {
+                    this.questionCarry = [];
                 }
-                if (this.stillOwns(sessionToken)) this.indexedChunkCount += embeddedCount;
-                console.log(`[LiveRAGIndexer] Embedded ${embeddedCount}/${chunkIds.length} chunks (${this.indexedChunkCount} total with embeddings)`);
-            } else {
-                console.log('[LiveRAGIndexer] Embedding pipeline not ready, chunks saved without embeddings');
+                const chunks = cleaned.length > 0 ? chunkTranscript(meetingId, cleaned) : [];
+                if (chunks.length > 0) {
+                    // Re-index chunks to continue from where we left off
+                    const indexedChunks: Chunk[] = chunks.map((chunk, i) => ({
+                        ...chunk,
+                        chunkIndex: this.chunkCounter + i,
+                    }));
+                    const chunkIds = this.vectorStore.saveChunks(indexedChunks);
+                    this.chunkCounter += indexedChunks.length;
+                    console.log(`[LiveRAGIndexer] Saved ${indexedChunks.length} chunks (${this.chunkCounter} total) for meeting ${meetingId}`);
+                    for (let i = 0; i < chunkIds.length; i++) {
+                        this.pendingEmbeds.push({ id: chunkIds[i], text: indexedChunks[i].text });
+                    }
+                }
+                // Advance the high-water mark — to what this tick actually
+                // processed (see the sliceStart note above), not to the live
+                // length, so segments appended mid-tick are picked up next time.
+                // The chunks are SAVED now; embedding them is the pending
+                // queue's job, so a failed embedding no longer loses them.
+                if (this.stillOwns(sessionToken)) this.indexedSegmentCount = processedUpTo;
             }
 
-            // 6. Advance high-water mark — to what this tick actually
-            //    processed (see the sliceStart note above), not to the live
-            //    length, so segments appended mid-tick are picked up next time.
-            if (this.stillOwns(sessionToken)) this.indexedSegmentCount = processedUpTo;
+            // 5. Embed what is pending, in small batches.
+            await this.embedPending(meetingId, sessionToken);
 
         } catch (err) {
             console.error('[LiveRAGIndexer] Processing error:', err);
+        }
+    }
+
+    /**
+     * Embed pending chunks, EMBED_BATCH_SIZE at a time. A batch that fails (or a
+     * pipeline that is not ready) leaves its chunks queued for the next tick.
+     * getEmbeddingsWithFallback() returns metadata from the SAME provider that
+     * produced the vectors, so a primary→fallback promotion cannot leave early
+     * chunks in the old space while the meeting is stamped with the new one.
+     */
+    private async embedPending(meetingId: string, sessionToken: number): Promise<void> {
+        if (this.pendingEmbeds.length === 0) return;
+        if (!this.embeddingPipeline.isReady()) {
+            console.log(`[LiveRAGIndexer] Embedding pipeline not ready — ${this.pendingEmbeds.length} chunk(s) wait for the next tick`);
+            return;
+        }
+        // Foreground gate (manual regression 2026-06-12): yield to any
+        // in-flight manual/WTA answer before the synchronous DB writes below.
+        const { ForegroundGate } = require('../services/ForegroundGate') as typeof import('../services/ForegroundGate');
+        for (let n = 0; n < MAX_EMBED_BATCHES_PER_TICK && this.pendingEmbeds.length > 0; n++) {
+            const batch = this.pendingEmbeds.slice(0, EMBED_BATCH_SIZE);
+            let embeddedCount = 0;
+            try {
+                await ForegroundGate.waitUntilIdle();
+                // E2E-only fault injection (NATIVELY_E2E=1, set by __e2e__:fail-live-embeds):
+                // lets the live harness prove the retry path on real meeting traffic.
+                if (process.env.NATIVELY_E2E === '1') {
+                    const g = globalThis as unknown as { __nativelyE2eFailLiveEmbeds?: number };
+                    if ((g.__nativelyE2eFailLiveEmbeds ?? 0) > 0) {
+                        g.__nativelyE2eFailLiveEmbeds = (g.__nativelyE2eFailLiveEmbeds ?? 0) - 1;
+                        throw new Error('E2E injected embedding failure');
+                    }
+                }
+                const { embeddings, space, provider, dimensions } = await this.embeddingPipeline.getEmbeddingsWithFallback(
+                    batch.map((c) => c.text)
+                );
+                // R-16b: the two awaits above park up to ~90s. If a newer session
+                // claimed the indexer meanwhile, these chunk rows were already
+                // purged by startLiveIndexing's F-411 delete, so storing them
+                // writes vec0 rows resolving to nothing — and the stamps below
+                // would describe THIS session's provider on the NEXT session's
+                // meeting row (the live id is a constant, so it addresses both).
+                if (!this.stillOwns(sessionToken)) {
+                    console.warn(
+                        `[LiveRAGIndexer] discarding a parked embedding batch for ${meetingId}: `
+                        + 'a newer live session owns the indexer.'
+                    );
+                    return;
+                }
+                // R-21: settle the meeting's embedding space BEFORE storing this
+                // batch. Re-stamping now discards the old space's vectors, so
+                // doing it afterwards would wipe the batch we just wrote. The
+                // chunks those vectors belonged to go back on the queue, so they
+                // are searchable again in the new space.
+                if (provider && space && dimensions
+                    && this.vectorStore.restampMeetingSpaceOnChange?.(meetingId, provider, dimensions, space)) {
+                    this.indexedChunkCount = 0;
+                    this.pendingEmbeds.push(...this.embeddedChunks);
+                    this.embeddedChunks = [];
+                }
+                for (let i = 0; i < batch.length && i < embeddings.length; i++) {
+                    this.vectorStore.storeEmbedding(batch[i].id, embeddings[i]);
+                    embeddedCount++;
+                }
+                if (embeddedCount > 0 && provider && space && dimensions) {
+                    this.vectorStore.stampMeetingSpaceIfUnset(meetingId, provider, dimensions, space);
+                }
+                const done = batch.slice(0, embeddedCount);
+                const doneIds = new Set(done.map((c) => c.id));
+                this.pendingEmbeds = this.pendingEmbeds.filter((c) => !doneIds.has(c.id));
+                this.embeddedChunks.push(...done);
+                this.indexedChunkCount += embeddedCount;
+                console.log(`[LiveRAGIndexer] Embedded ${embeddedCount}/${batch.length} chunks (${this.indexedChunkCount} total with embeddings, ${this.pendingEmbeds.length} pending)`);
+                if (embeddedCount < batch.length) break;  // a short response: retry the rest next tick
+            } catch (err) {
+                console.warn(`[LiveRAGIndexer] Failed to embed live chunk batch for ${meetingId} — ${this.pendingEmbeds.length} chunk(s) stay queued for the next tick:`, err);
+                break;
+            }
         }
     }
 
@@ -292,6 +358,9 @@ export class LiveRAGIndexer {
         this.indexedSegmentCount = 0;
         this.chunkCounter = 0;
         this.indexedChunkCount = 0;
+        this.pendingEmbeds = [];
+        this.embeddedChunks = [];
+        this.questionCarry = [];
 
         console.log(`[LiveRAGIndexer] Stopped for meeting ${meetingId}`);
     }
@@ -308,6 +377,16 @@ export class LiveRAGIndexer {
      */
     getIndexedChunkCount(): number {
         return this.indexedChunkCount;
+    }
+
+    /** Saved chunks still waiting for a vector (retried every tick). */
+    getPendingEmbedCount(): number {
+        return this.pendingEmbeds.length;
+    }
+
+    /** Chunks saved so far this session. */
+    getSavedChunkCount(): number {
+        return this.chunkCounter;
     }
 
     /**

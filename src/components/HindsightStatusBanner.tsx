@@ -12,7 +12,7 @@
 // otherwise be invisible until the user opens Settings.
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { GenieModal } from './ui/GenieModal';
 import { AlertTriangle, ExternalLink, X } from 'lucide-react';
 
 type HindsightStatus =
@@ -29,6 +29,13 @@ const STATUS_BODY: Record<'spawn-failed' | 'unreachable' | 'spawning' | 'auth-fa
   'spawning':       { title: 'Starting long-term memory…',              body: 'First boot can take 2–3 minutes (downloading embedding models).' },
   'auth-failed':    { title: 'Hindsight Cloud key was rejected',       body: 'The endpoint answered but your Cloud account key is invalid. Update the key below.' },
 };
+
+/** A short, stable tag for a string (djb2), so a picture key names a reason without holding it. */
+function hashOf(text: string): string {
+  let h = 5381;
+  for (let i = 0; i < text.length; i++) h = ((h << 5) + h + text.charCodeAt(i)) | 0;
+  return text ? (h >>> 0).toString(36) : '';
+}
 
 export const HindsightStatusBanner: React.FC<{ variant?: 'top-strip' | 'floating-card' }> = ({ variant = 'top-strip' }) => {
   const [status, setStatus] = useState<HindsightStatus | null>(null);
@@ -64,20 +71,10 @@ export const HindsightStatusBanner: React.FC<{ variant?: 'top-strip' | 'floating
     }
   }, []);
 
-  // Don't render anything on success states or when dismissed.
-  if (!status || status.state === 'ready' || dismissed) return null;
-  const copy = STATUS_BODY[status.state];
-  if (!copy) return null;
-
-  // Bug 3: the overlay/meeting window (top-strip variant) must NEVER surface
-  // Hindsight lifecycle failures during a meeting — the floating-card belongs
-  // exclusively to the launcher. Settings chip + post-call floating card are
-  // the launcher-resident surfaces; the overlay mount returns null here so
-  // the line-802 mount in App.tsx becomes a no-op for any non-ready state.
-  if (variant === 'top-strip') return null;
+  const copy = status && status.state !== 'ready' ? STATUS_BODY[status.state] : undefined;
 
   // Spawning: neutral (working) — smaller, less alarming. Failures: amber, with action.
-  const isFailing = status.state === 'spawn-failed' || status.state === 'unreachable' || status.state === 'auth-failed';
+  const isFailing = status?.state === 'spawn-failed' || status?.state === 'unreachable' || status?.state === 'auth-failed';
 
   // Floating card (launcher window only). Near-opaque surface with no backdrop
   // blur — it was rgba(26,26,30,0.55) + blur(28px) saturate(180%), and the blur
@@ -96,31 +93,42 @@ export const HindsightStatusBanner: React.FC<{ variant?: 'top-strip' | 'floating
   //   - Position: fixed bottom-7 right-7 z-9999 width: 360px
   // Amber failure cue: tinted glow + icon recolor; the chrome stays in family
   // with the rest of the launcher onboarding toasters.
+  //
+  // It opens and closes with the genie, as a notice rather than a modal: no
+  // dim, the launcher stays usable around it. It stays mounted so the close
+  // can play. Its picture is keyed by what it says, the state and the reason
+  // (hashed: a reason can carry a path, and keys are stored in the clear), so
+  // "Starting long-term memory…", shown on every launch that auto-starts the
+  // server, pours out its own picture, and a new failure never pours out an
+  // old one.
   if (variant === 'floating-card') {
+    const open = !!status && !!copy && !dismissed;
+    const view = status ? `${status.state}|${hashOf(status.reason ?? '')}` : undefined;
+    const shadow = isFailing
+      ? '0 24px 80px -16px rgba(0,0,0,0.55), 0 0 80px rgba(245,158,11,0.14), inset 0 1px 0 rgba(255,255,255,0.18)'
+      : '0 24px 80px -16px rgba(0,0,0,0.55), 0 0 80px rgba(255,255,255,0.02), inset 0 1px 0 rgba(255,255,255,0.18)';
     return (
-      <AnimatePresence>
-        {!dismissed && (
-          <motion.div
-            key="hindsight-floating-card"
-            role="status"
-            aria-live="polite"
-            initial={{ opacity: 0, scale: 0.93, y: 22 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 14 }}
-            transition={{ type: 'spring', stiffness: 290, damping: 25, mass: 0.82 }}
-            style={{
-              position: 'fixed', bottom: 28, right: 28, zIndex: 9999,
-              width: 360,
-              borderRadius: 24,
-              background: 'rgba(26, 26, 30, 0.94)',
-              boxShadow: isFailing
-                ? '0 24px 80px -16px rgba(0,0,0,0.55), 0 0 80px rgba(245,158,11,0.14), inset 0 1px 0 rgba(255,255,255,0.18)'
-                : '0 24px 80px -16px rgba(0,0,0,0.55), 0 0 80px rgba(255,255,255,0.02), inset 0 1px 0 rgba(255,255,255,0.18)',
-              padding: 20,
-              pointerEvents: 'auto',
-              fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
-            } as React.CSSProperties}
-          >
+      <GenieModal
+        open={open}
+        label="HindsightStatusBanner"
+        modal={false}
+        placement="bottom-right"
+        openingView={view}
+        zIndex={9999}
+        padding={28}
+        wrapStyle={{ width: 360 }}
+        cardProps={{ role: 'status', 'aria-live': 'polite', 'data-genie-view': view }}
+        cardStyle={{
+          background: 'rgba(26, 26, 30, 0.94)',
+          boxShadow: shadow,
+          padding: 20,
+          fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
+        }}
+        shadow={shadow}
+        radius={24}
+      >
+        {open && status && copy ? (
+          <>
             {/* Fine organic grain — verbatim from TrialPromoToaster */}
             <div aria-hidden style={{
               position: 'absolute', inset: 0, borderRadius: 24, pointerEvents: 'none', zIndex: 0,
@@ -201,11 +209,22 @@ export const HindsightStatusBanner: React.FC<{ variant?: 'top-strip' | 'floating
                 </div>
               ) : null}
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          </>
+        ) : null}
+      </GenieModal>
     );
   }
+
+  // Don't render anything on success states or when dismissed.
+  if (!status || status.state === 'ready' || dismissed) return null;
+  if (!copy) return null;
+
+  // Bug 3: the overlay/meeting window (top-strip variant) must NEVER surface
+  // Hindsight lifecycle failures during a meeting — the floating-card belongs
+  // exclusively to the launcher. Settings chip + post-call floating card are
+  // the launcher-resident surfaces; the overlay mount returns null here so
+  // the line-802 mount in App.tsx becomes a no-op for any non-ready state.
+  if (variant === 'top-strip') return null;
 
   const borderClass = isFailing ? 'border-amber-500/40' : 'border-border-subtle';
   const bgClass = isFailing ? 'bg-amber-500/10' : 'bg-bg-item-surface';

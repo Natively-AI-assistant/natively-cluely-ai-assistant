@@ -162,8 +162,11 @@ export class IntelligenceManager extends EventEmitter {
     }
 
     /** Current meeting's full finalized transcript (for in-meeting search, Phase 10). */
-    getCurrentMeetingTranscript(): Array<{ speaker: string; text: string; timestamp: number }> {
-        return this.session.getFullTranscript().map(s => ({ speaker: s.speaker, text: s.text, timestamp: s.timestamp }));
+    getCurrentMeetingTranscript(): Array<{ speaker: string; text: string; timestamp: number; origin?: string }> {
+        // `origin` rides along so the live-transcript evidence can tell a line
+        // the user SAID from one they TYPED into the overlay (typed chat is
+        // echoed into the transcript as speaker 'user', origin 'manual_chat').
+        return this.session.getFullTranscript().map(s => ({ speaker: s.speaker, text: s.text, timestamp: s.timestamp, ...(s.origin ? { origin: s.origin } : {}) }));
     }
 
     logUsage(type: string, question: string, answer: string): void {
@@ -329,7 +332,15 @@ export class IntelligenceManager extends EventEmitter {
     // ============================================
 
     async stopMeeting(): Promise<{ meetingId: string; memoryEligibleCount: number } | null> {
-        return this.persistence.stopMeeting();
+        try {
+            return await this.persistence.stopMeeting();
+        } finally {
+            this.engine.endMeetingConversation();
+        }
+    }
+
+    beginMeetingConversation(id: string): void {
+        this.engine.beginMeetingConversation(id);
     }
 
     async recoverUnprocessedMeetings(): Promise<void> {
@@ -337,7 +348,7 @@ export class IntelligenceManager extends EventEmitter {
     }
 
     /** Regenerate V3 notes for a saved meeting (optionally with a different mode/tone). */
-    async regenerateMeetingSummary(meetingId: string, opts?: { templateType?: string; tone?: 'professional' | 'warm' | 'concise' | 'friendly' }): Promise<boolean> {
+    async regenerateMeetingSummary(meetingId: string, opts?: { templateType?: string; modeId?: string; tone?: 'professional' | 'warm' | 'concise' | 'friendly' }): Promise<boolean> {
         return this.persistence.regenerateSavedMeeting(meetingId, opts);
     }
 

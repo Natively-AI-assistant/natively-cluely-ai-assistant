@@ -1,6 +1,6 @@
 {
   "name": "natively",
-  "version": "2.9.0",
+  "version": "2.9.1",
   "main": "dist-electron/electron/main.js",
   "engines": {
     "node": ">=22.6.0"
@@ -25,6 +25,7 @@
     "electron:dev": "npm run build && npm run build:electron && cross-env NODE_ENV=development electron .",
     "electron:build": "npm run build:electron && cross-env NODE_ENV=production electron .",
     "app:dev": "concurrently --kill-others --kill-signal SIGKILL \"npm run dev -- --host 127.0.0.1 --port 5180 --strictPort\" \"wait-on http://127.0.0.1:5180 && npm run electron:dev\"",
+    "dev:agent": "node scripts/dev-agent.mjs",
     "app:build": "npm run build && npm run typecheck:electron && npm run build:electron && cross-env NATIVELY_BUILD_ALL_MAC_ARCHES=1 npm run build:native && node scripts/ensure-sharp-mac-deps.js && node scripts/ensure-napi-canvas-mac-deps.js && node scripts/ensure-sqlite-vec.js && npm run verify:packaged-local-assets && node scripts/package-app.js",
     "app:build:signed": "node scripts/preflight-notary.cjs && npm run build && npm run typecheck:electron && npm run build:electron && cross-env NATIVELY_BUILD_ALL_MAC_ARCHES=1 npm run build:native && node scripts/ensure-sharp-mac-deps.js && node scripts/ensure-napi-canvas-mac-deps.js && node scripts/ensure-sqlite-vec.js && npm run verify:packaged-local-assets && node scripts/package-app.js --config electron-builder.signed.cjs",
     "watch": "node scripts/build-electron.js --watch",
@@ -33,14 +34,15 @@
     "dist:signed": "npm run app:build:signed && node scripts/upload-release.mjs",
     "build:native": "node scripts/build-native.js",
     "test": "npm run build:electron && node scripts/run-with-env.mjs --default-tmpdir NATIVELY_TEST_USERDATA=natively-test-userdata --default-tmpdir CODEX_HOME=natively-test-codex-home --set ELECTRON_RUN_AS_NODE=1 -- electron --test \"electron/services/__tests__/**/*.test.mjs\" \"electron/services/extensions/__tests__/**/*.test.mjs\" \"electron/intelligence/autoAnswer/__tests__/**/*.test.mjs\" \"electron/lib/__tests__/**/*.test.mjs\" \"electron/llm/__tests__/**/*.test.mjs\" \"electron/llm/codeVerification/__tests__/**/*.test.mjs\" \"electron/audio/__tests__/**/*.test.mjs\" \"electron/audio/whisper/__tests__/**/*.test.mjs\" \"electron/audio/whisper/nemotron/__tests__/**/*.test.mjs\" \"electron/rag/__tests__/**/*.test.mjs\" \"electron/utils/__tests__/**/*.test.mjs\" \"electron/update/**/*.test.mjs\"",
-    "test:auto-answer": "npm run build:electron && node --test \"electron/intelligence/autoAnswer/__tests__/**/*.test.mjs\"",
+    "test:auto-answer": "npm run build:electron && node scripts/run-with-env.mjs --default-tmpdir NATIVELY_TEST_USERDATA=natively-auto-answer-test-userdata --default-tmpdir CODEX_HOME=natively-auto-answer-test-codex-home --set ELECTRON_RUN_AS_NODE=1 -- electron --test \"electron/intelligence/autoAnswer/__tests__/**/*.test.mjs\"",
     "test:auto-answer:judge": "npm run build:electron && node electron/intelligence/autoAnswer/__tests__/judgeEval.mjs",
     "test:intelligence": "npm run build:electron && node --test \"electron/intelligence/__tests__/**/*.test.mjs\" \"electron/context-intelligence/__tests__/**/*.test.mjs\"",
     "test:core-smoke": "node --test \"electron/llm/__tests__/DirectAssistCore2026_08_29.test.mjs\" \"electron/services/__tests__/DirectAssistIpcBridge2026_08_29.test.mjs\" \"electron/services/__tests__/ScreenshotOutranksTextDecline2026_08_19.test.mjs\" \"electron/services/__tests__/SsrfProtection.test.mjs\" \"electron/context-intelligence/__tests__/AnswerTrace.test.mjs\" \"electron/context-intelligence/__tests__/LegacyTrace.test.mjs\" \"electron/context-intelligence/__tests__/ScreenCodeAskCodingTask2026_08_05.test.mjs\" \"electron/audio/__tests__/AppleSpeechSTT.test.mjs\" \"electron/services/__tests__/SttAwaitingAudioInitialState.test.mjs\"",
     "test:lib": "node --experimental-strip-types --test \"src/lib/**/__tests__/**/*.test.mjs\"",
+    "test:components": "node --experimental-strip-types --test \"src/components/**/__tests__/**/*.test.mjs\"",
     "test:scripts": "node --test \"scripts/__tests__/**/*.test.mjs\"",
     "test:company-research-spend": "npm run build:electron && node --test premium/electron/knowledge/__tests__/CompanyResearchForceRefresh2026_09_21.test.mjs src/components/__tests__/CompanyResearchCtaWiring2026_09_21.test.mjs",
-    "test:ci": "npm run typecheck:electron && npm run build && npm test && npm run test:intelligence && npm run test:lib && npm run test:scripts && npm run test:company-research-spend",
+    "test:ci": "npm run typecheck:electron && npm run build && npm test && npm run test:intelligence && npm run test:lib && npm run test:components && npm run test:scripts && npm run test:company-research-spend",
     "test:modes": "npm run build:electron && node --test \"electron/services/__tests__/Mode*.test.mjs\" electron/services/__tests__/ProfileIntelligenceGate.test.mjs electron/services/__tests__/NativelyApiE2E.test.mjs",
     "test:modes:no-build": "node --test \"electron/services/__tests__/Mode*.test.mjs\" electron/services/__tests__/ProfileIntelligenceGate.test.mjs electron/services/__tests__/NativelyApiE2E.test.mjs",
     "test:modes:collect-fixtures": "cross-env RUN_INTERNET_FIXTURE_COLLECTION=1 node --test electron/services/__tests__/ModeFixtureIntegrity.test.mjs",
@@ -48,7 +50,7 @@
     "test:realtime-prompt": "npm run build:electron && cross-env ELECTRON_RUN_AS_NODE=1 electron tests/realtime-prompt/e2e-wiring.cjs && cross-env ELECTRON_RUN_AS_NODE=1 electron tests/realtime-prompt/e2e-wiring.cjs --v3=0 && cross-env ELECTRON_RUN_AS_NODE=1 electron tests/realtime-prompt/e2e-typed-chat.cjs",
     "test:realtime-prompt:live": "npm run build:electron && cross-env RUN_REALTIME_PROMPT_LIVE=1 ELECTRON_RUN_AS_NODE=1 electron tests/realtime-prompt/live-e2e.cjs",
     "test:modes:long": "node --test electron/services/__tests__/ModeLongSession.test.mjs",
-    "test:css": "npm run test:css:table && npm run test:css:resize-handle && npm run test:css:split-audio-select && npm run test:css:undetectable-ring && npm run test:css:cta-liquid-glass && npm run test:css:pricing-liquid-glass && npm run test:css:clear-variant && npm run test:css:thinking-label",
+    "test:css": "npm run test:css:table && npm run test:css:resize-handle && npm run test:css:split-audio-select && npm run test:css:undetectable-ring && npm run test:css:cta-liquid-glass && npm run test:css:pricing-liquid-glass && npm run test:css:clear-variant && npm run test:css:thinking-label && npm run test:css:bubble-liquid-glass",
     "test:css:table": "electron tests/css/table-scrollbar.check.mjs",
     "test:css:resize-handle": "electron tests/css/resize-handle-cursor.check.mjs",
     "test:css:split-audio-select": "electron tests/css/split-audio-model-select.check.mjs",
@@ -120,7 +122,8 @@
     "test:css:cta-liquid-glass": "electron tests/css/cta-liquid-glass.check.mjs",
     "test:css:clear-variant": "electron tests/css/clear-variant-liquid-glass.check.mjs",
     "test:css:thinking-label": "electron tests/css/thinking-label.check.mjs",
-    "test:css:pricing-liquid-glass": "electron tests/css/pricing-liquid-glass.check.mjs"
+    "test:css:pricing-liquid-glass": "electron tests/css/pricing-liquid-glass.check.mjs",
+    "test:css:bubble-liquid-glass": "electron tests/css/bubble-liquid-glass.check.mjs"
   },
   "build": {
     "generateUpdatesFilesForAllChannels": true,
@@ -186,8 +189,8 @@
         "from": "resources/models/",
         "to": "models/",
         "filter": [
-          "Xenova/all-MiniLM-L6-v2/**",
           "Xenova/ms-marco-MiniLM-L-6-v2/**",
+          "Xenova/multilingual-e5-small/**",
           "pipecat-ai/**"
         ]
       }
@@ -210,7 +213,7 @@
           ]
         }
       ],
-      "icon": "assets/natively.icns",
+      "icon": "assets/Natively.icon",
       "identity": null,
       "hardenedRuntime": false,
       "extendInfo": {

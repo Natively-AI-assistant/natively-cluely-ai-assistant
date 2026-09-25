@@ -46,6 +46,10 @@ const {
   writeLoadSentinel,
   clearLoadSentinel,
 } = await import(pathToFileURL(preloaderPath).href);
+// Launch identity is process-global (shared across inlined bundle copies), so
+// the seam from the standalone module also rotates modelPreloader.js's view.
+const { __simulateNewLaunchForTests } = await import(pathToFileURL(path.resolve(
+  __dirname, '../../../dist-electron/electron/utils/onnxLoadSentinel.js')).href);
 
 function sentinelPath() {
   return path.join(userData, 'onnx-load-sentinel-whisper.json');
@@ -59,6 +63,9 @@ test('write → consume returns the model id and records a cooldown', () => {
   clearLoadSentinel();
   writeLoadSentinel('distil-whisper/distil-medium.en');
   assert.ok(fs.existsSync(sentinelPath()), 'sentinel file should exist after write');
+  // Models the PREVIOUS launch dying mid-load: consume as the next launch.
+  // Since 2026-09-22 a launch never reports its own in-flight record.
+  __simulateNewLaunchForTests();
   const poisoned = modelPreloader.consumePoisonedLoadSentinel();
   assert.ok(poisoned, 'consume should return a sentinel');
   assert.equal(poisoned.modelId, 'distil-whisper/distil-medium.en');
@@ -85,6 +92,9 @@ test('repeated writes for the same model increment attempt', () => {
   writeLoadSentinel('onnx-community/moonshine-base-ONNX');
   writeLoadSentinel('onnx-community/moonshine-base-ONNX');
   writeLoadSentinel('onnx-community/moonshine-base-ONNX');
+  // Models the PREVIOUS launch dying mid-load: consume as the next launch.
+  // Since 2026-09-22 a launch never reports its own in-flight record.
+  __simulateNewLaunchForTests();
   const poisoned = modelPreloader.consumePoisonedLoadSentinel();
   assert.ok(poisoned);
   assert.equal(poisoned.modelId, 'onnx-community/moonshine-base-ONNX');
@@ -103,6 +113,9 @@ test('clearLoadSentinel(modelId) does not clobber a different model\'s sentinel'
 test('consumePoisonedLoadSentinel is idempotent', () => {
   clearLoadSentinel();
   writeLoadSentinel('Xenova/whisper-small.en');
+  // Models the PREVIOUS launch dying mid-load: consume as the next launch.
+  // Since 2026-09-22 a launch never reports its own in-flight record.
+  __simulateNewLaunchForTests();
   const first = modelPreloader.consumePoisonedLoadSentinel();
   assert.ok(first);
   const second = modelPreloader.consumePoisonedLoadSentinel();

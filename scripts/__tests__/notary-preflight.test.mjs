@@ -14,6 +14,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const { decidePreflight, checkNotaryReachable, NOTARY_HOST } = require('../lib/notary-preflight.cjs');
@@ -275,7 +276,10 @@ describe('notary-defaults', () => {
     const out = execFileSync(
       process.execPath,
       ['-e', "require('./electron-builder.signed.cjs');console.log(process.env.APPLE_KEYCHAIN_PROFILE+' '+process.env.APPLE_TEAM_ID)"],
-      { cwd: new URL('../..', import.meta.url).pathname, encoding: 'utf8' }
+      // fileURLToPath, never .pathname: on Windows the latter yields
+      // "/D:/repo" (leading slash), which is not a directory that exists, so
+      // spawnSync fails the whole job with a bare ENOENT naming node.exe.
+      { cwd: fileURLToPath(new URL('../..', import.meta.url)), encoding: 'utf8' }
     ).trim();
     assert.equal(out, `${DEFAULT_KEYCHAIN_PROFILE} ${DEFAULT_TEAM_ID}`);
   });

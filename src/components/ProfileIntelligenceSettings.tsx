@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { ThinkingOrb } from 'thinking-orbs';
 import { useToggleInit } from './settings/useToggleInit';
-import { PremiumUpgradeModal, RoleInsightPanel } from '../premium';
+import { RoleInsightPanel } from '../premium';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { useLensTracking } from '../ui-components/LiquidGlassButton';
 import { truncateResumeSummary } from '../utils/resumeSummary.mjs';
@@ -1917,9 +1917,16 @@ function ProfileIntelligenceProGate({ onOpenNativelyAPI, onClose }: {
 // ─── Main export ──────────────────────────────────────────────────────────────
 export function ProfileIntelligenceSettings({
     onClose,
+    isTrialActive = false,
     onOpenNativelyAPI,
 }: {
     onClose: () => void;
+    /** An unexpired free trial grants the same access a Pro licence does. Owned by
+     *  App (the `trial-started` / `trial-ended` events), exactly as ModesSettings
+     *  receives it — this panel used to hardcode it to false, so a trial user was
+     *  shown the Unlock-Pro gate on every Profile Intelligence surface even though
+     *  main's own `isProOrTrialActive()` would have served every one of them. */
+    isTrialActive?: boolean;
     onOpenNativelyAPI?: () => void;
 }) {
     const cachedPremium = readPremiumCache();
@@ -1928,8 +1935,10 @@ export function ProfileIntelligenceSettings({
     const piToggleInit = useToggleInit();
     const [isPremium, setIsPremium] = useState(cachedPremium.isPremium);
     const [premiumPlan, setPremiumPlan] = useState<string>(cachedPremium.plan);
-    const [isTrialActive] = useState(false);
-    const [isPremiumModalOpen, setIsPremiumModalOpen] = useState(false);
+    // Upgrading, entering a licence key and managing Pro all live in Settings →
+    // Plans & Billing. The manager hands over to it (App's openSettingsExclusive
+    // closes this panel), and the licence is read again on the next mount.
+    const openPlans = () => onOpenNativelyAPI?.();
     const [licenseLoaded, setLicenseLoaded] = useState(false);
     const hasProfileAccess = isPremium || isTrialActive;
     const theme = useResolvedTheme();
@@ -1968,6 +1977,9 @@ export function ProfileIntelligenceSettings({
         extractionMode?: 'llm' | 'heuristic' | 'none';
     }>({ hasProfile: false, profileMode: false });
     const [profileUploading, setProfileUploading] = useState(false);
+    // The genie keeps a picture of this card to pour out on the next open
+    // (genieSnapshots.ts); it must never picture it half-loaded.
+    const [statusLoaded, setStatusLoaded] = useState(false);
     const [profileUploadStatus, setProfileUploadStatus] = useState<string | undefined>(undefined);
     const [profileError, setProfileError] = useState('');
     // Nothing sets `cancelled` any more — the X button used to, but that only
@@ -2109,7 +2121,7 @@ export function ProfileIntelligenceSettings({
             if (status?.resume_indexing_in_flight || status?.jd_indexing_in_flight) {
                 setAdoptTick(t => t + 1);
             }
-        }).catch(() => {});
+        }).catch(() => {}).finally(() => setStatusLoaded(true));
         window.electronAPI?.profileGetProfile?.().then((data: any) => {
             setProfileData(data);
             if (data?.coverLetter) setCoverLetter(data.coverLetter);
@@ -2357,14 +2369,14 @@ export function ProfileIntelligenceSettings({
     // FileUploadEmpty stays: it also decides the "Requires Pro." hint, so it is
     // doing UI work, not just guarding — and a double gate here is idempotent.
     const browseResume = async () => {
-        if (!hasProfileAccess) { setIsPremiumModalOpen(true); return; }
+        if (!hasProfileAccess) { openPlans(); return; }
         const fileResult = await window.electronAPI?.profileSelectFile?.();
         if (fileResult?.cancelled || !fileResult?.filePath) return;
         await doResumeUpload(fileResult.filePath);
     };
 
     const browseJD = async () => {
-        if (!hasProfileAccess) { setIsPremiumModalOpen(true); return; }
+        if (!hasProfileAccess) { openPlans(); return; }
         const fileResult = await window.electronAPI?.profileSelectFile?.();
         if (fileResult?.cancelled || !fileResult?.filePath) return;
         await doJdUpload(fileResult.filePath);
@@ -2471,7 +2483,7 @@ export function ProfileIntelligenceSettings({
                     hint="Add your resume as real-time context."
                     hasAccess={hasProfileAccess}
                     onBrowse={browseResume}
-                    onNeedUpgrade={() => setIsPremiumModalOpen(true)}
+                    onNeedUpgrade={() => openPlans()}
                     enterClass={profileHandoff.arriving ? 'pi-handoff-in-self' : undefined}
                 />
             ) : (
@@ -2583,7 +2595,7 @@ export function ProfileIntelligenceSettings({
                     hint="Add a job description as real-time context."
                     hasAccess={hasProfileAccess}
                     onBrowse={browseJD}
-                    onNeedUpgrade={() => setIsPremiumModalOpen(true)}
+                    onNeedUpgrade={() => openPlans()}
                     enterClass={jdHandoff.arriving ? 'pi-handoff-in-self' : undefined}
                 />
             ) : (
@@ -3696,7 +3708,7 @@ export function ProfileIntelligenceSettings({
     const renderRoleInsight = () => (
         <RoleInsightPanel
             hasAccess={hasProfileAccess}
-            onNeedUpgrade={() => setIsPremiumModalOpen(true)}
+            onNeedUpgrade={() => openPlans()}
             onGoToProfile={() => goToSection('identity')}
         />
     );
@@ -3717,29 +3729,10 @@ export function ProfileIntelligenceSettings({
         !isPremium && !isTrialActive  ? 'pi-cta--shimmer' : '',
     ].filter(Boolean).join(' ');
 
-    // ── Shared premium-modal lifecycle handlers (used by both the gate and the
-    //    unlocked panel's own CTA, so activating/deactivating behaves the same
-    //    regardless of which surface triggered the modal) ──────────────────────
-    const handlePremiumActivated = async () => {
-        setIsPremium(true);
-        try {
-            const details = await window.electronAPI?.licenseGetDetails?.();
-            const plan = details?.plan ?? '';
-            if (plan) setPremiumPlan(plan);
-            writePremiumCache(true, plan);
-        } catch { writePremiumCache(true, premiumPlan); }
-        const status = await window.electronAPI?.profileGetStatus?.();
-        if (status) setProfileStatus(status);
-    };
-    const handlePremiumDeactivated = () => {
-        setIsPremium(false); setPremiumPlan('');
-        writePremiumCache(false, '');
-        setProfileStatus(prev => ({ ...prev, profileMode: false }));
-    };
-
     // ── Non-pro users see the gate (wait for license verification) ────────────
     if (!hasProfileAccess) {
-        if (!licenseLoaded) return null;
+        // Busy, not empty: an empty card would read as settled to the genie.
+        if (!licenseLoaded) return <div aria-busy="true" style={{ height: '100%' }} />;
         return (
             <ProfileIntelligenceProGate
                 onOpenNativelyAPI={onOpenNativelyAPI}
@@ -3752,6 +3745,7 @@ export function ProfileIntelligenceSettings({
         <div
             className="pi-root"
             data-theme={theme}
+            aria-busy={!statusLoaded || profileUploading || jdUploading}
             style={{
                 display: 'flex', height: '100%', background: 'var(--pi-bg)',
                 borderRadius: 16, overflow: 'hidden',
@@ -3811,7 +3805,7 @@ export function ProfileIntelligenceSettings({
                 <div style={{ padding: '12px', borderTop: '1px solid var(--pi-border)', flexShrink: 0 }}>
                     <button
                         ref={ctaLens.ref}
-                        onClick={() => setIsPremiumModalOpen(true)}
+                        onClick={() => openPlans()}
                         onPointerMove={ctaLens.onPointerMove}
                         onFocus={ctaLens.onFocus}
                         className={ctaClass}
@@ -3843,19 +3837,11 @@ export function ProfileIntelligenceSettings({
                 {/* Scrollable content — key remounts the block on each switch, which
                     is what re-fires the directional blur-in below it. */}
                 <div ref={panelScrollRef} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '24px 32px', boxSizing: 'border-box' }}>
-                    <div key={activeSection} className="pi-panel-fade" data-dir={navDir}>
+                    <div key={activeSection} className="pi-panel-fade" data-dir={navDir} data-genie-view={activeSection}>
                         {(SECTION_RENDERERS[activeSection] ?? renderIdentity)()}
                     </div>
                 </div>
             </div>
-
-            <PremiumUpgradeModal
-                isOpen={isPremiumModalOpen}
-                onClose={() => setIsPremiumModalOpen(false)}
-                isPremium={isPremium}
-                onActivated={handlePremiumActivated}
-                onDeactivated={handlePremiumDeactivated}
-            />
         </div>
     );
 }

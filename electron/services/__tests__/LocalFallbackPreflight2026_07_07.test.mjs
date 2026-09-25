@@ -68,13 +68,13 @@ describe('LocalFallbackAssets (2026-07-07)', () => {
     // `new URL('.')` is this file's own directory (__tests__), and three `..`
     // from there is the repo root on both platforms.
     const repoRoot = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..', '..');
-    const candidate = path.join(repoRoot, 'resources', 'models', 'Xenova', 'all-MiniLM-L6-v2', 'tokenizer.json');
+    const candidate = path.join(repoRoot, 'resources', 'models', 'Xenova', 'multilingual-e5-small', 'tokenizer.json');
     if (!fs.existsSync(candidate)) {
       // CI may not have downloaded models; this test only runs when assets are present.
       return;
     }
     const { resolvePackagedModelPath } = require(ASSETS_PATH);
-    const resolved = resolvePackagedModelPath('Xenova/all-MiniLM-L6-v2/tokenizer.json');
+    const resolved = resolvePackagedModelPath('Xenova/multilingual-e5-small/tokenizer.json');
     assert.equal(typeof resolved, 'string');
     assert.ok(fs.existsSync(resolved));
   });

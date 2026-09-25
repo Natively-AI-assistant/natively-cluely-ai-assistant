@@ -14,9 +14,10 @@
  */
 
 import { originPatternFromUrl } from './capture/originPattern';
-// Static, NOT a dynamic import: chrome.permissions.request must run inside the
-// popup's user-gesture window, and a dynamic import can resolve on a later
-// microtask than that window allows ("may only be called from a user gesture").
+// request*Permission are only used by the legacy grant-* handlers below. The
+// popup calls them itself: a popup click's user activation does not travel
+// through runtime.sendMessage, so chrome.permissions.request reached that way
+// throws "must be called during a user gesture" (verified live, Chrome 148).
 import { requestOriginPermission, requestAllSitesPermission, hasAllSitesPermission } from './capture/permissions';
 
 const STORAGE_KEY = 'pairing';
@@ -780,9 +781,9 @@ export function badgeForCaptureOutcome(kind: string): { text: string; title: str
  * pull focus off the page the user is looking at (and be page-observable via
  * blur/focus) for a capture the user never initiated. The popup's own
  * "Capture" button (popup.ts `captureBtn`, which drives `case 'capture'` and
- * then `case 'grant-host'` below) already runs inside a real user gesture and
- * grants access without needing this nudge to open anything — the badge/title
- * alone is enough to point the user at the icon.
+ * then calls chrome.permissions.request itself) already runs inside a real
+ * user gesture and grants access without needing this nudge to open anything —
+ * the badge/title alone is enough to point the user at the icon.
  */
 function nudgeGrantViaAction(kind: string): void {
   const badge = badgeForCaptureOutcome(kind);
@@ -917,6 +918,7 @@ type PopupMessage =
   | { type: 'grant-host'; value: string }
   | { type: 'grant-all-sites' }
   | { type: 'all-sites-status' }
+  | { type: 'clear-grant-nudge' }
   | { type: 'status' }
   | { type: 'ws-status' }
   | { type: 'unpair' };
@@ -956,10 +958,10 @@ chrome.runtime.onMessage.addListener((msg: PopupMessage, _sender, sendResponse) 
         return;
       }
       case 'grant-host': {
-        // The popup asks for ONE origin after a capture came back
-        // needs-host-permission. chrome.permissions.request must run inside a
-        // user gesture; the popup's click handler is that gesture, and the
-        // gesture survives this round-trip because the popup awaits us.
+        // LEGACY (no longer sent by the popup): user activation does NOT cross
+        // runtime.sendMessage into a service worker, so this request always
+        // throws and resolves { granted: false }. The popup requests the origin
+        // itself from its click handler — see popup.ts `captureBtn`.
         const origin = typeof msg.value === 'string' ? msg.value : '';
         const granted = await requestOriginPermission(chrome.permissions, origin);
         if ((granted as { granted?: boolean })?.granted) clearGrantNudge();
@@ -967,9 +969,9 @@ chrome.runtime.onMessage.addListener((msg: PopupMessage, _sender, sendResponse) 
         return;
       }
       case 'grant-all-sites': {
-        // One-time "Allow on all sites": a single prompt covering the broad
-        // optional_host_permissions patterns, so the desktop hotkey works on
-        // any site without per-site grants. Gesture comes from the popup click.
+        // LEGACY (no longer sent by the popup) — same reason as grant-host: the
+        // click's user activation never arrives here, so no prompt can show.
+        // The popup's allSitesBtn requests the broad patterns itself.
         const r = await requestAllSitesPermission(chrome.permissions);
         if (r.granted) clearGrantNudge();
         sendResponse(r);
@@ -977,6 +979,10 @@ chrome.runtime.onMessage.addListener((msg: PopupMessage, _sender, sendResponse) 
       }
       case 'all-sites-status':
         sendResponse({ granted: await hasAllSitesPermission(chrome.permissions) });
+        return;
+      case 'clear-grant-nudge':
+        clearGrantNudge();
+        sendResponse({ kind: 'success' });
         return;
       case 'status':
         sendResponse(await connectionStatus());

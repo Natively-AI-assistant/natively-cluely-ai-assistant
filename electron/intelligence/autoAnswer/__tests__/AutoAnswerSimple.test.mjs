@@ -51,7 +51,7 @@ function makeSimple(judgeImpl, overrides = {}) {
     telemetry: (e) => { state.events.push(e); if (e.name === 'auto_answer_ignored') state.skips.push(e.skipReason); },
     logContent: (label, text) => state.contentTrace.push({ label, text }),
     log: () => {},
-    ...(judgeImpl ? { judgeCandidate: (req) => { state.judgeCalls.push(req); return judgeImpl(req, state.judgeCalls.length); } } : {}),
+    ...(judgeImpl ? { judgeCandidate: (req, signal) => { state.judgeCalls.push(req); state.judgeSignals = [...(state.judgeSignals || []), signal]; return judgeImpl(req, state.judgeCalls.length); } } : {}),
   };
   const engine = new SimpleAutoAnswerEngine(host, clock);
   engine.onMeetingStart();
@@ -223,6 +223,54 @@ test('a provider endpoint confirms the stop early', async () => {
   assert.equal(h.state.judgeCalls.length, 1, 'judged at the endpoint, not the full window');
 });
 
+// ── Latency work (2026-09-22): the local VAD confirms the stop for providers without an endpoint ──
+// Only four STT providers emit their own end-of-turn event (Deepgram, Nvidia NIM,
+// Soniox, OpenAI Realtime); the other eight waited the full STABILITY_MS after
+// the last final. The native capture already reports `speech_ended` (VAD,
+// 150-200 ms hangover) on the interviewer channel — it just never reached the
+// controller. It now counts as an endpoint, with one guard: a dangling interim
+// means the final for the last words has not landed, and that final re-arms
+// the window itself when it does.
+
+test('the local VAD stop confirms the window early when the transcript is caught up', async () => {
+  const h = makeSimple(async () => YES());
+  h.interviewer('Why did you choose PostgreSQL over the alternatives here?');   // final landed
+  h.engine.onLocalSpeechEnd();
+  await h.advance(ENDPOINT_CONFIRM_MS + 100);
+  assert.equal(h.texts().length, 1, 'committed at ENDPOINT_CONFIRM_MS, not STABILITY_MS');
+});
+
+test('the local VAD stop is ignored while an interim is still dangling (its final is in flight)', async () => {
+  const h = makeSimple(async () => YES());
+  h.interviewer('Why did you choose PostgreSQL over the', true);
+  h.interviewer('alternatives here', false);                                    // interim, final not yet in
+  h.engine.onLocalSpeechEnd();
+  await h.advance(ENDPOINT_CONFIRM_MS + 100);
+  assert.deepEqual(h.texts(), [], 'not committed on a half-transcribed turn');
+  h.interviewer('alternatives here?', true);                                    // the final lands
+  await h.advance(STABILITY_MS + 100);
+  assert.equal(h.texts().length, 1, 'the final re-armed the window and the turn commits whole');
+  assert.match(h.texts()[0], /alternatives here\?$/);
+});
+
+test('the local VAD hint is taken only from providers that stream interims', () => {
+  const { acceptsLocalSpeechEndHint } = Simple;
+  for (const p of ['deepgram', 'soniox', 'nvidia_nim', 'apple-speech', 'natively', 'elevenlabs', 'google']) {
+    assert.equal(acceptsLocalSpeechEndHint(p), true, p);
+  }
+  for (const p of ['groq', 'azure', 'ibmwatson', 'openai', 'local-whisper', 'none']) {
+    assert.equal(acceptsLocalSpeechEndHint(p), false, `${p}: its final is produced by the segment end — the stop precedes the text`);
+  }
+});
+
+test('the local VAD stop with nothing pending is a no-op', async () => {
+  const h = makeSimple(async () => YES());
+  h.engine.onLocalSpeechEnd();
+  await h.advance(ENDPOINT_CONFIRM_MS + 100);
+  assert.equal(h.state.judgeCalls.length, 0);
+  assert.equal(h.clock.pendingCount(), 0);
+});
+
 test('meeting stop clears everything; telemetry carries no transcript text', async () => {
   const h = makeSimple(async () => YES());
   h.interviewer('Why did you choose PostgreSQL over the alternatives here?');
@@ -370,6 +418,81 @@ test('prefetch: rationed by time, so a chatty meeting cannot stack generations',
   h.interviewer('And now the last thing to know is how the cache gets invalidated on write.');
   await h.advance(STABILITY_MS + 200);
   assert.equal(prefetched.length, 2, 'once the window passes, prefetch is allowed again');
+});
+
+// ── Latency work (2026-09-22): a superseded judge call is aborted, not left to finish ──
+// 41 of 83 judge calls in the 2026-09-22 telemetry were 'stale': the interviewer
+// kept talking, the controller discarded the verdict — and the request ran to
+// completion anyway, spending money and rate-limit headroom on nothing. The
+// controller now hands the host an AbortSignal and aborts it on supersede.
+
+test('supersede aborts the in-flight judge call through the host signal', async () => {
+  const h = makeSimple(() => new Promise(() => {}));   // a judge that never answers on its own
+  h.interviewer('Why did you choose PostgreSQL over the alternatives here?');
+  await h.advance(EARLY_JUDGE_MS + 60);
+  assert.equal(h.state.judgeCalls.length, 1);
+  const signal = h.state.judgeSignals[0];
+  assert.ok(signal && typeof signal.aborted === 'boolean', 'the host receives an AbortSignal');
+  assert.equal(signal.aborted, false, 'live while the verdict is wanted');
+  h.interviewer('and also how', false);                 // interviewer resumes → supersede
+  assert.equal(signal.aborted, true, 'superseded → aborted, so the provider call stops costing');
+});
+
+test('a verdict that arrives after the meeting moved on is still recorded as stale (abort does not lose telemetry)', async () => {
+  const resolvers = [];
+  const h = makeSimple(() => new Promise((r) => resolvers.push(r)));
+  h.interviewer('Why did you choose PostgreSQL over the alternatives here?');
+  await h.advance(EARLY_JUDGE_MS + 60);
+  h.interviewer('and also how about the indexes on it?', true);   // a new final supersedes
+  resolvers[0](YES());
+  await flush(); await flush();
+  const judged = h.state.events.filter(e => e.name === 'auto_answer_judged');
+  assert.ok(judged.some(e => e.judgeOutcome === 'stale'), 'the superseded call reports stale');
+});
+
+// ── Latency work (2026-09-22): question-shaped candidates always prefetch ──
+// Live telemetry (9 auto answers, Deepgram + gpt-5.6-luna): the judge took
+// 1.2-2.5 s and the answer's first token another 0.7-2.7 s, SERIALLY, because
+// the time ration let the prefetch fire at most once per 25 s and an interview
+// asks faster than that. A candidate that ends in '?' or opens with an
+// interrogative ("tell me", "walk me through", "how would you") is the
+// high-prior shape — the judge said 'answer' to those far more often than to
+// statements — so it starts the answer at the consult every time. Statements
+// and declarative tasks keep the time ration (a rejected prefetch is a wasted
+// generation, and their prior is low).
+
+test('prefetch: question-shaped candidates bypass the time ration — back-to-back questions each get the head start', async () => {
+  const h = makeSimple(async () => YES());
+  const prefetched = [];
+  h.engine.host.prefetchAnswer = (id, text) => prefetched.push(text);
+  h.engine.host.speculativeSnapshot = () => ({ questionId: null, text: null });
+  h.interviewer('Why did you choose PostgreSQL over the alternatives here?');
+  await h.advance(STABILITY_MS + 200);
+  assert.equal(prefetched.length, 1);
+  h.state.streaming = false; h.state.accepting = true;
+  await h.advance(3000);                                   // well inside the 25 s ration
+  h.interviewer('Tell me how you would shard it once it outgrows one box.');
+  await h.advance(STABILITY_MS + 200);
+  assert.equal(prefetched.length, 2, 'an interrogative-led ask 3 s later prefetches too');
+  h.state.streaming = false; h.state.accepting = true;
+  await h.advance(3000);
+  h.interviewer('And what breaks first under that write load?');
+  await h.advance(STABILITY_MS + 200);
+  assert.equal(prefetched.length, 3, 'and a third question, again inside the window');
+});
+
+test('prefetch: a statement inside the window is still rationed — the shape bypass is for asks only', async () => {
+  const h = makeSimple(async () => NO);
+  const prefetched = [];
+  h.engine.host.prefetchAnswer = (id, text) => prefetched.push(text);
+  h.engine.host.speculativeSnapshot = () => ({ questionId: null, text: null });
+  h.interviewer('So the first thing to know about this system is that it stores everything in one place.');
+  await h.advance(STABILITY_MS + 200);
+  assert.equal(prefetched.length, 1, 'the first stoppage is inside a fresh window');
+  await h.advance(3000);
+  h.interviewer('The second thing to know is that the cache is invalidated on write, not on read.');
+  await h.advance(STABILITY_MS + 200);
+  assert.equal(prefetched.length, 1, 'a second statement 3 s later does not spend another generation');
 });
 
 test('prefetch: a stale speculative snapshot for ANOTHER question is not reused', async () => {

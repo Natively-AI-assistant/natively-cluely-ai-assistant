@@ -105,16 +105,17 @@ describe('the selected catalog model reaches the provider through the config, no
       embeddingProvider: 'openai',
       localEmbeddingModelId: 'qwen3-embedding-4b-q4',
     });
-    assert.equal(provider.catalogId, 'minilm-l6-v2');
+    // The bundled model is multilingual-e5-small since 2026-09-22.
+    assert.equal(provider.catalogId, 'multilingual-e5-small');
   });
 
-  test('an argument-less LocalEmbeddingProvider (the pipeline fallback) is always the bundled MiniLM', () => {
+  test('an argument-less LocalEmbeddingProvider (the pipeline fallback) is always the bundled model', () => {
     // A user on a hosted primary who once picked Qwen3-4B must not get a
     // 2.5 GB llama.cpp model as the "lightweight" offline fallback.
     SettingsManager.getInstance().set('localEmbeddingModelId', 'qwen3-embedding-4b-q4');
     const fallback = new LocalEmbeddingProvider();
-    assert.equal(fallback.catalogId, 'minilm-l6-v2');
-    assert.equal(fallback.model, 'Xenova/all-MiniLM-L6-v2');
+    assert.equal(fallback.catalogId, 'multilingual-e5-small');
+    assert.equal(fallback.model, 'Xenova/multilingual-e5-small');
     assert.equal(fallback.dimensions, 384);
     assert.equal(fallback.runtime, 'onnx');
   });

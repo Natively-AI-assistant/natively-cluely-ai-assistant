@@ -64,7 +64,7 @@ async function makeEngine({ chunks = [ANSWER], gate = null, truncated = false } 
     const finals = [];
     const tokens = [];
     engine.on('suggested_answer', (answer, question, confidence, generationId) => finals.push({ answer, question, generationId }));
-    engine.on('suggested_answer_token', (token) => tokens.push(token));
+    engine.on('suggested_answer_token', (token, _q, _c, generationId) => { tokens.push(token); tokens.generationIds = [...(tokens.generationIds || []), generationId]; });
     return { engine, session, finals, tokens };
 }
 
@@ -189,5 +189,58 @@ test('adoption of an IN-FLIGHT prefetch is not conditional on the trigger being 
     assert.equal(finals.length, 1, 'the adopted stream is revealed at completion for a non-automatic trigger too');
     assert.equal(finals[0].answer, ANSWER);
     assert.equal(engine.automaticGenerationId, null, 'but it is not marked automatic: nothing may barge-in-cancel it');
+    engine.reset();
+});
+
+// ── Latency (2026-09-22): an adopted prefetch streams from the moment of adoption ──
+//
+// Live telemetry (Deepgram + gpt-5.6-luna, 9 automatic answers): the judge
+// took 1.2-2.5 s and the answer's first token 0.7-2.7 s. The prefetch was
+// meant to overlap them, but an adopted stream stayed silent until it
+// FINISHED ("revealed at completion"), so the first visible text landed at
+// prefetch-start + full generation time — about when a fresh dispatch would
+// have painted its first token anyway. Adopting now unmutes the stream: what
+// the judge kept off-screen so far is painted at once through the same
+// prefix guards a live turn uses, the rest streams, and the final replaces
+// the row under the SAME generation id (the live-path contract).
+
+const LONG_PREFIX = 'I picked PostgreSQL because the team already knew it, the tooling around migrations and observability is mature, and the relational model fit the data: orders, customers and inventory are tightly joined. ';
+const LONG_TAIL = 'Later we added read replicas for the reporting load, which kept the primary responsive.';
+const LONG_ANSWER = LONG_PREFIX + LONG_TAIL;
+
+test('an adopted IN-FLIGHT prefetch paints the buffered text at adoption and streams on — not at completion', async () => {
+    let release;
+    const gate = new Promise((r) => { release = r; });
+    const { engine, finals, tokens } = await makeEngine({ chunks: [LONG_PREFIX, LONG_TAIL], gate });
+    engine.prefetchAutoAnswer('q10', QUESTION);
+    await flush(); await flush();
+    assert.deepEqual(tokens, [], 'until the judge rules, a speculative stream paints nothing');
+
+    await dispatch(engine, 'q10');
+    await flush(); await flush();
+    assert.ok(tokens.length >= 1, 'adoption paints what was already generated, without waiting for the stream to finish');
+    assert.equal(tokens.join(''), LONG_PREFIX, 'exactly the text generated so far');
+    assert.deepEqual(finals, [], 'the final still waits for completion');
+
+    release();
+    await untilIdle(engine);
+    await flush();
+    assert.equal(finals.length, 1);
+    assert.equal(finals[0].answer, LONG_ANSWER);
+    assert.equal(tokens.join(''), LONG_ANSWER, 'the tail streamed after adoption; nothing is painted twice');
+    const ids = new Set(tokens.generationIds);
+    assert.equal(ids.size, 1, 'every token belongs to one generation');
+    assert.equal(finals[0].generationId, [...ids][0], 'and the final replaces THAT row rather than opening a second one');
+    engine.reset();
+});
+
+test('a prefetch that finished before adoption still reveals once, under a fresh generation (unchanged)', async () => {
+    const { engine, finals, tokens } = await makeEngine({ chunks: [LONG_PREFIX, LONG_TAIL] });
+    engine.prefetchAutoAnswer('q11', QUESTION);
+    await untilIdle(engine);
+    assert.deepEqual(tokens, [], 'nothing painted while unadopted');
+    await dispatch(engine, 'q11');
+    assert.equal(finals.length, 1);
+    assert.equal(tokens.join(''), LONG_ANSWER, 'revealed once');
     engine.reset();
 });

@@ -18,9 +18,11 @@ import {
   easeLauncherResize,
   interpolateBounds,
 } from './utils/launcherResizeAnimation';
-import { attachNoActivate, isNoActivateManaged } from './utils/windowsFocusPolicy';
+import { attachNoActivate, isNoActivateManaged, restoreFocusableOffTaskbar } from './utils/windowsFocusPolicy';
+import { setVisibleOnAllWorkspacesKeepingDock } from './utils/macDockPolicy';
 import { resizeEnvelopeFor, OVERLAY_PANEL_INSET } from '../src/lib/overlayCustomSize.mjs';
 import { decideLauncherClose } from '../src/lib/launcherCloseDecision.mjs';
+import { DEV_SERVER_URL } from './devServerUrl';
 
 const isEnvDev = process.env.NODE_ENV === 'development';
 const isPackaged = app.isPackaged;
@@ -48,7 +50,7 @@ function traceOverlayResize(event: string, data: Record<string, unknown>): void 
 }
 
 const startUrl = isDev
-  ? 'http://127.0.0.1:5180'
+  ? DEV_SERVER_URL
   : `file://${path.join(__dirname, '../../dist/index.html')}`;
 
 export class WindowHelper {
@@ -594,11 +596,22 @@ export class WindowHelper {
       // translucent material by default.
       transparent: true,
       hasShadow: true,
-      // The launcher starts with the black logo splash. Use a black native
-      // background too so the OS doesn't show a grey/white transparent-window
-      // flash before the renderer paints (applies on macOS and Windows, both
-      // of which now create the window with `transparent: true`).
-      backgroundColor: '#000000',
+      // The launcher starts with the black logo splash. On macOS a black
+      // native background hides any grey/white transparent-window flash
+      // before the renderer paints, and the OS rounds the window frame itself
+      // (titleBarStyle: 'hiddenInset'), so the black never squares off the
+      // corners.
+      //
+      // WINDOWS/LINUX HAVE NO NATIVE ROUNDING for a frameless transparent
+      // window — the corner radius is CSS on <body> (see index.css,
+      // html[data-platform="win32"][data-window="launcher"]). An OPAQUE native
+      // backgroundColor paints the window's full square rect *behind* that
+      // rounded content, so the corners read as square no matter what the CSS
+      // says. Transparent here, like every other window in the app
+      // (settings/model-selector/overlay/cropper all use #00000000); the
+      // flash it guarded against can't occur anyway, since the launcher is
+      // created `show: false` and only revealed after the renderer paints.
+      backgroundColor: isMac ? '#000000' : '#00000000',
       focusable: true,
       resizable: true,
       movable: true,
@@ -611,8 +624,8 @@ export class WindowHelper {
         if (mode === 'none') {
           if (isMac) {
             return app.isPackaged
-              ? path.join(process.resourcesPath, 'natively.icns')
-              : path.resolve(__dirname, '../../assets/natively.icns');
+              ? path.join(process.resourcesPath, 'assets', 'icon.png')
+              : path.resolve(__dirname, '../../assets/icon.png');
           } else if (isWin) {
             return app.isPackaged
               ? path.join(process.resourcesPath, 'assets/icons/win/icon.ico')
@@ -635,8 +648,8 @@ export class WindowHelper {
           // Defensive: unknown mode — use the real app icon, matching 'none'.
           if (isMac) {
             return app.isPackaged
-              ? path.join(process.resourcesPath, 'natively.icns')
-              : path.resolve(__dirname, '../../assets/natively.icns');
+              ? path.join(process.resourcesPath, 'assets', 'icon.png')
+              : path.resolve(__dirname, '../../assets/icon.png');
           } else if (isWin) {
             return app.isPackaged
               ? path.join(process.resourcesPath, 'assets/icons/win/icon.ico')
@@ -911,7 +924,9 @@ export class WindowHelper {
     }
 
     if (process.platform === 'darwin') {
-      this.overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+      // Never through the raw API: it hides the Dock tile as a side effect
+      // (see utils/macDockPolicy.ts — the duplicate-Dock-icon bug).
+      setVisibleOnAllWorkspacesKeepingDock(this.overlayWindow, true, true);
       this.overlayWindow.setHiddenInMissionControl(true);
       this.overlayWindow.setAlwaysOnTop(true, 'floating');
 
@@ -1461,8 +1476,10 @@ export class WindowHelper {
       // focus from the meeting app. Mouse interactivity does not need focusable
       // on Windows; typing is captured by the WH_KEYBOARD_LL stealth hook
       // without the window ever being focused (StealthKeyboardManager).
+      // Never the raw setFocusable(true): on Windows it re-adds a taskbar
+      // button (AddTab) on every hover — undetectable mode included.
       if (!isNoActivateManaged(this.overlayWindow)) {
-        this.overlayWindow.setFocusable(true);
+        restoreFocusableOffTaskbar(this.overlayWindow);
       }
     }
     auxWindows.forEach((w) => {
@@ -1471,7 +1488,7 @@ export class WindowHelper {
       } else {
         w.setIgnoreMouseEvents(false);
         // Same no-activate guard as the overlay body above.
-        if (!isNoActivateManaged(w)) w.setFocusable(true);
+        if (!isNoActivateManaged(w)) restoreFocusableOffTaskbar(w);
       }
     });
     if (!quiet) {
@@ -1648,7 +1665,7 @@ export class WindowHelper {
     });
     this.popoverCatcher.setContentProtection(this.contentProtection);
     if (isMac) {
-      this.popoverCatcher.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+      setVisibleOnAllWorkspacesKeepingDock(this.popoverCatcher, true, true);
       this.popoverCatcher.setHiddenInMissionControl(true);
       // relativeLevel -1: below the other 'floating' Natively windows, above
       // normal app windows — clicks on Natively still hit Natively; clicks
@@ -1751,7 +1768,7 @@ export class WindowHelper {
       // applyContentProtection).
       win.setContentProtection(this.contentProtection);
       if (process.platform === 'darwin') {
-        win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+        setVisibleOnAllWorkspacesKeepingDock(win, true, true);
         win.setHiddenInMissionControl(true);
         win.setAlwaysOnTop(true, 'floating');
         win.once('ready-to-show', () => {
@@ -2363,7 +2380,7 @@ export class WindowHelper {
     } else {
       // Must match the values createWindow() applies at construction.
       if (isMac) this.launcherWindow.setVibrancy('under-window');
-      this.launcherWindow.setBackgroundColor('#000000');
+      this.launcherWindow.setBackgroundColor(isMac ? '#000000' : '#00000000');
       this.launcherWindow.setHasShadow(true);
     }
     this.launcherOpacityPreviewActive = active;

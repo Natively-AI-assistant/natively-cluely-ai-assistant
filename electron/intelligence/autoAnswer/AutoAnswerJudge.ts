@@ -33,6 +33,31 @@ export const JUDGE_CONTAINMENT_MIN = 0.65;
 /** How many hot-window turns of context the judge sees. */
 export const JUDGE_CONTEXT_TURNS = 8;
 
+/**
+ * Character ceilings for the VARIABLE part of the judge prompt.
+ *
+ * Measured 2026-09-24 (gemini-3.1-flash-lite, thinking minimal, tiny output,
+ * median of 3): ~1.0 s at <=2k input tokens, 1.58 s at 7.5k, 3.77 s at 28k.
+ * Input size, not model tier, is the dominant term — and the fixed boilerplate
+ * below is already ~1955 tokens, so the transcript is the only part we control.
+ *
+ * JUDGE_CONTEXT_TURNS caps how MANY turns are shown; nothing capped how LONG
+ * they are, so eight rambling turns could push a 2500 ms deadline past it.
+ *
+ * Tails are kept, never heads: an ask lands at the END of speech.
+ */
+export const JUDGE_TURN_CHAR_CAP = 400;
+export const JUDGE_CANDIDATE_CHAR_CAP = 1000;
+export const JUDGE_ANSWERED_CHAR_CAP = 250;
+export const JUDGE_PROMPT_MAX_VARIABLE_CHARS =
+  JUDGE_CONTEXT_TURNS * JUDGE_TURN_CHAR_CAP + JUDGE_CANDIDATE_CHAR_CAP + JUDGE_ANSWERED_CHAR_CAP;
+
+/** Keep the last `max` characters, marking the elision so the model knows. */
+function keepTail(text: string, max: number): string {
+  const t = String(text ?? '');
+  return t.length <= max ? t : `…${t.slice(t.length - max)}`;
+}
+
 export interface JudgeRequest {
     candidateText: string;
     recentTurns: TranscriptTurn[];
@@ -134,18 +159,22 @@ export function buildJudgePrompt(req: JudgeRequest): string {
     const anyLabels = kept.some((t, i) => t.role === 'interviewer' && speakerOf(i));
     const context = kept
         .map((t, i) => {
-            if (t.role !== 'interviewer') return `USER: ${t.text}`;
+            const text = keepTail(t.text, JUDGE_TURN_CHAR_CAP);
+            if (t.role !== 'interviewer') return `USER: ${text}`;
             const who = speakerOf(i);
-            return `${who ? `OTHERS/${who}` : 'OTHERS'}: ${t.text}`;
+            return `${who ? `OTHERS/${who}` : 'OTHERS'}: ${text}`;
         })
         .join('\n');
     // Only shown when the transcript actually carries labels, so an
     // undiarized session never sees a rule it cannot apply.
     const parts = req.candidateParts ?? [];
     const partsLabelled = parts.some(p => p.speaker);
-    const candidateBlock = partsLabelled
-        ? parts.map(p => `${p.speaker ? `OTHERS/${p.speaker}` : 'OTHERS'}: ${p.text}`).join('\n')
-        : req.candidateText;
+    const candidateBlock = keepTail(
+        partsLabelled
+            ? parts.map(p => `${p.speaker ? `OTHERS/${p.speaker}` : 'OTHERS'}: ${p.text}`).join('\n')
+            : req.candidateText,
+        JUDGE_CANDIDATE_CHAR_CAP,
+    );
     const diarization = anyLabels || partsLabelled ? `
 The meeting audio is SPEAKER-LABELLED (OTHERS/speaker_1, OTHERS/speaker_2, …). Where a rule below asks you to work out WHO said something, the labels settle it — prefer them over any guess from wording, including in the merged-reply rule:
 - A question and its answer under the SAME label is one person answering themselves: closed, is_ask false, however substantive the question sounds.
@@ -157,7 +186,7 @@ ${partsLabelled ? 'The candidate itself is split by speaker below; judge the ASK
     // 2026-08-25, with it in the preamble the model fired on five separate
     // elaborations of a task it had just answered (API-endpoint details).
     const answered = req.lastAnsweredText
-        ? `\nAlready answered for the USER moments ago: "${req.lastAnsweredText}"\nAnything that RESTATES that ask, or adds its details, constraints, materials or follow-on explanation, is NOT a new ask: is_ask false, answerability at most 0.2. Only a genuinely NEW question or a changed requirement counts.\n`
+        ? `\nAlready answered for the USER moments ago: "${keepTail(req.lastAnsweredText, JUDGE_ANSWERED_CHAR_CAP)}"\nAnything that RESTATES that ask, or adds its details, constraints, materials or follow-on explanation, is NOT a new ask: is_ask false, answerability at most 0.2. Only a genuinely NEW question or a changed requirement counts.\n`
         : '';
     // ORDERING IS LOAD-BEARING (measured 2026-08-25). A cache-friendly layout
     // (all instructions first, only a short trailer after the candidate) was

@@ -288,6 +288,13 @@ interface ElectronAPI {
   convertTrial: (choice: string) => Promise<{ ok: boolean }>;
   endTrialByok: () => Promise<{ success: boolean; error?: string }>;
   onTrialEnded: (cb: (data: { choice: string }) => void) => () => void;
+  /** Emitted by `trial:start` so a trial claimed mid-session unlocks without a relaunch. */
+  onTrialStarted: (cb: (data: {
+    expiresAt: string;
+    startedAt: string;
+    usage?: { ai: number; ai_tokens?: number; stt_seconds: number; search: number };
+    limits?: object;
+  }) => void) => () => void;
   onModesActiveCleared: (cb: () => void) => () => void;
 
   // STT Provider Management
@@ -507,6 +514,7 @@ interface ElectronAPI {
   >;
   getMeetingDetails: (id: string) => Promise<any>;
   searchGlobalMeetings: (query: string, filters?: any) => Promise<{ enabled: boolean; results: any[] }>;
+  searchMemories: (query: string) => Promise<{ enabled: boolean; results: Array<{ text: string; meetingId?: string; meetingTitle?: string; date?: string }> }>;
   searchInMeeting: (query: string) => Promise<{ enabled: boolean; results: any[] }>;
   generateLectureNotes: (opts?: { title?: string; course?: string }) => Promise<{ enabled: boolean; notes: any }>;
   generateDiagram: (text?: string) => Promise<{ enabled: boolean; diagram: any }>;
@@ -783,6 +791,12 @@ interface ElectronAPI {
 
   // Theme API
   getThemeMode: () => Promise<{ mode: 'system' | 'light' | 'dark'; resolved: 'light' | 'dark' }>;
+  // Genie snapshots (electron/genieSnapshots.ts): pictures of popup cards the genie warps.
+  genieSnapshotCapture?: (rect: { x: number; y: number; width: number; height: number }) => Promise<{ png: Uint8Array; width: number; height: number } | null>;
+  genieSnapshotSave?: (key: string, png: Uint8Array) => Promise<boolean>;
+  genieSnapshotLoad?: (key: string) => Promise<Uint8Array | null>;
+  genieSnapshotList?: () => Promise<string[]>;
+  genieSnapshotClear?: (prefix?: string) => Promise<boolean>;
   setThemeMode: (mode: 'system' | 'light' | 'dark') => Promise<void>;
   onThemeChanged: (
     callback: (data: { mode: 'system' | 'light' | 'dark'; resolved: 'light' | 'dark' }) => void,
@@ -880,6 +894,8 @@ interface ElectronAPI {
   getKeybindRegistrationFailures: () => Promise<
     Array<{ id: string; accelerator: string }>
   >;
+  getGlobalShortcutsEnabled: () => Promise<boolean>;
+  setGlobalShortcutsEnabled: (enabled: boolean) => Promise<boolean>;
 
   // Global shortcut events (stealth: fired even when window is not focused)
   onGlobalShortcut: (callback: (data: { action: string }) => void) => () => void;
@@ -1499,6 +1515,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
+  // Genie snapshots (electron/genieSnapshots.ts): pictures of popup cards the
+  // genie warps. capture reads this window's own compositor output.
+  genieSnapshotCapture: (rect: { x: number; y: number; width: number; height: number }) =>
+    ipcRenderer.invoke('genie-snapshot:capture', rect) as Promise<{ png: Uint8Array; width: number; height: number } | null>,
+  genieSnapshotSave: (key: string, png: Uint8Array) => ipcRenderer.invoke('genie-snapshot:save', key, png) as Promise<boolean>,
+  genieSnapshotLoad: (key: string) => ipcRenderer.invoke('genie-snapshot:load', key) as Promise<Uint8Array | null>,
+  genieSnapshotList: () => ipcRenderer.invoke('genie-snapshot:list') as Promise<string[]>,
+  genieSnapshotClear: (prefix?: string) => ipcRenderer.invoke('genie-snapshot:clear', prefix) as Promise<boolean>,
   // UX2: in-app TCC repair. Returns { ok, bundleId, results, promptRelaunch, message }.
   // Renderer should show the `message` and prompt the user to fully quit and reopen.
   repairTccPermissions: () => ipcRenderer.invoke('repair-tcc-permissions'),
@@ -1669,6 +1693,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const sub = (_: any, data: any) => cb(data);
     ipcRenderer.on('trial-ended', sub);
     return () => ipcRenderer.removeListener('trial-ended', sub);
+  },
+  onTrialStarted: (cb: (data: any) => void) => {
+    const sub = (_: any, data: any) => cb(data);
+    ipcRenderer.on('trial-started', sub);
+    return () => ipcRenderer.removeListener('trial-started', sub);
   },
 
   // STT Provider Management
@@ -2003,6 +2032,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getRecentMeetings: () => ipcRenderer.invoke('get-recent-meetings'),
   getMeetingDetails: (id: string) => ipcRenderer.invoke('get-meeting-details', id),
   searchGlobalMeetings: (query: string, filters?: any) => ipcRenderer.invoke('search:global-meetings', { query, filters }),
+  searchMemories: (query: string) => ipcRenderer.invoke('search:memories', query),
   searchInMeeting: (query: string) => ipcRenderer.invoke('search:in-meeting', { query }),
   generateLectureNotes: (opts?: { title?: string; course?: string }) => ipcRenderer.invoke('lecture:generate-notes', opts),
   generateDiagram: (text?: string) => ipcRenderer.invoke('diagram:generate', { text }),
@@ -2077,6 +2107,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   downloadExtensionModel: (id: string, modelKey: string) => ipcRenderer.invoke('extensions:download-model', id, modelKey),
   cancelExtensionModelDownload: (id: string, modelKey: string) => ipcRenderer.invoke('extensions:cancel-download', id, modelKey),
   browseExtensionRegistry: (url?: string) => ipcRenderer.invoke('extensions:browse-registry', url),
+  // Takes an EXTENSION ID, never a URL: main resolves the download itself.
+  installExtensionFromRegistry: (id: string) => ipcRenderer.invoke('extensions:install-from-registry', id),
   onExtensionModelProgress: (callback: (p: { id: string; modelKey: string; fraction: number }) => void) => {
     const subscription = (_e: any, payload: any) => callback(payload);
     ipcRenderer.on('extensions:model-progress', subscription);
@@ -2090,14 +2122,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   clearContextDebugLogs: () => ipcRenderer.invoke('context-debug:clear'),
   exportContextDebugSession: () => ipcRenderer.invoke('context-debug:export'),
   getHindsightConfig: () => ipcRenderer.invoke('hindsight-config:get'),
-  setHindsightConfig: (cfg: { baseUrl?: string; apiKey?: string; autoStart?: boolean; serverCommand?: string; llmProvider?: string }) => ipcRenderer.invoke('hindsight-config:set', cfg),
+  setHindsightConfig: (cfg: { baseUrl?: string; apiKey?: string; autoStart?: boolean; serverCommand?: string; llmProvider?: string; enableMemory?: boolean }) => ipcRenderer.invoke('hindsight-config:set', cfg),
   testHindsightConnection: () => ipcRenderer.invoke('hindsight-config:test'),
   updateMeetingTitle: (id: string, title: string) =>
     ipcRenderer.invoke('update-meeting-title', { id, title }),
   updateMeetingSummary: (id: string, updates: any) =>
     ipcRenderer.invoke('update-meeting-summary', { id, updates }),
-  regenerateMeetingSummary: (id: string, opts?: { templateType?: string; tone?: 'professional' | 'warm' | 'concise' | 'friendly' }) =>
-    ipcRenderer.invoke('regenerate-meeting-summary', { id, templateType: opts?.templateType, tone: opts?.tone }),
+  regenerateMeetingSummary: (id: string, opts?: { templateType?: string; modeId?: string; tone?: 'professional' | 'warm' | 'concise' | 'friendly' }) =>
+    ipcRenderer.invoke('regenerate-meeting-summary', { id, templateType: opts?.templateType, modeId: opts?.modeId, tone: opts?.tone }),
   regenerateMeetingFollowUp: (id: string, tone?: 'professional' | 'warm' | 'concise' | 'friendly') =>
     ipcRenderer.invoke('regenerate-meeting-followup', { id, tone }),
   updateMeetingSpeakerLabels: (id: string, labels: Record<string, string>) =>
@@ -2344,6 +2376,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getDefaultModel: () => ipcRenderer.invoke('get-default-model'),
   setModel: (modelId: string) => ipcRenderer.invoke('set-model', modelId),
   setDefaultModel: (modelId: string) => ipcRenderer.invoke('set-default-model', modelId),
+  getFastModel: () => ipcRenderer.invoke('get-fast-model'),
+  setFastModel: (modelId: string | null) => ipcRenderer.invoke('set-fast-model', modelId),
+  filterFastModelCandidates: (ids: string[]) => ipcRenderer.invoke('filter-fast-model-candidates', ids),
   toggleModelSelector: (coords: { x: number; y: number; activate?: boolean }) =>
     ipcRenderer.invoke('toggle-model-selector', coords),
   modelSelectorCloseIfOpen: () => ipcRenderer.invoke('model-selector:close-if-open'),
@@ -2690,6 +2725,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   resetKeybinds: () => ipcRenderer.invoke('keybinds:reset'),
   getKeybindRegistrationFailures: () =>
     ipcRenderer.invoke('keybinds:get-registration-failures'),
+  getGlobalShortcutsEnabled: () => ipcRenderer.invoke('keybinds:get-global-enabled'),
+  setGlobalShortcutsEnabled: (enabled: boolean) =>
+    ipcRenderer.invoke('keybinds:set-global-enabled', enabled),
   onKeybindsUpdate: (callback: (keybinds: Array<any>) => void) => {
     const subscription = (_: any, keybinds: any) => callback(keybinds);
     ipcRenderer.on('keybinds:update', subscription);

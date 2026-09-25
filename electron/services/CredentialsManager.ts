@@ -137,6 +137,8 @@ export interface StoredCredentials {
     customProviders?: CustomProvider[];
     curlProviders?: CurlProvider[];
     defaultModel?: string;
+    /** Model for cheap internal calls (Auto Answer judge, query rewrite, classification). */
+    fastModel?: string;
     nativelyApiKey?: string;
     /**
      * Optional bearer token for a user-hosted OpenAI-compatible embedding
@@ -1126,6 +1128,17 @@ export class CredentialsManager {
         return this.credentials.defaultModel || 'gemini-3.1-flash-lite';
     }
 
+    /**
+     * The user's chosen fast model, or null when unset.
+     *
+     * Null is a first-class state meaning "use the measured per-provider ladder",
+     * NOT a missing default. Returning a model id here would silently override the
+     * judge ladder for every user who never opened the picker.
+     */
+    public getFastModel(): string | null {
+        return this.credentials.fastModel || null;
+    }
+
     public getVoyageApiKey(): string | undefined {
         return this.credentials.voyageApiKey;
     }
@@ -1377,7 +1390,7 @@ export class CredentialsManager {
         if (this.getOpenaiApiKey()) return true;                 // gpt-4o / gpt-5 vision
         if (this.getClaudeApiKey()) return true;                 // Claude vision
         if (this.getGeminiApiKey()) return true;                 // Gemini vision
-        if (this.getGroqApiKey()) return true;                   // Groq qwen3.6-27b vision
+        if (this.getGroqApiKey()) return true;                   // Groq qwen3.8-27b vision
         // Custom providers. TWO fixes over the previous `customProviders.some(
         // p => p.multimodal === true)`:
         //   • getAllCustomProviders() — the old read missed the store the
@@ -1755,6 +1768,19 @@ export class CredentialsManager {
     }
 
     /**
+     * @returns false when the write was refused or did not persist. Boolean, not
+     * void: a void setter is how a refused write gets reported to the UI as a
+     * success and then vanishes on restart.
+     */
+    public setFastModel(model: string | null): boolean {
+        if (this.refuseWriteWhileDegraded('set fast model')) return false;
+        this.credentials.fastModel = model ?? undefined;
+        const persisted = this.saveCredentials();
+        console.log(`[CredentialsManager] Fast Model set to: ${model ?? '(auto)'}`);
+        return persisted;
+    }
+
+    /**
      * Undo the auto-promotions setNativelyApiKey() performs when a key is stored.
      * Mutates only; the caller saves.
      *
@@ -1883,12 +1909,14 @@ export class CredentialsManager {
             // Auto-assigned ids, past and present: the gemini defaults, the
             // historical Groq fallbacks (llama-3.3, scout — both retired,
             // which is exactly why sitting on them must not be treated as a
-            // choice), and the current Groq default qwen/qwen3.6-27b.
+            // choice), the former Groq default qwen/qwen3.6-27b (retired
+            // 2026-09-14) and the current one, qwen/qwen3.8-27b.
             const AUTO_ASSIGNED_MODEL_IDS = new Set([
                 'gemini', 'llama',
                 'llama-3.3-70b-versatile',
                 'meta-llama/llama-4-scout-17b-16e-instruct',
                 'qwen/qwen3.6-27b',
+                'qwen/qwen3.8-27b',
             ]);
             const isAutoDefault = !current
                 || current.startsWith('gemini-')

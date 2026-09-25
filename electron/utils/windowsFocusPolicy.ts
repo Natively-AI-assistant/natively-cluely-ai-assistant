@@ -97,3 +97,31 @@ export function attachNoActivate(
 export function isNoActivateManaged(win: object | null | undefined): boolean {
   return !!win && managed.has(win);
 }
+
+/** Structural subset of BrowserWindow for restoreFocusableOffTaskbar. */
+export interface FocusableTaskbarWindowLike {
+  isFocusable(): boolean;
+  setFocusable(focusable: boolean): void;
+  setSkipTaskbar(skip: boolean): void;
+}
+
+/**
+ * Make a skipTaskbar window focusable WITHOUT putting it on the taskbar.
+ *
+ * Electron's NativeWindowViews::SetFocusable(true) calls SetSkipTaskbar(false)
+ * — ITaskbarList::AddTab — on Windows. The overlay, pill and toggle are
+ * skipTaskbar windows, and the interaction policy used to call
+ * setFocusable(true) on every hover whenever the no-activate policy above was
+ * not applied (no stealth hook, or a CJK IME at launch): each call put a
+ * Natively button on the taskbar, undetectable mode included. An
+ * already-focusable window is left alone; otherwise the button is removed again
+ * straight after. macOS has no taskbar, so only the first half applies there.
+ */
+export function restoreFocusableOffTaskbar(
+  win: FocusableTaskbarWindowLike,
+  platform: NodeJS.Platform = process.platform,
+): void {
+  if (win.isFocusable()) return;
+  win.setFocusable(true);
+  if (platform === 'win32') win.setSkipTaskbar(true);
+}

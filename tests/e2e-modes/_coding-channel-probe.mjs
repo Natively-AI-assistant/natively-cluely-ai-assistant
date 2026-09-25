@@ -15,9 +15,10 @@
 import { _electron as electron } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 
-const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../..');
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 // ── render the stub screenshot the user would attach ────────────────────────
 const STUB = `42. Trapping Rain Water

@@ -17,6 +17,7 @@ import os from "os"
 import { SystemAudioHealthClassifier } from "./audio/systemAudioHealthClassifier.mjs"
 import { FatalMainProcessCoordinator } from "./utils/fatalMainProcess"
 import { installResilientDnsLookup } from "./utils/resilientDnsLookup"
+import { resolveDebugLogPath } from "./utils/debugLogPath.mjs"
 import { MeetingLifecycleQueue, type MeetingLifecycleState } from "./audio/meetingLifecycleQueue"
 import { autoUpdater } from "electron-updater"
 import { summarizeUpdateDownload } from "./update/updateDownloadSummary"
@@ -332,7 +333,13 @@ let _logFile: string | null = null;
 const getLogFile = (): string | null => {
   if (_logFile) return _logFile;
   try {
-    _logFile = path.join(app.getPath('documents'), 'natively_debug.log');
+    // An agent instance (npm run dev:agent) logs into its own userData; see
+    // resolveDebugLogPath. Packaged builds always use Documents.
+    _logFile = resolveDebugLogPath({
+      isPackaged: app.isPackaged,
+      agentUserData: process.env.NATIVELY_AGENT_USER_DATA,
+      documentsDir: () => app.getPath('documents'),
+    });
     return _logFile;
   } catch {
     // app.ready may not have fired yet (including native module boot gates).
@@ -1303,16 +1310,21 @@ import { setVerboseLoggingFlag } from "./verboseLog"
 import { ReleaseNotesManager } from "./update/ReleaseNotesManager"
 import { OllamaManager } from './services/OllamaManager'
 import { ProviderStatusRegistry } from './services/ProviderStatusRegistry'
+import { decideToggle, decideDockTransition, shouldWriteProcessTitle } from './services/toggleStateReducer'
+import { acceptsLocalSpeechEndHint } from './intelligence/autoAnswer/SimpleAutoAnswer'
+import { NativeOomTrace } from './utils/NativeOomTrace'
+import { setStealthHookAvailabilityProvider } from './utils/windowsFocusPolicy'
 import {
-  decideToggle,
-  decideDockTransition,
-  shouldWriteProcessTitle,
+  shouldPromoteToRegularAtStartup,
+  planDisguiseTitleWrites,
   DOCK_ENFORCE_INTERVAL_MS,
   DOCK_ENFORCE_MAX_ATTEMPTS,
   DOCK_ENFORCE_STARTUP_MAX_ATTEMPTS,
-} from './services/toggleStateReducer'
-import { NativeOomTrace } from './utils/NativeOomTrace'
-import { setStealthHookAvailabilityProvider } from './utils/windowsFocusPolicy'
+} from './utils/macDockPolicy'
+import { disguiseAppName } from './utils/disguiseAppName'
+import { disguiseIconRelativePath, shouldSetMacDockIcon } from './utils/disguiseIcon'
+import { appUserModelIdForDisguise } from './utils/windowsTaskbarPolicy'
+import { shouldOpenExternally } from './utils/windowOpenPolicy'
 import { ensureNativeModuleAbi } from './utils/nativeModuleGuard'
 
 // Opt-in only: this trace writes allowlisted process metadata and IPC byte estimates
@@ -1470,6 +1482,7 @@ export class AppState {
   private _disguiseTimers: NodeJS.Timeout[] = []; // Track forceUpdate timeouts
   private _dockDebounceTimer: NodeJS.Timeout | null = null; // Debounce dock state changes
   private _dockReassertTimers: NodeJS.Timeout[] = []; // Self-verifying dock-enforcement retry timers
+  private _macDockIconOverridden = false; // app.dock.setIcon() has replaced the bundle icon (see utils/disguiseIcon.ts)
   private _ollamaBootstrapPromise: Promise<void> | null = null;
   private screenshotCaptureInProgress: boolean = false;
   private localWhisperRecoveryNotice: LocalWhisperRecoveryNotice | null = null;
@@ -2565,7 +2578,11 @@ export class AppState {
         // negotiation script + all extraction keep the quality-first fn above.
         if (typeof this.knowledgeOrchestrator.setLiveCoachingContentFn === 'function') {
           this.knowledgeOrchestrator.setLiveCoachingContentFn(async (contents: any[]) => {
-            return await llmHelper.generateContentStructured(joinContents(contents), { preferFast: true });
+            // Deliberately NOT on the fast path - this returns a tacticalNote + exactScript the user reads
+            // and says aloud, so it is not an "invisible call". The fast rung also caps
+            // output at 256 tokens, and a truncated coaching JSON degrades to a canned
+            // fallback mid-negotiation with nothing pointing at the setting that caused it.
+            return await llmHelper.generateContentStructured(joinContents(contents));
           });
         }
 
@@ -3267,10 +3284,10 @@ export class AppState {
     speculativeSnapshot: () => this.intelligenceManager.getSpeculativeSnapshot(),
     prefetchAnswer: (id, text) => this.intelligenceManager.prefetchAutoAnswer(id, text),
     ...((process.env.NATIVELY_AUTO_ANSWER_JUDGE || '').toLowerCase() === 'off' ? {} : {
-      judgeCandidate: async (req) => {
+      judgeCandidate: async (req, signal) => {
         const llm = this.processingHelper?.getLLMHelper?.();
         if (!llm) return null;
-        return await llm.generateJudgeVerdict(buildJudgePrompt(req));
+        return await llm.generateJudgeVerdict(buildJudgePrompt(req), { signal });
       },
     }),
     modeName: () => {
@@ -3400,7 +3417,7 @@ export class AppState {
         stt = new GoogleSTT(speaker);
       }
     } else if (sttProvider === 'openai') {
-      // OpenAI: WebSocket Realtime (gpt-4o-transcribe → gpt-4o-mini-transcribe) with whisper-1 REST fallback.
+      // OpenAI: WebSocket Realtime (gpt-live-transcribe → gpt-4o-transcribe → gpt-4o-mini-transcribe) with whisper-1 REST fallback.
       // If a custom OpenAI-compatible base URL is configured (e.g. Speaches), the STT class
       // skips the Realtime WS path and uses REST against the custom endpoint.
       const apiKey = CredentialsManager.getInstance().getOpenAiSttApiKey();
@@ -3994,6 +4011,25 @@ export class AppState {
     capture.on('speech_ended', () => {
       if (this.systemAudioCapture === capture) {
         this.googleSTT?.notifySpeechEnded?.();
+        // Auto Answer: the local VAD saw the interviewer stop. For a provider
+        // with no end-of-turn event of its own this is the only early signal;
+        // the controller guards against a half-transcribed turn by ignoring the
+        // stop while an interim is dangling. Excluded: providers whose FINAL
+        // is produced by the end of the segment itself, with no interim to
+        // guard on — the REST ones (Groq Whisper, Azure, IBM Watson), OpenAI
+        // (its whisper-1 REST fallback; its Realtime mode emits its own
+        // endpoint anyway) and the local models (their own VAD closes the
+        // segment, then inference runs). For those the stop always precedes
+        // the text, so it would judge the turn without its last words.
+        if (this._autoAnswerEnabled && this.isMeetingActive) {
+          try {
+            const { CredentialsManager } = require('./services/CredentialsManager');
+            const provider = CredentialsManager.getInstance().getSttProvider();
+            if (acceptsLocalSpeechEndHint(provider)) {
+              this.simpleAutoAnswer.onLocalSpeechEnd();
+            }
+          } catch { /* an endpoint hint must never break capture */ }
+        }
       }
     });
     capture.on('speech_edge', (edge: SpeechEdge) => {
@@ -6331,6 +6367,10 @@ export class AppState {
     if (metadata) {
       this.intelligenceManager.setMeetingMetadata(metadata);
     }
+    // Every meeting gets its own conversation history, whether or not a mode
+    // is active (the dynamic-action session id below exists only WITH a mode,
+    // and without one every meeting shared one history — 2026-09-24).
+    this.intelligenceManager.beginMeetingConversation(`conv_${crypto.randomUUID()}`);
 
     // Phase 3 — bind dynamic action engine to this meeting + active mode.
     // Action store is per-(sessionId, modeId), so a fresh sessionId here gives
@@ -7754,12 +7794,16 @@ export class AppState {
     SettingsManager.getInstance().set('isUndetectable', state);
 
     // Cancel all pending disguise timers to prevent their app.setName() calls
-    // from re-registering the dock icon after we hide it
+    // from re-registering the dock icon after we hide it. When disabling
+    // undetectable mode, reapply the disguise so process.title, app.setName(),
+    // and dock icon (suppressed while undetectable) are restored.
     if (state) {
       for (const timer of this._disguiseTimers) {
         clearTimeout(timer);
       }
       this._disguiseTimers = [];
+    } else {
+      this._applyDisguise(this.disguiseMode);
     }
 
     // Cancel any pending content-protection re-assert from a PREVIOUS toggle —
@@ -8129,25 +8173,19 @@ export class AppState {
 
     // NO runtime activation-policy churn here — and this is deliberate.
     //
-    // The dual-dock-icon bug is a STARTUP phenomenon: the app is born, paints a
-    // tile, THEN renames via app.setName()+CFBundleName, and the LaunchServices
-    // re-registration races into a second tile. That path is fully handled at
-    // startup by LSUIElement (the bundle is born tile-less) plus the one-shot
-    // accessory→regular promotion after createWindow() — see the whenReady block.
+    // Duplicate Dock tiles come from activation-policy churn (rapid
+    // regular↔accessory/UIElement flips), not from the rename — see
+    // utils/macDockPolicy.ts. The old code bracketed this rename in
+    // accessory→regular "to be safe", but that round-trip is exactly such a flip,
+    // and it also deactivates the whole application for a tick — the
+    // always-on-top overlay/launcher windows leave the foreground layer and snap
+    // back, producing a visible disappear/reappear flicker on every disguise
+    // switch. With no policy change the app never deactivates, so there is also
+    // nothing to re-focus.
     //
-    // At RUNTIME the app already owns a single stable 'regular' dock tile, and
-    // app.setName() updates that tile's label in place rather than spawning a
-    // duplicate. The old code still bracketed this rename in accessory→regular
-    // "to be safe", but that round-trip deactivates the whole application for a
-    // tick — the always-on-top overlay/launcher windows leave the foreground
-    // layer and snap back, producing a visible disappear/reappear flicker on
-    // every disguise switch. Trading a guaranteed flicker for a hypothetical
-    // duplicate tile is the wrong deal, so the bracket is gone. With no policy
-    // change the app never deactivates, so there is also nothing to re-focus.
-    //
-    // Stealth is unaffected: _applyDisguise() already skips app.setName() and
-    // app.dock.setIcon() when isUndetectable (the dock stays hidden), and we
-    // never promote activation policy here.
+    // Stealth: the Settings UI locks the disguise picker while undetectable is
+    // on, and _applyDisguise() skips app.setName()/app.dock.setIcon() and
+    // re-hides the tile after its process.title write if it ever runs then.
     this._applyDisguise(mode);
   }
 
@@ -8156,84 +8194,28 @@ export class AppState {
   }
 
   private _applyDisguise(mode: 'terminal' | 'settings' | 'activity' | 'none'): void {
-    let appName = "Natively";
-    let iconPath = "";
-
+    const appName = disguiseAppName(mode, process.platform);
     const isWin = process.platform === 'win32';
     const isMac = process.platform === 'darwin';
 
-    switch (mode) {
-      case 'terminal':
-        appName = isWin ? "Command Prompt " : "Terminal ";
-        if (isWin) {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/fakeicon/win/terminal.png")
-            : path.join(app.getAppPath(), "assets/fakeicon/win/terminal.png");
-        } else {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/fakeicon/mac/terminal.png")
-            : path.join(app.getAppPath(), "assets/fakeicon/mac/terminal.png");
-        }
-        break;
-      case 'settings':
-        appName = isWin ? "Settings " : "System Settings ";
-        if (isWin) {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/fakeicon/win/settings.png")
-            : path.join(app.getAppPath(), "assets/fakeicon/win/settings.png");
-        } else {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/fakeicon/mac/settings.png")
-            : path.join(app.getAppPath(), "assets/fakeicon/mac/settings.png");
-        }
-        break;
-      case 'activity':
-        appName = isWin ? "Task Manager " : "Activity Monitor ";
-        if (isWin) {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/fakeicon/win/activity.png")
-            : path.join(app.getAppPath(), "assets/fakeicon/win/activity.png");
-        } else {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/fakeicon/mac/activity.png")
-            : path.join(app.getAppPath(), "assets/fakeicon/mac/activity.png");
-        }
-        break;
-      case 'none':
-      default:
-        appName = "Natively";
-        if (isMac) {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "natively.icns")
-            : path.join(app.getAppPath(), "assets/natively.icns");
-        } else if (isWin) {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/icons/win/icon.ico")
-            : path.join(app.getAppPath(), "assets/icons/win/icon.ico");
-        } else {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/icon.png")
-            : path.join(app.getAppPath(), "assets/icon.png");
-        }
-        break;
-    }
+    // macOS 'none' is the macOS-drawn render of assets/Natively.icon, not full-bleed icon.png — see utils/disguiseIcon.ts.
+    const iconRelativePath = disguiseIconRelativePath(mode, process.platform);
+    const iconPath = app.isPackaged
+      ? path.join(process.resourcesPath, iconRelativePath)
+      : path.join(app.getAppPath(), iconRelativePath);
 
     console.log(`[AppState] Applying disguise: ${mode} (${appName}) on ${process.platform}`);
 
-    // 1. Update process title (affects Task Manager / ps / top).
-    // NOT while undetectable on macOS: the setter is a LaunchServices check-in
-    // (libuv uv__set_process_title → _LSApplicationCheckIn with the bundle's
-    // Info.plist, which has no LSUIElement), so every write re-registers the
-    // process as a Foreground app and re-shows the Dock tile — the same thing
-    // app.dock.show() does. Activity Monitor reads the LS display name, not
-    // this, so nothing is lost. See shouldWriteProcessTitle().
-    if (shouldWriteProcessTitle(process.platform, this.isUndetectable)) {
-      process.title = appName;
-    }
+    // 1. Update process title (affects Activity Monitor / Task Manager).
+    // On macOS this write re-checks the app in with LaunchServices, which
+    // UNHIDES a hidden Dock tile — see planDisguiseTitleWrites below.
+    const titlePlan = planDisguiseTitleWrites(process.platform, this.isUndetectable);
+    const titleWritten = !(titlePlan.skipUnchangedWrite && process.title === appName);
+    if (titleWritten) process.title = appName;
 
-    // 2. Update app name (affects macOS Menu / Dock)
-    // Skip when undetectable — kept conservative; the verified re-show
-    // trigger is the process.title check-in above, not app.setName() itself.
+    // 2. Update app name (affects macOS Menu / Dock label). On macOS
+    // app.setName() only stores the name; still skipped when undetectable so the
+    // stealth path makes no identity changes beyond the title above.
     if (!this.isUndetectable) {
       app.setName(appName);
     }
@@ -8242,10 +8224,12 @@ export class AppState {
       process.env.CFBundleName = appName.trim();
     }
 
-    // 3. Update App User Model ID (Windows Taskbar grouping)
+    // 3. Update App User Model ID (Windows Taskbar grouping). Undisguised, it
+    // is the installer shortcut's ID so the running window groups with a
+    // pinned Natively instead of adding a second button; each disguise keeps
+    // its own ID so it never groups with the real app. See windowsTaskbarPolicy.
     if (isWin) {
-      // Use unique AUMID per disguise to avoid grouping with the real app
-      app.setAppUserModelId(`com.natively.assistant.${mode}`);
+      app.setAppUserModelId(appUserModelIdForDisguise(mode));
     }
 
     // 4. Update Icons
@@ -8255,7 +8239,11 @@ export class AppState {
       if (isMac) {
         // Skip dock icon update when dock is hidden to avoid potential flicker
         if (!this.isUndetectable) {
-          if (app.dock) app.dock.setIcon(image);  // app.dock is macOS-only (undefined elsewhere); isMac gated at 7244
+          // Packaged + undisguised keeps the live Liquid Glass bundle icon — see utils/disguiseIcon.ts.
+          if (app.dock && !image.isEmpty() && shouldSetMacDockIcon(mode, app.isPackaged, this._macDockIconOverridden)) {
+            app.dock.setIcon(image);  // app.dock is macOS-only (undefined elsewhere); isMac gated at 7244
+            this._macDockIconOverridden = true;
+          }
         }
       } else {
         // Windows/Linux: Update all window icons
@@ -8310,9 +8298,19 @@ export class AppState {
       this._disguiseTimers.push(ts);
     };
 
-    scheduleUpdate(200);
-    scheduleUpdate(1000);
-    scheduleUpdate(5000);
+    // Not while the macOS Dock must stay hidden: each re-assert unhides the
+    // tile, and the +5000ms one landed after startup enforcement had finished,
+    // leaving the icon up in undetectable mode for the rest of the session.
+    if (titlePlan.scheduleReasserts) {
+      scheduleUpdate(200);
+      scheduleUpdate(1000);
+      scheduleUpdate(5000);
+    }
+
+    // A write above has already unhidden the tile; hide it again now.
+    if (titlePlan.reassertStealthAfterWrite && titleWritten) {
+      this.reassertUndetectableStealth();
+    }
   }
 
   // Helper: broadcast an IPC event to all windows
@@ -8361,8 +8359,30 @@ export class AppState {
 // packaged build — there it logs and exits, because a packaged mismatch means
 // the release pipeline shipped the wrong .node binaries and no runtime fix is
 // honest.
-const gotSingleInstanceLock = app.requestSingleInstanceLock();
-logStartupPhase('single-instance-lock', { gotLock: gotSingleInstanceLock });
+/*
+  Agent UI testing (CLAUDE.md, "Agent UI testing via CDP"). An agent-driven
+  instance must not fight the developer's own app for the single-instance lock,
+  and must not write into the real profile. scripts/dev-agent.mjs is the only
+  thing that sets NATIVELY_AGENT_USER_DATA.
+
+  Both concessions are gated on !app.isPackaged. A packaged build must keep the
+  lock and the real profile whatever the environment says, or a stray env var in
+  a user's shell would silently give them a second app writing to a throwaway
+  directory — and CLAUDE.md forbids enabling this in packaged builds outright.
+*/
+const agentUserData = !app.isPackaged ? process.env.NATIVELY_AGENT_USER_DATA : undefined;
+if (agentUserData) {
+  // Before whenReady and before anything reads userData, or the log file and
+  // the DB would already have been opened against the real profile.
+  app.setPath('userData', agentUserData);
+}
+
+// Skipping the lock is what lets an agent instance run beside the developer's.
+const gotSingleInstanceLock = agentUserData ? true : app.requestSingleInstanceLock();
+logStartupPhase('single-instance-lock', {
+  gotLock: gotSingleInstanceLock,
+  agentMode: Boolean(agentUserData),
+});
 if (!gotSingleInstanceLock) {
   console.log('[Main] Another instance is already running. Exiting this instance.');
   // process.exit(0), not app.quit() and not app.exit(0). app.quit() before
@@ -8387,6 +8407,22 @@ async function initializeApp() {
     } catch (err) {
       console.error('[Main] second-instance handler failed:', err);
     }
+  });
+
+  // No renderer may open another Electron window: a target="_blank" link used
+  // to spawn a default BrowserWindow — its own taskbar button on Windows and no
+  // content protection, even in undetectable mode. https goes to the default
+  // browser (the 'open-external' rule); everything else is dropped. Registered
+  // before whenReady so it covers every window. See utils/windowOpenPolicy.ts.
+  app.on('web-contents-created', (_event, contents) => {
+    contents.setWindowOpenHandler(({ url }) => {
+      if (shouldOpenExternally(url)) {
+        shell.openExternal(url).catch((err) => console.warn('[Main] openExternal failed:', err?.message || err));
+      } else {
+        console.warn('[Main] Blocked window.open', { protocol: url.split(':')[0] });
+      }
+      return { action: 'deny' };
+    });
   });
 
   // PHASE-2E: install lifecycle tracking BEFORE app.whenReady() so we never
@@ -8462,32 +8498,32 @@ async function initializeApp() {
     }
   }
 
-  // 2a. PRE-EMPTIVE dock hide / activation-policy clamp: must happen before ANY
-  // operation that causes macOS to register a dock entry (app.setName, the
-  // LaunchServices live-rename in _applyDisguise, BrowserWindow creation, etc.).
+  // 2a. PRE-EMPTIVE dock hide for a persisted-undetectable launch: the packaged
+  // bundle has no LSUIElement, so the process is born with a Dock tile. Hide it
+  // before any window exists; applyInitialUndetectableState() later converges it.
+  // The disguise title is written FIRST, while the born tile is still up: on
+  // macOS a process.title write re-checks the app in as a Foreground app, and
+  // doing it after the hide (as _applyDisguise used to) made born tile → hide →
+  // re-shown → re-hide within ~150ms, which left a duplicate tile up for the
+  // whole session. _applyDisguise then skips the identical rewrite.
   //
-  // DUAL-DOCK-ICON FIX: even in NORMAL (non-stealth) mode, applyInitialDisguise()
-  // → app.setName() + the native setProcessDisplayName() LaunchServices rename
-  // re-register the running app's LS identity. Doing that while the app is on the
-  // default 'regular' activation policy makes macOS paint a SECOND dock tile (the
-  // old identity's tile lingers while the renamed one registers) — the duplicate
-  // "Natively" icon multiple users reported. We therefore drop to 'accessory'
-  // (no dock tile) for the whole rename+window-creation window, then promote back
-  // to 'regular' exactly once AFTER createWindow() so a single, correctly-named
-  // tile appears together with the window. Stealth mode stays hidden via dock.hide()
-  // and is never promoted.
+  // Normal mode deliberately does NOTHING here. It used to clamp to 'accessory'
+  // and promote back to 'regular' after createWindow(), on the theory that the
+  // startup rename painted a second tile. Measured on the real build
+  // (2026-09-23) that round-trip was itself the duplicate-tile bug: a bundle
+  // born 'regular' went regular→accessory→regular, and with the DockHide() that
+  // setVisibleOnAllWorkspaces used to run per window, startup left 4 tiles and
+  // 2 after quit. With neither, the app shows exactly one tile. (app.setName()
+  // on macOS only stores a string; it re-registers nothing.) See
+  // utils/macDockPolicy.ts.
   // We read isUndetectable directly from settings here — AppState singleton isn't
   // constructed yet, so we cannot call appState.getUndetectable().
   if (process.platform === 'darwin') {
     // SettingsManager is already statically imported — no require() needed.
     const isUndetectableOnStartup = SettingsManager.getInstance().get('isUndetectable') ?? false;
     if (isUndetectableOnStartup) {
+      process.title = disguiseAppName(normalizeDisguiseMode(SettingsManager.getInstance().get('disguiseMode')), process.platform);
       if (app.dock) app.dock.hide();  // app.dock is macOS-only (undefined elsewhere); darwin gated at 7445
-    } else {
-      // Non-stealth: clamp to accessory (dock-tile-less) until the disguised
-      // name/icon is painted and the window exists. Do NOT promote to 'regular'
-      // here — that happens once after createWindow() below.
-      app.setActivationPolicy('accessory');
     }
   }
 
@@ -8936,14 +8972,11 @@ if (process.env.THINKING_MATRIX === '1') {
   // on 2026-09-05 with the classifier itself; its cache is swept above.
   // See docs/natively-router-final-answer-2026-09-05.md.
 
-  // DUAL-DOCK-ICON FIX (promotion half): now that the disguised name/icon are
-  // applied and the window exists, promote back to 'regular' so a SINGLE dock
-  // tile appears together with the window. Gated on darwin && !undetectable so
-  // stealth mode is never promoted (it must stay dock-tile-less). This pairs
-  // with the 'accessory' clamp in step 2a above — together they ensure the LS
-  // re-registration from app.setName()/setProcessDisplayName() happens while no
-  // tile is visible, so macOS never paints a second "Natively" icon.
-  if (process.platform === 'darwin' && !appState.getUndetectable()) {
+  // One-shot promotion to 'regular', only to ADD a missing tile: the dev
+  // Electron.app is patched to LSUIElement=1 and is born without one. A packaged
+  // bundle is born 'regular', so it is left alone (re-promoting is churn), and
+  // undetectable mode is never promoted.
+  if (shouldPromoteToRegularAtStartup(process.platform, appState.getUndetectable(), app.dock?.isVisible() ?? false)) {
     app.setActivationPolicy('regular');
   }
 
@@ -9244,12 +9277,11 @@ if (process.env.THINKING_MATRIX === '1') {
     console.log("App activated")
     if (process.platform === 'darwin') {
       if (appState.getUndetectable()) {
-        // A LaunchServices re-open of the running app (click on the pinned
-        // Dock tile, `open -a`, Spotlight) has ALREADY transformed the process
-        // back to a Foreground app by the time this fires — verified on
-        // Electron 43.1.0. Skipping dock.show() is not enough: drive the dock
-        // back to hidden through the self-verifying loop, or the tile (and its
-        // running dot) stays until the next toggle.
+        // A LaunchServices re-open of the running app (clicking its pinned
+        // Dock icon, `open -a`, Spotlight) has ALREADY made it a Foreground
+        // app when this fires — measured: the tile came back ~5 ms before the
+        // event and stayed. Not calling dock.show() is not enough; drive the
+        // Dock back to hidden. (Identified in PR #595.)
         appState.reassertUndetectableStealth();
       } else if (!appState.getIsMeetingActive()) {
         // Do NOT call dock.show() while a meeting is running — the dock icon
@@ -9490,8 +9522,39 @@ if (process.env.THINKING_MATRIX === '1') {
     logToFile('[DIAG:gpu-info-update] GPU process info changed');
   });
 
+  // Local embedding workers must be idle before the process exits (2026-09-22):
+  // quitting while one was inside a native ONNX call aborted the app with
+  // SIGABRT (see LocalEmbeddingProvider.shutdownForQuit). Deferred ONCE, only
+  // when a worker still owes a reply, and bounded so a wedged worker cannot
+  // hold the quit hostage. Same code path on macOS and Windows: both run the
+  // worker on a Node worker_thread that process exit tears down.
+  let localEmbeddingQuitDrainStarted = false;
+  const LOCAL_EMBEDDING_QUIT_DRAIN_MS = 5_000;
+  /** True when the quit was deferred; before-quit returns and re-runs on app.quit(). */
+  const deferQuitForLocalEmbeddingDrain = (event: Electron.Event): boolean => {
+    if (localEmbeddingQuitDrainStarted) return false;
+    localEmbeddingQuitDrainStarted = true;
+    try {
+      const { LocalEmbeddingProvider } = require('./rag/providers/LocalEmbeddingProvider');
+      if (!LocalEmbeddingProvider.hasInFlightWorkForQuit()) return false;
+      event.preventDefault();
+      appState.setQuitting(true);
+      const startedAt = Date.now();
+      console.log('[Main] Quit deferred: waiting for the local embedding worker to finish its current batch...');
+      void LocalEmbeddingProvider.shutdownAllForQuit(LOCAL_EMBEDDING_QUIT_DRAIN_MS)
+        .then((outcomes: string[]) => console.log(`[Main] Local embedding workers stopped for quit in ${Date.now() - startedAt}ms: ${outcomes.join(', ')}`))
+        .catch((e: unknown) => console.warn('[Main] Local embedding quit drain failed; quitting anyway:', e))
+        .finally(() => app.quit());
+      return true;
+    } catch (e) {
+      console.warn('[Main] Local embedding quit drain unavailable; quitting normally:', e);
+      return false;
+    }
+  };
+
   // Scrub API keys from memory on quit to minimize exposure window
   app.on("before-quit", (event) => {
+    if (deferQuitForLocalEmbeddingDrain(event)) return;
     console.log("App is quitting, cleaning up resources...");
     appState.setQuitting(true);
 

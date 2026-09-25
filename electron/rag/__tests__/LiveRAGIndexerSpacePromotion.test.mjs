@@ -105,10 +105,14 @@ describe('LiveRAGIndexer provider promotion space coherence', () => {
     const indexer = new LiveRAGIndexer(vectorStore, pipeline);
 
     indexer.start(meetingId);
+    // Each turn is long (~175 tokens): chunks span speakers since 2026-09-24,
+    // so three short turns are now ONE chunk — length, not speaker changes,
+    // is what makes this fixture multi-chunk.
+    const long = (w) => `${w} ${'segment has enough useful words for indexing and keeps going. '.repeat(11)}`;
     indexer.feedSegments([
-      { speaker: 'Alice', text: 'Alpha planning segment has enough useful words for indexing.', timestamp: 1000 },
-      { speaker: 'Bob', text: 'Beta response segment also has enough useful words for indexing.', timestamp: 2000 },
-      { speaker: 'Alice', text: 'Gamma followup segment keeps the live index multi chunk.', timestamp: 3000 },
+      { speaker: 'Alice', text: long('Alpha planning'), timestamp: 1000 },
+      { speaker: 'Bob', text: long('Beta response'), timestamp: 2000 },
+      { speaker: 'Alice', text: long('Gamma followup'), timestamp: 3000 },
     ]);
 
     await indexer.stop();

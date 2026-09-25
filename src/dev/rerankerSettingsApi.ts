@@ -107,6 +107,9 @@ const EXTENSIONS = [{
 const params = new URLSearchParams(location.search);
 const SLOW = params.has('slow');
 const HANG = params.has('hang');   // never resolves — the stuck-skeleton repro
+// `?extensions=0` renders the Reranker Extensions empty state, which is what
+// most installs see and which the one-extension fixture never shows.
+const NO_EXTENSIONS = params.get('extensions') === '0';
 const delay = <T,>(v: T): Promise<T> =>
     HANG ? new Promise<T>(() => {})
         : SLOW ? new Promise(r => setTimeout(() => r(v), 4000))
@@ -133,7 +136,7 @@ export const RERANKER_SETTINGS_API = {
         ],
     }),
     listLocalRerankerModels: async () => ({ models: CATALOG_MODELS, selectedId: 'ettin-reranker-68m', builtInSelected: false }),
-    listExtensions: async () => ({ available: true, extensions: EXTENSIONS }),
+    listExtensions: async () => ({ available: true, extensions: NO_EXTENSIONS ? [] : EXTENSIONS }),
     setRerankerConfig: async () => ({ success: true }),
     useLocalRerankerModel: async () => ({ success: true }),
     installLocalRerankerModel: async () => ({ success: true }),
@@ -147,7 +150,37 @@ export const RERANKER_SETTINGS_API = {
     acknowledgeExtensionLicense: async () => ({ success: true }),
     downloadExtensionModel: async () => ({ success: true }),
     cancelExtensionModelDownload: async () => ({ success: true }),
-    browseExtensionRegistry: async () => ({ ok: true, entries: [] }),
+    // Two rows so the harness exercises the real shapes: one needing an
+    // external runtime, one under a non-commercial licence. An empty list
+    // would render nothing and prove nothing.
+    browseExtensionRegistry: async () => ({
+        ok: true,
+        cached: false,
+        error: null,
+        entries: [
+            {
+                id: 'jina-reranker-v35', name: 'Jina Reranker v3.5', latestVersion: '1.0.0',
+                repo: 'example/natively-extensions', apiVersion: '1', category: 'reranker',
+                modelLicenses: ['CC-BY-NC-4.0'], requiresExternalRuntime: ['llama-server'],
+                download: {
+                    code: 'https://objects.githubusercontent.com/jina.js',
+                    manifest: 'https://objects.githubusercontent.com/jina.json',
+                    sha256: { code: 'a'.repeat(64), manifest: 'b'.repeat(64) },
+                },
+            },
+            {
+                id: 'qwen3-reranker', name: 'Qwen3 Reranker 0.6B', latestVersion: '1.0.0',
+                repo: 'example/natively-extensions', apiVersion: '1', category: 'reranker',
+                modelLicenses: ['Apache-2.0'], requiresExternalRuntime: ['llama-server'],
+                download: {
+                    code: 'https://objects.githubusercontent.com/qwen.js',
+                    manifest: 'https://objects.githubusercontent.com/qwen.json',
+                    sha256: { code: 'c'.repeat(64), manifest: 'd'.repeat(64) },
+                },
+            },
+        ],
+    }),
+    installExtensionFromRegistry: async (id: string) => ({ success: false, error: 'harness_' + id }),
     onLocalRerankerModelProgress: () => () => {},
     onExtensionModelProgress: () => () => {},
     platform: 'darwin',

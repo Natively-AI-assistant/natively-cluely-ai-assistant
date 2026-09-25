@@ -741,6 +741,26 @@ export class ModeHybridRetriever {
             return;
         }
 
+        // INDEXING may block on a lazy model load; a live QUERY may not.
+        //
+        // The bundled local provider is assigned before its ONNX session is
+        // built, and reports isLoaded()=false until the first embed. Without
+        // this, indexing saw isEmbeddingAvailable()=false, marked the file
+        // `lexical_only`, and never performed the embed that would have loaded
+        // the model — so the retry path hit the same gate forever. Reproduced
+        // live 2026-09-21: `embedded 0/9 chunks`, no model load in the worker.
+        //
+        // Deliberately NOT applied to retrieve(): stalling a live turn on a
+        // cold model load is exactly what isLoaded() exists to prevent.
+        // Optional-called so a pipeline double without the method is unaffected.
+        if (!this.isEmbeddingAvailable() && activeSpace) {
+            try {
+                await (this.embeddingPipeline as {
+                    ensureProviderLoaded?: (ms?: number) => Promise<boolean>;
+                }).ensureProviderLoaded?.();
+            } catch { /* fall through to lexical_only below */ }
+        }
+
         if (!this.isEmbeddingAvailable() || !activeSpace) {
             // No embedder: persist chunk TEXT (lexical retrieval still wins a
             // re-chunk per query) and mark lexical_only so prewarm retries later.

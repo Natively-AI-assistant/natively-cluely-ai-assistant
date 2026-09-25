@@ -132,7 +132,8 @@ const GEMINI_PRO_MODEL = "gemini-3.1-pro-preview"
 // TEXT_HEDGE_ENABLED / GEMINI_TEXT_HEDGE_CONFIG knobs were removed.
 // Groq retired every Llama id it hosted: `llama-3.3-70b-versatile` shut down
 // 2026-08-16 and `meta-llama/llama-4-scout-17b-16e-instruct` on 2026-07-17.
-// `qwen/qwen3.6-27b` is the replacement for BOTH paths — it is the only model
+// `qwen/qwen3.8-27b` (successor to qwen3.6-27b, itself shut down 2026-09-14) is
+// the model for BOTH paths — it is the only model
 // left in Groq's catalogue that accepts image input, so text and vision share
 // one id. The user's pick in the model selector still wins; these are only the
 // baseline used when nothing is chosen and by the Fast Text / emergency paths.
@@ -143,6 +144,7 @@ const GEMINI_PRO_MODEL = "gemini-3.1-pro-preview"
 // vision chain is meant to fall through to another provider.
 const GROQ_MODEL = GROQ_PRIMARY_MODEL
 import { GROQ_VISION_MODEL } from './llm/groqModels'
+import { DEEPSEEK_DEFAULT_MODEL, deepseekWireModel, isDeepseekModelId } from './llm/deepseekModels'
 import { stripLeadingReasoningBlock } from './llm/reasoningTagFilter'
 import { describeNinerouterFailure, NINEROUTER_EMPTY_ANSWER } from './llm/ninerouterErrors'
 import { renderUserInstructionSystemLayer } from './llm/userInstructionContract'
@@ -156,8 +158,51 @@ const OLLAMA_VISION_CHAIN_PROBE_BUDGET_MS = 1500
 const OLLAMA_VISION_NEGATIVE_TTL_MS = 30_000
 const OPENAI_MODEL = "gpt-5.4"
 const CLAUDE_MODEL = "claude-sonnet-4-6"
-const DEEPSEEK_MODEL = "deepseek-v4-flash"
+// Auto Answer judge on the OpenAI rung — chosen by MEASUREMENT, not by size.
+// Scored with judgeEval.mjs on the 146 labeled real-meeting candidates (19 asks),
+// two runs each, JSON mode, 2026-09-22:
+//   gpt-5.5       none  recall 14/19 14/19  false fires 0  p50 1.4 s  worst p90 2.1 s
+//   gpt-5.6-luna  low   recall 12/19 13/19  false fires 0  p50 2.0 s  worst p90 3.7 s  ← the old path
+//   gpt-5.4       none  recall 11/19 11/19  false fires 0  p50 1.4 s  worst p90 2.3 s
+//   gpt-5.4-mini  none  recall  9/19  6/19  false fires 1  p50 1.2 s  worst p90 2.5 s
+// The small tiers are faster but miss real asks; gpt-5.5 is both faster AND more
+// accurate than the chat-model fallback it replaces. Re-run the eval before
+// changing this.
+// Sub-deadline for the fast rung inside the judge's 2500 ms budget.
+//
+// Measured 2026-09-24 against gemini-3.1-flash-lite on the REAL capped judge
+// prompt (~3039 tokens), thinking minimal, 7 runs:
+//   1085, 1104, 1119, 1419, 1722, 2096, 2213 ms   (median 1419)
+// The earlier 1200 ms was set from a 60-token synthetic call and would have
+// timed out 4 of those 7 — spending the latency and then falling through
+// anyway, which is worse than not having the rung.
+//
+// 1800 ms covers the median and most of the spread while leaving ~700 ms of the
+// judge budget for the ladder beneath. The variance here is real and the deeper
+// lever is prompt size: JUDGE_PROMPT_RULES alone is 7420 chars of the ~12.2k
+// total, so trimming the boilerplate would buy more than any timeout tuning.
+const FAST_MODEL_JUDGE_RUNG_TIMEOUT_MS = 1800
+// Ceiling for a fast call made with no caller signal (the preferFast callers).
+const FAST_MODEL_DEFAULT_TIMEOUT_MS = 8000
+const OPENAI_JUDGE_MODEL = "gpt-5.5"
+const CLAUDE_JUDGE_MODEL = "claude-haiku-4-5"
+// DEEPSEEK_MODEL keeps main's centralised id, NOT the "deepseek-v4-flash"
+// literal this commit carried: v4-flash is a RETIRED alias and deepseek-flash
+// is what DeepSeek serves today (llm/deepseekModels.ts). Taking the literal
+// would silently revert main's fix.
+const DEEPSEEK_MODEL = DEEPSEEK_DEFAULT_MODEL
 const DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+// DeepSeek's chat API THINKS BY DEFAULT: `thinking.type` defaults to `enabled`
+// (reasoning_effort `high`), and in streaming the reasoning arrives in
+// `delta.reasoning_content` BEFORE the first `delta.content` token
+// (api-docs.deepseek.com/api/create-chat-completion). Every reader here takes
+// only `delta.content`, so a request without this field waits out the whole
+// hidden chain of thought before the overlay shows a word. The post-meeting
+// summary server has always sent it (benchmark/reports/REPORT.md: a probe that
+// dropped it returned reasoning_tokens 106 on a tiny prompt, the production
+// body 0); the interactive paths never did. A spread, not an inline literal:
+// the OpenAI SDK's request type has no `thinking` field.
+const DEEPSEEK_NO_THINKING = { thinking: { type: 'disabled' as const } }
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 // Optional on OpenRouter's side, and purely for their public leaderboards —
 // they are NOT auth and carry nothing about the user. Sent as constants so a
@@ -2131,8 +2176,7 @@ export class LLMHelper {
   }
 
   private isDeepseekModel(modelId: string): boolean {
-    if (!modelId) return false;
-    return /^deepseek-v\d/.test(modelId.toLowerCase());
+    return isDeepseekModelId(modelId);
   }
 
   private isLiteLLMModel(modelId: string): boolean {
@@ -3497,15 +3541,22 @@ ${IMAGE_TRUST_TRAILER}`;
     try {
       const imageBuffer = await fs.promises.readFile(path);
 
-      // Resize and compress
+      // Resize and compress. 1536px @ q80 unless "Shrink screenshots when the
+      // provider is slow" is on AND the measured provider would blow this turn's
+      // budget AND this is not a coding session — then ImageOptimizer's `fast`
+      // preset size (1024px @ q78). This is the path every built-in vision
+      // adapter (OpenAI, Claude, Gemini, Groq, Antigravity, Fluxion …) uses; the
+      // switch used to reach only the Custom/cURL paths.
+      const shrink = this.imageProfileFor('balanced', 0) === 'fast';
+      const edge = shrink ? 1024 : 1536;
       const processedBuffer = await sharp(imageBuffer)
         .resize({
-          width: 1536,
-          height: 1536,
-          fit: 'inside', // Maintain aspect ratio, max dimension 1536
+          width: edge,
+          height: edge,
+          fit: 'inside', // Maintain aspect ratio
           withoutEnlargement: true
         })
-        .jpeg({ quality: 80 }) // 80% quality JPEG is much smaller than PNG
+        .jpeg({ quality: shrink ? 78 : 80 }) // JPEG is much smaller than PNG
         .toBuffer();
 
       return {
@@ -4718,6 +4769,213 @@ let isMultimodal = !!(imagePaths?.length);
    * is down (the controller's deadline bounds the total wait either way).
    */
   /**
+   * The user's chosen fast model, or null. Read PER CALL rather than cached so a
+   * Settings change takes effect without restarting the helper.
+   */
+  private get fastModelId(): string | null {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      return CredentialsManager.getInstance().getFastModel();
+    } catch { return null; }
+  }
+
+  /**
+   * Which provider family will actually serve this fast-model id, or null when
+   * NONE will.
+   *
+   * ONE resolver, used by callFastModel to dispatch AND by the renderer over IPC
+   * to filter the picker, so the list the user is offered cannot drift from the
+   * list the seam can run. A separate boolean beside callFastModel would drift
+   * the first time a branch changed, and invisibly - which is how the gateway
+   * egress bug got in.
+   */
+  private resolveFastModelFamily(modelId: string):
+    'openai' | 'groq' | 'gemini' | 'deepseek' | 'claude'
+    | 'openrouter' | 'litellm' | 'nvidia_nim' | 'ninerouter' | 'fluxion' | null {
+    if (!modelId) return null;
+    // Gateways are OpenAI-SHAPED but are NOT OpenAI. isOpenAiModel() self-excludes
+    // Groq and Fluxion but not these, and its final clause is `includes('openai')`
+    // - so `openrouter/openai/gpt-5.6-terra` (a stock picker preset) would be
+    // POSTed to api.openai.com on the user's OWN OpenAI key, carrying the judge
+    // prompt's meeting turns, for a prefixed id OpenAI rejects. Supporting them
+    // properly needs per-gateway clients plus routing-prefix stripping; until
+    // then they resolve to no family rather than leak. MUST stay first.
+    if (this.isOpenRouterModel(modelId)) return 'openrouter';
+    if (this.isLiteLLMModel(modelId)) return 'litellm';
+    if (this.isNvidiaNimModel(modelId)) return 'nvidia_nim';
+    if (this.isNinerouterModel(modelId)) return 'ninerouter';
+    if (this.isFluxionModel(modelId)) return 'fluxion';
+    if (this.isOpenAiModel(modelId)) return 'openai';
+    if (this.isGroqModel(modelId)) return 'groq';
+    if (this.isGeminiModel(modelId)) return 'gemini';
+    if (this.isDeepseekModel(modelId)) return 'deepseek';
+    if (this.isClaudeModel(modelId)) return 'claude';
+    return null;
+  }
+
+  /**
+   * Can the fast path actually run this model id? The Settings picker filters
+   * its options through this over IPC, so a user is never offered a model that
+   * would save, display, and silently do nothing.
+   */
+  public canDispatchFastModel(modelId: string): boolean {
+    return this.resolveFastModelFamily(modelId) !== null;
+  }
+
+  /**
+   * One non-streaming call on the user's chosen FAST model.
+   *
+   * Returns null for every "not available" case — unset, no client, family
+   * disabled, local-only, unrecognised id, provider failure, empty body — so the
+   * caller falls through to its own ladder unchanged. ONLY an abort throws, so a
+   * caller can tell a missing setting from a user cancellation; the judge needs
+   * that distinction because its deadline and supersede must propagate rather
+   * than quietly spend a ladder call.
+   */
+  private async callFastModel(
+    message: string,
+    opts: { signal?: AbortSignal; timeoutMs?: number; json?: boolean } = {},
+  ): Promise<string | null> {
+    const modelId = this.fastModelId;
+    if (!modelId) return null;
+    if (this.isLocalOnlyMode) return null;
+
+    // A pick the seam cannot dispatch is a silent no-op forever, which is
+    // indistinguishable from "unset" without this line.
+    const notDispatchable = () => {
+      console.log(`[LLMHelper] fast-model not dispatchable (${modelId}) - falling through to the ladder`);
+      return null;
+    };
+
+    const family = this.resolveFastModelFamily(modelId);
+    if (!family) return notDispatchable();
+
+    // A caller with neither a signal nor a timeout would leave the request running
+    // to the SDK default (10 min on OpenAI) long after its result is worthless.
+    const budget = opts.timeoutMs ?? (opts.signal ? undefined : FAST_MODEL_DEFAULT_TIMEOUT_MS);
+    const timer = budget
+      ? AbortSignal.any([opts.signal, AbortSignal.timeout(budget)].filter(Boolean) as AbortSignal[])
+      : opts.signal;
+
+    const finish = (raw: string | null | undefined): string | null => {
+      let text = stripLeadingReasoningBlock(raw || '').trim();
+      // A model that ignores response_format returns ```json ... ``` and the
+      // caller's JSON.parse fails silently - no verdict, no error, no log.
+      // Observed live on OpenRouter 2026-09-24. We do send response_format, but
+      // not every gateway model honours it.
+      const fenced = text.match(/^```(?:[a-zA-Z]+)?\s*\n?([\s\S]*?)\n?```$/);
+      if (fenced) text = fenced[1].trim();
+      if (!text) return null;
+      // Stable, greppable marker: this is how a user's debug log shows whether
+      // their pick is actually being used, and which model answered.
+      console.log(`[LLMHelper] fast-model answered (${modelId})`);
+      return text;
+    };
+
+    try {
+      // The gateways are OpenAI-SHAPED but each has its OWN wire-id rule, and
+      // getting it wrong 404s: Fluxion strips to a bare id, OpenRouter keeps the
+      // vendor segment underneath. Never a generic strip.
+      const gateways: Record<string, { client: OpenAI | null; wire: string } | undefined> = {
+        openrouter: { client: this.openrouterClient, wire: this.openrouterWireModel(modelId) },
+        litellm:    { client: this.litellmClient,    wire: modelId.replace(/^litellm\//, '') },
+        nvidia_nim: { client: this.nvidiaNimClient,  wire: modelId.replace(/^nvidia_nim\//, '') },
+        ninerouter: { client: this.ninerouterClient, wire: this.ninerouterWireModel(modelId) },
+        fluxion:    { client: this.fluxionOpenAIClient, wire: this.fluxionWireModel(modelId) },
+      };
+      const gw = gateways[family];
+      if (gw) {
+        // Fluxion speaks either protocol and exactly one client is ever non-null;
+        // when the user's group is Anthropic the OpenAI client is null, so take
+        // the Anthropic path rather than falling through to a wrong provider.
+        if (family === 'fluxion' && !gw.client && this.fluxionAnthropicClient) {
+          this.assertOutboundScopes('fluxion', message);
+          await this.rateLimiters.fluxion?.acquire();
+          const res: any = await this.fluxionAnthropicClient.messages.create({
+            model: this.fluxionWireModel(modelId), max_tokens: 256, temperature: 0,
+            messages: [{ role: 'user', content: message }],
+          }, { signal: timer });
+          return finish((res?.content ?? []).map((c: any) => (c?.type === 'text' ? c.text : '')).join(''));
+        }
+        if (!gw.client) return notDispatchable();
+        this.assertOutboundScopes(family, message);
+        await this.rateLimiters[family]?.acquire();
+        const res = await gw.client.chat.completions.create({
+          model: gw.wire,
+          messages: [{ role: 'user', content: message }],
+          temperature: 0, max_tokens: 256,
+          ...(opts.json ? { response_format: { type: 'json_object' as const } } : {}),
+        }, { signal: timer });
+        return finish(res.choices?.[0]?.message?.content);
+      }
+
+      if (family === 'openai' && this.openaiClient) {
+        this.assertOutboundScopes('openai', message);
+        await this.rateLimiters.openai?.acquire();
+        const res = await this.openaiClient.chat.completions.create({
+          model: modelId,
+          messages: [{ role: 'user', content: message }],
+          max_completion_tokens: 512,
+          ...(opts.json ? { response_format: { type: 'json_object' as const } } : {}),
+          ...openaiReasoningParam(modelId),
+        }, { signal: timer });
+        return finish(res.choices?.[0]?.message?.content);
+      }
+      if (family === 'groq' && this.groqClient && !this._groqLocalDisabled) {
+        this.assertOutboundScopes('groq', message);
+        await this.rateLimiters.groq?.acquire();
+        const res = await this.createGroqCompletion(
+          { model: modelId, messages: [{ role: 'user', content: message }], temperature: 0, max_tokens: 256, stream: false },
+          { signal: timer },
+        );
+        return finish(res.choices?.[0]?.message?.content);
+      }
+      if (family === 'gemini' && this.client) {
+        this.assertOutboundScopes('gemini', message);
+        await this.rateLimiters.gemini?.acquire();
+        // @ts-ignore - abortSignal is accepted by the SDK's request config
+        const res = await this.client.models.generateContent({
+          model: modelId,
+          contents: [{ role: 'user', parts: [{ text: message }] }],
+          config: {
+            maxOutputTokens: 256, temperature: 0, abortSignal: timer,
+            ...(opts.json ? { responseMimeType: 'application/json' } : {}),
+          },
+        });
+        const parts = res.candidates?.[0]?.content?.parts ?? [];
+        return finish(res.text ?? (Array.isArray(parts) ? parts : [parts]).map((pt: any) => pt?.text ?? '').join(''));
+      }
+      if (family === 'deepseek' && this.deepseekClient) {
+        this.assertOutboundScopes('deepseek', message);
+        await this.rateLimiters.deepseek?.acquire();
+        const res = await this.deepseekClient.chat.completions.create({
+          model: modelId,
+          messages: [{ role: 'user', content: message }],
+          temperature: 0, max_tokens: 256,
+          ...(opts.json ? { response_format: { type: 'json_object' as const } } : {}),
+          ...DEEPSEEK_NO_THINKING,
+        }, { signal: timer });
+        return finish(res.choices?.[0]?.message?.content);
+      }
+      if (family === 'claude' && this.claudeClient) {
+        this.assertOutboundScopes('claude', message);
+        await this.rateLimiters.claude?.acquire();
+        const res: any = await this.claudeClient.messages.create({
+          model: modelId, max_tokens: 256, temperature: 0,
+          messages: [{ role: 'user', content: message }],
+        }, { signal: timer });
+        return finish((res?.content ?? []).map((c: any) => (c?.type === 'text' ? c.text : '')).join(''));
+      }
+      // Family resolved but its client is not configured right now (key removed
+      // since the pick was saved). Fall through rather than guessing another.
+      return notDispatchable();
+    } catch (error) {
+      if (opts.signal?.aborted) throw error;
+      return null;
+    }
+  }
+
+  /**
    * The low-confidence QUERY REWRITE's model call (2026-09-20): exactly ONE rung,
    * aborted at its deadline. It first borrowed generateJudgeVerdict, and an
    * adversarial review read what that does without a Gemini key: it falls into
@@ -4734,6 +4992,11 @@ let isMultimodal = !!(imagePaths?.length);
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       if (this.isLocalOnlyMode) return '';
+      // The user's chosen fast model first; the Gemini -> Groq -> Natively chain
+      // below is the fallback. This method already had exactly this shape, so the
+      // seam replaces a hand-rolled copy rather than adding a layer.
+      const pickedFast = await this.callFastModel(message, { timeoutMs, signal: controller.signal, json: true });
+      if (pickedFast) return pickedFast;
       if (this.client) {
         this.assertOutboundScopes('gemini', message);
         // @ts-ignore — abortSignal is accepted by the SDK's request config
@@ -4756,24 +5019,151 @@ let isMultimodal = !!(imagePaths?.length);
     }
   }
 
-  public async generateJudgeVerdict(message: string): Promise<string> {
+  /**
+   * The Auto Answer judge's call. A small, FAST model — never the user's chat
+   * model. Live telemetry (2026-09-22, OpenAI-only user on gpt-5.6-luna): the
+   * judge fell through to generateContentStructured, whose OpenAI rung takes
+   * the CURRENT model, so a yes/no classification ran on whatever chat model
+   * was selected — 1.4 s median, 2.5 s p90 (the deadline), and 41 of 83 calls
+   * superseded mid-flight and paid for nothing. The ladder here is an explicit
+   * JUDGE model per provider: Gemini flash-lite (the tuned default, live-probed
+   * 750-1200 ms) → Groq (~0.3 s TTFT, and previously NO judge rung at all, so a
+   * Groq-only user got the "only a trailing '?' fires" regex fallback) →
+   * OpenAI OPENAI_JUDGE_MODEL (measured: see the constant) → DeepSeek flash →
+   * Claude's default model. Only when none of those is configured does it fall
+   * back to the structured ladder. Every rung honours the outbound data-scope policy and its
+   * provider's rate limiter like any other call, and `signal` aborts the rung
+   * in flight when the interviewer keeps talking (the controller supersedes
+   * the verdict anyway — the call was money and quota spent on nothing).
+   */
+  public async generateJudgeVerdict(message: string, opts: { signal?: AbortSignal } = {}): Promise<string> {
+    const signal = opts.signal;
+    const aborted = () => signal?.aborted === true;
+    const abortError = () => Object.assign(new Error('judge aborted: superseded by newer speech'), { name: 'AbortError' });
+    const userOnly = [{ role: 'user' as const, content: message }];
+
+    // Rung 0: the user's chosen fast model, when they have set one. Everything
+    // below is the measured per-provider ladder and remains the fallback, so an
+    // unset or failing pick degrades to exactly the previous behaviour. An abort
+    // here propagates rather than falling through — a superseded judge must not
+    // spend a ladder call on a verdict the controller has already discarded.
+    const picked = await this.callFastModel(message, { signal, json: true, timeoutMs: FAST_MODEL_JUDGE_RUNG_TIMEOUT_MS });
+    if (picked) return picked;
+
     if (this.client) {
       for (const modelId of [GEMINI_FLASH_LITE_MODEL, GEMINI_FLASH_MODEL]) {
+        if (aborted()) throw abortError();
         try {
+          this.assertOutboundScopes('gemini', message);
           await this.rateLimiters.gemini.acquire();
-          // @ts-ignore
+          // @ts-ignore — abortSignal is accepted by the SDK's request config
           const res = await this.client.models.generateContent({
             model: modelId,
             contents: [{ role: 'user', parts: [{ text: message }] }],
-            config: { maxOutputTokens: 256, temperature: 0, responseMimeType: 'application/json' },
+            config: { maxOutputTokens: 256, temperature: 0, responseMimeType: 'application/json', abortSignal: signal },
           });
           const parts = res.candidates?.[0]?.content?.parts ?? [];
           const text = res.text ?? (Array.isArray(parts) ? parts : [parts]).map((p: any) => p?.text ?? '').join('');
           if (text) return text;
-        } catch { /* try the next model, then the structured ladder */ }
+        } catch { if (aborted()) throw abortError(); /* try the next rung */ }
       }
     }
-    return this.generateContentStructured(message, { preferFast: true });
+    if (this.groqClient && !this._groqLocalDisabled && !this.isLocalOnlyMode) {
+      if (aborted()) throw abortError();
+      try {
+        this.assertOutboundScopes('groq', message);
+        await this.rateLimiters.groq.acquire();
+        // createGroqCompletion adds reasoning_effort:'none' for a thinking model
+        // and ladders a retired id down to the production tier.
+        const res = await this.createGroqCompletion(
+          { model: GROQ_MODEL, messages: userOnly, temperature: 0, max_tokens: 256, stream: false },
+          { signal },
+        );
+        const text = stripLeadingReasoningBlock(res.choices?.[0]?.message?.content || '');
+        if (text) return text;
+      } catch { if (aborted()) throw abortError(); }
+    }
+    if (this.openaiClient && !this.isLocalOnlyMode) {
+      if (aborted()) throw abortError();
+      try {
+        this.assertOutboundScopes('openai', message);
+        await this.rateLimiters.openai.acquire();
+        // OPENAI_NO_SAMPLING_PARAMS: gpt-5 / o-series 400 on temperature. The
+        // JSON response_format and the lowest valid reasoning effort keep the
+        // verdict deterministic enough and the first token fast.
+        const res = await this.openaiClient.chat.completions.create({
+          model: OPENAI_JUDGE_MODEL,
+          messages: userOnly,
+          max_completion_tokens: 512,
+          response_format: { type: 'json_object' },
+          ...openaiReasoningParam(OPENAI_JUDGE_MODEL),
+        }, { signal });
+        const text = res.choices?.[0]?.message?.content || '';
+        if (text) return text;
+      } catch { if (aborted()) throw abortError(); }
+    }
+    if (this.deepseekClient && !this.isLocalOnlyMode) {
+      if (aborted()) throw abortError();
+      try {
+        this.assertOutboundScopes('deepseek', message);
+        await this.rateLimiters.deepseek.acquire();
+        const res = await this.deepseekClient.chat.completions.create({
+          model: DEEPSEEK_MODEL,
+          messages: userOnly,
+          temperature: 0,
+          max_tokens: 256,
+          response_format: { type: 'json_object' },
+          // Without it the default reasoning pass runs first — and inside a
+          // 256-token budget it can spend all of it, leaving empty content,
+          // so the rung would silently fall through on exactly the calls
+          // it exists to answer.
+          ...DEEPSEEK_NO_THINKING,
+        }, { signal });
+        const text = stripLeadingReasoningBlock(res.choices?.[0]?.message?.content || '');
+        if (text) return text;
+      } catch { if (aborted()) throw abortError(); }
+    }
+    if (this.claudeClient && !this.isLocalOnlyMode) {
+      if (aborted()) throw abortError();
+      try {
+        this.assertOutboundScopes('claude', message);
+        await this.rateLimiters.claude.acquire();
+        const res: any = await this.claudeClient.messages.create({
+          // The app's default Claude model, as the structured ladder used before.
+          // A smaller tier is NOT substituted unmeasured: on OpenAI the small
+          // tiers lost 3-7 of 19 real asks (see OPENAI_JUDGE_MODEL).
+          model: CLAUDE_MODEL,
+          max_tokens: 256,
+          temperature: 0,
+          messages: userOnly,
+        }, { signal });
+        const text = (res?.content ?? []).map((c: any) => (c?.type === 'text' ? c.text : '')).join('');
+        if (text) return text;
+      } catch { if (aborted()) throw abortError(); }
+    }
+    if (aborted()) throw abortError();
+    // Natively-only users have no small rung above, so without this their judge
+    // reached /v1/chat via the structured ladder carrying the ACTIVE MODE's
+    // system prompt - and in an interview mode the server routed a yes/no
+    // verdict to gemini-3.8-flash, which is slower AND cannot take thinkingLevel
+    // 'minimal' (it 400s and falls back to 'low', paying thinking overhead every
+    // consult). `purpose:'decision'` pins gemini-3.1-flash-lite server-side.
+    if (this.nativelyKey) {
+      try {
+        const text = await this.generateWithNatively(message, undefined, undefined, {
+          purpose: 'decision', timeoutMs: FAST_MODEL_JUDGE_RUNG_TIMEOUT_MS, signal,
+        });
+        if (text) return text;
+      } catch { if (aborted()) throw abortError(); }
+    }
+    if (aborted()) throw abortError();
+
+    // Nothing small is configured (Codex CLI / Ollama / custom): the structured
+    // ladder still answers, bounded by the controller's deadline.
+    // NOT preferFast: rung 0 already tried the fast model with the caller's signal.
+    // Re-entering here would bill it a second time, milliseconds after it failed,
+    // on a request that carries no signal and so cannot be cancelled.
+    return this.generateContentStructured(message);
   }
 
   public async generateContentStructured(
@@ -4808,9 +5198,14 @@ let isMultimodal = !!(imagePaths?.length);
       if (name.startsWith('Natively')) return 'natively';
       return name;
     };
-    // `opts.preferFast` retained for API compatibility; ordering no longer
-    // depends on it (the Gemini block always leads with flash-lite).
-    void opts;
+    // `opts.preferFast` is the opt-in fast path: the user's chosen fast model is
+    // tried BEFORE the ladder is built. It was previously a no-op behind `void
+    // opts` — "retained for API compatibility" — so the flag promised something
+    // it never delivered. The ladder below is unchanged and remains the fallback.
+    if (opts?.preferFast) {
+      const pickedFast = await this.callFastModel(message, { json: true });
+      if (pickedFast) return pickedFast;
+    }
 
     // Priority 1: OpenAI
     if (this.openaiClient) {
@@ -5035,8 +5430,12 @@ let isMultimodal = !!(imagePaths?.length);
     // used to pay a doomed full-payload round trip to the dead model before
     // laddering — callers keep passing the module const. Skip straight to the
     // fallback rung when this process has already seen the model die.
-    const { markGroqModelGone, isGroqModelKnownGone, groqReasoningParams } = require('./llm/groqModels') as typeof import('./llm/groqModels');
-    if (!opts?.strictModel && isGroqModelKnownGone(request?.model)) {
+    const { markGroqModelGone, isGroqModelKnownGone, isRetiredModelId, groqReasoningParams } = require('./llm/groqModels') as typeof import('./llm/groqModels');
+    // A RETIRED id with a named successor is known-gone before the first call,
+    // not after it: no process should pay a doomed round trip to learn what
+    // the deprecations page already says. (Retired ids without a successor
+    // return null below and take the normal path, as before.)
+    if (!opts?.strictModel && (isGroqModelKnownGone(request?.model) || isRetiredModelId(request?.model))) {
       const memoFallback = groqFallbackFor(request?.model);
       if (memoFallback) {
         return await this.createGroqCompletion({ ...request, model: memoFallback }, opts);
@@ -5109,7 +5508,7 @@ let isMultimodal = !!(imagePaths?.length);
   /**
    * Routes AI generation through the Natively API backend (Gemini-powered).
    */
-  private async generateWithNatively(userMessage: string, systemPrompt?: string, imagePaths?: string[], opts?: { purpose?: 'extraction'; timeoutMs?: number; signal?: AbortSignal }): Promise<string> {
+  private async generateWithNatively(userMessage: string, systemPrompt?: string, imagePaths?: string[], opts?: { purpose?: 'extraction' | 'decision'; timeoutMs?: number; signal?: AbortSignal }): Promise<string> {
     this.assertOutboundScopes('natively', userMessage, imagePaths);
     // Prefer the in-memory field; fall back to CredentialsManager for the direct-routing path
     // where currentModelId === 'natively' but setNativelyKey() wasn't called yet.
@@ -5379,7 +5778,7 @@ let isMultimodal = !!(imagePaths?.length);
 
     await this.rateLimiters.deepseek.acquire();
 
-    const model = modelId || (this.isDeepseekModel(this.currentModelId) ? this.currentModelId : DEEPSEEK_MODEL);
+    const model = deepseekWireModel(modelId || (this.isDeepseekModel(this.currentModelId) ? this.currentModelId : DEEPSEEK_MODEL));
 
     const messages: any[] = [];
     if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
@@ -5390,6 +5789,7 @@ let isMultimodal = !!(imagePaths?.length);
         model,
         messages,
         max_tokens: this.getDeepseekMaxOutput(model),
+        ...DEEPSEEK_NO_THINKING,
       })),
       60000,
       `DeepSeek (${model})`
@@ -6334,14 +6734,14 @@ let isMultimodal = !!(imagePaths?.length);
       model: GROQ_VISION_MODEL,
       messages,
       temperature: 1,
-      // Groq caps qwen3.6-27b at 16,384 completion tokens. The old 28,672 was
+      // Groq caps qwen3.8-27b (as it did 3.6) at 16,384 completion tokens. The old 28,672 was
       // llama-4-scout's ceiling; asking for more than a model's limit is a 400,
       // not a silent clamp.
       max_completion_tokens: 16384,
       top_p: 1,
       stream: false as const,
       stop: null as string[] | null,
-      // GROQ_VISION_MODEL is qwen3.6-27b — a THINKING model. Without this the
+      // GROQ_VISION_MODEL is qwen3.8-27b — a THINKING model. Without this the
       // <think> block is returned as message.content and handed straight to the
       // caller (2026-09-03). Note this call deliberately does NOT go through
       // createGroqCompletion: that ladder falls back to a TEXT-ONLY model, which
@@ -6761,7 +7161,7 @@ let isMultimodal = !!(imagePaths?.length);
    * and Gemini-only for multimodal (images)
    *
    * TEXT-ONLY FALLBACK CHAIN:
-   * 1. Groq (qwen/qwen3.6-27b) - Primary
+   * 1. Groq (qwen/qwen3.8-27b) - Primary
    * 2. Gemini Flash - 1st fallback
    * 3. Gemini Flash + Pro parallel - 2nd fallback
    * 4. Gemini Flash retries (max 3) - Last resort
@@ -9751,6 +10151,19 @@ let isMultimodal = !!(imagePaths?.length);
       } catch { return connectTimeoutMs; }
     })();
 
+    // E2E-only (NATIVELY_E2E=1): the request body as sent, minus image bytes.
+    // The what-to-answer path layers the legacy transcript packet under V3's
+    // composed prompt, so the meeting-memory harness must read what actually
+    // left the app, not what one layer composed.
+    if (process.env.NATIVELY_E2E === '1') {
+      try {
+        const g = globalThis as unknown as { __nativelyE2eOutbound?: unknown[] };
+        const ring = g.__nativelyE2eOutbound ?? (g.__nativelyE2eOutbound = []);
+        ring.push({ at: Date.now(), system: body.system ?? null, message: body.message ?? body.messages ?? null });
+        if (ring.length > 20) ring.splice(0, ring.length - 20);
+      } catch { /* harness capture only */ }
+    }
+
     const endpointUrl = `${NATIVELY_API_URL}/v1/chat`;
     const requestId = makeRequestId('nat_stream');
     const streamStartedAt = nowMs();
@@ -10087,7 +10500,15 @@ let isMultimodal = !!(imagePaths?.length);
       // we don't leak DOM event subscriptions on long-lived AbortSignals
       // (e.g., the IPC handler's per-stream controller is short-lived, but a
       // future caller might reuse a single signal across many calls).
-      try { reader.cancel(); } catch { }
+      // reader.cancel() returns a Promise: when the stream was torn down by an
+      // abort (streamFallbackEngine's finally calls ctrl.abort() on every exit
+      // path), it REJECTS with that AbortError. A sync try/catch cannot catch
+      // that, so the rejection reached process.on('unhandledRejection') in
+      // main.ts — and five of those inside 60s trip the crash-loop guard and
+      // terminate the app. Switching AI actions quickly (Ctrl+1 then Ctrl+2 …)
+      // aborts one stream per switch, so this was reachable in normal use.
+      // Same idiom as CodexCliService/OllamaBootstrap.
+      try { reader.cancel().catch(() => { /* already torn down */ }); } catch { }
       abortSignal?.removeEventListener('abort', onCallerAbort);
     }
   }
@@ -10177,7 +10598,7 @@ let isMultimodal = !!(imagePaths?.length);
       temperature: 1,
       top_p: 1,
       stop: null,
-      // Same as the non-streaming vision call above: qwen3.6-27b thinks out loud
+      // Same as the non-streaming vision call above: qwen3.8-27b thinks out loud
       // into delta.content, and this is the LATENCY-CRITICAL path (every
       // screenshot turn). Applied here rather than via createGroqCompletion
       // because that ladder's fallback rung is text-only.
@@ -10304,7 +10725,7 @@ let isMultimodal = !!(imagePaths?.length);
 
     await this.rateLimiters.deepseek.acquire();
 
-    const model = modelId || (this.isDeepseekModel(this.currentModelId) ? this.currentModelId : DEEPSEEK_MODEL);
+    const model = deepseekWireModel(modelId || (this.isDeepseekModel(this.currentModelId) ? this.currentModelId : DEEPSEEK_MODEL));
 
     const messages: any[] = [];
     if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
@@ -10320,6 +10741,7 @@ let isMultimodal = !!(imagePaths?.length);
         temperature: INTERACTIVE_TEMPERATURE,
         seed: INTERACTIVE_SEED, // DeepSeek is OpenAI-compatible and honors seed
         max_tokens: this.getDeepseekMaxOutput(model),
+        ...DEEPSEEK_NO_THINKING, // else the first token waits out the default reasoning
       }, { signal: abortSignal });
     } catch (err: any) {
       // Hard-trip on billing/quota/auth failures so we don't burn 3 chain rotations
@@ -11569,6 +11991,24 @@ let isMultimodal = !!(imagePaths?.length);
    * Fails open to the requested preset on any error: a latency hint must never
    * be able to stop an image being sent.
    */
+  /**
+   * True in a coding session (the active mode's template is technical), where a
+   * screenshot is code and must stay legible. Same predicate
+   * ScreenUnderstandingService uses to pick the sharper `technical` preset.
+   * Fails closed to FALSE — the only consequence is an eligible downgrade.
+   */
+  private isCodingSession(): boolean {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { ModesManager } = require('./services/ModesManager');
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { isTechnicalModeTemplate } = require('./services/screen/technicalMode');
+      return isTechnicalModeTemplate(ModesManager.getInstance().getActiveMode()?.templateType);
+    } catch {
+      return false;
+    }
+  }
+
   private imageProfileFor(
     requested: 'fast' | 'balanced' | 'technical' | 'best',
     approxInputChars: number,
@@ -11579,11 +12019,12 @@ let isMultimodal = !!(imagePaths?.length);
       return imageProfileForTurn(requested, {
         llmHelper: this,
         inputTokens: Math.ceil(Math.max(0, approxInputChars) / 4),
-        // These three sites serve both live and manual turns and cannot tell
+        // These sites serve both live and manual turns and cannot tell
         // which from here. `manual_chat_stream` is the CONSERVATIVE label: its
         // 20s budget is twice the live one, so a turn is only ever downgraded
         // when it would blow the more generous of the two.
         streamRoute: 'manual_chat_stream',
+        isCode: this.isCodingSession(),
       });
     } catch {
       return requested;
@@ -12115,6 +12556,33 @@ let isMultimodal = !!(imagePaths?.length);
       case 'antigravity': return !!this.antigravityFallbackModel();
       default: return false;
     }
+  }
+
+  /**
+   * Returns true if at least one LLM provider (cloud, gateway, local, OAuth, or custom)
+   * is configured and ready to handle requests.
+   * Useful for background tasks (e.g. prompt compilation) to avoid churning
+   * through fallback ladders when no provider is configured.
+   */
+  public hasAnyConfiguredProvider(): boolean {
+    return Boolean(
+      this.client ||
+      this.openaiClient ||
+      this.claudeClient ||
+      this.groqClient ||
+      this.deepseekClient ||
+      this.nvidiaNimClient ||
+      this.openrouterClient ||
+      this.litellmClient ||
+      this.ninerouterClient ||
+      this.hasFluxionCredential() ||
+      this.hasNatively() ||
+      this.customProvider ||
+      this.activeCurlProvider ||
+      this.isCodexAvailable() ||
+      this.antigravityFallbackModel() ||
+      this.useOllama
+    );
   }
 
   /**
@@ -13040,45 +13508,49 @@ let isMultimodal = !!(imagePaths?.length);
 
     // ATTEMPT 3: Gemini Flash-Lite (cheapest/fastest — leads the Gemini cascade).
     // 3 attempts with linear backoff before dropping to full Flash.
-    console.log(`[LLMHelper] Attempting Gemini Flash-Lite for summary...`);
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        const text = await this.withTimeout(
-          this.generateContent(contents, GEMINI_FLASH_LITE_MODEL),
-          45000,
-          `Gemini Flash-Lite Summary (Attempt ${attempt})`
-        );
-        if (text.trim().length > 0) {
-          console.log(`[LLMHelper] ✅ Gemini Flash-Lite summary generated successfully (Attempt ${attempt}).`);
-          return this.processResponse(text);
-        }
-      } catch (e: any) {
-        console.warn(`[LLMHelper] ⚠️ Gemini Flash-Lite attempt ${attempt}/3 failed: ${e.message}`);
-        if (attempt < 3) {
-          await new Promise(r => setTimeout(r, 1000 * attempt)); // Linear backoff
+    if (this.client) {
+      console.log(`[LLMHelper] Attempting Gemini Flash-Lite for summary...`);
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const text = await this.withTimeout(
+            this.generateContent(contents, GEMINI_FLASH_LITE_MODEL),
+            45000,
+            `Gemini Flash-Lite Summary (Attempt ${attempt})`
+          );
+          if (text.trim().length > 0) {
+            console.log(`[LLMHelper] ✅ Gemini Flash-Lite summary generated successfully (Attempt ${attempt}).`);
+            return this.processResponse(text);
+          }
+        } catch (e: any) {
+          console.warn(`[LLMHelper] ⚠️ Gemini Flash-Lite attempt ${attempt}/3 failed: ${e.message}`);
+          if (attempt < 3) {
+            await new Promise(r => setTimeout(r, 1000 * attempt)); // Linear backoff
+          }
         }
       }
-    }
 
-    // ATTEMPT 4: Gemini Flash (with 2 retries = 3 attempts total)
-    console.log(`[LLMHelper] ⚠️ Flash-Lite exhausted. Switching to Gemini Flash...`);
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        const text = await this.withTimeout(
-          this.generateWithFlash(contents),
-          45000,
-          `Gemini Flash Summary (Attempt ${attempt})`
-        );
-        if (text.trim().length > 0) {
-          console.log(`[LLMHelper] ✅ Gemini Flash summary generated successfully (Attempt ${attempt}).`);
-          return this.processResponse(text);
-        }
-      } catch (e: any) {
-        console.warn(`[LLMHelper] ⚠️ Gemini Flash attempt ${attempt}/3 failed: ${e.message}`);
-        if (attempt < 3) {
-          await new Promise(r => setTimeout(r, 1000 * attempt)); // Linear backoff
+      // ATTEMPT 4: Gemini Flash (with 2 retries = 3 attempts total)
+      console.log(`[LLMHelper] ⚠️ Flash-Lite exhausted. Switching to Gemini Flash...`);
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const text = await this.withTimeout(
+            this.generateWithFlash(contents),
+            45000,
+            `Gemini Flash Summary (Attempt ${attempt})`
+          );
+          if (text.trim().length > 0) {
+            console.log(`[LLMHelper] ✅ Gemini Flash summary generated successfully (Attempt ${attempt}).`);
+            return this.processResponse(text);
+          }
+        } catch (e: any) {
+          console.warn(`[LLMHelper] ⚠️ Gemini Flash attempt ${attempt}/3 failed: ${e.message}`);
+          if (attempt < 3) {
+            await new Promise(r => setTimeout(r, 1000 * attempt)); // Linear backoff
+          }
         }
       }
+    } else {
+      console.log(`[LLMHelper] Gemini client not initialized — skipping Gemini Flash-Lite / Flash.`);
     }
 
     // ATTEMPT 5: Gemini Pro

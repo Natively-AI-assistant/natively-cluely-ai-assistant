@@ -92,7 +92,7 @@ function isCloudIdentifier(id: string): boolean {
   if (s.startsWith('claude-')) return true;
   // DeepSeek cloud API (OpenAI-compatible). The local Ollama "deepseek-coder"
   // family is handled by the isOllama branch above.
-  if (/^deepseek-v\d/.test(s)) return true;
+  if (isDeepseekModelId(s)) return true;
   return false;
 }
 
@@ -116,7 +116,8 @@ function isLargeGroqModel(id: string): boolean {
 /**
  * Groq-hosted models that accept image input.
  *
- * Exactly one, as of 2026-08-23: qwen3.6-27b. Groq retired llama-4-scout (its
+ * Exactly one: qwen3.8-27b since 2026-09-14 (qwen3.6-27b before it, from
+ * 2026-08-23). Groq retired llama-4-scout (its
  * previous vision model) on 2026-07-17 and shipped no like-for-like successor.
  *
  * This must be checked explicitly. The Groq branch of getModelCapabilities()
@@ -128,6 +129,7 @@ function isLargeGroqModel(id: string): boolean {
 // encoded in four uncoordinated places; a vision-model swap that missed one
 // silently re-armed the "Groq vision refused" bug).
 import { groqSupportsImages } from './groqModels';
+import { isDeepseekModelId } from './deepseekModels';
 import { modelNameSuggestsVision } from './visionCapability';
 
 // Parse parameter size from an Ollama model id like "llama3.1:8b" or "qwen2.5-coder:14b".
@@ -317,6 +319,42 @@ export type OpenAiReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'hig
 //   - gpt-5-pro                           → high      (only high is accepted)
 //   - o1 / o3 / o4 (and -mini/-pro)       → low       (only low/medium/high)
 // Anything else (gpt-4*, custom proxies)  → null      (omit the param).
+/**
+ * Models LIVE-PROBED to accept `reasoning_effort: 'none'`, with the measured
+ * time-to-first-token it buys on a streaming What-to-Answer-shaped call
+ * (7 runs each except where noted, medians, 2026-09-22):
+ *
+ *   gpt-5.6-luna   low 1178 ms → none  798 ms   (-32%)
+ *   gpt-5.4-mini   low  823 ms → none  671 ms   (-18%)
+ *   gpt-5.5        low  864 ms → none  769 ms   (-11%, 5 runs)
+ *   gpt-5.4        low  912 ms → none  855 ms   (-6%)
+ *   gpt-5.4-nano   low  665 ms → none  697 ms   (within noise, 5 runs)
+ *
+ * `none` is the floor of the same lever `low` sits on — it removes the hidden
+ * reasoning pass that runs BEFORE the first visible token, which is the whole
+ * cost on a live answer. It is an ALLOW-LIST rather than a family rule for the
+ * same reason MINIMAL_THINKING_MODELS is one on the Gemini side: sending an
+ * effort a model rejects is a hard 400 on the interactive stream, not a slower
+ * answer ('minimal' is rejected by every id above — verified in the same run).
+ * Add an id only after probing it live.
+ */
+const NONE_REASONING_MODELS: ReadonlySet<string> = new Set<string>([
+  'gpt-5.6-luna',
+  'gpt-5.5',
+  'gpt-5.4',
+  'gpt-5.4-mini',
+  'gpt-5.4-nano',
+]);
+
+/** True for a probed id, including its dated snapshots (`gpt-5.4-2026-01-01`). */
+function acceptsNoneReasoning(id: string): boolean {
+  if (NONE_REASONING_MODELS.has(id)) return true;
+  for (const m of NONE_REASONING_MODELS) {
+    if (id.startsWith(`${m}-20`)) return true;
+  }
+  return false;
+}
+
 export function getOpenAiReasoningEffort(modelId: string): OpenAiReasoningEffort | null {
   const id = (modelId || '').toLowerCase();
 
@@ -328,7 +366,10 @@ export function getOpenAiReasoningEffort(modelId: string): OpenAiReasoningEffort
     if (id.includes('codex')) return 'low'; // codex variants: no none/minimal
     // Original gpt-5 / gpt-5-mini / gpt-5-nano (NOT 5.1+) keep `minimal`.
     if (/\bgpt-5(-mini|-nano)?(\b|-20)/.test(id) && !/\bgpt-5\.\d/.test(id)) return 'minimal';
-    // gpt-5.1 / 5.2 / 5.4 / 5.5 and chat-latest: `minimal` removed; use `low`.
+    // Probed to accept the floor: take it (see NONE_REASONING_MODELS).
+    if (acceptsNoneReasoning(id)) return 'none';
+    // Every other gpt-5.1+ id: `minimal` is removed and `none` is unprobed, so
+    // `low` remains the lowest value known to be accepted.
     return 'low';
   }
 

@@ -673,21 +673,8 @@ export class MeetingPersistence {
                     // deterministic, no LLM, no network. Compares this meeting's open
                     // questions/risks to recent prior meetings to surface "still open from
                     // last time". Degrades to nothing when there is no prior history.
-                    try {
-                        if (isIntelligenceFlagEnabled('meetingMemoryV2')) {
-                            const { CrossMeetingRecall, priorFromDetailedSummary } = require('./services/meeting/CrossMeetingRecall');
-                            const recent = DatabaseManager.getInstance().getRecentMeetings(15)
-                                .filter(m => m.id !== meetingId)
-                                .map(priorFromDetailedSummary)
-                                .filter((p: unknown): p is NonNullable<typeof p> => p !== null);
-                            const recall = new CrossMeetingRecall().compute(v3, recent);
-                            if (recall.stillOpen.length > 0) {
-                                (summaryData as any).crossMeeting = recall;
-                            }
-                        }
-                    } catch (xmErr) {
-                        console.warn('[CrossMeetingRecall] skipped (non-fatal):', (xmErr as any)?.message);
-                    }
+                    const recall = computeCrossMeetingRecall(meetingId, v3);
+                    if (recall) (summaryData as any).crossMeeting = recall;
                 }
             }
 
@@ -1116,7 +1103,7 @@ Return ONLY valid JSON (no markdown code blocks):
      *
      * Honors providerDataScopes.post_call_summary — if denied, returns false (no cloud call).
      */
-    public async regenerateSavedMeeting(meetingId: string, opts?: { templateType?: string; tone?: 'professional' | 'warm' | 'concise' | 'friendly' }): Promise<boolean> {
+    public async regenerateSavedMeeting(meetingId: string, opts?: { templateType?: string; modeId?: string; tone?: 'professional' | 'warm' | 'concise' | 'friendly' }): Promise<boolean> {
         const db = DatabaseManager.getInstance();
         const details = db.getMeetingDetails(meetingId);
         if (!details || !Array.isArray(details.transcript) || details.transcript.length < 3) return false;
@@ -1143,7 +1130,22 @@ Return ONLY valid JSON (no markdown code blocks):
             const { ModesManager, TEMPLATE_NOTE_SECTIONS } = require('./services/ModesManager');
             const modesMgr = ModesManager.getInstance();
             const storedMode = (details.detailedSummary as any)?.mode;
-            if (!templateType) templateType = storedMode?.selectedTemplateType || modesMgr.getActiveMode()?.templateType;
+            const all = modesMgr.getModes() as Array<{ id: string; name: string; templateType: string }>;
+            // PRECEDENCE (2026-09-25): explicit mode id > explicit template > the mode
+            // this meeting ran under > the active mode. The auto-detect suggestion
+            // ("Regenerate notes as Sales") used to lose to the saved mode here, so the
+            // notes came back in the ORIGINAL template and the suggestion vanished as if
+            // it had worked.
+            const resolved = resolveRegenerateTarget({
+                modeId: opts?.modeId,
+                templateType: opts?.templateType,
+                stored: storedMode,
+                modes: all,
+                activeTemplateType: modesMgr.getActiveMode()?.templateType,
+            });
+            templateType = resolved.templateType;
+            const explicitMode = resolved.explicitMode;
+            const explicitTemplate = resolved.explicitTemplate;
             // F-503: prefer the mode this meeting actually ran under.
             // MeetingPersistence PERSISTS selectedModeId at write time, but
             // regeneration used to ignore it and resolve by templateType —
@@ -1153,15 +1155,12 @@ Return ONLY valid JSON (no markdown code blocks):
             // first, so regenerating a meeting run under a custom mode silently
             // used a DIFFERENT mode's note sections and then rewrote
             // modeMeta.selectedModeId/Name with that other mode's identity.
-            const all = modesMgr.getModes() as Array<{ id: string; name: string; templateType: string }>;
-            const byId = storedMode?.selectedModeId
-                ? all.find((m) => m.id === storedMode.selectedModeId)
-                : undefined;
+            const byId = resolved.byId;
             // Fall back to the legacy template lookup only when the recorded
             // mode is gone (deleted) or was never recorded (pre-selectedModeId
             // meetings).
-            const match = byId ?? all.find((m) => m.templateType === templateType);
-            if (!byId && storedMode?.selectedModeId) {
+            const match = resolved.match;
+            if (!byId && !explicitMode && !explicitTemplate && storedMode?.selectedModeId) {
                 console.warn(`[MeetingPersistence] regenerate: mode ${storedMode.selectedModeId} no longer exists; falling back to the first '${templateType}' mode.`);
             }
             if (match) { modeId = match.id; modeName = match.name; modeNoteSections = modesMgr.getNoteSections(match.id); }
@@ -1235,6 +1234,16 @@ Return ONLY valid JSON (no markdown code blocks):
                 console.log(`[MeetingPersistence] regenerate: keeping the existing title "${existingTitle}" over the note-derived fallback.`);
             }
             const detailedSummary = buildV3DetailedSummary(v3, details.detailedSummary);
+            // "Capture key points" used to be erased by Regenerate: neither the
+            // "From earlier meetings" recall nor the structured memory record was
+            // carried into the rebuilt blob. The recall is recomputed against the
+            // NEW notes (the items it matches may have changed); the memory record
+            // is built from the transcript, which Regenerate does not change, so it
+            // is kept as saved.
+            const recall = computeCrossMeetingRecall(meetingId, v3);
+            if (recall) detailedSummary.crossMeeting = recall;
+            const prevMemory = (details.detailedSummary as any)?.meetingMemory;
+            if (prevMemory) detailedSummary.meetingMemory = prevMemory;
             const ok = db.replaceDetailedSummary(meetingId, detailedSummary, { title: v3.title, summaryStatus: 'completed' });
             try {
                 const wins = require('electron').BrowserWindow.getAllWindows();
@@ -1296,6 +1305,58 @@ Return ONLY valid JSON (no markdown code blocks):
             console.error('[MeetingPersistence] follow-up regenerate failed:', e?.message);
             return false;
         }
+    }
+}
+
+/**
+ * Which mode a Regenerate rebuilds the notes in. PRECEDENCE: an explicit mode id
+ * (the auto-detect suggestion) > an explicit template > the mode this meeting ran
+ * under (F-503) > the active mode. `match` falls back to the first mode with the
+ * resolved template when the chosen one no longer exists. Pure — exported for tests.
+ */
+export function resolveRegenerateTarget<M extends { id: string; templateType: string }>(input: {
+    modeId?: string;
+    templateType?: string;
+    stored?: { selectedModeId?: string; selectedTemplateType?: string } | null;
+    modes: M[];
+    activeTemplateType?: string;
+}): { templateType: string | undefined; explicitMode: M | undefined; explicitTemplate: boolean; byId: M | undefined; match: M | undefined } {
+    const explicitMode = input.modeId ? input.modes.find((m) => m.id === input.modeId) : undefined;
+    const explicitTemplate = Boolean(!explicitMode && input.templateType);
+    const templateType = explicitMode?.templateType
+        || input.templateType
+        || input.stored?.selectedTemplateType
+        || input.activeTemplateType;
+    const byId = explicitMode
+        ?? (explicitTemplate || !input.stored?.selectedModeId
+            ? undefined
+            : input.modes.find((m) => m.id === input.stored!.selectedModeId));
+    const match = byId ?? input.modes.find((m) => m.templateType === templateType);
+    return { templateType, explicitMode, explicitTemplate, byId, match };
+}
+
+// CROSS-MEETING RECALL (Phase 13, behind meetingMemoryV2 — "Capture key points").
+// Local-first, deterministic, no LLM, no network. Compares this meeting's open
+// questions, action items, risks and decisions to the 15 most recent other meetings
+// to surface "still open from last time" and earlier decisions. Returns null when the
+// switch is off, there is no prior history, or nothing matched. Shared by the
+// meeting-end save and Regenerate so the two can never disagree.
+function computeCrossMeetingRecall(
+    meetingId: string,
+    v3: import('./services/meeting/types').MeetingSummaryV3,
+): import('./services/meeting/CrossMeetingRecall').CrossMeetingResult | null {
+    try {
+        if (!isIntelligenceFlagEnabled('meetingMemoryV2')) return null;
+        const { CrossMeetingRecall, priorFromDetailedSummary } = require('./services/meeting/CrossMeetingRecall');
+        const recent = DatabaseManager.getInstance().getRecentMeetings(15)
+            .filter(m => m.id !== meetingId)
+            .map(priorFromDetailedSummary)
+            .filter((p: unknown): p is NonNullable<typeof p> => p !== null);
+        const recall = new CrossMeetingRecall().compute(v3, recent);
+        return recall.stillOpen.length > 0 ? recall : null;
+    } catch (xmErr) {
+        console.warn('[CrossMeetingRecall] skipped (non-fatal):', (xmErr as any)?.message);
+        return null;
     }
 }
 

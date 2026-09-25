@@ -808,7 +808,7 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
             }
             transition={
                 prefersReducedMotion
-                    ? { duration: INK.out }
+                    ? { duration: INK.out, layout: { duration: 0 } }
                     : deactivatePhase === 'exiting'
                         ? { duration: INK.out, ease: EASE_LEAVE }
                         : {

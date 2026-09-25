@@ -69,6 +69,34 @@ export interface GlobalSearchResult {
   timestampMs?: number;
 }
 
+/**
+ * The best-matching transcript line per meeting, for "Search past meetings".
+ * Score = share of the query's terms the line contains, +0.5 when it contains the
+ * whole phrase, capped at 1 (the same scale as the summary match it competes
+ * with). Ties go to the EARLIER line — the first time it was said. Pure.
+ */
+export function bestTranscriptLinePerMeeting(
+  rows: Array<{ meetingId: string; content: string; timestampMs: number }>,
+  terms: string[],
+  phrase: string,
+): Map<string, { content: string; timestampMs: number; score: number }> {
+  const best = new Map<string, { content: string; timestampMs: number; score: number }>();
+  if (terms.length === 0) return best;
+  for (const row of rows) {
+    const text = String(row.content || '').toLowerCase();
+    let hits = 0;
+    for (const t of terms) if (text.includes(t)) hits++;
+    if (hits === 0) continue;
+    const score = Math.min(1, hits / Math.max(1, terms.length) + (phrase && text.includes(phrase) ? 0.5 : 0));
+    const ts = Number(row.timestampMs) || 0;
+    const prev = best.get(row.meetingId);
+    if (!prev || score > prev.score || (score === prev.score && ts < prev.timestampMs)) {
+      best.set(row.meetingId, { content: String(row.content || ''), timestampMs: ts, score });
+    }
+  }
+  return best;
+}
+
 // Spec fusion weights — must sum to 1.0.
 const WEIGHTS = { lexical: 0.30, vector: 0.30, memory: 0.20, recency: 0.10, metadata: 0.10 } as const;
 

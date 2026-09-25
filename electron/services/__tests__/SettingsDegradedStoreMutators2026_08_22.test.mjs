@@ -6,9 +6,9 @@
 // handler also broadcast screen-understanding-mode-changed to every window, so
 // the whole UI switched mode over an unchanged disk.
 //
-// This uses a REAL settings.json made REALLY unreadable (mode 000 → EACCES),
-// which is the reachable path the review named: a plain read error, common on
-// Windows with AV or a locked profile. No stubbing of the failure.
+// Filesystem failures are injected at the Node fs boundary. POSIX chmod does
+// not make a file unreadable on Windows, so it cannot prove this contract on
+// every supported platform.
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
@@ -43,20 +43,60 @@ const freshManager = () => {
   SettingsManager.instance = undefined;
   return SettingsManager.getInstance();
 };
-const diskNow = () => {
-  fs.chmodSync(settingsPath, 0o600);
-  const raw = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
-  return raw;
+const diskNow = () => JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+
+const managerWithUnreadableStore = () => {
+  const realReadFileSync = fs.readFileSync;
+  const realRenameSync = fs.renameSync;
+  fs.readFileSync = function injectedReadFailure(target, ...args) {
+    if (path.resolve(String(target)) === path.resolve(settingsPath)) {
+      const error = new Error('injected EACCES while reading settings');
+      error.code = 'EACCES';
+      throw error;
+    }
+    return realReadFileSync.call(this, target, ...args);
+  };
+  fs.renameSync = function injectedQuarantineFailure(source, destination) {
+    if (path.resolve(String(source)) === path.resolve(settingsPath)) {
+      const error = new Error('injected EPERM while quarantining settings');
+      error.code = 'EPERM';
+      throw error;
+    }
+    return realRenameSync.call(this, source, destination);
+  };
+  try {
+    return freshManager();
+  } finally {
+    fs.readFileSync = realReadFileSync;
+    fs.renameSync = realRenameSync;
+  }
 };
 
-after(() => { try { fs.chmodSync(settingsPath, 0o600); fs.rmSync(userData, { recursive: true, force: true }); } catch {} });
+const failNextSettingsRename = (operation) => {
+  const realRenameSync = fs.renameSync;
+  fs.renameSync = function injectedSaveFailure(source, destination) {
+    if (path.resolve(String(source)) === path.resolve(`${settingsPath}.tmp`)
+        && path.resolve(String(destination)) === path.resolve(settingsPath)) {
+      const error = new Error('injected EPERM while replacing settings');
+      error.code = 'EPERM';
+      throw error;
+    }
+    return realRenameSync.call(this, source, destination);
+  };
+  try {
+    return operation();
+  } finally {
+    fs.renameSync = realRenameSync;
+  }
+};
+
+after(() => { try { fs.rmSync(userData, { recursive: true, force: true }); } catch {} });
 
 describe('a degraded settings store must refuse the TYPED setters too', () => {
   let sm;
   before(() => {
     fs.writeFileSync(settingsPath, JSON.stringify(ORIGINAL, null, 2));
-    fs.chmodSync(settingsPath, 0o000);   // real EACCES on read
-    sm = freshManager();
+    sm = managerWithUnreadableStore();
   });
 
   test('the store really is degraded (the read genuinely failed)', () => {
@@ -76,7 +116,6 @@ describe('a degraded settings store must refuse the TYPED setters too', () => {
   test("the user's real settings file is untouched on disk", () => {
     assert.deepEqual(diskNow(), ORIGINAL,
       'the whole point of the degraded guard: a file we could not read must never be overwritten');
-    fs.chmodSync(settingsPath, 0o000);
   });
 
   test('memory did not diverge from disk', () => {
@@ -90,7 +129,6 @@ describe('a degraded settings store must refuse the TYPED setters too', () => {
 describe('a HEALTHY store still persists through the same setters', () => {
   let sm;
   before(() => {
-    fs.chmodSync(settingsPath, 0o600);
     fs.writeFileSync(settingsPath, JSON.stringify(ORIGINAL, null, 2));
     sm = freshManager();
   });
@@ -112,5 +150,36 @@ describe('a HEALTHY store still persists through the same setters', () => {
 
   test('unrelated user keys survive the write', () => {
     assert.equal(JSON.parse(fs.readFileSync(settingsPath, 'utf8')).someUserKey, 'keep-me');
+  });
+});
+
+describe('a healthy store rolls memory back when persistence fails', () => {
+  let sm;
+  before(() => {
+    fs.writeFileSync(settingsPath, JSON.stringify(ORIGINAL, null, 2));
+    sm = freshManager();
+  });
+
+  test('the generic setter reports the write failure', () => {
+    const persisted = failNextSettingsRename(() => sm.set('ambientChatEnabled', true));
+    assert.equal(persisted, false);
+  });
+
+  test('an unpersisted new key is removed from memory and disk', () => {
+    assert.equal(sm.get('ambientChatEnabled'), undefined);
+    assert.equal(diskNow().ambientChatEnabled, undefined);
+  });
+
+  test('a typed setter restores the previous value after a write failure', () => {
+    const persisted = failNextSettingsRename(
+      () => sm.setScreenUnderstandingMode('vision_only'),
+    );
+    assert.equal(persisted, false);
+    assert.equal(sm.getScreenUnderstandingMode(), ORIGINAL.screenUnderstandingMode);
+    assert.equal(diskNow().screenUnderstandingMode, ORIGINAL.screenUnderstandingMode);
+  });
+
+  test('a failed atomic write does not leave a stale temp file', () => {
+    assert.equal(fs.existsSync(`${settingsPath}.tmp`), false);
   });
 });

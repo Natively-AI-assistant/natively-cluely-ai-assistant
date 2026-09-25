@@ -41,8 +41,20 @@ const { isRetiredModelId } = await load('../../../dist-electron/electron/service
 
 describe('the ladder ends somewhere durable', () => {
   test('the primary is the preview-tier multimodal model', () => {
-    assert.equal(GROQ_PRIMARY_MODEL, 'qwen/qwen3.6-27b');
+    // qwen3.6-27b until Groq shut it down on 2026-09-14 — the preview-tier
+    // hazard this file was written about, realised.
+    assert.equal(GROQ_PRIMARY_MODEL, 'qwen/qwen3.8-27b');
     assert.equal(GROQ_TEXT_MODEL_LADDER[0], GROQ_PRIMARY_MODEL);
+  });
+
+  test('a FORMER primary ladders to its successor, not to "exhausted"', () => {
+    // qwen3.6 was index 0, so its fallback was gpt-oss. Off the ladder it
+    // would have returned null — a hard failure on every turn for anyone still
+    // holding the id — so a retired ladder head maps to Groq's named successor.
+    assert.equal(groqFallbackFor('qwen/qwen3.6-27b'), GROQ_PRIMARY_MODEL);
+    assert.equal(isRetiredModelId('qwen/qwen3.6-27b'), true);
+    // and the successor chain still ends on the durable rung
+    assert.equal(groqFallbackFor(GROQ_PRIMARY_MODEL), GROQ_PRODUCTION_FALLBACK_MODEL);
   });
 
   test('THE POINT: the last rung is a PRODUCTION-tier model, not another preview one', () => {

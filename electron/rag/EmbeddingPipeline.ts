@@ -113,6 +113,17 @@ export class EmbeddingPipeline {
     private vectorStore: VectorStore;
     private isProcessing = false;
     private initPromise: Promise<void> | null = null;
+    /**
+     * Bumped by every initialize(). An initialization that finishes after a
+     * newer one started is STALE and must not touch the pipeline's state.
+     *
+     * Without this, overlapping initializations assigned `this.provider` in
+     * completion order, not request order: a slow boot-time `auto` resolve
+     * (cloud probes retrying a 429) finished after the user's `manual/local`
+     * selection and silently replaced it with a cloud provider
+     * (docs/local-embedding-benchmark.md §9d).
+     */
+    private initGeneration = 0;
     /** Tracks the config used in the most recent successful initialize() call to enable idempotency. */
     private _lastConfig: AppAPIConfig | null = null;
     /**
@@ -162,7 +173,8 @@ export class EmbeddingPipeline {
             embeddingMode: config.embeddingMode || 'auto',
             embeddingProvider: config.embeddingProvider || null,
         });
-        this.initPromise = this._doInitialize(config);
+        const generation = ++this.initGeneration;
+        this.initPromise = this._doInitialize(config, generation);
         return this.initPromise;
     }
 
@@ -200,7 +212,28 @@ export class EmbeddingPipeline {
         }
     }
 
-    private async _doInitialize(config: AppAPIConfig): Promise<void> {
+    /**
+     * Provider resolution, behind an instance method so tests can control its
+     * timing. The resolver is inlined into this bundle, so it cannot be
+     * replaced from outside.
+     */
+    private resolveEmbeddingProvider(config: AppAPIConfig) {
+        return EmbeddingProviderResolver.resolveWithDemotion(config);
+    }
+
+    /** Dispose a provider a stale initialization resolved but never installed. */
+    private async discardStaleProvider(provider: IEmbeddingProvider | null | undefined): Promise<void> {
+        if (!(provider instanceof LocalEmbeddingProvider)) return;
+        if (provider === this.provider || provider === this.fallbackProvider) return;
+        try {
+            await provider.dispose('superseded by a newer embedding configuration');
+        } catch {
+            /* best effort: the instance is unreachable either way */
+        }
+    }
+
+    private async _doInitialize(config: AppAPIConfig, generation: number): Promise<void> {
+        const isStale = () => generation !== this.initGeneration;
         // Record the pin BEFORE resolution, so the "is this what the user asked
         // for?" question is answerable no matter which way resolution goes —
         // including the case where the pinned provider produced no candidate at
@@ -219,6 +252,9 @@ export class EmbeddingPipeline {
         // the MiniLM ONNX model resident; overwriting the field alone left them
         // running, unreachable, for the rest of the session.
         await this.disposeLocalProviders();
+        // A newer initialize() started while this one waited. It owns the
+        // fallback slot now; creating one here would leak a worker.
+        if (isStale()) return;
 
         this.fallbackProvider = new LocalEmbeddingProvider();
         console.log(`[EmbeddingPipeline] Local fallback provider registered for lazy load (${this.fallbackProvider.dimensions}d)`);
@@ -227,7 +263,12 @@ export class EmbeddingPipeline {
         // local, the resolver's instance becomes both primary and fallback so the model
         // is loaded at most once in local-only mode.
         try {
-            const resolution = await EmbeddingProviderResolver.resolveWithDemotion(config);
+            const resolution = await this.resolveEmbeddingProvider(config);
+            if (isStale()) {
+                console.log(`[EmbeddingPipeline] Discarding a superseded initialization's result (${resolution.provider.name}); a newer configuration was requested while it resolved.`);
+                await this.discardStaleProvider(resolution.provider);
+                return;
+            }
             this.provider = resolution.provider;
             console.log(`[EmbeddingPipeline] Ready with provider: ${this.provider.name} (${this.provider.dimensions}d)`);
             if (resolution.demotedPinned) {
@@ -284,6 +325,10 @@ export class EmbeddingPipeline {
             this.db.prepare("INSERT OR REPLACE INTO app_state (key, value) VALUES ('last_embedding_space', ?)").run(activeSpace);
 
         } catch (err) {
+            if (isStale()) {
+                console.log('[EmbeddingPipeline] A superseded initialization failed; ignoring it, a newer configuration owns the pipeline.');
+                return;
+            }
             console.error('[EmbeddingPipeline] Failed to initialize primary provider:', err);
             if (!this.fallbackProvider) {
                 console.warn('[EmbeddingPipeline] No embedding provider available — pipeline idle.');
@@ -331,6 +376,67 @@ export class EmbeddingPipeline {
      */
     isReady(): boolean {
         return this.provider !== null && (this.provider.isLoaded?.() ?? true);
+    }
+
+    /**
+     * Force a lazily-registered provider to actually LOAD, for callers that can
+     * afford to block. Returns true when the pipeline is ready afterwards.
+     *
+     * ── WHY THIS EXISTS (2026-09-21, reproduced live) ───────────────────────
+     *
+     * The bundled local model is registered lazily: the resolver assigns the
+     * provider but the ONNX session is only built on the first real embed(),
+     * and `LocalEmbeddingProvider.isLoaded()` reports false until then — by
+     * design, so a live QUERY routes to lexical instead of stalling on a 60s
+     * model load.
+     *
+     * `isReady()` and `waitForReady()` disagreed about that state:
+     *
+     *     isReady()      -> provider !== null && provider.isLoaded()  -> FALSE
+     *     waitForReady() -> `if (this.provider) return;`              -> resolves at once
+     *
+     * So the INDEXING path awaited waitForReady(), got an instant resolve, then
+     * failed its own isReady() check and wrote every reference file off as
+     * `lexical_only`. Nothing in that path ever performs the embed that would
+     * load the model, so the retry path hit the same gate — a deadlock, not a
+     * race. Measured on a real app: reindex returned in 13-30ms having embedded
+     * 0 of 9 chunks, and the worker never logged a model load.
+     *
+     * Indexing is a background job where a sub-second load is acceptable;
+     * a live query is not. This method is therefore for INDEXING CALLERS ONLY —
+     * `isReady()` remains the right check on the query hot path, and nothing
+     * here changes it.
+     *
+     * A provider that does not implement `isLoaded()` (every cloud provider)
+     * is already considered loaded and returns immediately WITHOUT a probe, so
+     * this never introduces a network call for hosted providers.
+     */
+    async ensureProviderLoaded(timeoutMs: number = 60_000): Promise<boolean> {
+        const provider = this.provider;
+        if (!provider) return false;
+        if (provider.isLoaded?.() ?? true) return true;
+
+        // Only a provider that explicitly reports "assigned but not loaded"
+        // reaches here — today that is the bundled local model alone.
+        // isAvailable() is what performs the real load; it resolves false
+        // rather than throwing when the asset is missing or the ONNX gate
+        // refuses, so an outage still degrades to lexical instead of hanging.
+        try {
+            let timer: ReturnType<typeof setTimeout> | undefined;
+            const loaded = await Promise.race([
+                provider.isAvailable(),
+                new Promise<boolean>((resolve) => {
+                    timer = setTimeout(() => resolve(false), timeoutMs);
+                }),
+            ]);
+            if (timer) clearTimeout(timer);
+            // Re-check through isReady() rather than trusting isAvailable():
+            // the provider is the authority on whether its model is loaded.
+            return loaded === true && this.isReady();
+        } catch (e: any) {
+            console.warn(`[EmbeddingPipeline] ensureProviderLoaded failed: ${e?.message || e}`);
+            return false;
+        }
     }
 
     /**

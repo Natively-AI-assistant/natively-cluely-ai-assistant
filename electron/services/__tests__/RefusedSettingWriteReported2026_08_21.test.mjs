@@ -27,7 +27,10 @@ test('set() reports whether the write actually landed', () => {
   assert.ok(/\)\s*:\s*boolean\s*$/.test(sig.trim()),
     'set() must return boolean — as void, a refusal is indistinguishable from a success');
 
-  const body = sm.slice(i, i + 900);
+  // Keep enough of the method to include the persistence-failure rollback.
+  // The explanatory comments are intentionally detailed and can grow without
+  // making this source contract lose sight of the success return.
+  const body = sm.slice(i, i + 1800);
   const refusal = body.slice(body.indexOf('this.settingsUnreadable'));
   assert.ok(/return false/.test(refusal.slice(0, 400)), 'the refusal path must return false');
   assert.ok(/return true/.test(body), 'the success path must return true');

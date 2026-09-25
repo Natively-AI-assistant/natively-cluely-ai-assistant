@@ -1,8 +1,9 @@
 // electron/rag/__tests__/LocalEmbeddingProviderRealModel.test.mjs
 //
 // REAL-MODEL smoke test for the worker-isolated LocalEmbeddingProvider
-// (2026-07-05 SIGTRAP crash hardening). Loads the actual bundled
-// all-MiniLM-L6-v2 ONNX model through the real worker_threads.Worker spawn
+// (2026-07-05 SIGTRAP crash hardening). Loads the actual bundled ONNX model
+// (multilingual-e5-small since 2026-09-22, previously all-MiniLM-L6-v2 —
+// electron/rag/bundledLocalEmbedding.ts) through the real worker_threads.Worker spawn
 // path (electron/rag/providers/localEmbeddingWorker.js) — no mocking of
 // Worker or transformers — and asserts embed()/embedBatch() still produce
 // correct, semantically-sane vectors after being moved off the main thread.
@@ -21,7 +22,12 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../../..');
-const modelDir = path.join(repoRoot, 'resources/models/Xenova/all-MiniLM-L6-v2');
+// The bundled model's id and width, read from the compiled single source so this
+// test follows the bundled model rather than pinning a literal that goes stale.
+const { BUNDLED_LOCAL_EMBEDDING } = await import(pathToFileURL(
+  path.resolve(repoRoot, 'dist-electron/electron/rag/bundledLocalEmbedding.js')).href);
+const WIDTH = BUNDLED_LOCAL_EMBEDDING.dimensions;
+const modelDir = path.join(repoRoot, 'resources/models', ...BUNDLED_LOCAL_EMBEDDING.modelId.split('/'));
 const MODEL_PRESENT = fs.existsSync(path.join(modelDir, 'tokenizer.json'));
 
 // This suite runs under `ELECTRON_RUN_AS_NODE=1 electron --test`, where the
@@ -61,7 +67,7 @@ async function loadProvider() {
 describe('LocalEmbeddingProvider — real bundled model, real Worker (no mocks)', () => {
   test(
     'embed() delegates to the actual worker_threads.Worker and produces normalized, semantically-sane vectors',
-    { skip: !MODEL_PRESENT ? 'all-MiniLM-L6-v2 model not downloaded' : false },
+    { skip: !MODEL_PRESENT ? `${BUNDLED_LOCAL_EMBEDDING.modelId} not downloaded` : false },
     async () => {
       const { LocalEmbeddingProvider } = await loadProvider();
       const provider = new LocalEmbeddingProvider();
@@ -73,8 +79,9 @@ describe('LocalEmbeddingProvider — real bundled model, real Worker (no mocks)'
       const dogVec = await provider.embed('A dog rested on the rug.');
       const unrelatedVec = await provider.embed('Quarterly revenue grew by twelve percent.');
 
-      assert.equal(catVec.length, 384);
-      assert.equal(dogVec.length, 384);
+      assert.equal(WIDTH, 384, 'the bundled model is expected to be 384-dim');
+      assert.equal(catVec.length, WIDTH);
+      assert.equal(dogVec.length, WIDTH);
 
       // normalize: true was requested — vectors should be unit-length.
       const norm = Math.sqrt(catVec.reduce((s, x) => s + x * x, 0));
@@ -92,14 +99,14 @@ describe('LocalEmbeddingProvider — real bundled model, real Worker (no mocks)'
 
   test(
     'embedBatch() batches multiple texts through the same worker round-trip',
-    { skip: !MODEL_PRESENT ? 'all-MiniLM-L6-v2 model not downloaded' : false },
+    { skip: !MODEL_PRESENT ? `${BUNDLED_LOCAL_EMBEDDING.modelId} not downloaded` : false },
     async () => {
       const { LocalEmbeddingProvider } = await loadProvider();
       const provider = new LocalEmbeddingProvider();
 
       const vectors = await provider.embedBatch(['one', 'two', 'three']);
       assert.equal(vectors.length, 3);
-      for (const v of vectors) assert.equal(v.length, 384);
+      for (const v of vectors) assert.equal(v.length, WIDTH);
     },
   );
 });

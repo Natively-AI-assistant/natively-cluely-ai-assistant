@@ -75,3 +75,39 @@ export function stripPriorAssistantTurns(snapshot: string): string {
 export function applyHistoryGrant(snapshot: string, grant: HistoryGrant): string {
   return grant.included ? snapshot : stripPriorAssistantTurns(snapshot);
 }
+
+/** Character budget of the live speech window in a V3 prompt. */
+export const SPEECH_WINDOW_MAX_CHARS = 2400;
+
+/**
+ * The live meeting's recent SPEECH for the composer's "Conversation so far"
+ * section: `[ME]:` / `[INTERVIEWER]:` lines only, newest kept, cut at a line
+ * boundary (2026-09-24).
+ *
+ * This was the formatted context's last 2,400 characters. In a live mock
+ * interview 57% of those characters were the assistant's own previous
+ * suggestions, so about two minutes of speech survived, and the window began
+ * mid-word ("ithout falling behind."). The interviewer's "retries for up to
+ * twenty four hours", said 2.5 minutes before "How would you design the retry
+ * policy?", was not in the prompt, and the answer capped retries at "a few
+ * minutes". The suggestions are not lost by leaving them out here: the bridge
+ * merges every history exchange whose answer the window does not contain.
+ */
+export function speechWindowForPrompt(formatted: string, maxChars = SPEECH_WINDOW_MAX_CHARS): string {
+  const lines = stripPriorAssistantTurns(String(formatted ?? '')).split('\n');
+  const kept: string[] = [];
+  let used = 0;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i];
+    if (!line.trim()) continue;
+    if (used + line.length + 1 > maxChars) {
+      // The newest line alone is over budget: keep its END, which is what was
+      // just said, rather than send nothing.
+      if (!kept.length) kept.push(line.slice(-maxChars));
+      break;
+    }
+    kept.push(line);
+    used += line.length + 1;
+  }
+  return kept.reverse().join('\n');
+}
