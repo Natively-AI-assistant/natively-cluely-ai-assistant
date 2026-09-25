@@ -293,7 +293,9 @@ const POPUPS = {
   'components/trial/FreeTrialModal.tsx': 'Trial ended',
   'components/NativelyQuotaBanner.tsx': 'Quota notice',
   'components/HindsightStatusBanner.tsx': 'Long-term memory notice',
-  'components/ProviderChangeNotice.tsx': 'Provider change / re-index notice',
+  // ProviderChangeNotice left the genie on 2026-09-25 by request: it slides in
+  // from the window's right edge like a macOS notification banner instead
+  // (pinned in EmbeddingDegradationSurfaced2026_08_14.test.mjs).
 };
 
 for (const [file, name] of Object.entries(POPUPS)) {
@@ -505,10 +507,9 @@ test('the corner notices go through GenieModal as notices, and stay mounted so t
     'the floating card is decided before the early returns');
   assert.ok(floating.includes("cardProps={{ role: 'status', 'aria-live': 'polite', 'data-genie-view': view }}"), 'still announced politely');
   const app = code('App.tsx');
-  const notice = code('components/ProviderChangeNotice.tsx');
-  assert.ok(/<ProviderChangeNotice\s+open=\{isDefault && \(!!incompatibleWarning \|\| !!reindexShown\)\}\s+warning=\{incompatibleWarning\}\s+progress=\{reindexShown\}/.test(app),
-    'warning and re-index are one card');
-  for (const [src, where] of [[quota, 'quota'], [floating, 'hindsight'], [notice, 'provider change']]) {
+  assert.ok(/<ProviderChangeNotice\s+open=\{isDefault && \(!!incompatibleWarning \|\| !!reindexShown \|\| !!embeddingNotice\)\}\s+warning=\{incompatibleWarning\}\s+progress=\{reindexShown\}\s+degraded=\{embeddingNotice\}/.test(app),
+    'warning, re-index and degraded search are one card');
+  for (const [src, where] of [[quota, 'quota'], [floating, 'hindsight']]) {
     assert.ok(src.includes('modal={false}') && src.includes('placement="bottom-right"'), `${where}: a notice in the corner`);
   }
   assert.ok(!/<AnimatePresence>\s*\{(incompatibleWarning|reindexProgress) && isDefault/.test(app), 'no framer entrance left for either');
@@ -525,7 +526,6 @@ test('pictures: a card whose content is new each time keeps none', () => {
   assert.ok(modal.includes('if (keepRef.current && last && !changedSinceShotRef.current'), 'the close never reuses a picture from before they were turned off');
   assert.ok(code('components/NativelyQuotaBanner.tsx').includes('keepPictures={false}'), 'quota readings');
   assert.ok(code('components/trial/FreeTrialModal.tsx').includes('keepPictures={false}'), 'trial usage');
-  assert.ok(code('components/ProviderChangeNotice.tsx').includes('keepPictures={false}'), 'provider change / re-index counts');
 });
 
 test('pictures: a card showing one of several things is keyed by which', () => {

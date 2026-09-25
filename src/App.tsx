@@ -31,7 +31,7 @@ import ReviewPromptHost from "./components/ReviewPromptHost"
 // the extension.
 import { getOrchestrator } from "./lib/onboarding/orchestrator.ts"
 import { isInternalCaptureDevice } from "../electron/audio/audioDeviceSelection.mjs"
-import { ProviderChangeNotice } from "./components/ProviderChangeNotice"
+import { ProviderChangeNotice, type EmbeddingDegradedNotice } from "./components/ProviderChangeNotice"
 import { clampOverlayOpacity, OVERLAY_OPACITY_DEFAULT, getDefaultOverlayOpacity } from "./lib/overlayAppearance"
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from './lib/meetingInterfaceTheme'
 import { isMac } from "./utils/platformUtils"
@@ -353,7 +353,10 @@ const App: React.FC = () => {
   // the card shows 0 of the warning's count meanwhile instead of closing.
   const [reindexPending, setReindexPending] = useState<number | null>(null);
   const reindexShown = reindexProgress ?? (reindexPending != null ? { done: 0, total: reindexPending } : null);
-  
+  // Semantic search fell back to another embedding provider, or its space
+  // could not be saved. Shown for a few seconds in the corner notice.
+  const [embeddingNotice, setEmbeddingNotice] = useState<EmbeddingDegradedNotice | null>(null);
+
   // API check
   const [hasNativelyApi, setHasNativelyApi] = useState<boolean>(false);
 
@@ -783,9 +786,9 @@ const App: React.FC = () => {
     // 'ollama-error'; nothing consumed them, so the user saw a silent hang
     // (F-119). Reuses the pull-status banner's 'failed' state — declared in
     // the union since day one but never set.
-    // Shared reset timer for the two transient failure notices below. Held in
-    // the effect scope so it can be cleared on unmount and re-armed on a second
-    // notice, rather than leaking one uncancellable timer per event.
+    // Reset timer for the transient failure notice below. Held in the effect
+    // scope so it can be cleared on unmount and re-armed on a second notice,
+    // rather than leaking one uncancellable timer per event.
     let bannerResetTimer: ReturnType<typeof setTimeout> | undefined;
     const showTransientBannerFailure = (message: string) => {
       setOllamaPullStatus('failed');
@@ -814,16 +817,18 @@ const App: React.FC = () => {
     }
 
     // Embedding degradation notices (F-120): a fallback embedding provider or
-    // a failed space persist silently degrades semantic search. Surface via
-    // the same generic status banner the Ollama failure path uses.
+    // a failed space persist silently degrades semantic search. Surfaced in
+    // the corner notice beside the re-index progress, not the launcher's
+    // centre pill: that pill never wraps, so this long a line pushed the
+    // Start Natively button aside. Fallback fires once per meeting, so a burst
+    // re-arms one timer rather than stacking notices.
+    let embeddingNoticeTimer: ReturnType<typeof setTimeout> | undefined;
     let removeEmbeddingDegraded: (() => void) | undefined;
     if (window.electronAPI?.onEmbeddingDegraded) {
       removeEmbeddingDegraded = window.electronAPI.onEmbeddingDegraded((data) => {
-        showTransientBannerFailure(
-          data.kind === 'fallback'
-            ? `Semantic search degraded: switched to fallback embeddings (${data.fallbackProvider ?? 'local'}).`
-            : 'Semantic search may need a re-index: embedding space could not be saved.'
-        );
+        setEmbeddingNotice({ kind: data.kind, fallbackProvider: data.fallbackProvider });
+        if (embeddingNoticeTimer) clearTimeout(embeddingNoticeTimer);
+        embeddingNoticeTimer = setTimeout(() => setEmbeddingNotice(null), 8000);
       });
     }
 
@@ -863,6 +868,7 @@ const App: React.FC = () => {
       // Without this the pending reset can fire after unmount/remount and
       // clobber the banner state of the next mount.
       if (bannerResetTimer) clearTimeout(bannerResetTimer);
+      if (embeddingNoticeTimer) clearTimeout(embeddingNoticeTimer);
       if (removeReindexProgress) removeReindexProgress();
       if (removeLicenseListener) removeLicenseListener();
       if (trialPollId) clearInterval(trialPollId);
@@ -1265,11 +1271,12 @@ const App: React.FC = () => {
       </AnimatePresence>
 
 
-      {/* Provider change + re-index: one notice in the bottom-right corner. */}
+      {/* Provider change, re-index and degraded search: one notice in the bottom-right corner. */}
       <ProviderChangeNotice
-        open={isDefault && (!!incompatibleWarning || !!reindexShown)}
+        open={isDefault && (!!incompatibleWarning || !!reindexShown || !!embeddingNotice)}
         warning={incompatibleWarning}
         progress={reindexShown}
+        degraded={embeddingNotice}
         onDismiss={() => setIncompatibleWarning(null)}
         onReindex={handleReindex}
       />

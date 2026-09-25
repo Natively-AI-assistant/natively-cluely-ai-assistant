@@ -1012,6 +1012,162 @@
 
 /*
   ---------------------------------------------------------------------------
+  .lg-notice — the material as a CLEAR pane: the launcher's corner notice
+  (ProviderChangeNotice: degraded search, re-index progress, provider change).
+
+  DERIVED. Every other surface in this file is an opaque tinted body; this one
+  sits over the launcher and lets it show through, so the glass is carried by
+  three things, none of them a uniform ring (design.md: a uniform perimeter
+  ring is what makes a surface read as a plastic capsule):
+
+    backdrop     a LIGHT blur (10px, not the 24px of a frosted toast) so the
+                 page behind stays legible as shapes, with the saturation and
+                 a touch of brightness applied to the BACKDROP — a saturate()
+                 on the element itself only oversaturates the card's own ink
+    ::before     .lg-bubble's specular rings, aimed by the same two masks: lit
+                 across the top face, a weaker bounce along the bottom, dying
+                 away over the corners (px cap stops pinned to the 18px radius,
+                 .lg-wide's reasoning)
+    ::after      the side faces in shadow, turned well down — heavy side bands
+                 read as trying too hard
+
+  The fill is kept thin so the backdrop does the work; the outer shadow is
+  what lifts a pane this clear off the page. The host owns the silhouette
+  (GenieModal's radius) and the padding. .lg-notice-alert adds a red hairline
+  for the provider-change warning, inset so the box never changes size as the
+  card swaps between states in place.
+
+  Light theme is lit differently (below). A diagonal-ring version of the dark
+  theme was tried and rejected: the top-lit rim here was preferred.
+  ---------------------------------------------------------------------------
+*/
+.lg-notice {
+    --lg-rim-1: rgba(255, 255, 255, .34);
+    --lg-rim-2: rgba(255, 255, 255, .12);
+    --lg-cap-0: 2px;
+    --lg-cap-1: 6px;
+    --lg-cap-2: 18px;
+    --lg-notice-lift: 0 22px 44px -18px rgba(0, 0, 0, .70), 0 2px 6px rgba(0, 0, 0, .25);
+
+    position: relative;
+    isolation: isolate;
+    background:
+        linear-gradient(180deg,
+            rgba(255, 255, 255, .10) 0, rgba(255, 255, 255, 0) 12px,
+            rgba(255, 255, 255, 0) calc(100% - 12px), rgba(255, 255, 255, .05) 100%),
+        rgba(52, 52, 58, .34);
+    -webkit-backdrop-filter: blur(10px) saturate(1.9) brightness(1.12);
+            backdrop-filter: blur(10px) saturate(1.9) brightness(1.12);
+    box-shadow: var(--lg-notice-lift);
+}
+.lg-notice.lg-notice-alert {
+    box-shadow: inset 0 0 0 1px rgba(255, 51, 51, .38), var(--lg-notice-lift);
+}
+
+.lg-notice::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow:
+        inset 0 0 0 1px var(--lg-rim-1),
+        inset 0 0 0 2px var(--lg-rim-2);
+    -webkit-mask-image:
+        linear-gradient(180deg, #000 0, #000 2px, transparent 14px, transparent calc(100% - 14px), rgba(0, 0, 0, .55) calc(100% - 2px), rgba(0, 0, 0, .55) 100%),
+        linear-gradient(90deg, transparent var(--lg-cap-0), rgba(0, 0, 0, .82) var(--lg-cap-1), #000 var(--lg-cap-2), #000 calc(100% - var(--lg-cap-2)), rgba(0, 0, 0, .82) calc(100% - var(--lg-cap-1)), transparent calc(100% - var(--lg-cap-0)));
+    -webkit-mask-composite: source-in;
+    mask-image:
+        linear-gradient(180deg, #000 0, #000 2px, transparent 14px, transparent calc(100% - 14px), rgba(0, 0, 0, .55) calc(100% - 2px), rgba(0, 0, 0, .55) 100%),
+        linear-gradient(90deg, transparent var(--lg-cap-0), rgba(0, 0, 0, .82) var(--lg-cap-1), #000 var(--lg-cap-2), #000 calc(100% - var(--lg-cap-2)), rgba(0, 0, 0, .82) calc(100% - var(--lg-cap-1)), transparent calc(100% - var(--lg-cap-0)));
+    mask-composite: intersect;
+    pointer-events: none;
+    z-index: -1;
+}
+
+.lg-notice::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 2px;
+    background: linear-gradient(180deg,
+        rgba(0, 0, 0, 0) 0%,
+        rgba(0, 0, 0, 0) 8%,
+        rgba(0, 0, 0, .90) 50%,
+        rgba(0, 0, 0, 0) 92%,
+        rgba(0, 0, 0, 0) 100%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+            mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+            mask-composite: exclude;
+    opacity: .14;
+    pointer-events: none;
+    z-index: -1;
+}
+
+/* Light theme. A white fill over a near-white page reads as a paper card,
+   however thin it is, so here the body stays CLEAR — it takes the page's own
+   tint through the blur — and the glass lives at the edge, as Apple's light
+   material does:
+
+     --lg-notice-edge   thickness: a hairline shade and a soft inner band,
+                        the pane's rim bending the light away
+     ::before           the specular as a diagonal ring, brightest toward the
+                        top-left and bottom-right corners where a key light
+                        from the upper left catches the rounded edge (a conic
+                        sweep cut to a 1.5px ring)
+     background         a faint sheen falling from the top-left
+
+   The masked top-only rim the dark theme uses is invisible here: white on a
+   near-white ground has nothing to stand against. */
+[data-theme='light'] .lg-notice {
+    --lg-notice-edge: inset 0 0 1px 1px rgba(0, 0, 0, .07), inset 0 0 14px 3px rgba(0, 0, 0, .045);
+    --lg-notice-lift: 0 0 0 .5px rgba(0, 0, 0, .09), 0 12px 30px -10px rgba(0, 0, 0, .22), 0 2px 5px rgba(0, 0, 0, .05);
+    background: linear-gradient(160deg, rgba(255, 255, 255, .35), rgba(255, 255, 255, .06) 55%, rgba(255, 255, 255, .18));
+    -webkit-backdrop-filter: blur(8px) saturate(1.8) brightness(.99);
+            backdrop-filter: blur(8px) saturate(1.8) brightness(.99);
+    box-shadow: var(--lg-notice-edge), var(--lg-notice-lift);
+}
+[data-theme='light'] .lg-notice.lg-notice-alert {
+    box-shadow: inset 0 0 0 1px rgba(255, 51, 51, .38), var(--lg-notice-edge), var(--lg-notice-lift);
+}
+[data-theme='light'] .lg-notice::before {
+    box-shadow: none;
+    padding: 1.5px;
+    background: conic-gradient(from 0deg,
+        rgba(255, 255, 255, .55) 0deg,
+        rgba(255, 255, 255, .12) 80deg,
+        rgba(255, 255, 255, .95) 130deg,
+        rgba(255, 255, 255, .35) 190deg,
+        rgba(255, 255, 255, .12) 260deg,
+        rgba(255, 255, 255, 1) 310deg,
+        rgba(255, 255, 255, .55) 360deg);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+            mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+            mask-composite: exclude;
+}
+[data-theme='light'] .lg-notice::after { opacity: .10; }
+
+/* High contrast: the pane goes solid, and the rim gives way to a defined
+   border, as .lg-bubble does. */
+@media (prefers-contrast: more) {
+    .lg-notice {
+        background: #1c1c1f;
+        -webkit-backdrop-filter: none;
+                backdrop-filter: none;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .6), var(--lg-notice-lift);
+    }
+    [data-theme='light'] .lg-notice {
+        background: #ffffff;
+        box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .6), var(--lg-notice-lift);
+    }
+    .lg-notice::before,
+    .lg-notice::after { content: none; }
+}
+
+/*
+  ---------------------------------------------------------------------------
   .lg-chip — Apple-style glass turned right down, for a small tinted pill:
   the meeting notes gist tag. (It was the quiet sibling of an Apple-style
   .lg-bubble; the bubble has since moved to the original material, and the
