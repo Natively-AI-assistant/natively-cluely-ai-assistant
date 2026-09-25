@@ -18,7 +18,6 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useT } from '../../i18n';
 import { motion, AnimatePresence, LayoutGroup, useReducedMotion } from 'framer-motion';
 import { AccordionSection, Disclosure } from '../ui/AccordionSection';
-import { InteractiveCard } from '../ui/InteractiveCard';
 import { FreeTrialModal } from '../trial/FreeTrialModal';
 import { useTrialRemaining } from '../trial/useTrialRemaining';
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../../lib/meetingInterfaceTheme';
@@ -109,17 +108,6 @@ function setUsageCache(next: UsageData | null): void {
     // session, only the cross-restart benefit is lost.
   }
 }
-
-// Cursor-tracked spotlight colour per tier, so the API card blooms in its OWN
-// hue on hover exactly as the Pro purchase cards do. Values are the tier fills'
-// hues at low alpha; a neutral grey glow here would still have read as a
-// different control from the Pro cards.
-const TIER_GLOW = {
-  Standard: 'rgba(60, 107, 105, 0.34)',
-  Pro: 'rgba(17, 89, 153, 0.34)',
-  Max: 'rgba(102, 60, 104, 0.34)',
-  Ultra: 'rgba(111, 37, 66, 0.34)',
-} as const;
 
 // The plan chooser.
 //
@@ -1259,9 +1247,10 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
             id="natively-api-tabpanel"
             aria-labelledby={`natively-api-tab-${plan.id}`}
           >
-            <InteractiveCard
-              className={`natively-api-detail-card group h-full w-full relative overflow-hidden natively-api-detail-card-${plan.name.toLowerCase()}`}
-              glowColor={TIER_GLOW[plan.name as keyof typeof TIER_GLOW]}
+            {/* A plain surface, deliberately: no cursor spotlight, press scale or
+                hover bloom. The blueprint grid (::before) is always shown. */}
+            <div
+              className={`natively-api-detail-card h-full w-full relative overflow-hidden natively-api-detail-card-${plan.name.toLowerCase()}`}
               data-active={isActive ? "true" : "false"}
               // No inline `transition` here on purpose. index.css already
               // declares `transition: transform/box-shadow/border-color 180ms`
@@ -1373,7 +1362,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
                   </div>
                 </motion.div>
               </AnimatePresence>
-            </InteractiveCard>
+            </div>
           </div>
         );
       })()}
