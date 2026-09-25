@@ -10354,3 +10354,48 @@ html[data-platform="linux"][data-window="launcher"] body {
 @media (prefers-reduced-motion: reduce) {
   .nat-caret { animation: none; opacity: 1; }
 }
+
+/* ── Error notice shake (transitions.dev #12, "error state shake") ───────
+   Sync surfaces four failure states — status load, enable/disable, LAN
+   reset, browser-context save — and every one of them arrived through the
+   same `notice()` helper as the informational ones: a 250ms height+opacity
+   collapse. An error that enters exactly like a tip is not feedback, it is
+   just more content. This gives the alert notices, and only those, the
+   percussive hint the recipe is for.
+
+   Ported values, not invented ones: 6px throw, 4px overshoot, 80/60/80/60ms
+   segments (280ms total), and the per-stop `animation-timing-function` that
+   lets each leg follow its own curve — the whole point of the recipe, and the
+   thing a single eased keyframe cannot reproduce. The %-stops are the
+   cumulative segment durations: 28.57 / 57.14 / 78.57 / 100.
+
+   `--shake-ease` is cubic-bezier(0.22, 1, 0.36, 1), which is already this
+   app's smooth-out curve (--aip-ease-out, EASE_SMOOTH_OUT in
+   PhoneMirrorSettings), so it needs no new easing vocabulary.
+
+   Replay is keyed in React rather than by the reference's
+   remove-class/reflow/re-add dance: the notice is re-keyed on its message, so
+   a NEW error remounts the node and the animation runs again, while a
+   re-render with the same message leaves it alone. No reflow, no timers, and
+   nothing to clean up on unmount.
+
+   transform only — it composites, and it cannot disturb the height the
+   Collapse above it is animating at the same time. */
+.t-notice-shake {
+  animation: t-notice-shake 280ms linear;
+  will-change: transform;
+}
+@keyframes t-notice-shake {
+  0%     { transform: translateX(0);     animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1); }
+  28.57% { transform: translateX(6px);   animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1); }
+  57.14% { transform: translateX(-6px);  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1); }
+  78.57% { transform: translateX(4px);   animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1); }
+  100%   { transform: translateX(0); }
+}
+
+/* Required by the recipe. A shake is pure emphasis — there is no information
+   in it that the red border and the alert role do not already carry — so it
+   is dropped entirely rather than shortened. */
+@media (prefers-reduced-motion: reduce) {
+  .t-notice-shake { animation: none !important; transform: none !important; }
+}

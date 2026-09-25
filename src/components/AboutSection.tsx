@@ -1,57 +1,70 @@
 import React, { useEffect, useRef } from 'react';
 import { useT } from '../i18n';
 import {
-    Github, Twitter, Linkedin, Instagram, Globe, Send, Star, Bug, Mail, Heart,
-    AudioLines, Sparkles, Layers, Search, Cpu, FileText,
-    HardDrive, SlidersHorizontal, KeyRound, EyeOff, Camera,
+    Github, Twitter, Linkedin, Instagram, Send, Star, Bug, Mail, Heart,
+    Zap, ListOrdered, Gauge, RefreshCw, Boxes,
+    LayoutGrid, Search, FileText, UserRound,
+    HardDrive, Sliders, Lock,
 } from 'lucide-react';
 import evinProfile from '../assets/evin.png';
 import nativelyIcon from './icon.png';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { APP_FEATURE_VERSION } from '../utils/appVersion';
-import { AIP_CSS, AipBadge } from './settings/AIProvidersSettings';
 import { LiquidGlassButton } from '../ui-components/LiquidGlassButton';
+import { LiquidGlassBadge } from '../ui-components/LiquidGlassBadge';
+import { SettingsRow, SettingsSectionHeading } from './settings/SettingsRow';
 
 // Built from the AI Providers panel's `.aip-*` system (the same one Retrieval
 // adopts), so About reads as part of Settings rather than its own UI: aip-card
 // surfaces, rows split by --aip-divider hairlines, and colour only where
 // something carries a state.
 
-const WHATS_NEW: { title: string; body: string; badge?: string }[] = [
-    { title: 'Direct Assist', body: 'Sends your last three minutes and reference files verbatim. Turn it on in AI Providers.', badge: 'Off by default' },
-    { title: 'Rerankers', body: 'Jina AI, OpenRouter, or a local model. In Retrieval.' },
-    { title: 'Lighter and faster', body: 'About a quarter less memory. Windows open faster.' },
-    { title: 'Provider failover', body: 'OpenAI, Claude, DeepSeek, LiteLLM, NVIDIA NIM and custom endpoints switch to a spare when stalled. Local models are untouched.' },
-    { title: 'Embedding models', body: 'Gemini, OpenAI, Voyage AI, OpenRouter, Ollama, or any OpenAI-compatible endpoint. In Retrieval.' },
+// ABOUT_CSS is About's own layer OVER that system — three additions, no
+// overrides, so AI Providers / Retrieval / Embedding (which all share AIP_CSS)
+// cannot be reached from here. Kept in its own literal and concatenated at the
+// single trailing <style>, because AIP_CSS is exported and shared.
+//
+// Container queries rather than Tailwind's `md:` / `lg:`: Settings is a
+// `w-full max-w-4xl` modal with a `w-64` (256px) sidebar and `p-8` on the
+// panel, so this column CAPS at ~576px and shrinks with the window — measured
+// at 574px on a maximised window. A viewport breakpoint knows none of that:
+// `md:` and `lg:` both fire off the window, which is how the pipeline grid
+// came to render three ~190px columns inside 574px. `@container` measures the
+// column itself, so it also handles the narrow-window case the viewport
+// version got backwards. Written raw because tailwind.config.js has
+// `plugins: []` — no container-queries plugin.
+//
+// (No backticks in this CSS: ABOUT_CSS is a template literal, as AIP_CSS is.)
+type AboutIcon = React.ComponentType<{ size?: number; className?: string; strokeWidth?: number }>;
+
+interface AboutItem { title: string; body: string; badge?: string; Icon: AboutIcon }
+
+const WHATS_NEW: AboutItem[] = [
+    { title: 'Direct Assist', body: 'Sends your last three minutes and files verbatim. In AI Providers.', badge: 'Off by default', Icon: Zap },
+    { title: 'Rerankers', body: 'Jina AI, OpenRouter, or a local model. In Retrieval.', Icon: ListOrdered },
+    { title: 'Lighter and faster', body: 'About a quarter less memory. Windows open faster.', Icon: Gauge },
+    { title: 'Provider failover', body: 'Stalled providers switch to a spare. Local models are untouched.', Icon: RefreshCw },
+    { title: 'Embedding models', body: 'Gemini, OpenAI, Voyage AI, Ollama and more. In Retrieval.', Icon: Boxes },
 ];
 
-// Checked against the code on 2026-09-23 (the earlier copy described the app's
-// first week). Keep claims to what the app does by default on both platforms.
-const HOW_IT_WORKS = [
-    { Icon: AudioLines, title: 'Hears both sides', body: 'Captures your mic and system audio and transcribes it with the speech provider you choose, including on-device ones.' },
-    { Icon: Sparkles, title: 'Answers from context', body: "Each answer draws on the conversation, your mode's files, your profile, and any screenshot you take." },
-    { Icon: Layers, title: 'Modes', body: 'Start from templates like Sales, Recruiting or Technical Interview, then add your own context and files.' },
-    { Icon: Search, title: 'Searches files and meetings', body: 'Indexed in a local database, using a built-in on-device model or a cloud one you pick.' },
-    { Icon: Cpu, title: 'Your choice of AI', body: "Gemini, OpenAI, Claude, Groq, OpenRouter and more, or local models through Ollama. A stalled provider fails over to your spare." },
-    { Icon: FileText, title: 'Notes after every meeting', body: 'Structured notes, plus open questions that came up in recent meetings.' },
+// Compressed 2026-09-25 at the owner's request; every claim still checked
+// against the code. Six capabilities, deliberately not numbered — they are not
+// a pipeline ("Modes" is not step three of anything).
+const HOW_IT_WORKS: AboutItem[] = [
+    { title: 'Modes', body: 'Templates like Sales or Interview, plus your own.', Icon: LayoutGrid },
+    { title: 'Profile Intelligence', body: 'Resume, job description and company intel.', Icon: UserRound },
+    { title: 'Searches files and meetings', body: 'Indexed locally, on-device or cloud.', Icon: Search },
+    { title: 'Notes after every meeting', body: 'Structured notes and open questions.', Icon: FileText },
 ];
 
-const PRIVACY = [
-    { Icon: HardDrive, title: 'Stored on your device', body: 'Meetings, transcripts, notes and documents live in a local database. Audio is transcribed as it streams and never saved.' },
-    { Icon: SlidersHorizontal, title: 'You decide what is sent', body: 'Audio goes only to your speech provider; text and screenshots only to your AI provider. Each can be switched off per provider, and local models keep everything on your computer.' },
-    { Icon: KeyRound, title: 'Keys are encrypted', body: "API keys are encrypted with your operating system's secure storage." },
-    { Icon: EyeOff, title: 'Undetectable Mode', body: 'Hides Natively from screen shares and recordings, and from the Dock on macOS or the taskbar and tray on Windows. Disguise renames it as a system app.' },
-    { Icon: Camera, title: 'Screenshots only on command', body: 'Taken only from your hotkey, a button, or your phone shutter.' },
+const PRIVACY: AboutItem[] = [
+    { title: 'Stored on your device', body: 'Local database. Audio is never saved.', Icon: HardDrive },
+    { title: 'You decide what is sent', body: 'Audio to speech, text to AI. Local sends nothing.', Icon: Sliders },
+    { title: 'Keys are encrypted', body: "In your OS secure storage.", Icon: Lock },
 ];
 
 const REPO_URL = 'https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant';
 const DONATE_URL = 'https://buymeacoffee.com/evinjohnn';
-
-const NATIVELY_LINKS = [
-    { label: 'Website', url: 'https://natively.software', Icon: Globe },
-    { label: 'Telegram', url: 'https://t.me/nativelyaichat', Icon: Send },
-    { label: 'LinkedIn', url: 'https://www.linkedin.com/company/nativley-ai', Icon: Linkedin },
-];
 
 const CREATOR_LINKS = [
     { label: 'GitHub', url: REPO_URL, Icon: Github },
@@ -60,28 +73,52 @@ const CREATOR_LINKS = [
     { label: 'Instagram', url: 'https://www.instagram.com/evinjohnn/', Icon: Instagram },
 ];
 
-// One row of a divided aip-card: title over a meta line, optional trailing
-// control. Every row after the first carries the hairline.
-const AboutRow: React.FC<{ title: string; body: string; first: boolean; icon?: React.ReactNode; children?: React.ReactNode }> = ({ title, body, first, icon, children }) => (
-    <div
-        className={`flex flex-wrap items-center justify-between gap-x-3 gap-y-2 ${first ? '' : 'pt-3 border-t'}`}
-        style={first ? undefined : { borderColor: 'var(--aip-divider)' }}
-    >
-        {icon && <span className="aip-muted shrink-0 self-start mt-[1px]">{icon}</span>}
-        <div className="flex flex-col flex-1 min-w-[160px]">
-            <span className="text-xs aip-hero font-semibold">{title}</span>
-            <span className="aip-meta leading-snug mt-0.5">{body}</span>
+// About is built from `./settings/SettingsRow` — the module General, Audio,
+// Sync, Intelligence and Provider Performance are built from, whose own header
+// says it exists "so a pane that adopts the Settings look takes the same
+// measurements rather than a copy of them". About previously used the `aip-*`
+// sheet from AI Providers, which is that panel's own dialect at its own scale
+// (15px/600 headings, 26px tiles, 11px body) — correct for a dense credential
+// panel, wrong for a reading pane sitting next to General in the same nav, and
+// the reason About read as a different product.
+//
+// Every measurement below is therefore imported rather than restated:
+//   panel heading   18px/700 + 12px sub   SettingsSectionHeading
+//   row             [40px tile][14px/700 title (+badge)][12px description][control]
+//   icon glyph      20px, as General, Keybinds, Audio and Intelligence pass it
+//   group gap       space-y-6
+// Nothing here re-declares a colour, a radius or a size that the module owns.
+
+// Community's action rows carry NO tile. SettingsRow always paints one, and
+// here it would show the SAME glyph twice on one line — a Star tile beside a
+// "Star" button, a Bug beside "Report" — because the Liquid Glass button
+// already leads with that icon and the button is the part that stays. So this
+// is SettingsRow's row minus the tile: identical padding (px-4 py-3), identical
+// type (14px/700 title over 12px description), identical control rail.
+const CommunityActionRow: React.FC<{
+    title: string;
+    body: string;
+    control: React.ReactNode;
+}> = ({ title, body, control }) => (
+    <div className="border-x border-transparent">
+        <div className="flex items-center justify-between gap-4 px-4 py-3">
+            <div className="min-w-0 flex-1">
+                <h4 className="text-sm font-bold text-text-primary">{title}</h4>
+                <div className="text-xs text-text-secondary mt-0.5">{body}</div>
+            </div>
+            <div className="shrink-0 flex items-center gap-2">{control}</div>
         </div>
-        {children}
     </div>
 );
 
-const SectionHeading: React.FC<{ title: string; subtitle: string }> = ({ title, subtitle }) => (
-    <div>
-        <h3 className="text-sm font-bold aip-hero mb-1">{title}</h3>
-        <p className="text-xs aip-muted mb-2">{subtitle}</p>
-    </div>
-);
+// General's row container, verbatim. The 1px TRANSPARENT border is load-bearing:
+// SettingsRow carries the matching `border-x border-transparent`, and together
+// they set the tiles 1px in from the section heading. General also carries
+// `divide-y divide-border-subtle/20`, which is dead — Tailwind 3 cannot
+// recompute alpha on a bare var() colour, so it emits no CSS and General's rows
+// have no dividers at all. Verified against dist/assets/*.css (0 occurrences),
+// and deliberately not reproduced: rows here separate by rhythm, as General's do.
+const ROW_GROUP = 'rounded-xl border bg-transparent border-transparent';
 
 interface AboutSectionProps { }
 
@@ -124,7 +161,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
         }
     };
 
-    const iconLinks = (links: typeof NATIVELY_LINKS) => (
+    const iconLinks = (links: typeof CREATOR_LINKS) => (
         <div className="flex items-center gap-4 shrink-0">
             {links.map(({ label, url, Icon }) => (
                 <button
@@ -160,7 +197,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                     <Icon
                         size={14}
                         strokeWidth={1.75}
-                        className={`fill-current [fill-opacity:0] [transition:transform_150ms_cubic-bezier(0.23,1,0.32,1),color_150ms_cubic-bezier(0.23,1,0.32,1),fill-opacity_150ms_cubic-bezier(0.23,1,0.32,1)] group-hover:[transition:transform_280ms_cubic-bezier(0.34,1.56,0.64,1),color_200ms_cubic-bezier(0.23,1,0.32,1),fill-opacity_200ms_cubic-bezier(0.23,1,0.32,1)] group-hover:scale-[1.12] motion-reduce:group-hover:scale-100 ${hue} ${solid ? 'group-hover:[fill-opacity:1]' : 'group-hover:[fill-opacity:0.28]'}`}
+                        className={`fill-current [fill-opacity:0] [transition:transform_150ms_cubic-bezier(0.23,1,0.32,1),color_150ms_cubic-bezier(0.23,1,0.32,1),fill-opacity_150ms_cubic-bezier(0.23,1,0.32,1)] group-hover:[transition:transform_280ms_bezier(0.34,1.56,0.64,1),color_200ms_cubic-bezier(0.23,1,0.32,1),fill-opacity_200ms_cubic-bezier(0.23,1,0.32,1)] group-hover:scale-[1.12] motion-reduce:group-hover:scale-100 ${hue} ${solid ? 'group-hover:[fill-opacity:1]' : 'group-hover:[fill-opacity:0.28]'}`}
                     />
                 }
                 onClick={() => openLink(url)}
@@ -170,124 +207,134 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
         </span>
     );
 
-    const community = [
+    // Ordered by the WIDTH of each row's Liquid Glass button, ascending. The
+    // buttons are right-aligned, so rising width steps their left edges
+    // leftward down the list — a deliberate staircase instead of the ragged
+    // column six arbitrary labels produce. Measured in the running app, not
+    // guessed from label length (the icon and padding dominate at this size):
+    //   Star 76 · Join 76 · Follow 89 · Report 91 · Contact Me 118 · Support Project 143
+    // It doubles as an escalating-commitment ladder — one free click, then
+    // follow, then report, then write, then pay — so the order reads as
+    // intentional rather than as a sort. Re-measure if a label changes.
+    const actions = [
         { title: t('Star on GitHub'), body: t('Love Natively? Support us by starring the repo.'), action: actionButton(t('Star'), REPO_URL, Star, 'group-hover:text-[#E3B341]') },
+        { title: t('Telegram'), body: t('Early betas, direct help from the community, and usage tips.'), action: actionButton(t('Join'), 'https://t.me/nativelyaichat', Send, 'group-hover:text-sky-500') },
+        { title: t('LinkedIn'), body: t('Follow the climb to the top of AI note-taking assistants.'), action: actionButton(t('Follow'), 'https://www.linkedin.com/company/nativley-ai', Linkedin, 'group-hover:text-sky-600') },
         { title: t('Report an Issue'), body: t('Found a bug? Let us know so we can fix it.'), action: actionButton(t('Report'), `${REPO_URL}/issues`, Bug, 'group-hover:text-red-500', false) },
         { title: t('Get in Touch'), body: t('Open for professional collaborations and job offers.'), action: actionButton(t('Contact Me'), 'mailto:evinjohnignatious@gmail.com', Mail, 'group-hover:text-accent-primary', false) },
         { title: t('Support Development'), body: t('Natively is independent source-available software.'), action: actionButton(t('Support Project'), DONATE_URL, Heart, 'group-hover:text-pink-500') },
     ];
 
     return (
-        <div className="aip-root space-y-5 pb-10" data-theme={theme} data-settings-stagger>
-            <header>
-                <h3 className="aip-title mb-1">{t('About Natively')}</h3>
-                <p className="aip-subtitle mb-2">{t('Designed to be invisible, intelligent, and trusted.')}</p>
-            </header>
+        // General's own shell: space-y-6, and the stagger attribute is the ONLY
+        // entrance. General pairs it with "animated fadeIn", which is dead —
+        // neither `.animated` nor `.fadeIn` exists in any stylesheet (0 hits in
+        // dist/assets/*.css), so copying it would have copied nothing.
+        <div className="space-y-6 pb-10" data-settings-stagger>
+            <section>
+                <SettingsSectionHeading
+                    title={`${t("What's New in")} v${APP_FEATURE_VERSION}`}
+                    subtitle={t('The changes you can see in this release.')}
+                />
+                <div className={ROW_GROUP}>
+                    {WHATS_NEW.map(({ title, body, badge, Icon }) => (
+                        <SettingsRow
+                            key={title}
+                            icon={<Icon size={20} />}
+                            title={t(title)}
+                            /* The app's own tag. `neutral` is its documented default
+                               because "a tag qualifies the thing beside it rather than
+                               competing with it", and it is the only variant that clears
+                               the AA floor at 9.5px type. */
+                            badge={badge ? <LiquidGlassBadge variant="neutral">{t(badge)}</LiquidGlassBadge> : undefined}
+                            description={t(body)}
+                        />
+                    ))}
+                </div>
+            </section>
 
-            {/* Identity: the app's mark, the running build, and its official channels. */}
-            <div className="aip-card p-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-                <div className="flex items-center gap-3 flex-1 min-w-[180px]">
-                    <span className="aip-tile aip-tile--mark">
+            <section>
+                <SettingsSectionHeading
+                    title={t('How Natively Works')}
+                    subtitle={t('From the conversation to the answer.')}
+                />
+                <div className={ROW_GROUP}>
+                    {HOW_IT_WORKS.map(({ title, body, Icon }) => (
+                        <SettingsRow key={title} icon={<Icon size={20} />} title={t(title)} description={t(body)} />
+                    ))}
+                </div>
+            </section>
+
+            <section>
+                <SettingsSectionHeading
+                    title={t('Privacy & Data')}
+                    subtitle={t('What stays local, and what you send.')}
+                />
+                <div className={ROW_GROUP}>
+                    {PRIVACY.map(({ title, body, Icon }) => (
+                        <SettingsRow key={title} icon={<Icon size={20} />} title={t(title)} description={t(body)} />
+                    ))}
+                </div>
+            </section>
+
+            {/* Community and the panel's own title are ONE closing section, at the
+                owner's request. They were two, which meant two headings and three row
+                groups for what is really a single block: who made it, how to reach
+                the project, and which build you are on — the last being exactly what
+                you need in hand when you click "Report an Issue" two rows above.
+
+                One row group, so the creator, the four actions and the build line
+                stack without seams. The actions deliberately carry no tile (see
+                CommunityActionRow), so the group is intentionally not uniformly
+                indented — that is the duplicate-icon fix, not an oversight. */}
+            <section>
+                <SettingsSectionHeading
+                    title={t('About Natively')}
+                    subtitle={t('Designed to be invisible, intelligent, and trusted.')}
+                />
+                <div className={ROW_GROUP}>
+                    <SettingsRow
+                        /* The avatar FILLS the tile rather than sitting inside it:
+                           rounded-[7px] is the tile's 8px radius less its 1px border,
+                           so the photo meets the hairline exactly. */
+                        icon={<img src={evinProfile} alt="" className="w-full h-full object-cover rounded-[7px]" draggable={false} />}
+                        title="Evin John"
+                        badge={<LiquidGlassBadge variant="neutral">{t('Creator')}</LiquidGlassBadge>}
+                        description="I build software that stays out of the way."
+                        control={iconLinks(CREATOR_LINKS)}
+                    />
+                    {actions.map(({ title, body, action }) => (
+                        <CommunityActionRow key={title} title={title} body={body} control={action} />
+                    ))}
+                </div>
+                {/* Build identity is a FOOTNOTE, not a sixth row.
+                    As a row it read as out of place, for two reasons that are both
+                    about weight rather than position: it re-introduced a 40px tile
+                    after four deliberately tile-less action rows, so the text column
+                    stepped in, out and back in again down one group; and it put a
+                    second set of social links directly under the creator's, which is
+                    the same doubling the action tiles were removed for.
+
+                    A version string is metadata about the page, not a peer of
+                    "Support Development" — so it drops to `text-xs text-text-secondary`,
+                    the mark shrinks to 14px inline, and the links come down to 16px.
+                    Nothing is lost; it simply stops competing. Shape is Sync's
+                    `SettingsFootnote` from the shared module (px-1, mt-3, 12px
+                    secondary), widened to carry the links on the right. */}
+                <div className="flex items-center justify-between gap-4 px-4 mt-3 text-xs text-text-secondary">
+                    <span className="flex items-center gap-2 min-w-0">
                         <img
                             src={nativelyIcon}
                             alt=""
-                            className="w-4 h-4 object-contain"
+                            className="w-3.5 h-3.5 object-contain shrink-0 opacity-60"
                             style={{ filter: theme === 'light' ? 'brightness(0)' : 'brightness(0) invert(1)' }}
                             draggable={false}
                         />
+                        <span className="tabular-nums truncate">{`Natively ${appVersion} · Build ${buildCommit}`}</span>
                     </span>
-                    <div className="min-w-0">
-                        <h4 className="aip-card-title">Natively</h4>
-                        <p className="aip-meta tabular-nums truncate">{`Version ${appVersion} · Build ${buildCommit}`}</p>
-                    </div>
                 </div>
-                {iconLinks(NATIVELY_LINKS)}
-            </div>
-
-            <div className="space-y-5">
-                <SectionHeading title={`${t("What's New in")} v${APP_FEATURE_VERSION}`} subtitle={t('The changes you can see in this release.')} />
-                <div className="aip-card p-5 flex flex-col gap-3">
-                    {WHATS_NEW.map(({ title, body, badge }, i) => (
-                        <AboutRow key={title} title={title} body={body} first={i === 0}>
-                            {badge && <AipBadge tone="neutral" label={t(badge)} className="shrink-0" />}
-                        </AboutRow>
-                    ))}
-                </div>
-            </div>
-
-            <div className="space-y-5">
-                <SectionHeading title={t('How Natively Works')} subtitle={t('What happens between the conversation and the answer.')} />
-                {/* One surface split by hairlines: the grid gap shows the divider
-                    colour behind cells painted in the card's own fill. */}
-                <div className="aip-card overflow-hidden">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-px" style={{ background: 'var(--aip-divider)' }}>
-                        {HOW_IT_WORKS.map(({ Icon, title, body }) => (
-                            <div key={title} className="bg-bg-item-surface p-4">
-                                <div className="flex items-center gap-2 mb-1">
-                                    <Icon size={14} strokeWidth={1.75} className="aip-muted shrink-0" />
-                                    <span className="text-xs aip-hero font-semibold">{t(title)}</span>
-                                </div>
-                                <p className="aip-meta leading-snug">{t(body)}</p>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </div>
-
-            <div className="space-y-5">
-                <SectionHeading title={t('Privacy & Data')} subtitle={t('What stays on your computer, and what you choose to send.')} />
-                <div className="aip-card p-5 flex flex-col gap-3">
-                    {PRIVACY.map(({ Icon, title, body }, i) => (
-                        <AboutRow
-                            key={title}
-                            first={i === 0}
-                            title={t(title)}
-                            body={t(body)}
-                            icon={<Icon size={14} strokeWidth={1.75} />}
-                        />
-                    ))}
-                </div>
-            </div>
-
-            <div className="space-y-5">
-                <SectionHeading title={t('Community')} subtitle={t('Follow along, report a bug, or support the project.')} />
-                <div className="space-y-3">
-                    <div className="aip-card p-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-                        <div className="flex items-center gap-3 flex-1 min-w-[180px]">
-                            <img
-                                src={evinProfile}
-                                alt=""
-                                className="w-[26px] h-[26px] rounded-full object-cover shrink-0"
-                                draggable={false}
-                            />
-                            <div className="min-w-0">
-                                <div className="flex items-center gap-2">
-                                    <h4 className="aip-card-title">Evin John</h4>
-                                    <span
-                                        className="text-[10px] font-medium leading-none px-1.5 py-[3px] rounded-full border"
-                                        style={{ color: 'var(--aip-accent)', background: 'var(--aip-accent-muted)', borderColor: 'var(--aip-accent-border)' }}
-                                    >
-                                        {t('Creator')}
-                                    </span>
-                                </div>
-                                <p className="aip-meta truncate">I build software that stays out of the way.</p>
-                            </div>
-                        </div>
-                        {iconLinks(CREATOR_LINKS)}
-                    </div>
-
-                    <div className="aip-card p-5 flex flex-col gap-3">
-                        {community.map(({ title, body, action }, i) => (
-                            <AboutRow key={title} title={title} body={body} first={i === 0}>
-                                {action}
-                            </AboutRow>
-                        ))}
-                    </div>
-                </div>
-            </div>
-
-            {/* Last child: first, it would pick up the space-y margin. */}
-            <style>{AIP_CSS}</style>
+            </section>
         </div>
     );
 };
+
