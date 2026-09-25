@@ -3541,15 +3541,22 @@ ${IMAGE_TRUST_TRAILER}`;
     try {
       const imageBuffer = await fs.promises.readFile(path);
 
-      // Resize and compress
+      // Resize and compress. 1536px @ q80 unless "Shrink screenshots when the
+      // provider is slow" is on AND the measured provider would blow this turn's
+      // budget AND this is not a coding session — then ImageOptimizer's `fast`
+      // preset size (1024px @ q78). This is the path every built-in vision
+      // adapter (OpenAI, Claude, Gemini, Groq, Antigravity, Fluxion …) uses; the
+      // switch used to reach only the Custom/cURL paths.
+      const shrink = this.imageProfileFor('balanced', 0) === 'fast';
+      const edge = shrink ? 1024 : 1536;
       const processedBuffer = await sharp(imageBuffer)
         .resize({
-          width: 1536,
-          height: 1536,
-          fit: 'inside', // Maintain aspect ratio, max dimension 1536
+          width: edge,
+          height: edge,
+          fit: 'inside', // Maintain aspect ratio
           withoutEnlargement: true
         })
-        .jpeg({ quality: 80 }) // 80% quality JPEG is much smaller than PNG
+        .jpeg({ quality: shrink ? 78 : 80 }) // JPEG is much smaller than PNG
         .toBuffer();
 
       return {
@@ -11984,6 +11991,24 @@ let isMultimodal = !!(imagePaths?.length);
    * Fails open to the requested preset on any error: a latency hint must never
    * be able to stop an image being sent.
    */
+  /**
+   * True in a coding session (the active mode's template is technical), where a
+   * screenshot is code and must stay legible. Same predicate
+   * ScreenUnderstandingService uses to pick the sharper `technical` preset.
+   * Fails closed to FALSE — the only consequence is an eligible downgrade.
+   */
+  private isCodingSession(): boolean {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { ModesManager } = require('./services/ModesManager');
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { isTechnicalModeTemplate } = require('./services/screen/technicalMode');
+      return isTechnicalModeTemplate(ModesManager.getInstance().getActiveMode()?.templateType);
+    } catch {
+      return false;
+    }
+  }
+
   private imageProfileFor(
     requested: 'fast' | 'balanced' | 'technical' | 'best',
     approxInputChars: number,
@@ -11994,11 +12019,12 @@ let isMultimodal = !!(imagePaths?.length);
       return imageProfileForTurn(requested, {
         llmHelper: this,
         inputTokens: Math.ceil(Math.max(0, approxInputChars) / 4),
-        // These three sites serve both live and manual turns and cannot tell
+        // These sites serve both live and manual turns and cannot tell
         // which from here. `manual_chat_stream` is the CONSERVATIVE label: its
         // 20s budget is twice the live one, so a turn is only ever downgraded
         // when it would blow the more generous of the two.
         streamRoute: 'manual_chat_stream',
+        isCode: this.isCodingSession(),
       });
     } catch {
       return requested;

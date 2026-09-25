@@ -1256,9 +1256,11 @@ interface MeetingDetailsProps {
     meeting: Meeting;
     onBack: () => void;
     onOpenSettings: () => void;
+    /** Open on the Transcript tab, scrolled to the line nearest this timestamp. */
+    initialMomentMs?: number;
 }
 
-const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting }) => {
+const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting, initialMomentMs }) => {
     const t = useT();
     const isLight = useResolvedTheme() === 'light';
     // We need local state for the meeting object to reflect optimistic updates
@@ -1322,6 +1324,14 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     const [followUpCopied, setFollowUpCopied] = useState(false);
     const [showEvidence, setShowEvidence] = useState(false);
     const [pendingScrollTs, setPendingScrollTs] = useState<number | null>(null);
+    // "Search past meetings" opens a meeting AT the line that matched: land on the
+    // Transcript tab and reuse the evidence jump (scroll + highlight the nearest
+    // line). Keyed on the meeting too, so a second hit in another meeting re-jumps.
+    useEffect(() => {
+        if (typeof initialMomentMs !== 'number') return;
+        setActiveTab('transcript');
+        setPendingScrollTs(initialMomentMs);
+    }, [initialMeeting.id, initialMomentMs]);
     const [editingSpeaker, setEditingSpeaker] = useState<string | null>(null);
     const [speakerDraft, setSpeakerDraft] = useState('');
     // Armed for exactly one materialisation: on mount when the notes are already
@@ -1615,12 +1625,22 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
         } catch { /* swallow */ }
     };
 
-    const handleRegenerate = async (templateType?: string) => {
+    // Set when regenerating AS the auto-detected mode was refused because that mode
+    // needs Pro (the same gate as switching to it) — the suggestion then says so
+    // instead of spinning and silently doing nothing.
+    const [detectedNeedsPro, setDetectedNeedsPro] = useState(false);
+
+    const handleRegenerate = async (target?: string | { templateType?: string; modeId?: string }) => {
         if (isRegenerating || !window.electronAPI?.regenerateMeetingSummary) return;
+        const opts = typeof target === 'string' ? { templateType: target } : target;
         setIsRegenerating(true);
         try {
-            const res = await window.electronAPI.regenerateMeetingSummary(meeting.id, templateType ? { templateType } : undefined);
+            const res = await window.electronAPI.regenerateMeetingSummary(
+                meeting.id,
+                opts && (opts.templateType || opts.modeId) ? opts : undefined,
+            );
             if (res?.success) await reloadMeeting();
+            else if (res?.error === 'pro_required') setDetectedNeedsPro(true);
         } catch { /* swallow */ } finally { setIsRegenerating(false); }
     };
 
@@ -1639,7 +1659,12 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
         if (!name.trim()) delete next[speakerId];
         setMeeting(prev => ({ ...prev, detailedSummary: { ...(prev.detailedSummary as any), speakerLabels: next } }));
         setEditingSpeaker(null);
-        try { await window.electronAPI?.updateMeetingSpeakerLabels?.(meeting.id, next); } catch { /* swallow */ }
+        try {
+            const res = await window.electronAPI?.updateMeetingSpeakerLabels?.(meeting.id, next);
+            // With "Speaker labels" on, the backend has rewritten the saved notes
+            // and action items with the new name — reload so they show it now.
+            if (res?.notesUpdated) await reloadMeeting();
+        } catch { /* swallow */ }
     };
 
     // Resolve a transcript segment's display name using saved speaker labels.
@@ -2142,8 +2167,14 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                   v3Mode.detectedModeName !== v3Mode.selectedModeName && (
                                     <motion.button
                                         type="button"
-                                        onClick={() => handleRegenerate(v3Mode.detectedModeId ? undefined : (v3Mode.detectedModeName || '').toLowerCase())}
-                                        disabled={isRegenerating}
+                                        // The DETECTED mode, by id when the detector matched one
+                                        // (it always does for the built-ins). This used to pass
+                                        // `undefined` in exactly that case, so the notes were rebuilt
+                                        // in the ORIGINAL template.
+                                        onClick={() => handleRegenerate(v3Mode.detectedModeId
+                                            ? { modeId: v3Mode.detectedModeId }
+                                            : { templateType: (v3Mode.detectedModeName || '').toLowerCase() })}
+                                        disabled={isRegenerating || detectedNeedsPro}
                                         initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 6 }}
                                         animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
                                         whileTap={prefersReducedMotion || isRegenerating ? undefined : { scale: 0.99, transition: { duration: 0.1 } }}
@@ -2157,7 +2188,9 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                             <p className="text-[14px] font-semibold text-text-primary tracking-[-0.01em] truncate leading-tight">
                                                 {isRegenerating
                                                     ? t('Regenerating…')
-                                                    : <>{t('Regenerate notes as')} <span className="text-accent-primary">{v3Mode.detectedModeName}</span></>}
+                                                    : detectedNeedsPro
+                                                        ? <>{v3Mode.detectedModeName} {t('notes need Natively Pro')}</>
+                                                        : <>{t('Regenerate notes as')} <span className="text-accent-primary">{v3Mode.detectedModeName}</span></>}
                                             </p>
                                         </div>
                                         <ChevronRight className="shrink-0 w-4 h-4 text-text-tertiary group-hover:text-accent-primary group-hover:translate-x-0.5 transition-all duration-150" strokeWidth={2} />

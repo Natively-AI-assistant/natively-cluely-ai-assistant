@@ -514,6 +514,7 @@ interface ElectronAPI {
   >;
   getMeetingDetails: (id: string) => Promise<any>;
   searchGlobalMeetings: (query: string, filters?: any) => Promise<{ enabled: boolean; results: any[] }>;
+  searchMemories: (query: string) => Promise<{ enabled: boolean; results: Array<{ text: string; meetingId?: string; meetingTitle?: string; date?: string }> }>;
   searchInMeeting: (query: string) => Promise<{ enabled: boolean; results: any[] }>;
   generateLectureNotes: (opts?: { title?: string; course?: string }) => Promise<{ enabled: boolean; notes: any }>;
   generateDiagram: (text?: string) => Promise<{ enabled: boolean; diagram: any }>;
@@ -2031,6 +2032,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getRecentMeetings: () => ipcRenderer.invoke('get-recent-meetings'),
   getMeetingDetails: (id: string) => ipcRenderer.invoke('get-meeting-details', id),
   searchGlobalMeetings: (query: string, filters?: any) => ipcRenderer.invoke('search:global-meetings', { query, filters }),
+  searchMemories: (query: string) => ipcRenderer.invoke('search:memories', query),
   searchInMeeting: (query: string) => ipcRenderer.invoke('search:in-meeting', { query }),
   generateLectureNotes: (opts?: { title?: string; course?: string }) => ipcRenderer.invoke('lecture:generate-notes', opts),
   generateDiagram: (text?: string) => ipcRenderer.invoke('diagram:generate', { text }),
@@ -2120,14 +2122,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   clearContextDebugLogs: () => ipcRenderer.invoke('context-debug:clear'),
   exportContextDebugSession: () => ipcRenderer.invoke('context-debug:export'),
   getHindsightConfig: () => ipcRenderer.invoke('hindsight-config:get'),
-  setHindsightConfig: (cfg: { baseUrl?: string; apiKey?: string; autoStart?: boolean; serverCommand?: string; llmProvider?: string }) => ipcRenderer.invoke('hindsight-config:set', cfg),
+  setHindsightConfig: (cfg: { baseUrl?: string; apiKey?: string; autoStart?: boolean; serverCommand?: string; llmProvider?: string; enableMemory?: boolean }) => ipcRenderer.invoke('hindsight-config:set', cfg),
   testHindsightConnection: () => ipcRenderer.invoke('hindsight-config:test'),
   updateMeetingTitle: (id: string, title: string) =>
     ipcRenderer.invoke('update-meeting-title', { id, title }),
   updateMeetingSummary: (id: string, updates: any) =>
     ipcRenderer.invoke('update-meeting-summary', { id, updates }),
-  regenerateMeetingSummary: (id: string, opts?: { templateType?: string; tone?: 'professional' | 'warm' | 'concise' | 'friendly' }) =>
-    ipcRenderer.invoke('regenerate-meeting-summary', { id, templateType: opts?.templateType, tone: opts?.tone }),
+  regenerateMeetingSummary: (id: string, opts?: { templateType?: string; modeId?: string; tone?: 'professional' | 'warm' | 'concise' | 'friendly' }) =>
+    ipcRenderer.invoke('regenerate-meeting-summary', { id, templateType: opts?.templateType, modeId: opts?.modeId, tone: opts?.tone }),
   regenerateMeetingFollowUp: (id: string, tone?: 'professional' | 'warm' | 'concise' | 'friendly') =>
     ipcRenderer.invoke('regenerate-meeting-followup', { id, tone }),
   updateMeetingSpeakerLabels: (id: string, labels: Record<string, string>) =>

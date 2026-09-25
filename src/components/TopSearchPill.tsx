@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import { useT } from '../i18n';
 import { createPortal } from 'react-dom';
-import { Search, Sparkles, FileText } from 'lucide-react';
+import { Search, Sparkles, FileText, Brain } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 
@@ -24,6 +24,26 @@ interface SearchResult {
     title: string;
     subtitle?: string;
     meetingId: string;
+}
+
+// A long-term memory (Hindsight) matching the query. Linked when the memory carries
+// the tag of the meeting it was saved from — then the row opens that meeting.
+interface MemoryHit {
+    text: string;
+    meetingId?: string;
+    meetingTitle?: string;
+    date?: string;
+}
+
+// Memory recall is a network call (local or Cloud Hindsight), so it waits for the
+// typing to settle and for a query long enough to mean something.
+const MEMORY_DEBOUNCE_MS = 250;
+const MEMORY_MIN_QUERY = 3;
+
+function shortDate(iso?: string): string {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 interface TopSearchPillProps {
@@ -128,8 +148,43 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
         return searchMeetings(meetings, query);
     }, [meetings, query, state]);
 
-    // Total selectable items: 2 (Explore section) + sessions
-    const totalItems = 2 + sessionResults.length;
+    // Long-term memories for the query. Each request carries an id; a response for an
+    // older query (the user kept typing) is dropped. Cleared whenever the pill closes
+    // or the query gets too short, so a reopened pill never flashes stale memories.
+    const [memoryHits, setMemoryHits] = useState<MemoryHit[]>([]);
+    const memoryRequest = useRef(0);
+    useEffect(() => {
+        const q = query.trim();
+        const id = ++memoryRequest.current;
+        if (state !== 'results' || q.length < MEMORY_MIN_QUERY || !window.electronAPI?.searchMemories) {
+            setMemoryHits([]);
+            return;
+        }
+        const timer = setTimeout(async () => {
+            try {
+                const res = await window.electronAPI.searchMemories!(q);
+                if (id !== memoryRequest.current) return;
+                setMemoryHits(res?.enabled && Array.isArray(res.results) ? res.results : []);
+            } catch {
+                if (id === memoryRequest.current) setMemoryHits([]);
+            }
+        }, MEMORY_DEBOUNCE_MS);
+        return () => clearTimeout(timer);
+    }, [query, state]);
+
+    // Only a memory linked to a meeting is actionable; the rest are read in place.
+    // Memories render BELOW Sessions, so their late arrival never shifts the index of
+    // anything already on screen (Enter defaults to index 0).
+    const linkedMemories = useMemo(() => memoryHits.filter((m) => m.meetingId), [memoryHits]);
+
+    // Total selectable items: 2 (Explore section) + sessions + linked memories
+    const totalItems = 2 + sessionResults.length + linkedMemories.length;
+
+    // A highlighted memory row can vanish when a newer response lands; drop the
+    // highlight rather than leave it on nothing (Enter then falls back to index 0).
+    useEffect(() => {
+        if (selectedIndex >= totalItems) setSelectedIndex(-1);
+    }, [selectedIndex, totalItems]);
 
     // State transitions
     const open = useCallback(() => {
@@ -168,7 +223,7 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
             // Literal search
             onLiteralSearch(query);
             close();
-        } else {
+        } else if (index < 2 + sessionResults.length) {
             // Session result
             const sessionIndex = index - 2;
             const result = sessionResults[sessionIndex];
@@ -176,8 +231,15 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                 onOpenMeeting(result.meetingId);
                 close();
             }
+        } else {
+            // Linked memory — opens the meeting it was saved from
+            const memory = linkedMemories[index - 2 - sessionResults.length];
+            if (memory?.meetingId) {
+                onOpenMeeting(memory.meetingId);
+                close();
+            }
         }
-    }, [query, sessionResults, onAIQuery, onLiteralSearch, onOpenMeeting, close]);
+    }, [query, sessionResults, linkedMemories, onAIQuery, onLiteralSearch, onOpenMeeting, close]);
 
     // Keyboard handling
     useEffect(() => {
@@ -437,6 +499,76 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                                                                         </div>
                                                                     </motion.button>
                                                                 ))}
+                                                            </AnimatePresence>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Memory Section — long-term memories (Hindsight) */}
+                                                    {memoryHits.length > 0 && (
+                                                        <div className="px-3 py-1 mt-1">
+                                                            <div className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider mb-1">
+                                                                {t('Memory')}
+                                                            </div>
+
+                                                            <AnimatePresence initial={false} mode="popLayout">
+                                                                {memoryHits.map((memory) => {
+                                                                    const linkedIndex = memory.meetingId ? linkedMemories.indexOf(memory) : -1;
+                                                                    const itemIndex = linkedIndex >= 0 ? 2 + sessionResults.length + linkedIndex : -1;
+                                                                    const when = shortDate(memory.date);
+                                                                    const subtitle = memory.meetingId
+                                                                        ? [memory.meetingTitle || t('Meeting'), when].filter(Boolean).join(' · ')
+                                                                        : [t('Long-term memory'), when].filter(Boolean).join(' · ');
+                                                                    const body = (
+                                                                        <>
+                                                                            <div className="w-6 h-6 rounded-md bg-bg-item-surface flex items-center justify-center shrink-0 mt-px">
+                                                                                <Brain size={12} className="text-text-secondary" />
+                                                                            </div>
+                                                                            <div className="flex-1 min-w-0">
+                                                                                <div className="text-[13px] text-text-primary line-clamp-2">
+                                                                                    {memory.text}
+                                                                                </div>
+                                                                                <div className="text-[11px] text-text-tertiary truncate">
+                                                                                    {subtitle}
+                                                                                </div>
+                                                                            </div>
+                                                                        </>
+                                                                    );
+                                                                    const motionProps = {
+                                                                        layout: 'position' as const,
+                                                                        initial: { opacity: 0, height: 0 },
+                                                                        animate: { opacity: 1, height: 'auto' },
+                                                                        exit: { opacity: 0, height: 0 },
+                                                                        transition: { duration: 0.2 },
+                                                                    };
+                                                                    return itemIndex >= 0 ? (
+                                                                        <motion.button
+                                                                            key={`memory:${memory.text}`}
+                                                                            {...motionProps}
+                                                                            data-memory-linked="true"
+                                                                            className={`
+                                                                            w-full flex items-start gap-3 px-2 py-1.5 rounded-lg text-left
+                                                                            transition-colors duration-100
+                                                                            ${selectedIndex === itemIndex
+                                                                                    ? 'bg-bg-item-active'
+                                                                                    : 'hover:bg-bg-item-hover'
+                                                                                }
+                                                                        `}
+                                                                            onClick={() => handleSelect(itemIndex)}
+                                                                            onMouseEnter={() => setSelectedIndex(itemIndex)}
+                                                                        >
+                                                                            {body}
+                                                                        </motion.button>
+                                                                    ) : (
+                                                                        <motion.div
+                                                                            key={`memory:${memory.text}`}
+                                                                            {...motionProps}
+                                                                            data-memory-linked="false"
+                                                                            className="w-full flex items-start gap-3 px-2 py-1.5 text-left"
+                                                                        >
+                                                                            {body}
+                                                                        </motion.div>
+                                                                    );
+                                                                })}
                                                             </AnimatePresence>
                                                         </div>
                                                     )}

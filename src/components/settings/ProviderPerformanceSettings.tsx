@@ -1,6 +1,11 @@
-import { Activity, AlertTriangle, Gauge, Loader2, RefreshCw, Wifi } from 'lucide-react';
+import { Activity, AlertTriangle, Gauge, History, Loader2, Play, RefreshCw, RotateCcw, Timer, Wifi } from 'lucide-react';
+import { AnimatePresence } from 'framer-motion';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useT } from '../../i18n';
+import {
+    Collapse, CollapseItem, Presence, SETTINGS_BTN, SettingsGroupLabel, SettingsMotionReady, SettingsNotice, SettingsRow,
+    SettingsSectionHeading, useMotionReadyAfter, useSettingsTones, useSettledFlag,
+} from './SettingsRow';
 
 /**
  * Provider performance — what Natively has learned about each provider on this
@@ -18,10 +23,11 @@ import { useT } from '../../i18n';
  * having already learned things without ever having sent a request of its own.
  *
  * There IS an explicit "Run calibration" button, and everything about how it is
- * presented follows from it being the only thing here that costs money: it sits
- * below the read-out rather than at the top, it is preceded by a sentence
- * stating that it uses the user's API key and that most people do not need it,
- * and its flags default OFF so the common outcome of pressing it is that
+ * presented follows from it being the only thing here that costs money: its row
+ * sits directly under the two switches that permit it (2026-09-25 layout — the
+ * settings first, then the read-out), its own line says "Optional" and "Uses
+ * your API key" before the button, the section subtitle names it as the only
+ * cost, and its flags default OFF so the common outcome of pressing it is that
  * nothing is sent and the note says so. No progress bar, because at 3-4 small
  * requests there is nothing to watch.
  */
@@ -67,20 +73,6 @@ interface Diagnostics {
     secondaryStreams?: SecondaryTally[];
 }
 
-/**
- * One tone per grade, and reliability is the only one that gets the alarm
- * colour. A provider that answers in 900ms and fails a fifth of the time is not
- * "fast" — saying so would be the most misleading thing this panel could do.
- */
-const GRADE_TONE: Record<Grade, string> = {
-    fast: 'text-emerald-500',
-    good: 'text-emerald-500',
-    moderate: 'text-text-secondary',
-    slow: 'text-amber-500',
-    unreliable: 'text-red-500',
-    unknown: 'text-text-tertiary',
-};
-
 const GRADE_LABEL: Record<Grade, string> = {
     fast: 'Fast',
     good: 'Good',
@@ -105,12 +97,26 @@ function confidenceNote(c: Confidence, samples: number): string | null {
     return null;
 }
 
-const ProviderPerformanceSettings: React.FC = () => {
+const ProviderPerformanceSettings: React.FC<{
+    /** The pane's provider switches, listed under the heading above the read-out. */
+    settings?: React.ReactNode;
+}> = ({ settings }) => {
     const t = useT();
     const [data, setData] = useState<Diagnostics | null>(null);
     const [loading, setLoading] = useState(true);
     const [busy, setBusy] = useState<string | null>(null);
     const [calibrateNote, setCalibrateNote] = useState<string | null>(null);
+    // Its own readiness, not the pane's: the diagnostics read lands on its own
+    // schedule, and the first set of rows must appear settled, not grow in.
+    const motionReady = useMotionReadyAfter(data !== null);
+    // Spinners only for work long enough to notice: a local diagnostics read or a
+    // calibration skipped by its flag answers in milliseconds, and a spinner that
+    // swaps in and straight back out is a flicker (transitions-polish intent delay).
+    // The first read has its own words ("Reading measurements…"), so only a Refresh
+    // of data already on screen spins the button.
+    const refreshing = useSettledFlag(loading && data !== null);
+    const calibrating = useSettledFlag(busy === 'calibrate');
+    const forgetting = useSettledFlag(busy === '*');
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -157,11 +163,20 @@ const ProviderPerformanceSettings: React.FC = () => {
             else if (r?.skippedReason === 'cooldown') setCalibrateNote(t('Already calibrated recently — try again tomorrow.'));
             else if (r?.skippedReason) setCalibrateNote(t('Calibration was skipped.'));
             else {
-                const ok = (r?.rungs ?? []).filter((x: any) => x.ok).length;
+                // The image probe is one of the requests, so a definite verdict
+                // counts as a success — a probe-only run used to read "Sent 1 test
+                // requests. 0 succeeded." — and the verdict itself is said aloud,
+                // since it is now kept as the model's image support.
+                const probeAnswered = r?.vision === 'SUPPORTED' || r?.vision === 'UNSUPPORTED';
+                const ok = (r?.rungs ?? []).filter((x: any) => x.ok).length + (probeAnswered ? 1 : 0);
+                const sent = Number(r?.requestsIssued ?? 0);
+                const images = r?.vision === 'SUPPORTED'
+                    ? ` ${t('Images: supported.')}`
+                    : r?.vision === 'UNSUPPORTED' ? ` ${t('Images: not supported.')}` : '';
                 setCalibrateNote(
-                    t('Sent {n} test requests. {ok} succeeded.')
-                        .replace('{n}', String(r?.requestsIssued ?? 0))
-                        .replace('{ok}', String(ok)),
+                    (sent === 1 ? t('Sent 1 test request. {ok} succeeded.') : t('Sent {n} test requests. {ok} succeeded.'))
+                        .replace('{n}', String(sent))
+                        .replace('{ok}', String(ok)) + images,
                 );
             }
             await load();
@@ -177,182 +192,208 @@ const ProviderPerformanceSettings: React.FC = () => {
     // is history, not a description of what is happening now.
     const current = profiles.filter((p) => p.isCurrentNetwork && !p.stale);
     const others = profiles.filter((p) => !p.isCurrentNetwork || p.stale);
+    const lateStreams = (data?.secondaryStreams ?? []).filter((s) => s.firstTokenTimeouts > 0);
 
+    // The interface CLASS, never the network id. The id is a local key; showing
+    // it would invite a user to paste it somewhere.
+    const networkKey = loading && !data ? 'loading' : data?.network ? (data.network.offline ? 'offline' : data.network.interfaceClass) : 'none';
+    const networkDescription = loading && !data
+        ? t('Reading measurements…')
+        : data?.network
+            ? (data.network.offline ? t('offline') : t(NETWORK_LABEL[data.network.interfaceClass] ?? data.network.interfaceClass))
+            : t('Not detected');
+
+    // One category, laid out as General lays out a section: the settings first (the
+    // three switches the pane hands in, then the calibration action they govern), then
+    // ONE labelled group for the read-out. The read-out always has at least two rows —
+    // Current network plus either the measurements or the empty row — so the label
+    // never sits over a single row. Older / other-network rows say so in their own
+    // description instead of under a second-level label.
     return (
-        <div className="space-y-6">
-            <section className="space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                    <div>
-                        <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary">
-                            <Gauge size={15} /> {t('Provider performance')}
-                        </h3>
-                        <p className="mt-1 max-w-xl text-xs leading-relaxed text-text-secondary">
-                            {t('Natively measures how each provider behaves on your network and adjusts its own timeouts to match. This happens while you use it — normal answers are the measurements, so nothing extra is billed.')}
-                        </p>
-                    </div>
-                    <button
-                        type="button"
-                        onClick={() => void load()}
-                        disabled={loading}
-                        className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border-subtle px-3 py-1.5 text-xs font-medium text-text-secondary transition-[colors,transform] hover:text-text-primary active:scale-[0.97] disabled:opacity-40 disabled:active:scale-100 motion-reduce:active:scale-100"
-                    >
-                        {loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+        <SettingsMotionReady.Provider value={motionReady}>
+            <SettingsSectionHeading
+                title={t('Provider performance')}
+                subtitle={t('Learns each provider’s speed from normal use. Only calibration costs extra.')}
+            />
+
+            {settings}
+
+            {/* The one action here that costs money, so its row says so before the
+                button, not after. Phase 21's rule is that nothing is spent silently. */}
+            <SettingsRow
+                icon={<Gauge size={20} />}
+                title={t('Run calibration')}
+                description={t('Sends small test requests to measure speed. Uses your API key.')}
+                control={
+                    <button type="button" className={SETTINGS_BTN} onClick={() => void calibrate()} disabled={busy !== null}>
+                        <Presence kind="icon" id={calibrating ? 'busy' : 'idle'}>
+                            {calibrating ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+                        </Presence>
+                        {t('Run')}
+                    </button>
+                }
+            >
+                {/* The outcome grows in under the row; a new outcome swaps in place. */}
+                <Collapse open={!!calibrateNote}>
+                    <p className="pb-3 text-xs text-text-secondary" role="status">
+                        <Presence kind="text" id={calibrateNote} block>{calibrateNote}</Presence>
+                    </p>
+                </Collapse>
+            </SettingsRow>
+
+            <SettingsGroupLabel>{t('Measurements')}</SettingsGroupLabel>
+
+            <SettingsRow
+                icon={<Wifi size={20} />}
+                title={t('Current network')}
+                description={networkDescription}
+                descriptionKey={networkKey}
+                control={
+                    <button type="button" className={SETTINGS_BTN} onClick={() => void load()} disabled={loading}>
+                        <Presence kind="icon" id={refreshing ? 'busy' : 'idle'}>
+                            {refreshing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                        </Presence>
                         {t('Refresh')}
                     </button>
-                </div>
+                }
+            />
 
-                {data?.network ? (
-                    <div className="flex items-center gap-2 text-xs text-text-tertiary">
-                        <Wifi size={13} />
-                        {/* The interface CLASS, never the network id. The id is a local
-                            key; showing it would invite a user to paste it somewhere. */}
-                        <span>{t('Current network')}: {data.network.offline ? t('offline') : t(data.network.interfaceClass)}</span>
-                    </div>
-                ) : null}
-            </section>
+            {/* Every read-out row grows in and folds away as the measurements change
+                (a Refresh that learned a new model, a Forget that cleared them all),
+                instead of the list jumping. Keys are the rows' identities. */}
+            <AnimatePresence initial={false}>
 
-            {loading && !data ? (
-                <div className="flex items-center gap-2 text-xs text-text-tertiary">
-                    <Loader2 size={14} className="animate-spin" /> {t('Reading measurements…')}
-                </div>
+            {/* Keyed on having data, not on `loading`: a Refresh of an empty read-out
+                must not fold this row away and grow it back. */}
+            {data !== null && profiles.length === 0 ? (
+                <CollapseItem key="empty">
+                    <SettingsRow
+                        icon={<Activity size={20} />}
+                        title={t('Nothing measured yet')}
+                        description={t('Ask a question and Natively starts learning your provider’s speed.')}
+                    />
+                </CollapseItem>
             ) : null}
 
-            {!loading && profiles.length === 0 ? (
-                <p className="rounded-lg border border-border-subtle bg-bg-input/40 px-3 py-3 text-xs leading-relaxed text-text-secondary">
-                    {t('Nothing measured yet. Ask a question and Natively will start learning how your provider behaves.')}
-                </p>
-            ) : null}
+            {current.map((p) => (
+                <CollapseItem key={`${p.providerId}|${p.modelId}|${p.networkProfileId}`}>
+                    <MeasurementRow p={p} t={t} />
+                </CollapseItem>
+            ))}
+            {others.map((p) => (
+                <CollapseItem key={`${p.providerId}|${p.modelId}|${p.networkProfileId}`}>
+                    <MeasurementRow p={p} t={t} older />
+                </CollapseItem>
+            ))}
 
-            {current.length > 0 ? (
-                <section className="space-y-2">
-                    <h4 className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">{t('On this network')}</h4>
-                    {current.map((p) => (
-                        <ProfileCard key={`${p.providerId}|${p.modelId}|${p.networkProfileId}`} p={p} t={t} />
-                    ))}
-                </section>
-            ) : null}
-
-            {others.length > 0 ? (
-                <section className="space-y-2">
-                    <h4 className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">
-                        {t('Other networks and older measurements')}
-                    </h4>
-                    {others.map((p) => (
-                        <ProfileCard key={`${p.providerId}|${p.modelId}|${p.networkProfileId}`} p={p} t={t} dimmed />
-                    ))}
-                </section>
-            ) : null}
-
-            {(data?.secondaryStreams ?? []).some((s) => s.firstTokenTimeouts > 0) ? (
-                <section className="space-y-2">
-                    <h4 className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">
-                        {t('Answer improvements')}
-                    </h4>
-                    {/* This block exists because the failure it reports is otherwise
-                        SILENT: when a repair window expires before the provider's first
-                        token, the user simply never sees their answer improve, and
-                        nothing anywhere says so. */}
-                    {(data?.secondaryStreams ?? [])
-                        .filter((s) => s.firstTokenTimeouts > 0)
-                        .map((s) => (
-                            <div key={s.kind} className="rounded-lg border border-border-subtle bg-bg-input/40 px-3 py-2 text-xs text-text-secondary">
-                                <span className="font-medium text-text-primary">{t(s.kind)}</span>
-                                {' — '}
-                                {t('{done} of {total} finished in time.')
-                                    .replace('{done}', String(s.completed))
-                                    .replace('{total}', String(s.attempts))}
-                                {s.maxObservedTtftMs > 0
-                                    ? ` ${t('Your provider has taken up to {n}s to start replying.').replace('{n}', (s.maxObservedTtftMs / 1000).toFixed(1))}`
-                                    : ''}
-                            </div>
-                        ))}
-                </section>
-            ) : null}
-
-            <section className="space-y-2 border-t border-border-subtle pt-4">
-                <p className="max-w-xl text-xs leading-relaxed text-text-secondary">
-                    {/* Said plainly, because this is the only thing on the page that
-                        costs money. Phase 21's rule is that nothing is spent silently;
-                        the honest way to honour it in the UI is to state the cost
-                        before the button, not after. */}
-                    {t('You can also send a few small test requests to measure large-context speed and check image support directly. These use your API key. Most people do not need this — normal use already teaches Natively everything here.')}
-                </p>
-                <button
-                    type="button"
-                    onClick={() => void calibrate()}
-                    disabled={busy !== null}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle px-3 py-1.5 text-xs font-medium text-text-secondary transition-[colors,transform] hover:text-text-primary active:scale-[0.97] disabled:opacity-40 disabled:active:scale-100 motion-reduce:active:scale-100"
-                >
-                    {busy === 'calibrate' ? <Loader2 size={14} className="animate-spin" /> : <Gauge size={14} />}
-                    {t('Run calibration')}
-                </button>
-                {calibrateNote ? <p className="text-[11px] text-text-tertiary">{calibrateNote}</p> : null}
-            </section>
+            {/* This block exists because the failure it reports is otherwise SILENT:
+                when a repair window expires before the provider's first token, the user
+                simply never sees their answer improve, and nothing anywhere says so. */}
+            {lateStreams.map((s) => (
+                <CollapseItem key={`late-${s.kind}`}>
+                <SettingsRow
+                    icon={<Timer size={20} />}
+                    title={t(s.kind)}
+                    description={
+                        <>
+                            {t('{done} of {total} finished in time.')
+                                .replace('{done}', String(s.completed))
+                                .replace('{total}', String(s.attempts))}
+                            {s.maxObservedTtftMs > 0
+                                ? ` ${t('Slowest start: {n}s.').replace('{n}', (s.maxObservedTtftMs / 1000).toFixed(1))}`
+                                : ''}
+                        </>
+                    }
+                />
+                </CollapseItem>
+            ))}
 
             {profiles.length > 0 ? (
-                <button
-                    type="button"
-                    onClick={() => void forget()}
-                    disabled={busy !== null}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle px-3 py-1.5 text-xs font-medium text-text-secondary transition-[colors,transform] hover:text-text-primary active:scale-[0.97] disabled:opacity-40 disabled:active:scale-100 motion-reduce:active:scale-100"
-                >
-                    {busy === '*' ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-                    {t('Forget all measurements')}
-                </button>
+                <CollapseItem key="forget">
+                <SettingsRow
+                    icon={<RotateCcw size={20} />}
+                    title={t('Forget all measurements')}
+                    description={t('Clears what Natively has learned. It relearns from your next answer.')}
+                    control={
+                        <button type="button" className={SETTINGS_BTN} onClick={() => void forget()} disabled={busy !== null}>
+                            <Presence kind="icon" id={forgetting ? 'busy' : 'idle'}>
+                                {forgetting ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
+                            </Presence>
+                            {t('Forget')}
+                        </button>
+                    }
+                />
+                </CollapseItem>
             ) : null}
-        </div>
+            </AnimatePresence>
+        </SettingsMotionReady.Provider>
     );
 };
 
-const ProfileCard: React.FC<{ p: ProfileRow; t: (s: string) => string; dimmed?: boolean }> = ({ p, t, dimmed }) => {
+const NETWORK_LABEL: Record<string, string> = {
+    wifi: 'Wi-Fi',
+    ethernet: 'Ethernet',
+    cellular: 'Cellular',
+    loopback: 'This computer only',
+    other: 'Other network',
+};
+
+const MeasurementRow: React.FC<{ p: ProfileRow; t: (s: string) => string; older?: boolean }> = ({ p, t, older }) => {
+    const tones = useSettingsTones();
     const note = confidenceNote(p.confidence, p.sampleCount);
     // Only worth saying when evidence actually moved it. "8.0s (default)" on
     // every row is noise; "2.5s" on the row that changed is information.
     const guardMoved = p.streamIdle.source !== 'shipped_prior';
+
+    // One tone per grade, and reliability is the only one that gets the alarm
+    // colour. A provider that answers in 900ms and fails a fifth of the time is
+    // not "fast" — saying so would be the most misleading thing this panel could
+    // do. The palette's 400/500 shades fall under 4.5:1 on the light canvas, so
+    // the tones come from the shared theme-split set.
+    const gradeTone: Record<Grade, string> = {
+        fast: tones.text.ok,
+        good: tones.text.ok,
+        moderate: 'text-text-secondary',
+        slow: tones.text.warn,
+        unreliable: tones.text.danger,
+        unknown: 'text-text-secondary',
+    };
+
+    const facts: string[] = [`${p.providerId} · ${p.route.replace(/_/g, ' ')}`];
+    if (!p.isCurrentNetwork) facts.push(t('another network'));
+    if (guardMoved) facts.push(t('Stalled replies detected after {n}s').replace('{n}', (p.streamIdle.valueMs / 1000).toFixed(1)));
+    if (p.capability.contextWindowTokens > 0) facts.push(`${t('Context')}: ${Math.round(p.capability.contextWindowTokens / 1000)}K`);
+    if (p.capability.visionVerdict === 'SUPPORTED') facts.push(t('Images supported'));
+    if (p.capability.visionVerdict === 'UNSUPPORTED') facts.push(t('No image support'));
+    // Only shown when the fit explains more than it invents. An unactionable
+    // projection is a number with no meaning.
+    if (p.projected100k?.actionable) {
+        facts.push(t('Very large requests: about {n}s to start').replace('{n}', (p.projected100k.predictedTtftMs / 1000).toFixed(0)));
+    }
+    if (p.stale) facts.push(t('measurements are old'));
+
     return (
-        <div className={`rounded-lg border border-border-subtle bg-bg-input/40 px-3 py-3 ${dimmed ? 'opacity-60' : ''}`}>
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <div className="min-w-0">
-                    <div className="truncate text-sm font-medium text-text-primary">{p.modelId}</div>
-                    <div className="text-[11px] text-text-tertiary">{p.providerId} · {p.route.replace(/_/g, ' ')}</div>
+        <SettingsRow
+            icon={older ? <History size={20} /> : <Activity size={20} />}
+            title={p.modelId}
+            truncateTitle
+            description={facts.join(' · ')}
+            control={
+                <div className="text-right">
+                    <div className={`text-xs font-semibold ${gradeTone[p.grade] ?? gradeTone.unknown}`}>
+                        {/* A Refresh that re-grades a model swaps the word in place. */}
+                        <Presence kind="text" id={p.grade}>{t(GRADE_LABEL[p.grade] ?? GRADE_LABEL.unknown)}</Presence>
+                    </div>
+                    {note ? <div className="text-[11px] text-text-secondary">{t(note)}</div> : null}
                 </div>
-                <div className={`text-sm font-semibold ${GRADE_TONE[p.grade] ?? GRADE_TONE.unknown}`}>
-                    {t(GRADE_LABEL[p.grade] ?? GRADE_LABEL.unknown)}
-                    {note ? <span className="ml-2 text-[11px] font-normal text-text-tertiary">{t(note)}</span> : null}
-                </div>
-            </div>
-
-            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-text-tertiary">
-                {guardMoved ? (
-                    <span className="inline-flex items-center gap-1">
-                        <Activity size={12} />
-                        {t('Stalled replies detected after {n}s').replace('{n}', (p.streamIdle.valueMs / 1000).toFixed(1))}
-                    </span>
-                ) : null}
-                {p.capability.contextWindowTokens > 0 ? (
-                    <span>{t('Context')}: {Math.round(p.capability.contextWindowTokens / 1000)}K</span>
-                ) : null}
-                {p.capability.visionVerdict === 'SUPPORTED' ? <span>{t('Images supported')}</span> : null}
-                {p.capability.visionVerdict === 'UNSUPPORTED' ? <span>{t('No image support')}</span> : null}
-                {/* Only shown when the fit explains more than it invents. An
-                    unactionable projection is a number with no meaning. */}
-                {p.projected100k?.actionable ? (
-                    <span>
-                        {t('Very large requests: about {n}s to start').replace('{n}', (p.projected100k.predictedTtftMs / 1000).toFixed(0))}
-                    </span>
-                ) : null}
-                {p.stale ? <span>{t('measurements are old')}</span> : null}
-            </div>
-
+            }
+        >
             {p.largeContextWarning ? (
-                <div className="mt-2 flex items-start gap-1.5 text-[11px] leading-relaxed text-amber-500">
-                    <AlertTriangle size={12} className="mt-0.5 shrink-0" />
-                    {/* Phrased as RELIABILITY, never as capability. Repeated failure at
-                        a large size is not evidence the model cannot accept it. */}
-                    <span>{t(p.largeContextWarning)}</span>
-                </div>
+                // Phrased as RELIABILITY, never as capability. Repeated failure at a
+                // large size is not evidence the model cannot accept it.
+                <SettingsNotice tone={tones.warn} icon={<AlertTriangle size={14} />}>{t(p.largeContextWarning)}</SettingsNotice>
             ) : null}
-        </div>
+        </SettingsRow>
     );
 };
 

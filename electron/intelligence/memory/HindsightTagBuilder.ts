@@ -19,7 +19,7 @@ function tagHash(s: string): string {
   return h.toString(36);
 }
 
-const sanitizeTagValue = (v: string): string => (v || '').toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 48);
+export const sanitizeTagValue = (v: string): string => (v || '').toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 48);
 
 export class HindsightTagBuilder {
   /**

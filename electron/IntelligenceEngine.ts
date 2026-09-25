@@ -68,6 +68,7 @@ import { recordAttribution } from './intelligence/IntelligenceAttribution';
 // source-available boundary so a core type-check does not require private sources.
 // Follow-up: type getKnowledgeOrchestrator() properly and drop this import.
 import type { PromptAssemblyResult } from './premium/contracts';
+import type { AnswerType } from './llm/AnswerPlanner';
 
 /**
  * Credential-scrub a trace payload before it is stringified.
@@ -205,6 +206,13 @@ interface SpeculativeAnswer {
     text: string;
     /** The run's own session-write decision (e.g. do_not_store for a truncated stream); undefined on the legacy answerLLM path. */
     writeDecision: SessionWriteDecision | undefined;
+    /**
+     * The run's own answer plan shape, so the reveal can shape and guard the text
+     * exactly as the live path would. Undefined on the legacy answerLLM path,
+     * which has no plan.
+     */
+    answerType?: AnswerType;
+    answerStyle?: string;
 }
 
 export class IntelligenceEngine extends EventEmitter {
@@ -1196,8 +1204,13 @@ export class IntelligenceEngine extends EventEmitter {
         generationId: number, question: string | undefined, confidence: number, text: string,
         writeDecision: SessionWriteDecision | undefined,
         streamed?: SpeculativeStreamed,
+        plan?: { answerType?: AnswerType; answerStyle?: string },
     ): string {
-        const finished: SpeculativeAnswer = { generationId, question: question || 'inferred', confidence, text, writeDecision };
+        const finished: SpeculativeAnswer = {
+            generationId, question: question || 'inferred', confidence, text, writeDecision,
+            ...(plan?.answerType ? { answerType: plan.answerType } : {}),
+            ...(plan?.answerStyle ? { answerStyle: plan.answerStyle } : {}),
+        };
         const adoptedInFlight = this.speculativeAdoptedGenerationId === generationId && this.currentGenerationId === generationId;
         if (this.speculativeAdoptedGenerationId === generationId) this.speculativeAdoptedGenerationId = null;
         if (adoptedInFlight) {
@@ -1250,6 +1263,33 @@ export class IntelligenceEngine extends EventEmitter {
         if (!text.trim()) {
             console.warn('[IntelligenceEngine] Prefetched answer was empty — nothing to reveal');
             return;
+        }
+        // "Repetition guard" covers THIS path too. An adopted prefetch (the most
+        // common Auto Answer path) returned before runWhatShouldISayInner's guard,
+        // so it was neither checked against earlier answers nor recorded — the next
+        // live answer could repeat it, and it could repeat the one before.
+        //   • With the run's own plan: the SAME facade and per-meeting guard the
+        //     live path uses, with the same answerType/answerStyle, so a structured
+        //     answer the plan asked for is left structured.
+        //   • Without one (the legacy answerLLM path): record only. Reshaping text
+        //     against a guessed plan could flatten an answer the model was asked to
+        //     structure; recording still lets the NEXT answer be checked against it.
+        if (isIntelligenceFlagEnabled('answerDiversityGuard')) {
+            try {
+                if (finished.answerType) {
+                    const shaped = applyAnswerContract({
+                        answer: text,
+                        answerStyle: finished.answerStyle,
+                        isCoding: false,
+                        answerType: finished.answerType,
+                        question: finished.question || '',
+                        guard: this.wtaDiversityGuard,
+                    });
+                    if (shaped.changed && shaped.text.trim().length >= 10) text = shaped.text;
+                } else {
+                    this.wtaDiversityGuard.record(text, 'unknown_answer', finished.question || '');
+                }
+            } catch { /* the guard never blocks an answer */ }
         }
         // Two shapes of adoption (2026-09-22):
         //  - adopted AFTER it finished, or adopted mid-stream but nothing crossed
@@ -6234,7 +6274,10 @@ export class IntelligenceEngine extends EventEmitter {
                 const streamed = speculativeStreamingLive
                     ? { emitted: emittedStreamingToken, pendingBuffer: streamingTokenBuffer }
                     : undefined;
-                return this.completeSpeculativeRun(generationId, question, confidence, fullAnswer, wtaWriteDecision, streamed);
+                return this.completeSpeculativeRun(generationId, question, confidence, fullAnswer, wtaWriteDecision, streamed, {
+                    answerType: answerPlan.answerType,
+                    answerStyle: answerPlan.answerStyle as string,
+                });
             }
 
             // Keep the RAW answer (with the hidden <verification_spec>) for

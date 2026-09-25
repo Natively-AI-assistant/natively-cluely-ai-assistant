@@ -111,7 +111,7 @@ import { ProfileTreeService } from './intelligence/ProfileTreeService';
 import { isIntelligenceFlagEnabled, getSourceOwnerEnforcementStage } from './intelligence/intelligenceFlags';
 import { recordAttribution, hindsightModeFor, type AttributionInput } from './intelligence/IntelligenceAttribution';
 import { routeContext, isBackwardLookingQuery } from './intelligence/ContextRouter';
-import { SearchOrchestrator, type SearchCandidate } from './intelligence/SearchOrchestrator';
+import { SearchOrchestrator, bestTranscriptLinePerMeeting, type SearchCandidate } from './intelligence/SearchOrchestrator';
 import { CHAT_MODE_PROMPT } from './llm/prompts';
 
 // Prompt System v2 (flag promptSystemV2): the manual-chat base prompt. When
@@ -7686,7 +7686,12 @@ export function initializeIpcHandlers(appState: AppState): void {
       return {
         baseUrl: cfg?.baseUrl || 'http://localhost:8888',
         hasApiKey: Boolean(sm.get('hindsightApiKey')),
-        autoStart: sm.get('hindsightAutoStart') !== false, // default on
+        // Default OFF, matching HindsightManager.autoStartCommand (which only
+        // auto-starts on an explicit `true`). This read used to report ON for an
+        // unsaved setting, so the card showed auto-start on while nothing started —
+        // and the first save of that card then PERSISTED `true` without the user
+        // ever touching the switch (2026-09-25).
+        autoStart: sm.get('hindsightAutoStart') === true,
         serverCommand: String(sm.get('hindsightServerCommand') || ''),
         llmProvider: String(sm.get('hindsightLlmProvider') || ''),
         mode: cfg?.mode || 'local',
@@ -7701,7 +7706,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle('hindsight-config:set', async (_, cfg: { baseUrl?: string; apiKey?: string; autoStart?: boolean; serverCommand?: string; llmProvider?: string }) => {
+  safeHandle('hindsight-config:set', async (_, cfg: { baseUrl?: string; apiKey?: string; autoStart?: boolean; serverCommand?: string; llmProvider?: string; enableMemory?: boolean }) => {
     try {
       const sm = SettingsManager.getInstance();
       // R-24: this handler writes up to six keys. A refused write must not be
@@ -7721,6 +7726,32 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (sm.get('hindsightExplicitlyDisabled') === true) put('hindsightExplicitlyDisabled', false);
       if (!persisted) {
         return { success: false, error: 'settings_store_degraded' };
+      }
+      // "Long-term memory" had no path to ON: its runtime gates are the intelligence
+      // flags hindsightMemory + hindsightPostMeetingRetain (default OFF, no switch in
+      // the pane, and nothing ever wrote them), so a user could configure a server,
+      // see a real green "Connected" badge, and never have one meeting saved to it.
+      // The user setting Hindsight up IS the opt-in: turn on memory + post-meeting saving
+      // (which also lights up past-meeting search recall). The pane says so with
+      // `enableMemory` — only when the user typed an address or switched Auto-start ON.
+      // Not "any save with a baseUrl": the pane always sends its address field, which
+      // holds the synthetic http://localhost:8888 default for someone who never set
+      // Hindsight up, so typing a key or switching Auto-start OFF would otherwise opt a
+      // user in against a server that isn't there. Deliberately NOT
+      // hindsightLiveRecall — that one injects memory into typed-chat answers, and the
+      // answer engine is out of scope for this switch. "Don't use Hindsight at all"
+      // (hindsight:disable) turns both back off, so the sidecar-respawn trap the
+      // 2026-07-09 hotfix closed still has a UI escape hatch. An env-forced value
+      // still wins at read time (readEnvOverride), so this never overrides NATIVELY_*.
+      const savedUrl = String(sm.get('hindsightBaseUrl') || '').trim();
+      if (cfg?.enableMemory === true && savedUrl) {
+        try {
+          const { setIntelligenceFlag } = require('./intelligence/intelligenceFlags') as typeof import('./intelligence/intelligenceFlags');
+          setIntelligenceFlag('hindsightMemory', true);
+          setIntelligenceFlag('hindsightPostMeetingRetain', true);
+        } catch (e: any) {
+          console.warn('[HindsightConfig] memory flags not enabled (non-fatal):', e?.message);
+        }
       }
       // Re-run start() so the auto-spawn fires IN-SESSION — previously the user had to restart
       // the app for the boot-time start() to see the new config. start() is idempotent and a
@@ -7808,6 +7839,15 @@ export function initializeIpcHandlers(appState: AppState): void {
         // success — and broadcasting below — put every window on a value disk
         // never received, which silently reverted on the next launch.
         return { success: false, error: 'settings_store_degraded' };
+      }
+      // The opt-out undoes the opt-in (hindsight-config:set): memory and post-meeting
+      // saving go back OFF, so nothing is retained after the next meeting.
+      try {
+        const { setIntelligenceFlag } = require('./intelligence/intelligenceFlags') as typeof import('./intelligence/intelligenceFlags');
+        setIntelligenceFlag('hindsightMemory', false);
+        setIntelligenceFlag('hindsightPostMeetingRetain', false);
+      } catch (e: any) {
+        console.warn('[HindsightConfig] memory flags not disabled (non-fatal):', e?.message);
       }
       const { HindsightManager } = require('./services/HindsightManager') as typeof import('./services/HindsightManager');
       // If we spawned an app-managed server, kill it. Cloud / user-managed servers stay up.
@@ -13718,11 +13758,17 @@ export function initializeIpcHandlers(appState: AppState): void {
       const q = (query || '').toLowerCase().trim();
       if (!q) return { enabled: true, results: [] };
       const terms = q.split(/\s+/).filter((t) => t.length > 1);
-      // Scan the SAME window the renderer's meetings array holds (50). The renderer
-      // opens a result by finding its meetingId in that array, so scanning a wider
-      // window than the renderer has loaded would return hits it can't open (they'd
-      // silently fall back to the AI query). Keep them aligned (test-engineer Phase 9).
-      const meetings = DatabaseManager.getInstance().getRecentMeetings(50);
+      // Every saved meeting (up to 500), not the renderer's 50: the renderer now
+      // opens a hit BY ID (getMeetingDetails), so a match in an older meeting is
+      // openable. The old 50-window existed only because the renderer looked the
+      // hit up in its own list.
+      const db = DatabaseManager.getInstance();
+      const meetings = db.getRecentMeetings(500);
+      // WHAT WAS SAID. Titles and summaries alone never matched the words people
+      // actually used, and without a transcript line there was no moment to jump
+      // to. Best line per meeting: most distinct terms, then the exact phrase, then
+      // the earliest.
+      const bestLine = bestTranscriptLinePerMeeting(terms.length > 0 ? db.searchTranscriptLines(terms) : [], terms, q);
       const candidates: SearchCandidate[] = [];
       for (const m of meetings) {
         const ds: any = m.detailedSummary || {};
@@ -13738,22 +13784,27 @@ export function initializeIpcHandlers(appState: AppState): void {
           ...(Array.isArray(mem.skillsDiscussed) ? mem.skillsDiscussed : []),
         ].filter(Boolean).map((s: any) => String(s));
         const hay = haystackParts.join(' • ').toLowerCase();
-        if (!hay) continue;
         let hits = 0;
         for (const t of terms) if (hay.includes(t)) hits++;
-        if (hits === 0) continue;
-        const phraseBonus = hay.includes(q) ? 0.5 : 0;
-        const score = Math.min(1, hits / Math.max(1, terms.length) + phraseBonus);
-        // Best matching snippet for display.
-        const snippet = haystackParts.find((p) => p.toLowerCase().includes(terms[0])) || m.title || m.summary || '';
+        const summaryScore = hits === 0 ? 0 : Math.min(1, hits / Math.max(1, terms.length) + (hay.includes(q) ? 0.5 : 0));
+        const line = bestLine.get(m.id);
+        if (summaryScore === 0 && !line) continue;
+        // The transcript line is the snippet when it matches at least as well —
+        // it is the moment the meeting opens at. Its timestamp rides along either
+        // way, so even a summary-led hit can jump to where it was said.
+        const lineLeads = Boolean(line && line.score >= summaryScore);
+        const snippet = lineLeads
+          ? line!.content
+          : (haystackParts.find((p) => p.toLowerCase().includes(terms[0])) || m.title || m.summary || '');
         candidates.push({
           meetingId: m.id,
           title: m.title,
           date: m.date ? Date.parse(m.date) || undefined : undefined,
           snippet: snippet.slice(0, 240),
           source: 'lexical',
-          score,
+          score: Math.max(summaryScore, line?.score ?? 0),
           userId: 'local',
+          ...(line ? { timestampMs: line.timestampMs } : {}),
           metadata: { company: String(mem.companiesDiscussed?.[0] ?? '') },
         });
       }
@@ -13803,6 +13854,36 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (e: any) {
       console.warn('[GlobalSearchV2] search failed (non-fatal):', e?.message);
       return { enabled: true, results: [] };
+    }
+  });
+
+  // LAUNCHER MEMORY SEARCH (2026-09-25). The search pill shows long-term memories that
+  // match what the user is typing, each linked to the meeting it was saved from when
+  // the memory carries that meeting's tag. Gated on Long-term memory alone (not on
+  // "Search past meetings"): the flag is checked FIRST, because getHindsightConfig()
+  // synthesises a localhost default for users who never set Hindsight up — without it
+  // every keystroke would probe a server that isn't there. Search only, never an answer:
+  // `includeProvenance` is asked for here and nowhere on the answer path.
+  safeHandle('search:memories', async (_event, query: unknown) => {
+    try {
+      if (!isIntelligenceFlagEnabled('hindsightMemory')) return { enabled: false, results: [] };
+      const { HindsightManager } = require('./services/HindsightManager') as typeof import('./services/HindsightManager');
+      const hm = HindsightManager.getInstance();
+      const cfg = hm.getHindsightConfig();
+      if (!cfg || !hm.isAvailable()) return { enabled: false, results: [] };
+      const q = typeof query === 'string' ? query.trim().slice(0, 200) : '';
+      if (q.length < 2) return { enabled: true, results: [] };
+      const { LongTermMemoryService } = require('./intelligence/memory/LongTermMemoryService') as typeof import('./intelligence/memory/LongTermMemoryService');
+      const ltm = LongTermMemoryService.fromFlags({ hindsight: { ...cfg, timeoutMs: 1500 } });
+      if (!ltm.enabled) return { enabled: false, results: [] };
+      // Same scope the post-meeting retain uses, or the bank + tag filter miss.
+      const memories = await ltm.recallRelevantMemory(q, { userId: hm.localUserId() }, { timeoutMs: 1500, maxResults: 3, includeProvenance: true });
+      const { meetingIdsFromMemories, linkMemoriesToMeetings } = require('./intelligence/memory/memorySearch') as typeof import('./intelligence/memory/memorySearch');
+      const meetings = DatabaseManager.getInstance().getMeetingHeadlines(meetingIdsFromMemories(memories));
+      return { enabled: true, results: linkMemoriesToMeetings(memories, meetings, 3) };
+    } catch (e: any) {
+      console.warn('[MemorySearch] skipped (non-fatal):', e?.message);
+      return { enabled: false, results: [] };
     }
   });
 
@@ -13890,11 +13971,28 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Meeting Notes V3 — regenerate the full structured notes for a saved meeting, optionally
   // with a different mode (templateType) and follow-up tone. Runs the map-reduce pipeline on
   // the stored transcript off the UI thread; honors the post_call_summary data scope.
-  safeHandle('regenerate-meeting-summary', async (_, { id, templateType, tone }: { id: string; templateType?: string; tone?: 'professional' | 'warm' | 'concise' | 'friendly' }) => {
+  safeHandle('regenerate-meeting-summary', async (_, { id, templateType, modeId, tone }: { id: string; templateType?: string; modeId?: string; tone?: 'professional' | 'warm' | 'concise' | 'friendly' }) => {
     if (!id || typeof id !== 'string') return { success: false, error: 'invalid id' };
+    if (modeId !== undefined && typeof modeId !== 'string') modeId = undefined;
+    if (templateType !== undefined && typeof templateType !== 'string') templateType = undefined;
     const mgr = appState.getIntelligenceManager();
     if (!mgr) return { success: false, error: 'intelligence manager unavailable' };
-    const ok = await mgr.regenerateMeetingSummary(id, { templateType, tone });
+    // Regenerating AS a different mode (the "Regenerate notes as Sales" suggestion
+    // from Auto-detect meeting type, or any explicit template) is the same Pro gate
+    // as switching to that mode: modes:set-active refuses a non-general template
+    // without Pro or a live trial, and notes must not be a side door to it. A plain
+    // regenerate (no override) keeps the meeting's own mode and is never gated.
+    if (modeId || templateType) {
+      let target = templateType;
+      try {
+        if (modeId) {
+          const { ModesManager } = require('./services/ModesManager');
+          target = ModesManager.getInstance().getModes().find((m: { id: string }) => m.id === modeId)?.templateType ?? target;
+        }
+      } catch { /* resolve best-effort; an unknown mode is gated like any non-general one */ }
+      if (target !== 'general' && !isProOrTrialActive()) return { success: false, error: 'pro_required' };
+    }
+    const ok = await mgr.regenerateMeetingSummary(id, { templateType, modeId, tone });
     return { success: ok };
   });
 
@@ -13913,9 +14011,17 @@ export function initializeIpcHandlers(appState: AppState): void {
     if (!id || typeof id !== 'string') return { success: false, error: 'invalid id' };
     try {
       const { SpeakerLabelService } = require('./services/meeting/SpeakerLabelService');
-      const sanitized = new SpeakerLabelService().sanitizeLabelMap(labels);
-      const ok = DatabaseManager.getInstance().updateSpeakerLabels(id, sanitized);
-      return { success: ok, labels: sanitized };
+      const svc = new SpeakerLabelService();
+      const sanitized = svc.sanitizeLabelMap(labels);
+      // "Speaker labels" ON: the saved notes and action items take the new names
+      // now, not only after a Regenerate. OFF: names stay transcript-only.
+      const applyToNotes = isIntelligenceFlagEnabled('speakerLabelsV1');
+      const ok = DatabaseManager.getInstance().updateSpeakerLabels(
+        id,
+        sanitized,
+        applyToNotes ? (d: any) => svc.applyRenamesToSummary(d, d?.speakerLabels, sanitized) : undefined,
+      );
+      return { success: ok, labels: sanitized, notesUpdated: ok && applyToNotes };
     } catch (e: any) {
       return { success: false, error: e?.message || 'failed' };
     }
@@ -17306,10 +17412,10 @@ export function initializeIpcHandlers(appState: AppState): void {
   /** Forget everything measured for one provider — the manual "recalibrate". */
   safeHandle('provider-performance:reset', async (_: any, providerId?: string) => {
     try {
-      const { getProviderPerformanceStore } = require('./llm/performance');
-      const store = getProviderPerformanceStore();
-      if (providerId) store.invalidateProvider(providerId); else store.clear();
-      store.flush();
+      // The store AND the session state beside it (calibration cooldown,
+      // capability seeding, late-stream tallies) — see llm/performance/forget.ts.
+      const { forgetPerformanceEvidence } = require('./llm/performance');
+      forgetPerformanceEvidence(providerId);
       return { ok: true };
     } catch (err: any) {
       return { ok: false, error: String(err?.message ?? err) };

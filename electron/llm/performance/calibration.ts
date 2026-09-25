@@ -45,7 +45,7 @@ import { getRuntimeSignals } from './runtimeSignals';
 import { classifyStreamError, estimateOutputTokens } from './recorder';
 import { generationRateTps } from './estimators';
 import { classifyWorkload, type PerformanceSample, type RouteKind } from './types';
-import type { CapabilityVerdict } from './capabilityView';
+import { readCapabilityFacts, type CapabilityVerdict } from './capabilityView';
 
 /** Hard ceiling on billable requests per invocation. Enforced by a counter. */
 export const MAX_CALIBRATION_REQUESTS = 3;
@@ -357,11 +357,36 @@ export interface CalibrationDeps {
   probeEnabled?: boolean;
 }
 
-/** Last calibration per identity, persisted alongside the profile. */
+/** Last calibration per identity (in memory; a restart clears it). */
 const lastCalibratedAt = new Map<string, number>();
+
+/**
+ * Identities with a run in progress. The cooldown used to be stamped BEFORE the
+ * first request, which doubled as a double-click guard — and also meant a run
+ * whose every request failed (offline, bad key) locked the user out for 24h.
+ * The cooldown is now stamped only when the provider actually answered, so the
+ * re-entry guard needs its own state.
+ */
+const inFlight = new Set<string>();
 
 export function __resetCalibrationCooldowns(): void {
   lastCalibratedAt.clear();
+  inFlight.clear();
+}
+
+/**
+ * Clear the cooldown — for one provider, or all of them. "Forget all
+ * measurements" calls this: after forgetting, "try again tomorrow" would
+ * contradict the button the user just pressed.
+ */
+export function resetCalibrationCooldowns(providerId?: string): void {
+  if (!providerId) {
+    lastCalibratedAt.clear();
+    return;
+  }
+  for (const key of [...lastCalibratedAt.keys()]) {
+    if (key.startsWith(`${providerId}|`)) lastCalibratedAt.delete(key);
+  }
 }
 
 /**
@@ -396,15 +421,46 @@ export async function runCalibration(
   const key = `${identity.providerId}|${identity.modelId}|${networkProfileId}`;
 
   const last = lastCalibratedAt.get(key) ?? 0;
-  if (last > 0 && now() - last < CALIBRATION_COOLDOWN_MS) {
+  if (inFlight.has(key) || (last > 0 && now() - last < CALIBRATION_COOLDOWN_MS)) {
     return { ...base('cooldown'), providerId: identity.providerId, modelId: identity.modelId, networkProfileId };
   }
-  lastCalibratedAt.set(key, now());
+  inFlight.add(key);
+  try {
+    const result = await runLadderAndProbe(helper, identity, store, networkProfileId, calibrationEnabled, probeEnabled, now, startedAt);
+    // Only a run the provider ANSWERED starts the cooldown: at least one rung
+    // completed, or the probe reached a definite verdict. A run that failed
+    // end to end measured nothing and (for most providers) billed nothing, so
+    // locking the user out for a day would only punish them for being offline.
+    const answered = result.rungs.some((r) => r.ok) || result.vision === 'SUPPORTED' || result.vision === 'UNSUPPORTED';
+    if (answered) lastCalibratedAt.set(key, now());
+    return result;
+  } finally {
+    inFlight.delete(key);
+  }
+}
 
+async function runLadderAndProbe(
+  helper: CalibrationHelper,
+  identity: ReturnType<CalibrationHelper['performanceIdentity']>,
+  store: ProviderPerformanceStore,
+  networkProfileId: string,
+  calibrationEnabled: boolean,
+  probeEnabled: boolean,
+  now: () => number,
+  startedAt: number,
+): Promise<CalibrationResult> {
   const existing = store.getExact(identity.providerId, identity.modelId, networkProfileId);
-  const contextWindow = existing?.capability?.contextWindowTokens
-    ?? helper.getModelContextWindowTokens?.()
-    ?? 0;
+  // A profile's context window is 0 until capability seeding has run for it,
+  // and LLMHelper has no getModelContextWindowTokens — so the old chain fell
+  // through to 0 and `laddersFor(0)` ran a single rung. The model registry is
+  // the same source the seeding reads.
+  const registryWindow = (() => {
+    try { return readCapabilityFacts(identity.modelId, identity.isOllama === true).contextWindowTokens; } catch { return 0; }
+  })();
+  const contextWindow = (existing?.capability?.contextWindowTokens || 0)
+    || (helper.getModelContextWindowTokens?.() || 0)
+    || registryWindow
+    || 0;
 
   const rungs: CalibrationRung[] = [];
   let requestsIssued = 0;
@@ -465,6 +521,7 @@ export async function runCalibration(
           const visionIdentity = helper.performanceIdentity(true);
           recordCalibrationSample(store, visionIdentity, networkProfileId, observation, 20, true);
         }
+        persistVisionVerdict(helper, store, networkProfileId, vision);
       } catch (err) {
         // A THROW is not automatically an UNSUPPORTED. Route it through the same
         // rule the non-throwing path uses, so the two cannot disagree about the
@@ -489,4 +546,35 @@ export async function runCalibration(
     startedAt,
     finishedAt: now(),
   };
+}
+
+/**
+ * Keep a DEFINITE probe verdict as the profile's vision capability.
+ *
+ * The probe used to be measured and then thrown away — nothing called
+ * `setCapabilities` — so "Check image support directly" changed nothing the
+ * user could see. It is filed under the VISION identity, the same identity the
+ * probe's latency sample goes to, because `streamChat` routes an image through
+ * the vision chain and that is the model the verdict actually describes.
+ * FAILED_TEMPORARILY / UNKNOWN say nothing about the model and are not kept.
+ */
+function persistVisionVerdict(
+  helper: CalibrationHelper,
+  store: ProviderPerformanceStore,
+  networkProfileId: string,
+  vision: CapabilityVerdict,
+): void {
+  if (vision !== 'SUPPORTED' && vision !== 'UNSUPPORTED') return;
+  try {
+    const visionIdentity = helper.performanceIdentity(true);
+    const existing = store.getExact(visionIdentity.providerId, visionIdentity.modelId, networkProfileId);
+    const base = existing?.capability && existing.capability.source !== 'unknown'
+      ? existing.capability
+      : readCapabilityFacts(visionIdentity.modelId, visionIdentity.isOllama === true);
+    store.setCapabilities(visionIdentity.providerId, visionIdentity.modelId, networkProfileId, {
+      ...base,
+      vision: vision === 'SUPPORTED',
+      source: 'probe',
+    });
+  } catch { /* a verdict that cannot be stored is still returned to the UI */ }
 }

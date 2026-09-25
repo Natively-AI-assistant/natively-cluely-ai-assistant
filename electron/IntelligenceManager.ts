@@ -348,7 +348,7 @@ export class IntelligenceManager extends EventEmitter {
     }
 
     /** Regenerate V3 notes for a saved meeting (optionally with a different mode/tone). */
-    async regenerateMeetingSummary(meetingId: string, opts?: { templateType?: string; tone?: 'professional' | 'warm' | 'concise' | 'friendly' }): Promise<boolean> {
+    async regenerateMeetingSummary(meetingId: string, opts?: { templateType?: string; modeId?: string; tone?: 'professional' | 'warm' | 'concise' | 'friendly' }): Promise<boolean> {
         return this.persistence.regenerateSavedMeeting(meetingId, opts);
     }
 

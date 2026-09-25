@@ -37,7 +37,11 @@ export interface HindsightConfig {
 
 // Structural type for just the bits of the client we use (so we don't hard-import it).
 // Mirrors the real 0.8.2 RecallResult: { id, text, type?, context?, ... } (no score/tags).
-interface HindsightRecallResult { id?: string; text?: string; type?: string | null; context?: string | null; }
+interface HindsightRecallResult {
+  id?: string; text?: string; type?: string | null; context?: string | null;
+  // Read only with options.includeProvenance (see RecallOptions).
+  tags?: string[] | null; occurred_start?: string | null; mentioned_at?: string | null;
+}
 interface HindsightClientLike {
   retain(bankId: string, content: string, options?: Record<string, unknown>): Promise<unknown>;
   recall(bankId: string, query: string, options?: Record<string, unknown>): Promise<{ results?: HindsightRecallResult[] }>;
@@ -129,7 +133,13 @@ export class HindsightClientAdapter implements MemoryProvider {
           const base = String(r?.text ?? '').trim();
           const ctx = r?.context ? String(r.context).trim() : '';
           const text = ctx && !base.includes(ctx) ? `${base} (${ctx})` : base;
-          return { text, source: r?.type ? String(r.type) : undefined };
+          const memory: RecalledMemory = { text, source: r?.type ? String(r.type) : undefined };
+          if (options.includeProvenance) {
+            if (Array.isArray(r?.tags)) memory.tags = r.tags.map(String);
+            const date = r?.occurred_start || r?.mentioned_at;
+            if (date) memory.date = String(date);
+          }
+          return memory;
         })
         .filter((r) => r.text.trim().length > 0);
     } catch {

@@ -77,6 +77,22 @@ const seenThisSession = new Set<string>();
  */
 const capabilitiesSeeded = new Set<string>();
 
+/**
+ * Forget which identities were seeded, so the next turn copies the registry
+ * facts again. Needed after "Forget all measurements": the store drops every
+ * profile, and without this the rebuilt profiles keep `unknownCapability()` —
+ * no vision or context-window facts — until the app restarts.
+ */
+export function resetCapabilitySeeding(providerId?: string): void {
+  if (!providerId) {
+    capabilitiesSeeded.clear();
+    return;
+  }
+  for (const key of [...capabilitiesSeeded]) {
+    if (key.startsWith(`${providerId}|`)) capabilitiesSeeded.delete(key);
+  }
+}
+
 export interface PerformanceHookOptions {
   llmHelper: PerformanceIdentitySource | null | undefined;
   hasImages: boolean;
@@ -439,6 +455,13 @@ export function imageProfileForTurn(
     llmHelper: PerformanceIdentitySource | null | undefined;
     inputTokens: number;
     streamRoute?: string | null;
+    /**
+     * The turn is a coding session, so its screenshot is code whatever preset
+     * the call site requested. Every call site used to request 'balanced', so
+     * the `technical` exemption below never applied to anything and a code
+     * screenshot could drop to 1024px — the opposite of the switch's promise.
+     */
+    isCode?: boolean;
   },
 ): 'fast' | 'balanced' | 'technical' | 'best' {
   try {
@@ -452,7 +475,7 @@ export function imageProfileForTurn(
     // visibly DEGRADES output (1280px@q85 -> 1024px@q78), which is a trade, not
     // a strict improvement. A user seeing blurrier screenshots deserves a switch.
     if (!flagOn('adaptiveImageQuality')) return requested;
-    if (requested === 'technical') return requested;
+    if (requested === 'technical' || opts.isCode === true) return requested;
     if (requested === 'fast') return requested;
     const advice = slowWorkloadAdvice({
       llmHelper: opts.llmHelper,

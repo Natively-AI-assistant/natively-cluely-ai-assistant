@@ -422,7 +422,47 @@ export function commitTrace(trace: IntelligenceTrace | null | undefined): void {
     if (!rec) return;
     ring.push(rec);
     if (ring.length > RING_MAX) ring.shift();
+    logTraceSummary(rec);
   } catch { /* never throw */ }
+}
+
+/**
+ * One line per committed trace in natively_debug.log.
+ *
+ * The ring above has no production reader, so with the Diagnostics trace switch
+ * on, the per-answer routing record — the thing the switch exists for — was
+ * collected and then never reachable by the user or support. The console is
+ * patched into natively_debug.log (main.ts), which Settings → Export debug logs
+ * collects. Only fixed-vocabulary fields and numbers are written: `errors` and
+ * `routerDecision` are free-form and could quote a provider message, so they
+ * stay in the in-memory record only.
+ */
+function logTraceSummary(rec: IntelligenceTraceRecord): void {
+  try {
+    console.log('[IntelligenceTrace]', JSON.stringify({
+      seq: rec.seq,
+      queryHash: rec.queryHash,
+      queryLength: rec.queryLength,
+      surface: rec.surface,
+      source: rec.source,
+      mode: rec.mode,
+      modeId: rec.modeId,
+      answerType: rec.answerType,
+      answerContract: rec.answerContract,
+      provider: rec.provider,
+      model: rec.model,
+      firstTokenMs: rec.firstTokenMs,
+      firstUsefulMs: rec.firstUsefulMs,
+      totalMs: rec.totalMs,
+      retryCount: rec.retryCount,
+      aborted: rec.aborted,
+      errorCategory: rec.errorCategory,
+      fallbacksUsed: rec.fallbacksUsed,
+      included: rec.contextInclusion.filter((c) => c.included).map((c) => c.source),
+      dropped: rec.contextInclusion.filter((c) => c.requested && !c.included).map((c) => c.source),
+      stages: rec.stages.map((s) => s.stage),
+    }));
+  } catch { /* tracing must never break an answer */ }
 }
 
 /** Recent committed traces (dev/diagnostics/tests). */

@@ -100,4 +100,64 @@ export class SpeakerLabelService {
     }
     return out;
   }
+
+  /**
+   * Carry a rename into notes that already exist.
+   *
+   * "Speaker labels" promises the names reach the notes and action items, but
+   * notes are written once, at meeting end, with the default names ("Me",
+   * "Speaker 1") — so a rename used to show only in the transcript until the
+   * user found and pressed Regenerate (a full LLM call). This rewrites the saved
+   * text in place, deterministically:
+   *   • each speaker's CURRENT display name (previous rename, else its default)
+   *     becomes the NEW one, whole-word and case-sensitive, so "Speaker 1" never
+   *     matches inside "Speaker 10" and a name never matches inside a longer word;
+   *   • all renames go through ONE pass, so swapping two names cannot cascade;
+   *   • "Me" is an ordinary English word, so it is only replaced where an
+   *     `owner` field is exactly "Me" — never inside a sentence;
+   *   • verbatim or other-meeting text is left alone: evidence quotes, the
+   *     cross-meeting recall block, the structured memory record, and metadata.
+   * Returns the same object shape; the input is not mutated.
+   */
+  applyRenamesToSummary<T>(detailed: T, previous: SpeakerLabelMap | undefined, next: SpeakerLabelMap | undefined): T {
+    const renames = new Map<string, { to: string; ownerOnly: boolean }>();
+    const ids = new Set([...Object.keys(previous || {}), ...Object.keys(next || {})]);
+    for (const id of ids) {
+      const from = (previous?.[id] || '').trim() || this.defaultDisplayName(id);
+      const to = (next?.[id] || '').trim() || this.defaultDisplayName(id);
+      if (!from || !to || from === to) continue;
+      // Only ids whose default is a distinctive label are rewritten by default
+      // name. 'unknown' → "Unknown" is too common a word to find-and-replace.
+      if (!previous?.[id] && id !== 'me' && !/^speaker_\d+$/.test(id)) continue;
+      renames.set(from, { to, ownerOnly: from === 'Me' });
+    }
+    if (renames.size === 0 || !detailed || typeof detailed !== 'object') return detailed;
+
+    const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const froms = [...renames.keys()].filter((f) => !renames.get(f)!.ownerOnly).sort((a, b) => b.length - a.length);
+    const pattern = froms.length
+      ? new RegExp(`(?<![\\p{L}\\p{N}_])(${froms.map(esc).join('|')})(?![\\p{L}\\p{N}_])`, 'gu')
+      : null;
+    const SKIP = new Set(['speakerLabels', 'crossMeeting', 'meetingMemory', 'evidence', 'mode', 'generation', 'sourceQuality']);
+
+    const walk = (value: unknown, key: string | null): unknown => {
+      if (typeof value === 'string') {
+        if (key === 'owner') {
+          const exact = renames.get(value.trim());
+          if (exact) return exact.to;
+        }
+        return pattern ? value.replace(pattern, (m) => renames.get(m)?.to ?? m) : value;
+      }
+      if (Array.isArray(value)) return value.map((v) => walk(v, key));
+      if (value && typeof value === 'object') {
+        const out: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+          out[k] = SKIP.has(k) ? v : walk(v, k);
+        }
+        return out;
+      }
+      return value;
+    };
+    return walk(detailed, null) as T;
+  }
 }

@@ -187,6 +187,31 @@ const FINISHED_M0 = {
 
 const noop = async () => undefined;
 
+// ?mem=1 — the search pill's long-term-memory rows (search:memories). Off by default so
+// the preview's other uses see the pill exactly as before. Every call is recorded on
+// window.__memoryCalls / __detailsCalls for checks. A query starting "stale" answers
+// after 1.2s, so a check can type past it and prove the late reply is dropped.
+const MEMORY_PREVIEW = new URLSearchParams(location.search).get('mem') === '1';
+const OLD_MEETING = { id: 'old-meeting-1', title: 'Vendor call — Q2 (older than the list)', date: iso(60 * 24 * 120), duration: '25:00', summary: 'Vendor shortlist.', detailedSummary: {}, transcript: [], usage: [] };
+const record = (key: string, value: unknown) => { const w = window as unknown as Record<string, unknown[]>; (w[key] ??= []).push(value); };
+async function previewSearchMemories(query: string) {
+    record('__memoryCalls', query);
+    if (!MEMORY_PREVIEW) return { enabled: false, results: [] };
+    if (query.toLowerCase().startsWith('stale')) {
+        await new Promise((r) => setTimeout(r, 1200));
+        return { enabled: true, results: [{ text: 'STALE-MEMORY: this reply arrived after the query changed.' }] };
+    }
+    await new Promise((r) => setTimeout(r, 60));
+    return {
+        enabled: true,
+        results: [
+            { text: 'The team agreed the Q4 budget cap is 40k, with headcount flat until the ledger migration lands.', meetingId: 'm2', meetingTitle: 'Design review: launcher transitions', date: iso(180) },
+            { text: 'Acme and Globex are the two vendors on the shortlist.', meetingId: OLD_MEETING.id, meetingTitle: OLD_MEETING.title, date: OLD_MEETING.date },
+            { text: 'Priya owns the call to abort the ledger rollback.', date: iso(60 * 24 * 3) },
+        ],
+    };
+}
+
 // A plain object, deliberately not a Proxy: the components read non-function
 // properties too (platformUtils does `electronAPI?.platform.startsWith(...)` at
 // module scope), so a catch-all that hands back a function breaks the app
@@ -196,6 +221,8 @@ const stub = {
     platform: 'darwin',
     getRecentMeetings: async () => MEETINGS,
     getMeetingDetails: async (id: string) => {
+        record('__detailsCalls', id);
+        if (MEMORY_PREVIEW && id === OLD_MEETING.id) return OLD_MEETING;
         // m0 finishes generating 8s after load, so opening it shows the whole arc:
         // skeleton → live status → the notes swapping in. MeetingDetails polls
         // getMeetingDetails while the status is in-progress, which is what picks
@@ -230,6 +257,7 @@ const stub = {
     getUndetectable: async () => true,
     seedDemo: noop,
     searchGlobalMeetings: async () => ({ enabled: false, results: [] }),
+    searchMemories: previewSearchMemories,
 };
 
 // Effects DO call methods that are not optional-chained (ConnectCalendarButton
