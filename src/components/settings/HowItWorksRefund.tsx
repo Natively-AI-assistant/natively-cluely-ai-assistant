@@ -1,5 +1,5 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { animate, motion, useMotionValue, useReducedMotion } from 'framer-motion';
 import { CalendarClock, CalendarX, CirclePlay, Clock3, FileText, Gauge, Heart, KeyRound, Mail, Power, Receipt, Ticket } from 'lucide-react';
 import { AccordionSection } from '../ui/AccordionSection';
 import { LiquidGlassButton } from '../../ui-components/LiquidGlassButton';
@@ -23,9 +23,9 @@ import './HowItWorksRefund.css';
 //   tab switch      tabs sliding: a sky-blue Liquid Glass pill (.lg-bubble on
 //                   .lg-sky's #3a9ff7), 250ms smooth-out, labels cross-fade on
 //                   the same clock
-//   part swap       text states swap: out 150ms up 4px + 2px blur, then in from
-//                   below — while the body eases to the new part's height
-//                   (card resize, 250ms smooth-out) instead of jumping
+//   part swap       one motion: the box eases to the new part's height (250ms
+//                   smooth-out) while the new part fades in from a 2px blur
+//                   (250ms) and the old fades out (150ms) — see PartPanels
 //   Open / Email    learn-more hover (HowItWorksRefund.css)
 // No framer `layout`/`layoutId`: layout projection caused a scroll regression in
 // this settings scroller (see AIProvidersSettings). Nothing staggers in when the
@@ -49,7 +49,6 @@ const SKY_BUTTON_STYLE = { '--lg-sky-bg': 'var(--hiw-sky)', '--lg-sky-hover': 'v
 
 const EASE_SMOOTH_OUT = [0.22, 1, 0.36, 1] as const;
 const SWAP_DUR = 0.15;
-const SWAP_Y = 4;
 const SWAP_BLUR = 'blur(2px)';
 const RESIZE_DUR = 0.25;
 
@@ -237,33 +236,96 @@ const StepRow: React.FC<{ n: number; title: string; body: string }> = ({ n, titl
 );
 
 /**
- * transitions.dev card resize: tween the body to its content's height when the
- * part changes, instead of snapping. The content is measured with a
- * ResizeObserver and the wrapper animates to that number — no `layout` prop.
+ * The three parts, switched as ONE motion (transitions.dev card resize with a
+ * cross-blur, on the polish scale):
+ *   - every part stays mounted, stacked at the top of a clipped box, so its
+ *     height is always measured and never has to be discovered mid-switch;
+ *   - on a switch the box eases straight to the new part's height (250ms
+ *     smooth-out) WHILE the new part fades in with a 2px blur settling to 0
+ *     (250ms) and the old one fades out faster (150ms: exits are quieter).
+ * It used to be three beats — fade out, swap, THEN resize — which read as the
+ * card lurching after the content had already changed.
+ * No framer `layout`: layout projection caused a scroll regression in this
+ * scroller. Heights come from a ResizeObserver; the first measure happens in a
+ * layout effect, before paint, so the box never renders at 0.
  */
-const EaseToHeight: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+const PartPanels: React.FC<{ part: PartId; content: Record<PartId, React.ReactNode> }> = ({ part, content }) => {
   const reduceMotion = useReducedMotion();
-  const innerRef = useRef<HTMLDivElement>(null);
-  const [height, setHeight] = useState<number | 'auto'>('auto');
+  const refs = useRef<Partial<Record<PartId, HTMLDivElement | null>>>({});
+  const [heights, setHeights] = useState<Partial<Record<PartId, number>>>({});
 
   useLayoutEffect(() => {
-    const el = innerRef.current;
-    if (!el) return;
-    const measure = () => setHeight(el.offsetHeight);
+    const measure = () => {
+      setHeights((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        for (const { id } of PARTS) {
+          const h = refs.current[id]?.offsetHeight;
+          if (h != null && next[id] !== h) { next[id] = h; changed = true; }
+        }
+        return changed ? next : prev;
+      });
+    };
     measure();
     const observer = new ResizeObserver(measure);
-    observer.observe(el);
+    for (const { id } of PARTS) {
+      const el = refs.current[id];
+      if (el) observer.observe(el);
+    }
     return () => observer.disconnect();
   }, []);
 
+  const target = heights[part];
+
+  // One motion value drives the height, set outright on the first measure and
+  // animated on every change after. Declaring the height as BOTH a style and
+  // an `animate` target let the style win when growing, so How it works ->
+  // Refunds snapped to full height in one frame while shrinking eased.
+  const height = useMotionValue(0);
+  const measuredOnce = useRef(false);
+  useLayoutEffect(() => {
+    if (target == null) return;
+    if (!measuredOnce.current || reduceMotion) {
+      measuredOnce.current = true;
+      height.set(target);
+      return;
+    }
+    const controls = animate(height, target, { duration: RESIZE_DUR, ease: EASE_SMOOTH_OUT });
+    return () => controls.stop();
+  }, [target, reduceMotion, height]);
+
+  const variants = reduceMotion
+    ? { in: { opacity: 1, transition: { duration: 0 } }, out: { opacity: 0, transition: { duration: 0 } } }
+    : {
+        in: { opacity: 1, filter: 'blur(0px)', transition: { duration: RESIZE_DUR, ease: EASE_SMOOTH_OUT } },
+        out: { opacity: 0, filter: SWAP_BLUR, transition: { duration: SWAP_DUR, ease: EASE_SMOOTH_OUT } },
+      };
+
   return (
-    <motion.div
-      initial={false}
-      animate={{ height }}
-      transition={{ duration: reduceMotion ? 0 : RESIZE_DUR, ease: EASE_SMOOTH_OUT }}
-      style={{ overflow: 'hidden' }}
-    >
-      <div ref={innerRef}>{children}</div>
+    <motion.div style={{ position: 'relative', overflow: 'hidden', height }}>
+      {PARTS.map(({ id }) => {
+        const active = id === part;
+        return (
+          <motion.div
+            key={id}
+            ref={(el) => { refs.current[id] = el; }}
+            id={`hiw-part-panel-${id}`}
+            role="tabpanel"
+            aria-labelledby={`hiw-part-tab-${id}`}
+            aria-hidden={!active}
+            inert={!active}
+            initial={false}
+            animate={active ? 'in' : 'out'}
+            variants={variants}
+            style={{ position: 'absolute', top: 0, left: 0, right: 0 }}
+            // pt-1 keeps a focus ring on the first control inside clear of
+            // the box's overflow clip.
+            className={`pt-1 pb-1${active ? '' : ' pointer-events-none'}`}
+          >
+            {content[id]}
+          </motion.div>
+        );
+      })}
     </motion.div>
   );
 };
@@ -276,24 +338,6 @@ export const HowItWorksRefund: React.FC = () => {
     (window.electronAPI as any)?.openExternal?.(url);
   };
 
-  // Keyframes, so an entering panel always rises from BELOW even though it
-  // last left UPWARD. `initial={false}` mounts each at its end state.
-  const swapVariants = reduceMotion
-    ? { in: { opacity: 1, transition: { duration: 0 } }, out: { opacity: 0, transition: { duration: 0 } } }
-    : {
-        in: {
-          opacity: [0, 1],
-          y: [SWAP_Y, 0],
-          filter: [SWAP_BLUR, 'blur(0px)'],
-          transition: { duration: SWAP_DUR, ease: 'easeInOut' as const },
-        },
-        out: {
-          opacity: 0,
-          y: -SWAP_Y,
-          filter: SWAP_BLUR,
-          transition: { duration: SWAP_DUR, ease: 'easeInOut' as const },
-        },
-      };
   const actionButton = `${SETTINGS_BTN} t-learn`;
 
   const howItWorks = (
@@ -407,25 +451,7 @@ export const HowItWorksRefund: React.FC = () => {
           />
         </div>
 
-        <EaseToHeight>
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.div
-              key={part}
-              id={`hiw-part-panel-${part}`}
-              role="tabpanel"
-              aria-labelledby={`hiw-part-tab-${part}`}
-              initial="out"
-              animate="in"
-              exit="out"
-              variants={swapVariants}
-              // pt-1 keeps a focus ring on the first control inside clear of
-              // EaseToHeight's overflow clip.
-              className="pt-1 pb-1"
-            >
-              {content[part]}
-            </motion.div>
-          </AnimatePresence>
-        </EaseToHeight>
+        <PartPanels part={part} content={content} />
       </div>
     </AccordionSection>
   );
