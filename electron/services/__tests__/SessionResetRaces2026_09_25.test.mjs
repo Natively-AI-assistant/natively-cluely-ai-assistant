@@ -10,10 +10,10 @@
 // before this fix: meeting B's 3 lines became 0 and meeting A's summary was
 // in meeting B's getFullSessionContext().
 //
-// The phone-mirror chat path has the same shape: it saves its answer after
-// awaiting the provider stream, with no check that the session it was asked in
-// still exists. Desktop chat is covered by the overlay's cancelChatStream() on
-// session-reset; the phone path has no stream registry.
+// The phone-mirror and desktop chat paths have the same shape: they save the
+// answer after awaiting the provider, so a meeting stop or mode switch in
+// between saved it into the context that replaced the one it was asked in.
+// Those are gated on the context epoch (see AnswerSaveAfterContextChange2026_09_25).
 //
 // Requires: npm run build:electron.
 
@@ -134,13 +134,27 @@ describe('transcript compaction vs session reset', () => {
   });
 });
 
-describe('session epoch', () => {
-  test('reset() advances it; clearSessionContext() does not', () => {
+describe('session and context epochs', () => {
+  test('session epoch: reset() advances it; clearSessionContext() does not', () => {
     const s = new SessionTracker();
     const e0 = s.getSessionEpoch();
     s.clearSessionContext();
     assert.equal(s.getSessionEpoch(), e0);
     s.reset();
     assert.equal(s.getSessionEpoch(), e0 + 1);
+  });
+
+  // The context epoch gates answer saves (phone-mirror and desktop chat): an
+  // answer asked before a meeting stop OR a mode switch must not be saved into
+  // the context that replaced it. modes:set-active clears via
+  // clearSessionContext(), and does so even when re-selecting the same mode,
+  // which a mode-id comparison alone would miss.
+  test('context epoch: both reset() and clearSessionContext() advance it', () => {
+    const s = new SessionTracker();
+    const c0 = s.getContextEpoch();
+    s.clearSessionContext();
+    assert.equal(s.getContextEpoch(), c0 + 1);
+    s.reset();
+    assert.equal(s.getContextEpoch(), c0 + 2);
   });
 });

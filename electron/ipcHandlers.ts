@@ -1452,6 +1452,22 @@ export function initializeIpcHandlers(appState: AppState): void {
         }
         myController = new AbortController();
         _chatStreamsBySender.set(senderId, { streamId: myStreamId, controller: myController });
+        // The overlay cancels its own stream on session-reset, and modes:set-active
+        // aborts every sender's, but the launcher's chat (GlobalChat /
+        // MeetingChat fallback) is not cancelled at meeting stop. Its answer is
+        // still shown; the record steps below skip the session if a reset or
+        // mode clear landed while it was being generated.
+        const myContextEpoch = appState.getIntelligenceManager?.()?.getContextEpoch?.() ?? null;
+        let contextChangeLogged = false;
+        const contextChangedSinceAsk = (): boolean => {
+          if (myContextEpoch === null) return false;
+          const changed = appState.getIntelligenceManager?.()?.getContextEpoch?.() !== myContextEpoch;
+          if (changed && !contextChangeLogged) {
+            contextChangeLogged = true;
+            console.log('[IPC] session reset or mode switched during this answer — not recording it', { streamId: myStreamId });
+          }
+          return changed;
+        };
 
         // Issue #558: Codex is the selected model but there is no usable
         // ChatGPT sign-in. Say so, instead of answering from another provider
@@ -2153,7 +2169,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             const manualActiveMode = modeInfo;
             let liveModeIdAtRecord: string | null = null;
             try { liveModeIdAtRecord = mm.getActiveMode()?.id ?? null; } catch { /* record-guard only */ }
-            if (liveModeIdAtRecord === (manualActiveMode?.id ?? null)) {
+            if (liveModeIdAtRecord === (manualActiveMode?.id ?? null) && !contextChangedSinceAsk()) {
               // A truncated ANSWER must NOT enter conversation state or memory.
               // It would become the antecedent for the next turn's referent
               // resolution and be replayed as if it were a complete answer —
@@ -6088,7 +6104,8 @@ export function initializeIpcHandlers(appState: AppState): void {
             // (the doc-grounded validator gate) is kept as a separate guard.
             if (fullResponse.trim().length > 0
                 && !blockedFromSessionTracker
-                && !sessionWriteDecision.blockedFromSessionTracker) {
+                && !sessionWriteDecision.blockedFromSessionTracker
+                && !contextChangedSinceAsk()) {
               intelligenceManager.addAssistantMessage(fullResponse, sessionWriteDecision, 'manual_chat');
               // Log Usage for streaming chat
               intelligenceManager.logUsage('chat', message, fullResponse);
@@ -6222,7 +6239,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                   // alone — exactly the case this guard must catch.
                   const { ModesManager: _ModesManagerForRecordGuard } = require('./services/ModesManager');
                   const liveModeIdAtRecord = _ModesManagerForRecordGuard.getInstance().getActiveMode()?.id ?? null;
-                  if (liveModeIdAtRecord === (manualActiveMode?.id ?? null)) {
+                  if (liveModeIdAtRecord === (manualActiveMode?.id ?? null) && !contextChangedSinceAsk()) {
                     _manualConversationMemory.record({
                       sessionId: String(senderId),
                       userMessage: message,
@@ -17935,10 +17952,11 @@ export function initializeIpcHandlers(appState: AppState): void {
       const phoneMirror = PhoneMirrorService.getInstance();
       const intelligenceManager = appState.getIntelligenceManager();
       // Read before the stream is awaited. Unlike desktop chat, a phone stream is
-      // not in _chatStreamsBySender, so the overlay's cancelChatStream() on
-      // session-reset never reaches it: a meeting stopped mid-answer would save
-      // this answer into the NEXT session. The phone still gets the full answer.
-      const myPhoneSessionEpoch = intelligenceManager.getSessionEpoch();
+      // not in _chatStreamsBySender, so neither the overlay's cancelChatStream()
+      // on session-reset nor modes:set-active's abort reaches it: a meeting stop
+      // or mode switch mid-answer would save this answer into the context that
+      // replaced the one it was asked in. The phone still gets the full answer.
+      const myPhoneContextEpoch = intelligenceManager.getContextEpoch();
 
       // Document-grounded custom mode (audit 2026-06-27): the phone chat path is
       // a SECOND ungated entry — it captures the rolling snapshot and saves the
@@ -18214,11 +18232,11 @@ export function initializeIpcHandlers(appState: AppState): void {
           if (phoneInvalid) {
             console.warn('[PhoneMirror] document-grounded invalid answer blocked from SessionTracker', { chars: phoneTrim.length });
           }
-          const phoneSessionEnded = intelligenceManager.getSessionEpoch() !== myPhoneSessionEpoch;
-          if (phoneSessionEnded) {
-            console.log('[PhoneMirror] session was reset during this answer — not saving it into the new session', { chars: phoneTrim.length });
+          const phoneContextChanged = intelligenceManager.getContextEpoch() !== myPhoneContextEpoch;
+          if (phoneContextChanged) {
+            console.log('[PhoneMirror] session reset or mode switched during this answer — not saving it', { chars: phoneTrim.length });
           }
-          if (phoneTrim.length > 0 && !phoneInvalid && !phoneSessionEnded) {
+          if (phoneTrim.length > 0 && !phoneInvalid && !phoneContextChanged) {
             intelligenceManager.addAssistantMessage(full, undefined, 'phone_mirror');
             intelligenceManager.logUsage('chat', message, full);
           }
