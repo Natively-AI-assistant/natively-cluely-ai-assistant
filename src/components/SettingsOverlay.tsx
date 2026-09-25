@@ -2372,7 +2372,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             </div>
                                                             <div>
                                                                 <h3 className="text-sm font-bold text-text-primary">{t('Protect Natively shortcuts')}</h3>
-                                                                <p className="text-xs text-text-secondary mt-0.5">{t('Stops a Natively shortcut from typing into the app underneath. Turn off if your antivirus flags the keyboard hook.')}</p>
+                                                                <p className="text-xs text-text-secondary mt-0.5">{t('Keeps shortcuts from typing into the app below. Turn off if antivirus flags it.')}</p>
                                                             </div>
                                                         </div>
                                                         <SettingsToggle
