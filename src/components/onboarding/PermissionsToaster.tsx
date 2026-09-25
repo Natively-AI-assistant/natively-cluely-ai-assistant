@@ -16,13 +16,13 @@
 // panel or raise a prompt; the real status arrives via the focus refresh below.
 //
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { motion, type MotionStyle } from 'framer-motion';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import { X, Monitor, Mic, Settings, Check, Lock, Loader2, Circle } from 'lucide-react';
 import nativelyIcon from '../../../assets/icon.png';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { LiquidGlassButton } from '../../ui-components/LiquidGlassButton';
-import { useGenieCard } from './useGenieCard';
+import { GenieModal } from '../ui/GenieModal';
 import { describePermRow, allPermissionsResolved } from '../../lib/permissionRowPolicy.mjs';
 import type { RowPresentation } from '../../lib/permissionRowPolicy.mjs';
 
@@ -87,13 +87,25 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
   const [scrStatus,  setScrStatus]  = useState<PermStatus>('loading');
   const [requesting, setRequesting] = useState<RowKind | null>(null);
 
-  // The same macOS genie the extension card pours out with. It owns the
-  // entrance, the scrim and the close sequencing; this file only says WHEN
-  // the card is ready to appear.
-  const {
-    shown, closing, closeThen, scrim,
-    wrapRef, cardRef, bandsRef, shadowRef, reduced,
-  } = useGenieCard(ready, 'PermissionsToaster');
+  // It pours out of, and back into, the bottom of the window like every other
+  // popup (GenieModal), warping one picture of itself the way macOS does. This
+  // file only says WHEN the card is ready to appear: once the statuses are read.
+  const reduced = useReducedMotion() ?? false;
+
+  // The genie pours the card out whole, so nothing inside it animates in on top
+  // of that. Entrances run only where there is no genie (reduced motion) or for
+  // content that arrives after the card has landed (the "all set" state).
+  const [landed, setLanded] = useState(false);
+  const enter = reduced || landed;
+
+  // The orchestrator unmounts this the moment it hears "dismissed", so every
+  // way out closes the card first (the genie) and reports from onClosed.
+  const afterCloseRef = useRef<(() => void) | null>(null);
+  const closeThen = useCallback((after: () => void) => {
+    if (afterCloseRef.current) return;
+    afterCloseRef.current = after;
+    setReady(false);
+  }, []);
 
   const theme = useResolvedTheme();
   const isLight = theme === 'light';
@@ -174,20 +186,20 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
   }, []);
 
   useEffect(() => {
-    if (!isOpen) { setReady(false); return; }
+    if (!isOpen) { setReady(false); setLanded(false); return; }
     // Pure presentational: orchestrator already gated on the homepage-mounted
     // duration predicate. We just refresh status and become visible.
     refreshStatus().then(() => setReady(true));
   }, [isOpen, refreshStatus]);
 
   useEffect(() => {
-    if (!shown) return;
+    if (!ready) return;
     // The only way a grant reaches this card. Every row action is fire-and-
     // re-read: nothing below writes 'granted' on its own.
     const onFocus = () => refreshStatus();
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
-  }, [shown, refreshStatus]);
+  }, [ready, refreshStatus]);
 
   const openScreenSettings = useCallback(() => {
     if (platform !== 'darwin') return;
@@ -263,7 +275,7 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
   // column, so the card is the same size and shape either way.
   const permRows = (
     <motion.div
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+      initial={enter ? { opacity: 0 } : false} animate={{ opacity: 1 }}
       transition={{ delay: 0.12 }}
       style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '24px' }}
     >
@@ -273,6 +285,7 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
           label="Screen Recording"
           row={describePermRow(platform, 'screen', scrStatus)}
           busy={requesting === 'screen'}
+          enter={enter}
           reduced={reduced}
           isLight={isLight}
         />
@@ -282,220 +295,198 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
         label="Microphone"
         row={describePermRow(platform, 'microphone', micStatus)}
         busy={requesting === 'microphone'}
+        enter={enter}
         reduced={reduced}
         isLight={isLight}
       />
     </motion.div>
   );
 
+  // What the card shows is decided by the statuses, so its pictures are kept
+  // per combination: an open never pours out last time's checkmarks, and a
+  // picture taken while the consent prompt is up is never kept.
+  const genieView = `perm:${platform}:mic=${micStatus}:screen=${isMac ? scrStatus : 'none'}`;
+
   return (
-    <>
-      {shown && (
-        <motion.div
-          key="perm-overlay"
-          style={{
-            // The genie owns the scrim: it fades in with the pour and holds
-            // until the card is back in the slot.
-            opacity: scrim,
-            pointerEvents: closing ? 'none' : 'auto',
-            position: 'fixed', inset: 0, zIndex: 9998,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: colors.overlayBg,
-          } as MotionStyle}
-          onClick={e => { if (e.target === e.currentTarget) handleDismiss(); }}
-        >
-          {/* Never transformed, so it reports where the card sits at rest
-              even while the card is mid-genie. */}
-          <div ref={wrapRef} style={{ position: 'relative', width: CARD_W, maxWidth: '92vw' }}>
-            {/* The card's shadow, standing in for it mid-genie. */}
-            <div
-              ref={shadowRef}
-              aria-hidden
-              style={{
-                display: 'none', position: 'absolute', inset: 0,
-                borderRadius: '20px', transformOrigin: '50% 0', pointerEvents: 'none',
-                boxShadow: colors.boxShadow,
-              }}
-            />
-          <div
-            ref={cardRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="perm-toast-title"
-            aria-describedby="perm-toast-desc"
-            style={{
-              // Matches BrowserExtensionToaster's frame so the two onboarding
-              // cards read as one family. Windows renders no visual guide, so
-              // it loses that column rather than leaving an empty pane.
-              width: '100%',
-              borderRadius: '20px', overflow: 'hidden',
-              background: colors.cardBg,
-              boxShadow: colors.boxShadow,
-              fontFamily: T.font,
-              position: 'relative',
-            }}
-          >
-            {/* On macOS the close sits on the inset panel (below), as it does
-                on the extension card. Windows has no panel, so it falls back
-                to the card corner. */}
-            {!isMac && (
-            <button onClick={handleDismiss} aria-label="Dismiss"
-              style={{
-                position: 'absolute', top: '16px', right: '16px', zIndex: 10,
-                background: 'none', border: 'none', cursor: 'pointer',
-                width: '26px', height: '26px',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                borderRadius: '50%', opacity: colors.closeBtnOpacityDefault,
-                transition: 'opacity 200ms, background 200ms',
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.opacity = String(colors.closeBtnOpacityHover);
-                e.currentTarget.style.background = colors.closeBtnBgHover;
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.opacity = String(colors.closeBtnOpacityDefault);
-                e.currentTarget.style.background = 'transparent';
-              }}>
-              <X size={12} strokeWidth={2.5} color={colors.closeBtnColor} />
-            </button>
-            )}
-
-            {/* Two-column split on the extension card's proportions:
-                58/40 with a 440 floor. The footer below is pinned with
-                marginTop:auto, which is what holds the column together at
-                that floor instead of the flex:1 row list that used to strand
-                the gap ABOVE the button. */}
-            <div style={{ display: 'flex', alignItems: 'stretch', minHeight: isMac ? '440px' : undefined }}>
-
-              {/* ── LEFT: Permission controls ── */}
-              <div style={{
-                flex: isMac ? '1 1 58%' : 1, minWidth: 0,
-                padding: isMac ? '40px 28px 34px 40px' : '32px 32px 28px',
-                display: 'flex', flexDirection: 'column',
-              }}>
-
-                {/* Header row */}
-                <div style={{ marginBottom: '24px' }}>
-                  <span style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: t3 }}>
-                    Permissions
-                  </span>
-                </div>
-
-                {allResolved ? (
-                  <AllSetPanel isLight={isLight} reduced={reduced} onContinue={handleDismiss} rows={permRows} />
-                ) : (
-                  <>
-                    {/* Title + subtitle */}
-                    <motion.div
-                      initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-                      transition={{ ...SPRING.smooth, delay: 0.05 }}
-                      style={{ marginBottom: '24px' }}
-                    >
-                      <h2 id="perm-toast-title" style={{ fontSize: '24px', fontWeight: 700, letterSpacing: '-0.03em', color: t1, margin: '0 0 8px', lineHeight: 1.2 }}>
-                        Let's get you set up
-                      </h2>
-                      <p id="perm-toast-desc" style={{ fontSize: '13px', lineHeight: 1.65, color: t3, margin: 0 }}>
-                        {isMac
-                          ? 'Natively needs a few permissions to capture meetings and transcribe speech.'
-                          : 'Natively needs microphone access to transcribe speech.'}
-                      </p>
-                    </motion.div>
-
-                    {permRows}
-
-                    {/* marginTop:auto pins the action to the bottom of the
-                        column however short the copy above it runs — the same
-                        device the extension card uses to hold its 440 floor. */}
-                    <motion.div
-                      initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-                      transition={{ ...SPRING.smooth, delay: 0.2 }}
-                      style={{ marginTop: 'auto' }}
-                    >
-                      <PrimaryButton
-                        isLight={isLight}
-                        disabled={checking}
-                        icon={Settings}
-                        label="Open Settings"
-                        onClick={openSettingsForNext}
-                      />
-                    </motion.div>
-                  </>
-                )}
-              </div>
-
-              {/* ── RIGHT: Visual guide — macOS only ──
-                   The mock below is a macOS consent dialog and a macOS
-                   Privacy & Security row. Showing either on Windows would be
-                   troubleshooting for the wrong OS (CLAUDE.md). */}
-              {isMac && (
-                <motion.div
-                  initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
-                  transition={{ ...SPRING.gentle, delay: 0.08 }}
-                  style={{ flex: '0 0 40%', padding: '8px 8px 8px 0', display: 'flex' }}
-                >
-                  {/*
-                    Inset 8px from the card's top, right and bottom with its own
-                    radius, exactly as the extension card holds its image panel.
-                    That gap is what makes the guide read as a separate object
-                    held inside the card rather than a second column bleeding to
-                    the edge — the old full-bleed pane with a left hairline.
-                  */}
-                  <div style={{
-                    position: 'relative', flex: 1,
-                    borderRadius: '14px', overflow: 'hidden',
-                    background: colors.rightBg,
-                    boxShadow: isLight ? 'inset 0 0 0 1px rgba(11,16,32,0.07)' : 'none',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    padding: '28px 18px',
-                  }}>
-                    {/* Subtle grid pattern */}
-                    <div aria-hidden style={{
-                      position: 'absolute', inset: 0, opacity: colors.gridOpacity,
-                      backgroundImage: `linear-gradient(${colors.gridLineColor} 1px, transparent 1px),
-                                       linear-gradient(90deg, ${colors.gridLineColor} 1px, transparent 1px)`,
-                      backgroundSize: '24px 24px',
-                    }} />
-
-                    <button onClick={handleDismiss} aria-label="Dismiss"
-                      style={{
-                        position: 'absolute', top: '8px', right: '8px', zIndex: 2,
-                        width: '30px', height: '30px',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        padding: 0, cursor: 'pointer',
-                        background: 'none', border: 0, borderRadius: '8px',
-                        opacity: colors.closeBtnOpacityDefault,
-                        transition: 'opacity 200ms, background 200ms',
-                      }}
-                      onMouseEnter={e => {
-                        e.currentTarget.style.opacity = String(colors.closeBtnOpacityHover);
-                        e.currentTarget.style.background = colors.closeBtnBgHover;
-                      }}
-                      onMouseLeave={e => {
-                        e.currentTarget.style.opacity = String(colors.closeBtnOpacityDefault);
-                        e.currentTarget.style.background = 'transparent';
-                      }}>
-                      <X size={14} strokeWidth={2} color={colors.closeBtnColor} />
-                    </button>
-
-                    {allResolved
-                      ? <GuideResolved isLight={isLight} colors={colors} t3={t3} />
-                      : <GuideSteps colors={colors} t3={t3} reduced={reduced} />}
-                  </div>
-                </motion.div>
-              )}
-            </div>
-          </div>
-            {/* The genie's bands, present only while it runs. */}
-            <div
-              ref={bandsRef}
-              aria-hidden
-              inert
-              style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
-            />
-          </div>
-        </motion.div>
+    <GenieModal
+      open={ready}
+      label="PermissionsToaster"
+      openingView={genieView}
+      keepPictures={requesting === null}
+      zIndex={9998}
+      onBackdropClick={handleDismiss}
+      onOpened={() => setLanded(true)}
+      onClosed={() => { const after = afterCloseRef.current; afterCloseRef.current = null; after?.(); }}
+      backdropStyle={{ background: colors.overlayBg }}
+      wrapStyle={{ width: CARD_W, maxWidth: '92vw' }}
+      cardStyle={{
+        // Matches BrowserExtensionToaster's frame so the two onboarding
+        // cards read as one family. Windows renders no visual guide, so
+        // it loses that column rather than leaving an empty pane.
+        background: colors.cardBg,
+        boxShadow: colors.boxShadow,
+        fontFamily: T.font,
+      }}
+      cardProps={{
+        role: 'dialog',
+        'aria-modal': true,
+        'aria-labelledby': 'perm-toast-title',
+        'aria-describedby': 'perm-toast-desc',
+        'data-genie-view': genieView,
+      }}
+      shadow={colors.boxShadow}
+      radius={20}
+    >
+      {/* On macOS the close sits on the inset panel (below), as it does
+          on the extension card. Windows has no panel, so it falls back
+          to the card corner. */}
+      {!isMac && (
+      <button onClick={handleDismiss} aria-label="Dismiss"
+        style={{
+          position: 'absolute', top: '16px', right: '16px', zIndex: 10,
+          background: 'none', border: 'none', cursor: 'pointer',
+          width: '26px', height: '26px',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          borderRadius: '50%', opacity: colors.closeBtnOpacityDefault,
+          transition: 'opacity 200ms, background 200ms',
+        }}
+        onMouseEnter={e => {
+          e.currentTarget.style.opacity = String(colors.closeBtnOpacityHover);
+          e.currentTarget.style.background = colors.closeBtnBgHover;
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.opacity = String(colors.closeBtnOpacityDefault);
+          e.currentTarget.style.background = 'transparent';
+        }}>
+        <X size={12} strokeWidth={2.5} color={colors.closeBtnColor} />
+      </button>
       )}
-    </>
+
+      {/* Two-column split on the extension card's proportions:
+          58/40 with a 440 floor. The footer below is pinned with
+          marginTop:auto, which is what holds the column together at
+          that floor instead of the flex:1 row list that used to strand
+          the gap ABOVE the button. */}
+      <div style={{ display: 'flex', alignItems: 'stretch', minHeight: isMac ? '440px' : undefined }}>
+
+        {/* ── LEFT: Permission controls ── */}
+        <div style={{
+          flex: isMac ? '1 1 58%' : 1, minWidth: 0,
+          padding: isMac ? '40px 28px 34px 40px' : '32px 32px 28px',
+          display: 'flex', flexDirection: 'column',
+        }}>
+
+          {/* Header row */}
+          <div style={{ marginBottom: '24px' }}>
+            <span style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: t3 }}>
+              Permissions
+            </span>
+          </div>
+
+          {allResolved ? (
+            <AllSetPanel isLight={isLight} reduced={reduced} enter={enter} onContinue={handleDismiss} rows={permRows} />
+          ) : (
+            <>
+              {/* Title + subtitle */}
+              <motion.div
+                initial={enter ? { opacity: 0, y: 8 } : false} animate={{ opacity: 1, y: 0 }}
+                transition={{ ...SPRING.smooth, delay: 0.05 }}
+                style={{ marginBottom: '24px' }}
+              >
+                <h2 id="perm-toast-title" style={{ fontSize: '24px', fontWeight: 700, letterSpacing: '-0.03em', color: t1, margin: '0 0 8px', lineHeight: 1.2 }}>
+                  Let's get you set up
+                </h2>
+                <p id="perm-toast-desc" style={{ fontSize: '13px', lineHeight: 1.65, color: t3, margin: 0 }}>
+                  {isMac
+                    ? 'Natively needs a few permissions to capture meetings and transcribe speech.'
+                    : 'Natively needs microphone access to transcribe speech.'}
+                </p>
+              </motion.div>
+
+              {permRows}
+
+              {/* marginTop:auto pins the action to the bottom of the
+                  column however short the copy above it runs — the same
+                  device the extension card uses to hold its 440 floor. */}
+              <motion.div
+                initial={enter ? { opacity: 0, y: 8 } : false} animate={{ opacity: 1, y: 0 }}
+                transition={{ ...SPRING.smooth, delay: 0.2 }}
+                style={{ marginTop: 'auto' }}
+              >
+                <PrimaryButton
+                  isLight={isLight}
+                  disabled={checking}
+                  icon={Settings}
+                  label="Open Settings"
+                  onClick={openSettingsForNext}
+                />
+              </motion.div>
+            </>
+          )}
+        </div>
+
+        {/* ── RIGHT: Visual guide — macOS only ──
+             The mock below is a macOS consent dialog and a macOS
+             Privacy & Security row. Showing either on Windows would be
+             troubleshooting for the wrong OS (CLAUDE.md). */}
+        {isMac && (
+          <motion.div
+            initial={enter ? { opacity: 0, x: 20 } : false} animate={{ opacity: 1, x: 0 }}
+            transition={{ ...SPRING.gentle, delay: 0.08 }}
+            style={{ flex: '0 0 40%', padding: '8px 8px 8px 0', display: 'flex' }}
+          >
+            {/*
+              Inset 8px from the card's top, right and bottom with its own
+              radius, exactly as the extension card holds its image panel.
+              That gap is what makes the guide read as a separate object
+              held inside the card rather than a second column bleeding to
+              the edge — the old full-bleed pane with a left hairline.
+            */}
+            <div style={{
+              position: 'relative', flex: 1,
+              borderRadius: '14px', overflow: 'hidden',
+              background: colors.rightBg,
+              boxShadow: isLight ? 'inset 0 0 0 1px rgba(11,16,32,0.07)' : 'none',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              padding: '28px 18px',
+            }}>
+              {/* Subtle grid pattern */}
+              <div aria-hidden style={{
+                position: 'absolute', inset: 0, opacity: colors.gridOpacity,
+                backgroundImage: `linear-gradient(${colors.gridLineColor} 1px, transparent 1px),
+                                 linear-gradient(90deg, ${colors.gridLineColor} 1px, transparent 1px)`,
+                backgroundSize: '24px 24px',
+              }} />
+
+              <button onClick={handleDismiss} aria-label="Dismiss"
+                style={{
+                  position: 'absolute', top: '8px', right: '8px', zIndex: 2,
+                  width: '30px', height: '30px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  padding: 0, cursor: 'pointer',
+                  background: 'none', border: 0, borderRadius: '8px',
+                  opacity: colors.closeBtnOpacityDefault,
+                  transition: 'opacity 200ms, background 200ms',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.opacity = String(colors.closeBtnOpacityHover);
+                  e.currentTarget.style.background = colors.closeBtnBgHover;
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.opacity = String(colors.closeBtnOpacityDefault);
+                  e.currentTarget.style.background = 'transparent';
+                }}>
+                <X size={14} strokeWidth={2} color={colors.closeBtnColor} />
+              </button>
+
+              {allResolved
+                ? <GuideResolved isLight={isLight} colors={colors} t3={t3} />
+                : <GuideSteps colors={colors} t3={t3} reduced={reduced} enter={enter} />}
+            </div>
+          </motion.div>
+        )}
+      </div>
+    </GenieModal>
   );
 };
 
@@ -581,8 +572,8 @@ function PrimaryButton({
 // everything. This is what it renders now.
 // Same two rows as every other state — the card does not change shape when the
 // permissions come good, only the heading, each row's status and the footer.
-function AllSetPanel({ isLight, reduced, onContinue, rows }: {
-  isLight: boolean; reduced: boolean; onContinue: () => void;
+function AllSetPanel({ isLight, reduced, enter, onContinue, rows }: {
+  isLight: boolean; reduced: boolean; enter: boolean; onContinue: () => void;
   rows: React.ReactNode;
 }) {
   const t1 = isLight ? '#1C1C1E' : '#FFFFFF';
@@ -590,7 +581,7 @@ function AllSetPanel({ isLight, reduced, onContinue, rows }: {
 
   return (
     <motion.div
-      initial={reduced ? { opacity: 0 } : { opacity: 0, y: 10 }}
+      initial={!enter ? false : reduced ? { opacity: 0 } : { opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={reduced ? { duration: 0.15 } : SPRING.gentle}
       style={{ display: 'flex', flexDirection: 'column', flex: 1 }}
@@ -618,12 +609,15 @@ function AllSetPanel({ isLight, reduced, onContinue, rows }: {
 // layers. That combination is what ?isolate=permissions-toaster was added to
 // bisect against a native OOM, and none of it taught the user anything a still
 // image does not. Entrance animation only now.
-function GuideSteps({ colors, t3, reduced }: {
+function GuideSteps({ colors, t3, reduced, enter }: {
   colors: CardColors;
   t3: string;
   reduced: boolean;
+  enter: boolean;
 }) {
-  const rise = (delay: number) => (reduced
+  const rise = (delay: number) => (!enter
+    ? { initial: false as const }
+    : reduced
     ? { initial: { opacity: 0 }, animate: { opacity: 1 }, transition: { duration: 0.2, delay } }
     : { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 }, transition: { type: 'spring' as const, stiffness: 180, damping: 18, delay } });
 
@@ -767,12 +761,13 @@ function GuideResolved({ isLight, colors, t3 }: {
 // flip itself green, and clicking a granted row does nothing, because nothing
 // was revoked.
 function PermItem({
-  icon: Icon, label, row, busy, reduced, isLight,
+  icon: Icon, label, row, busy, enter, reduced, isLight,
 }: {
   icon:     React.ElementType;
   label:    string;
   row:      RowPresentation;
   busy:     boolean;
+  enter:    boolean;
   reduced:  boolean;
   isLight:  boolean;
 }) {
@@ -793,7 +788,7 @@ function PermItem({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+      initial={enter ? { opacity: 0, y: 8 } : false} animate={{ opacity: 1, y: 0 }}
       transition={reduced ? { duration: 0 } : { type: 'spring', stiffness: 260, damping: 24 }}
       style={{
         display: 'flex', alignItems: 'center', gap: '10px',
