@@ -62,7 +62,7 @@ const DEFAULT_USER_STATE = {
   extensionConnected: false,
   extensionSupported: true,
   permsShown: false,
-  macTCCBlocked: false,
+  permissionsNeedAttention: false,
   seenProfileOnboarding: false,
   seenModesOnboarding: false,
   activeModeSet: false,
@@ -100,21 +100,41 @@ test('permissions: fires on first launch when perms not yet shown', () => {
   assert.equal(show('permissions', makeCtx({ homepageMountedFor: 3_000 })), true);
 });
 
-test('permissions: skipped when perms shown AND no TCC block', () => {
+test('permissions: stays quiet once shown while every permission is fine', () => {
   const ctx = makeCtx({
-    userState: { ...DEFAULT_USER_STATE, permsShown: true, macTCCBlocked: false },
+    userState: { ...DEFAULT_USER_STATE, permsShown: true, permissionsNeedAttention: false },
     homepageMountedFor: 3_000,
   });
   assert.equal(show('permissions', ctx), false);
 });
 
-test('permissions: re-fires when mac TCC is blocked (returning user)', () => {
+test('permissions: comes back for a returning user when a permission needs attention', () => {
   const ctx = makeCtx({
-    userState: { ...DEFAULT_USER_STATE, permsShown: true, macTCCBlocked: true },
+    userState: { ...DEFAULT_USER_STATE, permsShown: true, permissionsNeedAttention: true },
     homepageMountedFor: 3_000,
   });
   assert.equal(show('permissions', ctx), true);
 });
+
+// The permissions rule, checked on BOTH twins: the .ts catalog the app ships
+// and the .mjs one the decision-engine tests above run. Hand-written truth
+// table: first launch always shows; afterwards only a permission that needs
+// attention brings the card back.
+for (const [label, stages] of [['stageCatalog.mjs', STAGES], ['stageCatalog.ts', STAGES_TS]]) {
+  const perms = stages.find((s) => s.id === 'permissions');
+  for (const [permsShown, permissionsNeedAttention, wantSkip] of [
+    [false, false, false],
+    [false, true, false],
+    [true, false, true],
+    [true, true, false],
+  ]) {
+    test(`${label} permissions: shown=${permsShown} needsAttention=${permissionsNeedAttention} → ${wantSkip ? 'quiet' : 'eligible'}`, () => {
+      const userState = { ...DEFAULT_USER_STATE, permsShown, permissionsNeedAttention };
+      assert.equal(perms.skipWhen(userState), wantSkip);
+      assert.equal(perms.reEligibility(userState, {}), permissionsNeedAttention);
+    });
+  }
+}
 
 test('permissions: blocked by homepage duration < 2s', () => {
   assert.equal(show('permissions', makeCtx({ homepageMountedFor: 1_500 })), false);

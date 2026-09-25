@@ -41,8 +41,9 @@ export const STAGES = [
       requiresForeground: true,
       requiresMeetingInactive: true,
     },
-    skipWhen: (s) => (s.permsShown && !s.macTCCBlocked),
-    reEligibility: (s) => s.macTCCBlocked,
+    skipWhen: (s) => (s.permsShown && !s.permissionsNeedAttention),
+    reEligibility: (s) => s.permissionsNeedAttention,
+    reopensWhenReEligible: true,
   },
   {
     id: 'browser_extension',

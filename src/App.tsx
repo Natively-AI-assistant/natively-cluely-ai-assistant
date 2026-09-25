@@ -34,6 +34,7 @@ import { isInternalCaptureDevice } from "../electron/audio/audioDeviceSelection.
 import { ProviderChangeNotice, type EmbeddingDegradedNotice } from "./components/ProviderChangeNotice"
 import { clampOverlayOpacity, OVERLAY_OPACITY_DEFAULT, getDefaultOverlayOpacity } from "./lib/overlayAppearance"
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from './lib/meetingInterfaceTheme'
+import { permissionsNeedAttention } from './lib/permissionAttentionPolicy.mjs'
 import { isMac } from "./utils/platformUtils"
 import { trackAppOpen } from "./lib/toasterGating"
 import {
@@ -710,7 +711,8 @@ const App: React.FC = () => {
     // ── Onboarding orchestrator — push user-state patches ─────
     // The orchestrator owns scheduling; we just feed it the latest user state.
     if (isLauncherWindow || isDefault) {
-      // Permissions state — first launch vs returning mac with revoked TCC.
+      // Permissions state — first launch, then only when a required permission
+      // needs attention (mac: mic/screen; Windows: mic). See permissionAttentionPolicy.mjs.
       const permsShown = localStorage.getItem('natively_perms_shown_v1') === '1';
       const seenModes = localStorage.getItem('natively_seen_modes_onboarding_v5') === 'true';
       const seenProfile = localStorage.getItem('natively_seen_profile_onboarding_v1') === 'true';
@@ -719,11 +721,9 @@ const App: React.FC = () => {
       if (maybeCheck) {
         maybeCheck()
           .then((p) => {
-            const blocked = (s?: string) => s === 'denied' || s === 'restricted';
-            const macTCCBlocked = p?.platform === 'darwin' && (blocked(p.microphone) || blocked(p.screen));
             setOrchestratorUserState({
               permsShown,
-              macTCCBlocked,
+              permissionsNeedAttention: permissionsNeedAttention(p),
               seenModesOnboarding: seenModes,
               seenProfileOnboarding: seenProfile,
               extensionSupported: true, // updated by phoneMirrorGetInfo below
@@ -994,9 +994,9 @@ const App: React.FC = () => {
         // deep-links to System Settings. This is the recoverable surface for
         // the "I press Start Natively and nothing happens" report.
         if (result.code === 'mic-permission-denied') {
-          // Route through the orchestrator: mark mac TCC as blocked so the
-          // permissions stage becomes re-eligible.
-          setOrchestratorUserState({ macTCCBlocked: true });
+          // Route through the orchestrator: mark permissions as needing
+          // attention so the permissions stage becomes re-eligible.
+          setOrchestratorUserState({ permissionsNeedAttention: true });
         }
       }
     } catch (err) {
@@ -1007,7 +1007,7 @@ const App: React.FC = () => {
       // serialized error .code across ipcRenderer.invoke — keep the recovery
       // working so the denial never regresses to a silent failure.
       if ((err as { code?: string })?.code === 'mic-permission-denied') {
-        setOrchestratorUserState({ macTCCBlocked: true });
+        setOrchestratorUserState({ permissionsNeedAttention: true });
       }
     }
   };

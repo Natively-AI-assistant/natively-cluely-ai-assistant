@@ -47,12 +47,13 @@ export const STAGE_ORDER: ToasterId[] = [
 
 export const STAGES: StageConfig[] = [
   // ──────────────────────────────────────────────────────────────
-  // 1. Permissions — first launch OR returning mac user with revoked TCC
+  // 1. Permissions — first launch, then only when a required permission
+  //    needs attention (src/lib/permissionAttentionPolicy.mjs)
   // ──────────────────────────────────────────────────────────────
   {
     id: 'permissions',
     order: 1,
-    onceEver: false, // can re-fire if mac TCC is denied
+    onceEver: false, // comes back while a required permission needs attention
     triggers: {
       requiresHomepageMounted: true,
       requiresHomepageDuration: 2_000,
@@ -61,8 +62,9 @@ export const STAGES: StageConfig[] = [
     },
     skipWhen: (s) =>
       // Skip if fully resolved
-      (s.permsShown && !s.macTCCBlocked),
-    reEligibility: (s) => s.macTCCBlocked,
+      (s.permsShown && !s.permissionsNeedAttention),
+    reEligibility: (s) => s.permissionsNeedAttention,
+    reopensWhenReEligible: true,
   },
 
   // ──────────────────────────────────────────────────────────────
