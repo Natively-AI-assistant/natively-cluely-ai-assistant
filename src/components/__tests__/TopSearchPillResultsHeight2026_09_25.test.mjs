@@ -5,11 +5,14 @@
 //    every meeting) became the target; as typing narrowed them the panel kept
 //    sliding into empty space, then dropped ~190px in one frame when the spring
 //    settled. The panel now slides to its measured height instead.
-// 2. Result rows left with popLayout (fading where they had been) while the rows
-//    staying slid up under them (layout="position"); the two overlapped for
-//    ~200ms at the bottom of the pill on every narrowing keystroke.
+//    While open the panel only grows: following the results back up as they
+//    narrowed read as the bottom edge bouncing.
+// 2. Result rows animated their own exit. With popLayout they faded where they
+//    had been while the rows staying slid up under them (layout="position");
+//    collapsing in place instead, a row's unclipped text ran over the rows
+//    below. Rows now swap in place and only fade in.
 //
-// Both were measured frame by frame on the real Launcher. The slide itself (the
+// All measured frame by frame on the real Launcher. The slide itself (the
 // spring) is the original and deliberately not pinned here.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -32,9 +35,15 @@ test('the results panel slides to its measured height, not to auto', () => {
     const panel = src.slice(src.indexOf('const ResultsPanel'), src.indexOf('const TopSearchPill'));
     assert.match(panel, /new ResizeObserver\(/, 'the height is re-measured on every change');
     assert.match(panel, /animate=\{\{\s*height,/, 'the panel animates to the measured number');
+    assert.match(panel, /Math\.max\(/, 'while open the panel only grows');
 });
 
-test('result rows collapse in place instead of overlapping', () => {
+test('result rows swap in place: no exit, no height animation, no slide', () => {
+    const start = src.indexOf('<ResultsPanel>');
+    assert.ok(start >= 0, 'results rendered inside ResultsPanel');
+    const rows = src.slice(start, src.indexOf('</ResultsPanel>', start));
+    assert.doesNotMatch(rows, /exit[=:]/, 'no row animates out');
+    assert.doesNotMatch(rows, /height:/, 'no row animates its height');
     assert.doesNotMatch(src, /mode=["']popLayout["']/);
     assert.doesNotMatch(src, /layout=["']position["']|layout:\s*['"]position['"]/);
 });

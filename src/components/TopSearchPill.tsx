@@ -119,21 +119,26 @@ function searchMeetings(meetings: Meeting[], query: string): SearchResult[] {
 // the panel mounts: the results shrank as you kept typing while the panel kept
 // sliding toward that first measurement, then dropped ~190px in one frame when
 // the spring settled. Re-measured on every change, the spring always heads for
-// the real height. The height lives here, not in the pill, so the per-frame
-// re-measures while rows animate in and out re-render only this wrapper; the
-// rows arrive as the same `children` and are skipped.
+// the real height.
+//
+// While it is open the panel only grows. The results narrow as you type (one
+// letter matches almost every meeting), and following them back up read as the
+// bottom edge bouncing, so a shorter result set leaves room at the bottom until
+// the pill closes; the panel remounts on every open, so each open starts fresh.
+// The height lives here, not in the pill, so re-measures re-render only this
+// wrapper; the rows arrive as the same `children` and are skipped.
 const ResultsPanel: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const bodyRef = useRef<HTMLDivElement>(null);
     const [height, setHeight] = useState(0);
 
     // Measured before the first paint, so the spring starts toward this body and
-    // not toward 0; the observer then follows results, memories arriving late, and
-    // rows animating in and out. offsetHeight ignores transforms, and the body
-    // ends in padding, so its rounding never clips a row.
+    // not toward 0; the observer then follows results and memories arriving late.
+    // offsetHeight ignores transforms, and the body ends in padding, so its
+    // rounding never clips a row.
     useLayoutEffect(() => {
         const body = bodyRef.current;
         if (!body) return;
-        const measure = () => setHeight(body.offsetHeight);
+        const measure = () => setHeight((current) => Math.max(current, body.offsetHeight));
         measure();
         if (typeof ResizeObserver === 'undefined') return;
         const observer = new ResizeObserver(measure);
@@ -159,6 +164,16 @@ const ResultsPanel: React.FC<{ children: React.ReactNode }> = ({ children }) => 
             </div>
         </motion.div>
     );
+};
+
+// Result rows swap in place when the results change; a new row only fades in.
+// Rows used to animate their own height out: a collapsing row's text is not
+// clipped, so it ran over the rows below while they moved up (and before that,
+// popLayout left it fading where it had been while the rest slid under it).
+const ROW_ENTER = {
+    initial: { opacity: 0 },
+    animate: { opacity: 1 },
+    transition: { duration: 0.15, ease: 'easeOut' as const },
 };
 
 // ============================================
@@ -532,17 +547,10 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                                                                 Sessions
                                                             </div>
 
-                                                            {/* Leaving rows collapse in place. With popLayout they faded out where
-                                                                they had been while the rows staying slid up under them
-                                                                (layout="position"), and the two overlapped for ~200ms. */}
-                                                            <AnimatePresence initial={false}>
                                                                 {sessionResults.map((result, index) => (
                                                                     <motion.button
                                                                         key={result.id}
-                                                                        initial={{ opacity: 0, height: 0 }}
-                                                                        animate={{ opacity: 1, height: 'auto' }}
-                                                                        exit={{ opacity: 0, height: 0 }}
-                                                                        transition={{ duration: 0.2 }}
+                                                                        {...ROW_ENTER}
                                                                         className={`
                                                                         w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left
                                                                         transition-colors duration-100
@@ -569,7 +577,6 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                                                                         </div>
                                                                     </motion.button>
                                                                 ))}
-                                                            </AnimatePresence>
                                                         </div>
                                                     )}
 
@@ -580,7 +587,6 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                                                                 {t('Memory')}
                                                             </div>
 
-                                                            <AnimatePresence initial={false}>
                                                                 {memoryHits.map((memory) => {
                                                                     const linkedIndex = memory.meetingId ? linkedMemories.indexOf(memory) : -1;
                                                                     const itemIndex = linkedIndex >= 0 ? 2 + sessionResults.length + linkedIndex : -1;
@@ -603,12 +609,7 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                                                                             </div>
                                                                         </>
                                                                     );
-                                                                    const motionProps = {
-                                                                        initial: { opacity: 0, height: 0 },
-                                                                        animate: { opacity: 1, height: 'auto' },
-                                                                        exit: { opacity: 0, height: 0 },
-                                                                        transition: { duration: 0.2 },
-                                                                    };
+                                                                    const motionProps = ROW_ENTER;
                                                                     return itemIndex >= 0 ? (
                                                                         <motion.button
                                                                             key={`memory:${memory.text}`}
@@ -638,7 +639,6 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                                                                         </motion.div>
                                                                     );
                                                                 })}
-                                                            </AnimatePresence>
                                                         </div>
                                                     )}
                                                 </div>
