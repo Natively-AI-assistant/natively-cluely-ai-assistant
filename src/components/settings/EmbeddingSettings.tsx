@@ -328,6 +328,7 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
     const [active, setActive] = useState<ActiveDescription>({ configured: false });
     const [configured, setConfigured] = useState<{ mode?: 'auto' | 'manual'; provider?: string; model?: string }>({ mode: 'auto' });
     const [acknowledged, setAcknowledged] = useState(false);
+    const [ackLeaving, setAckLeaving] = useState(false);
 
     const [reindexing, setReindexing] = useState(false);
     const [pending, setPending] = useState<string | null>(null);
@@ -1280,7 +1281,7 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                                         disabled={locked}
                                         onClick={() => void useLocalModel(m.id)}
                                     >
-                                        {busy ? <Loader2 size={12} className="animate-spin" aria-hidden="true" /> : null}
+                                        {busy ? <Loader2 size={12} className="aip-spinner" aria-hidden="true" /> : null}
                                         <span>{t('Use')}</span>
                                     </button>
                                 )}
@@ -1355,7 +1356,7 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                 {busy && prog && (
                     <div className="space-y-1 pl-3.5 pt-1">
                         <div className="h-1 w-full bg-[var(--aip-item-active)] rounded-full overflow-hidden">
-                            <div className="h-full bg-[var(--aip-accent)] transition-all duration-150" style={{ width: `${Math.round(prog.fraction * 100)}%` }} />
+                            <div className="h-full w-full origin-left bg-[var(--aip-accent)] transition-transform duration-150 ease-linear" style={{ transform: `scaleX(${Math.min(1, Math.max(0, prog.fraction))})` }} />
                         </div>
                         <div className="text-[10px] aip-muted flex justify-between">
                             <span>{`${Math.round(prog.fraction * 100)}% · ${prog.file}`}</span>
@@ -1389,7 +1390,7 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
         // vanished on the light card. --aip-pill-bg is exactly the old 10% white
         // in dark and a raised white chip in light.
         const filterTabStyle = (tab: typeof localFilterTab) => ({
-            background: localFilterTab === tab ? 'var(--aip-pill-bg)' : 'transparent',
+            background: localFilterTab === tab ? 'var(--aip-pill-bg)' : undefined,
             boxShadow: localFilterTab === tab ? 'var(--aip-pill-shadow)' : 'none',
             fontWeight: localFilterTab === tab ? 600 : 400,
         });
@@ -1437,13 +1438,13 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                     ) : <div />}
 
                     <div className="flex items-center gap-1 bg-[var(--aip-btn-bg)] p-0.5 rounded-md text-[11px]">
-                        <button type="button" className="px-2 py-0.5 rounded aip-hero transition-colors" style={filterTabStyle('all')} onClick={() => setLocalFilterTab('all')}>
+                        <button type="button" className="px-2 py-0.5 rounded aip-hero transition-[background-color,box-shadow,transform] duration-150 ease-out hover:bg-[color:var(--aip-item-hover)] active:scale-[0.97] motion-reduce:active:scale-100" style={filterTabStyle('all')} onClick={() => setLocalFilterTab('all')}>
                             {t('All')} ({totalLocalCount})
                         </button>
-                        <button type="button" className="px-2 py-0.5 rounded aip-hero transition-colors" style={filterTabStyle('installed')} onClick={() => setLocalFilterTab('installed')}>
+                        <button type="button" className="px-2 py-0.5 rounded aip-hero transition-[background-color,box-shadow,transform] duration-150 ease-out hover:bg-[color:var(--aip-item-hover)] active:scale-[0.97] motion-reduce:active:scale-100" style={filterTabStyle('installed')} onClick={() => setLocalFilterTab('installed')}>
                             {t('Installed')} ({installedLocalCount})
                         </button>
-                        <button type="button" className="px-2 py-0.5 rounded aip-hero transition-colors" style={filterTabStyle('recommended')} onClick={() => setLocalFilterTab('recommended')}>
+                        <button type="button" className="px-2 py-0.5 rounded aip-hero transition-[background-color,box-shadow,transform] duration-150 ease-out hover:bg-[color:var(--aip-item-hover)] active:scale-[0.97] motion-reduce:active:scale-100" style={filterTabStyle('recommended')} onClick={() => setLocalFilterTab('recommended')}>
                             {t('Recommended')}
                         </button>
                     </div>
@@ -1532,7 +1533,11 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                 </div>
 
                 {active.lightweight && !acknowledged && (
-                    <div className="aip-inline-warn flex items-start gap-2 mt-3" role="status">
+                    <div className="aip-dismissable" data-leaving={ackLeaving ? 'true' : 'false'}>
+                    {/* Bare grid item: padding here would floor the collapse. */}
+                    <div>
+                    <div className="pt-3">
+                    <div className="aip-inline-warn flex items-start gap-2" role="status">
                         <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
                         <span className="min-w-0">
                             {t('This is the compatibility default. It may retrieve less well on large projects, which can affect answer quality even with a strong AI model.')}
@@ -1542,12 +1547,23 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                             className="aip-btn shrink-0 ml-auto"
                             data-size="sm"
                             onClick={async () => {
+                                // Persist first: the fold is decoration.
                                 await window.electronAPI.acknowledgeLightweightEmbeddings?.(true);
-                                setAcknowledged(true);
+                                // Reduced motion squashes the collapse panel-wide, so
+                                // a timer would only hold an invisible box open.
+                                if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+                                    setAcknowledged(true);
+                                    return;
+                                }
+                                setAckLeaving(true);
+                                setTimeout(() => setAcknowledged(true), 170);
                             }}
                         >
                             {t('Keep it')}
                         </button>
+                    </div>
+                    </div>
+                    </div>
                     </div>
                 )}
 
