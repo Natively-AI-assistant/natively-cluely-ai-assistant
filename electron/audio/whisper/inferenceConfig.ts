@@ -136,11 +136,14 @@ export function buildWorkerInitMessage(modelId: string): WorkerInitMessage {
         type: 'init',
         modelId,
         cacheDir: getModelsDir(),
-        // Nemotron opts OUT of the platform accelerator — see
-        // resolveNemotronExecutionProviders() for the measurements.
+        // Nemotron and Parakeet TDT opt OUT of the platform accelerator — see
+        // resolveNemotronExecutionProviders() / resolveParakeetExecutionProviders()
+        // for the measurements.
         executionProviders: sessionLayout === 'nemotron-rnnt'
             ? resolveNemotronExecutionProviders(executionProviders)
-            : executionProviders,
+            : sessionLayout === 'parakeet-tdt'
+                ? resolveParakeetExecutionProviders(executionProviders)
+                : executionProviders,
         dtype,
         expectedBytes,
         useExternalDataFormat,
@@ -176,6 +179,23 @@ export function buildWorkerInitMessage(modelId: string): WorkerInitMessage {
 export function resolveNemotronExecutionProviders(platformProviders: string[]): string[] {
     const cpuOnly = platformProviders.filter(p => p === 'cpu');
     return cpuOnly.length > 0 ? cpuOnly : ['cpu'];
+}
+
+/**
+ * Parakeet TDT (sessionLayout 'parakeet-tdt') runs CPU-only for the same
+ * reason as Nemotron: a three-session transducer whose decode loop crosses
+ * every CoreML fragment boundary per symbol. Measured on an M4 (int8 export,
+ * two fresh processes per config, warm = median of 5, identical transcripts):
+ *
+ *   coreml+cpu   load 3.6s    warm 280ms (5.7s clip)   657ms (13.2s clip)
+ *   cpu          load 0.76s   warm 144ms               379ms
+ *
+ * CoreML partitions the int8 encoder into 344 fragments (1404 of 3249 nodes).
+ * DirectML was never measured for this export, so Windows takes the measured
+ * CPU path too rather than an untested accelerator.
+ */
+export function resolveParakeetExecutionProviders(platformProviders: string[]): string[] {
+    return resolveNemotronExecutionProviders(platformProviders);
 }
 
 /**

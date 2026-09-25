@@ -96,13 +96,6 @@ export const AUTO_DETECT_ALTERNATES = [
     'he-IL',
     'ms-MY',
     'fi-FI',
-    'hr-HR',
-    'et-EE',
-    'lv-LV',
-    'lt-LT',
-    'mt-MT',
-    'sk-SK',
-    'sl-SI',
 ];
 
 export const RECOGNITION_LANGUAGES: Record<string, LanguageOption> = {
@@ -146,6 +139,31 @@ export const RECOGNITION_LANGUAGES: Record<string, LanguageOption> = {
     'slovenian': { label: 'Slovenian', code: 'slovenian', bcp47: 'sl-SI', iso639: 'sl', group: 'Slovenian' },
 };
 
+/**
+ * Recognition languages offered ONLY while Parakeet TDT v3 is the active local
+ * model. They exist for its 25-language set; no cloud provider, Apple Speech,
+ * or other local model was verified for them, so every other picker hides them
+ * (getLocalModelLanguageSupport, and isRecognitionLanguageOffered below).
+ */
+export const PARAKEET_ONLY_LANGUAGE_KEYS: ReadonlySet<string> = new Set([
+    'croatian', 'estonian', 'latvian', 'lithuanian', 'maltese', 'slovak', 'slovenian',
+]);
+
+/**
+ * Whether the STT language picker offers `key`.
+ * `localModelKeys` — what the active local model(s) accept; null unless the
+ * provider is local-whisper. `providerKeys` — the active backend's restriction
+ * (local model, NVIDIA, Apple); null for an unrestricted cloud provider.
+ */
+export function isRecognitionLanguageOffered(
+    key: string,
+    localModelKeys: ReadonlySet<string> | null,
+    providerKeys: ReadonlySet<string> | null,
+): boolean {
+    if (PARAKEET_ONLY_LANGUAGE_KEYS.has(key) && !localModelKeys?.has(key)) return false;
+    return !providerKeys || providerKeys.has(key);
+}
+
 export const AI_RESPONSE_LANGUAGES = [
     { label: 'Auto (Detect)', code: 'auto' },
     { label: 'English', code: 'English' },
@@ -178,13 +196,6 @@ export const AI_RESPONSE_LANGUAGES = [
     { label: 'Hebrew', code: 'Hebrew' },
     { label: 'Malay', code: 'Malay' },
     { label: 'Finnish', code: 'Finnish' },
-    { label: 'Croatian', code: 'Croatian' },
-    { label: 'Estonian', code: 'Estonian' },
-    { label: 'Latvian', code: 'Latvian' },
-    { label: 'Lithuanian', code: 'Lithuanian' },
-    { label: 'Maltese', code: 'Maltese' },
-    { label: 'Slovak', code: 'Slovak' },
-    { label: 'Slovenian', code: 'Slovenian' },
 ];
 
 /**

@@ -47,7 +47,7 @@
 // under plain node.
 
 import { MODEL_CATALOG } from './modelManager';
-import { RECOGNITION_LANGUAGES, ENGLISH_VARIANTS } from '../../config/languages';
+import { RECOGNITION_LANGUAGES, ENGLISH_VARIANTS, PARAKEET_ONLY_LANGUAGE_KEYS } from '../../config/languages';
 import { resolveNemotronLangId } from './nemotron/languageTable';
 
 export interface LocalModelLanguageSupport {
@@ -177,13 +177,16 @@ function isNemotronModel(modelId: string): boolean {
  *    including the documented en-IN/en-AU/en-CA → en-US inference and the
  *    ar-SA → ar-AR alias). 'auto' excluded — Nemotron has no auto-detect.
  *  - Parakeet TDT: the 25 European languages in its training vocabulary + auto.
- *  - Multilingual Whisper family: everything, including 'auto'.
+ *    The only model offered PARAKEET_ONLY_LANGUAGE_KEYS.
+ *  - Multilingual Whisper family: everything except PARAKEET_ONLY_LANGUAGE_KEYS,
+ *    including 'auto'.
  *  - English-only models: the English variants only, language locked.
  */
 export function getLocalModelLanguageSupport(modelId: string): LocalModelLanguageSupport {
   if (isNemotronModel(modelId)) {
     const allowed = Object.entries(RECOGNITION_LANGUAGES)
-      .filter(([key, lang]) => key !== 'auto' && resolveNemotronLangId(lang.bcp47) !== null)
+      .filter(([key, lang]) => key !== 'auto' && !PARAKEET_ONLY_LANGUAGE_KEYS.has(key)
+        && resolveNemotronLangId(lang.bcp47) !== null)
       .map(([key]) => key);
     return { languageSelectable: true, accentSelectable: true, allowedLanguageKeys: allowed };
   }
@@ -201,7 +204,7 @@ export function getLocalModelLanguageSupport(modelId: string): LocalModelLanguag
     return {
       languageSelectable: true,
       accentSelectable: false,
-      allowedLanguageKeys: Object.keys(RECOGNITION_LANGUAGES),
+      allowedLanguageKeys: Object.keys(RECOGNITION_LANGUAGES).filter((key) => !PARAKEET_ONLY_LANGUAGE_KEYS.has(key)),
     };
   }
   return {

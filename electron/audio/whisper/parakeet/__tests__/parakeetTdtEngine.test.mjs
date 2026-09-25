@@ -40,8 +40,9 @@ describe('Parakeet TDT Download & Engine Config', () => {
       outputNames: ['features', 'features_lens'],
       run: async (feeds) => {
         preprocCalled = true;
-        assert.ok(feeds.audio_signal, 'preprocessor must receive audio_signal');
-        assert.ok(feeds.length, 'preprocessor must receive length');
+        // Real nemo128.onnx inputs: waveforms f32 [B,N], waveforms_lens i64 [B].
+        assert.ok(feeds.waveforms, 'preprocessor must receive waveforms');
+        assert.ok(feeds.waveforms_lens, 'preprocessor must receive waveforms_lens');
         return {
           features: new Tensor('float32', new Float32Array(1 * 128 * 2), [1, 128, 2]),
           features_lens: new Tensor('int64', new BigInt64Array([2n]), [1]),
@@ -69,6 +70,9 @@ describe('Parakeet TDT Download & Engine Config', () => {
         jointCalls++;
         assert.ok(feeds.encoder_outputs, 'joint must receive encoder_outputs');
         assert.ok(feeds.targets, 'joint must receive targets');
+        // Real decoder_joint inputs: targets and target_length are int32.
+        assert.equal(feeds.targets.type, 'int32', 'targets must be int32');
+        assert.equal(feeds.target_length.type, 'int32', 'target_length must be int32');
         assert.ok(feeds.input_states_1, 'joint must receive input_states_1');
         assert.ok(feeds.input_states_2, 'joint must receive input_states_2');
 

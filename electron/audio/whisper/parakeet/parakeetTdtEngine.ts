@@ -171,8 +171,8 @@ export class ParakeetTdtEngine {
     const lengthTensor = new Tensor('int64', new BigInt64Array([BigInt(numSamples)]), [1]);
 
     const preprocOut = await this.shared.preprocessorSession.run({
-      audio_signal: audioSignalTensor,
-      length: lengthTensor,
+      waveforms: audioSignalTensor,
+      waveforms_lens: lengthTensor,
     });
 
     // nemo128 outputs: features [1, 128, T_feat], features_lens [1]
@@ -242,8 +242,8 @@ export class ParakeetTdtEngine {
       }
 
       const encoderOutputsTensor = new Tensor('float32', frameData, [1, hiddenDim, 1]);
-      const targetsTensor = new Tensor('int64', new BigInt64Array([BigInt(prevToken)]), [1, 1]);
-      const targetLengthTensor = new Tensor('int64', new BigInt64Array([1n]), [1]);
+      const targetsTensor = new Tensor('int32', new Int32Array([prevToken]), [1, 1]);
+      const targetLengthTensor = new Tensor('int32', new Int32Array([1]), [1]);
       const s1Tensor = new Tensor('float32', state.state1, this.shared.state1Shape);
       const s2Tensor = new Tensor('float32', state.state2, this.shared.state2Shape);
 
