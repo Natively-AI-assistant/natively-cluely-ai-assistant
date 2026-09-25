@@ -533,6 +533,11 @@ docs/*
 # an ignored path at all. Same reasoning as the autopilot entries above.
 !docs/retrieval-handoff/
 !docs/retrieval-handoff/**
+# Homebrew cask — the distribution runbook for the tap (issue #577). It carries
+# the two steps that cannot be automated from this repo (creating the tap repo,
+# adding HOMEBREW_TAP_TOKEN) and the tag-case constraint the cask URL depends
+# on. Untracked, a fresh clone ships a cask nobody knows how to publish.
+!docs/homebrew-cask.md
 benchmark-results/
 
 
