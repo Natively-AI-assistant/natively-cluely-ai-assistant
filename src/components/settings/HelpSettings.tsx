@@ -1985,7 +1985,7 @@ hindsight-api`}
                                     Establish a secure paired loopback connection (done only once):
                                 </p>
                                 <ol className="text-[11px] text-text-secondary space-y-1 list-decimal pl-4">
-                                    <li>In Natively desktop: go to <strong>Settings → Sync</strong>, ensure Phone Mirror is running, and under the **Browser Extension** card click <strong>Connect browser extension</strong> (arms pairing for 60s).</li>
+                                    <li>In Natively desktop: go to <strong>Settings → Sync</strong>, ensure Phone Mirror is running, and under the **Browser Extension** card click <strong>Connect</strong> (arms pairing for 60s).</li>
                                     <li>In your browser: click the Natively extension toolbar icon, then click <strong>Connect to Natively</strong>.</li>
                                     <li>Once paired, the connection status shows a green dot ("Connected — capture ready").</li>
                                 </ol>
