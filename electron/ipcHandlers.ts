@@ -17934,6 +17934,11 @@ export function initializeIpcHandlers(appState: AppState): void {
       const message = stripEmbeddedAnswerContract(cmd.message);
       const phoneMirror = PhoneMirrorService.getInstance();
       const intelligenceManager = appState.getIntelligenceManager();
+      // Read before the stream is awaited. Unlike desktop chat, a phone stream is
+      // not in _chatStreamsBySender, so the overlay's cancelChatStream() on
+      // session-reset never reaches it: a meeting stopped mid-answer would save
+      // this answer into the NEXT session. The phone still gets the full answer.
+      const myPhoneSessionEpoch = intelligenceManager.getSessionEpoch();
 
       // Document-grounded custom mode (audit 2026-06-27): the phone chat path is
       // a SECOND ungated entry — it captures the rolling snapshot and saves the
@@ -18209,7 +18214,11 @@ export function initializeIpcHandlers(appState: AppState): void {
           if (phoneInvalid) {
             console.warn('[PhoneMirror] document-grounded invalid answer blocked from SessionTracker', { chars: phoneTrim.length });
           }
-          if (phoneTrim.length > 0 && !phoneInvalid) {
+          const phoneSessionEnded = intelligenceManager.getSessionEpoch() !== myPhoneSessionEpoch;
+          if (phoneSessionEnded) {
+            console.log('[PhoneMirror] session was reset during this answer — not saving it into the new session', { chars: phoneTrim.length });
+          }
+          if (phoneTrim.length > 0 && !phoneInvalid && !phoneSessionEnded) {
             intelligenceManager.addAssistantMessage(full, undefined, 'phone_mirror');
             intelligenceManager.logUsage('chat', message, full);
           }
