@@ -1,11 +1,13 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useT } from '../../i18n';
+import { AnimatePresence } from 'framer-motion';
 import {
     Check,
     CheckCircle,
     FileCode,
     FileUp,
     FolderOpen,
+    Loader2,
     RefreshCw,
     Trash2,
     X,
@@ -17,6 +19,15 @@ import type {
     UploadSkillOutcome,
 } from '../../types/electron';
 import { LiquidGlassButton } from '../../ui-components/LiquidGlassButton';
+import {
+    Collapse,
+    CollapseItem,
+    Presence,
+    SettingsDisclosureButton,
+    SettingsMotionReady,
+    useMotionReadyAfter,
+    useSettledFlag,
+} from './SettingsRow';
 
 // Cap on the instructions preview length shown in the confirm card. The main
 // process may also truncate (DEFAULT_MAX_INSTRUCTIONS_PREVIEW=280), but the
@@ -69,6 +80,13 @@ export const SkillsSettings: React.FC = () => {
     const [skills, setSkills] = useState<SkillSummary[]>([]);
     const [skillsPath, setSkillsPath] = useState<string>('');
     const [loading, setLoading] = useState(false);
+    // First list landed. Until then nothing moves (rows that arrive over IPC
+    // must not grow in as the pane opens), and the count / empty state stay
+    // up through every later Refresh instead of blinking out with `loading`.
+    const [loadedOnce, setLoadedOnce] = useState(false);
+    const motionReady = useMotionReadyAfter(loadedOnce);
+    // Only a load that runs long enough to notice gets the spinner.
+    const refreshing = useSettledFlag(loading);
     const [status, setStatus] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
     const [preview, setPreview] = useState<{
@@ -114,6 +132,7 @@ export const SkillsSettings: React.FC = () => {
             setStatus(error?.message || 'Could not load skills.');
         } finally {
             setLoading(false);
+            setLoadedOnce(true);
         }
     }, []);
 
@@ -388,6 +407,7 @@ export const SkillsSettings: React.FC = () => {
         s.length <= n ? s : `${s.slice(0, n).trimEnd()}…`;
 
     return (
+        <SettingsMotionReady.Provider value={motionReady}>
         <div className="space-y-5 animated fadeIn select-text pb-4" data-settings-stagger>
             <div className="flex items-start justify-between gap-4">
                 <div>
@@ -399,9 +419,13 @@ export const SkillsSettings: React.FC = () => {
                 <button
                     onClick={loadSkills}
                     disabled={loading}
-                    className="flex items-center gap-2 px-4 py-1.5 rounded-full border border-border-subtle bg-bg-subtle/30 hover:bg-bg-subtle transition-all duration-200 text-xs font-medium text-text-secondary hover:text-text-primary active:scale-95 mt-1 disabled:opacity-60"
+                    className="flex items-center gap-2 px-4 py-1.5 rounded-full border border-border-subtle hover:bg-bg-item-surface transition-[color,background-color,transform,opacity] duration-150 ease-out text-xs font-medium text-text-secondary hover:text-text-primary active:scale-[0.97] motion-reduce:active:scale-100 mt-1 disabled:opacity-60"
                 >
-                    <RefreshCw size={13} strokeWidth={2.5} className={loading ? 'animate-spin' : ''} />
+                    {/* Cross-fades to a spinner and back, instead of a spinning
+                        glyph that snapped to 0deg mid-turn when loading ended. */}
+                    <Presence kind="icon" id={refreshing ? 'busy' : 'idle'}>
+                        {refreshing ? <Loader2 size={13} strokeWidth={2.5} className="animate-spin" /> : <RefreshCw size={13} strokeWidth={2.5} />}
+                    </Presence>
                     {t('Refresh')}
                 </button>
             </div>
@@ -410,11 +434,12 @@ export const SkillsSettings: React.FC = () => {
                 card layout for visual consistency: icon + heading on the
                 left, action button on the right, description below. */}
             <div
-                onDragOver={(e) => {
+                onDragEnter={(e) => {
                     e.preventDefault();
                     if (dragDepthRef.current === 0) setIsDragging(true);
                     dragDepthRef.current += 1;
                 }}
+                onDragOver={(e) => e.preventDefault()}
                 onDragLeave={() => {
                     dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
                     if (dragDepthRef.current === 0) setIsDragging(false);
@@ -425,14 +450,14 @@ export const SkillsSettings: React.FC = () => {
                     handleDrop(e);
                 }}
                 className={[
-                    'rounded-xl border transition-colors p-4 bg-bg-card',
+                    'rounded-xl border transition-colors p-4',
                     // The dashed outline is drag feedback, so it appears only
                     // while a file is actually over the card. It used to also
                     // show on plain hover, which read as the card being a
                     // control in its own right.
                     isDragging
                         ? 'border-dashed border-accent-primary bg-accent-subtle'
-                        : 'border-transparent',
+                        : 'border-transparent bg-bg-card',
                 ].join(' ')}
             >
                 <div className="flex items-center justify-between gap-4">
@@ -445,7 +470,7 @@ export const SkillsSettings: React.FC = () => {
                             {t('Drop a SKILL.md file here, or click Upload to pick one. For folders, use the Advanced option below.')}
                         </p>
                         {uploading && (
-                            <p className="text-[11px] text-text-tertiary animate-pulse mt-2">{t('Uploading…')}</p>
+                            <p className="text-[11px] text-text-tertiary animate-pulse motion-reduce:animate-none mt-2">{t('Uploading…')}</p>
                         )}
                     </div>
                     <input
@@ -519,7 +544,7 @@ export const SkillsSettings: React.FC = () => {
 
                     {preview.preview.fileTree.length > 0 && (
                         <details className="text-[11px] text-text-tertiary">
-                            <summary className="cursor-pointer hover:text-text-secondary">
+                            <summary className="cursor-pointer hover:text-text-secondary transition-colors">
                                 {preview.preview.fileTree.length} {t('files')}
                             </summary>
                             <ul className="mt-2 font-mono space-y-0.5 max-h-32 overflow-y-auto">
@@ -536,7 +561,7 @@ export const SkillsSettings: React.FC = () => {
                         <button
                             onClick={handleInstall}
                             disabled={installing}
-                            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-legacy-action-bg hover:bg-legacy-action-hover text-legacy-action-fg text-xs font-semibold transition-colors disabled:opacity-60"
+                            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-legacy-action-bg hover:bg-legacy-action-hover text-legacy-action-fg text-xs font-semibold transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100 disabled:opacity-60"
                         >
                             <Check size={13} strokeWidth={2.5} />
                             {installing ? t('Installing…') : t('Install')}
@@ -544,7 +569,7 @@ export const SkillsSettings: React.FC = () => {
                         <button
                             onClick={handleCancel}
                             disabled={installing}
-                            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border-subtle bg-bg-input hover:bg-bg-elevated text-xs font-medium text-text-secondary transition-colors disabled:opacity-60"
+                            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border-subtle bg-bg-input hover:bg-bg-elevated text-xs font-medium text-text-secondary transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100 disabled:opacity-60"
                         >
                             <X size={13} strokeWidth={2.5} />
                             {t('Cancel')}
@@ -570,17 +595,20 @@ export const SkillsSettings: React.FC = () => {
                     <h4 className="text-xs font-semibold uppercase tracking-wider text-text-tertiary">
                         {t('Installed skills')}
                     </h4>
-                    {!loading && skills.length > 0 && (
+                    {loadedOnce && skills.length > 0 && (
                         <span className="text-[11px] text-text-tertiary">
                             {skills.length} {skills.length === 1 ? t('skill') : t('skills')}
                         </span>
                     )}
                 </div>
-                <div className="space-y-1.5">
+                <div className="-mb-1.5">
+                    <AnimatePresence initial={false}>
                     {skills.map((skill) => (
+                        <CollapseItem key={skill.id}>
+                        <div className="pb-1.5">
                         <div
-                            key={skill.id}
-                            className="group bg-bg-card rounded-lg border border-border-subtle px-3 py-2.5 hover:border-border-muted transition-colors"
+                            className={`group bg-bg-card rounded-lg border border-border-subtle px-3 py-2.5 hover:border-border-muted transition-[border-color,opacity] duration-150 ease-out ${deletingIds.has(skill.id) ? 'opacity-60' : ''}`}
+                            aria-busy={deletingIds.has(skill.id) || undefined}
                         >
                             <div className="flex items-center justify-between gap-3">
                                 {/* Left side: [Name] [/id] — name + slug only.
@@ -614,14 +642,14 @@ export const SkillsSettings: React.FC = () => {
                                                 role="group"
                                                 aria-live="polite"
                                                 aria-label={`Confirm delete ${skill.name}`}
-                                                className="flex items-center gap-2 select-none"
+                                                className="flex items-center gap-2 select-none animate-[settings-stagger-fade_150ms_ease-out] motion-reduce:animate-none"
                                             >
                                                 <span className="text-[11px] text-text-secondary hidden sm:inline">
                                                     {t('Delete')} <span className="font-medium text-text-primary">{skill.name}</span>?
                                                 </span>
                                                 <button
                                                     onClick={() => setConfirmingId(null)}
-                                                    className="px-2.5 py-1 rounded-md border border-border-subtle bg-bg-input text-text-secondary text-[11px] font-medium hover:bg-bg-elevated hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-muted transition-colors"
+                                                    className="px-2.5 py-1 rounded-md border border-border-subtle bg-bg-input text-text-secondary text-[11px] font-medium hover:bg-bg-elevated hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-muted transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100"
                                                     title={t("Cancel (Escape)")}
                                                 >
                                                     {t('Cancel')}
@@ -629,18 +657,18 @@ export const SkillsSettings: React.FC = () => {
                                                 <button
                                                     onClick={() => commitDeleteSkill(skill.id, skill.name)}
                                                     disabled={deletingIds.has(skill.id)}
-                                                    className="px-2.5 py-1 rounded-md bg-red-500 text-white text-[11px] font-semibold hover:bg-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                                                    className="px-2.5 py-1 rounded-md bg-red-500 text-white text-[11px] font-semibold hover:bg-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-60 disabled:cursor-not-allowed transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100"
                                                     title={t("Delete this skill")}
                                                 >
                                                     {deletingIds.has(skill.id) ? t('Deleting…') : t('Delete')}
                                                 </button>
                                             </div>
                                         ) : (
-                                            <div className="flex items-center gap-1 opacity-0 translate-y-1 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-hover:translate-y-0 group-focus-within:opacity-100 group-focus-within:translate-y-0 [@media(hover:none)]:opacity-100 transition-all duration-[160ms] ease-out select-none">
+                                            <div className="flex items-center gap-1 opacity-0 translate-y-1 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-hover:translate-y-0 group-focus-within:opacity-100 group-focus-within:translate-y-0 [@media(hover:none)]:opacity-100 transition-[opacity,transform] duration-150 ease-out motion-reduce:translate-y-0 select-none">
                                                 <button
                                                     onClick={() => requestDeleteSkill(skill.id)}
                                                     disabled={deletingIds.has(skill.id)}
-                                                    className="p-1.5 rounded-lg text-text-secondary hover:text-red-400 hover:bg-red-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                                                    className="p-1.5 rounded-lg text-text-secondary hover:text-red-400 hover:bg-red-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-60 disabled:cursor-not-allowed transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100"
                                                     title={t("Delete skill")}
                                                     aria-label={`Delete ${skill.name}`}
                                                 >
@@ -657,10 +685,13 @@ export const SkillsSettings: React.FC = () => {
                                 </p>
                             )}
                         </div>
+                        </div>
+                        </CollapseItem>
                     ))}
+                    </AnimatePresence>
 
-                    {!loading && skills.length === 0 && (
-                        <div className="bg-bg-card rounded-lg border border-dashed border-border-subtle p-5 text-center">
+                    {loadedOnce && skills.length === 0 && (
+                        <div className="mb-1.5 bg-bg-card rounded-lg border border-dashed border-border-subtle p-5 text-center">
                             <FileCode size={18} className="mx-auto mb-1.5 text-text-tertiary" />
                             <p className="text-xs font-medium text-text-primary">{t('No skills installed')}</p>
                             <p className="text-[11px] text-text-secondary mt-0.5">
@@ -674,14 +705,14 @@ export const SkillsSettings: React.FC = () => {
             {/* Advanced escape hatch — preserved from the pre-upload UI so
                 power users can still drop files directly into the folder. */}
             <div className="pt-1">
-                <button
-                    onClick={() => setShowAdvanced((s) => !s)}
-                    className="text-xs font-semibold uppercase tracking-wider text-text-tertiary hover:text-text-secondary transition-colors"
-                >
-                    {showAdvanced ? '▾' : '▸'} {t('Advanced: open skills folder')}
-                </button>
-                {showAdvanced && (
-                    <div className="mt-2 bg-bg-card rounded-xl border border-border-subtle p-4">
+                <SettingsDisclosureButton
+                    open={showAdvanced}
+                    onToggle={() => setShowAdvanced((s) => !s)}
+                    label={t('Advanced: open skills folder')}
+                />
+                <Collapse open={showAdvanced}>
+                    <div className="pt-2">
+                    <div className="bg-bg-card rounded-xl border border-border-subtle p-4">
                         <div className="flex items-center justify-between gap-4">
                             <div className="min-w-0">
                                 <div className="flex items-center gap-2 mb-1">
@@ -697,15 +728,17 @@ export const SkillsSettings: React.FC = () => {
                             </div>
                             <button
                                 onClick={openFolder}
-                                className="px-4 py-2 rounded-lg bg-legacy-action-bg hover:bg-legacy-action-hover text-legacy-action-fg text-xs font-semibold transition-colors shrink-0"
+                                className="px-4 py-2 rounded-lg bg-legacy-action-bg hover:bg-legacy-action-hover text-legacy-action-fg text-xs font-semibold transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100 shrink-0"
                             >
                                 {t('Open Folder')}
                             </button>
                         </div>
                     </div>
-                )}
+                    </div>
+                </Collapse>
             </div>
         </div>
+        </SettingsMotionReady.Provider>
     );
 };
 

@@ -226,23 +226,22 @@ function pickFeatureIcon(feature: string) {
 // single body, so nothing consumed them any more. Only the container-level
 // opacity crossfade between tiers survives.
 
+// Both tiers' text share one absolutely-positioned cell, so for as long as the
+// two fades overlap the card shows two sets of text. The outgoing tier leaves
+// on the quick clock (150ms) and the incoming one arrives on the tab pill's
+// (250ms smooth-out), the same clock the card's fill now cross-fades on. The
+// stagger that used to sit here had no child variants to act on.
 const cardContainerVariants = {
   enter: (_direction: number) => ({
     opacity: 0,
   }),
   center: {
     opacity: 1,
-    transition: {
-      staggerChildren: 0.07,
-      delayChildren: 0.02,
-    }
+    transition: { duration: 0.25, ease: [0.22, 1, 0.36, 1] as const },
   },
   exit: (_direction: number) => ({
     opacity: 0,
-    transition: {
-      staggerChildren: 0.03,
-      staggerDirection: -1 as const,
-    }
+    transition: { duration: 0.15, ease: 'easeInOut' as const },
   })
 };
 
@@ -1173,7 +1172,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
         {/* Active sliding pill */}
         <div
           aria-hidden="true"
-          className="natively-api-selector-pill-track absolute top-0 bottom-0 left-0 w-1/4 p-1 transition-transform duration-220 ease-[cubic-bezier(0.23,1,0.32,1)] will-change-transform"
+          className="natively-api-selector-pill-track absolute top-0 bottom-0 left-0 w-1/4 p-1 transition-transform duration-[220ms] ease-[cubic-bezier(0.23,1,0.32,1)] will-change-transform"
           style={{
             transform: `translate3d(${
               selectedPlanId === 'natively_api_standard_monthly' ? '0%' :
@@ -1274,11 +1273,11 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
               // inline transition string on this element is dead weight. It
               // silently was for a long time: a 280ms value sat here doing
               // nothing while the 180ms from CSS is what actually ran.
-              // Note `background` is NOT in that list, so the tier-fill swap is
-              // instantaneous; the crossfade you see comes from the
-              // AnimatePresence child below, which is a different element.
+              // `background-color` is in that list (250ms smooth-out), so the
+              // tier fill cross-fades on the tab pill's clock; the text
+              // crossfade is the AnimatePresence child below, a different element.
             >
-              <AnimatePresence custom={direction}>
+              <AnimatePresence custom={direction} initial={false}>
                 <motion.div
                   key={selectedPlanId}
                   custom={direction}
@@ -1712,10 +1711,10 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
             // is what made this choppy in the first place.
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0, scale: 0.985 }}
+            exit={prefersReducedMotion ? { opacity: 0, transition: { duration: INK.out } } : { opacity: 0, scale: 0.985 }}
             transition={
               prefersReducedMotion
-                ? { duration: INK.in, delay: BEAT }
+                ? { layout: { duration: 0 }, default: { duration: INK.in, delay: BEAT } }
                 : {
                   // `layout` defaults to a SPRING — name it or the house curves
                   // are silently discarded.
@@ -1791,10 +1790,10 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
           // is what made this choppy in the first place.
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          exit={{ opacity: 0, scale: 0.985 }}
+          exit={prefersReducedMotion ? { opacity: 0, transition: { duration: INK.out } } : { opacity: 0, scale: 0.985 }}
           transition={
             prefersReducedMotion
-              ? { duration: INK.in, delay: usageDelay(BEAT) }
+              ? { layout: { duration: 0 }, default: { duration: INK.in, delay: usageDelay(BEAT) } }
               : {
                 // `layout` defaults to a SPRING — name it or the house curves
                 // are silently discarded.
@@ -1873,10 +1872,10 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
             // is what made this choppy in the first place.
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0, scale: 0.985 }}
+            exit={prefersReducedMotion ? { opacity: 0, transition: { duration: INK.out } } : { opacity: 0, scale: 0.985 }}
             transition={
               prefersReducedMotion
-                ? { duration: INK.in, delay: BEAT }
+                ? { layout: { duration: 0 }, default: { duration: INK.in, delay: BEAT } }
                 : {
                   // `layout` defaults to a SPRING — name it or the house curves
                   // are silently discarded.
