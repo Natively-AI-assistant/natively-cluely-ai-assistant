@@ -569,7 +569,7 @@ test('REGRESSION: resolveLocalModelProviderName routes the Nemotron catalog entr
 
 test('REGRESSION: resolveLocalModelProviderName routes every non-Nemotron catalog entry to "whisper" (unchanged)', () => {
   assert.equal(resolveLocalModelProviderName('Xenova/whisper-tiny.en'), 'whisper');
-  assert.equal(resolveLocalModelProviderName('onnx-community/parakeet-ctc-0.6b-ONNX'), 'whisper');
+  assert.equal(resolveLocalModelProviderName('istupakov/parakeet-tdt-0.6b-v3-onnx'), 'whisper');
   assert.equal(resolveLocalModelProviderName('onnx-community/moonshine-tiny-ONNX'), 'whisper');
 });
 

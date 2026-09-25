@@ -96,6 +96,13 @@ export const AUTO_DETECT_ALTERNATES = [
     'he-IL',
     'ms-MY',
     'fi-FI',
+    'hr-HR',
+    'et-EE',
+    'lv-LV',
+    'lt-LT',
+    'mt-MT',
+    'sk-SK',
+    'sl-SI',
 ];
 
 export const RECOGNITION_LANGUAGES: Record<string, LanguageOption> = {
@@ -130,6 +137,13 @@ export const RECOGNITION_LANGUAGES: Record<string, LanguageOption> = {
     'hebrew': { label: 'Hebrew', code: 'hebrew', bcp47: 'he-IL', iso639: 'he', group: 'Hebrew' },
     'malay': { label: 'Malay', code: 'malay', bcp47: 'ms-MY', iso639: 'ms', group: 'Malay' },
     'finnish': { label: 'Finnish', code: 'finnish', bcp47: 'fi-FI', iso639: 'fi', group: 'Finnish' },
+    'croatian': { label: 'Croatian', code: 'croatian', bcp47: 'hr-HR', iso639: 'hr', group: 'Croatian' },
+    'estonian': { label: 'Estonian', code: 'estonian', bcp47: 'et-EE', iso639: 'et', group: 'Estonian' },
+    'latvian': { label: 'Latvian', code: 'latvian', bcp47: 'lv-LV', iso639: 'lv', group: 'Latvian' },
+    'lithuanian': { label: 'Lithuanian', code: 'lithuanian', bcp47: 'lt-LT', iso639: 'lt', group: 'Lithuanian' },
+    'maltese': { label: 'Maltese', code: 'maltese', bcp47: 'mt-MT', iso639: 'mt', group: 'Maltese' },
+    'slovak': { label: 'Slovak', code: 'slovak', bcp47: 'sk-SK', iso639: 'sk', group: 'Slovak' },
+    'slovenian': { label: 'Slovenian', code: 'slovenian', bcp47: 'sl-SI', iso639: 'sl', group: 'Slovenian' },
 };
 
 export const AI_RESPONSE_LANGUAGES = [
@@ -164,6 +178,13 @@ export const AI_RESPONSE_LANGUAGES = [
     { label: 'Hebrew', code: 'Hebrew' },
     { label: 'Malay', code: 'Malay' },
     { label: 'Finnish', code: 'Finnish' },
+    { label: 'Croatian', code: 'Croatian' },
+    { label: 'Estonian', code: 'Estonian' },
+    { label: 'Latvian', code: 'Latvian' },
+    { label: 'Lithuanian', code: 'Lithuanian' },
+    { label: 'Maltese', code: 'Maltese' },
+    { label: 'Slovak', code: 'Slovak' },
+    { label: 'Slovenian', code: 'Slovenian' },
 ];
 
 /**

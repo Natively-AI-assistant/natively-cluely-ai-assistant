@@ -21,11 +21,9 @@ export type WhisperModelId =
   // English-only. MIT licensed.
   | 'onnx-community/moonshine-tiny-ONNX'
   | 'onnx-community/moonshine-base-ONNX'
-  // Parakeet — NVIDIA Conformer CTC, English-only, CC-BY-4.0. Single-session:
-  // CTC has no autoregressive decoder, so the repo ships one `onnx/model.onnx`
-  // instead of the encoder/decoder pair every other id here uses. See
-  // `sessionLayout` on WhisperModelInfo.
-  | 'onnx-community/parakeet-ctc-0.6b-ONNX'
+  // Parakeet — NVIDIA FastConformer TDT v3, Multilingual (25 European languages), CC-BY-4.0.
+  // Direct ONNX Runtime engine driving encoder and decoder_joint graphs.
+  | 'istupakov/parakeet-tdt-0.6b-v3-onnx'
   // Nemotron 3.5 ASR Streaming — NVIDIA's cache-aware FastConformer-RNNT,
   // multilingual, genuinely chunked/streaming (not simulated like every other
   // entry above). Int4 ONNX export via onnx-community. Bypasses
@@ -69,13 +67,11 @@ export interface WhisperModelInfo {
    * `encoder_model.onnx` plus either a merged decoder or a
    * (decoder + decoder_with_past) pair. That is the default and stays implicit.
    *
-   * `'single'` is a one-session CTC model — Parakeet ships a single
-   * `onnx/model.onnx`, because CTC decodes by collapsing frame-level logits and
-   * has no autoregressive decoder to load. Without this the cache check looks
-   * for an encoder/decoder pair that will never exist and reports the model
-   * missing forever, so it re-downloads on every launch and never runs.
+   * `'single'` is a one-session CTC model.
+   * `'nemotron-rnnt'` is NVIDIA FastConformer-RNNT.
+   * `'parakeet-tdt'` is NVIDIA FastConformer-TDT multilingual.
    */
-  sessionLayout?: 'encoder-decoder' | 'single' | 'nemotron-rnnt';
+  sessionLayout?: 'encoder-decoder' | 'single' | 'nemotron-rnnt' | 'parakeet-tdt';
   /**
    * Set when this catalog entry is not yet functional and must not be
    * surfaced in any user-facing model picker. Everything else about the
@@ -110,9 +106,9 @@ export interface WorkerInitMessage {
   // See WhisperModelInfo.externalDataFormat for the full rationale.
   useExternalDataFormat?: boolean | Record<string, boolean>;
   // Routes the worker between the transformers.js pipeline() path (undefined /
-  // 'encoder-decoder' / 'single') and the raw-ONNX Nemotron engine
-  // ('nemotron-rnnt'). See WhisperModelInfo.sessionLayout for the source of truth.
-  sessionLayout?: 'encoder-decoder' | 'single' | 'nemotron-rnnt';
+  // 'encoder-decoder' / 'single') and the raw-ONNX engines
+  // ('nemotron-rnnt', 'parakeet-tdt'). See WhisperModelInfo.sessionLayout for the source of truth.
+  sessionLayout?: 'encoder-decoder' | 'single' | 'nemotron-rnnt' | 'parakeet-tdt';
   // Dual-channel Nemotron only (sessionLayout === 'nemotron-rnnt'; ignored by
   // every other model): identifies which channel (mic/system, or whatever
   // LocalWhisperSTT.channelLabel resolves to) this init is for. Two channels

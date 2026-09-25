@@ -8,10 +8,10 @@
 //                              (huggingface.co/UsefulSensors/moonshine-base):
 //                              "capable of transcribing English speech audio
 //                              into English text".
-//   Parakeet CTC 0.6B        — English-only. Model card
-//                              (huggingface.co/nvidia/parakeet-ctc-0.6b):
-//                              "transcribes speech in lower case English
-//                              alphabet".
+//   Parakeet TDT 0.6B v3     — Multilingual (25 European languages). Model card
+//                              (huggingface.co/nvidia/parakeet-tdt-0.6b-v3):
+//                              "transcribes speech in 25 European languages
+//                              with punctuation and capitalization".
 //   Distil-Whisper (all)     — English-only. Model card
 //                              (huggingface.co/distil-whisper/distil-large-v3):
 //                              "the Distil-Whisper English series"; passing
@@ -110,6 +110,13 @@ const WHISPER_LANGUAGE_BY_ISO639: Record<string, string> = {
   he: 'hebrew',
   ms: 'malay',
   fi: 'finnish',
+  hr: 'croatian',
+  et: 'estonian',
+  lv: 'latvian',
+  lt: 'lithuanian',
+  mt: 'maltese',
+  sk: 'slovak',
+  sl: 'slovenian',
 };
 
 /**
@@ -149,6 +156,16 @@ export function isEnglishOnlyLocalModel(modelId: string): boolean {
 
 const ENGLISH_VARIANT_KEYS = Object.keys(ENGLISH_VARIANTS);
 
+export const PARAKEET_TDT_SUPPORTED_ISO639 = new Set([
+  'bg', 'hr', 'cs', 'da', 'nl', 'en', 'et', 'fi', 'fr', 'de',
+  'el', 'hu', 'it', 'lv', 'lt', 'mt', 'pl', 'pt', 'ro', 'sk',
+  'sl', 'es', 'sv', 'ru', 'uk',
+]);
+
+function isParakeetTdtModel(modelId: string): boolean {
+  return MODEL_CATALOG.find((x) => x.id === modelId)?.sessionLayout === 'parakeet-tdt';
+}
+
 function isNemotronModel(modelId: string): boolean {
   return MODEL_CATALOG.find((x) => x.id === modelId)?.sessionLayout === 'nemotron-rnnt';
 }
@@ -159,6 +176,7 @@ function isNemotronModel(modelId: string): boolean {
  *    through resolveNemotronLangId() (the verified transcription-ready tier,
  *    including the documented en-IN/en-AU/en-CA → en-US inference and the
  *    ar-SA → ar-AR alias). 'auto' excluded — Nemotron has no auto-detect.
+ *  - Parakeet TDT: the 25 European languages in its training vocabulary + auto.
  *  - Multilingual Whisper family: everything, including 'auto'.
  *  - English-only models: the English variants only, language locked.
  */
@@ -168,6 +186,16 @@ export function getLocalModelLanguageSupport(modelId: string): LocalModelLanguag
       .filter(([key, lang]) => key !== 'auto' && resolveNemotronLangId(lang.bcp47) !== null)
       .map(([key]) => key);
     return { languageSelectable: true, accentSelectable: true, allowedLanguageKeys: allowed };
+  }
+  if (isParakeetTdtModel(modelId)) {
+    const allowed = Object.entries(RECOGNITION_LANGUAGES)
+      .filter(([key, lang]) => key === 'auto' || PARAKEET_TDT_SUPPORTED_ISO639.has(lang.iso639))
+      .map(([key]) => key);
+    return {
+      languageSelectable: true,
+      accentSelectable: false,
+      allowedLanguageKeys: allowed,
+    };
   }
   if (!isEnglishOnlyLocalModel(modelId)) {
     return {
