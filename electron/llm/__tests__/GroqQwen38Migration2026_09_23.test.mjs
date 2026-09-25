@@ -71,7 +71,9 @@ describe('every hand-written default site names the live id (drift guard)', () =
     ['default-model repair', 'electron/ipcHandlers.ts', new RegExp(`modelAvailable\\('${esc(PRIMARY)}'\\) \\? '${esc(PRIMARY)}'`)],
     ['picker, first Groq entry', 'src/utils/modelUtils.ts', new RegExp(`ids: \\['${esc(PRIMARY)}',`)],
     ['auto-assigned defaults', 'electron/services/CredentialsManager.ts', new RegExp(`'${esc(PRIMARY)}',`)],
-    ['Help text', 'src/components/settings/HelpSettings.tsx', new RegExp(`Default model: <strong>${esc(PRIMARY)}</strong>`)],
+    // No 'Help text' site: Setup & Help was rewritten (2026-09-25) to name no
+    // provider default models — the stale ids it carried were why it drifted — so
+    // there is no hand-written default left there to guard.
     ['Hindsight sidecar default', 'scripts/hindsight-llm-config.mjs', new RegExp(`'groq/${esc(PRIMARY)}'`)],
   ];
   for (const [name, file, re] of sites) {
