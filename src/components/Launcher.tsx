@@ -11,6 +11,7 @@ import TopSearchPill from './TopSearchPill';
 import GlobalChatOverlay from './GlobalChatOverlay';
 import { motion, AnimatePresence, useReducedMotion, type TargetAndTransition, type Variants } from 'framer-motion';
 import { FeatureSpotlight } from './FeatureSpotlight';
+import './LauncherCta.css';
 import { analytics } from '../lib/analytics/analytics.service'; // Added analytics import
 import { useShortcuts } from '../hooks/useShortcuts';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
@@ -1039,13 +1040,14 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                     analytics.trackCommandExecuted('start_natively_cta');
                                                 }
                                             }}
-                                            className="group relative overflow-hidden text-white px-6 py-3 rounded-full font-celeb font-medium tracking-normal flex items-center justify-center gap-3 backdrop-blur-xl shrink-0 transition-transform duration-200 ease-out active:scale-[0.98] hover:scale-[1.01] hover:brightness-110"
+                                            className="launcher-cta relative overflow-hidden text-white px-6 py-3 rounded-full font-celeb font-medium tracking-normal flex items-center justify-center gap-3 backdrop-blur-xl shrink-0"
+                                            // Hover, press and the shadow all live in LauncherCta.css. Only the
+                                            // bloom colour is set here: no inline `transition`, which would
+                                            // override the stylesheet's and make the hover jump again.
                                             style={{
-                                                boxShadow: isMeetingActive
-                                                    ? 'inset 0 1px 1px rgba(255,255,255,0.7), inset 0 -1px 2px rgba(0,0,0,0.1), 0 2px 10px rgba(16,185,129,0.45), 0 0 0 1px rgba(255,255,255,0.15)'
-                                                    : 'inset 0 1px 1px rgba(255,255,255,0.7), inset 0 -1px 2px rgba(0,0,0,0.1), 0 2px 10px rgba(14,165,233,0.4), 0 0 0 1px rgba(255,255,255,0.15)',
-                                                transition: 'box-shadow 0.36s cubic-bezier(0.25, 1, 0.5, 1)',
-                                            }}
+                                                '--cta-glow': isMeetingActive ? '16, 185, 129' : '14, 165, 233',
+                                                '--cta-glow-a': isMeetingActive ? '0.45' : '0.4',
+                                            } as React.CSSProperties}
                                         >
                                             {/* Blue gradient layer (idle) */}
                                             <div
@@ -1061,7 +1063,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                             {/* Top highlight band — shared between both states */}
                                             <div className="absolute inset-x-3 top-0 h-[40%] bg-gradient-to-b from-white/40 to-transparent blur-[2px] rounded-b-lg opacity-80 pointer-events-none z-10" />
                                             {/* Internal suspended-light hover glow */}
-                                            <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none z-10" />
+                                            <div className="launcher-cta-light absolute inset-0 pointer-events-none z-10" />
 
                                             {/* Button content — crossfade between idle and meeting states.
                                                 popLayout pops the exiting block out of flow the instant it starts
