@@ -2664,11 +2664,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
                                             <div className="pt-1">
                                                 <button
+                                                    type="button"
                                                     onClick={() => setShowAdvancedSettings((s) => !s)}
+                                                    aria-expanded={showAdvancedSettings}
                                                     className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-text-tertiary hover:text-text-secondary transition-colors"
                                                 >
                                                     <DisclosureChevron open={showAdvancedSettings} />
-                                                    {t('Advanced')}
+                                                    {showAdvancedSettings ? t('Hide advanced settings') : t('Show advanced settings')}
                                                 </button>
                                                 <Disclosure open={showAdvancedSettings}>
                                                 <div className="mt-1">
