@@ -244,7 +244,7 @@ test('the local VAD stop is ignored while an interim is still dangling (its fina
   const h = makeSimple(async () => YES());
   h.interviewer('Why did you choose PostgreSQL over the', true);
   h.interviewer('alternatives here', false);                                    // interim, final not yet in
-  h.engine.onLocalSpeechEnd();
+  h.engine.onLocalSpeechEnd({ providerFinalized: true });
   await h.advance(ENDPOINT_CONFIRM_MS + 100);
   assert.deepEqual(h.texts(), [], 'not committed on a half-transcribed turn');
   h.interviewer('alternatives here?', true);                                    // the final lands
@@ -253,22 +253,25 @@ test('the local VAD stop is ignored while an interim is still dangling (its fina
   assert.match(h.texts()[0], /alternatives here\?$/);
 });
 
-test('the local VAD stop waits for in-flight finals when provider is lagging, then trailing final arms endpoint confirm', async () => {
+test('the local VAD stop without explicit finalization never shortens window on subsequent finals to prevent partial turns', async () => {
   const h = makeSimple(async () => YES());
   // Intermediate final arrives while interviewer is speaking
   h.interviewer('Why did you choose PostgreSQL over the', true);
   // Time passes while speech continues physically
   await h.advance(100);
-  // Local VAD detects silence and fires speech end (no premature arm without provider catchup)
+  // Local VAD detects silence and fires speech end without provider finalization guarantee
   h.engine.onLocalSpeechEnd();
-  // At ENDPOINT_CONFIRM_MS + 50, it must NOT have committed prematurely because trailing final was in flight
+  // At ENDPOINT_CONFIRM_MS + 50, it must NOT have committed prematurely
   await h.advance(ENDPOINT_CONFIRM_MS + 50);
-  assert.deepEqual(h.texts(), [], 'not committed prematurely while trailing final is still in flight');
-  // Trailing final arrives from provider (explicit provider catch-up!)
+  assert.deepEqual(h.texts(), [], 'not committed prematurely while subsequent finals may be in flight');
+  // Subsequent final arrives from provider
   h.interviewer('alternatives here?', true);
-  // Now trailing final arms ENDPOINT_CONFIRM_MS
+  // Must NOT shorten to ENDPOINT_CONFIRM_MS (which could truncate another in-flight segment)
   await h.advance(ENDPOINT_CONFIRM_MS + 50);
-  assert.equal(h.texts().length, 1, 'committed full question once trailing final landed');
+  assert.deepEqual(h.texts(), [], 'not committed prematurely at ENDPOINT_CONFIRM_MS after subsequent final');
+  // Safely commits whole question at STABILITY_MS
+  await h.advance(STABILITY_MS);
+  assert.equal(h.texts().length, 1, 'committed full question once STABILITY_MS elapsed');
   assert.match(h.texts()[0], /alternatives here\?$/);
 });
 

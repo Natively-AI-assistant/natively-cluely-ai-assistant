@@ -272,8 +272,6 @@ export class SimpleAutoAnswerEngine {
     private punctuationGuaranteed = false;
     /** What last bumped judgeSeq, so a discarded verdict can say what killed it. */
     private judgeSeqCause: NonNullable<AutoAnswerTelemetryEvent['supersededBy']> | null = null;
-    /** When local VAD speech-end fired, for provider catch-up tolerance. */
-    private localSpeechEndedAt: number | null = null;
     private thresholds: AutoAnswerThresholds;
 
     constructor(
@@ -321,24 +319,17 @@ export class SimpleAutoAnswerEngine {
      * ongoing, so speech_ended cannot assume an empty interim means the provider
      * has delivered all final text.
      *
-     * Instead of prematurely starting the 350 ms window based only on the
-     * absence of an interim, we require an explicit provider catch-up or
-     * finalization guarantee:
-     * 1. If the provider explicitly signals finalization (e.g. providerFinalized: true
-     *    or onProviderEndpoint()), we arm ENDPOINT_CONFIRM_MS immediately.
-     * 2. Otherwise, we record the physical speech-stop timestamp (localSpeechEndedAt).
-     *    When the trailing final for that utterance arrives from the provider in
-     *    ingest(), that arrival serves as the explicit provider catch-up and arms
-     *    ENDPOINT_CONFIRM_MS. If no trailing final arrives, the safe STABILITY_MS
-     *    window runs to completion without risk of truncating in-flight text.
+     * To prevent judging an incomplete interviewer turn, a local speech-end hint
+     * never prematurely shortens the stability window for independent streaming
+     * providers unless the provider itself explicitly guarantees finalization
+     * (options.providerFinalized === true). When explicit finalization is present,
+     * ENDPOINT_CONFIRM_MS is armed immediately; otherwise the turn safely runs
+     * the full STABILITY_MS window so trailing finals are never truncated.
      */
     onLocalSpeechEnd(options?: { providerFinalized?: boolean }): void {
         if (!this.host.isEnabled() || this.pending.length === 0) return;
         if (this.lastInterviewerInterim) return;
-        const now = this.clock.now();
-        this.localSpeechEndedAt = now;
         if (options?.providerFinalized) {
-            this.localSpeechEndedAt = null;
             this.arm(ENDPOINT_CONFIRM_MS);
         }
     }
@@ -359,7 +350,6 @@ export class SimpleAutoAnswerEngine {
                         this.bumpJudgeSeq('interim');
                         this.lastInterviewerAt = now;
                         this.lastInterviewerInterim = text;
-                        this.localSpeechEndedAt = null;
                     }
                     this.arm(STABILITY_MS);
                 }
@@ -383,12 +373,7 @@ export class SimpleAutoAnswerEngine {
             this.pending.push({ text, at: now, speaker, glueNext });
             this.bumpJudgeSeq('final');  // supersede any in-flight verdict: it judged less than this
             this.lastInterviewerAt = now;
-            if (this.localSpeechEndedAt !== null && (now - this.localSpeechEndedAt) <= STABILITY_MS) {
-                this.localSpeechEndedAt = null;
-                this.arm(ENDPOINT_CONFIRM_MS, false);
-            } else {
-                this.arm(STABILITY_MS);
-            }
+            this.arm(STABILITY_MS);
             return;
         }
 
@@ -773,7 +758,6 @@ export class SimpleAutoAnswerEngine {
         this.lastJudgedKey = '';
         this.lastAnsweredText = null;
         this.lastPrefetchAt = null;
-        this.localSpeechEndedAt = null;
         this.held = null;
         this.bumpJudgeSeq('meeting_reset');
         this.sequence = 0;
