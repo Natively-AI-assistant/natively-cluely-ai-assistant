@@ -1276,15 +1276,16 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     // dialog, and — checked after this tick, since Settings and the search pill
     // register their listeners later — any handler that already claimed the key.
     useEffect(() => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
         const onKeyDown = (e: KeyboardEvent) => {
             if (e.key !== 'Escape' || e.defaultPrevented || isChatOpen) return;
             const el = e.target as HTMLElement | null;
             if (el?.closest('input, textarea, select, [contenteditable="true"]')) return;
             if (document.querySelector('[role="dialog"], [aria-modal="true"]')) return;
-            setTimeout(() => { if (!e.defaultPrevented) onBack(); }, 0);
+            timer = setTimeout(() => { if (!e.defaultPrevented) onBack(); }, 0);
         };
         window.addEventListener('keydown', onKeyDown);
-        return () => window.removeEventListener('keydown', onKeyDown);
+        return () => { window.removeEventListener('keydown', onKeyDown); clearTimeout(timer); };
     }, [isChatOpen, onBack]);
 
     // Stable client-side keys for the action-item and key-point lists. The
