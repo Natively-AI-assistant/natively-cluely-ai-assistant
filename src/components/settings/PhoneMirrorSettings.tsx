@@ -139,6 +139,23 @@ const Presence: React.FC<{
 }> = ({ kind, id, block, className = '', children }) => {
   const ready = React.useContext(MotionReadyContext);
   const m = presenceMotion(kind, !!useReducedMotion());
+  const cls = `${block ? 'block' : m.className} ${className}`;
+  // Before hydration: plain markup, no AnimatePresence at all (the fix
+  // SettingsRow.tsx's copy already carries). Gating only `initial` is not
+  // enough: in mode="wait" the incoming child mounts after the outgoing one's
+  // exit settles, a frame or more later, by which time `ready` has flipped, so
+  // a running mirror's description swapped in on every open of Sync.
+  if (!ready) {
+    const Plain = kind === 'control' ? 'div' : 'span';
+    const body = id !== null ? <Plain className={cls}>{children}</Plain> : null;
+    return kind === 'icon' ? (
+      <span className="relative inline-block w-3.5 h-3.5 shrink-0" aria-hidden="true">
+        {body}
+      </span>
+    ) : (
+      body
+    );
+  }
   // A control can hold a <div> (the confirm group), so it cannot be a span.
   const Tag = (kind === 'control' ? motion.div : motion.span) as typeof motion.span;
   const presence = (
@@ -146,13 +163,7 @@ const Presence: React.FC<{
     // replacement arrives, so two labels never share a line.
     <AnimatePresence mode={kind === 'icon' ? 'sync' : 'wait'} initial={false}>
       {id !== null ? (
-        <Tag
-          key={id}
-          className={`${block ? 'block' : m.className} ${className}`}
-          initial={ready ? m.from : false}
-          animate={m.to}
-          exit={ready ? m.out : undefined}
-        >
+        <Tag key={id} className={cls} initial={m.from} animate={m.to} exit={m.out}>
           {children}
         </Tag>
       ) : null}
