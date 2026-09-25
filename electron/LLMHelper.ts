@@ -211,6 +211,14 @@ const OPENROUTER_ATTRIBUTION_HEADERS = {
   "HTTP-Referer": "https://natively.software",
   "X-OpenRouter-Title": "Natively",
 }
+// Requesty is an OpenAI-compatible gateway with the same `vendor/model` id
+// shape as OpenRouter. The attribution headers are optional and, like
+// OpenRouter's, carry nothing about the user.
+const REQUESTY_BASE_URL = "https://router.requesty.ai/v1"
+const REQUESTY_ATTRIBUTION_HEADERS = {
+  "HTTP-Referer": "https://natively.software",
+  "X-Title": "Natively",
+}
 // Fluxion AI is an aggregator gateway that speaks BOTH wire protocols, and the
 // one it accepts is fixed by the group the user's key belongs to — a property
 // the key itself does not expose. Hence two base URLs and a user-chosen
@@ -525,6 +533,8 @@ export class LLMHelper {
   // + custom baseURL, its own client so credentials/scope/telemetry stay
   // provider-specific.
   private _openrouterClient: OpenAI | null = null
+  // Requesty, same pattern as OpenRouter.
+  private _requestyClient: OpenAI | null = null
   // Fluxion speaks both protocols, so it gets one client per protocol and the
   // user's `fluxionProtocol` setting decides which one a request uses. Exactly
   // one is ever non-null at a time — see setFluxionConfig.
@@ -554,6 +564,8 @@ export class LLMHelper {
   private set nvidiaNimClient(v: OpenAI | null) { this._nvidiaNimClient = v }
   private get openrouterClient(): OpenAI | null { return this.isProviderDisabled('openrouter') ? null : this._openrouterClient }
   private set openrouterClient(v: OpenAI | null) { this._openrouterClient = v }
+  private get requestyClient(): OpenAI | null { return this.isProviderDisabled('requesty') ? null : this._requestyClient }
+  private set requestyClient(v: OpenAI | null) { this._requestyClient = v }
   // These two getters ARE the disabled-provider guard for Fluxion. PROVIDER_LABEL_FAMILY
   // carries no entry for the gateways (openrouter/litellm/nvidia_nim included), so
   // assertOutboundScopes' backstop never fires for them — returning null here is
@@ -610,6 +622,7 @@ export class LLMHelper {
   private deepseekApiKey: string | null = null
   private nvidiaNimApiKey: string | null = null
   private openrouterApiKey: string | null = null
+  private requestyApiKey: string | null = null
   private fluxionApiKey: string | null = null
   /** Which wire protocol this key's Fluxion group speaks. Default matches the
    *  GPT/Grok/Gemini/DeepSeek/GLM/Kimi groups; Claude groups need 'anthropic'. */
@@ -764,7 +777,7 @@ export class LLMHelper {
       const c: any = this.activeCurlProvider;
       return `curl:${c.id}:${c.curlCommand ? String(c.curlCommand).length : ''}`;
     }
-    if (this.isLiteLLMModel(this.currentModelId) || this.isNvidiaNimModel(this.currentModelId) || this.isOpenRouterModel(this.currentModelId) || this.isFluxionModel(this.currentModelId) || this.isNinerouterModel(this.currentModelId)) {
+    if (this.isLiteLLMModel(this.currentModelId) || this.isNvidiaNimModel(this.currentModelId) || this.isOpenRouterModel(this.currentModelId) || this.isRequestyModel(this.currentModelId) || this.isFluxionModel(this.currentModelId) || this.isNinerouterModel(this.currentModelId)) {
       return `model:${this.currentModelId}`;
     }
     return null;
@@ -1527,6 +1540,18 @@ export class LLMHelper {
     console.log(`[LLMHelper] OpenRouter API Key ${trimmed ? 'updated' : 'cleared'}.`);
   }
 
+  /** Requesty chat client. Chat and vision only, no retrieval coupling. */
+  public setRequestyApiKey(apiKey: string) {
+    const trimmed = (apiKey || '').trim();
+    this.requestyApiKey = trimmed || null;
+    this.requestyClient = trimmed
+      ? new OpenAI({ apiKey: trimmed, baseURL: REQUESTY_BASE_URL, defaultHeaders: REQUESTY_ATTRIBUTION_HEADERS })
+      : null;
+    this.textHealth.delete('requesty');
+    this.visionHealth.delete('requesty');
+    console.log(`[LLMHelper] Requesty API Key ${trimmed ? 'updated' : 'cleared'}.`);
+  }
+
   /**
    * Configure Fluxion AI.
    *
@@ -2006,7 +2031,7 @@ export class LLMHelper {
   // these named entry points so the surface stays auditable.
 
   public async runVisionRequest(
-    providerId: 'natively' | 'openai' | 'claude' | 'gemini_flash_lite' | 'gemini_flash' | 'gemini_pro' | 'groq_scout' | 'custom' | 'litellm' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'ninerouter',
+    providerId: 'natively' | 'openai' | 'claude' | 'gemini_flash_lite' | 'gemini_flash' | 'gemini_pro' | 'groq_scout' | 'custom' | 'litellm' | 'nvidia_nim' | 'openrouter' | 'requesty' | 'fluxion' | 'ninerouter',
     userPrompt: string,
     systemPrompt: string,
     imagePath: string,
@@ -2041,6 +2066,8 @@ export class LLMHelper {
         return this.generateWithNvidiaNim(userPrompt, systemPrompt, [imagePath]);
       case 'openrouter':
         return this.generateWithOpenRouter(userPrompt, systemPrompt, [imagePath]);
+      case 'requesty':
+        return this.generateWithRequesty(userPrompt, systemPrompt, [imagePath]);
       case 'fluxion':
         return this.generateWithFluxion(userPrompt, systemPrompt, [imagePath]);
       case 'ninerouter':
@@ -2164,6 +2191,9 @@ export class LLMHelper {
     // request goes to api.openai.com on the user's own key and answers
     // perfectly, which is what makes it so hard to see.
     if (this.isNinerouterModel(modelId)) return false;
+    // Requesty ids carry the vendor segment too (`requesty/openai/gpt-4o-mini`),
+    // so the includes("openai") catch-all below would claim them.
+    if (this.isRequestyModel(modelId)) return false;
     return modelId.startsWith("gpt-") || modelId.startsWith("o1-") || modelId.startsWith("o3-") || modelId.includes("openai");
   }
 
@@ -2213,6 +2243,14 @@ export class LLMHelper {
    * bill the wrong key.
    */
   private isOpenRouterModel(modelId: string): boolean { return !!modelId && modelId.startsWith('openrouter/'); }
+
+  /**
+   * Same rule as isOpenRouterModel: Requesty ids are vendor-namespaced
+   * (`requesty/openai/gpt-4o-mini`), so this MUST be tested before the vendor
+   * predicates. Managed policy ids are bare (`requesty/claude-sonnet-4-5`) and
+   * go through the same prefix.
+   */
+  private isRequestyModel(modelId: string): boolean { return !!modelId && modelId.startsWith('requesty/'); }
 
   /**
    * MUST be tested before isClaudeModel/isOpenAiModel/the gemini and deepseek
@@ -4584,6 +4622,9 @@ let isMultimodal = !!(imagePaths?.length);
       if (this.isOpenRouterModel(this.currentModelId) && this.openrouterClient) {
         return await this.generateWithOpenRouter(cloudUserContent, openaiSystemPrompt, cloudIsMultimodal ? cloudImagePaths : undefined);
       }
+      if (this.isRequestyModel(this.currentModelId) && this.requestyClient) {
+        return await this.generateWithRequesty(cloudUserContent, openaiSystemPrompt, cloudIsMultimodal ? cloudImagePaths : undefined);
+      }
       // Before the Groq/OpenAI branches below, and before the Claude branch
       // above reachable through isClaudeModel — see isFluxionModel.
       if (this.isFluxionModel(this.currentModelId) && this.hasFluxionCredential()) {
@@ -5979,6 +6020,48 @@ let isMultimodal = !!(imagePaths?.length);
     // Load-bearing here: the SDK only throws on HTTP status, so a 200 carrying
     // an error body would otherwise return an empty string as a real answer.
     this.assertNoOpenRouterStreamError(response, model);
+    return stripLeadingReasoningBlock((response as any).choices?.[0]?.message?.content || "");
+  }
+
+  /**
+   * Requesty's wire model id. Strips only Natively's own `requesty/` routing
+   * prefix, so `requesty/openai/gpt-4o-mini` goes out as `openai/gpt-4o-mini`
+   * and a managed policy id such as `requesty/gpt-5.4-mini` as `gpt-5.4-mini`.
+   */
+  private requestyWireModel(modelId: string): string {
+    return (modelId || '').replace(/^requesty\//, '');
+  }
+
+  /**
+   * Same in-band failure shape as OpenRouter: an `error` object or a
+   * `finish_reason` of "error" inside an otherwise 200 body. Checked on both
+   * paths so a dead upstream throws and the caller sees a real error.
+   */
+  private assertNoRequestyStreamError(chunk: any, model: string): void {
+    const err = chunk?.error;
+    if (err) {
+      const code = err.code ?? err.origin ?? 'error';
+      throw new Error(`Requesty (${model}) stream error [${code}]: ${err.message || 'provider failed mid-stream'}`);
+    }
+    if (chunk?.choices?.[0]?.finish_reason === 'error') {
+      throw new Error(`Requesty (${model}) ended the stream with finish_reason=error`);
+    }
+  }
+
+  private async generateWithRequesty(userMessage: string, systemPrompt?: string, imagePaths?: string[]): Promise<string> {
+    if (this.isLocalOnlyMode) throw new Error('Cloud providers disabled in local-only mode');
+    const client = this.requestyClient;
+    if (!client) throw new Error('Requesty client not initialized');
+    this.assertOutboundScopes('requesty', userMessage, imagePaths);
+    await this.rateLimiters.requesty.acquire();
+    const model = this.requestyWireModel(this.currentModelId);
+    const messages = await this.buildOpenRouterMessages(userMessage, systemPrompt, imagePaths);
+    const response = await this.withTimeout(
+      this.withRetry(() => client.chat.completions.create({ model, messages })),
+      60000,
+      `Requesty (${model})`
+    );
+    this.assertNoRequestyStreamError(response, model);
     return stripLeadingReasoningBlock((response as any).choices?.[0]?.message?.content || "");
   }
 
@@ -7605,6 +7688,11 @@ let isMultimodal = !!(imagePaths?.length);
         cloud.push({ id: 'openrouter', name: `OpenRouter (${this.openrouterWireModel(this.currentModelId)})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
           open: (sig) => this.streamWithOpenRouter(userContent, systemPrompt, imagePaths, sig) });
       }
+      // Selected-only, like OpenRouter: never seated for another model's turn.
+      if (this.isRequestyModel(this.currentModelId) && this.requestyClient) {
+        cloud.push({ id: 'requesty', name: `Requesty (${this.requestyWireModel(this.currentModelId)})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
+          open: (sig) => this.streamWithRequesty(userContent, systemPrompt, imagePaths, sig) });
+      }
       // Same rule again: a gateway is only ever recruited for the model the user
       // picked. It matters more here than for the others — Fluxion's ids are the
       // real vendors' own, so a Fluxion rung seated for someone else's turn would
@@ -7694,6 +7782,7 @@ let isMultimodal = !!(imagePaths?.length);
       if (this.isLiteLLMModel(this.currentModelId)) { const l = cloud.find(p => p.id === 'litellm'); if (l) front.push(l); }
       if (this.isNvidiaNimModel(this.currentModelId)) { const n = cloud.find(p => p.id === 'nvidia_nim'); if (n) front.push(n); }
       if (this.isOpenRouterModel(this.currentModelId)) { const o = cloud.find(p => p.id === 'openrouter'); if (o) front.push(o); }
+      if (this.isRequestyModel(this.currentModelId)) { const rq = cloud.find(p => p.id === 'requesty'); if (rq) front.push(rq); }
       if (this.isNinerouterModel(this.currentModelId)) { const n9 = cloud.find(p => p.id === 'ninerouter'); if (n9) front.push(n9); }
       // Fluxion belongs here for a sharper version of the same reason. Its rung
       // IS seated in `cloud`, but at the end of the priority order, and
@@ -7717,6 +7806,7 @@ let isMultimodal = !!(imagePaths?.length);
       const gateway = this.isLiteLLMModel(this.currentModelId) ? 'LiteLLM proxy'
         : this.isNvidiaNimModel(this.currentModelId) ? 'NVIDIA NIM endpoint'
         : this.isOpenRouterModel(this.currentModelId) ? 'OpenRouter gateway'
+        : this.isRequestyModel(this.currentModelId) ? 'Requesty gateway'
         : this.isFluxionModel(this.currentModelId) ? 'Fluxion AI gateway'
         : null;
       throw new Error(gateway
@@ -9597,6 +9687,18 @@ let isMultimodal = !!(imagePaths?.length);
       return;
     }
 
+    if (this.isRequestyModel(this.currentModelId) && this.requestyClient) {
+      const rqSystem = this.injectLanguageInstruction(systemPromptOverride || OPENAI_SYSTEM_PROMPT);
+      yield* this.streamSelectedProviderWithFailover({
+        id: 'requesty',
+        name: `Requesty (${this.requestyWireModel(this.currentModelId)})`,
+        open: (sig) => this.streamWithRequesty(userContent, rqSystem, (isMultimodal && imagePaths) ? imagePaths : undefined, sig),
+        userContent, finalSystemPrompt: rqSystem, thinkingBudget, abortSignal,
+        hasImages: Boolean(isMultimodal && imagePaths?.length),
+      });
+      return;
+    }
+
     // THE PRIMARY ANSWER PATH. Its absence here was the worst defect in the
     // whole Fluxion integration and the hardest to see: every vendor predicate
     // correctly returns false for a `fluxion/` id, so the turn fell all the way
@@ -10926,6 +11028,27 @@ let isMultimodal = !!(imagePaths?.length);
     finally { if (abortSignal?.aborted && typeof (stream as any).abort === 'function') (stream as any).abort(); }
   }
 
+  private async * streamWithRequesty(userMessage: string, systemPrompt?: string, imagePaths?: string[], abortSignal?: AbortSignal, modelId?: string): AsyncGenerator<string, void, unknown> {
+    if (this.isLocalOnlyMode) throw new Error('Cloud providers disabled in local-only mode');
+    const client = this.requestyClient;
+    if (!client) throw new Error('Requesty client not initialized');
+    this.assertOutboundScopes('requesty', userMessage, imagePaths);
+    await this.rateLimiters.requesty.acquire();
+    const model = this.requestyWireModel(modelId || this.currentModelId);
+    const messages = await this.buildOpenRouterMessages(userMessage, systemPrompt, imagePaths);
+    if (abortSignal?.aborted) return;
+    const stream = await client.chat.completions.create({ model, messages, stream: true }, { signal: abortSignal }) as any;
+    try {
+      for await (const chunk of stream) {
+        if (abortSignal?.aborted) return;
+        this.assertNoRequestyStreamError(chunk, model);
+        const content = chunk.choices?.[0]?.delta?.content;
+        if (content) yield content;
+      }
+    }
+    finally { if (abortSignal?.aborted && typeof (stream as any).abort === 'function') (stream as any).abort(); }
+  }
+
   /**
    * Stream multimodal (image + text) response from OpenAI with system/user separation
    */
@@ -11975,7 +12098,7 @@ let isMultimodal = !!(imagePaths?.length);
     // machine or their tunnel, and its whole purpose is to fail over between
     // upstreams AFTER accepting the request, so its first token can be waiting
     // on a cold provider two hops away.
-    return this.isLiteLLMModel(this.currentModelId) || this.isNvidiaNimModel(this.currentModelId) || this.isOpenRouterModel(this.currentModelId) || this.isFluxionModel(this.currentModelId) || this.isNinerouterModel(this.currentModelId);
+    return this.isLiteLLMModel(this.currentModelId) || this.isNvidiaNimModel(this.currentModelId) || this.isOpenRouterModel(this.currentModelId) || this.isFluxionModel(this.currentModelId) || this.isNinerouterModel(this.currentModelId) || this.isRequestyModel(this.currentModelId);
   }
 
   /**
@@ -12399,6 +12522,7 @@ let isMultimodal = !!(imagePaths?.length);
         model = this.getSelectedCodexCliModel(false);
       } else if (this.isNvidiaNimModel(selected)) provider = 'nvidia_nim';
       else if (this.isOpenRouterModel(selected)) provider = 'openrouter';
+      else if (this.isRequestyModel(selected)) provider = 'requesty';
       // Fluxion's ids are the real vendors' own, so EVERY predicate below would
       // claim one if the prefix check did not come first — claude-*, gpt-*,
       // gemini-* and deepseek-v* are all live Fluxion catalogue entries.
@@ -12549,6 +12673,7 @@ let isMultimodal = !!(imagePaths?.length);
       case 'deepseek': return !!this.deepseekClient;
       case 'nvidia_nim': return !!this.nvidiaNimClient;
       case 'openrouter': return !!this.openrouterClient;
+      case 'requesty': return !!this.requestyClient;
       case 'fluxion': return this.hasFluxionCredential();
       case 'litellm': return !!this.litellmClient;
       case 'ninerouter': return !!this.ninerouterClient;
@@ -12573,6 +12698,7 @@ let isMultimodal = !!(imagePaths?.length);
       this.deepseekClient ||
       this.nvidiaNimClient ||
       this.openrouterClient ||
+      this.requestyClient ||
       this.litellmClient ||
       this.ninerouterClient ||
       this.hasFluxionCredential() ||
@@ -12651,6 +12777,7 @@ let isMultimodal = !!(imagePaths?.length);
       case 'litellm':
       case 'nvidia_nim':
       case 'openrouter':
+      case 'requesty':
       case 'fluxion':
       // 9Router belongs with them rather than with its own vision seat's
       // per-model gate, and the difference is deliberate. The vision CHAIN
@@ -12922,6 +13049,9 @@ let isMultimodal = !!(imagePaths?.length);
         // `model` is still prefixed; streamWithOpenRouter strips exactly the one
         // `openrouter/` segment to get OpenRouter's own wire id.
         yield* this.streamWithOpenRouter(directUserPrompt, request.systemPrompt, imagePaths, abortSignal, model);
+        return;
+      case 'requesty':
+        yield* this.streamWithRequesty(directUserPrompt, request.systemPrompt, imagePaths, abortSignal, model);
         return;
       case 'fluxion':
         // `model` is still prefixed; streamWithFluxion strips the one `fluxion/`

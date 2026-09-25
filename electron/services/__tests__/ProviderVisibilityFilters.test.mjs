@@ -161,7 +161,7 @@ test('every provider with a UI toggle is a family the main process can classify'
     // in the diff instead of showing up as "expected 8, got 7".
     assert.deepEqual(
         [...fromTable].sort(),
-        ['claude', 'deepseek', 'fluxion', 'gemini', 'groq', 'nvidia_nim', 'openai', 'openrouter'],
+        ['claude', 'deepseek', 'fluxion', 'gemini', 'groq', 'nvidia_nim', 'openai', 'openrouter', 'requesty'],
         'CLOUD_PROVIDERS membership changed — every id here must also be a '
         + "`return '<family>';` in ipcHandlers.ts providerFamily(), which the "
         + 'assertions below check.',

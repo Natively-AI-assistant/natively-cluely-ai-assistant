@@ -11,7 +11,7 @@ export interface ProviderModel {
     label: string;
 }
 
-type Provider = 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion';
+type Provider = 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'requesty' | 'fluxion';
 
 /**
  * Fetch available models from a provider's API.
@@ -36,6 +36,8 @@ export async function fetchProviderModels(
             return fetchNvidiaNimModels(apiKey);
         case 'openrouter':
             return fetchOpenRouterModels(apiKey);
+        case 'requesty':
+            return fetchRequestyModels(apiKey);
         case 'fluxion':
             return fetchFluxionModels(apiKey);
         default:
@@ -77,6 +79,40 @@ async function fetchOpenRouterModels(apiKey: string): Promise<ProviderModel[]> {
         // an OpenRouter model would be billed to the wrong provider's key.
         .map((m: any) => ({ id: `openrouter/${m.id}`, label: m.name || m.id }))
         .sort((a: ProviderModel, b: ProviderModel) => a.label.localeCompare(b.label));
+}
+
+const REQUESTY_BASE_URL = 'https://router.requesty.ai/v1';
+
+async function listRequestyChatModels(url: string, apiKey: string): Promise<ProviderModel[]> {
+    const response = await axios.get(url, {
+        headers: { Authorization: `Bearer ${apiKey}` }, timeout: 15000,
+    });
+    return (response.data?.data || [])
+        .filter((m: any) => m?.id && (!m.api || m.api === 'chat'))
+        // Same `requesty/` routing prefix rule as OpenRouter above: catalogue ids
+        // are vendor-namespaced (`openai/gpt-4o-mini`) and would otherwise be
+        // classified as, and billed to, another provider.
+        .map((m: any) => ({ id: `requesty/${m.id}`, label: String(m.id) }))
+        .sort((a: ProviderModel, b: ProviderModel) => a.label.localeCompare(b.label));
+}
+
+/**
+ * Requesty's catalogue. Managed policies (GET /v1/models/managed, short ids
+ * like `claude-sonnet-4-5` that Requesty routes across several upstreams) are
+ * listed first, then the full `vendor/model` catalogue from GET /v1/models,
+ * which with a key is scoped to the models the organisation has approved. If
+ * the managed list cannot be read the full catalogue alone is returned.
+ */
+async function fetchRequestyModels(apiKey: string): Promise<ProviderModel[]> {
+    let managed: ProviderModel[] = [];
+    try {
+        managed = await listRequestyChatModels(`${REQUESTY_BASE_URL}/models/managed`, apiKey);
+    } catch {
+        managed = [];
+    }
+    const catalogue = await listRequestyChatModels(`${REQUESTY_BASE_URL}/models`, apiKey);
+    const seen = new Set(managed.map((m) => m.id));
+    return [...managed, ...catalogue.filter((m) => !seen.has(m.id))];
 }
 
 /**

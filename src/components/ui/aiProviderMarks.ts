@@ -43,6 +43,8 @@ import ninerouterMark from '../../assets/provider-logos/ninerouter.png';
 // size the galaxy is an illegible smudge in both themes (measured). See the
 // provider-logos README.
 import fluxionMark from '../../assets/provider-logos/fluxion.png';
+// Requesty's app icon, full colour, so a URL rendered with <img> like fluxion.
+import requestyMark from '../../assets/provider-logos/requesty.png';
 // Our own app icon, for the Natively API row. Raster and full-colour, so it is a
 // URL rendered with <img> for the same reason as litellm.
 import nativelyIcon from '../../../assets/icon-512.png';
@@ -74,6 +76,7 @@ export const AI_PROVIDER_BRANDS: Record<string, { mono: string; brand: string }>
     // variants: OpenRouter lime, Voyage deep teal. The MARKS themselves take the
     // monochrome variant — see the README's "Colour vs monochrome".
     openrouter: { mono: 'OR', brand: '#C8FF00' },
+    requesty: { mono: 'RQ', brand: '#1677FF' },
     // Sampled from the shipping asset. NOT #39D9E7 — that came from a stale
     // interlocking-S logo the site still serves under the name "Sub2API".
     fluxion:  { mono: 'FX', brand: '#0048D8' },
@@ -109,6 +112,7 @@ export const AI_PROVIDER_MARK_IMAGES: Record<string, string> = {
     litellm: litellmMark,
     ninerouter: ninerouterMark,
     fluxion: fluxionMark,
+    requesty: requestyMark,
     natively: nativelyIcon,
 };
 

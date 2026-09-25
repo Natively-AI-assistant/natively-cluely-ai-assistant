@@ -423,6 +423,9 @@ export function initializeIpcHandlers(appState: AppState): void {
         // known Groq id and an `includes('openai')` match — classified late it
         // would be gated by, and billed to, the wrong provider's key.
         if (modelId.startsWith('openrouter/')) return 'openrouter';
+        // Same reason as OpenRouter: `requesty/openai/gpt-4o-mini` would match
+        // the vendor checks below if classified late.
+        if (modelId.startsWith('requesty/')) return 'requesty';
         // MUST stay above EVERY vendor check below, for a sharper version of the
         // same reason: Fluxion is a reseller, so its catalogue ids are not merely
         // look-alikes but the vendors' OWN ids. `fluxion/claude-sonnet-4-6` and
@@ -482,7 +485,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         // what the user can pick, this one decides what routing accepts. If they
         // diverge the picker offers models the router rejects. A drift guard test
         // pins the two together.
-        const optInFamily = family === 'litellm' || family === 'openrouter' || family === 'ninerouter';
+        const optInFamily = family === 'litellm' || family === 'openrouter' || family === 'requesty' || family === 'ninerouter';
         const enabledForFamily = cm.getCloudEnabledModels?.(family) || [];
         if (optInFamily) {
           if (!enabledForFamily.includes(modelId)) return false;
@@ -496,6 +499,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         if (modelId.startsWith('nvidia_nim/')) return has(cm.getNvidiaNimApiKey());
         // Above the groq/openai lines for the reason providerFamily() gives.
         if (modelId.startsWith('openrouter/')) return has(cm.getOpenrouterApiKey());
+        if (modelId.startsWith('requesty/')) return has(cm.getRequestyApiKey());
         // Above the gemini/groq/openai/claude/deepseek lines for the reason
         // providerFamily() gives — all five would otherwise claim a Fluxion id.
         if (modelId.startsWith('fluxion/')) return has(cm.getFluxionApiKey());
@@ -532,6 +536,8 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Already stored fully prefixed (`openrouter/<vendor>/<model>`), which is
       // the form modelAvailable() classifies — do not re-prefix.
       const openrouterFallbackModel: string | null = cm.getPreferredModel?.('openrouter') || null;
+      // Same contract: stored fully prefixed (`requesty/<model>`). Do not re-prefix.
+      const requestyFallbackModel: string | null = cm.getPreferredModel?.('requesty') || null;
       // Same contract: stored fully prefixed (`fluxion/<model>`), the form
       // modelAvailable() classifies. Do not re-prefix.
       const fluxionFallbackModel: string | null = cm.getPreferredModel?.('fluxion') || null;
@@ -595,6 +601,10 @@ export function initializeIpcHandlers(appState: AppState): void {
         // Without this rung a user whose only working provider is OpenRouter is
         // left pinned to a dead default and told "No AI providers configured".
         : (openrouterFallbackModel && modelAvailable(openrouterFallbackModel)) ? openrouterFallbackModel
+        // Requesty earns a rung on the same terms as OpenRouter: modelAvailable()
+        // enforces the key, the disabled switch and the opt-in allow-list, so
+        // only a model the user ticked can become the default.
+        : (requestyFallbackModel && modelAvailable(requestyFallbackModel)) ? requestyFallbackModel
         // Fluxion earns a rung for the same reason, and the symptom is identical:
         // its preferred model was already being STORED and returned to the
         // renderer, but never consulted here, so a Fluxion-only user whose
@@ -10348,6 +10358,37 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   /**
+   * Shorter than the OpenRouter handler above: the Requesty key backs chat and
+   * vision only, so there is no hosted retrieval to sample or wait on.
+   */
+  safeHandle('set-requesty-api-key', async (_, apiKey: string) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cm = CredentialsManager.getInstance();
+      const normalizedKey = (apiKey || '').trim();
+      const keyChanged = cm.getRequestyApiKey() !== normalizedKey;
+      // Same degraded-store rule as the OpenRouter handler: stop BEFORE the live
+      // client is touched.
+      const saved = cm.setRequestyApiKey(normalizedKey);
+      if (saved === false) {
+        return {
+          success: false,
+          error: 'credential_store_degraded',
+          message: 'Could not save the key. Your credential store is unavailable this session.',
+        };
+      }
+      appState.processingHelper.getLLMHelper().setRequestyApiKey(normalizedKey);
+      appState.getIntelligenceManager().resetEngine();
+      appState.getIntelligenceManager().initializeLLMs();
+      if (keyChanged) {
+        await refreshRuntimeDefaultIfUnavailable();
+        broadcastCredentialsChanged();
+      }
+      return { success: true };
+    } catch (error: any) { return { success: false, error: error.message }; }
+  });
+
+  /**
    * Fluxion takes a key AND a protocol, because the protocol is a property of
    * the key's group that the key does not expose. They are written together so
    * a client can never be built for the protocol the user did not choose.
@@ -11859,6 +11900,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasDeepseekKey: hasKey(creds.deepseekApiKey),
         hasNvidiaNimKey: hasKey(creds.nvidiaNimApiKey),
         hasOpenrouterKey: hasKey(creds.openrouterApiKey),
+        hasRequestyKey: hasKey(creds.requestyApiKey),
         hasFluxionKey: hasKey(creds.fluxionApiKey),
         // Config, not a secret: Settings must prefill the protocol selector, and
         // a wrong-but-invisible protocol is the failure this setting exists to stop.
@@ -11920,6 +11962,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             ? undefined
             : creds.nvidia_nimPreferredModel || undefined,
         openrouterPreferredModel: creds.openrouterPreferredModel || undefined,
+        requestyPreferredModel: creds.requestyPreferredModel || undefined,
         fluxionPreferredModel: creds.fluxionPreferredModel || undefined,
         // Stored prefixed (`litellm/<model>`) — see StoredCredentials.litellmPreferredModel.
         litellmPreferredModel: creds.litellmPreferredModel || undefined,
@@ -11937,6 +11980,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasDeepseekKey: false,
         hasNvidiaNimKey: false,
         hasOpenrouterKey: false,
+        hasRequestyKey: false,
         hasFluxionKey: false,
         fluxionProtocol: 'openai',
         hasLitellmBaseURL: false,
@@ -11979,7 +12023,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle(
     'fetch-provider-models',
-    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion', apiKey: string) => {
+    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'requesty' | 'fluxion', apiKey: string) => {
       try {
         // Fall back to stored key if no key was explicitly provided
         let key = apiKey?.trim();
@@ -11993,6 +12037,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           else if (provider === 'deepseek') key = cm.getDeepseekApiKey();
           else if (provider === 'nvidia_nim') key = cm.getNvidiaNimApiKey();
           else if (provider === 'openrouter') key = cm.getOpenrouterApiKey();
+          else if (provider === 'requesty') key = cm.getRequestyApiKey();
           else if (provider === 'fluxion') key = cm.getFluxionApiKey();
         }
 
@@ -12045,7 +12090,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle(
     'set-provider-preferred-model',
-    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'litellm' | 'ninerouter', modelId: string) => {
+    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'requesty' | 'fluxion' | 'litellm' | 'ninerouter', modelId: string) => {
       try {
         const { CredentialsManager } = require('./services/CredentialsManager');
         CredentialsManager.getInstance().setPreferredModel(provider, modelId);
@@ -12947,7 +12992,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle(
     'test-llm-connection',
-    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion', apiKey?: string) => {
+    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'requesty' | 'fluxion', apiKey?: string) => {
       console.log(`[IPC] Received test-llm-connection request for provider: ${provider}`);
       try {
         if (!apiKey || !apiKey.trim()) {
@@ -12960,6 +13005,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           else if (provider === 'deepseek') apiKey = creds.getDeepseekApiKey();
           else if (provider === 'nvidia_nim') apiKey = creds.getNvidiaNimApiKey();
           else if (provider === 'openrouter') apiKey = creds.getOpenrouterApiKey();
+          else if (provider === 'requesty') apiKey = creds.getRequestyApiKey();
           else if (provider === 'fluxion') apiKey = creds.getFluxionApiKey();
         }
 
@@ -13143,6 +13189,14 @@ export function initializeIpcHandlers(appState: AppState): void {
           // bogus-key requests both return 401 {"error":{"code":401}}, so a 200
           // is real evidence the credential works.
           response = await axios.get('https://openrouter.ai/api/v1/key', {
+            headers: { Authorization: `Bearer ${apiKey}` },
+            timeout: 15000,
+          });
+        }
+        else if (provider === 'requesty') {
+          // Requesty has no key endpoint. An authenticated GET /v1/models answers
+          // 200 for a valid key and 403 for a bad one, and costs no tokens.
+          response = await axios.get('https://router.requesty.ai/v1/models', {
             headers: { Authorization: `Bearer ${apiKey}` },
             timeout: 15000,
           });

@@ -96,7 +96,7 @@ export interface CurlProvider {
  * and setter build the key by concatenation, so adding a name here without the
  * field would silently read and write `undefined`.
  */
-export type PreferredModelProvider = 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'litellm' | 'ninerouter';
+export type PreferredModelProvider = 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'requesty' | 'litellm' | 'ninerouter';
 
 export interface StoredCredentials {
     geminiApiKey?: string;
@@ -182,6 +182,11 @@ export interface StoredCredentials {
      * narrow escape hatch — not, as the docs imply, a per-group requirement.
      */
     fluxionProtocol?: 'openai' | 'anthropic';
+    /**
+     * Requesty gateway key. Backs chat and vision only, so like fluxionApiKey
+     * there is no activateHostedRetrieval coupling.
+     */
+    requestyApiKey?: string;
     jinaApiKey?: string;
     /** Voyage AI key, used for EMBEDDINGS (Voyage is embeddings-only here). */
     voyageApiKey?: string;
@@ -214,6 +219,7 @@ export interface StoredCredentials {
     nvidia_nimPreferredModel?: string;
     openrouterPreferredModel?: string;
     fluxionPreferredModel?: string;
+    requestyPreferredModel?: string;
     /**
      * The LiteLLM model the user promoted to this provider's default, stored
      * PREFIXED (`litellm/<model>`) so it is the same id the picker, the
@@ -1242,6 +1248,18 @@ export class CredentialsManager {
     public setFluxionApiKey(key: string): boolean {
         if (this.refuseWriteWhileDegraded('set fluxion api key')) return false;
         this.credentials.fluxionApiKey = key.trim() || undefined;
+        this.saveCredentials();
+        return true;
+    }
+
+    public getRequestyApiKey(): string | undefined {
+        return this.credentials.requestyApiKey;
+    }
+
+    /** Chat-only, like setFluxionApiKey: no hosted retrieval to activate. */
+    public setRequestyApiKey(key: string): boolean {
+        if (this.refuseWriteWhileDegraded('set requesty api key')) return false;
+        this.credentials.requestyApiKey = key.trim() || undefined;
         this.saveCredentials();
         return true;
     }
