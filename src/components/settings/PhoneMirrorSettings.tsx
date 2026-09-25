@@ -1,4 +1,4 @@
-import { AlertCircle, BookOpen, Braces, Briefcase, Check, ClipboardPaste, Copy, Eye, EyeOff, FileText, HelpCircle, KeyRound, Lock, Paperclip, Puzzle, QrCode, RefreshCw, Smartphone, Sparkles, Wifi } from 'lucide-react';
+import { AlertCircle, BookOpen, Braces, Briefcase, Check, ClipboardPaste, Copy, Eye, EyeOff, FileText, HelpCircle, KeyRound, Lock, Paperclip, QrCode, RefreshCw, Smartphone, Sparkles, Wifi } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
@@ -8,6 +8,7 @@ import type { BrowserContextSettings, PhoneMirrorInfo } from '../../types/electr
 import { LiquidGlassBadge } from '../../ui-components/LiquidGlassBadge';
 import { LiquidGlassButton } from '../../ui-components/LiquidGlassButton';
 import { isMac } from '../../utils/platformUtils';
+import { NativelyLogoMark } from '../NativelyLogoMark';
 import { Disclosure, DisclosureChevron } from '../ui/AccordionSection';
 import { SettingsToggle } from './SettingsToggle';
 
@@ -965,7 +966,7 @@ export const PhoneMirrorSettings: React.FC = () => {
               descriptionKey={view.exposeOnLan ? 'pair-lan' : 'pair-local'}
               description={
                 view.exposeOnLan
-                  ? t("Scan the code with your phone's camera, or open the link on it.")
+                  ? t('Scan the code with your phone camera, or open the link on it.')
                   : t('LAN access is off. Turn it on, or open the link on this computer.')
               }
               control={revealButton(showPairing, () => setShowPairing((v) => !v), t('Show code'), t('Hide code'), 'min-w-[112px]')}
@@ -1122,7 +1123,7 @@ export const PhoneMirrorSettings: React.FC = () => {
           <SectionHeading title={t('Browser Extension')} subtitle={t("Send the page you're reading to Natively.")} />
 
           <SyncRow
-            icon={<Puzzle size={20} />}
+            icon={<NativelyLogoMark size={20} />}
             title="Natively Companion"
             badge={extBadge}
             descriptionKey={shownRunning ? 'ext-on' : 'ext-off'}
