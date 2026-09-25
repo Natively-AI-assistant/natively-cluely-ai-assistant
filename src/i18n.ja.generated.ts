@@ -369,6 +369,8 @@ export const JA_GENERATED: Record<string, string> = {
     'Help Guide': 'ヘルプガイド',
     'Hi there,\n\nI enjoyed our conversation. Let me know if you have any questions.\n\nBest,': 'こんにちは、\n\nお会いできて光栄でした。ご質問があればお気軽にお問い合わせください。\n\nよろしくお願いいたします、',
     'Hide': '非表示',
+    'Show advanced settings': '詳細設定を表示',
+    'Hide advanced settings': '詳細設定を非表示',
     'Hide developer options': '開発者向けオプションを非表示',
     'Hide evidence': '根拠を非表示',
     'Hide individual features': '個別機能を非表示',
