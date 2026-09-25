@@ -12,20 +12,12 @@
 // Reads defensively (never throws); any uncertainty resolves to OFF, EXCEPT an
 // explicit env/settings "on" which always wins.
 
-let cachedEnv: boolean | null = null;
-
-export const _resetCachedEnvForTesting = (): void => {
-  cachedEnv = null;
-};
-
 const envEnabled = (): boolean => {
-  if (cachedEnv !== null && !process.env.NATIVELY_TEST_USERDATA) return cachedEnv;
   let on = false;
   try {
     const v = (process.env.NATIVELY_CODE_VERIFY || '').trim().toLowerCase();
     on = v === 'on' || v === 'true' || v === '1' || v === 'enabled';
   } catch { on = false; }
-  if (!process.env.NATIVELY_TEST_USERDATA) cachedEnv = on;
   return on;
 };
 

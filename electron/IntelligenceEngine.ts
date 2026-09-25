@@ -213,6 +213,7 @@ interface SpeculativeAnswer {
      */
     answerType?: AnswerType;
     answerStyle?: string;
+    codeVerificationEnabled?: boolean;
 }
 
 export class IntelligenceEngine extends EventEmitter {
@@ -1204,12 +1205,13 @@ export class IntelligenceEngine extends EventEmitter {
         generationId: number, question: string | undefined, confidence: number, text: string,
         writeDecision: SessionWriteDecision | undefined,
         streamed?: SpeculativeStreamed,
-        plan?: { answerType?: AnswerType; answerStyle?: string },
+        plan?: { answerType?: AnswerType; answerStyle?: string; codeVerificationEnabled?: boolean },
     ): string {
         const finished: SpeculativeAnswer = {
             generationId, question: question || 'inferred', confidence, text, writeDecision,
             ...(plan?.answerType ? { answerType: plan.answerType } : {}),
             ...(plan?.answerStyle ? { answerStyle: plan.answerStyle } : {}),
+            ...(plan?.codeVerificationEnabled !== undefined ? { codeVerificationEnabled: plan.codeVerificationEnabled } : {}),
         };
         const adoptedInFlight = this.speculativeAdoptedGenerationId === generationId && this.currentGenerationId === generationId;
         if (this.speculativeAdoptedGenerationId === generationId) this.speculativeAdoptedGenerationId = null;
@@ -1247,7 +1249,10 @@ export class IntelligenceEngine extends EventEmitter {
         // (WhatToAnswerLLM passes isCodeVerificationEnabled() straight to
         // formatAnswerPlanForPrompt, which does not know about isSpeculative).
         // Discarding the text hid that; revealing it would put the raw block in
-        if (isCodeVerificationEnabled()) {
+        // the UI and the session record. Retain the verification mode established
+        // for the generation so a runtime toggle never leaks or wrongly strips.
+        const shouldStripSpec = finished.codeVerificationEnabled ?? isCodeVerificationEnabled();
+        if (shouldStripSpec) {
             try {
                 const { stripVerificationSpec } = require('./llm/codingContract') as typeof import('./llm/codingContract');
                 text = stripVerificationSpec(text);
@@ -1312,7 +1317,7 @@ export class IntelligenceEngine extends EventEmitter {
         if (alreadyPainting) {
             console.log(`[IntelligenceEngine] Finishing the adopted prefetch that streamed live (${text.length} chars, gen ${generationId})`);
             let pending = streamed?.pendingBuffer ?? '';
-            if (isCodeVerificationEnabled()) {
+            if (shouldStripSpec) {
                 try {
                     const { stripVerificationSpec } = require('./llm/codingContract') as typeof import('./llm/codingContract');
                     pending = stripVerificationSpec(pending);
@@ -6298,6 +6303,7 @@ export class IntelligenceEngine extends EventEmitter {
                 return this.completeSpeculativeRun(generationId, question, confidence, fullAnswer, wtaWriteDecision, streamed, {
                     answerType: answerPlan.answerType,
                     answerStyle: answerPlan.answerStyle as string,
+                    codeVerificationEnabled: shouldStripSpec,
                 });
             }
 

@@ -340,17 +340,6 @@ export class SimpleAutoAnswerEngine {
         if (options?.providerFinalized) {
             this.localSpeechEndedAt = null;
             this.arm(ENDPOINT_CONFIRM_MS);
-            return;
-        }
-        // When the last STT final arrived shortly before the local VAD stop
-        // (within PROVIDER_CATCHUP_TOLERANCE_MS), the provider may have already
-        // delivered the complete utterance. Arm the shortened ENDPOINT_CONFIRM_MS
-        // window so this latency improvement is preserved for production callers.
-        // We disallow the early judge (120ms) so that if a trailing final is still
-        // in flight over the network, it has the full catch-up window to land in
-        // ingest() and re-arm, preventing any partial question from being judged.
-        if (now - this.lastInterviewerAt <= PROVIDER_CATCHUP_TOLERANCE_MS) {
-            this.arm(ENDPOINT_CONFIRM_MS, false);
         }
     }
 
