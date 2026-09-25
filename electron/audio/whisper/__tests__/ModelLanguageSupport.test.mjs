@@ -51,6 +51,7 @@ const OFFICIAL_WHISPER_NAMES = new Set([
   'romanian', 'polish', 'dutch', 'arabic', 'hindi', 'swedish', 'norwegian',
   'danish', 'czech', 'hungarian', 'vietnamese', 'thai', 'greek', 'bulgarian',
   'hebrew', 'malay', 'finnish',
+  'croatian', 'estonian', 'latvian', 'lithuanian', 'maltese', 'slovak', 'slovenian',
 ]);
 
 test('every catalog model has a language-support entry with keys drawn from RECOGNITION_LANGUAGES', () => {
@@ -64,10 +65,11 @@ test('every catalog model has a language-support entry with keys drawn from RECO
   }
 });
 
-test('English-only guard derives from the catalog and covers Parakeet (the old hand-typed set missed it)', () => {
+test('English-only guard derives from the catalog and correctly marks multilingual/English-only models', () => {
   const englishOnly = MODEL_CATALOG.filter((m) => !m.multilingual).map((m) => m.id);
   const multilingual = MODEL_CATALOG.filter((m) => m.multilingual).map((m) => m.id);
-  assert.ok(englishOnly.includes('onnx-community/parakeet-ctc-0.6b-ONNX'), 'catalog must mark Parakeet English-only');
+  assert.ok(multilingual.includes('istupakov/parakeet-tdt-0.6b-v3-onnx'), 'catalog must mark Parakeet TDT multilingual');
+  assert.ok(englishOnly.includes('onnx-community/moonshine-tiny-ONNX'), 'catalog must mark Moonshine English-only');
   for (const id of englishOnly) {
     assert.equal(isEnglishOnlyLocalModel(id), true, `${id} must be English-only`);
   }
@@ -93,7 +95,7 @@ test('English-only models lock both selects and allow only the English variants'
 
 test('multilingual Whisper-family models allow every language including auto, but no accent conditioning', () => {
   const whisperMultilingual = MODEL_CATALOG.filter(
-    (m) => m.multilingual && m.sessionLayout !== 'nemotron-rnnt',
+    (m) => m.multilingual && m.sessionLayout !== 'nemotron-rnnt' && m.sessionLayout !== 'parakeet-tdt',
   );
   assert.ok(whisperMultilingual.length > 0, 'catalog must contain multilingual Whisper checkpoints');
   for (const m of whisperMultilingual) {
@@ -107,6 +109,35 @@ test('multilingual Whisper-family models allow every language including auto, bu
     );
     assert.ok(s.allowedLanguageKeys.includes('auto'), `${m.id}: Whisper supports auto-detect`);
   }
+});
+
+test('Parakeet TDT allows exactly the 25 European languages it supports plus auto', () => {
+  const PARAKEET_ID = 'istupakov/parakeet-tdt-0.6b-v3-onnx';
+  const s = getLocalModelLanguageSupport(PARAKEET_ID);
+  assert.equal(s.languageSelectable, true);
+  assert.equal(s.accentSelectable, false);
+  assert.ok(s.allowedLanguageKeys.includes('auto'));
+  assert.ok(s.allowedLanguageKeys.includes('bulgarian'));
+  assert.ok(s.allowedLanguageKeys.includes('english-us'));
+  assert.ok(s.allowedLanguageKeys.includes('german'));
+  assert.ok(s.allowedLanguageKeys.includes('french'));
+  assert.ok(s.allowedLanguageKeys.includes('spanish'));
+  assert.ok(s.allowedLanguageKeys.includes('russian'));
+  assert.ok(s.allowedLanguageKeys.includes('ukrainian'));
+  // The 7 European languages verified to be selectable
+  assert.ok(s.allowedLanguageKeys.includes('croatian'));
+  assert.ok(s.allowedLanguageKeys.includes('estonian'));
+  assert.ok(s.allowedLanguageKeys.includes('latvian'));
+  assert.ok(s.allowedLanguageKeys.includes('lithuanian'));
+  assert.ok(s.allowedLanguageKeys.includes('maltese'));
+  assert.ok(s.allowedLanguageKeys.includes('slovak'));
+  assert.ok(s.allowedLanguageKeys.includes('slovenian'));
+  // Asian/Middle-Eastern languages NOT supported by Parakeet
+  assert.equal(s.allowedLanguageKeys.includes('japanese'), false);
+  assert.equal(s.allowedLanguageKeys.includes('chinese'), false);
+  assert.equal(s.allowedLanguageKeys.includes('arabic'), false);
+  assert.equal(s.allowedLanguageKeys.includes('korean'), false);
+  assert.equal(s.allowedLanguageKeys.includes('hindi'), false);
 });
 
 test('Nemotron allows exactly the keys that resolve through the transcription-ready locale table — no auto', () => {

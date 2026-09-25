@@ -220,6 +220,42 @@ async function initNemotronChannel(msg: any, channelId: string): Promise<void> {
   }
 }
 
+// ── Dual-channel Parakeet TDT (2026-09-25) ─────────────────────────────
+let parakeetSharedResources: import('./parakeet/parakeetTdtEngine').ParakeetTdtSharedResources | null = null;
+const parakeetChannels = new Map<string, import('./parakeet/parakeetTdtEngine').ParakeetTdtEngine>();
+const parakeetChains = new Map<string, Promise<void>>();
+function getParakeetChain(channelId: string): Promise<void> {
+  return parakeetChains.get(channelId) ?? Promise.resolve();
+}
+function setParakeetChain(channelId: string, p: Promise<void>): void {
+  parakeetChains.set(channelId, p);
+}
+let parakeetInitChain: Promise<void> = Promise.resolve();
+
+async function initParakeetChannel(msg: any, channelId: string): Promise<void> {
+  try {
+    const { ParakeetTdtEngine } = require('./parakeet/parakeetTdtEngine');
+    let engine;
+    if (parakeetSharedResources) {
+      engine = await ParakeetTdtEngine.create(msg.cacheDir, msg.executionProviders ?? ['cpu'], parakeetSharedResources);
+    } else {
+      const { downloadParakeetTdtFiles } = require('./parakeet/downloadFiles');
+      const path = require('path');
+      const modelDir = path.join(msg.cacheDir, ...String(msg.modelId).split('/'));
+      await downloadParakeetTdtFiles(modelDir, (pct: number) => {
+        parentPort!.postMessage({ type: 'progress', modelId: msg.modelId, progress: pct, channelId: msg.channelId });
+      });
+      engine = await ParakeetTdtEngine.create(modelDir, msg.executionProviders ?? ['cpu']);
+      parakeetSharedResources = engine.getSharedResources();
+    }
+    parakeetChannels.set(channelId, engine);
+    loadedModelId = msg.modelId;
+    parentPort!.postMessage({ type: 'ready', channelId: msg.channelId });
+  } catch (e: any) {
+    parentPort!.postMessage({ type: 'error', channelId: msg.channelId, message: `Failed to load model: ${e?.message ?? String(e)}` });
+  }
+}
+
 parentPort.on('message', async (msg: any) => {
   if (msg.type === 'init') {
     if (msg.sessionLayout === 'nemotron-rnnt') {
@@ -256,6 +292,13 @@ parentPort.on('message', async (msg: any) => {
         console.error('[WhisperWorker] nemotron init chain error (should be unreachable):', chainErr);
       });
       return; // do not fall through to the transformers.js pipeline() path below
+    }
+    if (msg.sessionLayout === 'parakeet-tdt') {
+      const channelId: string = msg.channelId || 'default';
+      parakeetInitChain = parakeetInitChain.then(() => initParakeetChannel(msg, channelId)).catch((chainErr) => {
+        console.error('[WhisperWorker] parakeet init chain error (should be unreachable):', chainErr);
+      });
+      return;
     }
     // Validate required fields BEFORE entering the try/catch so the error
     // surfaces as a structured `error` postMessage rather than an unhandled
@@ -396,6 +439,8 @@ parentPort.on('message', async (msg: any) => {
       nemotronChannels.delete(msg.channelId);
       nemotronChains.delete(msg.channelId);
       nemotronSegmentTokens.delete(msg.channelId);
+      parakeetChannels.delete(msg.channelId);
+      parakeetChains.delete(msg.channelId);
     }
     return;
   } else if (msg.type === 'setPrompt') {
@@ -424,6 +469,18 @@ parentPort.on('message', async (msg: any) => {
         // message behind a rejected promise — log and let the chain continue.
         console.error('[WhisperWorker] nemotron chain error (should be unreachable):', chainErr);
       }));
+      return;
+    }
+    const parakeetChannelKey = channelId || 'default';
+    const parakeet = parakeetChannels.get(parakeetChannelKey) ?? (parakeetChannels.size === 1 ? parakeetChannels.values().next().value : undefined);
+    if (parakeet && msg.language && msg.language !== 'auto') {
+      const { RECOGNITION_LANGUAGES } = require('../../config/languages');
+      const langEntry = RECOGNITION_LANGUAGES[msg.language];
+      const iso = langEntry?.iso639 || String(msg.language).split('-')[0].toLowerCase();
+      const { PARAKEET_TDT_SUPPORTED_ISO639 } = require('./modelLanguageSupport');
+      if (iso && !PARAKEET_TDT_SUPPORTED_ISO639.has(iso)) {
+        console.warn(`[WhisperWorker] Parakeet TDT language warning: "${msg.language}" (${iso}) is not in 25 supported European languages`);
+      }
     }
     return;
   } else if (msg.type === 'transcribe') {
@@ -480,6 +537,40 @@ parentPort.on('message', async (msg: any) => {
         // permanently wedge every future message behind a rejected
         // promise — log and let the chain continue.
         console.error('[WhisperWorker] nemotron chain error (should be unreachable):', chainErr);
+      }));
+      return;
+    }
+    const parakeetChannelKey = channelId || 'default';
+    const parakeetEngine = parakeetChannels.get(parakeetChannelKey) ?? (parakeetChannels.size === 1 ? parakeetChannels.values().next().value : undefined);
+    if (parakeetEngine) {
+      setParakeetChain(parakeetChannelKey, getParakeetChain(parakeetChannelKey).then(async () => {
+        try {
+          if (msg.language && msg.language !== 'auto') {
+            const { RECOGNITION_LANGUAGES } = require('../../config/languages');
+            const langEntry = RECOGNITION_LANGUAGES[msg.language];
+            const iso = langEntry?.iso639 || String(msg.language).split('-')[0].toLowerCase();
+            const { PARAKEET_TDT_SUPPORTED_ISO639 } = require('./modelLanguageSupport');
+            if (iso && !PARAKEET_TDT_SUPPORTED_ISO639.has(iso)) {
+              console.warn(`[WhisperWorker] Parakeet TDT does not support language "${msg.language}" (${iso}) — defaulting to European multilingual recognition`);
+            }
+          }
+          const res = await parakeetEngine.transcribe(msg.audio);
+          parentPort!.postMessage({
+            type: msg.streaming ? 'partial' : 'result',
+            taskId: msg.taskId,
+            channelId: msg.channelId,
+            text: res.text,
+          });
+        } catch (e: any) {
+          parentPort!.postMessage({
+            type: 'error',
+            taskId: msg.taskId,
+            channelId: msg.channelId,
+            message: e?.message ?? String(e),
+          });
+        }
+      }).catch((chainErr) => {
+        console.error('[WhisperWorker] parakeet chain error (should be unreachable):', chainErr);
       }));
       return;
     }
