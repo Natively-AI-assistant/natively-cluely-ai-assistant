@@ -64,10 +64,11 @@ test('every catalog model has a language-support entry with keys drawn from RECO
   }
 });
 
-test('English-only guard derives from the catalog and covers Parakeet (the old hand-typed set missed it)', () => {
+test('English-only guard derives from the catalog and correctly marks multilingual/English-only models', () => {
   const englishOnly = MODEL_CATALOG.filter((m) => !m.multilingual).map((m) => m.id);
   const multilingual = MODEL_CATALOG.filter((m) => m.multilingual).map((m) => m.id);
-  assert.ok(englishOnly.includes('onnx-community/parakeet-ctc-0.6b-ONNX'), 'catalog must mark Parakeet English-only');
+  assert.ok(multilingual.includes('istupakov/parakeet-tdt-0.6b-v3-onnx'), 'catalog must mark Parakeet TDT multilingual');
+  assert.ok(englishOnly.includes('onnx-community/moonshine-tiny-ONNX'), 'catalog must mark Moonshine English-only');
   for (const id of englishOnly) {
     assert.equal(isEnglishOnlyLocalModel(id), true, `${id} must be English-only`);
   }

@@ -8,10 +8,10 @@
 //                              (huggingface.co/UsefulSensors/moonshine-base):
 //                              "capable of transcribing English speech audio
 //                              into English text".
-//   Parakeet CTC 0.6B        — English-only. Model card
-//                              (huggingface.co/nvidia/parakeet-ctc-0.6b):
-//                              "transcribes speech in lower case English
-//                              alphabet".
+//   Parakeet TDT 0.6B v3     — Multilingual (25 European languages). Model card
+//                              (huggingface.co/nvidia/parakeet-tdt-0.6b-v3):
+//                              "transcribes speech in 25 European languages
+//                              with punctuation and capitalization".
 //   Distil-Whisper (all)     — English-only. Model card
 //                              (huggingface.co/distil-whisper/distil-large-v3):
 //                              "the Distil-Whisper English series"; passing

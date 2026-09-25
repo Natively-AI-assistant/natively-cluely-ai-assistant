@@ -116,6 +116,19 @@ export class ParakeetTdtEngine {
     this.pendingPcm = new Float32Array(0);
   }
 
+  public async transcribe(pcm: Float32Array, resetState: boolean = true): Promise<ParakeetChunkTranscript> {
+    if (resetState) {
+      this.reset();
+    }
+    if (!pcm || pcm.length === 0) {
+      return { text: '', tokenIds: [], isFinal: true };
+    }
+    if (pcm.length < 1600) {
+      return { text: '', tokenIds: [], isFinal: true };
+    }
+    return this.transcribeAudio(pcm);
+  }
+
   public async pushAudio(pcmChunk: Float32Array): Promise<ParakeetChunkTranscript> {
     if (pcmChunk.length === 0) {
       return { text: '', tokenIds: [], isFinal: false };
