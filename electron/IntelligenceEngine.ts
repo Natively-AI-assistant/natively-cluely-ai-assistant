@@ -3636,7 +3636,8 @@ export class IntelligenceEngine extends EventEmitter {
             // answer kept for verification still has it.
             // Adopted prefetches can also generate a <verification_spec> when code
             // verification is enabled; filter those as well.
-            const shouldStripSpec = isCoding || isCodeVerificationEnabled();
+            const codeVerificationActive = isCodeVerificationEnabled();
+            const shouldStripSpec = isCoding || codeVerificationActive;
             const { StreamingSpecStripper } = shouldStripSpec ? require('./llm/codingContract') as typeof import('./llm/codingContract') : { StreamingSpecStripper: null as any };
             const specStripper: import('./llm/codingContract').StreamingSpecStripper | null = shouldStripSpec ? new StreamingSpecStripper() : null;
 
@@ -4043,7 +4044,7 @@ export class IntelligenceEngine extends EventEmitter {
                 meetingId: meetingMarker,
                 surface: 'what_to_answer' as const,
                 generationId,
-                codeVerificationEnabled: shouldStripSpec,
+                codeVerificationEnabled: codeVerificationActive,
                 ...(wtaContextOsGeneration ? { contextOsGeneration: wtaContextOsGeneration } : {}),
                 ...(wtaV3Prompt ? { v3Prompt: wtaV3Prompt } : {}),
             });
@@ -6305,7 +6306,7 @@ export class IntelligenceEngine extends EventEmitter {
                 return this.completeSpeculativeRun(generationId, question, confidence, fullAnswer, wtaWriteDecision, streamed, {
                     answerType: answerPlan.answerType,
                     answerStyle: answerPlan.answerStyle as string,
-                    codeVerificationEnabled: shouldStripSpec,
+                    codeVerificationEnabled: codeVerificationActive,
                 });
             }
 
