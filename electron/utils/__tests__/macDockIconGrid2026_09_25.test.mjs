@@ -182,6 +182,20 @@ test('the bundle icon (natively.icns, 1024 rep) sits on Apple\'s icon grid and m
   assert.ok(Math.abs(bundle.bodyH - dock.bodyH) <= 0.005, `bundle ${bundle.bodyH} vs dock ${dock.bodyH}`);
 });
 
+// The disguise icons are the real system apps' icons as macOS 27 draws them, so
+// a disguised tile matches its neighbours; nativeImage picks up the @2x pair.
+test('darwin: each disguise icon is 128px with a 256px @2x pair, on Apple\'s icon grid', () => {
+  for (const mode of ['terminal', 'settings', 'activity']) {
+    const rel = disguiseIconRelativePath(mode, 'darwin');
+    const one = bodyGeometry(fs.readFileSync(path.join(repoRoot, rel)));
+    const two = bodyGeometry(fs.readFileSync(path.join(repoRoot, rel.replace(/\.png$/, '@2x.png'))));
+    assert.equal(one.width, 128, `${rel} width`);
+    assert.equal(two.width, 256, `${rel} @2x width`);
+    assertOnAppleGrid(rel, one);
+    assertOnAppleGrid(`${rel} @2x`, two);
+  }
+});
+
 test('package.json builds the mac bundle icon from the Icon Composer document; Windows keeps its .ico', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
   assert.equal(pkg.build.mac.icon, 'assets/Natively.icon');
