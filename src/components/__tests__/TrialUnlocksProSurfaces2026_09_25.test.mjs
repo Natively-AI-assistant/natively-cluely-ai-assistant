@@ -22,7 +22,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
@@ -35,8 +35,10 @@ const app = read('../../App.tsx');
 const appCode = stripComments(app);
 const pi = read('../ProfileIntelligenceSettings.tsx');
 const piCode = stripComments(pi);
-const modes = read('../../../premium/src/ModesSettings.tsx');
-const modesCode = stripComments(modes);
+// Private submodule: fork PRs build without it (Build Smoke's "core" scope), so
+// the one assertion that reads it skips there instead of failing the file.
+const MODES_PATH = resolve(__dirname, '../../../premium/src/ModesSettings.tsx');
+const modesCode = existsSync(MODES_PATH) ? stripComments(readFileSync(MODES_PATH, 'utf8')) : null;
 const overlay = read('../NativelyInterface.tsx');
 const overlayCode = stripComments(overlay);
 
@@ -105,7 +107,7 @@ describe('App owns the trial flag and hands it to both managers', () => {
     );
   });
 
-  test('ModesSettings honours the prop it is given', () => {
+  test('ModesSettings honours the prop it is given', { skip: modesCode === null && 'premium submodule not checked out' }, () => {
     assert.ok(
       /const\s+hasProAccess\s*=\s*isPremium\s*\|\|\s*isTrialActive/.test(modesCode),
       'the premium submodule must keep gating on licence-or-trial',
