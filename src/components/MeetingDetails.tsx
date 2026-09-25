@@ -1273,14 +1273,14 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     const [query, setQuery] = useState('');
     const [isCopied, setIsCopied] = useState(false);
     const [isChatOpen, setIsChatOpen] = useState(false);
-    const [submittedQuery, setSubmittedQuery] = useState('');
-
     // Tell the host, and take it back on the way out: the page unmounts with
     // the chat still open when the user goes back to the list.
     useEffect(() => {
         onChatOpenChange?.(isChatOpen);
     }, [isChatOpen, onChatOpenChange]);
     useEffect(() => () => onChatOpenChange?.(false), [onChatOpenChange]);
+    const [submittedQuery, setSubmittedQuery] = useState('');
+
     // Stable client-side keys for the action-item and key-point lists. The
     // persisted shape is string[], so React keyed the rows by index, but the
     // onEnter handler splices a new empty row in mid-list — shifting indices
