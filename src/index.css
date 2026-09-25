@@ -2905,6 +2905,20 @@ body {
   -webkit-app-region: no-drag;
 }
 
+/* Overlay aux windows (pill, resize toggle), for the first frames after they
+   are shown: a hover main cleared while the window was hidden applies at once
+   instead of fading out in front of the user. Buttons only — that is where the
+   hover styles live, and the pill's collapse/expand opacity fade (on its
+   wrapper) must keep animating. `:not(#_)` matches everything but carries ID
+   specificity, so this also beats the liquid-glass / modern surface rules
+   (e.g. `[data-interface-theme="liquid-glass"] .overlay-icon-surface`), which
+   set their own transition with !important. Set and cleared by
+   OverlayAuxWindows.useNoTransitionsOnShow. */
+[data-aux-just-shown] button:not(#_),
+[data-aux-just-shown] button *:not(#_) {
+  transition: none !important;
+}
+
 /* Make sure buttons and interactive elements are not draggable */
 button,
 input,

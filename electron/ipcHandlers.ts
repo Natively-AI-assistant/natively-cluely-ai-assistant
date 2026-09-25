@@ -7,6 +7,7 @@ import { app, BrowserWindow, dialog, desktopCapturer, ipcMain, shell, systemPref
 import { setOpenAtLogin, getOpenAtLogin } from './utils/windowsTaskbarPolicy';
 import { micSettingsUri } from '../src/lib/micPermissionPolicy.mjs';
 import { TEXT_PLACEHOLDER_RE } from './utils/curlPlaceholderPolicy';
+import { routeOverlayUiAction } from './utils/overlayUiActionRouter';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -1103,8 +1104,10 @@ export function initializeIpcHandlers(appState: AppState): void {
     },
   );
 
-  // Aux windows → overlay renderer: user actions (toggle-width / end-meeting /
-  // toggle-expand). Only the pill/toggle windows may send.
+  // Aux windows: user actions. Layout actions (toggle-width / toggle-expand)
+  // go on to the overlay renderer; end-meeting is ended here, in main, so Stop
+  // does not depend on the overlay renderer being responsive. Only the
+  // pill/toggle windows may send.
   safeHandle('overlay-ui-action', async (event, action: { type?: string }) => {
     const helper = appState.getWindowHelper();
     const pillWin = helper.getPillWindow();
@@ -1113,7 +1116,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       (pillWin && !pillWin.isDestroyed() && pillWin.webContents.id === event.sender.id) ||
       (toggleWin && !toggleWin.isDestroyed() && toggleWin.webContents.id === event.sender.id);
     if (!fromAux || !action?.type) return;
-    helper.forwardOverlayUiAction(action);
+    await routeOverlayUiAction(action, {
+      endMeeting: () => appState.endMeeting(),
+      forwardToOverlay: (a) => helper.forwardOverlayUiAction(a),
+    });
   });
 
   // Pill window → main: drag the welded overlay group by a pointer delta.

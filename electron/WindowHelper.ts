@@ -20,6 +20,7 @@ import {
 } from './utils/launcherResizeAnimation';
 import { attachNoActivate, isNoActivateManaged, restoreFocusableOffTaskbar } from './utils/windowsFocusPolicy';
 import { setVisibleOnAllWorkspacesKeepingDock } from './utils/macDockPolicy';
+import { clearStaleHover } from './utils/overlayAuxHover';
 import { resizeEnvelopeFor, OVERLAY_PANEL_INSET } from '../src/lib/overlayCustomSize.mjs';
 import { decideLauncherClose } from '../src/lib/launcherCloseDecision.mjs';
 import { DEV_SERVER_URL } from './devServerUrl';
@@ -2199,8 +2200,16 @@ export class WindowHelper {
     if (want) this.positionOverlayAuxWindows();
     const apply = (win: BrowserWindow | null, show: boolean) => {
       if (!win || win.isDestroyed()) return;
-      if (show && !win.isVisible()) win.showInactive();
-      else if (!show && win.isVisible()) win.hide();
+      if (show) {
+        if (!win.isVisible()) win.showInactive();
+        return;
+      }
+      if (win.isVisible()) win.hide();
+      // Stop is clicked with the cursor on it, then the pill is hidden from
+      // under the cursor: without this the next meeting opens with Stop still
+      // drawn hovered (red). Unconditional — a welded pill may already have
+      // been ordered out by its parent. See clearStaleHover.
+      clearStaleHover(win);
     };
     apply(this.pillWindow, want);
     apply(this.toggleWindow, want && this.toggleHasContent);
@@ -2258,8 +2267,9 @@ export class WindowHelper {
     this.syncOverlayAuxVisibility();
   }
 
-  // Aux windows → overlay renderer: user actions (toggle-width, end-meeting,
-  // toggle-expand).
+  // Aux windows → overlay renderer: user actions (toggle-width, toggle-expand)
+  // and the meeting-ended notice. Stop itself is handled in main — see
+  // routeOverlayUiAction.
   public forwardOverlayUiAction(action: unknown): void {
     const overlay = this.overlayWindow;
     if (overlay && !overlay.isDestroyed()) {
