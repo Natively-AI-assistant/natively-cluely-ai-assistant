@@ -25,12 +25,13 @@ import { SettingsToggle } from './SettingsToggle';
 // The transitions.dev token scale, as values: framer-motion (already in this
 // renderer — the shared Disclosure runs on it) drives the pieces that have to
 // sequence an exit before an entrance, which a React re-render cannot do with
-// CSS alone. Every state change on this pane goes through one of five moves:
+// CSS alone. Every state change on this pane goes through one of six moves:
 //   text swap   150ms ease-in-out, 4px, 2px blur   descriptions, button labels
 //   icon swap   250ms ease-in-out, 0.25 scale, 2px  eye/copy/check glyphs
 //   badge pop   500ms bounce in, 180ms out          status tags
 //   collapse    250ms smooth-out, height + opacity   notices, rows, cards
-//   roll        250ms smooth-out, 4px               countdown digits
+//   roll        150ms ease-in-out, 4px, 2px blur    countdown digits, per column
+//   drain       linear, on the wall clock           countdown ring
 // No `layout`/`layoutId` anywhere: layout projection caused a scroll
 // regression in this same settings scroller (see AIProvidersSettings).
 const EASE_SMOOTH_OUT = [0.22, 1, 0.36, 1] as const;
@@ -326,23 +327,71 @@ const MORE_CTX: CtxOption[] = [
   },
 ];
 
-/** A draining ring with rolling digits. */
-const PairingCountdownRing: React.FC<{ seconds: number; total: number }> = ({ seconds, total }) => {
-  const reduce = useReducedMotion();
+// The countdown wears the Settings switch's ON blue (--toggle-on), not the
+// periwinkle accent. The ring is a graphic (3:1 bar) and takes it flat in
+// both themes; as 10-12px TEXT on the light card the flat #6688F5 is only
+// 3.17:1, so light-theme text takes it 20% deeper (#526DC4, 4.69:1).
+const TOGGLE_INK = 'var(--toggle-on)';
+const TOGGLE_TEXT_INK_LIGHT = 'color-mix(in srgb, var(--toggle-on) 80%, #000)';
+
+// A countdown's digits fall: the new digit drops in from above and the old one
+// leaves downward (Apple's numericText(countsDown:)). A re-arm that jumps the
+// count back UP rolls the other way. The move is the pane's text swap.
+type DigitRollCustom = { dir: 1 | -1; dy: number };
+const DIGIT_ROLL = {
+  enter: ({ dir, dy }: DigitRollCustom) => ({ opacity: 0, y: -dir * dy, filter: 'blur(2px)' }),
+  center: { opacity: 1, y: 0, filter: 'blur(0px)' },
+  exit: ({ dir, dy }: DigitRollCustom) => ({ opacity: 0, y: dir * dy, filter: 'blur(2px)' }),
+};
+
+/**
+ * A ring that drains with the wall clock, and digits that roll a column at a
+ * time. The ring is ONE linear Web Animation across the whole window, placed
+ * on the document timeline by a negative delay — not a 1s transition restarted
+ * every tick, which ran up to a second behind the digits and, like anything on
+ * requestAnimationFrame, stalled while Chromium throttled a hidden window.
+ */
+const PairingCountdownRing: React.FC<{ seconds: number; deadline: number; total: number; textInk: string }> = ({
+  seconds,
+  deadline,
+  total,
+  textInk,
+}) => {
+  const reduce = !!useReducedMotion();
   const size = 32;
   const stroke = 2.5;
   const radius = (size - stroke) / 2;
-  const circumference = 2 * Math.PI * radius;
   const safeTotal = total > 0 ? total : 60;
   const remaining = Math.max(0, Math.min(safeTotal, seconds));
-  const dashOffset = circumference * (1 - remaining / safeTotal);
-  const dy = reduce ? 0 : 4;
+  const arc = useRef<SVGCircleElement>(null);
+
+  // pathLength=1 keeps the dash maths in 0..1: offset 0 is a full ring, 1 empty.
+  useEffect(() => {
+    const el = arc.current;
+    if (!el || reduce || typeof el.animate !== 'function') return;
+    const windowMs = safeTotal * 1000;
+    const anim = el.animate([{ strokeDashoffset: '0' }, { strokeDashoffset: '1' }], {
+      duration: windowMs,
+      delay: -(windowMs - (deadline - Date.now())),
+      easing: 'linear',
+      fill: 'both',
+    });
+    return () => anim.cancel();
+  }, [deadline, safeTotal, reduce]);
+
+  // Which way the digits roll: remembered from the previous count, derived
+  // during render rather than in an effect so the first frame already knows.
+  const [roll, setRoll] = useState<{ value: number; dir: 1 | -1 }>({ value: remaining, dir: 1 });
+  if (roll.value !== remaining) setRoll({ value: remaining, dir: remaining < roll.value ? 1 : -1 });
+  const custom: DigitRollCustom = { dir: roll.dir, dy: reduce ? 0 : 4 };
+  const digits = String(remaining).split('');
 
   return (
-    <div className="relative h-8 w-8 shrink-0 text-accent-primary" aria-hidden="true">
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="block">
+    <div className="relative h-8 w-8 shrink-0" aria-hidden="true">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="block" style={{ color: TOGGLE_INK }}>
         <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="currentColor" strokeWidth={stroke} className="opacity-20" />
         <circle
+          ref={arc}
           cx={size / 2}
           cy={size / 2}
           r={radius}
@@ -350,37 +399,47 @@ const PairingCountdownRing: React.FC<{ seconds: number; total: number }> = ({ se
           stroke="currentColor"
           strokeWidth={stroke}
           strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={dashOffset}
+          pathLength={1}
+          strokeDasharray={1}
+          // Reduced motion (and the first paint) read the whole seconds; the
+          // running animation overrides this while it plays.
+          strokeDashoffset={1 - remaining / safeTotal}
           transform={`rotate(-90 ${size / 2} ${size / 2})`}
-          className="transition-[stroke-dashoffset] duration-1000 ease-linear motion-reduce:transition-none"
         />
       </svg>
-      <span className="absolute inset-0 overflow-hidden">
-        <AnimatePresence initial={false}>
-          <motion.span
-            key={remaining}
-            className="absolute inset-0 grid place-items-center font-mono text-[10px] font-semibold tabular-nums"
-            initial={{ opacity: 0, y: dy, filter: 'blur(1px)' }}
-            animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-            exit={{ opacity: 0, y: -dy, filter: 'blur(1px)' }}
-            transition={{ duration: DUR_FAST, ease: EASE_SMOOTH_OUT }}
-          >
-            {remaining}
-          </motion.span>
-        </AnimatePresence>
+      <span className="absolute inset-0 grid place-items-center">
+        <span className="inline-flex font-mono text-[10px] font-semibold leading-none" style={{ color: textInk }}>
+          {digits.map((d, i) => (
+            // Keyed by column from the right, so 42 → 41 rolls only the ones.
+            <span key={digits.length - 1 - i} className="relative inline-block h-[1em] w-[1ch]">
+              <AnimatePresence initial={false} custom={custom}>
+                <motion.span
+                  key={d}
+                  custom={custom}
+                  variants={DIGIT_ROLL}
+                  initial="enter"
+                  animate="center"
+                  exit="exit"
+                  transition={{ duration: DUR_QUICK, ease: 'easeInOut' }}
+                  className="absolute inset-0 grid place-items-center"
+                >
+                  {d}
+                </motion.span>
+              </AnimatePresence>
+            </span>
+          ))}
+        </span>
       </span>
     </div>
   );
 };
 
-const secondsLeft = (deadline: number) => Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
-
 /**
  * The extension's one-click pairing window, counting down. It owns its own
  * tick — the pane above only knows the deadline — so a minute of countdown
- * re-renders this card, not every row. Reading the clock rather than
- * decrementing also keeps it honest when the window is throttled.
+ * re-renders this card, not every row. Each tick reads the clock (so a
+ * throttled window stays honest) and schedules the next one for the moment
+ * the whole-second count changes, which is when the ring crosses that second.
  */
 const PairingCountdown: React.FC<{ deadline: number; total: number; onExpired: () => void }> = ({
   deadline,
@@ -388,16 +447,25 @@ const PairingCountdown: React.FC<{ deadline: number; total: number; onExpired: (
   onExpired,
 }) => {
   const t = useT();
-  const [remaining, setRemaining] = useState(() => secondsLeft(deadline));
+  const isLight = useResolvedTheme() === 'light';
+  const textInk = isLight ? TOGGLE_TEXT_INK_LIGHT : TOGGLE_INK;
+  const [remaining, setRemaining] = useState(() => Math.max(0, Math.ceil((deadline - Date.now()) / 1000)));
   useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const tick = () => {
-      const left = secondsLeft(deadline);
+      const msLeft = deadline - Date.now();
+      const left = Math.max(0, Math.ceil(msLeft / 1000));
       setRemaining(left);
-      if (left <= 0) onExpired();
+      if (left <= 0) {
+        onExpired();
+        return;
+      }
+      // ceil(msLeft / 1000) next changes once msLeft falls past the whole
+      // second below it; land a few ms after that so the read is unambiguous.
+      timer = setTimeout(tick, (msLeft % 1000 || 1000) + 5);
     };
     tick();
-    const timer = setInterval(tick, 1000);
-    return () => clearInterval(timer);
+    return () => clearTimeout(timer);
   }, [deadline, onExpired]);
 
   return (
@@ -408,11 +476,14 @@ const PairingCountdown: React.FC<{ deadline: number; total: number; onExpired: (
       aria-label={`Waiting for extension. Pairing window: ${remaining} seconds remaining.`}
       className="bg-bg-card rounded-xl border border-border-subtle p-3 flex items-center gap-3"
     >
-      <PairingCountdownRing seconds={remaining} total={total} />
+      <PairingCountdownRing seconds={remaining} deadline={deadline} total={total} textInk={textInk} />
       <div className="min-w-0">
         <p className="text-sm font-bold text-text-primary">{t('Waiting for extension')}</p>
         <p className="text-xs text-text-secondary mt-0.5">
-          {t('Click')} <span className="font-medium text-accent-primary">{t('Connect to Natively')}</span>{' '}
+          {t('Click')}{' '}
+          <span className="font-medium" style={{ color: textInk }}>
+            {t('Connect to Natively')}
+          </span>{' '}
           {t('in the extension popup.')}
         </p>
       </div>
