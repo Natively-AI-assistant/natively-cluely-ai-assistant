@@ -10395,9 +10395,10 @@ html[data-platform="linux"][data-window="launcher"] body {
 
    transform only — it composites, and it cannot disturb the height the
    Collapse above it is animating at the same time. */
+/* No will-change: the class stays on the notice after its one shake, so a
+   hint would pin a compositor layer on it for as long as it is shown. */
 .t-notice-shake {
   animation: t-notice-shake 280ms linear;
-  will-change: transform;
 }
 @keyframes t-notice-shake {
   0%     { transform: translateX(0);     animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1); }
