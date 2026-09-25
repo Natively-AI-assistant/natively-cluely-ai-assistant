@@ -232,10 +232,10 @@ test('a provider endpoint confirms the stop early', async () => {
 // means the final for the last words has not landed, and that final re-arms
 // the window itself when it does.
 
-test('the local VAD stop confirms the window early when the transcript is caught up', async () => {
+test('the local VAD stop confirms the window early when provider finalization is guaranteed', async () => {
   const h = makeSimple(async () => YES());
   h.interviewer('Why did you choose PostgreSQL over the alternatives here?');   // final landed
-  h.engine.onLocalSpeechEnd();
+  h.engine.onLocalSpeechEnd({ providerFinalized: true });
   await h.advance(ENDPOINT_CONFIRM_MS + 100);
   assert.equal(h.texts().length, 1, 'committed at ENDPOINT_CONFIRM_MS, not STABILITY_MS');
 });
@@ -257,19 +257,29 @@ test('the local VAD stop waits for in-flight finals when provider is lagging, th
   const h = makeSimple(async () => YES());
   // Intermediate final arrives while interviewer is speaking
   h.interviewer('Why did you choose PostgreSQL over the', true);
-  // Time passes while speech continues physically, exceeding provider catchup tolerance
-  await h.advance(PROVIDER_CATCHUP_TOLERANCE_MS + 50);
-  // Local VAD detects silence and fires speech end
+  // Time passes while speech continues physically
+  await h.advance(100);
+  // Local VAD detects silence and fires speech end (without explicit provider finalization)
   h.engine.onLocalSpeechEnd();
-  // At ENDPOINT_CONFIRM_MS + 50, it must NOT have committed yet because provider was lagging
+  // At ENDPOINT_CONFIRM_MS + 50, it must NOT have committed prematurely because trailing final was in flight
   await h.advance(ENDPOINT_CONFIRM_MS + 50);
   assert.deepEqual(h.texts(), [], 'not committed prematurely while trailing final is still in flight');
-  // Trailing final arrives from provider
+  // Trailing final arrives from provider (explicit provider catch-up!)
   h.interviewer('alternatives here?', true);
   // Now trailing final arms ENDPOINT_CONFIRM_MS
   await h.advance(ENDPOINT_CONFIRM_MS + 50);
   assert.equal(h.texts().length, 1, 'committed full question once trailing final landed');
   assert.match(h.texts()[0], /alternatives here\?$/);
+});
+
+test('the local VAD stop without explicit finalization safely waits out stability window if no trailing final arrives', async () => {
+  const h = makeSimple(async () => YES());
+  h.interviewer('Why did you choose PostgreSQL over the alternatives here?');
+  h.engine.onLocalSpeechEnd();
+  await h.advance(ENDPOINT_CONFIRM_MS + 50);
+  assert.deepEqual(h.texts(), [], 'not committed at ENDPOINT_CONFIRM_MS without explicit catch-up guarantee');
+  await h.advance(STABILITY_MS);
+  assert.equal(h.texts().length, 1, 'committed at STABILITY_MS');
 });
 
 test('the local VAD hint is taken only from providers that stream interims', () => {

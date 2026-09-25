@@ -1254,6 +1254,7 @@ export class IntelligenceEngine extends EventEmitter {
         } catch (err) {
             console.warn('[IntelligenceEngine] Prefetched answer spec strip failed:', err);
         }
+        text = text.replace(/\s*<verification_spec[\s\S]*$/i, '').trim();
         try {
             const cleaned = cleanAnswerArtifacts(text);
             if (cleaned.trim().length >= 10) text = cleaned;
@@ -1263,7 +1264,7 @@ export class IntelligenceEngine extends EventEmitter {
         if (!text.trim()) {
             console.warn('[IntelligenceEngine] Prefetched answer was empty — nothing to reveal');
             if (streamed?.emitted) {
-                this.emit('suggested_answer', '', finished.question, finished.confidence, finished.generationId);
+                this.emit('suggested_answer_discard', 'empty_after_strip');
             }
             return;
         }
@@ -1315,6 +1316,7 @@ export class IntelligenceEngine extends EventEmitter {
                 const { stripVerificationSpec } = require('./llm/codingContract') as typeof import('./llm/codingContract');
                 pending = stripVerificationSpec(pending);
             } catch { /* emit as-is */ }
+            pending = pending.replace(/\s*<verification_spec[\s\S]*$/i, '').trim();
             if (pending.trim()) this.emit('suggested_answer_token', pending, finished.question, finished.confidence, generationId);
         } else {
             console.log(`[IntelligenceEngine] Revealing the prefetched answer (${text.length} chars, prefetch gen ${finished.generationId} → ${generationId})`);
@@ -3626,8 +3628,8 @@ export class IntelligenceEngine extends EventEmitter {
             // never flashes in the UI (it trails the six sections). The raw
             // answer kept for verification still has it.
             // Adopted prefetches can also generate a <verification_spec> when code
-            // verification is enabled or requested; filter those as well.
-            const shouldStripSpec = isCoding || isSpeculative || isCodeVerificationEnabled();
+            // verification is enabled; filter those as well.
+            const shouldStripSpec = isCoding || isCodeVerificationEnabled();
             const { StreamingSpecStripper } = shouldStripSpec ? require('./llm/codingContract') as typeof import('./llm/codingContract') : { StreamingSpecStripper: null as any };
             const specStripper: import('./llm/codingContract').StreamingSpecStripper | null = shouldStripSpec ? new StreamingSpecStripper() : null;
 
@@ -6286,8 +6288,11 @@ export class IntelligenceEngine extends EventEmitter {
                 // If the dispatch adopted this stream mid-flight it has been
                 // painting live; the reveal must then finish THAT row (flush the
                 // held prefix, replace by the same id) instead of opening a new one.
+                const pendingBuffer = specStripper
+                    ? (specStripper.push(streamingTokenBuffer) + specStripper.finish())
+                    : streamingTokenBuffer;
                 const streamed = speculativeStreamingLive
-                    ? { emitted: emittedStreamingToken, pendingBuffer: streamingTokenBuffer }
+                    ? { emitted: emittedStreamingToken, pendingBuffer }
                     : undefined;
                 return this.completeSpeculativeRun(generationId, question, confidence, fullAnswer, wtaWriteDecision, streamed, {
                     answerType: answerPlan.answerType,

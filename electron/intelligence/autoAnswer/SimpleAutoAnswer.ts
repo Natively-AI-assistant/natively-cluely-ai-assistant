@@ -316,23 +316,29 @@ export class SimpleAutoAnswerEngine {
 
     /**
      * The LOCAL VAD (native capture, 150-200 ms hangover) saw the interviewer
-     * stop. Only four STT providers emit their own end-of-turn event; the rest
-     * waited the full STABILITY_MS after the last final even though the
-     * capture layer already knew. Treat the local stop like a provider
-     * endpoint — with two guards:
-     * 1. A dangling interim means the final for the last words has not landed yet.
-     * 2. An earlier intermediate final clears lastInterviewerInterim while speech
-     *    was still ongoing. If the last final arrived longer ago than
-     *    PROVIDER_CATCHUP_TOLERANCE_MS, the provider has not caught up with the
-     *    physical stop yet. We record the speech-end timestamp and let the
-     *    trailing final arm ENDPOINT_CONFIRM_MS when it lands.
+     * stop. For streaming providers whose endpointing is independent of the local
+     * VAD, an earlier final clears lastInterviewerInterim while speech was still
+     * ongoing, so speech_ended cannot assume an empty interim means the provider
+     * has delivered all final text.
+     *
+     * Instead of prematurely starting the 350 ms window based only on the
+     * absence of an interim, we require an explicit provider catch-up or
+     * finalization guarantee:
+     * 1. If the provider explicitly signals finalization (e.g. providerFinalized: true
+     *    or onProviderEndpoint()), we arm ENDPOINT_CONFIRM_MS immediately.
+     * 2. Otherwise, we record the physical speech-stop timestamp (localSpeechEndedAt).
+     *    When the trailing final for that utterance arrives from the provider in
+     *    ingest(), that arrival serves as the explicit provider catch-up and arms
+     *    ENDPOINT_CONFIRM_MS. If no trailing final arrives, the safe STABILITY_MS
+     *    window runs to completion without risk of truncating in-flight text.
      */
-    onLocalSpeechEnd(): void {
+    onLocalSpeechEnd(options?: { providerFinalized?: boolean }): void {
         if (!this.host.isEnabled() || this.pending.length === 0) return;
         if (this.lastInterviewerInterim) return;
         const now = this.clock.now();
         this.localSpeechEndedAt = now;
-        if (now - this.lastInterviewerAt <= PROVIDER_CATCHUP_TOLERANCE_MS) {
+        if (options?.providerFinalized) {
+            this.localSpeechEndedAt = null;
             this.arm(ENDPOINT_CONFIRM_MS);
         }
     }
