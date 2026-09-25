@@ -3315,9 +3315,12 @@ html[data-platform="linux"][data-window="launcher"] body {
      only lengthens an invisible tail. easeOutCubic spreads the travel out.
      Leave is the SLOWER half here, which inverts the usual "exit fast" rule
      because nothing is exiting: this is ambient light on a surface that stays
-     put, and light that snaps off is exactly what reads as un-animated. */
+     put, and light that snaps off is exactly what reads as un-animated.
+     background-color rides along on the tier switch's clock (the pill's 250ms
+     smooth-out), so the committed fill cross-fades instead of jumping. */
   transition: box-shadow 420ms cubic-bezier(0.33, 1, 0.68, 1),
-              border-color 420ms cubic-bezier(0.33, 1, 0.68, 1) !important;
+              border-color 420ms cubic-bezier(0.33, 1, 0.68, 1),
+              background-color 250ms cubic-bezier(0.22, 1, 0.36, 1) !important;
 }
 
 /* Glass shine gloss highlight on liquid glass detail cards */
@@ -3931,9 +3934,12 @@ html[data-platform="linux"][data-window="launcher"] body {
      only lengthens an invisible tail. easeOutCubic spreads the travel out.
      Leave is the SLOWER half here, which inverts the usual "exit fast" rule
      because nothing is exiting: this is ambient light on a surface that stays
-     put, and light that snaps off is exactly what reads as un-animated. */
+     put, and light that snaps off is exactly what reads as un-animated.
+     background-color rides along on the tier switch's clock (the pill's 250ms
+     smooth-out), so the committed fill cross-fades instead of jumping. */
   transition: box-shadow 420ms cubic-bezier(0.33, 1, 0.68, 1),
-              border-color 420ms cubic-bezier(0.33, 1, 0.68, 1) !important;
+              border-color 420ms cubic-bezier(0.33, 1, 0.68, 1),
+              background-color 250ms cubic-bezier(0.22, 1, 0.36, 1) !important;
 }
 
 /* Card Specific variations (Modern) — same four hues, same depth ladder as
@@ -4953,7 +4959,8 @@ html[data-platform="linux"][data-window="launcher"] body {
   .natively-api-selector-pill-track {
     transition: none !important;
   }
-  .natively-api-selector-tab:active {
+  .natively-api-selector-tab:active,
+  :root [data-interface-theme] .natively-api-selector-tab:active {
     transform: none !important;
   }
   .natively-api-detail-card > div,
@@ -8073,9 +8080,12 @@ html[data-platform="linux"][data-window="launcher"] body {
   }
 }
 
+/* --lgc-z is only defined on the Pro pricing CTAs. Without the 0px fallback the
+   whole transform was invalid at computed-value time here, so Activate / Start
+   free trial / See your options never pressed: they just lost the hover lift. */
 .natively-key-cta[data-state='ready']:active,
 .natively-key-cta[data-state='secondary']:active {
-  transform: translateZ(var(--lgc-z)) scale(0.985) !important;
+  transform: translateZ(var(--lgc-z, 0px)) scale(0.985) !important;
   box-shadow: 0 2px 6px rgba(69, 79, 184, 0.24) !important;
 }
 
@@ -8481,7 +8491,9 @@ html[data-platform="linux"][data-window="launcher"] body {
   }
 
   .natively-key-cta[data-state='ready']:hover,
-  .natively-key-cta[data-state='ready']:active {
+  .natively-key-cta[data-state='ready']:active,
+  .natively-key-cta[data-state='secondary']:hover,
+  .natively-key-cta[data-state='secondary']:active {
     transform: none !important;
   }
 }
@@ -8506,7 +8518,8 @@ html[data-platform="linux"][data-window="launcher"] body {
 @media (hover: hover) and (pointer: fine) {
   [data-interface-theme] .natively-api-detail-card:hover {
     transition: box-shadow 260ms cubic-bezier(0.32, 0.72, 0, 1),
-                border-color 260ms cubic-bezier(0.32, 0.72, 0, 1) !important;
+                border-color 260ms cubic-bezier(0.32, 0.72, 0, 1),
+                background-color 250ms cubic-bezier(0.22, 1, 0.36, 1) !important;
   }
 }
 
@@ -8689,7 +8702,12 @@ html[data-platform="linux"][data-window="launcher"] body {
 @keyframes settings-stagger-in {
   from {
     opacity: 0;
-    transform: translateY(7px);
+    /* Signed by SettingsOverlay's section motion.div (--settings-stagger-dy):
+       entering a section ABOVE the current one in the nav, the container
+       settles downward, so its children must too. A fixed +7px made them
+       rise against a falling container and bunch up. 7px is the fallback
+       for any other data-settings-stagger host. */
+    transform: translateY(var(--settings-stagger-dy, 7px));
   }
   to {
     opacity: 1;
@@ -8795,10 +8813,14 @@ html[data-platform="linux"][data-window="launcher"] body {
     background: var(--toggle-off);
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
+    /* opacity + filter so a switch that becomes disabled fades to 0.5, and the
+       hover brighten eases in, instead of both snapping. */
     transition:
         background 220ms cubic-bezier(0.4, 0, 0.2, 1),
         box-shadow 180ms ease,
-        transform 120ms ease;
+        transform 120ms ease,
+        opacity 150ms ease-out,
+        filter 150ms ease-out;
 }
 .t-toggle:disabled { cursor: not-allowed; opacity: 0.5; }
 .t-toggle[data-on="true"] { background: var(--toggle-on); }
