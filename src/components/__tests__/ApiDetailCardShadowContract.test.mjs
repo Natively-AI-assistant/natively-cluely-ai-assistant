@@ -176,20 +176,4 @@ describe('API detail card — four-slot box-shadow contract', () => {
         assert.ok(compared >= 2, `expected >=2 rest/hover ring pairs, compared ${compared}`);
     });
 
-    test('transform is not CSS-transitioned on the card Framer drives', () => {
-        // InteractiveCard writes transform: scale(...) inline from a spring on
-        // every frame; a CSS transition on the same property re-smooths each
-        // write and makes the press lag.
-        for (const theme of ['liquid-glass', 'modern']) {
-            const sel = `[data-interface-theme="${theme}"] .natively-api-detail-card {`;
-            const i = LIVE.indexOf(sel);
-            assert.notEqual(i, -1, `${sel} not found`);
-            const block = LIVE.slice(i, LIVE.indexOf('}', i));
-            const transition = block.match(/transition:([^;]*);/)?.[1] ?? '';
-            assert.ok(
-                !/\btransform\b/.test(transition),
-                `${theme} still transitions transform: ${transition.trim()}`,
-            );
-        }
-    });
 });

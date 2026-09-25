@@ -219,17 +219,25 @@ function pickFeatureIcon(feature: string) {
 // card body is keyed by plan, so this mounts fresh on every switch; it starts
 // on the previous plan's figure and rolls to the new one on the next frame.
 // The tens reel collapses to zero width for single-digit prices ($8).
+// Two reels cover whole dollars under $100 only; any other label (cents, $100+)
+// is shown as plain text rather than a reel parked between digits.
 const PRICE_DIGITS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 const PRICE_ROLL_EASE = 'cubic-bezier(0.23, 1, 0.32, 1)';
+const reelDollars = (label: string): number | null => {
+  const m = /^\$(\d{1,2})$/.exec(label);
+  return m ? Number(m[1]) : null;
+};
 
-function RollingPrice({ value, from }: { value: number; from: number }) {
+function RollingPrice({ price, from }: { price: string; from: string }) {
   const reduceMotion = useReducedMotion();
-  const [shown, setShown] = useState(reduceMotion ? value : from);
+  const value = reelDollars(price);
+  const [shown, setShown] = useState(reduceMotion ? value : reelDollars(from) ?? value);
   useEffect(() => {
     const id = requestAnimationFrame(() => setShown(value));
     return () => cancelAnimationFrame(id);
   }, [value]);
 
+  if (value === null || shown === null) return <>{price}</>;
   const tens = Math.floor(shown / 10);
   const reel = (digit: number, delayMs: number) => (
     <span style={{ display: 'inline-block', height: '1em', overflow: 'hidden' }}>
@@ -1358,7 +1366,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
                           className="natively-api-on-fill text-[38px] font-bold leading-none"
                           style={{ fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.04em' }}
                         >
-                          <RollingPrice value={Number(price.slice(1))} from={Number(prevPrice.slice(1))} />
+                          <RollingPrice price={price} from={prevPrice} />
                         </span>
                         <span className="natively-api-on-fill-dim text-[12px] font-medium">/ month</span>
                       </div>

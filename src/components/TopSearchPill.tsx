@@ -352,11 +352,11 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                         <div className="relative">
                             {/* Same surface as the "My Natively" section below (Launcher.tsx), recessed
                                 into the header with an inner top shadow and a hairline ring. Only the
-                                open results panel casts a drop, so it reads above the page. */}
+                                open results panel casts a drop, so it reads above the page. Both surfaces
+                                are opaque, so there is no backdrop blur: it would paint nothing. */}
                             <div
                                 className={`
                                     relative overflow-hidden
-                                    backdrop-blur-xl backdrop-saturate-150
                                     rounded-2xl ring-1
                                     transition-[box-shadow] duration-150 ease-out
                                     ${isLight
