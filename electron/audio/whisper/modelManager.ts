@@ -11,24 +11,19 @@ export const MODEL_CATALOG: WhisperModelInfo[] = [
   { id: 'onnx-community/moonshine-tiny-ONNX', name: 'Moonshine Tiny',  sizeMb: 26,   speed: 'very-fast', accuracy: 'good',      multilingual: false, status: 'missing', streaming: true },
   { id: 'onnx-community/moonshine-base-ONNX', name: 'Moonshine Base',  sizeMb: 60,   speed: 'very-fast', accuracy: 'very-high', multilingual: false, status: 'missing', streaming: true },
 
-  // ── Parakeet — NVIDIA's Conformer CTC encoder, English-only. Top of the Open
-  //     ASR leaderboard for its size; CC-BY-4.0, so redistribution is fine.
-  //
-  //     The ONLY single-session model in this catalog. CTC collapses frame-level
-  //     logits and has no autoregressive decoder, so the repo ships one
-  //     `onnx/model.onnx` rather than the encoder + decoder pair every other
-  //     entry here uses — hence sessionLayout: 'single'. Without that the cache
-  //     check hunts for `encoder_model.onnx`, never finds it, and the model
-  //     re-downloads on every launch while reporting itself missing.
-  //
-  //     externalDataFormat is a bare `true`, not a per-file map: EVERY dtype
-  //     variant in this repo (fp32/fp16/q8/int8/q4/uint8/bnb4) carries a
-  //     `*.onnx_data` companion, so keying it per-filename would silently miss
-  //     the companion the moment the active dtype changed.
-  //
-  //     sizeMb is the q8 download (1.3MB graph + 611MB weights). fp32 is 2.4GB;
-  //     `model: 'q8'` in WHISPER_SAFE_DTYPE is what keeps us off that path.
-  { id: 'onnx-community/parakeet-ctc-0.6b-ONNX', name: 'Parakeet CTC 0.6B', sizeMb: 583, speed: 'fast', accuracy: 'very-high', multilingual: false, status: 'missing', sessionLayout: 'single', externalDataFormat: true },
+  // ── Parakeet — NVIDIA FastConformer TDT v3, Multilingual (25 European languages).
+  //     Token-and-Duration Transducer architecture with duration-skipping decoding,
+  //     native punctuation and capitalization. CC-BY-4.0.
+  {
+    id: 'istupakov/parakeet-tdt-0.6b-v3-onnx',
+    name: 'Parakeet TDT 0.6B v3',
+    sizeMb: 670,
+    speed: 'very-fast',
+    accuracy: 'very-high',
+    multilingual: true,
+    status: 'missing',
+    sessionLayout: 'parakeet-tdt',
+  },
 
   // ── Nemotron 3.5 ASR Streaming — NVIDIA cache-aware FastConformer-RNNT.
   //     The ONLY model in this catalog with real streaming (chunked ONNX
@@ -291,6 +286,20 @@ function isNemotronModelCached(modelDir: string): boolean {
   });
 }
 
+export const PARAKEET_TDT_REQUIRED_FILES = [
+  'encoder-model.int8.onnx',
+  'decoder_joint-model.int8.onnx',
+  'nemo128.onnx',
+  'vocab.txt',
+  'config.json',
+] as const;
+
+function isParakeetModelCached(modelDir: string): boolean {
+  return PARAKEET_TDT_REQUIRED_FILES.every(f => {
+    try { return fs.statSync(path.join(modelDir, f)).size > 0; } catch { return false; }
+  });
+}
+
 /**
  * Returns true when the cache contains the ONNX files the active dtype will
  * actually load. When `dtype` is omitted (legacy callers), falls back to a
@@ -309,6 +318,7 @@ export function isModelCached(modelId: WhisperModelId, dtype?: string | Record<s
 
   const sessionLayout = MODEL_CATALOG.find(m => m.id === modelId)?.sessionLayout;
   if (sessionLayout === 'nemotron-rnnt') return isNemotronModelCached(modelDir);
+  if (sessionLayout === 'parakeet-tdt') return isParakeetModelCached(modelDir);
 
   if (!dtype) {
     try { return fs.readdirSync(modelDir).length > 0; } catch { return false; }

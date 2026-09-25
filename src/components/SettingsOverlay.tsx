@@ -94,6 +94,7 @@ const DISGUISE_TILE_RESTING = {
 // Shared with the main process so the picker cannot offer a model the ipc
 // validator rejects. Pure data module — no node/electron imports.
 import { NVIDIA_NIM_STT_MODELS, DEFAULT_NVIDIA_NIM_STT_MODEL, allowedLanguageKeysForNvidiaModel } from '../../electron/audio/nvidiaNimSttModels';
+import { isRecognitionLanguageOffered, PARAKEET_ONLY_LANGUAGE_KEYS } from '../../electron/config/languages';
 
 // ---------------------------------------------------------------------------
 // StarRating — renders filled/empty stars for culture ratings
@@ -1332,8 +1333,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
     // Language keys the active STT backend accepts. Unrestricted for cloud
     // providers; for local-whisper this is the active model's documented set.
+    // Parakeet-only languages are hidden unless the active local model lists them.
     const allowedLanguageKeySet = localLanguageCapability?.allowedKeys ?? nvidiaLanguageCapability ?? appleLanguageCapability ?? null;
-    const isLanguageEntryAllowed = (key: string) => !allowedLanguageKeySet || allowedLanguageKeySet.has(key);
+    const isLanguageEntryAllowed = (key: string) =>
+        isRecognitionLanguageOffered(key, localLanguageCapability?.allowedKeys ?? null, allowedLanguageKeySet);
 
     // Helper to get unique groups (restricted to what the active model accepts)
     const languageGroups = Array.from(new Set(
@@ -1367,6 +1370,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     const storedLanguageUnsupported =
         !!recognitionLanguage && recognitionLanguage !== 'auto'
         && !!allowedLanguageKeySet && !allowedLanguageKeySet.has(recognitionLanguage);
+    // A Parakeet-only language picked under Parakeet stays stored after the user
+    // moves to a backend that never lists it. Other local models are covered by
+    // storedLanguageUnsupported (their allowed keys exclude these languages).
+    const storedLanguageParakeetOnly =
+        sttProvider !== 'local-whisper' && PARAKEET_ONLY_LANGUAGE_KEYS.has(recognitionLanguage);
     const showsEnglishFallback = languageLocked && (storedLanguageUnsupported || autoDetectUnavailable);
     const displayedSttGroup = showsEnglishFallback ? 'English' : selectedSttGroup;
     const displayedRecognitionLanguage = showsEnglishFallback ? 'english-us' : recognitionLanguage;
@@ -3731,7 +3739,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 Natively offers that Apple cannot transcribe. It is filtered
                                                 out of the selects above, so without this the control would
                                                 just sit on its placeholder with no explanation. */}
-                                            {appleLanguageCapability && storedLanguageUnsupported && (
+                                            {appleLanguageCapability && storedLanguageUnsupported && !storedLanguageParakeetOnly && (
                                                 <div className="flex gap-2 items-center mt-2 px-1">
                                                     <AlertCircle size={14} className="text-amber-400 shrink-0" />
                                                     <p className="text-xs text-amber-200/90">
@@ -3842,6 +3850,14 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     <AlertCircle size={14} className="text-amber-400 shrink-0" />
                                                     <p className="text-xs text-amber-200/90">
                                                         {`"${availableLanguages[recognitionLanguage]?.label ?? recognitionLanguage}" ${t("isn't supported by the selected local model — pick one of the listed languages.")}`}
+                                                    </p>
+                                                </div>
+                                            )}
+                                            {storedLanguageParakeetOnly && (
+                                                <div className="flex gap-2 items-center mt-2 px-1">
+                                                    <AlertCircle size={14} className="text-amber-400 shrink-0" />
+                                                    <p className="text-xs text-amber-200/90">
+                                                        {`"${availableLanguages[recognitionLanguage]?.label ?? recognitionLanguage}" ${t("is only available with the Parakeet TDT local model — pick one of the listed languages.")}`}
                                                     </p>
                                                 </div>
                                             )}
