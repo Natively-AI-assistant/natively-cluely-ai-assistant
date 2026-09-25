@@ -634,6 +634,126 @@ stays the host's control colour rather than importing a tint from here.
 The host still owns the track. `accent-color` does nothing once the thumb is
 styled, so drop it rather than leaving it to look load-bearing.
 
+### The original material on a text surface: `.lg-bubble`
+
+Your questions in meeting notes — the Usage tab's question bubble and your
+messages in the "ask about this meeting" chat (`MeetingChatOverlay`) — in **this
+document's own material**: the measured pill, as `.lg-action` draws it, carried onto a block of
+wrapping text. The owner's words: "use the Liquid Glass original UI". It
+replaced an Apple-style reinterpretation (a halo, an inset frame, specular
+crescents, a pointer glint) that the owner took apart piece by piece.
+
+It is its own class rather than a `.lg-button` variant because nearly
+everything `.lg-button` sets is wrong for selectable, wrapping text: the fixed
+height, `nowrap`, overflow clipping, the pointer cursor, the pinned SF Pro
+stack. Everything it draws is the original's:
+
+| Layer | Carries | From |
+| --- | --- | --- |
+| `background` | the flat fill, with the soft `.09` sheen on the top and bottom faces | `.lg-action` |
+| `::before` | the specular rim, `.lg-action`'s ring colour, two rings, aimed at the top and bottom faces and dying across the corners | `.lg-button`, `.lg-tile` |
+| `::after` | the caps — here the side faces — in shadow: the black ring, 2px | `.lg-tile` |
+| light mode | the rim on the top face only, the underside darkened | light `.lg-action` |
+
+**Subtle, by owner request.** At the original's own weights (caps `.42` dark /
+`.55` light, underside `.20`) the owner found it "too evident, like trying too
+hard": the side faces measured −54 dark / −95 light against the body, a dark
+band down each side. So the shading is turned right down — caps `.16` dark /
+`.20` light, underside `.10` — and the rim is turned slightly *up*
+(`.22` / `.12` from `.148` / `.118`), because once the shading is quiet the rim
+is what makes it read as glass at all. The structure is the original's, layer
+for layer; only those weights move.
+
+| luma vs body | original weights | subtle (shipped) |
+| --- | --- | --- |
+| top rim, dark / light | +45 / +19 | +50 / +24 |
+| bottom, dark (bounce) / light (underside) | +45 / −30 | +50 / −15 |
+| side faces, dark / light | −54 / −95 | −17 / −38 |
+
+The check has upper bars as well as lower ones, so the full-strength shading
+fails it if it ever comes back.
+
+**Where it differs from the original, and why:**
+
+- **Lengths, not percentages.** The original's sheen, vertical mask and cap
+  stops are percentages of a fixed 136px pill. This box's height is set by its
+  line count and its width by the text, so the sheens end 8px in (inside the
+  10px padding, so the text sits on the flat fill), the rim's vertical mask is
+  gone 12px in, and the cap stops are `.lg-wide`'s px lengths pinned to the
+  16px corner radius. The check fails on percentage cap stops (the rim still
+  climbing at 60px) and on percentage sheens (the fill drifting under the text).
+- **No contact shadow in light mode**, where `.lg-action` casts
+  `0 1px 2px + 0 4px 10px`. The owner had every shadow outside this card
+  removed, twice, as "an extra translucent layer around the card".
+- **No lens and no hover tint.** The lens is the original's pointer bloom,
+  which the owner had removed from this card as "the water-like effect"; and the
+  bubble is not a control, so it has no hover or press either.
+- **High contrast** does what the original does — the rim gives way to a
+  defined border — and darkens the body to `#2C5BF1`, where white clears AA.
+
+The fill is `--bubble-user-bg`, which points at `--toggle-on` (`#6688F5`, the
+Settings toggle's ON colour); the light theme lifts it 25% toward white
+(`color-mix`, about `#8CA6F8`). White on the fill is **3.28:1** in dark mode and
+**2.35:1** in light, under the 4.5:1 AA floor for 15px text — the owner's
+standing choice; `--periwinkle-on-accent-dark` reaches 5.63:1 and 7.85:1 as a
+one-token swap of `--bubble-user-fg`. Pinned in
+`PeriwinkleContrastGuard.test.mjs`.
+
+```tsx
+<div className="lg-bubble px-5 py-2.5 rounded-2xl rounded-tr-sm max-w-[80%]">…</div>
+```
+
+Verified by `npm run test:css:bubble-liquid-glass` (every trait above, nothing
+painted around the card, hover changes nothing; each assertion mutation-tested)
+and by rendering the real Usage tab in both themes.
+
+**Capture traps the check works around, all measured.** The 2× capture is
+upscaled with a sharpening filter that rings beside every edge: about +10 luma
+just inside an edge meeting a darker pane, about −18 just outside a bright edge
+on the dark pane, +8 just outside the card on the light pane, −5 2px beside the
+dark cap ring. None of it is paint, and it is gone within 4px. So a "lit" edge
+needs a bar well above +10 in dark, the light-mode "no shadow" check is
+one-sided and looks below the card only, and dark mode's near-edge pane is not
+asserted.
+
+### The same glass, turned right down: `.lg-chip`
+
+The meeting notes gist tag (`overlay-gist-chip`, under each Usage answer; the
+"ask about this meeting" chat shows no gist tag, by owner request) takes an Apple-style glass at a fraction of the strength the
+bubble once had (the bubble has since moved to the original material above). The owner's brief was "very subtle, just to make it premium": the tag
+is a label under the answer, not the moment the bubble is.
+
+So it changes only the edge. The host keeps its tint, text colours, radius and
+box; `.lg-chip` swaps the flat border for:
+
+| Layer | Carries |
+| --- | --- |
+| `box-shadow` | a 1px ring in the chip's own tint (26% dark, 20% light), a crisp 1px white highlight on the top face, and a whisper of contact shadow (tinted in light) |
+| `::after` | two tiny crescents, top-left and a weaker bottom-right, cut to a 1px ring |
+
+No sheen across the body, no glint, no hover. Measured over the middle of its
+own top edge, the top-left crescent reads **+16** (dark) / **+13** (light) —
+visible at a glance up close, invisible from across the room — and the chip's
+interior is the host fill exactly.
+
+**The host drops its border and adds the 1px back to its padding**
+(`.overlay-gist-chip.lg-chip` in `index.css`: `border: 0; padding: 4px 11px`),
+so the glass chip is the plain chip's 194×25 box to the pixel and nothing around
+it moves. The host feeds `--lg-chip-tint` (its `--hotword-color`). `::before` is
+left alone because the gist tag draws its `GIST` label there.
+
+Crescents are px (40px / 32px) for the same reason as the bubble's. Under
+`prefers-contrast: more` the light goes and a `currentColor` 1px edge replaces it.
+
+Scope: meeting notes only. The live overlay renders the same `overlay-gist-chip`
+without `.lg-chip`, because it has its own interface themes (glass, modern, …)
+that this treatment has not been rendered against.
+
+Verified by FAILURE 8 in `npm run test:css:bubble-liquid-glass`, which renders
+the chip beside a plain twin using the real host rules pulled from `index.css`
+(box unchanged, interior equals the host fill, crescent reads, high-contrast
+state; each mutation-tested), and by rendering the real Usage tab in both themes.
+
 ### Light mode is derived, not measured
 
 Everything else in this document was sampled from a reference. Light mode was
@@ -650,7 +770,9 @@ vertical mask and one box-shadow change; the layer structure is untouched.
 
 - **`neutral` and `green` are dark-surface tints** for `#242424`, and the focus
   ring is picked for contrast against it. Only `.lg-action` and `.lg-clear` have
-  a light-mode treatment, and both are derived rather than measured.
+  a light-mode treatment, and both are derived rather than measured. `.lg-sky`
+  has a light body, so one treatment serves both themes; `.lg-bubble` is styled
+  after Apple's tinted glass rather than this reference and serves both too.
 - **`.lg-clear` has been rendered on the modes sidebar only.** Its defaults are
   that panel's control tokens; on a surface with a different resting weight,
   feed `--lg-clear-*` rather than assuming the defaults carry over.

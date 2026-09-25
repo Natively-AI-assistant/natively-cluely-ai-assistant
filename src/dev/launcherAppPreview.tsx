@@ -13,6 +13,22 @@ import '../index.css';
 const now = Date.now();
 const iso = (minsAgo: number) => new Date(now - minsAgo * 60_000).toISOString();
 
+// The first meeting carries Usage history, one short and one wrapping question, so
+// the Usage tab renders the question bubble (.lg-bubble) at two heights. Each
+// answer ends in a [[GIST]] line so the gist chip renders under it.
+const SAMPLE_USAGE = [
+    {
+        timestamp: now - 40 * 60_000,
+        question: 'What was the budget?',
+        answer: 'Q4 spend is **tracking 8% under plan**, with headcount flat until the ledger migration lands.\n[[GIST]] Q4 spend 8% under plan',
+    },
+    {
+        timestamp: now - 38 * 60_000,
+        question: 'Can you walk me through how the migration plan handles the ledger rollback if the second batch fails halfway, and who owns the call to abort it?',
+        answer: 'The plan keeps the first batch live and replays the second from the last checkpoint. Priya owns the abort call.\n[[GIST]] Replay from checkpoint; Priya aborts',
+    },
+];
+
 const MEETINGS = [
     { id: 'm1', title: 'Weekly sync — engineering', mins: 45 },
     { id: 'm2', title: 'Design review: launcher transitions', mins: 180 },
@@ -53,7 +69,7 @@ const MEETINGS = [
         text: 'Transcript line ' + (k + 1) + ' — rendered by the real MeetingDetails component.',
         timestamp: k * 27,
     })),
-    usage: [],
+    usage: i === 0 ? SAMPLE_USAGE : [],
 }));
 
 // The state the app is in for the ~30-60s after a meeting ends: the placeholder
