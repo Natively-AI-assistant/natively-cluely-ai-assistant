@@ -1322,6 +1322,7 @@ import {
   DOCK_ENFORCE_STARTUP_MAX_ATTEMPTS,
 } from './utils/macDockPolicy'
 import { disguiseAppName } from './utils/disguiseAppName'
+import { disguiseIconRelativePath, shouldSetMacDockIcon } from './utils/disguiseIcon'
 import { appUserModelIdForDisguise } from './utils/windowsTaskbarPolicy'
 import { shouldOpenExternally } from './utils/windowOpenPolicy'
 import { ensureNativeModuleAbi } from './utils/nativeModuleGuard'
@@ -1481,6 +1482,7 @@ export class AppState {
   private _disguiseTimers: NodeJS.Timeout[] = []; // Track forceUpdate timeouts
   private _dockDebounceTimer: NodeJS.Timeout | null = null; // Debounce dock state changes
   private _dockReassertTimers: NodeJS.Timeout[] = []; // Self-verifying dock-enforcement retry timers
+  private _macDockIconOverridden = false; // app.dock.setIcon() has replaced the bundle icon (see utils/disguiseIcon.ts)
   private _ollamaBootstrapPromise: Promise<void> | null = null;
   private screenshotCaptureInProgress: boolean = false;
   private localWhisperRecoveryNotice: LocalWhisperRecoveryNotice | null = null;
@@ -8184,62 +8186,14 @@ export class AppState {
 
   private _applyDisguise(mode: 'terminal' | 'settings' | 'activity' | 'none'): void {
     const appName = disguiseAppName(mode, process.platform);
-    let iconPath = "";
-
     const isWin = process.platform === 'win32';
     const isMac = process.platform === 'darwin';
 
-    switch (mode) {
-      case 'terminal':
-        if (isWin) {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/fakeicon/win/terminal.png")
-            : path.join(app.getAppPath(), "assets/fakeicon/win/terminal.png");
-        } else {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/fakeicon/mac/terminal.png")
-            : path.join(app.getAppPath(), "assets/fakeicon/mac/terminal.png");
-        }
-        break;
-      case 'settings':
-        if (isWin) {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/fakeicon/win/settings.png")
-            : path.join(app.getAppPath(), "assets/fakeicon/win/settings.png");
-        } else {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/fakeicon/mac/settings.png")
-            : path.join(app.getAppPath(), "assets/fakeicon/mac/settings.png");
-        }
-        break;
-      case 'activity':
-        if (isWin) {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/fakeicon/win/activity.png")
-            : path.join(app.getAppPath(), "assets/fakeicon/win/activity.png");
-        } else {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/fakeicon/mac/activity.png")
-            : path.join(app.getAppPath(), "assets/fakeicon/mac/activity.png");
-        }
-        break;
-      case 'none':
-      default:
-        if (isMac) {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/icon.png")
-            : path.join(app.getAppPath(), "assets/icon.png");
-        } else if (isWin) {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/icons/win/icon.ico")
-            : path.join(app.getAppPath(), "assets/icons/win/icon.ico");
-        } else {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/icon.png")
-            : path.join(app.getAppPath(), "assets/icon.png");
-        }
-        break;
-    }
+    // macOS 'none' is the macOS-drawn render of assets/Natively.icon, not full-bleed icon.png — see utils/disguiseIcon.ts.
+    const iconRelativePath = disguiseIconRelativePath(mode, process.platform);
+    const iconPath = app.isPackaged
+      ? path.join(process.resourcesPath, iconRelativePath)
+      : path.join(app.getAppPath(), iconRelativePath);
 
     console.log(`[AppState] Applying disguise: ${mode} (${appName}) on ${process.platform}`);
 
@@ -8276,7 +8230,11 @@ export class AppState {
       if (isMac) {
         // Skip dock icon update when dock is hidden to avoid potential flicker
         if (!this.isUndetectable) {
-          if (app.dock && !image.isEmpty()) app.dock.setIcon(image);  // app.dock is macOS-only (undefined elsewhere); isMac gated at 7244
+          // Packaged + undisguised keeps the live Liquid Glass bundle icon — see utils/disguiseIcon.ts.
+          if (app.dock && !image.isEmpty() && shouldSetMacDockIcon(mode, app.isPackaged, this._macDockIconOverridden)) {
+            app.dock.setIcon(image);  // app.dock is macOS-only (undefined elsewhere); isMac gated at 7244
+            this._macDockIconOverridden = true;
+          }
         }
       } else {
         // Windows/Linux: Update all window icons
