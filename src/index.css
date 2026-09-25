@@ -61,33 +61,26 @@
   /* ─── Meeting notes → Usage tab, user question bubble ─────────────────────
      This bubble is the only chromatic element in the whole view — the AI answer
      below it is an open canvas of grey text — so it carries the entire accent
-     moment, and it therefore tracks --periwinkle-300 rather than holding a
-     private hue.
+     moment. Its fill is the Settings toggle's ON colour, --toggle-on (#6688F5,
+     defined with the toggle further down), by owner instruction: the bubble
+     and the switches read as one colour, and retuning the toggle moves both.
 
-     ACCESSIBILITY EXCEPTION, SEVERE — the foreground is white by explicit
-     owner instruction, on a fill the palette calibrates for a DARK foreground.
-     White measures 2.21:1 on the top gradient stop and 2.55:1 on the bottom,
-     against a 4.5:1 WCAG AA floor for normal text (15px regular, so the 3:1
-     large-text allowance does not apply); neither stop clears even the 3:1 bar
-     used for non-text UI. --periwinkle-on-accent-dark on this same fill gives
-     8.35:1, which is what the 300 step was designed for. Two ways to keep
-     white legible if this is ever revisited: swap the foreground back, or
-     point --bubble-user-bg at --periwinkle-600 (white clears AA there at
-     5.23:1, as light mode already does). Both stops are pinned in
-     PeriwinkleContrastGuard.test.mjs.
+     Light mode lifts the fill 25% toward white (the [data-theme='light']
+     block), still mixed from --toggle-on. It used to swap in --periwinkle-600,
+     which read as a dark purple slab on the light pane. The material itself —
+     the original Liquid Glass (the measured pill, as .lg-action draws it),
+     with nothing painted around the card and no hover effect — is .lg-bubble
+     in src/ui-components/LiquidGlassButton.css, which reads these two tokens.
 
-     --bubble-user-bg MUST stay a solid colour: it is consumed through
-     Tailwind's bg-[var(...)], which compiles to `background-color`, and a
-     gradient value there is silently dropped. The gradient rides
-     background-image in .bubble-user instead.
-
-     Dark-mode values; the light-theme override lives in the
-     [data-theme='light'] block. Every stop is asserted in
-     PeriwinkleContrastGuard.test.mjs. */
-  --bubble-user-bg: var(--periwinkle-300);
+     ACCESSIBILITY EXCEPTION — the foreground is white by explicit owner
+     instruction. White measures 3.28:1 on the dark-theme fill and 2.35:1 on
+     the lighter light-theme fill, against a 4.5:1 WCAG AA floor for normal
+     text (15px regular, so the 3:1 large-text allowance does not apply).
+     --periwinkle-on-accent-dark gives 5.63:1 and 7.85:1 on the same fills —
+     swapping --bubble-user-fg to it is the one-token fix if this is ever
+     revisited. Pinned in PeriwinkleContrastGuard.test.mjs. */
+  --bubble-user-bg: var(--toggle-on);
   --bubble-user-fg: #FFFFFF;
-  --bubble-user-grad-to: #AC96E5;
-  --bubble-user-glow: rgba(185, 161, 246, 0.28);
 
   /* --- SEMANTIC TOKEN SYSTEM (DEFAULT: DARK) --- */
   /* Reference Image Matching */
@@ -319,11 +312,12 @@
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 2px 8px rgba(0, 0, 0, 0.04);
   --shadow-popover: 0 8px 24px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.06);
 
-  /* Meeting notes and Q/A bubbles */
-  --bubble-user-bg: #8050D4;
-  --bubble-user-fg: #FFFFFF;
-  --bubble-user-grad-to: #764AC3;
-  --bubble-user-glow: rgba(128, 80, 212, 0.28);
+  /* Meeting notes and Q/A bubbles. On the light pane the question bubble takes
+     the toggle colour lifted 25% toward white (~#8CA6F8), by owner request
+     (15% first, then "lighten the colour a shade down"):
+     the full --toggle-on read too heavy there. Still mixed from --toggle-on, so
+     retuning the toggle moves both themes. White on it is 2.35:1 (see :root). */
+  --bubble-user-bg: color-mix(in srgb, var(--toggle-on) 75%, #FFFFFF);
   --ai-response-text: #1D1D1F;
   --ai-response-link: #0066CC;
   --mn-skel-strong: rgba(60, 60, 67, 0.14);
@@ -2656,37 +2650,6 @@ body {
   font-weight: 600;
 }
 
-/* Meeting notes → Usage tab, user question bubble.
-
-   Three separable layers, deliberately kept apart so a future "it looks wrong"
-   can be bisected: the flat fill, the vertical gradient, and the hue-tinted
-   glow. Tokens live in the :root / [data-theme='light'] blocks.
-
-   Why a class rather than Tailwind utilities: bg-[var(--bubble-user-bg)]
-   compiles to `background-color`, which cannot hold a gradient — assigning one
-   there fails silently and leaves a transparent bubble with white text on the
-   dark pane.
-
-   The gradient runs DOWNWARD (base → darker). Lightening it upward was tested
-   and drops white text to 4.01:1, below AA; darkening keeps the lightest pixel
-   at the top stop, so the worst white contrast anywhere in the fill is the
-   4.699:1 asserted in the guard test.
-
-   The glow and the inset highlight sit outside the 10px text padding, so
-   neither touches legibility. On a flat dark ground salience comes from chroma
-   rather than luminance, and bleeding a faint tinted halo into the surrounding
-   neutral grey is what makes the bubble read as a lit object instead of a
-   pasted swatch. */
-.bubble-user {
-  background-color: var(--bubble-user-bg);
-  background-image: linear-gradient(180deg, var(--bubble-user-bg) 0%, var(--bubble-user-grad-to) 100%);
-  color: var(--bubble-user-fg);
-  box-shadow:
-    0 1px 1px rgba(0, 0, 0, 0.28),
-    0 6px 18px -8px var(--bubble-user-glow),
-    inset 0 1px 0 rgba(255, 255, 255, 0.14);
-}
-
 /* ── Streaming word materialization ────────────────────────────────────────
    Each newly revealed word (see src/lib/textRevealAnimation.mjs) is wrapped
    in a span carrying these animations plus a NEGATIVE animation-delay equal
@@ -2792,6 +2755,17 @@ body {
   color: var(--overlay-text-secondary);
   background: color-mix(in srgb, var(--hotword-color, #C4B5FD) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--hotword-color, #C4B5FD) 24%, transparent);
+}
+
+/* In meeting notes the chip also takes .lg-chip, the subtle Apple-style glass
+   from src/ui-components/LiquidGlassButton.css. The glass ring replaces the
+   flat border, so the border goes and its 1px moves into the padding: the
+   box stays 25px tall and nothing around it shifts. The live overlay's chip
+   is untouched. */
+.overlay-gist-chip.lg-chip {
+  --lg-chip-tint: var(--hotword-color, #C4B5FD);
+  border: 0;
+  padding: 4px 11px;
 }
 
 .overlay-gist-chip::before {
@@ -8801,7 +8775,10 @@ html[data-platform="linux"][data-window="launcher"] body {
     /* Hardcoded on purpose, same as --toggle-off/-thumb: every toggle in the
        app reads identically regardless of theme or panel, ignoring each
        caller's own track token (bg-accent-primary, --pi-accent, --aip-accent,
-       Phone Mirror's amber LAN switch, …) and the app's periwinkle accent. */
+       Phone Mirror's amber LAN switch, …) and the app's periwinkle accent.
+       --toggle-on also fills the meeting notes Usage question bubble
+       (--bubble-user-bg; lifted toward white in light mode), so retuning it
+       repaints that bubble too. */
     --toggle-off: #474949;
     --toggle-on: #6688F5;
     --toggle-thumb: #e1ebfe;
