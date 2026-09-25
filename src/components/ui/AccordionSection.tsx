@@ -10,18 +10,33 @@ import { ChevronDown } from 'lucide-react';
 // AccordionSection below is the title+icon convenience wrapper for the
 // common case.
 
-/** Animated height/opacity wrapper for disclosure content. Respects reduced motion. */
-export const Disclosure: React.FC<{ open: boolean; children: React.ReactNode }> = ({ open, children }) => {
+/**
+ * Animated height/opacity wrapper for disclosure content. Respects reduced motion.
+ *
+ * `duration` and `blur` are opt-in, so every existing disclosure keeps its
+ * 220ms plain fade. AccordionSection passes transitions.dev's accordion
+ * values: 250ms, the same both ways (an accordion is one reversible motion,
+ * not an open/close pair), with the content softened by a 2px blur that
+ * settles to 0, which hides the height crop slicing through a row mid-open.
+ */
+export const Disclosure: React.FC<{ open: boolean; children: React.ReactNode; duration?: number; blur?: boolean }> = ({
+  open,
+  children,
+  duration = 0.22,
+  blur = false,
+}) => {
   const reduce = useReducedMotion();
+  const hidden = blur ? { height: 0, opacity: 0, filter: 'blur(2px)' } : { height: 0, opacity: 0 };
+  const shown = blur ? { height: 'auto', opacity: 1, filter: 'blur(0px)' } : { height: 'auto', opacity: 1 };
   return (
     <AnimatePresence initial={false}>
       {open ? (
         <motion.div
           key="disclosure"
-          initial={reduce ? { opacity: 0 } : { height: 0, opacity: 0 }}
-          animate={reduce ? { opacity: 1 } : { height: 'auto', opacity: 1 }}
-          exit={reduce ? { opacity: 0 } : { height: 0, opacity: 0 }}
-          transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+          initial={reduce ? { opacity: 0 } : hidden}
+          animate={reduce ? { opacity: 1 } : shown}
+          exit={reduce ? { opacity: 0 } : hidden}
+          transition={{ duration, ease: [0.22, 1, 0.36, 1] }}
           style={{ overflow: 'hidden' }}
         >
           {children}
@@ -108,12 +123,14 @@ export const AccordionSection: React.FC<AccordionSectionProps> = ({
           </div>
         </div>
         <ChevronDown
-          className={`w-5 h-5 text-text-tertiary shrink-0 transition-[transform,color] duration-200 ease-apple-ease motion-reduce:transition-none ${hoverFill ? '' : 'group-hover:text-text-primary'} ${isOpen ? 'rotate-0' : '-rotate-90'}`}
+          className={`w-5 h-5 text-text-tertiary shrink-0 transition-[transform,color] duration-[250ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${hoverFill ? '' : 'group-hover:text-text-primary'} ${isOpen ? 'rotate-0' : '-rotate-90'}`}
         />
       </button>
       {/* Disclosure: smooth-out, a fade-only path under reduced motion, and no
           open animation when the section mounts already open. */}
-      <Disclosure open={isOpen}>
+      {/* The chevron above runs on this same 250ms smooth-out clock, so the
+          flip and the panel land together. */}
+      <Disclosure open={isOpen} duration={0.25} blur>
         <div className={`p-5 text-sm leading-relaxed text-text-secondary ${divider ? 'border-t border-border-subtle' : ''}`}>
           {children}
         </div>
