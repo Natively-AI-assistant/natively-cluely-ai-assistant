@@ -42,6 +42,8 @@ const GUARDED_FILES = [
   'src/components/settings/AIProvidersSettings.tsx',
   'src/components/settings/EmbeddingSettings.tsx',
   'src/components/settings/HelpSettings.tsx',
+  'src/components/settings/help/HelpGraphics.tsx',
+  'src/components/settings/help/HelpParts.tsx',
   'src/components/settings/HowItWorksRefund.tsx',
   'src/components/settings/IntelligenceSettings.tsx',
   'src/components/settings/ModesSettings.tsx',
@@ -115,8 +117,12 @@ describe('Periwinkle Settings — portal scope guard', () => {
 
   test('guard file list is not stale — settings/*.tsx on disk matches GUARDED_FILES', () => {
     const settingsDir = resolve(REPO_ROOT, 'src/components/settings');
-    const onDisk = readdirSync(settingsDir)
-      .filter((f) => f.endsWith('.tsx'))
+    // Recursive: a pane may keep its parts in a subfolder (settings/help/), and
+    // those render inside the same accent scope as the pane itself. __tests__
+    // folders hold no components.
+    const onDisk = readdirSync(settingsDir, { recursive: true })
+      .map((f) => String(f).split('\\').join('/'))
+      .filter((f) => f.endsWith('.tsx') && !f.includes('__tests__/'))
       .map((f) => `src/components/settings/${f}`)
       .sort();
     const guarded = GUARDED_FILES
