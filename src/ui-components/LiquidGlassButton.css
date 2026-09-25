@@ -864,6 +864,241 @@
 }
 
 /*
+  ---------------------------------------------------------------------------
+  .lg-bubble — your questions in meeting notes, in THE ORIGINAL material: the
+  measured macOS 27 pill at the top of this file, as .lg-action draws it,
+  carried onto a block of wrapping text. Two hosts, one material: the Usage
+  tab's question bubble (MeetingDetails) and your messages in the "ask about
+  this meeting" chat (MeetingChatOverlay, on a #f9f9f9 / #111111 panel). Each
+  host keeps its own padding, width and radius.
+
+  By owner request ("use the Liquid Glass original UI"). It replaced an
+  Apple-style reinterpretation that the owner took apart piece by piece, so the
+  one rule here is FIDELITY: every value is the original's, and each place it
+  differs says why.
+
+    background   the flat fill (--bubble-user-bg) with .lg-action's soft sheen
+                 on the top and bottom faces, rgba(255,255,255,.09)
+    ::before     the specular rim: .lg-action's ring colour, TWO rings (the
+                 .lg-tile rule for a ~44-92px box; three are "visibly chunky by
+                 44px"), aimed at the top and bottom faces and dying across the
+                 corners
+    ::after      the caps in shadow: the original black ring, 2px
+
+  Light mode is .lg-action's light rule: no bounce off a light card, so the rim
+  stays on the top face and the underside darkens.
+
+  SUBTLE, BY OWNER REQUEST. At the original's strength (caps .42 / .55 in
+  light, underside .20) the card read as "too evident, like trying too hard":
+  the shaded side faces measured -54 dark / -95 light. So the shading is turned
+  right down — caps .16 dark / .20 light, underside .10 — and the rim is turned
+  slightly UP (.22 / .12 from .148 / .118), because the rim is what makes it
+  read as glass at all once the shading is quiet. The structure is still the
+  original's, layer for layer; only these weights move.
+
+  WHERE IT DIFFERS FROM THE ORIGINAL, and why:
+    - Lengths, not percentages, for everything that runs along the height or
+      the width. The original's are percentages of a FIXED 136px pill; this
+      box's height is set by its line count and its width by the text. The
+      sheens end 8px in (inside the host's 10px padding, so the text sits on
+      the flat fill), the rim's vertical mask is gone 12px in, and the cap stops
+      are .lg-wide's px lengths pinned to the 16px corner radius.
+    - No contact shadow in light mode, where the original casts
+      0 1px 2px + 0 4px 10px. The owner had every shadow outside this card
+      removed, twice ("an extra translucent layer around the card").
+    - No lens and no hover tint. The lens is the original's pointer bloom,
+      which the owner had removed from this card as "the water-like effect";
+      and it is not a control, so it has no hover or press.
+    - No pinned font, fixed height, nowrap or overflow clipping: wrong for
+      selectable, wrapping text, which is why this is not a .lg-button variant.
+
+  The host owns the silhouette (rounded-2xl with a small tail corner); every
+  layer inherits its radius. The two layers sit at z-index -1 inside an
+  isolated stacking context: over the fill, under the text.
+  ---------------------------------------------------------------------------
+*/
+.lg-bubble {
+    /* .lg-action's rim colour, two rings (.lg-tile) — the one layer turned UP
+       for the subtle version (.148/.118 -> .22/.12), so the edge still catches
+       light once the shading below is turned down */
+    --lg-rim-1: rgba(232, 243, 255, .22);
+    --lg-rim-2: rgba(232, 243, 255, .12);
+    /* .lg-wide: cap stops as px pinned to the corner radius (rounded-2xl) */
+    --lg-cap-0: 2px;
+    --lg-cap-1: 5px;
+    --lg-cap-2: 16px;
+
+    position: relative;
+    isolation: isolate;
+    color: var(--bubble-user-fg, #ffffff);
+    background:
+        linear-gradient(180deg,
+            rgba(255, 255, 255, .090) 0, rgba(255, 255, 255, 0) 8px,
+            rgba(255, 255, 255, 0) calc(100% - 8px), rgba(255, 255, 255, .090) 100%),
+        var(--bubble-user-bg, #6688f5);
+}
+
+/* The original ::before: the rings, aimed by two masks — vertical keeps the
+   light on the top and bottom faces, horizontal lets it die across the corners. */
+.lg-bubble::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow:
+        inset 0 0 0 1px var(--lg-rim-1),
+        inset 0 0 0 2px var(--lg-rim-2);
+    -webkit-mask-image:
+        linear-gradient(180deg, #000 0, #000 2px, transparent 12px, transparent calc(100% - 12px), #000 calc(100% - 2px), #000 100%),
+        linear-gradient(90deg, transparent var(--lg-cap-0), rgba(0, 0, 0, .82) var(--lg-cap-1), #000 var(--lg-cap-2), #000 calc(100% - var(--lg-cap-2)), rgba(0, 0, 0, .82) calc(100% - var(--lg-cap-1)), transparent calc(100% - var(--lg-cap-0)));
+    -webkit-mask-composite: source-in;
+    mask-image:
+        linear-gradient(180deg, #000 0, #000 2px, transparent 12px, transparent calc(100% - 12px), #000 calc(100% - 2px), #000 100%),
+        linear-gradient(90deg, transparent var(--lg-cap-0), rgba(0, 0, 0, .82) var(--lg-cap-1), #000 var(--lg-cap-2), #000 calc(100% - var(--lg-cap-2)), rgba(0, 0, 0, .82) calc(100% - var(--lg-cap-1)), transparent calc(100% - var(--lg-cap-0)));
+    mask-composite: intersect;
+    pointer-events: none;
+    z-index: -1;
+}
+
+/* The original ::after: the caps (here, the side faces) sit in shadow. */
+.lg-bubble::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 2px;
+    background: linear-gradient(180deg,
+        rgba(0, 0, 0, 0) 0%,
+        rgba(0, 0, 0, 0) 6%,
+        rgba(0, 0, 0, .90) 50%,
+        rgba(0, 0, 0, 0) 94%,
+        rgba(0, 0, 0, 0) 100%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+            mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+            mask-composite: exclude;
+    opacity: .16;
+    pointer-events: none;
+    z-index: -1;
+}
+
+/* .lg-action's light rule, less its contact shadow and at half its underside
+   (see above). */
+[data-theme='light'] .lg-bubble {
+    box-shadow: inset 0 -1px 0 rgba(0, 0, 0, .10);
+}
+[data-theme='light'] .lg-bubble::before {
+    -webkit-mask-image:
+        linear-gradient(180deg, #000 0, #000 2px, transparent 12px),
+        linear-gradient(90deg, transparent var(--lg-cap-0), rgba(0, 0, 0, .82) var(--lg-cap-1), #000 var(--lg-cap-2), #000 calc(100% - var(--lg-cap-2)), rgba(0, 0, 0, .82) calc(100% - var(--lg-cap-1)), transparent calc(100% - var(--lg-cap-0)));
+    mask-image:
+        linear-gradient(180deg, #000 0, #000 2px, transparent 12px),
+        linear-gradient(90deg, transparent var(--lg-cap-0), rgba(0, 0, 0, .82) var(--lg-cap-1), #000 var(--lg-cap-2), #000 calc(100% - var(--lg-cap-2)), rgba(0, 0, 0, .82) calc(100% - var(--lg-cap-1)), transparent calc(100% - var(--lg-cap-0)));
+}
+[data-theme='light'] .lg-bubble::after { opacity: .20; }
+
+/* The original's high-contrast move: the rim — the thing the material is built
+   on — gives way to a defined border, and the body darkens, holding the
+   toggle's hue, to where white text clears AA (#2C5BF1, 5.42:1). */
+@media (prefers-contrast: more) {
+    .lg-bubble,
+    [data-theme='light'] .lg-bubble {
+        background: #2c5bf1;
+        box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .92);
+    }
+    .lg-bubble::before,
+    .lg-bubble::after { content: none; }
+}
+
+/*
+  ---------------------------------------------------------------------------
+  .lg-chip — Apple-style glass turned right down, for a small tinted pill:
+  the meeting notes gist tag. (It was the quiet sibling of an Apple-style
+  .lg-bubble; the bubble has since moved to the original material, and the
+  chip is unchanged.)
+
+  DERIVED, not measured, and deliberately QUIET. It is a label under the answer,
+  not the moment the bubble is, so it keeps the host's own tint, text colours
+  and box and only trades the flat border for a glass edge:
+
+    box-shadow   a faint 1px ring all the way round in the chip's own tint (so
+                 it keeps its colour identity), a crisp 1px white highlight on
+                 the top face, and a whisper of contact shadow
+    ::after      two tiny specular crescents, top-left and (weaker)
+                 bottom-right, cut to a 1px ring — the bubble's, at a fraction
+                 of the strength
+
+  No sheen across the body, no glint, no hover: every layer is on the edge,
+  so the text sits on exactly the host's fill and keeps its contrast.
+
+  THE HOST OWNS THE FILL, THE TEXT AND THE SILHOUETTE. It supplies the tint
+  as --lg-chip-tint (the ring is mixed from it), the background,
+  the radius and the padding; if it had a border, it drops it for this ring
+  and adds the 1px back to its padding so the box does not move. ::before is
+  left alone because a chip may use it for a label (the gist tag does).
+
+  Crescent lengths are px (40px / 32px): a percentage runs the light along
+  the whole top of a long chip, and a math function as a radial-gradient size
+  (min(), clamp()) invalidates the whole background declaration in Chromium,
+  so the crescents vanish without an error.
+  ---------------------------------------------------------------------------
+*/
+.lg-chip {
+    position: relative;
+    isolation: isolate;
+    box-shadow:
+        inset 0 0 0 1px color-mix(in srgb, var(--lg-chip-tint, #ffffff) 26%, transparent),
+        inset 0 1px 0 rgba(255, 255, 255, .16),
+        0 1px 2px rgba(0, 0, 0, .30);
+}
+.lg-chip::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background:
+        radial-gradient(ellipse 40px 160% at 0% 0%,
+            rgba(255, 255, 255, .45) 0%, rgba(255, 255, 255, 0) 70%),
+        radial-gradient(ellipse 32px 160% at 100% 100%,
+            rgba(255, 255, 255, .22) 0%, rgba(255, 255, 255, 0) 70%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+            mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+            mask-composite: exclude;
+    pointer-events: none;
+    z-index: -1;
+}
+
+/* Light: the ring drops to 20% (a pale chip needs less edge), the top
+   highlight and the crescents go near-white, where they read against the
+   pale fill, and the shadow takes the tint and lifts the chip off the pane. */
+[data-theme='light'] .lg-chip {
+    box-shadow:
+        inset 0 0 0 1px color-mix(in srgb, var(--lg-chip-tint, #6d5ac7) 20%, transparent),
+        inset 0 1px 0 rgba(255, 255, 255, .80),
+        0 1px 2px color-mix(in srgb, var(--lg-chip-tint, #6d5ac7) 14%, transparent),
+        0 2px 6px -3px color-mix(in srgb, var(--lg-chip-tint, #6d5ac7) 30%, transparent);
+}
+[data-theme='light'] .lg-chip::after {
+    background:
+        radial-gradient(ellipse 40px 160% at 0% 0%,
+            rgba(255, 255, 255, .95) 0%, rgba(255, 255, 255, 0) 70%),
+        radial-gradient(ellipse 32px 160% at 100% 100%,
+            rgba(255, 255, 255, .55) 0%, rgba(255, 255, 255, 0) 70%);
+}
+
+/* High contrast: a defined edge instead of light, as everywhere else here. */
+@media (prefers-contrast: more) {
+    .lg-chip,
+    [data-theme='light'] .lg-chip {
+        box-shadow: inset 0 0 0 1px currentColor;
+    }
+    .lg-chip::after,
+    [data-theme='light'] .lg-chip::after { content: none; }
+}
+
+/*
   Disabled dims the parts rather than fading the whole element. A blanket
   `opacity: .45` takes the rim with it, so the button stops reading as glass at
   all, and it drops the label to 3.74:1. Desaturating the body and dimming the

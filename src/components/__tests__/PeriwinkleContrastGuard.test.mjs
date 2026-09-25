@@ -75,18 +75,17 @@ const PAIRINGS = [
   { label: 'PI dark: --pi-on-accent on --pi-accent fill',                   fg: '#14102A', bg: '#B9A1F6', min: AA_TEXT },
   { label: 'PI light: --pi-on-accent on --pi-accent fill',                  fg: '#FFFFFF', bg: '#8050D4', min: AA_TEXT },
 
-  // Meeting notes → Usage tab question bubble (MeetingDetails.tsx, via the
-  // --bubble-user-bg / --bubble-user-fg pair in index.css). It does NOT follow
-  // --accent-primary: in dark mode that resolves to periwinkle-300, a light fill
-  // calibrated for a dark foreground, and the bubble's white text measured
-  // 1.97:1 against it. The bubble is a vertical gradient, so EVERY stop is
-  // asserted, not just the token value — the top stop is the lightest pixel and
-  // therefore the worst case for white text. In dark mode both stops sit below
-  // AA and live in KNOWN_DEVIATIONS below; light mode clears it outright.
-  { label: 'Bubble dark: --bubble-user-bg fill on the #151515 pane',        fg: '#B9A1F6', bg: '#151515', min: AA_ICON },
-  { label: 'Bubble light: white on gradient TOP stop (worst case)',         fg: '#FFFFFF', bg: '#8050D4', min: AA_TEXT },
-  { label: 'Bubble light: white on gradient BOTTOM stop',                   fg: '#FFFFFF', bg: '#764AC3', min: AA_TEXT },
-  { label: 'Bubble light: --bubble-user-bg fill on the #f5f5f5 pane',       fg: '#8050D4', bg: '#F5F5F5', min: AA_ICON },
+  // Meeting notes → Usage tab question bubble (MeetingDetails.tsx, .lg-bubble
+  // in src/ui-components/LiquidGlassButton.css, fed by the --bubble-user-bg /
+  // --bubble-user-fg pair in index.css). The fill is --toggle-on (#6688F5, the
+  // Settings toggle's ON colour) in dark mode and that colour mixed 75/25 with
+  // white (#8CA6F8) in light mode. The Liquid Glass rim, sheens and cap
+  // shadow all stay in the host's padding, so the token value is the only fill
+  // pixel under the glyphs (the ink band is asserted flat in
+  // tests/css/bubble-liquid-glass.check.mjs). White on it sits below AA in both
+  // themes and lives in KNOWN_DEVIATIONS below, as does the fill against the
+  // light pane.
+  { label: 'Bubble dark: --bubble-user-bg fill on the #151515 pane',        fg: '#6688F5', bg: '#151515', min: AA_ICON },
 
   // Modes Manager (--mm-* — premium/src/ModesSettings.tsx). The checkmark
   // dot is a non-text icon, so the 3:1 (not 4.5:1) threshold applies.
@@ -117,24 +116,35 @@ const PAIRINGS = [
 // pairing that now passes.
 const KNOWN_DEVIATIONS = [
   {
-    label: 'Bubble dark: white on --periwinkle-300 fill (gradient TOP stop)',
-    fg: '#FFFFFF', bg: '#B9A1F6', expected: 2.21, shortfallOf: AA_TEXT,
+    label: 'Bubble dark: white on the flat --toggle-on fill',
+    fg: '#FFFFFF', bg: '#6688F5', expected: 3.28, shortfallOf: AA_TEXT,
     why:
-      'THE MOST SEVERE DEVIATION IN THIS FILE — 2.21:1 does not clear even the 3:1 ' +
-      'bar for non-text UI, let alone 4.5:1 for body text. White is set by explicit ' +
-      'owner instruction on a fill the palette calibrates for a DARK foreground: ' +
-      '--periwinkle-on-accent-dark measures 8.35:1 on this exact fill. Two lateral ' +
-      'fixes exist if revisited — swap the foreground back, or point ' +
-      '--bubble-user-bg at --periwinkle-600, where white clears AA at 5.23:1 (this ' +
-      'is what light mode already does). 15px regular, so the large-text allowance ' +
-      'does not apply.',
+      '3.28:1 is under the 4.5:1 AA floor for body text (15px regular, so the ' +
+      'large-text allowance does not apply). The fill is the Settings toggle\'s ON ' +
+      'colour and the foreground is white, both by explicit owner instruction. ' +
+      '--periwinkle-on-accent-dark measures 5.63:1 on this exact fill, and swapping ' +
+      '--bubble-user-fg to it is the one-token fix. prefers-contrast: more darkens ' +
+      'the body to #2C5BF1 (5.42:1).',
   },
   {
-    label: 'Bubble dark: white on gradient BOTTOM stop',
-    fg: '#FFFFFF', bg: '#AC96E5', expected: 2.55, shortfallOf: AA_TEXT,
+    label: 'Bubble light: white on the lifted --toggle-on fill (75% toggle, 25% white)',
+    fg: '#FFFFFF', bg: '#8CA6F8', expected: 2.35, shortfallOf: AA_TEXT,
     why:
-      'The darker end of the same gradient. Listed separately so that if the top ' +
-      'stop is ever fixed this one is not silently left behind.',
+      'The owner asked for a lighter bubble on the light pane, which costs white text ' +
+      'contrast: 2.35:1 here (2.68:1 at the first, 15% lift) against 3.28:1 in dark mode, ' +
+      'and light mode used to clear AA at 5.23:1 on periwinkle-600. --periwinkle-on-accent-dark measures 7.85:1 on ' +
+      'this fill; prefers-contrast: more darkens the body to #2C5BF1 (5.42:1).',
+  },
+  {
+    label: 'Bubble light: --bubble-user-bg fill on the --bg-secondary #EBEBF0 pane',
+    fg: '#8CA6F8', bg: '#EBEBF0', expected: 1.98, shortfallOf: AA_ICON,
+    why:
+      'A lifted body on a light pane. The fill alone does not separate the bubble from ' +
+      'the pane; the colour step, the specular rim and the shaded side faces carry the ' +
+      'edge instead. The ' +
+      'bubble is also not a control, so ' +
+      'SC 1.4.11 does ' +
+      'not strictly bind — pinned so a later hue or pane change still trips the guard.',
   },
   {
     label: 'Hotword modern: #C4B5FD on gradient TOP stop (lightest pixel)',
