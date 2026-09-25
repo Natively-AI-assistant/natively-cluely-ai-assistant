@@ -1356,6 +1356,8 @@ export interface PhoneMirrorInfo {
   qrDataUrl: string | null;
   clients: number;
   extensionConnected: boolean;
+  /** Epoch ms of the last successful one-click extension pair this session (0 = none). */
+  extPairedAt?: number;
   /** Resolved bind host — '127.0.0.1' for loopback-only, '0.0.0.0' when LAN-exposed. */
   bindAddress: string;
 }

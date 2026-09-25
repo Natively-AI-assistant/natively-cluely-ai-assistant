@@ -27,6 +27,13 @@ export interface PhoneMirrorInfo {
   clients: number;
   /** True when a companion browser extension is connected over /ws (capture-ready). */
   extensionConnected: boolean;
+  /**
+   * Epoch ms of the last successful one-click /pair this session (0 = none).
+   * A Re-pair while the extension is already connected changes nothing else —
+   * same persisted token, same open socket — so this is the only way Settings
+   * can tell the pairing window it opened has been used.
+   */
+  extPairedAt: number;
   /** Resolved bind host ('127.0.0.1' or '0.0.0.0') so the UI can show "loopback only" / "LAN". */
   bindAddress: string;
 }
@@ -174,6 +181,8 @@ export class PhoneMirrorService {
   // Epoch (ms) until which the one-click /pair endpoint accepts a handshake.
   // Set by armExtensionPairing(); burned to 0 on the first successful /pair.
   private armedUntil = 0;
+  // When /pair last succeeded (see PhoneMirrorInfo.extPairedAt).
+  private extPairedAt = 0;
   // WebSocket clients that announced `{type:'hello', role:'extension'}`. Tracked
   // separately from phone clients so capture frames go only to the extension and
   // StreamEvents (phone chat) never reach it.
@@ -848,6 +857,7 @@ export class PhoneMirrorService {
         qrDataUrl: null,
         clients: 0,
         extensionConnected: false,
+        extPairedAt: this.extPairedAt,
         bindAddress: this.exposeOnLan ? '0.0.0.0' : '127.0.0.1',
       };
       this.cachedInfo = info;
@@ -886,6 +896,7 @@ export class PhoneMirrorService {
       qrDataUrl,
       clients: this.phoneClientCount(),
       extensionConnected: this.hasExtensionClient(),
+      extPairedAt: this.extPairedAt,
       bindAddress: this.bindAddress,
     };
     this.cachedInfo = info;
@@ -1260,7 +1271,25 @@ export class PhoneMirrorService {
       }
       // Burn the window — single-use.
       this.armedUntil = 0;
+      this.extPairedAt = Date.now();
       console.log('[PhoneMirror] extension paired via one-click /pair');
+      // Tell Settings now. On a first pair the extension's socket follows in a
+      // few ms (its hello flips extensionConnected); on a Re-pair while already
+      // connected nothing else will ever change, and the countdown would run
+      // out its whole window.
+      // Counts are read live, not from cachedInfo: that is only refreshed while
+      // someone is listening, and would otherwise report a connected extension
+      // as disconnected.
+      if (this.cachedInfo) {
+        const info = {
+          ...this.cachedInfo,
+          clients: this.phoneClientCount(),
+          extensionConnected: this.hasExtensionClient(),
+          extPairedAt: this.extPairedAt,
+        };
+        this.cachedInfo = info;
+        this.emitStatusNow(info);
+      }
       res.writeHead(200, jsonHeaders);
       // Hand out the EXTENSION token (loopback-scoped), not the phone token.
       res.end(JSON.stringify({ token: this.extToken, port: this.port }));
@@ -1512,6 +1541,13 @@ export class PhoneMirrorService {
 
   private emitStatusClientCount(): void {
     if (this.statusListeners.size === 0) return;
+    // A socket can close after _teardown() (stop, restart), when cachedInfo still
+    // describes the server that just went away. Report a fresh snapshot instead
+    // of laying these counts over it.
+    if (!this.wss) {
+      this.emitStatus();
+      return;
+    }
     const clients = this.phoneClientCount();
     const extensionConnected = this.hasExtensionClient();
     // Emit on a change to EITHER the phone-client count OR the extension-connected
@@ -1521,12 +1557,39 @@ export class PhoneMirrorService {
       this.cachedInfo &&
       (clients !== this.cachedInfo.clients || extensionConnected !== this.cachedInfo.extensionConnected)
     ) {
+      const extensionFlipped = extensionConnected !== this.cachedInfo.extensionConnected;
       const info = { ...this.cachedInfo, clients, extensionConnected };
       this.cachedInfo = info;
-      this.emitStatus(info);
+      // The extension flag is what Settings' pairing countdown and the launcher's
+      // extension toaster wait on, so it goes out now instead of 150 ms later.
+      // A phone-count change stays debounced: the extension's raw socket counts
+      // as a phone for the 1-3 ms before its hello, and the debounce is what
+      // keeps that from flashing "1 phone connected".
+      if (extensionFlipped) this.emitStatusNow(info);
+      else this.emitStatus(info);
       return;
     }
     this.emitStatus();
+  }
+
+  /**
+   * Emit at once, superseding any debounced emit still waiting. Only called
+   * while the server runs, when everything a pending emit could carry is
+   * already folded into cachedInfo, which `info` is built from.
+   */
+  private emitStatusNow(info: PhoneMirrorInfo): void {
+    if (this.statusListeners.size === 0) return;
+    if (this.statusDebounceTimer !== null) {
+      clearTimeout(this.statusDebounceTimer);
+      this.statusDebounceTimer = null;
+    }
+    for (const l of this.statusListeners) {
+      try {
+        l(info);
+      } catch (_) {
+        /* noop */
+      }
+    }
   }
 
   private emitStatus(prebuilt?: PhoneMirrorInfo): void {
