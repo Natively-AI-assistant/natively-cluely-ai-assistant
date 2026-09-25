@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { AlertCircle, Check, ChevronDown, Download, ExternalLink, Filter, FolderOpen, HardDrive, KeyRound, Loader2, Monitor, RefreshCw, Search, Server, ShieldAlert, Trash2, X } from 'lucide-react';
 import { useT } from '../../i18n';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
@@ -435,40 +435,46 @@ interface CandidatesSlidingTabsProps {
 }
 
 /**
- * Tab switcher for candidate count using Framer Motion layoutId spring transition,
- * matching MeetingDetails (Summary / Transcript / Usage) 1:1.
+ * Tab switcher for candidate count. ONE pill that never unmounts, springing `x`
+ * across equal columns: the Retrieval tab pill's construction and spring. It
+ * used to be a per-button `layoutId` pill, the shared-layout projection that
+ * clamped the Settings scroller back to the top when AI Providers' tablist
+ * used one (see RetrievalSettings.tsx), and it had no reduced-motion path.
  */
 const CandidatesSlidingTabs: React.FC<CandidatesSlidingTabsProps> = ({ value, choices, onChange }) => {
-    const layoutId = React.useId();
     const theme = useResolvedTheme();
     const isLight = theme === 'light';
+    const reduceMotion = useReducedMotion();
+    const index = choices.indexOf(value);
 
     return (
-        <div className={`p-1 rounded-xl inline-flex items-center gap-0.5 border shrink-0 ${isLight ? 'bg-[#E5E5EA] border-black/[0.04]' : 'bg-[#0D0D0F] border-white/[0.08]'}`}>
-            {choices.map((n) => {
-                const isSelected = value === n;
-                return (
-                    <button
-                        key={n}
-                        type="button"
-                        onClick={() => onChange(n)}
-                        className={`
-                            relative px-3 py-1 text-xs font-medium rounded-lg transition-colors duration-200 z-10 select-none
-                            ${isSelected ? (isLight ? 'text-black' : 'text-[#E9E9E9]') : (isLight ? 'text-black/60 hover:text-black' : 'text-white/40 hover:text-white/80')}
-                        `}
-                    >
-                        {isSelected && (
-                            <motion.div
-                                layoutId={`candidatesTabActive-${layoutId}`}
-                                className={`absolute inset-0 rounded-lg -z-10 shadow-sm ${isLight ? 'bg-white' : 'bg-[#3A3A3C]'}`}
-                                initial={false}
-                                transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                            />
-                        )}
-                        {n}
-                    </button>
-                );
-            })}
+        <div className={`p-1 rounded-xl inline-flex border shrink-0 ${isLight ? 'bg-[#E5E5EA] border-black/[0.04]' : 'bg-[#0D0D0F] border-white/[0.08]'}`}>
+            <div className="relative inline-grid" style={{ gridTemplateColumns: `repeat(${choices.length}, 1fr)` }}>
+                <motion.div
+                    aria-hidden="true"
+                    className={`absolute inset-y-0 left-0 rounded-lg shadow-sm will-change-transform ${isLight ? 'bg-white' : 'bg-[#3A3A3C]'}`}
+                    style={{ width: `${100 / Math.max(1, choices.length)}%` }}
+                    initial={false}
+                    animate={{ x: `${Math.max(0, index) * 100}%`, opacity: index < 0 ? 0 : 1 }}
+                    transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 400, damping: 30 }}
+                />
+                {choices.map((n) => {
+                    const isSelected = value === n;
+                    return (
+                        <button
+                            key={n}
+                            type="button"
+                            onClick={() => onChange(n)}
+                            className={`
+                                relative z-10 px-3 py-1 text-xs font-medium rounded-lg transition-[color,transform] duration-200 active:scale-[0.97] motion-reduce:active:scale-100 select-none
+                                ${isSelected ? (isLight ? 'text-black' : 'text-[#E9E9E9]') : (isLight ? 'text-black/60 hover:text-black' : 'text-white/40 hover:text-white/80')}
+                            `}
+                        >
+                            {n}
+                        </button>
+                    );
+                })}
+            </div>
         </div>
     );
 };
@@ -1225,7 +1231,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                                 disabled={busyCatalogId !== null}
                                 onClick={() => void useCatalogModel(m.id)}
                             >
-                                {busy ? <Loader2 size={12} className="animate-spin" aria-hidden="true" /> : null}
+                                {busy ? <Loader2 size={12} className="aip-spinner" aria-hidden="true" /> : null}
                                 <span>{t('Use')}</span>
                             </button>
                         )}
@@ -1275,7 +1281,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                 {busy && prog && (
                     <div className="space-y-1 pl-3.5 pt-1">
                         <div className="h-1 w-full bg-[var(--aip-item-active)] rounded-full overflow-hidden">
-                            <div className="h-full bg-[var(--aip-accent)] transition-all duration-150" style={{ width: `${Math.round(prog.fraction * 100)}%` }} />
+                            <div className="h-full w-full origin-left bg-[var(--aip-accent)] transition-transform duration-150 ease-linear" style={{ transform: `scaleX(${Math.min(1, Math.max(0, prog.fraction))})` }} />
                         </div>
                         <div className="text-[10px] aip-muted flex justify-between">
                             <span>{`${Math.round(prog.fraction * 100)}% · ${prog.file}`}</span>
@@ -1666,9 +1672,9 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                     <div className="flex items-center gap-1 bg-[var(--aip-btn-bg)] p-0.5 rounded-md text-[11px]">
                         <button
                             type="button"
-                            className="px-2 py-0.5 rounded aip-hero transition-colors"
+                            className="px-2 py-0.5 rounded aip-hero transition-[background-color,box-shadow,transform] duration-150 ease-out hover:bg-[color:var(--aip-item-hover)] active:scale-[0.97] motion-reduce:active:scale-100"
                             style={{
-                                background: filterTab === 'all' ? 'var(--aip-pill-bg)' : 'transparent',
+                                background: filterTab === 'all' ? 'var(--aip-pill-bg)' : undefined,
                                 boxShadow: filterTab === 'all' ? 'var(--aip-pill-shadow)' : 'none',
                                 fontWeight: filterTab === 'all' ? 600 : 400,
                             }}
@@ -1678,9 +1684,9 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                         </button>
                         <button
                             type="button"
-                            className="px-2 py-0.5 rounded aip-hero transition-colors"
+                            className="px-2 py-0.5 rounded aip-hero transition-[background-color,box-shadow,transform] duration-150 ease-out hover:bg-[color:var(--aip-item-hover)] active:scale-[0.97] motion-reduce:active:scale-100"
                             style={{
-                                background: filterTab === 'installed' ? 'var(--aip-pill-bg)' : 'transparent',
+                                background: filterTab === 'installed' ? 'var(--aip-pill-bg)' : undefined,
                                 boxShadow: filterTab === 'installed' ? 'var(--aip-pill-shadow)' : 'none',
                                 fontWeight: filterTab === 'installed' ? 600 : 400,
                             }}
@@ -1690,9 +1696,9 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                         </button>
                         <button
                             type="button"
-                            className="px-2 py-0.5 rounded aip-hero transition-colors"
+                            className="px-2 py-0.5 rounded aip-hero transition-[background-color,box-shadow,transform] duration-150 ease-out hover:bg-[color:var(--aip-item-hover)] active:scale-[0.97] motion-reduce:active:scale-100"
                             style={{
-                                background: filterTab === 'recommended' ? 'var(--aip-pill-bg)' : 'transparent',
+                                background: filterTab === 'recommended' ? 'var(--aip-pill-bg)' : undefined,
                                 boxShadow: filterTab === 'recommended' ? 'var(--aip-pill-shadow)' : 'none',
                                 fontWeight: filterTab === 'recommended' ? 600 : 400,
                             }}
@@ -1990,7 +1996,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                             disabled={installing || !extensionsAvailable}
                             onClick={() => void installFromFolder()}
                         >
-                            {installing ? <Loader2 size={12} className="animate-spin" aria-hidden="true" />
+                            {installing ? <Loader2 size={12} className="aip-spinner" aria-hidden="true" />
                                 : <FolderOpen size={12} strokeWidth={1.75} aria-hidden="true" />}
                             <span>{t('Install from folder')}</span>
                         </button>
@@ -2168,8 +2174,8 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                                                     <div className="space-y-1 pt-1">
                                                         <div className="h-1 w-full bg-[var(--aip-item-active)] rounded-full overflow-hidden">
                                                             <div
-                                                                className="h-full bg-[var(--aip-accent)] transition-all duration-150"
-                                                                style={{ width: `${Math.round(pctFraction * 100)}%` }}
+                                                                className="h-full w-full origin-left bg-[var(--aip-accent)] transition-transform duration-150 ease-linear"
+                                                                style={{ transform: `scaleX(${Math.min(1, Math.max(0, pctFraction))})` }}
                                                             />
                                                         </div>
                                                         <div className="text-[10px] aip-muted flex justify-between">
@@ -2228,15 +2234,18 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                                                 )}
 
                                                 {/* Collapsible Individual Files Breakdown */}
-                                                {isExpanded && group.files.length > 1 && (
-                                                    <div className="space-y-1 mt-1 pl-2 border-l-2 border-[var(--aip-border-strong)] py-1 bg-white/[0.01] rounded-r">
+                                                {group.files.length > 1 && (
+                                                    <div className="aip-reveal" data-open={isExpanded ? 'true' : 'false'}>
+                                                    <div>
+                                                    <div className="pt-1">
+                                                    <div className="space-y-1 pl-2 border-l-2 border-[var(--aip-border-strong)] py-1 bg-white/[0.01] rounded-r">
                                                         {group.files.map(m => {
                                                             const key = `${ext.id}::${m.key}`;
                                                             const pct = progress[key];
                                                             const fileDownloading = busyModel === key || m.state === 'downloading';
 
                                                             return (
-                                                                <div key={m.key} className="flex items-center justify-between text-[10px] py-1 px-1.5 rounded hover:bg-white/5">
+                                                                <div key={m.key} className="flex items-center justify-between text-[10px] py-1 px-1.5 rounded transition-colors duration-150 hover:bg-[color:var(--aip-item-hover)]">
                                                                     <div className="min-w-0 flex-1 flex items-center gap-2">
                                                                         <span className="font-mono aip-text truncate">{m.key}</span>
                                                                         <span className="aip-muted">{humanBytes(m.bytes ?? m.approxBytes)}</span>
@@ -2263,6 +2272,9 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                                                                 </div>
                                                             );
                                                         })}
+                                                    </div>
+                                                    </div>
+                                                    </div>
                                                     </div>
                                                 )}
                                             </div>

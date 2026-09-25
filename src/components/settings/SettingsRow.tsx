@@ -98,6 +98,40 @@ export const CollapseItem: React.FC<{ children: React.ReactNode }> = ({ children
   );
 };
 
+/**
+ * A dropdown menu: transitions.dev "menu dropdown". It grows from its trigger
+ * (250ms smooth-out from 0.97) and gets out of the way faster than it came
+ * (150ms to 0.99). Reduced motion keeps the fade and drops the scale. Not gated
+ * on SettingsMotionReady: a menu only ever opens from a click. The transform
+ * sits on the menu itself and settles to none, so it never becomes a
+ * containing block for anything but its own options.
+ */
+export const SettingsMenu: React.FC<{
+  open: boolean;
+  /** The corner that touches the trigger, e.g. 'top right' for a right-0 menu. */
+  origin?: string;
+  className?: string;
+  children: React.ReactNode;
+}> = ({ open, origin = 'top', className = '', children }) => {
+  const reduce = useReducedMotion();
+  return (
+    <AnimatePresence>
+      {open ? (
+        <motion.div
+          key="menu"
+          className={className}
+          style={{ transformOrigin: origin }}
+          initial={{ opacity: 0, scale: reduce ? 1 : 0.97 }}
+          animate={{ opacity: 1, scale: 1, transition: { duration: DUR_FAST, ease: EASE_SMOOTH_OUT } }}
+          exit={{ opacity: 0, scale: reduce ? 1 : 0.99, transition: { duration: DUR_QUICK, ease: EASE_SMOOTH_OUT } }}
+        >
+          {children}
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
+  );
+};
+
 // Every "this thing changed" move, as presets of ONE component. `id` names the
 // state on show: a new id plays the old one's exit and the new one's entrance;
 // null shows nothing (and plays the exit). Before hydration nothing animates;
@@ -378,7 +412,10 @@ export function useSettingsTones(): Record<SettingsTone, string> & { text: Recor
 // `className` replaces the bottom gap when a notice sits in a spaced stack.
 // An `alert` shakes once as it lands (`.t-notice-shake`, src/index.css), and is
 // re-keyed on `shakeKey` so a DIFFERENT message replays the shake while a
-// re-render carrying the same one leaves it alone. Only alerts shake.
+// re-render carrying the same one leaves it alone. Only alerts shake, and only
+// once the pane is ready: an alert that is already true when the pane opens
+// (a saved auth failure) is the state of things, not news, and must not shake
+// on every open. The Collapse around it is silent then too.
 export const SettingsNotice: React.FC<{
   tone: string;
   icon: React.ReactNode;
@@ -386,16 +423,25 @@ export const SettingsNotice: React.FC<{
   shakeKey?: string;
   className?: string;
   children: React.ReactNode;
-}> = ({ tone, icon, alert, shakeKey, className = 'mb-3', children }) => (
-  <div
-    key={alert ? shakeKey : undefined}
-    role={alert ? 'alert' : undefined}
-    className={`${className} flex items-start gap-2 rounded-lg border px-3 py-2 text-xs leading-relaxed ${tone}${alert ? ' t-notice-shake' : ''}`}
-  >
-    <span className="mt-px shrink-0">{icon}</span>
-    <span className="min-w-0">{children}</span>
-  </div>
-);
+}> = ({ tone, icon, alert, shakeKey, className = 'mb-3', children }) => {
+  const ready = React.useContext(SettingsMotionReady);
+  const key = shakeKey ?? '';
+  const silentKey = useRef<string | null>(ready ? null : key);
+  const shake = alert && ready && key !== silentKey.current;
+  useEffect(() => {
+    if (ready && key !== silentKey.current) silentKey.current = null;
+  }, [ready, key]);
+  return (
+    <div
+      key={alert ? shakeKey : undefined}
+      role={alert ? 'alert' : undefined}
+      className={`${className} flex items-start gap-2 rounded-lg border px-3 py-2 text-xs leading-relaxed ${tone}${shake ? ' t-notice-shake' : ''}`}
+    >
+      <span className="mt-px shrink-0">{icon}</span>
+      <span className="min-w-0">{children}</span>
+    </div>
+  );
+};
 
 // Sync's footnote under a section.
 export const SettingsFootnote: React.FC<{ icon: React.ReactNode; children: React.ReactNode }> = ({ icon, children }) => (

@@ -305,7 +305,7 @@ export const AIP_CSS = `
 @keyframes aip-check-in { from { opacity:0; transform:scale(0.6); } to { opacity:1; transform:scale(1); } }
 @keyframes aip-shimmer  { 0%,100% { opacity:0.55; } 50% { opacity:1; } }
 
-.aip-panel-fade { animation: aip-fade-up var(--aip-dur-state) var(--aip-ease-out) both; }
+.aip-panel-fade { animation: aip-fade-up var(--aip-dur-state) var(--aip-ease-out) backwards; }
 .aip-spinner    { animation: aip-spin 0.65s linear infinite; }
 .aip-check      { animation: aip-check-in 200ms var(--aip-ease-spring) both; }
 .aip-skeleton   { background: var(--aip-btn-bg); border-radius: var(--aip-r-sm);
@@ -524,6 +524,8 @@ export const AIP_CSS = `
     transition: background var(--aip-dur-state) var(--aip-ease-out),
                 color var(--aip-dur-state) ease,
                 border-color var(--aip-dur-state) ease,
+                opacity var(--aip-dur-state) var(--aip-ease-out),
+                filter var(--aip-dur-state) var(--aip-ease-out),
                 transform var(--aip-dur-press) var(--aip-ease-out);
 }
 .aip-press:active:not(:disabled),
@@ -692,7 +694,8 @@ export const AIP_CSS = `
     font-family:inherit; font-size:12px; font-weight:500; line-height:1;
     white-space:nowrap; cursor:pointer;
     transition: background var(--aip-dur-state) var(--aip-ease-out),
-                color      var(--aip-dur-state) var(--aip-ease-out);
+                color      var(--aip-dur-state) var(--aip-ease-out),
+                opacity    var(--aip-dur-state) var(--aip-ease-out);
 }
 .aip-field-seg:hover:not(:disabled)  { background: var(--aip-btn-bg-hover); }
 .aip-field-seg:active:not(:disabled) { background: var(--aip-item-active); }
@@ -729,7 +732,8 @@ export const AIP_CSS = `
     color: var(--aip-secondary); cursor:pointer; font-family:inherit; text-align:left;
     transition: background var(--aip-dur-state) var(--aip-ease-out),
                 border-color var(--aip-dur-state) var(--aip-ease-out),
-                color var(--aip-dur-state) var(--aip-ease-out);
+                color var(--aip-dur-state) var(--aip-ease-out),
+                transform var(--aip-dur-press) var(--aip-ease-out);
 }
 .aip-models-summary:hover {
     background: var(--aip-item-hover); border-color: var(--aip-border-strong);
@@ -990,7 +994,8 @@ select.aip-input { cursor:pointer; }
     border:1px solid var(--aip-btn-border); color: var(--aip-primary);
     font-size:12px; line-height:1; text-align:left; cursor:pointer;
     transition: background var(--aip-dur-state) var(--aip-ease-out),
-                border-color var(--aip-dur-state) var(--aip-ease-out);
+                border-color var(--aip-dur-state) var(--aip-ease-out),
+                opacity var(--aip-dur-state) var(--aip-ease-out);
 }
 .aip-select-trigger:hover { background: var(--aip-btn-bg-hover); }
 .aip-select-trigger[aria-disabled='true'] { cursor:default; }
@@ -1036,7 +1041,8 @@ select.aip-input { cursor:pointer; }
    transition-duration to 0.01ms !important on every descendant, and a
    non-important shorthand here would lose to it anyway. */
 .aip-tab { color: var(--aip-secondary); background:transparent; cursor:pointer;
-           transition: color 200ms var(--aip-ease-out); }
+           transition: color 200ms var(--aip-ease-out),
+                       transform var(--aip-dur-press) var(--aip-ease-out); }
 /* Inset focus ring. This started as a workaround for the tablist's
    overflow:hidden (which the selection pill's spring overshoot has since forced
    off, see the tablist JSX) and is kept as the deliberate look: the tabs sit
@@ -2149,7 +2155,7 @@ const AmbiguousStoresCard: React.FC = () => {
             </div>
             <div className="flex flex-wrap gap-2 pl-6">
                 <button
-                    className="px-3 py-1.5 rounded-md border text-xs font-medium disabled:opacity-50"
+                    className="aip-press px-3 py-1.5 rounded-md border text-xs font-medium hover:bg-[color:var(--aip-item-hover)] disabled:opacity-50"
                     style={{ borderColor: 'var(--aip-warn-border)' }}
                     disabled={busy !== null}
                     onClick={() => resolve('keyring')}
@@ -2157,7 +2163,7 @@ const AmbiguousStoresCard: React.FC = () => {
                     {busy === 'keyring' ? t('Applying…') : t('Keep system keychain')}
                 </button>
                 <button
-                    className="px-3 py-1.5 rounded-md border text-xs font-medium disabled:opacity-50"
+                    className="aip-press px-3 py-1.5 rounded-md border text-xs font-medium hover:bg-[color:var(--aip-item-hover)] disabled:opacity-50"
                     style={{ borderColor: 'var(--aip-warn-border)' }}
                     disabled={busy !== null}
                     onClick={() => resolve('fallback')}
@@ -2165,7 +2171,7 @@ const AmbiguousStoresCard: React.FC = () => {
                     {busy === 'fallback' ? t('Applying…') : t('Keep app backup')}
                 </button>
                 <button
-                    className="px-3 py-1.5 rounded-md border text-xs font-medium disabled:opacity-50"
+                    className="aip-press px-3 py-1.5 rounded-md border text-xs font-medium hover:bg-[color:var(--aip-item-hover)] disabled:opacity-50"
                     style={{ borderColor: 'var(--aip-warn-border)' }}
                     disabled={busy !== null}
                     onClick={() => resolve('merge')}
@@ -5226,12 +5232,6 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                             );
                         })()}
 
-                        {ninerouterTest.message && (
-                            <p className={`text-[10px] ${ninerouterTest.ok ? 'aip-ok-fg' : 'aip-danger-fg'}`} role="status">
-                                {ninerouterTest.message}
-                            </p>
-                        )}
-
                         <div className="flex flex-wrap items-center gap-2">
                             <button
                                 type="button"
@@ -5290,6 +5290,11 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                 />
                             )}
                         </div>
+                        {ninerouterTest.message && (
+                            <p className={`text-[10px] ${ninerouterTest.ok ? 'aip-ok-fg' : 'aip-danger-fg'}`} role="status">
+                                {ninerouterTest.message}
+                            </p>
+                        )}
                     </div>
                 </div>
             </div>
