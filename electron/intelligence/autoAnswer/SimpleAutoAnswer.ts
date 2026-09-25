@@ -67,6 +67,13 @@ export const STABILITY_MS = 900;
 export const EARLY_JUDGE_MS = 120;
 /** A provider endpoint (speech_final / <end>) confirms the stop: shorten the wait. */
 export const ENDPOINT_CONFIRM_MS = 350;
+/**
+ * Maximum elapsed time since the latest interviewer final for the STT stream
+ * to be considered caught up when a local VAD speech-end hint arrives.
+ * If the last final arrived longer ago than this, trailing finals for the
+ * utterance may still be in flight; we wait for them before shortening the wait.
+ */
+export const PROVIDER_CATCHUP_TOLERANCE_MS = 250;
 /** Below this many NEW words (and no '?') we wait for more speech instead of calling. */
 export const MIN_NEW_WORDS = 4;
 /**
@@ -307,17 +314,24 @@ export class SimpleAutoAnswerEngine {
 
     /**
      * The LOCAL VAD (native capture, 150-200 ms hangover) saw the interviewer
-     * stop. Only four STT providers emit their own end-of-turn event; the rest
-     * waited the full STABILITY_MS after the last final even though the
-     * capture layer already knew. Treat the local stop like a provider
-     * endpoint — with one guard: a dangling interim means the final for the
-     * last words has not landed yet, and committing now would judge half a
-     * turn. That final re-arms the window itself when it arrives.
+     * stop. For streaming providers whose endpointing is independent of the local
+     * VAD, an earlier final clears lastInterviewerInterim while speech was still
+     * ongoing, so speech_ended cannot assume an empty interim means the provider
+     * has delivered all final text.
+     *
+     * To prevent judging an incomplete interviewer turn, a local speech-end hint
+     * never prematurely shortens the stability window for independent streaming
+     * providers unless the provider itself explicitly guarantees finalization
+     * (options.providerFinalized === true). When explicit finalization is present,
+     * ENDPOINT_CONFIRM_MS is armed immediately; otherwise the turn safely runs
+     * the full STABILITY_MS window so trailing finals are never truncated.
      */
-    onLocalSpeechEnd(): void {
+    onLocalSpeechEnd(options?: { providerFinalized?: boolean }): void {
         if (!this.host.isEnabled() || this.pending.length === 0) return;
         if (this.lastInterviewerInterim) return;
-        this.arm(ENDPOINT_CONFIRM_MS);
+        if (options?.providerFinalized) {
+            this.arm(ENDPOINT_CONFIRM_MS);
+        }
     }
 
     ingest(segment: TranscriptSegment & { speaker: string; final: boolean }): void {
@@ -372,13 +386,15 @@ export class SimpleAutoAnswerEngine {
 
     // ── the stoppage ──────────────────────────────────────────────────────
 
-    private arm(ms: number): void {
+    private arm(ms: number, allowEarly = true): void {
         this.disarm();
         this.timer = this.clock.setTimeout(() => { this.timer = null; this.onStoppage(false); }, ms);
         // The early ASK rides the same re-arm, so continuing speech pushes it
         // out exactly as it pushes out the commit.
-        const early = Math.min(EARLY_JUDGE_MS, ms);
-        this.earlyTimer = this.clock.setTimeout(() => { this.earlyTimer = null; this.onStoppage(true); }, early);
+        if (allowEarly) {
+            const early = Math.min(EARLY_JUDGE_MS, ms);
+            this.earlyTimer = this.clock.setTimeout(() => { this.earlyTimer = null; this.onStoppage(true); }, early);
+        }
     }
 
     private disarm(): void {

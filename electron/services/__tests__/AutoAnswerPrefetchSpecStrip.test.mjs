@@ -36,6 +36,7 @@ const untilIdle = (engine) => new Promise((resolve) => {
 });
 
 test('a revealed prefetch never carries the hidden <verification_spec>', async () => {
+    process.env.NATIVELY_CODE_VERIFY = '1';
     const { IntelligenceEngine } = await import(pathToFileURL(enginePath).href);
     const { SessionTracker } = require(sessionPath);
     const session = new SessionTracker();
@@ -61,5 +62,142 @@ test('a revealed prefetch never carries the hidden <verification_spec>', async (
     assert.ok(!/"entry"/.test(finals[0]), 'nor its JSON payload');
     const stored = session.getFullUsage().at(-1)?.answer ?? '';
     assert.ok(!/verification_spec/i.test(stored), 'nor the session record');
+    delete process.env.NATIVELY_CODE_VERIFY;
+    engine.reset();
+});
+
+test('an adopted streaming prefetch strips verification_spec from pending buffer', async () => {
+    process.env.NATIVELY_CODE_VERIFY = '1';
+    const { IntelligenceEngine } = await import(pathToFileURL(enginePath).href);
+    const { SessionTracker } = require(sessionPath);
+    const session = new SessionTracker();
+    const engine = new IntelligenceEngine({ setNegotiationCoachingHandler() {} }, session);
+
+    const tokens = [];
+    const finals = [];
+    engine.on('suggested_answer_token', (token) => tokens.push(token));
+    engine.on('suggested_answer', (answer) => finals.push(answer));
+
+    // Reveal an adopted prefetch that streamed live with pending buffer containing verification_spec
+    engine.revealSpeculativeAnswer(
+        {
+            generationId: 2,
+            question: QUESTION,
+            confidence: 0.9,
+            text: 'Valid code snippet\n<verification_spec>{"entry":"rev"}</verification_spec>',
+            writeDecision: { policy: 'store_conversational_only' },
+        },
+        true,
+        {
+            emitted: true,
+            pendingBuffer: 'Valid code snippet\n<verification_spec>{"entry":"rev"}</verification_spec>',
+        },
+    );
+
+    assert.equal(tokens.length, 1, 'pending buffer emitted');
+    assert.ok(tokens[0].includes('Valid code snippet'));
+    assert.ok(!tokens[0].includes('verification_spec'), 'pending buffer must not contain verification_spec');
+    assert.equal(finals.length, 1, 'final answer emitted');
+    assert.ok(!finals[0].includes('verification_spec'), 'final must not contain verification_spec');
+    engine.reset();
+    delete process.env.NATIVELY_CODE_VERIFY;
+});
+
+test('an adopted streaming prefetch emits suggested_answer_discard when empty after strip', async () => {
+    process.env.NATIVELY_CODE_VERIFY = '1';
+    const { IntelligenceEngine } = await import(pathToFileURL(enginePath).href);
+    const { SessionTracker } = require(sessionPath);
+    const session = new SessionTracker();
+    const engine = new IntelligenceEngine({ setNegotiationCoachingHandler() {} }, session);
+
+    const discards = [];
+    const finals = [];
+    engine.on('suggested_answer_discard', (reason) => discards.push(reason));
+    engine.on('suggested_answer', (answer) => finals.push(answer));
+
+    // Reveal an adopted prefetch where text consists entirely of verification_spec
+    engine.revealSpeculativeAnswer(
+        {
+            generationId: 3,
+            question: QUESTION,
+            confidence: 0.9,
+            text: '<verification_spec>{"entry":"rev"}</verification_spec>',
+            writeDecision: { policy: 'store_conversational_only' },
+        },
+        true,
+        {
+            emitted: true,
+            pendingBuffer: '',
+        },
+    );
+
+    assert.equal(finals.length, 0, 'no final answer emitted for empty text');
+    assert.equal(discards.length, 1, 'discard event emitted');
+    assert.equal(discards[0], 'empty_after_strip', 'correct discard reason emitted');
+    engine.reset();
+    delete process.env.NATIVELY_CODE_VERIFY;
+});
+
+test('an adopted prefetch containing a <verification_spec> block is stripped even if verification was not marked enabled', async () => {
+    delete process.env.NATIVELY_CODE_VERIFY;
+    const { IntelligenceEngine } = await import(pathToFileURL(enginePath).href);
+    const { SessionTracker } = require(sessionPath);
+    const session = new SessionTracker();
+    const engine = new IntelligenceEngine({ setNegotiationCoachingHandler() {} }, session);
+
+    const finals = [];
+    engine.on('suggested_answer', (answer) => finals.push(answer));
+
+    const exampleAnswer = 'Here is the solution code.\n<verification_spec>{"entry":"test","cases":[]}</verification_spec>';
+    engine.revealSpeculativeAnswer(
+        {
+            generationId: 4,
+            question: QUESTION,
+            confidence: 0.9,
+            text: exampleAnswer,
+            writeDecision: { policy: 'store_conversational_only' },
+            codeVerificationEnabled: false,
+        },
+        true,
+        {
+            emitted: true,
+            pendingBuffer: '',
+        },
+    );
+
+    assert.equal(finals.length, 1);
+    assert.ok(!finals[0].includes('verification_spec'), 'verification block must be stripped even when flag is false');
+    assert.ok(finals[0].includes('Here is the solution code.'), 'solution text preserved');
+    engine.reset();
+});
+
+test('an adopted prefetch without <verification_spec> is preserved unmodified when verification is disabled', async () => {
+    delete process.env.NATIVELY_CODE_VERIFY;
+    const { IntelligenceEngine } = await import(pathToFileURL(enginePath).href);
+    const { SessionTracker } = require(sessionPath);
+    const session = new SessionTracker();
+    const engine = new IntelligenceEngine({ setNegotiationCoachingHandler() {} }, session);
+
+    const finals = [];
+    engine.on('suggested_answer', (answer) => finals.push(answer));
+
+    const cleanAnswer = 'Here is a regular explanation without any hidden tags.';
+    engine.revealSpeculativeAnswer(
+        {
+            generationId: 5,
+            question: QUESTION,
+            confidence: 0.9,
+            text: cleanAnswer,
+            writeDecision: { policy: 'store_conversational_only' },
+        },
+        true,
+        {
+            emitted: true,
+            pendingBuffer: '',
+        },
+    );
+
+    assert.equal(finals.length, 1);
+    assert.equal(finals[0], cleanAnswer, 'unmodified when no verification block');
     engine.reset();
 });

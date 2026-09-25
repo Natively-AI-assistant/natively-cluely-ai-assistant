@@ -25,7 +25,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const Simple = require(path.resolve(__dirname, '../../../../dist-electron/electron/intelligence/autoAnswer/SimpleAutoAnswer.js'));
 const { isMidWordCut } = require(path.resolve(__dirname, '../../../../dist-electron/electron/intelligence/autoAnswer/AutoAnswerText.js'));
-const { SimpleAutoAnswerEngine, STABILITY_MS, ENDPOINT_CONFIRM_MS, RETRY_MS, RETRY_TTL_MS, HELD_MAX_AGE_MS, EARLY_JUDGE_MS } = Simple;
+const { SimpleAutoAnswerEngine, STABILITY_MS, ENDPOINT_CONFIRM_MS, PROVIDER_CATCHUP_TOLERANCE_MS, RETRY_MS, RETRY_TTL_MS, HELD_MAX_AGE_MS, EARLY_JUDGE_MS } = Simple;
 
 const flush = () => new Promise((r) => setImmediate(r));
 const YES = (over = {}) => JSON.stringify({ is_ask: true, directed_at_user: true, complete: true, act: 'question', answerability: 0.95, question_text: null, ...over });
@@ -232,10 +232,10 @@ test('a provider endpoint confirms the stop early', async () => {
 // means the final for the last words has not landed, and that final re-arms
 // the window itself when it does.
 
-test('the local VAD stop confirms the window early when the transcript is caught up', async () => {
+test('the local VAD stop confirms the window early when provider finalization is guaranteed', async () => {
   const h = makeSimple(async () => YES());
   h.interviewer('Why did you choose PostgreSQL over the alternatives here?');   // final landed
-  h.engine.onLocalSpeechEnd();
+  h.engine.onLocalSpeechEnd({ providerFinalized: true });
   await h.advance(ENDPOINT_CONFIRM_MS + 100);
   assert.equal(h.texts().length, 1, 'committed at ENDPOINT_CONFIRM_MS, not STABILITY_MS');
 });
@@ -244,13 +244,45 @@ test('the local VAD stop is ignored while an interim is still dangling (its fina
   const h = makeSimple(async () => YES());
   h.interviewer('Why did you choose PostgreSQL over the', true);
   h.interviewer('alternatives here', false);                                    // interim, final not yet in
-  h.engine.onLocalSpeechEnd();
+  h.engine.onLocalSpeechEnd({ providerFinalized: true });
   await h.advance(ENDPOINT_CONFIRM_MS + 100);
   assert.deepEqual(h.texts(), [], 'not committed on a half-transcribed turn');
   h.interviewer('alternatives here?', true);                                    // the final lands
   await h.advance(STABILITY_MS + 100);
   assert.equal(h.texts().length, 1, 'the final re-armed the window and the turn commits whole');
   assert.match(h.texts()[0], /alternatives here\?$/);
+});
+
+test('the local VAD stop without explicit finalization never shortens window on subsequent finals to prevent partial turns', async () => {
+  const h = makeSimple(async () => YES());
+  // Intermediate final arrives while interviewer is speaking
+  h.interviewer('Why did you choose PostgreSQL over the', true);
+  // Time passes while speech continues physically
+  await h.advance(100);
+  // Local VAD detects silence and fires speech end without provider finalization guarantee
+  h.engine.onLocalSpeechEnd();
+  // At ENDPOINT_CONFIRM_MS + 50, it must NOT have committed prematurely
+  await h.advance(ENDPOINT_CONFIRM_MS + 50);
+  assert.deepEqual(h.texts(), [], 'not committed prematurely while subsequent finals may be in flight');
+  // Subsequent final arrives from provider
+  h.interviewer('alternatives here?', true);
+  // Must NOT shorten to ENDPOINT_CONFIRM_MS (which could truncate another in-flight segment)
+  await h.advance(ENDPOINT_CONFIRM_MS + 50);
+  assert.deepEqual(h.texts(), [], 'not committed prematurely at ENDPOINT_CONFIRM_MS after subsequent final');
+  // Safely commits whole question at STABILITY_MS
+  await h.advance(STABILITY_MS);
+  assert.equal(h.texts().length, 1, 'committed full question once STABILITY_MS elapsed');
+  assert.match(h.texts()[0], /alternatives here\?$/);
+});
+
+test('the local VAD stop without explicit finalization safely waits out stability window if no trailing final arrives', async () => {
+  const h = makeSimple(async () => YES());
+  h.interviewer('Why did you choose PostgreSQL over the alternatives here?');
+  h.engine.onLocalSpeechEnd();
+  await h.advance(ENDPOINT_CONFIRM_MS + 50);
+  assert.deepEqual(h.texts(), [], 'not committed at ENDPOINT_CONFIRM_MS without explicit catch-up guarantee');
+  await h.advance(STABILITY_MS);
+  assert.equal(h.texts().length, 1, 'committed at STABILITY_MS');
 });
 
 test('the local VAD hint is taken only from providers that stream interims', () => {
@@ -449,7 +481,6 @@ test('a verdict that arrives after the meeting moved on is still recorded as sta
   const judged = h.state.events.filter(e => e.name === 'auto_answer_judged');
   assert.ok(judged.some(e => e.judgeOutcome === 'stale'), 'the superseded call reports stale');
 });
-
 // ── Latency work (2026-09-22): question-shaped candidates always prefetch ──
 // Live telemetry (9 auto answers, Deepgram + gpt-5.6-luna): the judge took
 // 1.2-2.5 s and the answer's first token another 0.7-2.7 s, SERIALLY, because
