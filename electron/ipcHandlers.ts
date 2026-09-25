@@ -492,6 +492,8 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Already stored fully prefixed (`openrouter/<vendor>/<model>`), which is
       // the form modelAvailable() classifies — do not re-prefix.
       const openrouterFallbackModel: string | null = cm.getPreferredModel?.('openrouter') || null;
+      // Same contract: stored fully prefixed (`requesty/<model>`). Do not re-prefix.
+      const requestyFallbackModel: string | null = cm.getPreferredModel?.('requesty') || null;
       // Same contract: stored fully prefixed (`fluxion/<model>`), the form
       // modelAvailable() classifies. Do not re-prefix.
       const fluxionFallbackModel: string | null = cm.getPreferredModel?.('fluxion') || null;
@@ -555,6 +557,10 @@ export function initializeIpcHandlers(appState: AppState): void {
         // Without this rung a user whose only working provider is OpenRouter is
         // left pinned to a dead default and told "No AI providers configured".
         : (openrouterFallbackModel && modelAvailable(openrouterFallbackModel)) ? openrouterFallbackModel
+        // Requesty earns a rung on the same terms as OpenRouter: modelAvailable()
+        // enforces the key, the disabled switch and the opt-in allow-list, so
+        // only a model the user ticked can become the default.
+        : (requestyFallbackModel && modelAvailable(requestyFallbackModel)) ? requestyFallbackModel
         // Fluxion earns a rung for the same reason, and the symptom is identical:
         // its preferred model was already being STORED and returned to the
         // renderer, but never consulted here, so a Fluxion-only user whose
