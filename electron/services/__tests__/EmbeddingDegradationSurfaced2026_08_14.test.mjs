@@ -143,3 +143,19 @@ test('the notice slides in from the right edge and back out, like a macOS banner
   assert.ok(/raw\.endsWith\('ms'\) \? n : raw\.endsWith\('s'\) \? n \* 1000 : fallback/.test(notice), 'ms and s both handled');
   assert.ok(/const closeMs = cssMs\(slideRef\.current, '--toast-close', 350\);/.test(notice), 'the slide-out timer uses it');
 });
+
+test('the quota and long-term-memory notices share the corner notice glass', () => {
+  const quota = fs.readFileSync(path.join(root, 'src', 'components', 'NativelyQuotaBanner.tsx'), 'utf8');
+  const hind = fs.readFileSync(path.join(root, 'src', 'components', 'HindsightStatusBanner.tsx'), 'utf8');
+  assert.ok(quota.includes('cardClassName="lg-notice lg-notice-warn ') && quota.includes("import '../ui-components/LiquidGlassButton.css';"), 'quota card is .lg-notice with the amber hairline');
+  assert.ok(/cardClassName=\{`lg-notice\$\{isFailing \? ' lg-notice-warn' : ''\}`\}/.test(hind) && hind.includes("import '../ui-components/LiquidGlassButton.css';"), 'hindsight card is .lg-notice, amber while failing');
+  // An inline background or box-shadow on the card would override the glass.
+  const cardStyle = hind.slice(hind.indexOf('cardStyle={{'), hind.indexOf('}}', hind.indexOf('cardStyle={{')));
+  assert.ok(!/background|boxShadow/.test(cardStyle), 'no inline surface over the glass');
+  // Text follows the theme: no hardcoded white copy left on either card.
+  assert.ok(!/text-white\/|#E0E0E0/.test(quota), 'quota text uses theme tokens');
+  assert.ok(!/color: '#FFFFFF'|rgba\(230,230,235/.test(hind), 'hindsight text uses theme tokens');
+  const warnDark = glassCss.indexOf('.lg-notice.lg-notice-warn {'), warnLight = glassCss.indexOf("[data-theme='light'] .lg-notice.lg-notice-warn {");
+  assert.ok(warnDark !== -1 && warnLight !== -1, 'amber hairline in both themes');
+  assert.ok(/var\(--lg-notice-edge\)/.test(glassCss.slice(warnLight, glassCss.indexOf('}', warnLight))), 'light warn keeps the edge thickness');
+});

@@ -525,6 +525,9 @@ test('pictures: a card whose content is new each time keeps none', () => {
   assert.ok(modal.includes('if (!open || !shown || !keepPictures) return;'), 'none taken while open');
   assert.ok(modal.includes('if (keepRef.current && last && !changedSinceShotRef.current'), 'the close never reuses a picture from before they were turned off');
   assert.ok(code('components/NativelyQuotaBanner.tsx').includes('keepPictures={false}'), 'quota readings');
+  // A see-through (Liquid Glass) card keeps none either: a picture bakes in the
+  // backdrop from when it was taken, so the next open would pour out a stale one.
+  assert.ok(code('components/HindsightStatusBanner.tsx').includes('keepPictures={false}'), 'long-term memory notice (glass)');
   assert.ok(code('components/trial/FreeTrialModal.tsx').includes('keepPictures={false}'), 'trial usage');
 });
 

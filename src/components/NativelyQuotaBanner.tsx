@@ -6,6 +6,8 @@ import React, { useEffect, useState } from 'react';
 import { AlertTriangle, X, ArrowUpRight } from 'lucide-react';
 import { formatMeter, normalizeQuota, type UsageMeter } from '../types/nativelyUsage';
 import { GenieModal } from './ui/GenieModal';
+import { useResolvedTheme } from '../hooks/useResolvedTheme';
+import '../ui-components/LiquidGlassButton.css';
 
 interface NearLimitBucket {
     label: string;
@@ -23,6 +25,11 @@ const UPGRADE_URL      = 'https://checkout.dodopayments.com/buy/pdt_0NbFixGmD8CS
 export const NativelyQuotaBanner: React.FC = () => {
     const [nearLimitBuckets, setNearLimitBuckets] = useState<NearLimitBucket[]>([]);
     const [visible, setVisible] = useState(false);
+    // The card is the Liquid Glass kit's clear pane (.lg-notice), shared with
+    // the provider-change notice, so its text follows the theme: amber and red
+    // step down a shade on light glass to stay legible.
+    const isLight = useResolvedTheme() === 'light';
+    const amber = isLight ? 'text-amber-600' : 'text-amber-400';
 
     useEffect(() => {
         let cancelled = false;
@@ -104,19 +111,21 @@ export const NativelyQuotaBanner: React.FC = () => {
             zIndex={9999}
             padding={24}
             wrapClassName="w-[320px]"
-            cardClassName="bg-[#1A1A1A] border border-amber-500/25 shadow-2xl rounded-2xl p-4 flex flex-col gap-3"
-            shadow="0 25px 50px -12px rgba(0,0,0,0.25)"
-            radius={16}
+            cardClassName="lg-notice lg-notice-warn p-4 flex flex-col gap-3"
+            // The stand-in for .lg-notice's lift while the genie runs.
+            shadow={isLight ? '0 16px 36px -14px rgba(0,0,0,0.22)' : '0 22px 44px -18px rgba(0,0,0,0.7)'}
+            radius={18}
         >
             {/* Header */}
             <div className="flex items-start justify-between gap-2">
                 <div className="flex items-center gap-2">
-                    <AlertTriangle size={14} className="text-amber-400 shrink-0 mt-[1px]" strokeWidth={2} />
-                    <span className="text-[13px] font-semibold text-[#E0E0E0]">Natively quota almost full</span>
+                    <AlertTriangle size={14} className={`${amber} shrink-0 mt-[1px]`} strokeWidth={2} />
+                    <span className="text-[13px] font-semibold text-text-primary">Natively quota almost full</span>
                 </div>
                 <button
                     onClick={() => setVisible(false)}
-                    className="text-white/30 hover:text-white/70 transition-colors shrink-0 cursor-pointer"
+                    aria-label="Dismiss"
+                    className="text-text-tertiary hover:text-text-primary transition-colors shrink-0 cursor-pointer"
                 >
                     <X size={14} strokeWidth={2} />
                 </button>
@@ -126,8 +135,8 @@ export const NativelyQuotaBanner: React.FC = () => {
             <div className="flex flex-col gap-1.5">
                 {nearLimitBuckets.map(({ label, detail, pct }) => (
                     <div key={label} className="flex items-center justify-between gap-2">
-                        <span className="text-[12px] text-white/50 shrink-0">{label}</span>
-                        <span className={`text-[12px] font-medium tabular-nums text-right ${pct >= 100 ? 'text-red-400' : 'text-amber-400'}`}>
+                        <span className="text-[12px] text-text-secondary shrink-0">{label}</span>
+                        <span className={`text-[12px] font-medium tabular-nums text-right ${pct >= 100 ? (isLight ? 'text-red-600' : 'text-red-400') : amber}`}>
                             {detail} ({pct}%)
                         </span>
                     </div>
@@ -136,10 +145,10 @@ export const NativelyQuotaBanner: React.FC = () => {
 
             {/* Footer */}
             <div className="flex items-center justify-between pt-0.5">
-                <span className="text-[11px] text-white/30">Resets on your next billing date</span>
+                <span className="text-[11px] text-text-secondary">Resets on your next billing date</span>
                 <button
                     onClick={() => (window.electronAPI as any)?.openExternal?.(UPGRADE_URL)}
-                    className="flex items-center gap-1 text-[11px] font-semibold text-amber-400 hover:text-amber-300 transition-colors cursor-pointer"
+                    className={`flex items-center gap-1 text-[11px] font-semibold ${amber} ${isLight ? 'hover:text-amber-700' : 'hover:text-amber-300'} transition-colors cursor-pointer`}
                 >
                     Upgrade <ArrowUpRight size={11} strokeWidth={2.5} />
                 </button>
