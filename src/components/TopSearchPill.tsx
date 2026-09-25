@@ -419,18 +419,24 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                     >
                         {/* Main Pill */}
                         <div className="relative">
-                            {/* Same surface as the "My Natively" section below (Launcher.tsx), recessed
-                                into the header with an inner top shadow and a hairline ring. Only the
-                                open results panel casts a drop, so it reads above the page. Both surfaces
-                                are opaque, so there is no backdrop blur: it would paint nothing. */}
+                            {/* At rest, the "My Natively" section's colour (Launcher.tsx), recessed into
+                                the header with an inner top shadow and a hairline ring. Open, it blends
+                                into the same colour at 90% so the frost shows: in on the dropdown-open
+                                clock (250ms smooth-out), back on the close clock (150ms).
+                                The blur stays on at rest, where the opaque fill hides it, so only
+                                background-color and box-shadow animate. Only the open results panel
+                                casts a drop, so it reads above the page. color-mix because a /90
+                                modifier emits nothing on a bare var() colour. */}
                             <div
                                 className={`
                                     relative overflow-hidden
+                                    backdrop-blur-xl backdrop-saturate-150
                                     rounded-2xl ring-1
-                                    transition-[box-shadow] duration-150 ease-out
+                                    transition-[background-color,box-shadow] ease-sculpted
+                                    ${isExpanded ? 'duration-[250ms]' : 'duration-150'}
                                     ${isLight
-                                        ? `bg-bg-secondary ${showResults ? 'shadow-[inset_0_1px_2px_rgba(0,0,0,0.08),0_8px_24px_rgba(0,0,0,0.10)]' : 'shadow-[inset_0_1px_2px_rgba(0,0,0,0.08)]'} ${isExpanded ? 'ring-black/[0.14]' : 'ring-black/[0.08] hover:ring-black/[0.14]'}`
-                                        : `bg-bg-elevated ${showResults ? 'shadow-[inset_0_1px_2px_rgba(0,0,0,0.6),0_12px_32px_rgba(0,0,0,0.55)]' : 'shadow-[inset_0_1px_2px_rgba(0,0,0,0.6)]'} ${isExpanded ? 'ring-white/[0.14]' : 'ring-white/[0.08] hover:ring-white/[0.12]'}`}
+                                        ? `${isExpanded ? 'bg-[color-mix(in_srgb,var(--bg-secondary)_90%,transparent)]' : 'bg-bg-secondary'} ${showResults ? 'shadow-[inset_0_1px_2px_rgba(0,0,0,0.08),0_8px_24px_rgba(0,0,0,0.10)]' : 'shadow-[inset_0_1px_2px_rgba(0,0,0,0.08)]'} ${isExpanded ? 'ring-black/[0.14]' : 'ring-black/[0.08] hover:ring-black/[0.14]'}`
+                                        : `${isExpanded ? 'bg-[color-mix(in_srgb,var(--bg-elevated)_90%,transparent)]' : 'bg-bg-elevated'} ${showResults ? 'shadow-[inset_0_1px_2px_rgba(0,0,0,0.6),0_12px_32px_rgba(0,0,0,0.55)]' : 'shadow-[inset_0_1px_2px_rgba(0,0,0,0.6)]'} ${isExpanded ? 'ring-white/[0.14]' : 'ring-white/[0.08] hover:ring-white/[0.12]'}`}
                                 `}
                             >
                                 {/* Input Row */}
