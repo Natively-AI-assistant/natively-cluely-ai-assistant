@@ -12,6 +12,7 @@ import {
     OVERLAY_OPACITY_DEFAULT,
 } from '../lib/overlayAppearance';
 import { useToggleInit } from './settings/useToggleInit';
+import { createOrphanReleaseGuard } from '../lib/orphanReleaseGuard.mjs';
 
 /**
  * The quick-settings popup's switch (`sm` variant: a 30x13.64 track — the
@@ -53,6 +54,11 @@ const PopupToggle: React.FC<{
     offClassName: string;
 }> = ({ checked, onChange, label, disabled = false, onClassName, offClassName }) => {
     const toggleInit = useToggleInit();
+    // Windows can drop the mouse-down on this popover window, leaving a release
+    // with no press and so no click — the switch never moved. Recover from the
+    // release; see orphanReleaseGuard.mjs.
+    const releaseGuard = useRef(createOrphanReleaseGuard()).current;
+    const activate = () => { toggleInit.arm(); onChange(); };
     return (
         <button
             type="button"
@@ -61,7 +67,10 @@ const PopupToggle: React.FC<{
             aria-checked={checked}
             aria-label={label}
             disabled={disabled}
-            onClick={() => { toggleInit.arm(); onChange(); }}
+            onClick={activate}
+            onPointerDown={releaseGuard.press}
+            onPointerCancel={releaseGuard.cancel}
+            onPointerUp={(e) => { if (releaseGuard.release(e.button) && !disabled) activate(); }}
             className={`t-toggle t-toggle-sm shrink-0 active:scale-[0.92] ${checked ? onClassName : offClassName} ${toggleInit.className}`}
         >
             <span className="t-toggle-thumb" aria-hidden="true" />
