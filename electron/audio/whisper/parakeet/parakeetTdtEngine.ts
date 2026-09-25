@@ -7,7 +7,7 @@ import { ParakeetTokenizer } from './tokenizer';
 import { runTdtGreedyDecodeAsync, type TdtJointOutput } from './tdtDecoder';
 import type { ParakeetChunkTranscript, ParakeetDecoderState } from './types';
 
-export interface ParakeetSharedResources {
+export interface ParakeetTdtSharedResources {
   preprocessorSession: InferenceSession;
   encoderSession: InferenceSession;
   decoderJointSession: InferenceSession;
@@ -17,6 +17,8 @@ export interface ParakeetSharedResources {
   vocabSize: number;
   blankId: number;
 }
+
+export type ParakeetSharedResources = ParakeetTdtSharedResources;
 
 async function createSessionWithFallback(
   filePath: string,

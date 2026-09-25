@@ -92,4 +92,30 @@ describe('TDT Greedy Decoder', () => {
     assert.deepEqual(result.tokens, [0]);
     assert.deepEqual(result.timestamps, [1]);
   });
+
+  test('preserves lastTokenId across chunks when initialState is provided', () => {
+    let capturedPrevToken = null;
+    const mockJointFn = (t, prevToken, state) => {
+      capturedPrevToken = prevToken;
+      return {
+        logits: new Float32Array([0, 0, 0, 10, 10, 0, 0, 0, 0]),
+        state1: new Float32Array([0]),
+        state2: new Float32Array([0]),
+      };
+    };
+
+    runTdtGreedyDecode({
+      encodingsLen: 1,
+      vocabSize: 4,
+      blankId: 3,
+      decodeJointFn: mockJointFn,
+      initialState: {
+        state1: new Float32Array(0),
+        state2: new Float32Array(0),
+        lastTokenId: 42,
+      },
+    });
+
+    assert.equal(capturedPrevToken, 42, 'Must use lastTokenId from initialState on first decode step');
+  });
 });

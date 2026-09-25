@@ -67,7 +67,7 @@ export async function runTdtGreedyDecodeAsync(
   let emittedTokens = 0;
 
   while (t < encodingsLen) {
-    const prevToken = tokens.length > 0 ? tokens[tokens.length - 1] : blankId;
+    const prevToken = tokens.length > 0 ? tokens[tokens.length - 1] : (currentState.lastTokenId ?? blankId);
     const jointOut = await decodeJointFn(t, prevToken, currentState);
     const logits = jointOut.logits;
 
@@ -128,7 +128,7 @@ export function runTdtGreedyDecode(options: TdtGreedyDecodeOptions): TdtDecodeRe
   let emittedTokens = 0;
 
   while (t < encodingsLen) {
-    const prevToken = tokens.length > 0 ? tokens[tokens.length - 1] : blankId;
+    const prevToken = tokens.length > 0 ? tokens[tokens.length - 1] : (currentState.lastTokenId ?? blankId);
     const jointOut = decodeJointFn(t, prevToken, currentState) as TdtJointOutput;
     const logits = jointOut.logits;
 
