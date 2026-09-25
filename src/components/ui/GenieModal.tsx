@@ -27,7 +27,7 @@ import React, { useCallback, useEffect, useMemo, useReducer, useRef } from 'reac
 import { motion, type MotionStyle } from 'framer-motion';
 import { useGenieCard, type GenieCard, type GenieSnapshotSource } from '../onboarding/useGenieCard';
 import {
-  warmGenieSnapshots, getGenieSnapshot, captureGenieSnapshot, isSettled, isScrolled, viewOf, snapshotKey as keyFor,
+  warmGenieSnapshots, getGenieSnapshot, captureGenieSnapshot, isSettled, isScrolled, showsTransientState, viewOf, snapshotKey as keyFor,
   type GenieSnapshot,
 } from '../onboarding/genieSnapshots';
 import { presenceInitial, presenceReducer, presenceEventFor } from '../onboarding/geniePresence.mjs';
@@ -211,6 +211,7 @@ export const GenieModal: React.FC<GenieModalProps> = ({
     if (event === 'close') {
       const card = genieRef.current?.cardRef.current;
       keepOnCloseRef.current = card && keepRef.current && !pausedRef.current && landedRef.current && isSettled(card) && !isScrolled(card)
+        && !showsTransientState(card)
         ? keyOf(viewOf(card)) : null;
       const landed = () => { dispatch('closed'); onClosedRef.current?.(); };
       if (closeInstantlyRef.current) landed();
@@ -234,7 +235,9 @@ export const GenieModal: React.FC<GenieModalProps> = ({
     const attempt = async () => {
       if (stopped) return;
       const bandsBusy = (genieRef.current?.bandsRef.current?.childElementCount ?? 0) > 0;
-      if (!landedRef.current || bandsBusy || pausedRef.current || !isSettled(card)) { schedule(400); return; }
+      // Not of a control under the pointer or a focus ring either: wait for the
+      // pointer to move on (a hover is not a change, so this polls).
+      if (!landedRef.current || bandsBusy || pausedRef.current || !isSettled(card) || showsTransientState(card)) { schedule(400); return; }
       // A picture of the view it opens into is a picture of its top: one
       // scrolled away would pour out scrolled, then land at the top.
       if (isScrolled(card)) return;

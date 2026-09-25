@@ -109,6 +109,32 @@ export function genieOpacity(p) {
 }
 
 /**
+ * How far in, in px, the silhouette may pinch before the card's shadow has
+ * gone. The shadow is a rectangle's box-shadow, cut off at the rectangle's
+ * edge, so while it shows it draws the rectangle's outline: wherever the card
+ * has pinched in from it, that outline stands around the card, the finished
+ * border there before the card is. Faded out over this much pinch, the most
+ * that outline can stray from the card is a quarter of it: 1.5 px, a few
+ * frames at the start of a close and the end of an open. (macOS and the
+ * GNOME port drop the shadow in flight altogether.)
+ */
+export const SHADOW_PINCH_PX = 6;
+
+/**
+ * The shadow stand-in's opacity at p: whole while the card is a rectangle,
+ * gone once it has pinched in SHADOW_PINCH_PX at its bottom edge, where the
+ * funnel narrows most. Measured in px, not in progress, so a narrow card or a
+ * corner notice on a short funnel fades its shadow over the same visible
+ * change as a wide one. Never later than the stretch (a card too narrow to
+ * pinch still loses it on the way down).
+ */
+export function genieShadowOpacity(p, geom) {
+  const { bottom } = genieEdges(p, geom);
+  const pinch = geom.width / 2 - genieHalfWidthAt(p, geom, bottom);
+  return Math.min(1 - genieStretch(p), clamp01(1 - pinch / SHADOW_PINCH_PX));
+}
+
+/**
  * Everything the card needs for frame p:
  *   transform  translate + vertical stretch, with transform-origin at the top
  *   clipPath   the funnel, in the card's own coordinates
@@ -259,7 +285,7 @@ export function genieTrack(from, to, ease, durationMs, geom, rows, hz = 120) {
     const { top, bottom } = genieEdges(p, geom);
     const sy = Math.max(bottom - top, 0.5) / height;
     shadowTransform.push(`translateY(${(top - geom.top).toFixed(2)}px) scaleY(${sy.toFixed(4)})`);
-    shadowOpacity.push(1 - genieStretch(p));
+    shadowOpacity.push(genieShadowOpacity(p, geom));
   }
   return { offsets, bands, layerOpacity, shadowTransform, shadowOpacity };
 }

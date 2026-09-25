@@ -123,7 +123,47 @@ test('track: a close picked up mid-open starts where the card is, and ends in th
   const tr = genieTrack(0.4, 1, t => t, 450, GEOM, ROWS);
   genieBands(0.4, GEOM, ROWS).forEach((m, b) => assert.equal(tr.bands[b][0], m));
   assert.equal(tr.layerOpacity.at(-1), 0, 'landed and gone');
-  assert.equal(tr.shadowOpacity.at(-1), 0, 'the shadow went before the silhouette changed');
+  assert.equal(tr.shadowOpacity.at(-1), 0, 'the shadow is gone by the time the card is in the slot');
+});
+
+// The stand-in is a rectangle, and a box-shadow is cut off at its element's
+// edge, so wherever the card has pinched in from that rectangle the shadow
+// draws the rectangle's outline around it: the finished card's border, there
+// before the card is. `1 - stretch` kept it at 86 % a tenth of a second into
+// a close, with the Settings card already 50 px in on each side.
+test('track: the shadow never outlines a card that has already pinched in', () => {
+  const { genieHalfWidthAt } = genieMod;
+  const shapes = {
+    'centred, wide': { top: 100, bottom: 700, width: 820, slotY: 800 - SLOT_INSET },
+    'centred, narrow': { top: 250, bottom: 550, width: 320, slotY: 800 - SLOT_INSET },
+    'bottom-right notice': { top: 636, bottom: 776, width: 320, slotY: 800 - SLOT_INSET },
+    'tall, in a short window': { top: 40, bottom: 560, width: 900, slotY: 600 - SLOT_INSET },
+  };
+  // How far in the silhouette is at its bottom edge, where it pinches most.
+  const pinch = (p, geom) => geom.width / 2 - genieHalfWidthAt(p, geom, genieEdges(p, geom).bottom);
+  const worst = [];
+  for (const [name, geom] of Object.entries(shapes)) {
+    const rows = genieBandRows(Math.round(geom.bottom - geom.top), 24);
+    for (const [from, to] of [[1, 0], [0, 1], [0.4, 1]]) {
+      for (const ease of [t => t, easeOut]) {
+        const tr = genieTrack(from, to, ease, 600, geom, rows);
+        tr.offsets.forEach((t, i) => {
+          const p = from + (to - from) * ease(t);
+          const shown = tr.shadowOpacity[i] * pinch(p, geom);
+          if (shown > 2) worst.push(`${name} ${from}->${to} t=${t.toFixed(3)}: opacity ${tr.shadowOpacity[i].toFixed(2)} x ${pinch(p, geom).toFixed(1)} px`);
+        });
+      }
+    }
+  }
+  assert.deepEqual(worst.slice(0, 5), [], `${worst.length} frames outline a pinched card`);
+});
+
+test('track: the shadow is whole at rest, and the outline genie fades it the same way', () => {
+  const open = genieTrack(1, 0, easeOut, 600, GEOM, ROWS);
+  assert.equal(open.shadowOpacity.at(-1), 1, 'the card lands with its whole shadow, for the class one to take over');
+  assert.equal(open.shadowOpacity[0], 0);
+  assert.ok(hook.includes('shadow.style.opacity = String(genieShadowOpacity(p, geom));'),
+    'the main-thread outline genie uses the same fade as the compositor track');
 });
 
 test('a close never mistakes its own first frames for rest', () => {
@@ -570,4 +610,49 @@ test('the main process lists pictures oldest first, so the renderer can warm the
   const main = read('../electron/genieSnapshots.ts');
   assert.ok(/if \(encrypted\(\)\) for \(const e of await loadIndex\(\)\) keys\.add\(e\.key\);\s*for \(const k of memory\.keys\(\)\) keys\.add\(k\);/.test(main));
   assert.ok(main.includes('others.sort((a, b) => a.savedAt - b.savedAt);'), 'the index is kept in save order');
+});
+
+// ─── Follow-ups to the shadow fix (2026-09-25) ──────────────────
+
+test('a close hands over from the real card as the bands appear, not a frame later', () => {
+  // Until the clock's first change the card and its shadow stayed up under the
+  // stand-in: one frame of both shadows at the start of every close.
+  const run = hook.slice(hook.indexOf('const run = (outlineOnly: boolean) => {'), hook.indexOf('const a = animate(genie, 1'));
+  assert.ok(run.includes('if (!reduced && rowsRef.current) renderGenie(from);'));
+  assert.ok(run.indexOf('renderGenie(from)') > run.indexOf('bandsFailedRef.current = !buildBands();'), 'after the bands are cut');
+});
+
+test('a kept picture never holds a hovered control or a focus ring', { skip: !snapsMod && 'no type stripping' }, () => {
+  const { showsTransientState } = snapsMod;
+  const control = { closest: () => control };
+  const plain = { closest: () => null };
+  const cardOf = ({ focus = null, hovered = [] } = {}) => {
+    const card = {
+      querySelector: sel => (sel === ':focus-visible' ? focus : null),
+      querySelectorAll: sel => (sel === ':hover' ? hovered : []),
+      contains: el => el === control || el === plain,
+    };
+    return card;
+  };
+  assert.equal(showsTransientState(cardOf()), false, 'nothing hovered or focused');
+  assert.equal(showsTransientState(cardOf({ hovered: [plain] })), false, 'the pointer on plain content');
+  assert.equal(showsTransientState(cardOf({ hovered: [plain, control] })), true, 'the pointer on a tab or button');
+  assert.equal(showsTransientState(cardOf({ focus: control })), true, 'a keyboard focus ring');
+  // The card itself matching (a focusable card) must not block every picture.
+  const self = cardOf({ hovered: [plain] });
+  plain.closest = () => self;
+  assert.equal(showsTransientState(self), false);
+  plain.closest = () => null;
+  assert.ok(modal.includes('|| !isSettled(card) || showsTransientState(card)) { schedule(400); return; }'), 'the settle loop waits');
+  assert.ok(/isSettled\(card\) && !isScrolled\(card\)\s*&& !showsTransientState\(card\)/.test(modal), 'a close keeps no such picture');
+});
+
+test('a confirm asked from inside Settings opens above it', () => {
+  // At the shared dialog's z-50 it opened behind Settings (GenieModal, 300):
+  // invisible, while its modal dim swallowed every click.
+  const confirm = code('components/ui/ConfirmDialog.tsx');
+  const layer = Number(confirm.match(/const CONFIRM_LAYER = (\d+);/)?.[1]);
+  const genieLayer = Number(modal.match(/zIndex = (\d+),/)?.[1]);
+  assert.ok(layer > genieLayer, `${layer} > ${genieLayer}`);
+  assert.equal((confirm.match(/style=\{\{ zIndex: CONFIRM_LAYER \}\}/g) || []).length, 2, 'the dim and the panel both');
 });

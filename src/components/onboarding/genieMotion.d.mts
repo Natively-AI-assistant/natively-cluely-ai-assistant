@@ -22,6 +22,10 @@ export declare function genieDrain(p: number): number;
 export declare function genieEdges(p: number, geom: GenieGeometry): { top: number; bottom: number };
 export declare function genieHalfWidthAt(p: number, geom: GenieGeometry, y: number): number;
 export declare function genieOpacity(p: number): number;
+/** How far in, px, the silhouette pinches before the card's shadow has gone. */
+export declare const SHADOW_PINCH_PX: number;
+/** The shadow stand-in's opacity: whole while the card is a rectangle, gone once it pinches in. */
+export declare function genieShadowOpacity(p: number, geom: GenieGeometry): number;
 export declare function genieFrame(p: number, geom: GenieGeometry | null): GenieFrame;
 
 export declare function quadMatrix3d(w: number, h: number, quad: [number, number][]): string;

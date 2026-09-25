@@ -216,7 +216,8 @@ test('the shadow is moved, never re-rasterised', () => {
   assert.ok(rendered.includes('shadow={isLight ? SHADOW_LIGHT : SHADOW_DARK}'), 'the stand-in is the card\'s own shadow');
   assert.ok(modal.includes('boxShadow: shadow,'));
   assert.ok(rendered.includes("' + SHADOW_LIGHT") && rendered.includes("' + SHADOW_DARK"), 'shared with the card, so the hand-over is exact');
-  assert.ok(hook.includes('shadow.style.opacity = String(1 - genieStretch(p));'), 'gone before the outline stops being a rectangle');
+  assert.ok(hook.includes('shadow.style.opacity = String(genieShadowOpacity(p, geom));'),
+    'gone within a few px of the card pinching in (GenieModal.test.mjs executes it)');
 });
 
 test('the genie does not bring the content in twice', () => {

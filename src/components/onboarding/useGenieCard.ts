@@ -26,7 +26,7 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import { animate, cubicBezier, useMotionValue, useReducedMotion } from 'framer-motion';
 import {
-  genieFrame, genieBands, genieBandRows, genieOpacity, genieStretch, genieEdges,
+  genieFrame, genieBands, genieBandRows, genieOpacity, genieShadowOpacity, genieEdges,
   genieTrack, SLOT_INSET, BAND_OVERLAP, type GenieGeometry,
 } from './genieMotion.mjs';
 import type { GenieSnapshot } from './genieSnapshots';
@@ -449,14 +449,15 @@ export function useGenieCard(isOpen: boolean, label: string, options: GenieCardO
     }
 
     // The shadow is the card's own, drawn once and only ever moved: it follows
-    // the card's top edge down and fades as the funnel forms, so it is gone
-    // before the silhouette stops being a rectangle.
+    // the card's top edge down and is gone within a few px of the card
+    // pinching in, since it is a rectangle's and would outline one round the
+    // funnel (genieShadowOpacity).
     if (composited) return;
     const { top, bottom } = genieEdges(p, geom);
     const sy = Math.max(bottom - top, 0.5) / (geom.bottom - geom.top);
     shadow.style.display = 'block';
     shadow.style.transform = `translateY(${(top - geom.top).toFixed(2)}px) scaleY(${sy.toFixed(4)})`;
-    shadow.style.opacity = String(1 - genieStretch(p));
+    shadow.style.opacity = String(genieShadowOpacity(p, geom));
   }, [reduced, bandCount]);
 
   useEffect(() => genie.on('change', renderGenie), [genie, renderGenie]);
@@ -531,6 +532,11 @@ export function useGenieCard(isOpen: boolean, label: string, options: GenieCardO
       // new run.
       if (!reduced && !rowsRef.current && !bandsFailedRef.current) bandsFailedRef.current = !buildBands();
       else if (rowsRef.current) playTrack();
+      // The bands and the shadow stand-in are showing now. Hand over from the
+      // real card at once, not on the clock's first change: that comes a frame
+      // later, and for that frame the card's own shadow and the stand-in's
+      // were drawn together, twice as dark.
+      if (!reduced && rowsRef.current) renderGenie(from);
       const a = animate(genie, 1, reduced ? REDUCED_FADE : GENIE_CLOSE);
       const b = animate(scrim, 0, reduced
         ? REDUCED_FADE
@@ -568,7 +574,7 @@ export function useGenieCard(isOpen: boolean, label: string, options: GenieCardO
       run(false);
     }
     return () => { cancelled = true; cleanup?.(); };
-  }, [closing, reduced, genie, scrim, finishClose]);
+  }, [closing, reduced, genie, scrim, finishClose, renderGenie]);
 
   // A host that keeps this mounted and opens it again gets a fresh card.
   useEffect(() => {
