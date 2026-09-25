@@ -1,5 +1,5 @@
-import React, { useRef, useState } from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
+import React, { useLayoutEffect, useRef, useState } from 'react';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { CalendarClock, CalendarX, CirclePlay, Clock3, FileText, Gauge, Heart, KeyRound, Mail, Power, Receipt, Ticket } from 'lucide-react';
 import { AccordionSection } from '../ui/AccordionSection';
 import { LiquidGlassButton } from '../../ui-components/LiquidGlassButton';
@@ -24,8 +24,8 @@ import './HowItWorksRefund.css';
 //                   .lg-sky's #3a9ff7), 250ms smooth-out, labels cross-fade on
 //                   the same clock
 //   part swap       text states swap: out 150ms up 4px + 2px blur, then in from
-//                   below. All three parts share one grid cell, so the card
-//                   never resizes on a switch
+//                   below — while the body eases to the new part's height
+//                   (card resize, 250ms smooth-out) instead of jumping
 //   Open / Email    learn-more hover (HowItWorksRefund.css)
 // No framer `layout`/`layoutId`: layout projection caused a scroll regression in
 // this settings scroller (see AIProvidersSettings). Nothing staggers in when the
@@ -47,9 +47,11 @@ const SKY = 'var(--hiw-sky)';
 /** Feeds .lg-sky the same theme-aware blue, so the buttons match the pill. */
 const SKY_BUTTON_STYLE = { '--lg-sky-bg': 'var(--hiw-sky)', '--lg-sky-hover': 'var(--hiw-sky-hover)' } as React.CSSProperties;
 
+const EASE_SMOOTH_OUT = [0.22, 1, 0.36, 1] as const;
 const SWAP_DUR = 0.15;
 const SWAP_Y = 4;
 const SWAP_BLUR = 'blur(2px)';
+const RESIZE_DUR = 0.25;
 
 type PartId = 'how' | 'refunds' | 'cancel';
 const PARTS: ReadonlyArray<{ id: PartId; name: string }> = [
@@ -68,26 +70,19 @@ const STEPS: ReadonlyArray<{ title: string; body: string }> = [
   { title: 'Paste it into the key box', body: 'An API key switches on usage and models; a license key unlocks Pro.' },
 ];
 
-// The summary of the Refund Policy. The three rules with a number are rows,
-// the number in the control slot so the figures line up in a column; the four
-// without one are a compact 2x2 grid, so Refunds lands near the height of the
-// other two tabs and switching tabs does not resize the card.
+// The summary of the Refund Policy, one rule per row. Rows with a figure carry
+// it in the control slot so the numbers line up in a column you can scan.
 // Each line must stay TRUE against the full policy: "when you request" (our own
 // mistakes are refunded in full), "usage cost" (§3.7 deducts ALL usage, not the
-// part over 10%), "even if you miss our reminder" (§3.6), "at once, unless
-// it's our mistake" (a refund ends access immediately; our own mistakes are a
-// full refund with access kept). Grid lines stay under ~36 characters so each
-// fits one line in its half-width cell.
-const FIGURES: ReadonlyArray<{ icon: React.ElementType; title: string; body: string; figure: string }> = [
+// part over 10%), "even if you miss our reminder" (§3.6).
+const RULES: ReadonlyArray<{ icon: React.ElementType; title: string; body: string; figure?: string }> = [
   { icon: Clock3, title: 'Natively API refund window', body: 'Counts from your first purchase; renewals aren\'t covered.', figure: '24 hours' },
   { icon: KeyRound, title: 'Pro license refund window', body: 'Only before you activate it. Try the free trial first.', figure: '1 hour' },
   { icon: Receipt, title: 'Refund processing fee', body: 'Deducted when you request a refund.', figure: '$2.50' },
-];
-const RULE_TILES: ReadonlyArray<{ icon: React.ElementType; title: string; body: string }> = [
-  { icon: Gauge, title: 'Heavy use is deducted', body: 'Over 10% used: usage cost comes off.' },
-  { icon: CalendarClock, title: 'Renewals aren\'t refunded', body: 'Final even if you miss our reminder.' },
-  { icon: Ticket, title: 'Promos are final sale', body: 'Coupons, vouchers, credit, offers.' },
-  { icon: Power, title: 'A refund ends access', body: 'At once, unless it\'s our mistake.' },
+  { icon: Gauge, title: 'Heavy use is deducted', body: 'Used over 10% of AI, Voice, Knowledge or Research? Usage cost comes off.' },
+  { icon: CalendarClock, title: 'Renewals aren\'t refunded', body: 'Cancel before your renewal date. Final even if you miss our reminder.' },
+  { icon: Ticket, title: 'Promo purchases are final sale', body: 'Coupons, vouchers, referral credit and limited-time offers.' },
+  { icon: Power, title: 'A refund ends access', body: 'Immediately. If the mistake was ours: full refund, and you keep access.' },
 ];
 
 /** transitions.dev learn-more chevron: the arms spread into an arrow on hover. */
@@ -241,6 +236,38 @@ const StepRow: React.FC<{ n: number; title: string; body: string }> = ({ n, titl
   </div>
 );
 
+/**
+ * transitions.dev card resize: tween the body to its content's height when the
+ * part changes, instead of snapping. The content is measured with a
+ * ResizeObserver and the wrapper animates to that number — no `layout` prop.
+ */
+const EaseToHeight: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const reduceMotion = useReducedMotion();
+  const innerRef = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState<number | 'auto'>('auto');
+
+  useLayoutEffect(() => {
+    const el = innerRef.current;
+    if (!el) return;
+    const measure = () => setHeight(el.offsetHeight);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <motion.div
+      initial={false}
+      animate={{ height }}
+      transition={{ duration: reduceMotion ? 0 : RESIZE_DUR, ease: EASE_SMOOTH_OUT }}
+      style={{ overflow: 'hidden' }}
+    >
+      <div ref={innerRef}>{children}</div>
+    </motion.div>
+  );
+};
+
 export const HowItWorksRefund: React.FC = () => {
   const reduceMotion = useReducedMotion();
   const [part, setPart] = useState<PartId>('how');
@@ -267,12 +294,6 @@ export const HowItWorksRefund: React.FC = () => {
           transition: { duration: SWAP_DUR, ease: 'easeInOut' as const },
         },
       };
-  // All three parts share one grid cell, so the entering one waits out the
-  // leaving one's 150ms instead of cross-fading on top of it.
-  const panelVariants = reduceMotion
-    ? swapVariants
-    : { ...swapVariants, in: { ...swapVariants.in, transition: { ...swapVariants.in.transition, delay: SWAP_DUR } } };
-
   const actionButton = `${SETTINGS_BTN} t-learn`;
 
   const howItWorks = (
@@ -297,35 +318,17 @@ export const HowItWorksRefund: React.FC = () => {
     </>
   );
 
-  const refunds = (
-    <>
-      {FIGURES.map(({ icon: Icon, title, body, figure }) => (
-        <IconRow
-          key={title}
-          icon={<Icon size={20} />}
-          title={title}
-          description={body}
-          control={<span className="text-sm font-semibold tabular-nums text-text-primary whitespace-nowrap">{figure}</span>}
-        />
-      ))}
-      {/* The four rules without a figure, two by two. Each cell keeps the
-          rows' 40px icon slot, so the left column's icons sit exactly under
-          the rows' icons above and the text starts on the same column. */}
-      <div className="grid grid-cols-2 gap-x-2 gap-y-2 pl-[17px] pr-4 pt-1 pb-3">
-        {RULE_TILES.map(({ icon: Icon, title, body }) => (
-          <div key={title} className="flex items-center gap-4 min-w-0">
-            <span className="w-10 h-10 shrink-0 flex items-center justify-center text-text-primary">
-              <Icon size={18} />
-            </span>
-            <div className="min-w-0">
-              <h4 className="text-[13px] font-semibold text-text-primary leading-snug">{title}</h4>
-              <p className="text-[11px] text-text-secondary leading-snug">{body}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-    </>
-  );
+  const refunds = RULES.map(({ icon: Icon, title, body, figure }) => (
+    <IconRow
+      key={title}
+      icon={<Icon size={20} />}
+      title={title}
+      description={body}
+      control={figure ? (
+        <span className="text-sm font-semibold tabular-nums text-text-primary whitespace-nowrap">{figure}</span>
+      ) : undefined}
+    />
+  ));
 
   const cancelAndSupport = (
     <>
@@ -404,33 +407,25 @@ export const HowItWorksRefund: React.FC = () => {
           />
         </div>
 
-        {/* All three parts sit in ONE grid cell, so the card is always as tall
-            as the tallest part and never resizes on a switch — the inactive
-            parts keep their space but are invisible, inert and hidden from
-            assistive tech. The Refunds part is laid out compactly so that
-            height is close to the other two. */}
-        <div className="grid">
-          {PARTS.map(({ id }) => {
-            const active = id === part;
-            return (
-              <motion.div
-                key={id}
-                id={`hiw-part-panel-${id}`}
-                role="tabpanel"
-                aria-labelledby={`hiw-part-tab-${id}`}
-                aria-hidden={!active}
-                inert={!active}
-                initial={false}
-                animate={active ? 'in' : 'out'}
-                variants={panelVariants}
-                style={{ gridArea: '1 / 1' }}
-                className={`pt-1 pb-1 ${active ? '' : 'pointer-events-none'}`}
-              >
-                {content[id]}
-              </motion.div>
-            );
-          })}
-        </div>
+        <EaseToHeight>
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={part}
+              id={`hiw-part-panel-${part}`}
+              role="tabpanel"
+              aria-labelledby={`hiw-part-tab-${part}`}
+              initial="out"
+              animate="in"
+              exit="out"
+              variants={swapVariants}
+              // pt-1 keeps a focus ring on the first control inside clear of
+              // EaseToHeight's overflow clip.
+              className="pt-1 pb-1"
+            >
+              {content[part]}
+            </motion.div>
+          </AnimatePresence>
+        </EaseToHeight>
       </div>
     </AccordionSection>
   );
