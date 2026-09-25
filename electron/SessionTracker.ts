@@ -173,11 +173,15 @@ export class SessionTracker {
     private transcriptEpochSummaries: string[] = [];
     private isCompacting: boolean = false;
 
-    // Advanced by reset() only. Async work that awaits (the compaction recap
-    // call, a phone-mirror answer stream) reads it before the await and drops
-    // its result if it moved, so an ended session cannot write into the next
-    // one. clearSessionContext() keeps the transcript and does NOT advance it.
+    // Advanced by reset() only. The compaction recap call reads it before its
+    // await and drops its result if it moved, so an ended session cannot write
+    // into the next one. clearSessionContext() keeps the transcript and does
+    // NOT advance it: a compaction in flight across a mode switch still applies.
     private sessionEpoch: number = 0;
+    // Advanced by reset() AND clearSessionContext(). An answer asked before
+    // either (phone-mirror, launcher or overlay chat) is still shown, but not
+    // saved into the context that replaced the one it was asked in.
+    private contextEpoch: number = 0;
 
     // Track interim interviewer segment
     private lastInterimInterviewer: TranscriptSegment | null = null;
@@ -292,6 +296,7 @@ export class SessionTracker {
         this.lastAssistantMessage = null;
         this.assistantResponseHistory = [];
         this.lastInterimInterviewer = null;
+        this.contextEpoch++;
         console.log('[SessionTracker] Mode-specific session context cleared');
     }
 
@@ -751,6 +756,10 @@ export class SessionTracker {
         return this.sessionEpoch;
     }
 
+    getContextEpoch(): number {
+        return this.contextEpoch;
+    }
+
     // ============================================
     // Usage Tracking
     // ============================================
@@ -817,6 +826,7 @@ export class SessionTracker {
         this.codingQuestionSetAt = null;
         this.recentInterviewerBuffer = [];
         this.sessionEpoch++;
+        this.contextEpoch++;
     }
 
     // ============================================
