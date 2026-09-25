@@ -71,7 +71,7 @@ Homebrew will download the new DMGs, verify the SHA256 checksums, and submit the
 ## Release Asset Naming Requirements
 
 To ensure Homebrew continues to resolve releases cleanly:
-1. Release tags should follow `V<version>` or `v<version>` (e.g. `V2.8.8` or `v2.9.0`).
+1. Release tags should follow `V<version>` (e.g. `V2.8.8` or `V2.9.0`).
 2. Release assets attached to the GitHub release must keep the established naming format:
    - `Natively-<version>-arm64.dmg` (for Apple Silicon)
    - `Natively-<version>.dmg` (for Intel x64)
