@@ -571,7 +571,8 @@ const directAssistErrorText = (code: string, message: string): string =>
   `❌ ${code}: ${message}`;
 
 interface NativelyInterfaceProps {
-  onEndMeeting?: () => void;
+  /** The pill's Stop ended the meeting (main already did the stopping). */
+  onMeetingEnded?: () => void;
   overlayOpacity?: number;
   interfaceTheme?: MeetingInterfaceTheme;
 }
@@ -1265,7 +1266,7 @@ const MessageRow = React.memo(
 );
 
 const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
-  onEndMeeting,
+  onMeetingEnded,
   overlayOpacity = OVERLAY_OPACITY_DEFAULT,
   interfaceTheme = 'default',
 }) => {
@@ -4354,14 +4355,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         case 'toggle-expand':
           setIsExpanded((prev) => !prev);
           break;
-        case 'end-meeting':
-          if (onEndMeeting) onEndMeeting();
-          else window.electronAPI.quitApp();
+        // Main has already ended the meeting (the pill's Stop no longer
+        // round-trips through this renderer); this is bookkeeping only.
+        case 'meeting-ended':
+          onMeetingEnded?.();
           break;
       }
     });
     return () => unsubscribe?.();
-  }, [handleManualResizeToggle, onEndMeeting]);
+  }, [handleManualResizeToggle, onMeetingEnded]);
 
   // Stream the panel's LIVE right edge (px from the window's left edge) to the
   // main process so the toggle aux window rides the panel's top-right corner

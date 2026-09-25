@@ -1012,12 +1012,14 @@ const App: React.FC = () => {
     }
   };
 
-  const handleEndMeeting = () => {
-    console.log("[App.tsx] handleEndMeeting triggered");
+  // The pill's Stop is ended in main (it used to round-trip through this
+  // renderer, so a busy or reloading overlay delayed or dropped it); main then
+  // tells this window the meeting ended. Only the local bookkeeping runs here.
+  const handleMeetingEnded = () => {
+    console.log("[App.tsx] meeting ended from the pill");
     analytics.trackMeetingEnded();
     setIsProcessingMeeting(true);
 
-    // Local bookkeeping that does not depend on the main process.
     const startStr = localStorage.getItem('natively_last_meeting_start');
     if (startStr) {
       const duration = Date.now() - parseInt(startStr, 10);
@@ -1027,21 +1029,6 @@ const App: React.FC = () => {
       }
       localStorage.removeItem('natively_last_meeting_start');
     }
-
-    // Fire-and-forget: main's endMeeting() handler now performs the
-    // launcher swap synchronously at the top, BEFORE any blocking audio
-    // teardown. Awaiting here would stall the overlay's React render
-    // loop for the IPC round-trip while libuv-blocking setImmediate
-    // native stops fire on the main process — which is the lag the user
-    // was seeing. The launcher window receives a 'meetings-updated'
-    // event after the BG teardown so its list refreshes on its own.
-    window.electronAPI.endMeeting().catch(err => {
-      console.error("Failed to end meeting:", err);
-      // Belt-and-suspenders: if the IPC itself rejected, the swap may
-      // not have happened — request it manually so the user isn't
-      // stranded on a dead overlay.
-      window.electronAPI.setWindowMode('launcher');
-    });
   };
 
   const interfaceThemeAttribute = meetingInterfaceTheme === 'default' ? undefined : meetingInterfaceTheme;
@@ -1122,7 +1109,7 @@ const App: React.FC = () => {
               >
                 <HindsightStatusBanner />
                 <NativelyInterface
-                  onEndMeeting={handleEndMeeting}
+                  onMeetingEnded={handleMeetingEnded}
                   overlayOpacity={overlayOpacity}
                   interfaceTheme={meetingInterfaceTheme}
                 />
