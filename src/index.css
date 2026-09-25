@@ -3298,26 +3298,12 @@ html[data-platform="linux"][data-window="launcher"] body {
   border: 1.5px solid transparent !important;
   position: relative !important;
   overflow: hidden !important;
-  /* `transform` is deliberately NOT transitioned here. InteractiveCard writes
-     transform: scale(...) inline from a spring on every frame; a CSS transition
-     on the same property re-smooths each of those writes, so the press spring
-     arrives late and mushy. Framer owns transform, CSS owns the material.
-     (The .pricing-card-* rules keep transform in their lists — those cards are
-     not wrapped in InteractiveCard.)
-
-     THIS LIST IS THE LEAVE HALF. A transition declared on the base rule runs
-     when :hover stops matching; the one on the :hover rule runs on enter. That
-     is how the asymmetry below is achieved without JS.
-     The curve changed, not just the clock, and that is the point:
-     cubic-bezier(0.23, 1, 0.32, 1) puts ~83% of the travel in the first 30% of
-     the duration, so at 180ms all perceptible motion was over in ~54ms — it was
-     animating and still reading as instant. Raising the duration on that curve
-     only lengthens an invisible tail. easeOutCubic spreads the travel out.
-     Leave is the SLOWER half here, which inverts the usual "exit fast" rule
-     because nothing is exiting: this is ambient light on a surface that stays
-     put, and light that snaps off is exactly what reads as un-animated.
-     background-color rides along on the tier switch's clock (the pill's 250ms
-     smooth-out), so the committed fill cross-fades instead of jumping. */
+  /* The card has no hover state and nothing moves it, so `transform` is not
+     in this list and this is the only transition the card has: the tier
+     switch and the [data-active] change ease box-shadow and border-color on
+     easeOutCubic, and background-color rides along on the tier switch's clock
+     (the pill's 250ms smooth-out), so the committed fill cross-fades instead
+     of jumping. */
   transition: box-shadow 420ms cubic-bezier(0.33, 1, 0.68, 1),
               border-color 420ms cubic-bezier(0.33, 1, 0.68, 1),
               background-color 250ms cubic-bezier(0.22, 1, 0.36, 1) !important;
@@ -3496,19 +3482,11 @@ html[data-platform="linux"][data-window="launcher"] body {
     0 1px 3px rgba(0, 0, 0, 0.22) !important;
 }
 
-/* NO border brighten on hover for the API detail card. It used to brighten its
-   edge to rgba(255,255,255,0.30) here, mirroring .pricing-card-yearly:hover —
-   but on a card that is already a saturated fill with a lit rim, the edge
-   flicking brighter under the pointer read as the card being selected rather
-   than merely pointed at, which the active-state border is what actually means.
-   Hover feedback is now the cursor-tracked spotlight (InteractiveCard) plus the
-   per-tier bloom near the end of this file — both of which change the card's
-   LIGHT, not its outline.
-   The rule that lived here declared `border-color` and a `box-shadow`; only
-   the border was ever live, since the per-tier bloom is later in source at
-   equal specificity and every detail card carries both classes (see
-   NativelyApiSettings.tsx:896). Deleted whole rather than trimmed, so nothing
-   is left implying the shadow here does something. Same for the `modern`
+/* NO border brighten on hover for the API detail card, and no hover state at
+   all: on a card that is already a saturated fill with a lit rim, any change
+   under the pointer read as the card being selected, which is what the
+   active-state border actually means. The rule that lived here declared
+   `border-color` and a `box-shadow`; it was deleted whole, as was the `modern`
    twin that used to sit near the features panel. */
 
 /* ──── Premium Graphics & Specular Upgrades (Liquid Glass Theme) ──── */
@@ -3917,26 +3895,12 @@ html[data-platform="linux"][data-window="launcher"] body {
   border: 1.5px solid transparent !important;
   position: relative !important;
   overflow: hidden !important;
-  /* `transform` is deliberately NOT transitioned here. InteractiveCard writes
-     transform: scale(...) inline from a spring on every frame; a CSS transition
-     on the same property re-smooths each of those writes, so the press spring
-     arrives late and mushy. Framer owns transform, CSS owns the material.
-     (The .pricing-card-* rules keep transform in their lists — those cards are
-     not wrapped in InteractiveCard.)
-
-     THIS LIST IS THE LEAVE HALF. A transition declared on the base rule runs
-     when :hover stops matching; the one on the :hover rule runs on enter. That
-     is how the asymmetry below is achieved without JS.
-     The curve changed, not just the clock, and that is the point:
-     cubic-bezier(0.23, 1, 0.32, 1) puts ~83% of the travel in the first 30% of
-     the duration, so at 180ms all perceptible motion was over in ~54ms — it was
-     animating and still reading as instant. Raising the duration on that curve
-     only lengthens an invisible tail. easeOutCubic spreads the travel out.
-     Leave is the SLOWER half here, which inverts the usual "exit fast" rule
-     because nothing is exiting: this is ambient light on a surface that stays
-     put, and light that snaps off is exactly what reads as un-animated.
-     background-color rides along on the tier switch's clock (the pill's 250ms
-     smooth-out), so the committed fill cross-fades instead of jumping. */
+  /* The card has no hover state and nothing moves it, so `transform` is not
+     in this list and this is the only transition the card has: the tier
+     switch and the [data-active] change ease box-shadow and border-color on
+     easeOutCubic, and background-color rides along on the tier switch's clock
+     (the pill's 250ms smooth-out), so the committed fill cross-fades instead
+     of jumping. */
   transition: box-shadow 420ms cubic-bezier(0.33, 1, 0.68, 1),
               border-color 420ms cubic-bezier(0.33, 1, 0.68, 1),
               background-color 250ms cubic-bezier(0.22, 1, 0.36, 1) !important;
