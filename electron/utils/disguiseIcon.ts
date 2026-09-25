@@ -7,8 +7,10 @@
 // electron-builder compiles it (actool) into Assets.car + CFBundleIconName, and
 // the system renders it as a Liquid Glass icon — Apple's continuous-corner
 // shape, specular rim, icon-grid margin, and the Default/Dark/Clear/Tinted
-// styles. icons/mac/dock-icon.png is that same icon exactly as macOS draws it
-// (margin and glass baked in), for the two cases that need a bitmap. Never
+// styles. icons/mac/dock-icon.png is that same icon as macOS draws it (margin
+// and glass baked in), for the two cases that need a bitmap — 1% larger, like
+// the disguise icons, because the Dock drew setIcon() bitmaps ~1% smaller than
+// their neighbours. Never
 // point the Dock at assets/icon.png: that art is full-bleed (~98% of its
 // canvas), so the tile drew ~20% larger than every other app — and the
 // renderer's permissions onboarding imports it, so it stays as it is.

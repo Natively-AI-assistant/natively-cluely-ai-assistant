@@ -12,7 +12,9 @@
 // Now the bundle icon is the Icon Composer document assets/Natively.icon
 // (electron-builder -> actool -> Assets.car), the packaged app no longer
 // overwrites it at launch, and every flat bitmap (natively.icns, dock-icon.png)
-// is that icon as macOS itself draws it. assets/icon.png stays full-bleed: the
+// is that icon as macOS itself draws it — the setIcon() bitmaps (dock-icon.png,
+// the disguise icons) 1% larger, because the Dock drew them ~1% smaller than
+// their neighbours (Evin, 2026-09-25). assets/icon.png stays full-bleed: the
 // renderer's permissions onboarding imports it.
 //
 // Platform is injected, so the darwin and win32 branches run on either OS.
@@ -127,9 +129,10 @@ function icnsChunk(buf, wanted) {
 }
 
 function assertOnAppleGrid(label, g) {
-  // Apple's grid is 824/1024 = 80.5%; the alpha>=128 cut ignores the soft drop shadow.
-  assert.ok(g.bodyW >= 0.79 && g.bodyW <= 0.82, `${label}: body width ${(g.bodyW * 100).toFixed(1)}% of canvas, want ~80.5%`);
-  assert.ok(g.bodyH >= 0.79 && g.bodyH <= 0.82, `${label}: body height ${(g.bodyH * 100).toFixed(1)}% of canvas, want ~80.5%`);
+  // Apple's grid is 824/1024 = 80.5% (~81.6% in the 128/256px layouts), +1% on the
+  // setIcon() bitmaps; the alpha>=128 cut ignores the soft drop shadow.
+  assert.ok(g.bodyW >= 0.79 && g.bodyW <= 0.84, `${label}: body width ${(g.bodyW * 100).toFixed(1)}% of canvas, want ~80.5-83%`);
+  assert.ok(g.bodyH >= 0.79 && g.bodyH <= 0.84, `${label}: body height ${(g.bodyH * 100).toFixed(1)}% of canvas, want ~80.5-83%`);
   assert.ok(Math.abs(g.centreDx) <= 0.01 && Math.abs(g.centreDy) <= 0.01, `${label}: body off-centre by (${g.centreDx}, ${g.centreDy})`);
 }
 
@@ -170,20 +173,24 @@ test('the running Dock tile (setIcon PNG) sits on Apple\'s icon grid', () => {
   assertOnAppleGrid(rel, bodyGeometry(fs.readFileSync(path.join(repoRoot, rel))));
 });
 
-test('the bundle icon (natively.icns, 1024 rep) sits on Apple\'s icon grid and matches the Dock PNG', () => {
+test('the bundle icon (natively.icns, 1024 rep) sits on Apple\'s icon grid; the Dock PNG is it +1%', () => {
   const ic10 = icnsChunk(fs.readFileSync(path.join(repoRoot, 'assets/natively.icns')), 'ic10');
   assert.ok(ic10, 'natively.icns has no ic10 (512@2x) representation');
   const bundle = bodyGeometry(ic10);
   assert.equal(bundle.width, 1024);
   assertOnAppleGrid('natively.icns ic10', bundle);
-  // Same master: the pinned tile and the running tile must not jump size at launch.
+  // Same icon, but the Dock draws a setIcon() bitmap ~1% smaller than a bundle icon,
+  // so the running-tile PNG carries +1% to land at the size of its neighbours.
   const dock = bodyGeometry(fs.readFileSync(path.join(repoRoot, disguiseIconRelativePath('none', 'darwin'))));
-  assert.ok(Math.abs(bundle.bodyW - dock.bodyW) <= 0.005, `bundle ${bundle.bodyW} vs dock ${dock.bodyW}`);
-  assert.ok(Math.abs(bundle.bodyH - dock.bodyH) <= 0.005, `bundle ${bundle.bodyH} vs dock ${dock.bodyH}`);
+  for (const [b, d, axis] of [[bundle.bodyW, dock.bodyW, 'width'], [bundle.bodyH, dock.bodyH, 'height']]) {
+    const ratio = d / b;
+    assert.ok(ratio >= 1.004 && ratio <= 1.02, `dock/bundle body ${axis} ratio ${ratio.toFixed(4)}, want ~1.01`);
+  }
 });
 
-// The disguise icons are the real system apps' icons as macOS 27 draws them, so
-// a disguised tile matches its neighbours; nativeImage picks up the @2x pair.
+// The disguise icons are the real system apps' icons as macOS 27 draws them (+1%,
+// like dock-icon.png), so a disguised tile matches its neighbours; nativeImage
+// picks up the @2x pair.
 test('darwin: each disguise icon is 128px with a 256px @2x pair, on Apple\'s icon grid', () => {
   for (const mode of ['terminal', 'settings', 'activity']) {
     const rel = disguiseIconRelativePath(mode, 'darwin');
