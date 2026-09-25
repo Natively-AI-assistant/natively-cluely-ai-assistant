@@ -147,6 +147,42 @@ export function applyWhatToAnswerNullFeedbackMessages(prev, feedback, idFactory 
  * safe to call alongside the manual-path null cleanup). Only removes a row that
  * is STILL streaming, so a previously-finalized answer is never deleted.
  */
+/**
+ * Placeholder intent for an `intelligence-error` mode. Most modes open a
+ * placeholder under their own name; What to Answer's is 'what_to_answer', and
+ * follow-up opens one under its refinement ('shorten', 'rephrase'), which only
+ * the renderer knows — so it is the active stream's intent when that is not one
+ * of the named ones. null = no placeholder to settle (just report the error).
+ */
+const NAMED_STREAM_INTENTS = new Set(['what_to_answer', 'recap', 'clarify', 'follow_up_questions', 'code_hint', 'brainstorm', 'chat']);
+export function intelligenceErrorIntent(mode, activeStreamIntent) {
+  if (mode === 'what_to_say') return 'what_to_answer';
+  if (mode === 'follow_up') {
+    return activeStreamIntent && !NAMED_STREAM_INTENTS.has(activeStreamIntent) ? activeStreamIntent : null;
+  }
+  return NAMED_STREAM_INTENTS.has(mode) && mode !== 'chat' ? mode : null;
+}
+
+/**
+ * Settle the open streaming row for `intent` when its generation errored, then
+ * append the error. Partial text that already streamed is kept as a finished
+ * row; an empty placeholder is dropped. Without this the "Thinking..." row
+ * stayed open forever beside the error. Finalized rows are never touched.
+ */
+export function settleStreamingOnErrorMessages(prev, intent, partialText, errorText, idFactory = _defaultIdFactory) {
+  const next = Array.isArray(prev) ? [...prev] : [];
+  const idx = intent
+    ? next.findLastIndex((m) => m.role === 'system' && m.intent === intent && m.isStreaming)
+    : -1;
+  if (idx !== -1) {
+    const text = partialText || next[idx].text;
+    if (text) next[idx] = { ...next[idx], text, isStreaming: false };
+    else next.splice(idx, 1);
+  }
+  next.push({ id: idFactory(), role: 'system', text: errorText });
+  return next;
+}
+
 export function discardStreamingByIntentMessages(prev, intent = 'what_to_answer') {
   if (!Array.isArray(prev)) return [];
   const openIdx = prev.findLastIndex(
