@@ -1,6 +1,7 @@
 import React from "react"
 import ReactDOM from "react-dom/client"
 import "./index.css"
+import { installOrphanReleaseClick } from "./lib/orphanReleaseGuard.mjs"
 
 // ── Renderer crash/hang diagnostics ─────────────────────────────────────────
 // Surface uncaught errors and unhandled promise rejections through console.error
@@ -24,6 +25,13 @@ window.addEventListener('unhandledrejection', (event) => {
 // (missing asset / CSP block) from "JS ran but hung later".
 // eslint-disable-next-line no-console
 console.log('[renderer] main.tsx evaluating');
+
+// The overlay's popover windows can lose a click's press on Windows (release
+// arrives, press never does, so no click). Recover it; see orphanReleaseGuard.mjs.
+const popoverWindow = new URLSearchParams(window.location.search).get('window');
+if (popoverWindow === 'settings' || popoverWindow === 'model-selector') {
+  installOrphanReleaseClick(window);
+}
 
 const THEME_CACHE_KEY = 'natively_resolved_theme';
 const launcherIsolation = new URLSearchParams(window.location.search).get('isolate');
