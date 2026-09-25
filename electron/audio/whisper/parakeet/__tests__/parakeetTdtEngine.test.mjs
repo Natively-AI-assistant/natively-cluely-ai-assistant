@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { Tensor } from 'onnxruntime-node';
-import { PARAKEET_TDT_REQUIRED_FILES, PARAKEET_TDT_REPO } from '../downloadFiles.ts';
+import { PARAKEET_TDT_REQUIRED_FILES, PARAKEET_TDT_REPO, cleanOrphanedPartialFiles } from '../downloadFiles.ts';
+import fs from 'fs';
+import os from 'os';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distEnginePath = path.resolve(
@@ -161,5 +163,30 @@ describe('Parakeet TDT Download & Engine Config', () => {
     // flush() cleans out any remaining audio
     const flushRes = await engine.flush();
     assert.equal(flushRes.isFinal, true);
+  });
+
+  test('cleanOrphanedPartialFiles cleans up dead pid partial files and old files', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'parakeet-cleanup-test-'));
+    try {
+      // 1. Partial file from an impossibly dead PID (99999999)
+      const deadPidFile = path.join(tmpDir, 'encoder-model.int8.onnx.partial.99999999.12345.abc123');
+      fs.writeFileSync(deadPidFile, 'dead pid content');
+
+      // 2. Partial file from current PID created recently (should be kept)
+      const livePidFile = path.join(tmpDir, `encoder-model.int8.onnx.partial.${process.pid}.${Date.now()}.xyz789`);
+      fs.writeFileSync(livePidFile, 'live pid content');
+
+      // 3. Normal model file (should be kept)
+      const validFile = path.join(tmpDir, 'vocab.txt');
+      fs.writeFileSync(validFile, 'vocab');
+
+      cleanOrphanedPartialFiles(tmpDir);
+
+      assert.equal(fs.existsSync(deadPidFile), false, 'dead PID partial file must be deleted');
+      assert.equal(fs.existsSync(livePidFile), true, 'live PID recent partial file must be kept');
+      assert.equal(fs.existsSync(validFile), true, 'regular model file must be kept');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 });

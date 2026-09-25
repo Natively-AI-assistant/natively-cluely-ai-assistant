@@ -24,11 +24,53 @@ const APPROX_BYTES: Record<ParakeetRequiredFile, number> = {
 
 const TOTAL_APPROX_BYTES = Object.values(APPROX_BYTES).reduce((a, b) => a + b, 0);
 
+/**
+ * Cleans up orphaned .partial.* download files left behind if the app or worker
+ * process crashed or was terminated mid-stream. Active downloads by living processes
+ * are preserved.
+ */
+export function cleanOrphanedPartialFiles(destDir: string): void {
+  try {
+    if (!fs.existsSync(destDir)) return;
+    const entries = fs.readdirSync(destDir);
+    const now = Date.now();
+    for (const entry of entries) {
+      if (!entry.includes('.partial.')) continue;
+      const parts = entry.split('.partial.');
+      if (parts.length < 2) continue;
+      const meta = parts[1].split('.');
+      const pid = Number(meta[0]);
+      const timestamp = Number(meta[1]);
+      let isDead = false;
+      if (Number.isFinite(pid) && pid > 0) {
+        try {
+          process.kill(pid, 0);
+        } catch (e: any) {
+          if (e.code === 'ESRCH') {
+            isDead = true;
+          }
+        }
+      }
+      // If the creating process is dead, or if the partial file is older than 10 minutes, clean it up
+      if (isDead || (Number.isFinite(timestamp) && now - timestamp > 10 * 60 * 1000)) {
+        try {
+          fs.unlinkSync(path.join(destDir, entry));
+        } catch {
+          // ignore busy/locked file
+        }
+      }
+    }
+  } catch {
+    // ignore directory read issues
+  }
+}
+
 export async function downloadParakeetTdtFiles(
   destDir: string,
   onProgress: (pct: number) => void,
 ): Promise<void> {
   fs.mkdirSync(destDir, { recursive: true });
+  cleanOrphanedPartialFiles(destDir);
 
   let lastReportedPct = -1;
   const report = (pct: number): void => {

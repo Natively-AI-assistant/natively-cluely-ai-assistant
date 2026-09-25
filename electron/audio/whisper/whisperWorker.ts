@@ -469,6 +469,18 @@ parentPort.on('message', async (msg: any) => {
         // message behind a rejected promise — log and let the chain continue.
         console.error('[WhisperWorker] nemotron chain error (should be unreachable):', chainErr);
       }));
+      return;
+    }
+    const parakeetChannelKey = channelId || 'default';
+    const parakeet = parakeetChannels.get(parakeetChannelKey) ?? (parakeetChannels.size === 1 ? parakeetChannels.values().next().value : undefined);
+    if (parakeet && msg.language && msg.language !== 'auto') {
+      const { RECOGNITION_LANGUAGES } = require('../../config/languages');
+      const langEntry = RECOGNITION_LANGUAGES[msg.language];
+      const iso = langEntry?.iso639 || String(msg.language).split('-')[0].toLowerCase();
+      const { PARAKEET_TDT_SUPPORTED_ISO639 } = require('./modelLanguageSupport');
+      if (iso && !PARAKEET_TDT_SUPPORTED_ISO639.has(iso)) {
+        console.warn(`[WhisperWorker] Parakeet TDT language warning: "${msg.language}" (${iso}) is not in 25 supported European languages`);
+      }
     }
     return;
   } else if (msg.type === 'transcribe') {

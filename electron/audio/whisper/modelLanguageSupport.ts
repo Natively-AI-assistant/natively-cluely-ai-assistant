@@ -110,6 +110,13 @@ const WHISPER_LANGUAGE_BY_ISO639: Record<string, string> = {
   he: 'hebrew',
   ms: 'malay',
   fi: 'finnish',
+  hr: 'croatian',
+  et: 'estonian',
+  lv: 'latvian',
+  lt: 'lithuanian',
+  mt: 'maltese',
+  sk: 'slovak',
+  sl: 'slovenian',
 };
 
 /**
