@@ -40,6 +40,12 @@ interface MemoryHit {
 const MEMORY_DEBOUNCE_MS = 250;
 const MEMORY_MIN_QUERY = 3;
 
+// Meeting matches follow the query once typing pauses, on the same beat as memory
+// recall. One letter matches almost every meeting and the next few narrow it, so
+// matching on every keystroke slid the dropdown open tall and pulled it back up
+// mid-word; settled on a pause, the dropdown only grows while you type.
+const SESSION_DEBOUNCE_MS = MEMORY_DEBOUNCE_MS;
+
 function shortDate(iso?: string): string {
     if (!iso) return '';
     const d = new Date(iso);
@@ -105,6 +111,57 @@ function searchMeetings(meetings: Meeting[], query: string): SearchResult[] {
 }
 
 // ============================================
+// Results Panel
+// ============================================
+
+// The original slide (same spring, same fade), aimed at the measured height of
+// the results instead of framer's `height: 'auto'`. 'auto' is resolved once, when
+// the panel mounts: the results shrank as you kept typing while the panel kept
+// sliding toward that first measurement, then dropped ~190px in one frame when
+// the spring settled. Re-measured on every change, the spring always heads for
+// the real height. The height lives here, not in the pill, so the per-frame
+// re-measures while rows animate in and out re-render only this wrapper; the
+// rows arrive as the same `children` and are skipped.
+const ResultsPanel: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const bodyRef = useRef<HTMLDivElement>(null);
+    const [height, setHeight] = useState(0);
+
+    // Measured before the first paint, so the spring starts toward this body and
+    // not toward 0; the observer then follows results, memories arriving late, and
+    // rows animating in and out. offsetHeight ignores transforms, and the body
+    // ends in padding, so its rounding never clips a row.
+    useLayoutEffect(() => {
+        const body = bodyRef.current;
+        if (!body) return;
+        const measure = () => setHeight(body.offsetHeight);
+        measure();
+        if (typeof ResizeObserver === 'undefined') return;
+        const observer = new ResizeObserver(measure);
+        observer.observe(body);
+        return () => observer.disconnect();
+    }, []);
+
+    return (
+        <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height, opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{
+                type: "spring",
+                stiffness: 150,
+                damping: 25,
+                opacity: { duration: 0.3 }
+            }}
+            className="overflow-hidden"
+        >
+            <div ref={bodyRef} className="w-[480px]">
+                {children}
+            </div>
+        </motion.div>
+    );
+};
+
+// ============================================
 // Main Component
 // ============================================
 
@@ -142,11 +199,23 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
         setBackdropTop(bar ? Math.max(0, bar.getBoundingClientRect().bottom) : 0);
     }, [state]);
 
-    // Compute results
+    // Compute results from the query as it stood when typing paused (see
+    // SESSION_DEBOUNCE_MS). Cleared as soon as the results close, so a reopened
+    // pill never flashes the last search's sessions.
+    const [sessionQuery, setSessionQuery] = useState('');
+    useEffect(() => {
+        if (state !== 'results') {
+            setSessionQuery('');
+            return;
+        }
+        const timer = setTimeout(() => setSessionQuery(query), SESSION_DEBOUNCE_MS);
+        return () => clearTimeout(timer);
+    }, [query, state]);
+
     const sessionResults = useMemo(() => {
-        if (state !== 'results' || !query.trim()) return [];
-        return searchMeetings(meetings, query);
-    }, [meetings, query, state]);
+        if (state !== 'results' || !sessionQuery.trim()) return [];
+        return searchMeetings(meetings, sessionQuery);
+    }, [meetings, sessionQuery, state]);
 
     // Long-term memories for the query. Each request carries an id; a response for an
     // older query (the user kept typing) is dropped. Cleared whenever the pill closes
@@ -393,19 +462,7 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                                 {/* Results Panel */}
                                 <AnimatePresence>
                                     {showResults && (
-                                        <motion.div
-                                            initial={{ height: 0, opacity: 0 }}
-                                            animate={{ height: 'auto', opacity: 1 }}
-                                            exit={{ height: 0, opacity: 0 }}
-                                            transition={{
-                                                type: "spring",
-                                                stiffness: 150,
-                                                damping: 25,
-                                                opacity: { duration: 0.3 }
-                                            }}
-                                            className="overflow-hidden"
-                                        >
-                                            <div className="w-[480px]">
+                                        <ResultsPanel>
                                                 <div className="border-t border-border-muted py-2">
                                                     {/* Explore Section */}
                                                     <div className="px-3 py-1">
@@ -469,10 +526,12 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                                                                 Sessions
                                                             </div>
 
-                                                            <AnimatePresence initial={false} mode="popLayout">
+                                                            {/* Leaving rows collapse in place. With popLayout they faded out where
+                                                                they had been while the rows staying slid up under them
+                                                                (layout="position"), and the two overlapped for ~200ms. */}
+                                                            <AnimatePresence initial={false}>
                                                                 {sessionResults.map((result, index) => (
                                                                     <motion.button
-                                                                        layout="position"
                                                                         key={result.id}
                                                                         initial={{ opacity: 0, height: 0 }}
                                                                         animate={{ opacity: 1, height: 'auto' }}
@@ -515,7 +574,7 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                                                                 {t('Memory')}
                                                             </div>
 
-                                                            <AnimatePresence initial={false} mode="popLayout">
+                                                            <AnimatePresence initial={false}>
                                                                 {memoryHits.map((memory) => {
                                                                     const linkedIndex = memory.meetingId ? linkedMemories.indexOf(memory) : -1;
                                                                     const itemIndex = linkedIndex >= 0 ? 2 + sessionResults.length + linkedIndex : -1;
@@ -539,7 +598,6 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                                                                         </>
                                                                     );
                                                                     const motionProps = {
-                                                                        layout: 'position' as const,
                                                                         initial: { opacity: 0, height: 0 },
                                                                         animate: { opacity: 1, height: 'auto' },
                                                                         exit: { opacity: 0, height: 0 },
@@ -578,8 +636,7 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                                                         </div>
                                                     )}
                                                 </div>
-                                            </div>
-                                        </motion.div>
+                                        </ResultsPanel>
                                     )}
                                 </AnimatePresence>
                             </div>
