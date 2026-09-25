@@ -123,6 +123,7 @@ export const JA_GENERATED: Record<string, string> = {
     'Automatically scroll to the latest message as new responses arrive': '新しい応答が届くと最新のメッセージまで自動的にスクロールします',
     'Autonomous Registry Sync:': '自動レジストリ同期：',
     'Available Variables': '利用可能な変数',
+    'Back': '戻る',
     'Because code is run locally, you must have the appropriate interpreters installed on your device and exposed in your system PATH:': 'コードはローカルで実行されるため、デバイスに適切なインタプリターがインストールされ、システムの PATH で利用できる状態である必要があります：',
     'Below the provider list, specify the Language you will be speaking (e.g., English). Most importantly, select your specific regional Accent / Region mapping (e.g., en-US vs en-GB vs en-IN) — STT backends use this to greatly improve transcription accuracy based on regional inflections.': 'プロバイダーリストの下で、使用する言語（例：英語）を指定してください。最も重要なのは、特定のリージョンのアクセント／リージョンマッピング（例：en-US、en-GB、en-IN の違い）を選択することです。STT バックエンドはこれを利用して、地域特有の発音に基づいて文字起こしの精度を大幅に向上させます。',
     'Benefits': 'メリット',

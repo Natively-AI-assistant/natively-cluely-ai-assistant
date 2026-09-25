@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useT } from '../i18n';
 import { ToggleLeft, ToggleRight, Search, Calendar, MoreHorizontal, Globe, Clock, ChevronRight, Settings, LayoutGrid, RefreshCw, Eye, EyeOff, Ghost, Plus, Mail, Link as LinkIcon, ChevronDown, Trash2, Bell, Download, DownloadCloud, CheckCircle, AlertCircle, User, UserSearch, Sparkles, ArrowUpRight } from 'lucide-react';
 import { generateMeetingPDF } from '../utils/pdfGenerator';
@@ -400,11 +400,13 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
     };
 
     // The global chat sits over the notes and closes on the same Esc press.
-    const handleBack = () => {
+    // Stable identity: MeetingDetails re-subscribes its Esc listener whenever
+    // onBack changes, which was every Launcher render.
+    const handleBack = useCallback(() => {
         if (isGlobalChatOpen) return;
         setSelectedMeeting(null);
         setSelectedMomentMs(null);
-    };
+    }, [isGlobalChatOpen]);
 
     // Open a search hit BY ID at the moment it was said. The hit may be older than
     // the 50 meetings this list holds, so it is fetched directly rather than looked

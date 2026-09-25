@@ -123,6 +123,7 @@ export const ZH_GENERATED: Record<string, string> = {
     "Automatically scroll to the latest message as new responses arrive": "在新回复到达时自动滚动到最新消息",
     "Autonomous Registry Sync:": "Autonomous Registry Sync:",
     "Available Variables": "可用变量",
+    "Back": "返回",
     "Because code is run locally, you must have the appropriate interpreters installed on your device and exposed in your system PATH:": "Because code is run locally, you must have the appropriate interpreters installed on your device and exposed in your system PATH:",
     "Below the provider list, specify the Language you will be speaking (e.g., English). Most importantly, select your specific regional Accent / Region mapping (e.g., en-US vs en-GB vs en-IN) — STT backends use this to greatly improve transcription accuracy based on regional inflections.": "Below the provider list, specify the Language you will be speaking (e.g., English). Most importantly, select your specific regional Accent / Region mapping (e.g., en-US vs en-GB vs en-IN) — STT backends use this to greatly improve transcription accuracy based on regional inflections.",
     "Benefits": "Benefits",
