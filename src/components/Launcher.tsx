@@ -308,10 +308,6 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
     const nextMeeting = visibleMeetings[0];
     const moreMeetingsCount = Math.max(0, upcomingMeetings.length - visibleMeetings.length);
 
-    if (!window.electronAPI) {
-        return <div className="text-white p-10">Error: Electron API not initialized. Check preload script.</div>;
-    }
-
     const toggleDetectable = () => {
         const newState = !isDetectable;
         setIsDetectable(newState);
@@ -544,6 +540,11 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
     const listSettle: TargetAndTransition = prefersReducedMotion
         ? { opacity: 1, transition: { duration: 0.16, ease: 'linear' } }
         : { transform: 'scale(1)', transition: SETTLE };
+
+    // After every hook: an early return above them would change the hook count between renders.
+    if (!window.electronAPI) {
+        return <div className="text-white p-10">Error: Electron API not initialized. Check preload script.</div>;
+    }
 
     return (
         <div className="h-full w-full flex flex-col bg-bg-primary text-text-primary font-sans overflow-hidden selection:bg-accent-secondary/30">
