@@ -36,6 +36,10 @@ test('the results panel slides to its measured height, not to auto', () => {
     assert.match(panel, /new ResizeObserver\(/, 'the height is re-measured on every change');
     assert.match(panel, /animate=\{\{\s*height,/, 'the panel animates to the measured number');
     assert.match(panel, /Math\.max\(/, 'while open the panel only grows');
+    // Deleting the query and retyping before the close finishes re-enters the SAME
+    // panel; without a reset it kept the last query's tallest height (~270px empty).
+    assert.match(panel, /useIsPresent\(\)/, 'the panel knows when it re-enters');
+    assert.match(panel, /\}, \[isPresent\]\);/, 'the height starts over on every (re)entry');
 });
 
 test('result rows swap in place: no exit, no height animation, no slide', () => {
