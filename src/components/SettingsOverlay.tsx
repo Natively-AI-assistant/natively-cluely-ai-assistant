@@ -3072,8 +3072,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         </button>
                                     </div>
 
-                                    {/* Issue #517: one switch to stop Natively claiming keys OS-wide. */}
-                                    <div className="flex items-center justify-between gap-4 px-4 py-3 rounded-xl border border-border-subtle bg-bg-subtle/30">
+                                    {/* Issue #517: one switch to stop Natively claiming keys OS-wide.
+                                        The card fill is what makes it a card in dark, where
+                                        --border-subtle is transparent. */}
+                                    <div className="flex items-center justify-between gap-4 px-4 py-3 rounded-xl border border-border-subtle bg-bg-card">
                                         <div>
                                             <h4 className="text-sm font-bold text-text-primary">{t('Global shortcuts')}</h4>
                                             <p className="text-xs text-text-secondary mt-0.5">
