@@ -178,6 +178,25 @@ export function isSettled(card: HTMLElement): boolean {
   return isUncovered(card);
 }
 
+// The controls whose hover or focus a picture would keep. Roles, not every
+// focusable element: a scroll pane with tabindex is hovered whenever the
+// pointer is over the card at all, and would stop every picture.
+const CONTROL = 'button, a[href], input, select, textarea, label, summary, '
+  + '[role="button"], [role="tab"], [role="menuitem"], [role="option"], [role="switch"], [role="checkbox"], [role="radio"]';
+
+/**
+ * Is the card showing something that belongs to this moment, not to the view:
+ * a control under the pointer, or a keyboard focus ring? A picture kept then
+ * pours out with it on the next open (the Settings tab last pointed at, lit
+ * up like a second selected tab) and drops it as the card lands.
+ */
+export function showsTransientState(card: HTMLElement): boolean {
+  if (card.querySelector(':focus-visible')) return true;
+  const hovered = card.querySelectorAll(':hover');
+  const control = hovered[hovered.length - 1]?.closest(CONTROL);
+  return !!control && control !== card && card.contains(control);
+}
+
 /** Is anything inside the card scrolled away from where it opens (the top)? */
 export function isScrolled(card: HTMLElement): boolean {
   const walk = (el: Element): boolean => {
