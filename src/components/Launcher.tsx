@@ -89,6 +89,9 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
     const [isDetectable, setIsDetectable] = useState(false);
     const [isMeetingActive, setIsMeetingActive] = useState(false);
     const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
+    // The notes page's "ask about this meeting" chat is open. See the details
+    // panel's z-index below.
+    const [meetingChatOpen, setMeetingChatOpen] = useState(false);
     const [upcomingEvents, setUpcomingEvents] = useState<any[]>([]);
     const [isCalendarConnected, setIsCalendarConnected] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
@@ -865,7 +868,13 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                         <motion.div
                             key="details"
                             data-page="details"
-                            className="absolute inset-0 z-20 overflow-hidden"
+                            // z-20 is the cover/uncover order (above the list at
+                            // z-10). While the meeting chat is open the page goes
+                            // above the header (z-[200]) and the undetectable ring
+                            // (z-[100]) too: the chat's dim lives in this page, and
+                            // like the dim behind Settings and the toasters it has to
+                            // cover the whole window, header included.
+                            className={`absolute inset-0 overflow-hidden ${meetingChatOpen ? 'z-[250]' : 'z-20'}`}
                             variants={panelVariants}
                             initial="hidden"
                             animate="shown"
@@ -885,7 +894,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                 only ever uncovers more of that same colour. */}
                             <motion.div
                                 data-layer="content"
-                                className="relative h-full w-full"
+                                className={`relative h-full w-full ${meetingChatOpen ? '!transform-none' : ''}`}
                                 variants={contentVariants}
                             >
                                 <MeetingDetails
@@ -912,6 +921,18 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                             <section className={`${isLight ? 'bg-bg-secondary' : 'bg-bg-elevated'} px-8 pt-6 pb-8 border-b border-border-subtle shrink-0`}>
                                 <div className="max-w-4xl mx-auto space-y-6">
                                     {/* 1.5. Hero Header (Title + Controls + CTA) */}
+                            {/* While the meeting chat is open the settled
+                                transform is forced off (!transform-none beats
+                                Framer's inline style). translateX(0) scale(1) is
+                                invisible but still a transform, and a transformed
+                                ancestor is the containing block for every
+                                position:fixed inside it — it cut the chat's
+                                full-window dim to this layer, short of the header.
+                                Not via transitionEnd: Framer then animates the exit
+                                FROM 'none' as if from scale(0), and the page
+                                collapsed to 20% on the way back (measured). Only
+                                while the chat is open, so the exit always starts
+                                from Framer's own identity transform. */}
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-4">
                                             <h1 className="text-3xl font-celeb-light font-medium text-text-primary tracking-wide drop-shadow-sm">{t('My Natively')}</h1>
@@ -922,6 +943,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                 disabled={isRefreshing}
                                                 className={`p-2 text-text-secondary hover:text-text-primary rounded-full transition-colors ${isRefreshing ? 'animate-spin text-blue-400' : ''} ${isLight ? 'hover:bg-black/8' : 'hover:bg-white/10'}`}
                                                 title={t("Refresh State")}
+                                    onChatOpenChange={setMeetingChatOpen}
                                             >
                                                 <RefreshCw size={18} />
                                             </button>
