@@ -533,6 +533,15 @@ parentPort.on('message', async (msg: any) => {
     if (parakeetEngine) {
       setParakeetChain(parakeetChannelKey, getParakeetChain(parakeetChannelKey).then(async () => {
         try {
+          if (msg.language && msg.language !== 'auto') {
+            const { RECOGNITION_LANGUAGES } = require('../../config/languages');
+            const langEntry = RECOGNITION_LANGUAGES[msg.language];
+            const iso = langEntry?.iso639 || String(msg.language).split('-')[0].toLowerCase();
+            const { PARAKEET_TDT_SUPPORTED_ISO639 } = require('./modelLanguageSupport');
+            if (iso && !PARAKEET_TDT_SUPPORTED_ISO639.has(iso)) {
+              console.warn(`[WhisperWorker] Parakeet TDT does not support language "${msg.language}" (${iso}) — defaulting to European multilingual recognition`);
+            }
+          }
           const res = await parakeetEngine.transcribe(msg.audio);
           parentPort!.postMessage({
             type: msg.streaming ? 'partial' : 'result',

@@ -54,42 +54,52 @@ export async function downloadParakeetTdtFiles(
 
     const expectedBytesHeader = response.headers.get('content-length');
     const expectedBytes = expectedBytesHeader !== null ? Number(expectedBytesHeader) : null;
-    const partialPath = `${destPath}.partial`;
+    const partialPath = `${destPath}.partial.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}`;
     const fileStream = fs.createWriteStream(partialPath);
     let fileBytes = 0;
 
-    const reader = response.body.getReader();
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      fileBytes += value.byteLength;
-      if (!fileStream.write(value)) {
-        await new Promise<void>((resolve) => fileStream.once('drain', resolve));
+    try {
+      const reader = response.body.getReader();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        fileBytes += value.byteLength;
+        if (!fileStream.write(value)) {
+          await new Promise<void>((resolve) => fileStream.once('drain', resolve));
+        }
+        const pct = Math.min(
+          99,
+          Math.round(((downloadedSoFar + fileBytes) / TOTAL_APPROX_BYTES) * 100),
+        );
+        report(pct);
       }
-      const pct = Math.min(
-        99,
-        Math.round(((downloadedSoFar + fileBytes) / TOTAL_APPROX_BYTES) * 100),
-      );
-      report(pct);
-    }
-    fileStream.end();
-    await new Promise<void>((resolve, reject) => {
-      fileStream.once('finish', resolve);
-      fileStream.once('error', reject);
-    });
+      fileStream.end();
+      await new Promise<void>((resolve, reject) => {
+        fileStream.once('finish', resolve);
+        fileStream.once('error', reject);
+      });
 
-    if (expectedBytes !== null && fileBytes !== expectedBytes) {
+      if (expectedBytes !== null && fileBytes !== expectedBytes) {
+        throw new Error(
+          `Downloaded file ${file} was truncated: expected ${expectedBytes} bytes, received ${fileBytes}`,
+        );
+      }
+
+      // If another concurrent download already finished and placed the valid file, we don't clobber it
+      if (fs.existsSync(destPath) && fs.statSync(destPath).size > 0) {
+        try { fs.unlinkSync(partialPath); } catch { /* ignore */ }
+      } else {
+        fs.renameSync(partialPath, destPath);
+      }
+    } catch (downloadErr) {
       try {
         fs.unlinkSync(partialPath);
       } catch {
         /* ignore */
       }
-      throw new Error(
-        `Downloaded file ${file} was truncated: expected ${expectedBytes} bytes, received ${fileBytes}`,
-      );
+      throw downloadErr;
     }
 
-    fs.renameSync(partialPath, destPath);
     downloadedSoFar += APPROX_BYTES[file];
     report(Math.min(99, Math.round((downloadedSoFar / TOTAL_APPROX_BYTES) * 100)));
   }

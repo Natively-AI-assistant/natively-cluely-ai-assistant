@@ -94,7 +94,7 @@ test('English-only models lock both selects and allow only the English variants'
 
 test('multilingual Whisper-family models allow every language including auto, but no accent conditioning', () => {
   const whisperMultilingual = MODEL_CATALOG.filter(
-    (m) => m.multilingual && m.sessionLayout !== 'nemotron-rnnt',
+    (m) => m.multilingual && m.sessionLayout !== 'nemotron-rnnt' && m.sessionLayout !== 'parakeet-tdt',
   );
   assert.ok(whisperMultilingual.length > 0, 'catalog must contain multilingual Whisper checkpoints');
   for (const m of whisperMultilingual) {
@@ -108,6 +108,27 @@ test('multilingual Whisper-family models allow every language including auto, bu
     );
     assert.ok(s.allowedLanguageKeys.includes('auto'), `${m.id}: Whisper supports auto-detect`);
   }
+});
+
+test('Parakeet TDT allows exactly the 25 European languages it supports plus auto', () => {
+  const PARAKEET_ID = 'istupakov/parakeet-tdt-0.6b-v3-onnx';
+  const s = getLocalModelLanguageSupport(PARAKEET_ID);
+  assert.equal(s.languageSelectable, true);
+  assert.equal(s.accentSelectable, false);
+  assert.ok(s.allowedLanguageKeys.includes('auto'));
+  assert.ok(s.allowedLanguageKeys.includes('bulgarian'));
+  assert.ok(s.allowedLanguageKeys.includes('english-us'));
+  assert.ok(s.allowedLanguageKeys.includes('german'));
+  assert.ok(s.allowedLanguageKeys.includes('french'));
+  assert.ok(s.allowedLanguageKeys.includes('spanish'));
+  assert.ok(s.allowedLanguageKeys.includes('russian'));
+  assert.ok(s.allowedLanguageKeys.includes('ukrainian'));
+  // Asian/Middle-Eastern languages NOT supported by Parakeet
+  assert.equal(s.allowedLanguageKeys.includes('japanese'), false);
+  assert.equal(s.allowedLanguageKeys.includes('chinese'), false);
+  assert.equal(s.allowedLanguageKeys.includes('arabic'), false);
+  assert.equal(s.allowedLanguageKeys.includes('korean'), false);
+  assert.equal(s.allowedLanguageKeys.includes('hindi'), false);
 });
 
 test('Nemotron allows exactly the keys that resolve through the transcription-ready locale table — no auto', () => {
