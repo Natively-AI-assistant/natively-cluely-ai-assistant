@@ -173,6 +173,12 @@ export class SessionTracker {
     private transcriptEpochSummaries: string[] = [];
     private isCompacting: boolean = false;
 
+    // Advanced by reset() only. Async work that awaits (the compaction recap
+    // call, a phone-mirror answer stream) reads it before the await and drops
+    // its result if it moved, so an ended session cannot write into the next
+    // one. clearSessionContext() keeps the transcript and does NOT advance it.
+    private sessionEpoch: number = 0;
+
     // Track interim interviewer segment
     private lastInterimInterviewer: TranscriptSegment | null = null;
 
@@ -741,6 +747,10 @@ export class SessionTracker {
         return this.sessionStartTime;
     }
 
+    getSessionEpoch(): number {
+        return this.sessionEpoch;
+    }
+
     // ============================================
     // Usage Tracking
     // ============================================
@@ -806,6 +816,7 @@ export class SessionTracker {
         this.codingQuestionSource = null;
         this.codingQuestionSetAt = null;
         this.recentInterviewerBuffer = [];
+        this.sessionEpoch++;
     }
 
     // ============================================
@@ -836,6 +847,10 @@ export class SessionTracker {
         if (this.fullTranscript.length <= 1800 || this.isCompacting) return;
 
         this.isCompacting = true;
+        // A meeting stop resets the session while the recap call below is still
+        // pending. Its summary and the 500-entry eviction belong to the session
+        // that ended, not the one that replaced it.
+        const epoch = this.sessionEpoch;
         try {
             // Take the oldest 500 entries to summarize
             const summarizeCount = 500;
@@ -853,6 +868,7 @@ export class SessionTracker {
                     const epochSummary = await this.recapLLM.generate(
                         `Summarize this conversation segment into 3-5 concise bullet points preserving key topics, decisions, and questions:\n\n${summaryInput}`
                     );
+                    if (this.sessionEpoch !== epoch) return;
                     if (epochSummary && epochSummary.trim().length > 0) {
                         this.transcriptEpochSummaries.push(epochSummary.trim());
                         console.log(`[SessionTracker] Epoch summary created (${this.transcriptEpochSummaries.length} total)`);
@@ -862,6 +878,7 @@ export class SessionTracker {
                         this.transcriptEpochSummaries.push(marker);
                     }
                 } catch (e) {
+                    if (this.sessionEpoch !== epoch) return;
                     // If summarization fails, store a simple marker
                     const fallback = `[Earlier discussion: ${oldEntries.length} segments summarized without transcript snippets.]`;
                     this.transcriptEpochSummaries.push(fallback);
