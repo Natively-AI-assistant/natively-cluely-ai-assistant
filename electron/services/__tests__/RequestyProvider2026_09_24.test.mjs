@@ -189,10 +189,16 @@ describe('Requesty is only ever an explicit choice', () => {
     assert.match(fn, /const isSelected = \/\^requesty\\\/\/i\.test\(activeModelId\);/);
   });
 
-  test('the default-model reconciliation ladder never lands on Requesty', () => {
+  test('the default-model reconciliation ladder can recover onto the preferred Requesty model', () => {
     const ladder = ipc.slice(ipc.indexOf('const next = defaultModel.startsWith('), ipc.indexOf('if (!next) {'));
     assert.ok(ladder.length > 0, 'the reconciliation ladder should exist');
-    assert.doesNotMatch(ladder, /requesty/i);
+    // Without this rung a Requesty-only user whose default went stale is told
+    // "No AI providers configured" while holding a working key.
+    assert.match(ladder, /requestyFallbackModel && modelAvailable\(requestyFallbackModel\)/);
+    // Gated by modelAvailable(), never a raw key check, so the opt-in allow-list
+    // and the disabled switch stay authoritative.
+    assert.doesNotMatch(ladder, /getRequestyApiKey/);
+    assert.match(ipc, /const requestyFallbackModel: string \| null = cm\.getPreferredModel\?\.\('requesty'\) \|\| null;/);
   });
 });
 
