@@ -2,7 +2,7 @@ import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMe
 import { useT } from '../i18n';
 import { createPortal } from 'react-dom';
 import { Search, Sparkles, FileText, Brain } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useIsPresent } from 'framer-motion';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 
 // ============================================
@@ -124,27 +124,33 @@ function searchMeetings(meetings: Meeting[], query: string): SearchResult[] {
 // While it is open the panel only grows. The results narrow as you type (one
 // letter matches almost every meeting), and following them back up read as the
 // bottom edge bouncing, so a shorter result set leaves room at the bottom until
-// the pill closes; the panel remounts on every open, so each open starts fresh.
+// the pill closes. Each open starts from its own results (see the reset below).
 // The height lives here, not in the pill, so re-measures re-render only this
 // wrapper; the rows arrive as the same `children` and are skipped.
 const ResultsPanel: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const bodyRef = useRef<HTMLDivElement>(null);
     const [height, setHeight] = useState(0);
+    const isPresent = useIsPresent();
 
     // Measured before the first paint, so the spring starts toward this body and
     // not toward 0; the observer then follows results and memories arriving late.
     // offsetHeight ignores transforms, and the body ends in padding, so its
     // rounding never clips a row.
+    //
+    // Keyed on presence, not run once: deleting the whole query and typing again
+    // before the close finishes brings this same panel back (AnimatePresence
+    // re-enters it instead of mounting a new one), and it kept the last query's
+    // tallest height, leaving up to ~270px empty under the new results. On every
+    // (re)entry it starts over from the body as it is now.
     useLayoutEffect(() => {
         const body = bodyRef.current;
-        if (!body) return;
-        const measure = () => setHeight((current) => Math.max(current, body.offsetHeight));
-        measure();
+        if (!body || !isPresent) return;
+        setHeight(body.offsetHeight);
         if (typeof ResizeObserver === 'undefined') return;
-        const observer = new ResizeObserver(measure);
+        const observer = new ResizeObserver(() => setHeight((current) => Math.max(current, body.offsetHeight)));
         observer.observe(body);
         return () => observer.disconnect();
-    }, []);
+    }, [isPresent]);
 
     return (
         <motion.div
