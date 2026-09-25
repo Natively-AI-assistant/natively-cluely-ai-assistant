@@ -47,3 +47,11 @@ test('result rows swap in place: no exit, no height animation, no slide', () => 
     assert.doesNotMatch(src, /mode=["']popLayout["']/);
     assert.doesNotMatch(src, /layout=["']position["']|layout:\s*['"]position['"]/);
 });
+
+// 3. The open dropdown hangs below the header. Painted into the header's layer it
+//    stretched that layer, and on the first open and close after a load the new
+//    area showed the header's colour for a few frames: a full-width band under
+//    the top bar. The pill gets its own compositor layer instead.
+test('the search pill has its own compositor layer', () => {
+    assert.match(src, /ref=\{containerRef\}\s*className="[^"]*\bwill-change-transform\b/);
+});
