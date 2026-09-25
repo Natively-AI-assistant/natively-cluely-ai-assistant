@@ -6,6 +6,7 @@ import { buildEmbeddingConfig } from './rag/embeddingConfigIdentity';
 import { app, BrowserWindow, dialog, desktopCapturer, ipcMain, shell, systemPreferences } from 'electron';
 import { setOpenAtLogin, getOpenAtLogin } from './utils/windowsTaskbarPolicy';
 import { micSettingsUri } from '../src/lib/micPermissionPolicy.mjs';
+import { resolveMacScreenStatus } from '../src/lib/permissionAttentionPolicy.mjs';
 import { TEXT_PLACEHOLDER_RE } from './utils/curlPlaceholderPolicy';
 import { routeOverlayUiAction } from './utils/overlayUiActionRouter';
 import * as fs from 'fs';
@@ -16485,42 +16486,29 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('permissions:check', async () => {
     if (process.platform === 'darwin') {
       const mic = systemPreferences.getMediaAccessStatus('microphone');
-      const rawScreen = systemPreferences.getMediaAccessStatus('screen');
 
       // macOS reports the Screen Recording grant unreliably via
       // getMediaAccessStatus('screen'): a genuinely-granted permission is
       // frequently surfaced as 'denied' / 'not-determined' until the process is
-      // relaunched. Trusting that raw string produces a false "TCC blocked"
-      // signal that makes the onboarding orchestrator (stageCatalog.ts
-      // reEligibility) re-raise the permissions toaster forever and defeats the
-      // dismiss button. When the raw status is anything other than 'granted',
-      // fall back to a capture probe (the same signal main.ts's
-      // resolveMacScreenCaptureCapability trusts) — if we can enumerate screen
-      // sources, the permission is effectively granted.
-      let screen = rawScreen;
-      if (rawScreen !== 'granted' && rawScreen !== 'restricted') {
-        try {
-          // desktopCapturer.getSources can block indefinitely on TCC (see
-          // main.ts:448 + resolveMacScreenCaptureCapability, which wraps the
-          // same probe in a 5 s timeout). This handler is awaited on the
-          // launcher render path (App.tsx checkPermissions().then(...)), so an
-          // un-bounded hang would freeze the onboarding user-state feed. Race
-          // the probe against a 5 s deadline and treat a timeout as not-granted.
-          const sources = await Promise.race([
-            desktopCapturer.getSources({
-              types: ['screen'],
-              thumbnailSize: { width: 1, height: 1 },
-            }),
-            new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error('screen-capture-probe-timeout')), 5000),
-            ),
-          ]);
-          const capturable = sources.some((s) => s.id.startsWith('screen:'));
-          if (capturable) screen = 'granted';
-        } catch {
-          // Probe failed or timed out — keep the raw status (treat as not-granted).
-        }
-      }
+      // relaunched. Trusting that raw string would re-raise the permissions
+      // card (permissionAttentionPolicy.mjs) on a correctly-granted Mac, so a
+      // non-granted status is confirmed with a capture probe (the same signal
+      // main.ts's resolveMacScreenCaptureCapability trusts).
+      //
+      // desktopCapturer.getSources can block indefinitely on TCC, and this
+      // handler is awaited on the launcher render path, so the probe races a
+      // 5 s deadline inside resolveMacScreenStatus. A timeout keeps the raw
+      // status, as the meeting path treats the same timeout as blocked.
+      const screen = await resolveMacScreenStatus(
+        systemPreferences.getMediaAccessStatus('screen'),
+        async () => {
+          const sources = await desktopCapturer.getSources({
+            types: ['screen'],
+            thumbnailSize: { width: 1, height: 1 },
+          });
+          return sources.some((s) => s.id.startsWith('screen:'));
+        },
+      );
 
       return { microphone: mic, screen, platform: 'darwin' };
     }

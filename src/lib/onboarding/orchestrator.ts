@@ -80,7 +80,8 @@ export interface UserState {
   extensionConnected: boolean;
   extensionSupported: boolean;
   permsShown: boolean;
-  macTCCBlocked: boolean;
+  /** A required permission is missing and user-fixable (permissionAttentionPolicy.mjs). */
+  permissionsNeedAttention: boolean;
   seenProfileOnboarding: boolean;
   seenModesOnboarding: boolean;
   activeModeSet: boolean;
@@ -106,6 +107,12 @@ export interface StageConfig {
   onceEver?: boolean;
   cooldownMs?: (s: UserState) => number;
   reEligibility?: (s: UserState, completed: Record<string, number>) => boolean;
+  /**
+   * Opt-in: when reEligibility turns from false to true, take the stage out of
+   * `skipped` so a persisted auto-skip cannot hide it (the permissions card).
+   * Off by default so a skipped marketing card is never re-armed this way.
+   */
+  reopensWhenReEligible?: boolean;
   customPredicate?: (ctx: Ctx) => boolean;
   /** Other stages that must be completed OR skipped before this can fire. */
   requiresStages?: ToasterId[];
@@ -156,7 +163,7 @@ export const DEFAULT_USER_STATE: UserState = {
   extensionConnected: false,
   extensionSupported: true,
   permsShown: false,
-  macTCCBlocked: false,
+  permissionsNeedAttention: false,
   seenProfileOnboarding: false,
   seenModesOnboarding: false,
   activeModeSet: false,
@@ -181,7 +188,7 @@ export class OnboardingOrchestrator {
   // unrelated.
   private revision = 0;
   // Toasters the user explicitly dismissed THIS session. Not persisted — a
-  // genuinely-blocked permission (macTCCBlocked) is still re-raised on the next
+  // permission that still needs attention is re-raised on the next
   // launch. This exists so an explicit dismiss (the X button) is not undone on
   // the very next RAF frame by a still-true reEligibility predicate, which is
   // what made the X appear to do nothing for a re-eligible stage.
@@ -199,6 +206,11 @@ export class OnboardingOrchestrator {
 
     // Sort configs by `order` and seed the queue
     this.stageConfigs = [...stageConfigs].sort((a, b) => a.order - b.order);
+
+    // A user-state push can land before start() (App.tsx starts after an async
+    // import; the permission check is an async IPC call). Replay its un-skips
+    // against the launch baseline so arrival order does not matter.
+    this.unskipOnReEligibility(DEFAULT_USER_STATE, this.userState);
 
     // Build queue if not already populated (e.g. cold launch with no legacy state)
     if (this.state.queue.length === 0) {
@@ -330,7 +342,7 @@ export class OnboardingOrchestrator {
         break;
 
       case 'user-state:change':
-        this.userState = { ...this.userState, ...event.patch };
+        this.applyUserState(event.patch);
         break;
 
       case 'queue:set':
@@ -562,7 +574,7 @@ export class OnboardingOrchestrator {
   markDismissed(id: ToasterId): void {
     // Record the explicit dismiss for this session so the drain loop does not
     // instantly re-raise a re-eligible stage (e.g. permissions while
-    // macTCCBlocked is genuinely true) on the next animation frame.
+    // permissionsNeedAttention is genuinely true) on the next animation frame.
     this.dismissedThisSession.add(id);
     this.completeToaster(id, false);
   }
@@ -609,8 +621,36 @@ export class OnboardingOrchestrator {
   // ─── User state injection ─────────────────────────────────────
 
   setUserState(patch: Partial<UserState>): void {
-    this.userState = { ...this.userState, ...patch };
+    this.applyUserState(patch);
     this.notify();
+  }
+
+  /**
+   * Merge a user-state patch. A persisted auto-skip must not outlive its
+   * reason: when a stage's reEligibility turns from false to true (a
+   * permission that broke after an earlier quiet launch), the stage leaves
+   * `skipped` so the scheduler gives it a deadline again. Without this, a
+   * long-time user whose other stages are all resolved never sees the card,
+   * because nothing else keeps the drain loop running. Only a transition
+   * un-skips, so a stage skipped while its reEligibility was already true
+   * (e.g. an explicit "Not now") stays skipped.
+   */
+  private applyUserState(patch: Partial<UserState>): void {
+    const before = this.userState;
+    this.userState = { ...before, ...patch };
+    this.unskipOnReEligibility(before, this.userState);
+  }
+
+  private unskipOnReEligibility(before: UserState, after: UserState): void {
+    let unskipped = false;
+    for (const config of this.stageConfigs) {
+      if (!config.reopensWhenReEligible || !config.reEligibility || !this.state.skipped.has(config.id)) continue;
+      if (!config.reEligibility(before, this.state.completed) && config.reEligibility(after, this.state.completed)) {
+        this.state.skipped.delete(config.id);
+        unskipped = true;
+      }
+    }
+    if (unskipped) this.persist();
   }
 
   getUserState(): UserState {
