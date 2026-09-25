@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 
 // ─── Shared disclosure primitives ───────────────────────────
 // Promoted from HelpSettings.tsx / IntelligenceSettings.tsx, which had
@@ -51,6 +51,14 @@ interface AccordionSectionProps {
   defaultOpen?: boolean;
   /** Outer container classes (bg/border/radius) — override to match the surrounding card convention. */
   className?: string;
+  /** The hairline between the header and the body. On by default; a body that
+      opens with its own group label reads better without it. */
+  divider?: boolean;
+  /** The header's hover fill. On by default. Off for a card whose open body
+      follows straight on: the fill stops square at the header's bottom edge
+      and reads as a rectangle stuck to the top of the card. The chevron
+      brightens on hover instead, so the header still answers the pointer. */
+  hoverFill?: boolean;
 }
 
 /**
@@ -66,14 +74,21 @@ export const AccordionSection: React.FC<AccordionSectionProps> = ({
   children,
   defaultOpen = false,
   className = 'bg-bg-card rounded-xl border-border-subtle',
+  divider = true,
+  hoverFill = true,
 }) => {
   const [isOpen, setIsOpen] = useState(defaultOpen);
 
   return (
-    <div className={`border mb-4 overflow-hidden transition-all duration-200 shadow-sm ${className}`}>
+    // Header hover is --bg-row-hover, not bg-item-surface: Plans renders this card
+    // ON bg-item-surface, so that hover painted the colour it already was. The
+    // focus ring is drawn inside (-2px): outside, the card's overflow-hidden cut
+    // it off on every side and keyboard focus was invisible.
+    <div className={`border mb-4 overflow-hidden shadow-sm ${className}`}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between gap-3 p-4 text-left transition-colors hover:bg-bg-item-surface group"
+        aria-expanded={isOpen}
+        className={`w-full flex items-center justify-between gap-3 p-4 text-left transition-colors ${hoverFill ? 'hover:bg-[color:var(--bg-row-hover)]' : ''} focus-visible:[outline-offset:-2px] group`}
       >
         <div className="flex items-center gap-3 min-w-0">
           {icon && (
@@ -83,31 +98,26 @@ export const AccordionSection: React.FC<AccordionSectionProps> = ({
           )}
           <div className="min-w-0">
             <span className="block font-semibold text-sm text-text-primary">{title}</span>
+            {/* text-secondary, not tertiary: tertiary measured 2.89:1 on the light
+                Plans card (bg-item-surface). A description is read, not decoration. */}
             {description && (
-              <span className="block text-[11.5px] text-text-tertiary leading-relaxed mt-1">
+              <span className="block text-[11.5px] text-text-secondary leading-relaxed mt-1">
                 {description}
               </span>
             )}
           </div>
         </div>
-        {isOpen
-          ? <ChevronDown className="w-5 h-5 text-text-tertiary shrink-0" />
-          : <ChevronRight className="w-5 h-5 text-text-tertiary shrink-0" />}
+        <ChevronDown
+          className={`w-5 h-5 text-text-tertiary shrink-0 transition-[transform,color] duration-200 ease-apple-ease motion-reduce:transition-none ${hoverFill ? '' : 'group-hover:text-text-primary'} ${isOpen ? 'rotate-0' : '-rotate-90'}`}
+        />
       </button>
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2, ease: 'easeOut' }}
-          >
-            <div className="p-5 border-t border-border-subtle text-sm leading-relaxed text-text-secondary">
-              {children}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Disclosure: smooth-out, a fade-only path under reduced motion, and no
+          open animation when the section mounts already open. */}
+      <Disclosure open={isOpen}>
+        <div className={`p-5 text-sm leading-relaxed text-text-secondary ${divider ? 'border-t border-border-subtle' : ''}`}>
+          {children}
+        </div>
+      </Disclosure>
     </div>
   );
 };
