@@ -9,11 +9,19 @@
 
 import { EventEmitter } from 'events';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
+import { RealtimeSilenceTail } from './realtimeSilenceTail';
 
 const RECONNECT_BASE_DELAY_MS = 1000;
 const RECONNECT_MAX_DELAY_MS = 30000;
 const RECONNECT_MAX_ATTEMPTS = 10;
 const KEEPALIVE_INTERVAL_MS = 8000;
+// Real-time silence streamed after the local VAD's speech end. endpointing
+// (300 ms, below) already fires inside the native hangover (>= 500 ms), but
+// UtteranceEnd needs a 1000 ms gap after the last word — at the keepalive
+// cadence (20 ms per 100 ms) that gap took ~2.6 s of wall time to accumulate.
+// hangover (>= 500) + 700 = 1200 ms of real silence covers it with margin.
+// See realtimeSilenceTail.ts.
+export const DEEPGRAM_SILENCE_TAIL_MS = 700;
 
 export class DeepgramStreamingSTT extends EventEmitter {
     private apiKey: string;
@@ -44,10 +52,21 @@ export class DeepgramStreamingSTT extends EventEmitter {
     // remote speakers can be distinguished. Default OFF — must never destabilize the
     // realtime path for users who don't enable it.
     private diarize = false;
+    private readonly silenceTail = new RealtimeSilenceTail({
+        tailMs: DEEPGRAM_SILENCE_TAIL_MS,
+        format: () => ({ sampleRate: this.sampleRate, channels: this.numChannels }),
+        sink: (pcm) => this.sendAudio(pcm),
+    });
 
     constructor(apiKey: string) {
         super();
         this.apiKey = apiKey;
+    }
+
+    /** Local VAD: the speaker stopped. Keep the endpointer's clock real-time. */
+    public notifySpeechEnded(): void {
+        if (!this.isActive) return;
+        this.silenceTail.start();
     }
 
     /** Enable/disable provider diarization. Restarts the stream if active (it's a connect param). */
@@ -106,6 +125,7 @@ export class DeepgramStreamingSTT extends EventEmitter {
 
     public stop(): void {
         this.shouldReconnect = false;
+        this.silenceTail.cancel();
         this.clearTimers();
 
         if (this.live) {
@@ -135,6 +155,12 @@ export class DeepgramStreamingSTT extends EventEmitter {
     }
 
     public write(chunk: Buffer): void {
+        if (!this.isActive) return;
+        this.silenceTail.observe(chunk);
+        this.sendAudio(chunk);
+    }
+
+    private sendAudio(chunk: Buffer): void {
         if (!this.isActive) return;
 
         if (!this.isOpen) {
@@ -169,6 +195,14 @@ export class DeepgramStreamingSTT extends EventEmitter {
                 model: 'nova-3',
                 language: this.languageCode,
                 smart_format: true,
+                // smart_format HOLDS a streaming final when the utterance ends
+                // in what looks like an incomplete entity (a number, a date),
+                // "until the speaker continues to non-entity speech, OR ...
+                // after 3 seconds of silence" (developers.deepgram.com/docs/
+                // smart-format) — and that silence is audio time, which the
+                // native keepalive stretches ~5×. no_delay releases the final
+                // immediately; formatting still applies where it is ready.
+                no_delay: true,
                 interim_results: true,
                 encoding: 'linear16',
                 sample_rate: this.sampleRate,

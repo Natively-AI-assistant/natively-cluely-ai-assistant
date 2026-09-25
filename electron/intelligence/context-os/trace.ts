@@ -102,6 +102,18 @@ export function buildContextOsTrace(input: {
  */
 export function logContextOsTrace(trace: ContextOsTrace): void {
   try {
-    console.log('[CONTEXT-OS]', JSON.stringify(trace));
+    // The LOGGED line carries no question text. `questionPreview` stays on the
+    // in-memory trace for callers, but this line lands in natively_debug.log —
+    // the file support is sent — and the Diagnostics trace switch promises
+    // "without transcript text". The log's key-based redaction never saw the
+    // preview because it arrives here already stringified. A hash + length
+    // still lets two lines about the same question be matched up.
+    const { questionPreview, ...rest } = trace;
+    let questionHash = '';
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      questionHash = require('crypto').createHash('sha256').update(String(questionPreview ?? '')).digest('hex').slice(0, 12);
+    } catch { /* hash is best-effort */ }
+    console.log('[CONTEXT-OS]', JSON.stringify({ ...rest, questionHash, questionLength: String(questionPreview ?? '').length }));
   } catch { /* tracing must never break an answer */ }
 }

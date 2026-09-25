@@ -86,7 +86,7 @@ test('the Knowledge warning colour reads the worst half, not the blend', () => {
     'KnowledgeUsage must derive a worst-half figure')
   assert.match(SRC, /const isHigh = worstHalf >= 80;/,
     'the amber threshold must read the worst half')
-  assert.match(SRC, /worstHalf > 100 \? 'bg-red-500'/,
+  assert.match(SRC, /worstHalf > 100 \? 'natively-meter-fill--over'/,
     'the over-limit red must read the worst half too')
   assert.doesNotMatch(SRC, /const isHigh = pct >= 80;[\s\S]{0,400}knowledge\.embedding/,
     'the Knowledge row must not fall back to colouring on the blend')

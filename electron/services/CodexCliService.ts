@@ -171,6 +171,11 @@ const CODEX_MODEL_REASONING_SETS: ReadonlyArray<readonly [string, readonly Codex
   ['gpt-5.2',          ['none', 'low', 'medium', 'high', 'xhigh']],
   ['gpt-5.4',          ['none', 'low', 'medium', 'high', 'xhigh']],
   ['gpt-5.5',          ['none', 'low', 'medium', 'high', 'xhigh']],
+  // gpt-5.6 (sol/terra/luna) and gpt-6 (astra). Without these, 'gpt-5.6-terra'
+  // longest-matched bare 'gpt-5' and an xhigh pick was silently sent as low
+  // (issue #573). `none` is left out until a live request proves it.
+  ['gpt-5.6',          ['low', 'medium', 'high', 'xhigh']],
+  ['gpt-6',            ['low', 'medium', 'high', 'xhigh']],
   // codex variants — `none` not supported; `xhigh` only on 5.2-codex+.
   ['gpt-5.5-codex',    ['low', 'medium', 'high', 'xhigh']],
   ['gpt-5.4-codex',    ['low', 'medium', 'high', 'xhigh']],

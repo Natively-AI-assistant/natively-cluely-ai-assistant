@@ -97,7 +97,10 @@ describe('electron-builder config actually bundles the reranker model (source-pi
 
     // The two models that ARE still bundled must keep their gate, or this
     // change quietly removes the protection for all three.
-    assert.match(script, /Xenova\/all-MiniLM-L6-v2\/onnx\/model_quantized\.onnx/);
+    // The bundled embedder is multilingual-e5-small since 2026-09-22.
+    assert.match(script, /Xenova\/multilingual-e5-small\/onnx\/model_quantized\.onnx/);
+    // MiniLM (the previous embedder) is no longer shipped, so no longer fetched.
+    assert.doesNotMatch(script, /pipeline\('feature-extraction', 'Xenova\/all-MiniLM-L6-v2'/);
     // MobileBERT removed 2026-09-05 with the intent classifier; the build must not download it.
     assert.doesNotMatch(script, /mobilebert-uncased-mnli/);
     assert.match(script, /process\.exit\(1\)/, 'verifyModels must still fail the build on a missing required file');
@@ -125,10 +128,15 @@ describe('bge-reranker-base is gone from the bundle entirely', () => {
   // provider and worker, and its entries in both build gates were removed —
   // it was never a catalogue entry, so there was nothing left worth keeping a
   // download path for. docs/reranker-benchmark-2026-09-04.md
-  test('nothing of it remains in resources/models', () => {
-    assert.equal(
-      fs.existsSync(path.resolve(repoRoot, 'resources/models/Xenova/bge-reranker-base')), false,
-      'the directory should be gone, not merely emptied');
+  test('a stale local copy cannot enter the packaged resources', () => {
+    // Developers may still have the old 279 MB model from an earlier checkout.
+    // Packaging is controlled by the explicit extraResources filter, so assert
+    // that durable contract instead of inspecting untracked workstation state.
+    const pkg = JSON.parse(fs.readFileSync(path.resolve(repoRoot, 'package.json'), 'utf8'));
+    const entry = pkg.build.extraResources.find((item) => item.from === 'resources/models/');
+    assert.ok(Array.isArray(entry?.filter), 'models extraResources must use an allowlist');
+    assert.equal(entry.filter.some((pattern) => pattern.includes('bge-reranker-base')), false,
+      'a stale local bge model must not be copied into a release');
   });
 
   test('neither build gate asks for it any more', () => {
@@ -191,10 +199,11 @@ describe('LocalReranker.isCached() resolves true against a SIMULATED packaged-bu
     const origResourcesPath = process.resourcesPath;
     Object.defineProperty(process, 'resourcesPath', { value: simulatedResourcesPath, configurable: true });
 
+    let reranker;
     try {
       const rerankerPath = path.resolve(repoRoot, 'dist-electron/electron/rag/LocalReranker.js');
       const { getLocalReranker } = await import(`${pathToFileURL(rerankerPath).href}?t=${Date.now()}`);
-      const reranker = getLocalReranker();
+      reranker = getLocalReranker();
 
       const cached = await reranker.isCached();
       assert.equal(cached, true, 'isCached() must resolve true against the simulated packaged resourcesPath layout — this is the direct regression check for the audit\'s "unbundled in packaged production" finding');
@@ -209,10 +218,26 @@ describe('LocalReranker.isCached() resolves true against a SIMULATED packaged-bu
       assert.ok(Array.isArray(results) && results.length === 2, 'rerank() must actually run end-to-end against the packaged-layout model, not no-op');
       assert.equal(results[0].index, 1, 'the relevant passage must rank first — proves real inference, not a stub');
     } finally {
+      await reranker?.dispose();
       Module._load = origLoad;
       Object.defineProperty(process, 'resourcesPath', { value: origResourcesPath, configurable: true });
-      fs.rmSync(simulatedResourcesPath, { recursive: true, force: true });
-      fs.rmSync(userData, { recursive: true, force: true });
+      await removeAfterWorkerRelease(simulatedResourcesPath);
+      await removeAfterWorkerRelease(userData);
     }
   });
 });
+
+async function removeAfterWorkerRelease(target) {
+  let lastError;
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    try {
+      fs.rmSync(target, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      if (!['EPERM', 'EBUSY', 'ENOTEMPTY'].includes(error?.code)) throw error;
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+  throw lastError;
+}

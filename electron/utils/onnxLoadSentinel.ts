@@ -63,6 +63,55 @@ export interface OnnxLoadSentinel {
     modelId: string;
     startedAt: number;
     attempt: number;
+    /**
+     * Which LAUNCH (process) wrote the record. Absent on records written by
+     * builds before 2026-09-22, which are treated as previous-launch records.
+     * See consumePoisonedOnnxLoad for why this field exists.
+     */
+    launchId?: string;
+}
+
+/**
+ * Launch identity + the stash of an overwritten previous-launch record, held on
+ * `globalThis` rather than in module scope — deliberately.
+ *
+ * build-electron.js gives many files their own esbuild entry, so this module is
+ * INLINED into several bundles (main.js, modelPreloader.js, …), each with its
+ * own module scope. A module-level id would differ per copy: a sentinel written
+ * by one copy and consumed by another would read as a DIFFERENT launch, and the
+ * self-poisoning this id exists to prevent would come back. One process, one
+ * launch, one id — whichever copy asks.
+ */
+interface OnnxSentinelProcessState {
+    launchId: string;
+    previousLaunchRecord: Map<OnnxFamily, OnnxLoadSentinel>;
+}
+const STATE_KEY = '__nativelyOnnxLoadSentinelState';
+function processState(): OnnxSentinelProcessState {
+    const g = globalThis as unknown as Record<string, OnnxSentinelProcessState | undefined>;
+    if (!g[STATE_KEY]) {
+        g[STATE_KEY] = {
+            launchId: `${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+            previousLaunchRecord: new Map(),
+        };
+    }
+    return g[STATE_KEY]!;
+}
+
+/**
+ * Test-only: begin a "new launch" — a fresh launch id — so a suite can write a
+ * sentinel as a previous launch and consume it as the next one within one
+ * process, which is what the crash guard actually models.
+ */
+export function __simulateNewLaunchForTests(): void {
+    const st = processState();
+    st.launchId = `test-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    st.previousLaunchRecord.clear();
+}
+
+/** A record NOT written by this launch — including a pre-2026-09-22 record with no id. */
+function isFromPreviousLaunch(record: OnnxLoadSentinel): boolean {
+    return record.launchId !== processState().launchId;
 }
 
 /** Whether the sentinel machinery is active. Honored by every primitive so an
@@ -91,6 +140,7 @@ function readSentinel(family: OnnxFamily): OnnxLoadSentinel | null {
                 modelId: parsed.modelId,
                 startedAt: parsed.startedAt,
                 attempt: Math.max(1, Math.floor(parsed.attempt)),
+                ...(typeof parsed.launchId === 'string' ? { launchId: parsed.launchId } : {}),
             };
         }
     } catch {
@@ -110,11 +160,19 @@ export function writeLoadSentinel(family: OnnxFamily, modelId: string): void {
     if (!sentinelEnabled()) return;
     try {
         const previous = readSentinel(family);
+        // About to overwrite another launch's crash record before the consume
+        // has read it: keep it, or starting a load would erase the evidence.
+        // (the stash is the evidence of a previous launch's crash; see consume)
+        const stash = processState().previousLaunchRecord;
+        if (previous && isFromPreviousLaunch(previous) && !stash.has(family)) {
+            stash.set(family, previous);
+        }
         const next: OnnxLoadSentinel = {
             family,
             modelId,
             startedAt: Date.now(),
             attempt: previous && previous.modelId === modelId ? previous.attempt + 1 : 1,
+            launchId: processState().launchId,
         };
         const finalPath = sentinelPath(family);
         const tmpPath = `${finalPath}.tmp`;
@@ -171,11 +229,36 @@ export function clearAllOnnxLoadSentinels(family: OnnxFamily): void {
  * `Xenova/whisper-tiny.en`; intent skips ONNX warmup this launch; embeddings
  * seeds the in-memory `nonRecoverableLoadError`; reranker seeds `loadFailed`.
  */
+//
+// ── A LAUNCH MUST NOT READ ITS OWN IN-FLIGHT LOAD AS A CRASH (2026-09-22) ──
+//
+// The consume runs once at cold start inside a setImmediate (main.ts). Anything
+// that starts an ONNX load before that — a startup re-index of reference files,
+// a reranker prewarm — writes a fresh sentinel first. The consume used to treat
+// ANY record as a previous crash, so it reported this launch's own in-flight
+// load as one, poisoned the model for the whole launch, and every other load
+// fast-failed. Reproduced live on an upgrade: "Recovered from a local embedding
+// crash. Xenova/multilingual-e5-base is skipped this launch" for a model no
+// earlier launch had loaded, and 0/9 reference chunks embedded while the model
+// itself loaded fine. Records now carry a launch id; this launch's own record is
+// left on disk (so a hard death of THIS launch still poisons the next one) and
+// is never reported. A previous launch's record is reported whether it is still
+// on disk or was overwritten by an early load. A record with no launch id comes
+// from an older build and keeps its crash-guard meaning.
 export function consumePoisonedOnnxLoad(family: OnnxFamily): OnnxLoadSentinel | null {
     if (!sentinelEnabled()) return null;
-    const previous = readSentinel(family);
-    if (previous) clearLoadSentinel(family);
-    return previous;
+    const stash = processState().previousLaunchRecord;
+    const stashed = stash.get(family) ?? null;
+    stash.delete(family);
+
+    const onDisk = readSentinel(family);
+    if (onDisk && isFromPreviousLaunch(onDisk)) {
+        clearLoadSentinel(family);
+        return onDisk;
+    }
+    // Either nothing on disk, or only THIS launch's in-flight record, which stays
+    // put for the next launch to judge. Report the crash the early load overwrote.
+    return stashed;
 }
 
 /**

@@ -1753,6 +1753,20 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // on React's render cycle for stop signals.
   const [stealthTapActive, setStealthTapActive] = useState<boolean>(false);
   const stealthTapActiveRef = useRef<boolean>(false);
+  const caretMirrorRef = useRef<HTMLDivElement>(null);
+  // While the stealth hook is engaged the input is never DOM-focused (always
+  // on Windows), so the browser does not scroll it to the insertion point as
+  // text is appended: a sentence longer than the box stays pinned to its start
+  // and the drawn caret runs off past the right edge. Scroll the input to its
+  // end and give the caret mirror the same offset, so the glyphs and the caret
+  // shift together and the caret stays on the last character.
+  useLayoutEffect(() => {
+    const input = textInputRef.current;
+    const mirror = caretMirrorRef.current;
+    if (!stealthTapActive || !input || !mirror) return;
+    input.scrollLeft = input.scrollWidth;
+    mirror.scrollLeft = input.scrollLeft;
+  }, [stealthTapActive, inputValue]);
   // True when the click-to-engage stealth path is safe. False when an IME
   // (Pinyin / Hangul / Kanji / …) is enabled in macOS HIToolbox: the tap
   // captures below the IME so composition would never reach the chat box.
@@ -8270,14 +8284,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
               },
             ]);
           } else {
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: genMessageId(),
-                role: 'system',
-                text: '⚠️ No speech detected. Try speaking closer to your microphone.',
-              },
-            ]);
+            // Issue #540: a healthy but silent mic (listening through headphones,
+            // Bluetooth or USB) means the user wants the other party answered.
+            // Hand off to What to Answer, which reads main's speaker-labelled
+            // transcript (recency window, question extraction, interim guard) and
+            // says so itself when there is nothing to answer. A failed or
+            // reconnecting mic keeps its diagnostic above instead. Read through
+            // handlersRef: this closure is from the Stop press, before the tail
+            // wait. Not awaited, so the Answer lock is released immediately.
+            void handlersRef.current.handleWhatToSay();
           }
           return;
         }
@@ -11239,6 +11254,29 @@ Provide only the answer, nothing else.`;
                     style={appearance.inputStyle}
                   />
 
+                  {/* Stealth-typing caret. While the hook is engaged the input
+                      is readOnly and — on Windows — never DOM-focused, so the
+                      OS paints no caret and the box reads as dead even though
+                      keystrokes ARE arriving via StealthKeyboardManager. Mirror
+                      the text invisibly to occupy the same width, then draw a
+                      blinking pipe after it. Pointer-events:none so it can
+                      never intercept the click that engages the tap.
+                      No `appearance.inputStyle` here: that carries the input's
+                      semi-transparent background, and this layer sits ON TOP
+                      of the input, so it veiled the typed text for the whole
+                      session — dim while engaged, full contrast the moment the
+                      session ended (clicking another app). */}
+                  {stealthTapActive && (
+                    <div
+                      ref={caretMirrorRef}
+                      aria-hidden="true"
+                      className="nat-caret-mirror pl-3 pr-10 py-2.5 text-[13px] leading-relaxed"
+                    >
+                      <span className="nat-caret-text">{inputValue}</span>
+                      <span className="nat-caret" />
+                    </div>
+                  )}
+
                   {/* Skill picker — portal so it escapes the overflow-hidden shell */}
                   {filteredSkills.length > 0 && skillPickerQuery !== null &&
                     createPortal(
@@ -11334,6 +11372,13 @@ Provide only the answer, nothing else.`;
                           // currentModelId verbatim for a gateway, so below the
                           // displayName branch this chip renders the whole id.
                           if (m.startsWith('ninerouter/')) return gatewayModelLabel(m);
+                          // The managed route. LLMHelper.getCurrentModelDisplayName()
+                          // returns the id verbatim for it, so the displayName branch
+                          // below cannot name it and the chip fell through to `return m`
+                          // and rendered a lowercase "natively" — the one label a trial
+                          // user sees for the whole trial. 'Natively API' is what the
+                          // model picker and every settings row already call it.
+                          if (m === 'natively') return 'Natively API';
                           // For everything else, prefer the authoritative
                           // displayName from `getCurrentLlmConfig` (handles
                           // custom-provider UUIDs and any future model aliases
@@ -11350,11 +11395,14 @@ Provide only the answer, nothing else.`;
                           if (m === 'gemini-3.6-flash') return 'Gemini 3.6 Flash';
                           if (m === 'gemini-3.1-flash-lite') return 'Gemini 3.1 Flash Lite';
                           if (m === 'gemini-3.1-pro-preview') return 'Gemini 3.1 Pro';
+                          if (m === 'qwen/qwen3.8-27b') return 'Groq Qwen 3.8';
                           if (m === 'qwen/qwen3.6-27b') return 'Groq Qwen 3.6';
                           if (m === 'openai/gpt-oss-120b') return 'Groq GPT-OSS 120B';
                           if (m === 'openai/gpt-oss-20b') return 'Groq GPT-OSS 20B';
                           if (m === 'gpt-5.4') return 'GPT 5.4';
                           if (m === 'claude-sonnet-4-6') return 'Sonnet 4.6';
+                          // Retired 2026-09-10; DeepSeek serves it as deepseek-flash (V4.1).
+                          if (m === 'deepseek-v4-flash') return 'DeepSeek V4.1 Flash';
                           return m;
                         })()}
                       </span>

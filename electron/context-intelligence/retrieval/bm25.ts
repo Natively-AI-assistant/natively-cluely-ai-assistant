@@ -32,7 +32,9 @@ export function tokenize(text: string): string[] {
     .toLowerCase()
     .replace(/['’]s\b/g, '')
     .replace(/['’]/g, '')
-    .replace(/[^a-z0-9\s-]/g, ' ')
+    // Every script's letters, marks and digits, in lockstep with wordsOf
+    // (2026-09-22; was ASCII-only, which erased non-Latin text entirely).
+    .replace(/[^\p{L}\p{M}\p{N}\s-]/gu, ' ')
     .split(/\s+/)
     // Short tokens carrying a digit are identifiers ("13", "v2", "l5"), not
     // stopwords — kept in lockstep with lexicalTokens.keepToken.

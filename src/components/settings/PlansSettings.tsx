@@ -255,7 +255,7 @@ export const PlansSettings: React.FC<PlansSettingsProps> = ({
             {/* Shifts rather than appears, so it needs `layout="position"` or it
                 jumps when the Pro section changes size. Every element that should
                 slide needs this prop; anything without it snaps. */}
-            <motion.div layout="position" transition={{ layout: { duration: SETTLE.remove, ease: EASE_ENTER } }}>
+            <motion.div layout="position" transition={{ layout: reduceMotion ? { duration: 0 } : { duration: SETTLE.remove, ease: EASE_ENTER } }}>
                 <NativelyApiSettings
                     initialIsSaved={initialHasNativelyKey}
                     afterKeySection={isPremium ? proSection : null}
@@ -285,10 +285,10 @@ export const PlansSettings: React.FC<PlansSettingsProps> = ({
                         style={{ width: '100%', contain: 'layout' }}
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        exit={{ opacity: 0, scale: 0.985 }}
+                        exit={reduceMotion ? { opacity: 0, transition: { duration: INK.out } } : { opacity: 0, scale: 0.985 }}
                         transition={
                             reduceMotion
-                                ? { duration: INK.in, delay: BEAT }
+                                ? { layout: { duration: 0 }, default: { duration: INK.in, delay: BEAT } }
                                 : {
                                     layout: { duration: SETTLE.remove, ease: EASE_ENTER },
                                     opacity: { duration: INK.in, ease: EASE_ENTER, delay: BEAT },
@@ -316,7 +316,7 @@ export const PlansSettings: React.FC<PlansSettingsProps> = ({
                 // giving it an entrance would animate an arrival that isn't
                 // happening. Without this prop it would simply jump.
                 layout="position"
-                transition={{ layout: { duration: SETTLE.remove, ease: EASE_ENTER } }}
+                transition={{ layout: reduceMotion ? { duration: 0 } : { duration: SETTLE.remove, ease: EASE_ENTER } }}
             >
                 <HowItWorksRefund />
             </motion.div>

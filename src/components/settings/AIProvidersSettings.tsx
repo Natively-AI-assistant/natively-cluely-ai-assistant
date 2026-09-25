@@ -28,6 +28,8 @@ import {
     WHITE_ON_TRANSPARENT_MARKS,
 } from '../ui/aiProviderMarks';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
+import { FLUXION_REFERRAL_URL } from '../../lib/partnerLinks';
+import { isKnownFastModel } from '../../lib/fastModelHint.mjs';
 import { LiquidGlassBadge } from '../../ui-components/LiquidGlassBadge';
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -225,6 +227,10 @@ export const AIP_CSS = `
     --aip-dur-travel: 220ms;
 
     --aip-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+    /* Codex action buttons (transitions.dev 17 Tooltip) — softer muted tones */
+    --codex-refresh-hover-color: #82b997;
+    --codex-logout-hover-color:  #cc7e7e;
 }
 
 .aip-root[data-theme='light'] {
@@ -294,6 +300,9 @@ export const AIP_CSS = `
     --aip-warn-border:   rgba(161,98,7,0.20);
     --aip-danger-bg:     rgba(239,68,68,0.08);
     --aip-danger-border: rgba(185,28,28,0.20);
+
+    --codex-refresh-hover-color: #3b7754;
+    --codex-logout-hover-color:  #a54848;
 }
 
 /* ── Motion. Two easings: ease-out for everything, spring ONLY for the switch
@@ -303,11 +312,70 @@ export const AIP_CSS = `
 @keyframes aip-check-in { from { opacity:0; transform:scale(0.6); } to { opacity:1; transform:scale(1); } }
 @keyframes aip-shimmer  { 0%,100% { opacity:0.55; } 50% { opacity:1; } }
 
-.aip-panel-fade { animation: aip-fade-up var(--aip-dur-state) var(--aip-ease-out) both; }
+.aip-panel-fade { animation: aip-fade-up var(--aip-dur-state) var(--aip-ease-out) backwards; }
 .aip-spinner    { animation: aip-spin 0.65s linear infinite; }
 .aip-check      { animation: aip-check-in 200ms var(--aip-ease-spring) both; }
 .aip-skeleton   { background: var(--aip-btn-bg); border-radius: var(--aip-r-sm);
                   animation: aip-shimmer 1.4s ease-in-out infinite; }
+
+/* ── Success check (transitions.dev #10) for a Test button's "Passed" tick:
+      fade + rotate upright + blur-in + Y-bob, while the tick's stroke draws.
+      The snippet's 40px bob and 10px blur are tuned for a ~48px icon; this is
+      a 12px glyph inside a 32px button, so both are scaled down or it would
+      fly out of the button. The wrapper mounts with the success render, so the
+      keyframes play once per pass — no reflow trick needed. */
+.aip-root {
+    --check-opacity-dur: 500ms;
+    --check-rotate-dur: 500ms;
+    --check-rotate-from: 80deg;
+    --check-bob-dur: 500ms;
+    --check-y-amount: 6px;
+    --check-blur-dur: 500ms;
+    --check-blur-from: 3px;
+    --check-path-dur: 500ms;
+    --check-path-delay: 80ms;
+    --check-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+    --check-ease-opacity: cubic-bezier(0.22, 1, 0.36, 1);
+    --check-ease-rotate: cubic-bezier(0.22, 1, 0.36, 1);
+    --check-ease-bob: cubic-bezier(0.34, 1.35, 0.64, 1);
+    --check-ease-path: cubic-bezier(0.22, 1, 0.36, 1);
+}
+.t-success-check {
+    display: inline-block;
+    transform-origin: center;
+    opacity: 0;
+    will-change: transform, opacity, filter;
+}
+.t-success-check svg { display: block; overflow: visible; }
+/* 24 = lucide Check's "M20 6 9 17l-5-5" (15.56 + 7.07 = 22.63), rounded up. */
+.t-success-check svg path {
+    stroke-dasharray: 24;
+    stroke-dashoffset: 24;
+}
+.t-success-check[data-state="in"] {
+    animation:
+        t-check-fade   var(--check-opacity-dur) var(--check-ease-opacity) forwards,
+        t-check-rotate var(--check-rotate-dur)  var(--check-ease-rotate)  forwards,
+        t-check-blur   var(--check-blur-dur)    var(--check-ease-out)     forwards,
+        t-check-bob    var(--check-bob-dur)     var(--check-ease-bob)     forwards;
+}
+.t-success-check[data-state="in"] svg path {
+    animation: t-check-draw var(--check-path-dur) var(--check-ease-path) var(--check-path-delay, 0ms) forwards;
+}
+@keyframes t-check-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes t-check-rotate {
+    from { transform: rotate(var(--check-rotate-from)); }
+    to   { transform: rotate(0deg); }
+}
+@keyframes t-check-blur {
+    from { filter: blur(var(--check-blur-from)); }
+    to   { filter: blur(0); }
+}
+@keyframes t-check-bob {
+    from { translate: 0 var(--check-y-amount); }
+    to   { translate: 0 0; }
+}
+@keyframes t-check-draw { to { stroke-dashoffset: 0; } }
 
 /* ── Dismissal. A one-shot card that disappears on click, without the rest of
       the panel snapping up into the hole it left.
@@ -463,6 +531,8 @@ export const AIP_CSS = `
     transition: background var(--aip-dur-state) var(--aip-ease-out),
                 color var(--aip-dur-state) ease,
                 border-color var(--aip-dur-state) ease,
+                opacity var(--aip-dur-state) var(--aip-ease-out),
+                filter var(--aip-dur-state) var(--aip-ease-out),
                 transform var(--aip-dur-press) var(--aip-ease-out);
 }
 .aip-press:active:not(:disabled),
@@ -566,6 +636,48 @@ export const AIP_CSS = `
 .aip-btn[data-tone='info']:hover:not(:disabled),
 .aip-btn[data-tone='danger']:hover:not(:disabled) { filter: brightness(1.08); }
 
+/* ── Codex action buttons (transitions.dev 17 Tooltip + custom soft colors) ── */
+.aip-btn.aip-codex-action-btn {
+    background: transparent !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+    /* transform: the shared press would otherwise snap (this list replaces it). */
+    transition: color 200ms cubic-bezier(0.22, 1, 0.36, 1),
+                transform var(--aip-dur-press) var(--aip-ease-out);
+}
+.aip-btn.aip-codex-action-btn:hover:not(:disabled),
+.aip-btn.aip-codex-action-btn:focus-visible:not(:disabled),
+.aip-btn.aip-codex-action-btn:active:not(:disabled) {
+    background: transparent !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+}
+.t-tt-wrap:hover .aip-codex-refresh-btn:not(:disabled),
+.aip-codex-refresh-btn:focus-visible:not(:disabled) {
+    color: var(--codex-refresh-hover-color) !important;
+}
+.t-tt-wrap:hover .aip-codex-logout-btn:not(:disabled),
+.aip-codex-logout-btn:focus-visible:not(:disabled) {
+    color: var(--codex-logout-hover-color) !important;
+}
+/* Tooltip below the button with muted, understated styling */
+.t-tt-wrap .t-tt {
+    top: calc(100% + 5px);
+    bottom: auto;
+    transform-origin: 50% 0%;
+    padding: 3px 7px;
+    border-radius: 5px;
+    background: var(--tt-bg);
+    color: var(--tt-fg);
+    font-size: 10.5px;
+    font-weight: 450;
+    line-height: 1.2;
+    letter-spacing: 0.01em;
+    border: 1px solid var(--tt-border);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
 /* ── Chips: DUAL encoding — dashed border off / solid + tinted on — so the
       state survives colour-blindness and greyscale. ───────────────────── */
 /* ── Provider card ───────────────────────────────────────────────────────────
@@ -631,7 +743,8 @@ export const AIP_CSS = `
     font-family:inherit; font-size:12px; font-weight:500; line-height:1;
     white-space:nowrap; cursor:pointer;
     transition: background var(--aip-dur-state) var(--aip-ease-out),
-                color      var(--aip-dur-state) var(--aip-ease-out);
+                color      var(--aip-dur-state) var(--aip-ease-out),
+                opacity    var(--aip-dur-state) var(--aip-ease-out);
 }
 .aip-field-seg:hover:not(:disabled)  { background: var(--aip-btn-bg-hover); }
 .aip-field-seg:active:not(:disabled) { background: var(--aip-item-active); }
@@ -668,7 +781,8 @@ export const AIP_CSS = `
     color: var(--aip-secondary); cursor:pointer; font-family:inherit; text-align:left;
     transition: background var(--aip-dur-state) var(--aip-ease-out),
                 border-color var(--aip-dur-state) var(--aip-ease-out),
-                color var(--aip-dur-state) var(--aip-ease-out);
+                color var(--aip-dur-state) var(--aip-ease-out),
+                transform var(--aip-dur-press) var(--aip-ease-out);
 }
 .aip-models-summary:hover {
     background: var(--aip-item-hover); border-color: var(--aip-border-strong);
@@ -929,7 +1043,8 @@ select.aip-input { cursor:pointer; }
     border:1px solid var(--aip-btn-border); color: var(--aip-primary);
     font-size:12px; line-height:1; text-align:left; cursor:pointer;
     transition: background var(--aip-dur-state) var(--aip-ease-out),
-                border-color var(--aip-dur-state) var(--aip-ease-out);
+                border-color var(--aip-dur-state) var(--aip-ease-out),
+                opacity var(--aip-dur-state) var(--aip-ease-out);
 }
 .aip-select-trigger:hover { background: var(--aip-btn-bg-hover); }
 .aip-select-trigger[aria-disabled='true'] { cursor:default; }
@@ -975,7 +1090,8 @@ select.aip-input { cursor:pointer; }
    transition-duration to 0.01ms !important on every descendant, and a
    non-important shorthand here would lose to it anyway. */
 .aip-tab { color: var(--aip-secondary); background:transparent; cursor:pointer;
-           transition: color 200ms var(--aip-ease-out); }
+           transition: color 200ms var(--aip-ease-out),
+                       transform var(--aip-dur-press) var(--aip-ease-out); }
 /* Inset focus ring. This started as a workaround for the tablist's
    overflow:hidden (which the selection pill's spring overshoot has since forced
    off, see the tablist JSX) and is kept as the deliberate look: the tabs sit
@@ -1043,6 +1159,9 @@ select.aip-input { cursor:pointer; }
        to land it. Opacity is left alone: it aids comprehension and carries no motion. */
     .aip-root .aip-reveal--models > div > * { transform: none !important; }
     .aip-root .aip-skeleton { animation: none; opacity: 0.55; }
+    /* The success check's own guard: show the finished tick outright. */
+    .aip-root .t-success-check { animation: none !important; opacity: 1; }
+    .aip-root .t-success-check svg path { animation: none !important; stroke-dashoffset: 0 !important; }
 }
 `;
 
@@ -1177,7 +1296,8 @@ export const CLOUD_PROVIDERS = [
     // Also a gateway, but NOT opt-in: 36 models, and its catalogue endpoint is
     // scoped to the key's group. The one provider here with a second required
     // setting — see the protocol selector passed as `extraControls` below.
-    { id: 'fluxion' as const, name: 'Fluxion AI', placeholder: 'sk-...', url: 'https://fluxionai.world' },
+    // Natively's partner link (sponsor): new sign-ups get $3 in API credit.
+    { id: 'fluxion' as const, name: 'Fluxion AI', placeholder: 'sk-...', url: FLUXION_REFERRAL_URL },
     { id: 'groq'     as const, name: 'Groq',     placeholder: 'gsk_...',    url: 'https://console.groq.com/keys' },
     { id: 'openai'   as const, name: 'OpenAI',   placeholder: 'sk-...',     url: 'https://platform.openai.com/api-keys' },
     { id: 'claude'   as const, name: 'Claude',   placeholder: 'sk-ant-...', url: 'https://console.anthropic.com/settings/keys' },
@@ -1191,6 +1311,14 @@ export const CLOUD_PROVIDERS = [
 export type CloudProviderId = (typeof CLOUD_PROVIDERS)[number]['id'];
 
 export const AIP_PROVIDER_BRANDS = AI_PROVIDER_BRANDS;
+
+/** A Test button's "Passed" tick with the success-check animation. Render it
+    only in the success branch: each mount is one play. */
+export const AipPassedCheck: React.FC = () => (
+    <span className="t-success-check" data-state="in" aria-hidden="true">
+        <Check size={12} strokeWidth={2} />
+    </span>
+);
 
 interface AipMonogramProps {
     /** Two letters. Longer strings are clipped to two. */
@@ -1826,6 +1954,8 @@ const CODEX_MODEL_REASONING_SETS: ReadonlyArray<readonly [string, readonly strin
     ['gpt-5.2',          ['none', 'low', 'medium', 'high', 'xhigh']],
     ['gpt-5.4',          ['none', 'low', 'medium', 'high', 'xhigh']],
     ['gpt-5.5',          ['none', 'low', 'medium', 'high', 'xhigh']],
+    ['gpt-5.6',          ['low', 'medium', 'high', 'xhigh']],
+    ['gpt-6',            ['low', 'medium', 'high', 'xhigh']],
     ['gpt-5.5-codex',    ['low', 'medium', 'high', 'xhigh']],
     ['gpt-5.4-codex',    ['low', 'medium', 'high', 'xhigh']],
     ['gpt-5.3-codex-spark', ['low', 'medium', 'high']],
@@ -2074,7 +2204,7 @@ const AmbiguousStoresCard: React.FC = () => {
             </div>
             <div className="flex flex-wrap gap-2 pl-6">
                 <button
-                    className="px-3 py-1.5 rounded-md border text-xs font-medium disabled:opacity-50"
+                    className="aip-press px-3 py-1.5 rounded-md border text-xs font-medium hover:bg-[color:var(--aip-item-hover)] disabled:opacity-50"
                     style={{ borderColor: 'var(--aip-warn-border)' }}
                     disabled={busy !== null}
                     onClick={() => resolve('keyring')}
@@ -2082,7 +2212,7 @@ const AmbiguousStoresCard: React.FC = () => {
                     {busy === 'keyring' ? t('Applying…') : t('Keep system keychain')}
                 </button>
                 <button
-                    className="px-3 py-1.5 rounded-md border text-xs font-medium disabled:opacity-50"
+                    className="aip-press px-3 py-1.5 rounded-md border text-xs font-medium hover:bg-[color:var(--aip-item-hover)] disabled:opacity-50"
                     style={{ borderColor: 'var(--aip-warn-border)' }}
                     disabled={busy !== null}
                     onClick={() => resolve('fallback')}
@@ -2090,7 +2220,7 @@ const AmbiguousStoresCard: React.FC = () => {
                     {busy === 'fallback' ? t('Applying…') : t('Keep app backup')}
                 </button>
                 <button
-                    className="px-3 py-1.5 rounded-md border text-xs font-medium disabled:opacity-50"
+                    className="aip-press px-3 py-1.5 rounded-md border text-xs font-medium hover:bg-[color:var(--aip-item-hover)] disabled:opacity-50"
                     style={{ borderColor: 'var(--aip-warn-border)' }}
                     disabled={busy !== null}
                     onClick={() => resolve('merge')}
@@ -2561,6 +2691,13 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     // 2026-09-03), so the model default takes the branch side; the three
     // Direct Assist states are main's and are additive.
     const [defaultModel, setDefaultModel] = useState<string>('gemini-3.8-flash');
+    // 'auto' means unset: use the measured per-provider ladder, not a slow default.
+    const [fastModel, setFastModel] = useState<string>('auto');
+    // Only the ids the fast path can actually dispatch. Main owns the provider
+    // classifiers, so we ASK it rather than re-deriving them here - a second copy
+    // would drift, and drift here means offering a pick that silently does nothing.
+    // null = not answered yet.
+    const [fastModelDispatchable, setFastModelDispatchable] = useState<string[] | null>(null);
     const [directAssistEnabled, setDirectAssistEnabled] = useState(false);
     const [directAssistBusy, setDirectAssistBusy] = useState(false);
     const [directAssistError, setDirectAssistError] = useState('');
@@ -2692,8 +2829,19 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 // If we set fastResponseMode before hasStoredKey is populated, the enforcement
                 // effect below fires with canUseFastMode=false and immediately resets fast mode
                 // to false — writing that reset back to SettingsManager on every startup.
-                // @ts-ignore
-                const creds = await window.electronAPI?.getStoredCredentials?.();
+                //
+                // The persisted default model is read in the SAME round trip, not after
+                // the Codex / Antigravity / custom-provider loads below. Read last, the
+                // `useState` initial value stayed on screen for that whole chain, and
+                // once hasStoredKey made it a real option (any Gemini key does) the
+                // Active Model picker showed Gemini for a beat before switching to the
+                // actual default, e.g. Natively API. Both setters now land in one render.
+                const [creds, persistedDefault] = await Promise.all([
+                    // @ts-ignore
+                    window.electronAPI?.getStoredCredentials?.(),
+                    window.electronAPI?.getDefaultModel?.().catch(() => null),
+                ]);
+                if (persistedDefault?.model) setDefaultModel(persistedDefault.model);
                 if (creds) {
                     setHasStoredKey({
                         gemini: creds.hasGeminiKey,
@@ -2798,12 +2946,10 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     setCustomProviders(custom);
                 }
 
-                // Load persisted default model
+                // Load the persisted fast model. null on disk means "Auto".
                 // @ts-ignore
-                const result = await window.electronAPI?.getDefaultModel();
-                if (result && result.model) {
-                    setDefaultModel(result.model);
-                }
+                const fastResult = await window.electronAPI?.getFastModel?.();
+                setFastModel(fastResult?.model || 'auto');
 
                 const directEnabled = await window.electronAPI?.getDirectAssistEnabled?.();
                 setDirectAssistEnabled(directEnabled === true);
@@ -2911,6 +3057,16 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         return out;
     }, [cloudFetchedModels, cloudEnabledModels, litellmModels, ninerouterModels, antigravityModels]);
 
+    /**
+     * The Background Model picker's options: Auto, plus only the models the fast
+     * path can actually run.
+     *
+     * Until main answers the filter IPC we offer ONLY Auto (plus whatever is
+     * already saved), so the full unfiltered list never flashes up as selectable.
+     * A saved-but-unsupported pick stays visible and labelled rather than being
+     * silently dropped - dropping it would render an empty control while the id
+     * is still persisted, and rewriting it would change a setting the user chose.
+     */
     const buildAvailableModelOptions = (): { id: string; name: string }[] => {
         const opts: { id: string; name: string }[] = [];
 
@@ -2981,6 +3137,30 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         }
         return opts;
     };
+
+    const fastModelCandidateKey = buildAvailableModelOptions().map((o) => o.id).join(',');
+    useEffect(() => {
+        let cancelled = false;
+        const ids = fastModelCandidateKey ? fastModelCandidateKey.split(',') : [];
+        window.electronAPI?.filterFastModelCandidates?.(ids)
+            .then((r) => { if (!cancelled) setFastModelDispatchable(r?.ids ?? []); })
+            .catch(() => { if (!cancelled) setFastModelDispatchable([]); });
+        return () => { cancelled = true; };
+    }, [fastModelCandidateKey]);
+
+    const buildFastModelOptions = (): { id: string; name: string }[] => {
+        const all = buildAvailableModelOptions();
+        const allowed = fastModelDispatchable === null
+            ? []
+            : all.filter((o) => fastModelDispatchable.includes(o.id));
+        const opts = [{ id: 'auto', name: t('Auto (recommended)') }, ...allowed];
+        if (fastModel !== 'auto' && !allowed.some((o) => o.id === fastModel)) {
+            const saved = all.find((o) => o.id === fastModel);
+            opts.push({ id: fastModel, name: `${saved?.name ?? fastModel} ${t('(not supported)')}` });
+        }
+        return opts;
+    };
+
 
     // Keep the persisted default model from pointing at a provider the user just
     // removed/signed out of. This turns credential changes into immediate routing
@@ -4131,6 +4311,42 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
 
             <div className="aip-card p-5 flex items-center justify-between gap-4">
                     <div className="min-w-0">
+                        <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('Background Model')}</label>
+                        <p className="text-[10px] aip-muted mt-0.5">{t('Runs Auto Answer and other quick background decisions.')}</p>
+                        {/* Advisory only: a big pick silently re-creates the latency
+                            problem the measured judge ladder exists to avoid, but a
+                            hard filter would need a hand-maintained list that goes
+                            stale on every model retirement. */}
+                        {!isKnownFastModel(fastModel) && (
+                            <p className="text-[10px] aip-warn-fg mt-0.5 font-medium">{t('Large models make Auto Answer slower. Pick a small tier for the best results.')}</p>
+                        )}
+                    </div>
+                    <ModelSelect
+                        value={fastModel}
+                        options={buildFastModelOptions()}
+                        onChange={async (val) => {
+                            const previous = fastModel;
+                            setFastModel(val);
+                            try {
+                                // @ts-ignore - null clears it, which means "use the measured ladder"
+                                const res = await window.electronAPI?.setFastModel?.(val === 'auto' ? null : val);
+                                // A resolved { success:false } is invisible to .catch(), and a
+                                // missing preload method resolves undefined. Either way the write
+                                // did not land, so the row must not keep showing the new value.
+                                if (!res?.success) {
+                                    setFastModel(previous);
+                                    console.error('[Settings] Fast Model not saved:', res?.error ?? 'unavailable');
+                                }
+                            } catch (e) {
+                                setFastModel(previous);
+                                console.error('[Settings] Fast Model not saved:', e);
+                            }
+                        }}
+                    />
+                </div>
+
+            <div className="aip-card p-5 flex items-center justify-between gap-4">
+                    <div className="min-w-0">
                         <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('AI Response Language')}</label>
                         <p className="text-[10px] aip-muted mt-0.5">
                             {aiResponseLanguage === 'auto'
@@ -4579,12 +4795,54 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                             <p className="text-xs aip-muted">{t('Use your ChatGPT Plus/Pro subscription as an AI provider.')}</p>
                         </div>
                     </div>
-                    <AipSwitch
-                        checked={!disabledProviders.includes('codex-cli')}
-                        onChange={() => handleToggleProvider('codex-cli', disabledProviders.includes('codex-cli'))}
-                        label={`${disabledProviders.includes('codex-cli') ? t('Enable') : t('Disable')} OpenAI Codex`}
-                        title={disabledProviders.includes('codex-cli') ? t('Enable provider') : t('Disable provider')}
-                    />
+                    <div className="flex items-center gap-2 shrink-0">
+                        {/* Refresh / Sign out act on Natively's own tokens only, so a
+                            `codex login` session gets the sign-in button below instead —
+                            signing in here takes precedence over the CLI login.
+                            Icon-only beside the switch with transitions.dev #17 tooltips. */}
+                        {codexOauthStatus.signedIn && codexOauthStatus.source !== 'codex-cli' && <>
+                            <span className="t-tt-wrap">
+                                <button
+                                    type="button"
+                                    onClick={handleCodexRefresh}
+                                    disabled={codexOauthInProgress}
+                                    className="aip-btn aip-codex-action-btn aip-codex-refresh-btn t-tt-trigger"
+                                    data-icon="true"
+                                    data-variant="ghost"
+                                    aria-label={t('Refresh session')}
+                                    aria-describedby="codex-tt-refresh"
+                                >
+                                    <RefreshCw size={16} strokeWidth={1.75} className={codexOauthInProgress ? 'aip-spinner' : undefined} />
+                                </button>
+                                <span className="t-tt" id="codex-tt-refresh" role="tooltip">
+                                    {t('Refresh')}
+                                </span>
+                            </span>
+                            <span className="t-tt-wrap">
+                                <button
+                                    type="button"
+                                    onClick={handleCodexSignOut}
+                                    disabled={codexOauthInProgress}
+                                    className="aip-btn aip-codex-action-btn aip-codex-logout-btn t-tt-trigger"
+                                    data-icon="true"
+                                    data-variant="ghost"
+                                    aria-label={t('Sign out')}
+                                    aria-describedby="codex-tt-logout"
+                                >
+                                    <LogOut size={16} strokeWidth={1.75} />
+                                </button>
+                                <span className="t-tt" id="codex-tt-logout" role="tooltip">
+                                    {t('Logout')}
+                                </span>
+                            </span>
+                        </>}
+                        <AipSwitch
+                            checked={!disabledProviders.includes('codex-cli')}
+                            onChange={() => handleToggleProvider('codex-cli', disabledProviders.includes('codex-cli'))}
+                            label={`${disabledProviders.includes('codex-cli') ? t('Enable') : t('Disable')} OpenAI Codex`}
+                            title={disabledProviders.includes('codex-cli') ? t('Enable provider') : t('Disable provider')}
+                        />
+                    </div>
                 </div>
 
                 {/* Mounted-but-hidden live region, same reasoning as Antigravity's. */}
@@ -4595,13 +4853,12 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                             : ''}
                 </p>
 
-                <div className="flex flex-wrap gap-2">
-                    {/* Refresh / Sign out act on Natively's own tokens only, so a
-                        `codex login` session gets the sign-in button instead —
-                        signing in here takes precedence over the CLI login. */}
-                    {!codexOauthStatus.signedIn || codexOauthStatus.source === 'codex-cli' ? (
-                        /* Full-width row, and NEUTRAL: data-variant="accent" tints it
-                           periwinkle, which the Antigravity bar deliberately does not do. */
+                {/* Only the sign-in state has a row now — Refresh / Sign out live
+                    in the header — so it isn't mounted empty under space-y-4. */}
+                {(!codexOauthStatus.signedIn || codexOauthStatus.source === 'codex-cli') && (
+                    <div className="flex flex-wrap gap-2">
+                        {/* Full-width row, and NEUTRAL: data-variant="accent" tints it
+                           periwinkle, which the Antigravity bar deliberately does not do. */}
                         <button
                             type="button"
                             onClick={() => handleCodexAuthAction('login')}
@@ -4613,18 +4870,8 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                 ? <><Loader2 size={13} strokeWidth={1.75} className="aip-spinner" /> {t('Waiting for browser…')}</>
                                 : <><ExternalLink size={13} strokeWidth={1.75} /> {t('Sign in with ChatGPT')}</>}
                         </button>
-                    ) : <>
-                        {/* Plain aip-btn in a wrap row, matching Antigravity's
-                            Reload models / Disconnect pair. Glyphs kept: they cost
-                            nothing here and the two actions are easy to confuse. */}
-                        <button type="button" onClick={handleCodexRefresh} disabled={codexOauthInProgress} className="aip-btn" title={t("Refresh session")}>
-                            <RefreshCw size={13} strokeWidth={1.75} /> {t('Refresh')}
-                        </button>
-                        <button type="button" onClick={handleCodexSignOut} disabled={codexOauthInProgress} className="aip-btn">
-                            <LogOut size={13} strokeWidth={1.75} /> {t('Sign out')}
-                        </button>
-                    </>}
-                </div>
+                    </div>
+                )}
 
                 {/* The Codex CLI's `codex login` works too, read-only: Natively
                     never refreshes it (that would sign the CLI out), so an
@@ -4653,14 +4900,6 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 {/* Model + settings — only shown once signed in */}
                 {codexOauthStatus.signedIn && (
                         <>
-                            {codexModelsFromCli && (
-                                <p className="text-xs aip-muted">
-                                    {t('Model list from your Codex CLI')}
-                                    {codexModelCatalog?.fetchedAt && !Number.isNaN(Date.parse(codexModelCatalog.fetchedAt))
-                                        ? ` · ${t('updated')} ${new Date(codexModelCatalog.fetchedAt).toLocaleDateString()}`
-                                        : ''}
-                                </p>
-                            )}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 <CodexCliModelField
                                     label={t("Model")}
@@ -4728,7 +4967,11 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                     />
                                 </label>
                             </div>
-                            <div className="flex items-end justify-between gap-4 mt-1">
+                            {/* Same grid as the selectors above, so Test Connection is
+                                exactly one selector wide and tall. The error sits in its
+                                own full-width row so it can't push the button off the
+                                input's baseline. */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-end mt-1">
                                 <label className="space-y-1 block min-w-0">
                                     <span className="aip-label">{t('Timeout (ms)')}</span>
                                     <input
@@ -4740,30 +4983,30 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                         className="aip-input"
                                         min={1000}
                                     />
-                                    {codexCliStatus === 'error' && codexCliError && (
-                                        <p className="text-[10px] aip-danger-fg mt-1">{codexCliError}</p>
-                                    )}
                                 </label>
-                                {/* Fixed min-width + centred content: a label change
+                                {/* Column-width + centred content: a label change
                                     ("Test Connection" → "Testing…") must not reflow
                                     the row it sits in. */}
                                 <button
                                     type="button"
                                     onClick={handleTestCodexCli}
                                     disabled={codexCliStatus === 'testing'}
-                                    className="aip-btn shrink-0 min-w-[124px]"
+                                    className="aip-btn w-full"
                                     data-tone={codexCliStatus === 'success' ? 'ok' : codexCliStatus === 'error' ? 'danger' : undefined}
                                 >
                                     {codexCliStatus === 'testing' ? (
                                         <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Testing…')}</>
                                     ) : codexCliStatus === 'success' ? (
-                                        <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Passed')}</>
+                                        <><AipPassedCheck /> {t('Passed')}</>
                                     ) : codexCliStatus === 'error' ? (
                                         <><AlertCircle size={12} strokeWidth={1.75} /> {t('Failed')}</>
                                     ) : (
                                         t('Test Connection')
                                     )}
                                 </button>
+                                {codexCliStatus === 'error' && codexCliError && (
+                                    <p className="text-[10px] aip-danger-fg md:col-span-2">{codexCliError}</p>
+                                )}
                             </div>
                         </>
                     )}
@@ -5047,12 +5290,6 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                             );
                         })()}
 
-                        {ninerouterTest.message && (
-                            <p className={`text-[10px] ${ninerouterTest.ok ? 'aip-ok-fg' : 'aip-danger-fg'}`} role="status">
-                                {ninerouterTest.message}
-                            </p>
-                        )}
-
                         <div className="flex flex-wrap items-center gap-2">
                             <button
                                 type="button"
@@ -5111,6 +5348,11 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                 />
                             )}
                         </div>
+                        {ninerouterTest.message && (
+                            <p className={`text-[10px] ${ninerouterTest.ok ? 'aip-ok-fg' : 'aip-danger-fg'}`} role="status">
+                                {ninerouterTest.message}
+                            </p>
+                        )}
                     </div>
                 </div>
             </div>

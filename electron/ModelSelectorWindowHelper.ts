@@ -1,6 +1,7 @@
 import { BrowserWindow, screen, app } from "electron"
 import path from "node:path"
 import { attachNoActivate } from "./utils/windowsFocusPolicy"
+import { setVisibleOnAllWorkspacesKeepingDock } from "./utils/macDockPolicy"
 
 // Force production mode if running as packaged app — matches WindowHelper.ts's
 // isDev predicate. A stray NODE_ENV=development in a packaged launch's
@@ -9,10 +10,11 @@ import { attachNoActivate } from "./utils/windowsFocusPolicy"
 const isDev = process.env.NODE_ENV === "development" && !app.isPackaged
 
 const startUrl = isDev
-    ? "http://127.0.0.1:5180"
+    ? DEV_SERVER_URL
     : `file://${path.join(app.getAppPath(), "dist/index.html")}`
 
 import type { WindowHelper } from "./WindowHelper"
+import { DEV_SERVER_URL } from './devServerUrl';
 
 type WindowActivationOptions = {
     activate?: boolean
@@ -65,8 +67,10 @@ export class ModelSelectorWindowHelper {
         }
 
         if (process.platform === "darwin") {
-            // Align with parent window behavior
-            this.window.setVisibleOnAllWorkspaces(isOverlay, { visibleOnFullScreen: isOverlay });
+            // Align with parent window behavior. Runs on EVERY open, so the raw
+            // API would hide the Dock tile on each overlay open and show it on
+            // each launcher open — even in undetectable mode (utils/macDockPolicy.ts).
+            setVisibleOnAllWorkspacesKeepingDock(this.window, isOverlay, isOverlay);
             // Only set alwaysOnTop if the value is actually changing — calling it unnecessarily
             // triggers NSApp activation on macOS, stealing focus from other apps.
             const currentAlwaysOnTop = this.window.isAlwaysOnTop();

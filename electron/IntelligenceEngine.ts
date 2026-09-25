@@ -11,7 +11,7 @@ import {
     FollowUpQuestionsLLM, WhatToAnswerLLM,
     prepareTranscriptForWhatToAnswer, buildTemporalContext,
     AssistantResponse as LLMAssistantResponse, classifyIntent, hasQuestionSignal, planNextAssistantAction, PlannerDecision,
-    extractLatestQuestion, toCandidateFraming, planAnswer, validateAnswerStructure, isCompleteShortAnswer, detectExplicitCodingContract, detectAndExtractScaffoldMisfire, hasUnrecoveredScaffoldContamination, isScaffoldRegenerationEligible, isCodingAnswerType, isJdFactualLookupNotNegotiationAdvice, resolveFollowUp, resolveFollowUpOrClarify,
+    extractLatestQuestion, toCandidateFraming, planAnswer, validateAnswerStructure, isCompleteShortAnswer, detectExplicitCodingContract, isCodingContinuation, detectAndExtractScaffoldMisfire, hasUnrecoveredScaffoldContamination, isScaffoldRegenerationEligible, isCodingAnswerType, isJdFactualLookupNotNegotiationAdvice, resolveFollowUp, resolveFollowUpOrClarify,
     isLiveSessionMemoryEnabled, resolveLiveFollowup, toMemoryMode, toSurface, effectiveMemoryMode,
     resolveLiveSessionMemoryConfig, piTelemetry, ageBucket,
     buildContextRoute, summarizeContextRoute, shouldThrottleTrigger,
@@ -37,6 +37,7 @@ import { HARD_SYSTEM_PROMPT } from './llm/prompts';
 import type { ActiveModeInfo } from './llm/modeProfiles';
 import type { WhatToAnswerRequestSnapshot } from './llm/whatToAnswerRequestSnapshot';
 import { resolveCanonicalTurn } from './llm/resolveCanonicalTurn';
+import { speechWindowForPrompt } from './llm/conversationHistoryPolicy';
 import { performanceHooks, applyAdaptiveTtft, secondaryStreamObserver, slowWorkloadAdvice } from './llm/performance/wiring';
 import { estimateTokens } from './llm/modelCapabilities';
 import { mintTurnId } from './llm/turnIdentity';
@@ -67,6 +68,7 @@ import { recordAttribution } from './intelligence/IntelligenceAttribution';
 // source-available boundary so a core type-check does not require private sources.
 // Follow-up: type getKnowledgeOrchestrator() properly and drop this import.
 import type { PromptAssemblyResult } from './premium/contracts';
+import type { AnswerType } from './llm/AnswerPlanner';
 
 /**
  * Credential-scrub a trace payload before it is stringified.
@@ -204,6 +206,13 @@ interface SpeculativeAnswer {
     text: string;
     /** The run's own session-write decision (e.g. do_not_store for a truncated stream); undefined on the legacy answerLLM path. */
     writeDecision: SessionWriteDecision | undefined;
+    /**
+     * The run's own answer plan shape, so the reveal can shape and guard the text
+     * exactly as the live path would. Undefined on the legacy answerLLM path,
+     * which has no plan.
+     */
+    answerType?: AnswerType;
+    answerStyle?: string;
 }
 
 export class IntelligenceEngine extends EventEmitter {
@@ -488,13 +497,34 @@ export class IntelligenceEngine extends EventEmitter {
      * to make that class of drift impossible rather than merely fixed once.
      */
     public conversationSessionId(): string {
-        const meetingMarker = this.currentSessionId
-            ?? (this.session.getMeetingMetadata?.()?.calendarEventId)
-            ?? undefined;
-        const meetingId = (this.session as any)?.getMeetingMetadata?.()?.id ?? null;
-        const { resolveConversationSessionId } =
+        const { meetingConversationKey } =
             require('./context-intelligence/question/conversation-state-store');
-        return resolveConversationSessionId(meetingId ?? meetingMarker, meetingMarker);
+        return meetingConversationKey({
+            meetingConversationId: this.meetingConversationId,
+            dynamicSessionId: this.currentSessionId,
+            calendarEventId: this.session.getMeetingMetadata?.()?.calendarEventId ?? null,
+            metadataMeetingId: (this.session as any)?.getMeetingMetadata?.()?.id ?? null,
+        });
+    }
+
+    /** One conversation per meeting, mode or no mode — see meetingConversationKey. */
+    private meetingConversationId: string | null = null;
+
+    public beginMeetingConversation(id: string): void {
+        this.meetingConversationId = id;
+    }
+
+    /**
+     * The meeting is over: its conversation ring goes with it. Keeping it would
+     * hold the meeting's raw questions and answers in memory for no reader, and
+     * (before every meeting had its own key) hand them to the next meeting.
+     */
+    public endMeetingConversation(): void {
+        const key = this.conversationSessionId();
+        this.meetingConversationId = null;
+        try {
+            require('./context-intelligence/question/conversation-state-store').clearConversationState(key);
+        } catch { /* continuity only */ }
     }
     private currentDynamicActionModeId: string | null = null;
     private currentDynamicActionTemplateType: string | null = null;
@@ -506,6 +536,8 @@ export class IntelligenceEngine extends EventEmitter {
     private static readonly MANUAL_CONTEXT_QUESTION_CHAR_LIMIT = 1000;
     private static readonly MANUAL_CONTEXT_ANSWER_CHAR_LIMIT = 2000;
     private static readonly TRANSCRIPT_CONTEXT_SUBSTANTIAL_CHARS = 80;
+    // A coding problem older than this is not "the current problem" any more (issue #539).
+    private static readonly ACTIVE_CODING_PROBLEM_MAX_AGE_MS = 30 * 60 * 1000;
 
     /**
      * Campaign-3 fix (2026-07-19, fix/answer-policy-engine). Returns true
@@ -1172,8 +1204,13 @@ export class IntelligenceEngine extends EventEmitter {
         generationId: number, question: string | undefined, confidence: number, text: string,
         writeDecision: SessionWriteDecision | undefined,
         streamed?: SpeculativeStreamed,
+        plan?: { answerType?: AnswerType; answerStyle?: string },
     ): string {
-        const finished: SpeculativeAnswer = { generationId, question: question || 'inferred', confidence, text, writeDecision };
+        const finished: SpeculativeAnswer = {
+            generationId, question: question || 'inferred', confidence, text, writeDecision,
+            ...(plan?.answerType ? { answerType: plan.answerType } : {}),
+            ...(plan?.answerStyle ? { answerStyle: plan.answerStyle } : {}),
+        };
         const adoptedInFlight = this.speculativeAdoptedGenerationId === generationId && this.currentGenerationId === generationId;
         if (this.speculativeAdoptedGenerationId === generationId) this.speculativeAdoptedGenerationId = null;
         if (adoptedInFlight) {
@@ -1225,8 +1262,40 @@ export class IntelligenceEngine extends EventEmitter {
         }
         if (!text.trim()) {
             console.warn('[IntelligenceEngine] Prefetched answer was empty — nothing to reveal');
+            if (streamed?.emitted) {
+                this.emit('suggested_answer', '', finished.question, finished.confidence, finished.generationId);
+            }
             return;
         }
+
+        // "Repetition guard" covers THIS path too. An adopted prefetch (the most
+        // common Auto Answer path) returned before runWhatShouldISayInner's guard,
+        // so it was neither checked against earlier answers nor recorded — the next
+        // live answer could repeat it, and it could repeat the one before.
+        //   • With the run's own plan: the SAME facade and per-meeting guard the
+        //     live path uses, with the same answerType/answerStyle, so a structured
+        //     answer the plan asked for is left structured.
+        //   • Without one (the legacy answerLLM path): record only. Reshaping text
+        //     against a guessed plan could flatten an answer the model was asked to
+        //     structure; recording still lets the NEXT answer be checked against it.
+        if (isIntelligenceFlagEnabled('answerDiversityGuard')) {
+            try {
+                if (finished.answerType) {
+                    const shaped = applyAnswerContract({
+                        answer: text,
+                        answerStyle: finished.answerStyle,
+                        isCoding: false,
+                        answerType: finished.answerType,
+                        question: finished.question || '',
+                        guard: this.wtaDiversityGuard,
+                    });
+                    if (shaped.changed && shaped.text.trim().length >= 10) text = shaped.text;
+                } else {
+                    this.wtaDiversityGuard.record(text, 'unknown_answer', finished.question || '');
+                }
+            } catch { /* the guard never blocks an answer */ }
+        }
+
         // Two shapes of adoption (2026-09-22):
         //  - adopted AFTER it finished, or adopted mid-stream but nothing crossed
         //    the paint guards yet: the renderer never saw this generation. Mint a
@@ -1241,7 +1310,11 @@ export class IntelligenceEngine extends EventEmitter {
         this.automaticGenerationId = automatic ? generationId : null;
         if (alreadyPainting) {
             console.log(`[IntelligenceEngine] Finishing the adopted prefetch that streamed live (${text.length} chars, gen ${generationId})`);
-            const pending = streamed?.pendingBuffer ?? '';
+            let pending = streamed?.pendingBuffer ?? '';
+            try {
+                const { stripVerificationSpec } = require('./llm/codingContract') as typeof import('./llm/codingContract');
+                pending = stripVerificationSpec(pending);
+            } catch { /* emit as-is */ }
             if (pending.trim()) this.emit('suggested_answer_token', pending, finished.question, finished.confidence, generationId);
         } else {
             console.log(`[IntelligenceEngine] Revealing the prefetched answer (${text.length} chars, prefetch gen ${finished.generationId} → ${generationId})`);
@@ -1539,6 +1612,10 @@ export class IntelligenceEngine extends EventEmitter {
                 // nothing: an unprompted insight has no question, and a
                 // question-less turn is one appendTurn refuses anyway.
                 question,
+                // Every live turn's question was HEARD, not typed: the overlay's
+                // What-to-answer passes none (resolved from the transcript) and
+                // Auto Answer passes the detected interviewer question.
+                { from: 'meeting' },
             );
         } catch (error: any) {
             // NEVER silent: a lost turn leaves the next follow-up with no
@@ -2244,6 +2321,30 @@ export class IntelligenceEngine extends EventEmitter {
                     }
                 } catch { /* keep extractor result */ }
             }
+            // ACTIVE CODING PROBLEM (issue #539). The hot window is 180s, so by the
+            // time the interviewer says "show the solution in python" the problem
+            // statement has usually been evicted, and the fragment alone routes
+            // general_meeting_answer — live, the model then invented an unrelated
+            // count_ways(n). SessionTracker keeps the detected coding problem for
+            // the session; when the latest ask is a coding CONTINUATION, put that
+            // problem back in front of the model and plan against it. Gated on the
+            // continuation shape, so a fresh question never inherits a stale problem.
+            try {
+                const activeCoding = this.session.getDetectedCodingQuestion();
+                const problem = activeCoding.question?.trim() ?? '';
+                const latestAsk = (question || extractedQuestion.latestQuestion || '').trim();
+                const fresh = activeCoding.setAt != null && Date.now() - activeCoding.setAt <= IntelligenceEngine.ACTIVE_CODING_PROBLEM_MAX_AGE_MS;
+                if (problem && fresh && latestAsk && latestAsk.toLowerCase() !== problem.toLowerCase() && isCodingContinuation(latestAsk)) {
+                    const inWindow = preparedTranscript.toLowerCase().includes(problem.slice(0, 60).toLowerCase());
+                    if (!inWindow) preparedTranscript = `[INTERVIEWER]: ${problem}\n${preparedTranscript}`;
+                    if (!question) {
+                        extractedQuestion.latestQuestion = `${latestAsk} (follow-up to the coding problem: "${problem}")`;
+                        extractedQuestion.isFollowUp = true;
+                    }
+                    trace.mark('repair_used', { reason: 'active_coding_problem', spliced: !inWindow, source: activeCoding.source });
+                    console.log('[IntelligenceEngine] coding continuation resolved against the active coding problem', { spliced: !inWindow, source: activeCoding.source, ageMs: Date.now() - (activeCoding.setAt ?? Date.now()) });
+                }
+            } catch { /* keep extractor result */ }
             trace.mark('latest_question_extracted', {
                 questionType: extractedQuestion.questionType,
                 detectedSpeaker: extractedQuestion.detectedSpeaker,
@@ -3524,8 +3625,11 @@ export class IntelligenceEngine extends EventEmitter {
             // Suppress the hidden <verification_spec> from the live stream so it
             // never flashes in the UI (it trails the six sections). The raw
             // answer kept for verification still has it.
-            const { StreamingSpecStripper } = isCoding ? require('./llm/codingContract') as typeof import('./llm/codingContract') : { StreamingSpecStripper: null as any };
-            const specStripper: import('./llm/codingContract').StreamingSpecStripper | null = isCoding ? new StreamingSpecStripper() : null;
+            // Adopted prefetches can also generate a <verification_spec> when code
+            // verification is enabled or requested; filter those as well.
+            const shouldStripSpec = isCoding || isSpeculative || isCodeVerificationEnabled();
+            const { StreamingSpecStripper } = shouldStripSpec ? require('./llm/codingContract') as typeof import('./llm/codingContract') : { StreamingSpecStripper: null as any };
+            const specStripper: import('./llm/codingContract').StreamingSpecStripper | null = shouldStripSpec ? new StreamingSpecStripper() : null;
 
             trace.mark('provider_request_started', { answerType: answerPlan.answerType });
 
@@ -3607,18 +3711,10 @@ export class IntelligenceEngine extends EventEmitter {
                         // spoken answers kept the new behaviour with no way to
                         // revert.
                         //
-                        // HONEST LIMIT, 2026-08-29: this is currently a NO-OP
-                        // here, and not because of anything on this line. The
-                        // ring is only ever WRITTEN by recordAnswerSummary,
-                        // whose single caller is ipcHandlers.ts (typed chat);
-                        // advanceConversationState never passes answerSummary,
-                        // so `AdvanceTurnInput.answerSummary` is dead and
-                        // `cs.turns` is permanently [] on what-to-answer,
-                        // assist and engine manual-chat. The flag therefore
-                        // skips an already-empty ring. It is passed anyway so
-                        // the rollback is correct the moment a writer exists —
-                        // but do not read this as "multi-turn history works on
-                        // this surface". It does not, yet.
+                        // The ring IS populated here now: recordLiveTurn wraps
+                        // runWhatShouldISay, and the bridge merges every ring
+                        // exchange the speech window does not already carry
+                        // (2026-09-24). So this flag really does roll it back.
                         multiTurnHistory: isIntelligenceFlagEnabled('chatHistoryMultiTurn'),
                         question: String(wtaTurnQuestion || ''),
                         modeTemplateType: _ctx.raw,
@@ -3676,7 +3772,9 @@ export class IntelligenceEngine extends EventEmitter {
                         // labelled untrusted section. Without this, a live meeting
                         // question under V3 composed a no-evidence disclosure even
                         // though the answer was said out loud a minute ago.
-                        conversationSummary: _ctx.conversationWindow(90),
+                        // 180 s = everything SessionTracker still holds; the
+                        // window's character budget, not its age, is the cap.
+                        conversationSummary: _ctx.conversationWindow(180),
                         retrieval: _ctx.port as any,
                         // Hand the bridge THIS turn's routed verdict rather than
                         // letting it re-derive one from keywords — see
@@ -4147,7 +4245,8 @@ export class IntelligenceEngine extends EventEmitter {
                         const cleaned = stripCannedOpener(visiblePrefix);
                         if (cleaned.stripped.length) { console.log('[IntelligenceEngine] canned opener stripped at first paint', { count: cleaned.stripped.length }); visiblePrefix = cleaned.text; }
                     } catch { /* emit unmodified */ }
-                    emitChunk(visiblePrefix);
+                    const toEmit = specStripper ? specStripper.push(visiblePrefix) : visiblePrefix;
+                    if (toEmit) emitChunk(toEmit);
                     streamingTokenBuffer = '';
                 }
             };
@@ -4294,6 +4393,18 @@ export class IntelligenceEngine extends EventEmitter {
                         paintBuffered(token);
                     }
                 },
+            }).finally(() => {
+                // The adoption hook is only meaningful while THIS stream runs,
+                // and it MUST be cleared even when the stream throws.
+                //
+                // A provider error or a deadline abort leaves `speculativeGenerationId`
+                // set — it has a single writer and is never cleared on failure — and a
+                // failed run does not bump `currentGenerationId`. So `stillStreaming`
+                // in handleSuggestionTrigger can still be true afterwards, the stale
+                // hook's `adoptedGenerationId !== generationId` guard passes, and the
+                // dead run's partial text paints as the answer. Clearing outside the
+                // `finally` left exactly that window open.
+                this.speculativeAdoptHook = null;
             });
             // The adoption hook is only meaningful while THIS stream runs.
             this.speculativeAdoptHook = null;
@@ -6178,7 +6289,10 @@ export class IntelligenceEngine extends EventEmitter {
                 const streamed = speculativeStreamingLive
                     ? { emitted: emittedStreamingToken, pendingBuffer: streamingTokenBuffer }
                     : undefined;
-                return this.completeSpeculativeRun(generationId, question, confidence, fullAnswer, wtaWriteDecision, streamed);
+                return this.completeSpeculativeRun(generationId, question, confidence, fullAnswer, wtaWriteDecision, streamed, {
+                    answerType: answerPlan.answerType,
+                    answerStyle: answerPlan.answerStyle as string,
+                });
             }
 
             // Keep the RAW answer (with the hidden <verification_spec>) for
@@ -6208,7 +6322,8 @@ export class IntelligenceEngine extends EventEmitter {
                 if (tail) this.emit('suggested_answer_token', tail, question || 'inferred', confidence, generationId);
             } else {
                 if (emittedStreamingToken && streamingTokenBuffer.trim()) {
-                    this.emit('suggested_answer_token', streamingTokenBuffer, question || 'inferred', confidence, generationId);
+                    const tail = specStripper ? (specStripper.push(streamingTokenBuffer) + specStripper.finish()) : streamingTokenBuffer;
+                    if (tail) this.emit('suggested_answer_token', tail, question || 'inferred', confidence, generationId);
                 }
                 if (!emittedStreamingToken) {
                     this.emit('suggested_answer_token', fullAnswer, question || 'inferred', confidence, generationId);
@@ -6740,8 +6855,9 @@ export class IntelligenceEngine extends EventEmitter {
                 // anti-pattern: it enters ONE named, untrusted, size-bounded
                 // section of a composed prompt — it does not substitute for a
                 // source decision, and evidence still comes only from the port.
+                // Speech only, whole lines — see speechWindowForPrompt.
                 conversationWindow: (sec: number) =>
-                    String((this.session as any)?.getFormattedContext?.(sec) ?? '').slice(-2400),
+                    speechWindowForPrompt(String((this.session as any)?.getFormattedContext?.(sec) ?? '')),
             };
         } catch { return null; }
     }

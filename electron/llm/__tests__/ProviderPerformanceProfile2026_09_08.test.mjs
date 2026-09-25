@@ -1395,6 +1395,17 @@ describe('the image-compression responder (Phase 18)', () => {
     });
   });
 
+  test('a CODING SESSION is never downgraded either, whatever preset the site requested', () => {
+    // 2026-09-25: every call site requests 'balanced', so the `technical`
+    // exemption above never applied to anything and a code screenshot could drop
+    // to 1024px. `isCode` carries the session's own answer (technical mode).
+    withSlowVisionProvider(() => {
+      assert.equal(imageProfileForTurn('balanced', { llmHelper: helper, inputTokens: 2000, isCode: true }), 'balanced');
+      assert.equal(imageProfileForTurn('balanced', { llmHelper: helper, inputTokens: 2000, isCode: false }), 'fast',
+        'outside a coding session the downgrade still applies');
+    });
+  });
+
   test('with no evidence the caller’s own choice is returned unchanged', () => {
     for (const p of ['fast', 'balanced', 'technical', 'best']) {
       assert.equal(imageProfileForTurn(p, { llmHelper: helper, inputTokens: 2000 }), p);

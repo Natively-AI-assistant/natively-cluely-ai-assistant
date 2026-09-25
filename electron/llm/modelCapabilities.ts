@@ -92,7 +92,7 @@ function isCloudIdentifier(id: string): boolean {
   if (s.startsWith('claude-')) return true;
   // DeepSeek cloud API (OpenAI-compatible). The local Ollama "deepseek-coder"
   // family is handled by the isOllama branch above.
-  if (/^deepseek-v\d/.test(s)) return true;
+  if (isDeepseekModelId(s)) return true;
   return false;
 }
 
@@ -116,7 +116,8 @@ function isLargeGroqModel(id: string): boolean {
 /**
  * Groq-hosted models that accept image input.
  *
- * Exactly one, as of 2026-08-23: qwen3.6-27b. Groq retired llama-4-scout (its
+ * Exactly one: qwen3.8-27b since 2026-09-14 (qwen3.6-27b before it, from
+ * 2026-08-23). Groq retired llama-4-scout (its
  * previous vision model) on 2026-07-17 and shipped no like-for-like successor.
  *
  * This must be checked explicitly. The Groq branch of getModelCapabilities()
@@ -128,6 +129,7 @@ function isLargeGroqModel(id: string): boolean {
 // encoded in four uncoordinated places; a vision-model swap that missed one
 // silently re-armed the "Groq vision refused" bug).
 import { groqSupportsImages } from './groqModels';
+import { isDeepseekModelId } from './deepseekModels';
 import { modelNameSuggestsVision } from './visionCapability';
 
 // Parse parameter size from an Ollama model id like "llama3.1:8b" or "qwen2.5-coder:14b".

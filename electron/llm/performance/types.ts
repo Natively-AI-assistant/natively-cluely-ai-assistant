@@ -255,8 +255,12 @@ export interface CapabilityFacts {
   structuredOutput: boolean | 'unknown';
   /** Advertised context window in tokens, from modelCapabilities.getModelCapabilities. */
   contextWindowTokens: number;
-  /** Where each fact came from, so a wrong one can be traced to its registry. */
-  source: 'model_registry' | 'prior' | 'unknown';
+  /**
+   * Where each fact came from, so a wrong one can be traced to its registry.
+   * 'probe' = the vision verdict came from a calibration image probe, which
+   * overrides the registry's published claim for that one fact.
+   */
+  source: 'model_registry' | 'prior' | 'probe' | 'unknown';
 }
 
 export type ProfileSource = 'shipped_prior' | 'calibration' | 'production';

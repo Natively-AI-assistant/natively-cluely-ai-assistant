@@ -260,8 +260,8 @@ export class SessionTracker {
         }
     }
 
-    getDetectedCodingQuestion(): { question: string | null; source: 'screenshot' | 'transcript' | null } {
-        return { question: this.detectedCodingQuestion, source: this.codingQuestionSource };
+    getDetectedCodingQuestion(): { question: string | null; source: 'screenshot' | 'transcript' | null; setAt: number | null } {
+        return { question: this.detectedCodingQuestion, source: this.codingQuestionSource, setAt: this.codingQuestionSetAt };
     }
 
     clearCodingQuestion(): void {

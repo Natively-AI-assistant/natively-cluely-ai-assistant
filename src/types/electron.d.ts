@@ -176,6 +176,12 @@ export interface ElectronAPI {
   onWindowMaximizedChanged: (callback: (isMaximized: boolean) => void) => () => void
   onEnsureExpanded: (callback: () => void) => () => void
   openExternal: (url: string) => Promise<void>
+  // Genie snapshots (electron/genieSnapshots.ts): pictures of popup cards the genie warps.
+  genieSnapshotCapture?: (rect: { x: number; y: number; width: number; height: number }) => Promise<{ png: Uint8Array; width: number; height: number } | null>
+  genieSnapshotSave?: (key: string, png: Uint8Array) => Promise<boolean>
+  genieSnapshotLoad?: (key: string) => Promise<Uint8Array | null>
+  genieSnapshotList?: () => Promise<string[]>
+  genieSnapshotClear?: (prefix?: string) => Promise<boolean>
   // UX2: in-app TCC repair. macOS only; returns { ok, bundleId, results, message, promptRelaunch }.
   repairTccPermissions: () => Promise<{
     ok: boolean
@@ -307,6 +313,8 @@ export interface ElectronAPI {
   endTrialByok:        () => Promise<{ success: boolean; error?: string }>
   wipeTrialProfileData: () => Promise<{ success: boolean; error?: string }>
   onTrialEnded:   (cb: (data: { choice: string }) => void) => () => void
+  /** Emitted by `trial:start`, so a trial claimed mid-session unlocks Pro surfaces without a relaunch. */
+  onTrialStarted: (cb: (data: { expiresAt: string; startedAt: string; usage?: { ai: number; ai_tokens?: number; stt_seconds: number; search: number }; limits?: { duration_ms: number; ai_requests: number; stt_minutes: number; search_requests: number } }) => void) => () => void
 
   // STT Provider Management
   setSttProvider: (provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech') => Promise<{ success: boolean; error?: string }>
@@ -460,6 +468,7 @@ export interface ElectronAPI {
   getRecentMeetings: () => Promise<Array<{ id: string; title: string; date: string; duration: string; summary: string }>>
   getMeetingDetails: (id: string) => Promise<any>
   searchGlobalMeetings: (query: string, filters?: any) => Promise<{ enabled: boolean; results: any[] }>
+  searchMemories?: (query: string) => Promise<{ enabled: boolean; results: Array<{ text: string; meetingId?: string; meetingTitle?: string; date?: string }> }>
   searchInMeeting: (query: string) => Promise<{ enabled: boolean; results: any[] }>
   generateLectureNotes: (opts?: { title?: string; course?: string }) => Promise<{ enabled: boolean; notes: any }>
   generateDiagram: (text?: string) => Promise<{ enabled: boolean; diagram: any }>
@@ -675,7 +684,22 @@ export interface ElectronAPI {
   acknowledgeExtensionLicense: (id: string, modelKey: string) => Promise<{ success: boolean; error?: string }>
   downloadExtensionModel: (id: string, modelKey: string) => Promise<{ success: boolean; status?: unknown; error?: string; message?: string }>
   cancelExtensionModelDownload: (id: string, modelKey: string) => Promise<{ success: boolean; error?: string }>
-  browseExtensionRegistry: (url?: string) => Promise<{ ok: boolean; entries: Array<{ id: string; repo: string; latestVersion: string; apiVersion: string; category: string; modelLicenses?: string[] }> }>
+  browseExtensionRegistry: (url?: string) => Promise<{
+    ok: boolean
+    cached?: boolean
+    error?: string | null
+    entries: Array<{
+      id: string; repo: string; latestVersion: string; apiVersion: string; category: string
+      modelLicenses?: string[]
+      name?: string
+      /** Present only when the registry came from a release with built artefacts. */
+      download?: { code: string; manifest: string; sha256: { code: string; manifest: string }; bytes?: { code: number; manifest: number } }
+      /** Binaries the extension spawns but does not bundle, e.g. llama-server. */
+      requiresExternalRuntime?: string[]
+    }>
+  }>
+  /** Takes an extension ID, never a URL — main resolves the download itself. */
+  installExtensionFromRegistry: (id: string) => Promise<{ success: boolean; id?: string; error?: string; errors?: string[]; warnings?: string[] }>
   onExtensionModelProgress: (callback: (p: { id: string; modelKey: string; fraction: number }) => void) => () => void
 
   testReranker: (choice?: { model?: string }) => Promise<{
@@ -700,13 +724,13 @@ export interface ElectronAPI {
   clearContextDebugLogs: () => Promise<{ ok: boolean; removed?: number; error?: string }>
   exportContextDebugSession: () => Promise<{ ok: boolean; path?: string; error?: string }>
   getHindsightConfig: () => Promise<{ baseUrl: string; hasApiKey: boolean; autoStart: boolean; serverCommand: string; llmProvider: string; available: boolean; mode: 'local' | 'cloud'; synthetic: boolean; explicitlyDisabled: boolean; authFailed: boolean }>
-  setHindsightConfig: (cfg: { baseUrl?: string; apiKey?: string; autoStart?: boolean; serverCommand?: string; llmProvider?: string }) => Promise<{ success: boolean; healthy?: boolean; error?: string }>
+  setHindsightConfig: (cfg: { baseUrl?: string; apiKey?: string; autoStart?: boolean; serverCommand?: string; llmProvider?: string; enableMemory?: boolean }) => Promise<{ success: boolean; healthy?: boolean; error?: string }>
   testHindsightConnection: () => Promise<{ healthy: boolean; error?: string }>
   updateMeetingTitle: (id: string, title: string) => Promise<boolean>
   updateMeetingSummary: (id: string, updates: { overview?: string, actionItems?: string[], keyPoints?: string[], actionItemsTitle?: string, keyPointsTitle?: string }) => Promise<boolean>
-  regenerateMeetingSummary: (id: string, opts?: { templateType?: string; tone?: 'professional' | 'warm' | 'concise' | 'friendly' }) => Promise<{ success: boolean; error?: string }>
+  regenerateMeetingSummary: (id: string, opts?: { templateType?: string; modeId?: string; tone?: 'professional' | 'warm' | 'concise' | 'friendly' }) => Promise<{ success: boolean; error?: string }>
   regenerateMeetingFollowUp: (id: string, tone?: 'professional' | 'warm' | 'concise' | 'friendly') => Promise<{ success: boolean; error?: string }>
-  updateMeetingSpeakerLabels: (id: string, labels: Record<string, string>) => Promise<{ success: boolean; labels?: Record<string, string>; error?: string }>
+  updateMeetingSpeakerLabels: (id: string, labels: Record<string, string>) => Promise<{ success: boolean; labels?: Record<string, string>; notesUpdated?: boolean; error?: string }>
   deleteMeeting: (id: string) => Promise<boolean>
   setWindowMode: (mode: 'launcher' | 'overlay', inactive?: boolean) => Promise<void>
   setMeetingInterfaceTheme: (theme: string) => void
@@ -762,6 +786,11 @@ export interface ElectronAPI {
   getDefaultModel: () => Promise<{ model: string }>;
   setModel: (modelId: string) => Promise<{ success: boolean; error?: string }>;
   setDefaultModel: (modelId: string) => Promise<{ success: boolean; error?: string }>;
+  /** The fast model used for internal calls only. null clears it (= "Auto"). */
+  getFastModel: () => Promise<{ model: string | null }>;
+  setFastModel: (modelId: string | null) => Promise<{ success: boolean; error?: string }>;
+  /** Narrows picker options to the ids the fast path can actually dispatch. */
+  filterFastModelCandidates: (ids: string[]) => Promise<{ ids: string[] }>;
   toggleModelSelector: (coords: { x: number; y: number; activate?: boolean }) => Promise<void>;
   modelSelectorCloseIfOpen: () => Promise<void>;
   // NOTE: this interface and the one in electron/preload.ts are maintained
@@ -897,6 +926,10 @@ export interface ElectronAPI {
   onKeybindRegistrationSucceeded: (callback: (data: { id: string; accelerator: string }) => void) => () => void
   /** Snapshot of currently-failing registrations, for renderers that mount after the boot-time pass. */
   getKeybindRegistrationFailures: () => Promise<Array<{ id: string; accelerator: string }>>
+  /** Issue #517: false = only Toggle Visibility stays OS-wide. */
+  getGlobalShortcutsEnabled: () => Promise<boolean>
+  /** Resolves to the value actually in effect. */
+  setGlobalShortcutsEnabled: (enabled: boolean) => Promise<boolean>
 
   onGlobalShortcut: (callback: (data: { action: string }) => void) => () => void
 
@@ -1324,6 +1357,8 @@ export interface PhoneMirrorInfo {
   qrDataUrl: string | null;
   clients: number;
   extensionConnected: boolean;
+  /** Epoch ms of the last successful one-click extension pair this session (0 = none). */
+  extPairedAt?: number;
   /** Resolved bind host — '127.0.0.1' for loopback-only, '0.0.0.0' when LAN-exposed. */
   bindAddress: string;
 }

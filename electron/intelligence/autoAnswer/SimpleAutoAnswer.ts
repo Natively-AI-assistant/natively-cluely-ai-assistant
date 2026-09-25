@@ -67,6 +67,13 @@ export const STABILITY_MS = 900;
 export const EARLY_JUDGE_MS = 120;
 /** A provider endpoint (speech_final / <end>) confirms the stop: shorten the wait. */
 export const ENDPOINT_CONFIRM_MS = 350;
+/**
+ * Maximum elapsed time since the latest interviewer final for the STT stream
+ * to be considered caught up when a local VAD speech-end hint arrives.
+ * If the last final arrived longer ago than this, trailing finals for the
+ * utterance may still be in flight; we wait for them before shortening the wait.
+ */
+export const PROVIDER_CATCHUP_TOLERANCE_MS = 250;
 /** Below this many NEW words (and no '?') we wait for more speech instead of calling. */
 export const MIN_NEW_WORDS = 4;
 /**
@@ -265,6 +272,8 @@ export class SimpleAutoAnswerEngine {
     private punctuationGuaranteed = false;
     /** What last bumped judgeSeq, so a discarded verdict can say what killed it. */
     private judgeSeqCause: NonNullable<AutoAnswerTelemetryEvent['supersededBy']> | null = null;
+    /** When local VAD speech-end fired, for provider catch-up tolerance. */
+    private localSpeechEndedAt: number | null = null;
     private thresholds: AutoAnswerThresholds;
 
     constructor(
@@ -310,14 +319,22 @@ export class SimpleAutoAnswerEngine {
      * stop. Only four STT providers emit their own end-of-turn event; the rest
      * waited the full STABILITY_MS after the last final even though the
      * capture layer already knew. Treat the local stop like a provider
-     * endpoint — with one guard: a dangling interim means the final for the
-     * last words has not landed yet, and committing now would judge half a
-     * turn. That final re-arms the window itself when it arrives.
+     * endpoint — with two guards:
+     * 1. A dangling interim means the final for the last words has not landed yet.
+     * 2. An earlier intermediate final clears lastInterviewerInterim while speech
+     *    was still ongoing. If the last final arrived longer ago than
+     *    PROVIDER_CATCHUP_TOLERANCE_MS, the provider has not caught up with the
+     *    physical stop yet. We record the speech-end timestamp and let the
+     *    trailing final arm ENDPOINT_CONFIRM_MS when it lands.
      */
     onLocalSpeechEnd(): void {
         if (!this.host.isEnabled() || this.pending.length === 0) return;
         if (this.lastInterviewerInterim) return;
-        this.arm(ENDPOINT_CONFIRM_MS);
+        const now = this.clock.now();
+        this.localSpeechEndedAt = now;
+        if (now - this.lastInterviewerAt <= PROVIDER_CATCHUP_TOLERANCE_MS) {
+            this.arm(ENDPOINT_CONFIRM_MS);
+        }
     }
 
     ingest(segment: TranscriptSegment & { speaker: string; final: boolean }): void {
@@ -336,6 +353,7 @@ export class SimpleAutoAnswerEngine {
                         this.bumpJudgeSeq('interim');
                         this.lastInterviewerAt = now;
                         this.lastInterviewerInterim = text;
+                        this.localSpeechEndedAt = null;
                     }
                     this.arm(STABILITY_MS);
                 }
@@ -359,7 +377,12 @@ export class SimpleAutoAnswerEngine {
             this.pending.push({ text, at: now, speaker, glueNext });
             this.bumpJudgeSeq('final');  // supersede any in-flight verdict: it judged less than this
             this.lastInterviewerAt = now;
-            this.arm(STABILITY_MS);
+            if (this.localSpeechEndedAt !== null && (now - this.localSpeechEndedAt) <= STABILITY_MS) {
+                this.localSpeechEndedAt = null;
+                this.arm(ENDPOINT_CONFIRM_MS);
+            } else {
+                this.arm(STABILITY_MS);
+            }
             return;
         }
 
@@ -742,6 +765,7 @@ export class SimpleAutoAnswerEngine {
         this.lastJudgedKey = '';
         this.lastAnsweredText = null;
         this.lastPrefetchAt = null;
+        this.localSpeechEndedAt = null;
         this.held = null;
         this.bumpJudgeSeq('meeting_reset');
         this.sequence = 0;

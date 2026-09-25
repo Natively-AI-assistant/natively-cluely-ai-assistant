@@ -38,8 +38,10 @@ import {
 import { getMeetingInterfaceTheme, setMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
 import { KeyRecorder } from './ui/KeyRecorder';
 import { Disclosure, DisclosureChevron } from './ui/AccordionSection';
-import { ProfileVisualizer, PremiumUpgradeModal } from '../premium';
+import { Presence, SettingsMenu, SettingsMotionReady } from './settings/SettingsRow';
+import { ProfileVisualizer } from '../premium';
 import GlassEffectLayer from './ui/GlassEffectLayer';
+import { GenieModal } from './ui/GenieModal';
 import { BrandMark, BrandMonogram } from './ui/BrandMark';
 import { LiquidGlassBadge } from '../ui-components/LiquidGlassBadge';
 import { LiquidGlassButton } from '../ui-components/LiquidGlassButton';
@@ -226,6 +228,15 @@ const MockupNativelyInterface = ({ opacity, theme }: { opacity: number; theme: M
     );
 };
 
+// A button label or result line that changes on a click: Sync's text swap
+// (150ms, 4px, 2px blur). Always ready, because these only ever change in
+// answer to the user, never when a value arrives over IPC as the pane opens.
+const LabelSwap: React.FC<{ id: string | null; children?: React.ReactNode }> = ({ id, children }) => (
+    <SettingsMotionReady.Provider value={true}>
+        <Presence kind="text" id={id}>{children}</Presence>
+    </SettingsMotionReady.Provider>
+);
+
 interface CustomSelectProps {
     label: string;
     icon: React.ReactNode;
@@ -277,38 +288,36 @@ const CustomSelect: React.FC<CustomSelectProps> = ({ label, icon, value, options
                     className={`w-full bg-bg-input border border-border-subtle rounded-lg px-3 py-2.5 text-sm text-text-primary flex items-center justify-between transition-colors ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-bg-elevated'}`}
                 >
                     <span className="truncate pr-4">{selectedLabel}</span>
-                    <ChevronDown size={14} className={`text-text-secondary transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                    <ChevronDown size={14} className={`text-text-secondary transition-transform duration-[250ms] ease-sculpted motion-reduce:transition-none ${isOpen ? 'rotate-180' : ''}`} />
                 </button>
 
-                {isOpen && !disabled && (
-                    <div className="absolute top-full left-0 w-full mt-1 bg-bg-elevated border border-border-subtle rounded-lg shadow-xl z-50 max-h-48 overflow-y-auto animated fadeIn">
-                        <div className="p-1 space-y-0.5">
-                            {options.map((device) => (
-                                <button
-                                    key={device.deviceId}
-                                    onClick={() => {
-                                        onChange(device.deviceId);
-                                        setIsOpen(false);
-                                    }}
-                                    className={`w-full text-left px-3 py-2 text-sm rounded-md flex items-center justify-between group transition-colors ${value === device.deviceId ? 'bg-bg-input hover:bg-bg-elevated text-text-primary' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
-                                >
-                                    <span className="truncate">{device.label || `Device ${device.deviceId.slice(0, 5)}...`}</span>
-                                    <span className="flex items-center gap-2 shrink-0 pl-2">
-                                        {badges?.[device.deviceId] && (
-                                            <span className="text-[10px] uppercase tracking-wide text-text-secondary/80 whitespace-nowrap">
-                                                {badges[device.deviceId]}
-                                            </span>
-                                        )}
-                                        {value === device.deviceId && <Check size={14} className="text-accent-primary" />}
-                                    </span>
-                                </button>
-                            ))}
-                            {options.length === 0 && (
-                                <div className="px-3 py-2 text-sm text-gray-500 italic">{t('No devices found')}</div>
-                            )}
-                        </div>
+                <SettingsMenu open={isOpen && !disabled} origin="top" className="absolute top-full left-0 w-full mt-1 bg-bg-elevated border border-border-subtle rounded-lg shadow-xl z-50 max-h-48 overflow-y-auto">
+                    <div className="p-1 space-y-0.5">
+                        {options.map((device) => (
+                            <button
+                                key={device.deviceId}
+                                onClick={() => {
+                                    onChange(device.deviceId);
+                                    setIsOpen(false);
+                                }}
+                                className={`w-full text-left px-3 py-2 text-sm rounded-md flex items-center justify-between group transition-colors ${value === device.deviceId ? 'bg-bg-input hover:bg-bg-elevated text-text-primary' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
+                            >
+                                <span className="truncate">{device.label || `Device ${device.deviceId.slice(0, 5)}...`}</span>
+                                <span className="flex items-center gap-2 shrink-0 pl-2">
+                                    {badges?.[device.deviceId] && (
+                                        <span className="text-[10px] uppercase tracking-wide text-text-secondary/80 whitespace-nowrap">
+                                            {badges[device.deviceId]}
+                                        </span>
+                                    )}
+                                    {value === device.deviceId && <Check size={14} className="text-accent-primary" />}
+                                </span>
+                            </button>
+                        ))}
+                        {options.length === 0 && (
+                            <div className="px-3 py-2 text-sm text-gray-500 italic">{t('No devices found')}</div>
+                        )}
                     </div>
-                )}
+                </SettingsMenu>
             </div>
         </div>
     );
@@ -394,11 +403,11 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({ value, options, onChang
         <div ref={containerRef} className="relative z-20 font-sans">
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className={`w-full group bg-bg-input border border-border-subtle hover:border-border-muted shadow-sm rounded-xl p-2.5 pr-3.5 flex items-center justify-between transition-all duration-200 outline-none focus:ring-2 focus:ring-accent-border ${isOpen ? 'ring-2 ring-accent-border border-accent-focus' : 'hover:shadow-md'}`}
+                className={`w-full group bg-bg-input border border-border-subtle hover:border-border-muted shadow-sm rounded-xl p-2.5 pr-3.5 flex items-center justify-between transition-[border-color,box-shadow] duration-150 ease-out outline-none focus:ring-2 focus:ring-accent-border ${isOpen ? 'ring-2 ring-accent-border border-accent-focus' : 'hover:shadow-md'}`}
             >
                 {selected ? (
                     <div className="flex items-center gap-3 overflow-hidden">
-                        <div className={`w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 transition-all duration-300 ${getIconStyle(selected.color, false, selected.neutralTile, selected.tileClassName)}`}>
+                        <div className={`w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 transition-colors duration-200 ${getIconStyle(selected.color, false, selected.neutralTile, selected.tileClassName)}`}>
                             {selected.icon}
                         </div>
                         <div className="min-w-0 flex-1 text-left">
@@ -411,52 +420,45 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({ value, options, onChang
                         </div>
                     </div>
                 ) : <span className="text-text-secondary px-2 text-sm">{t('Select Provider')}</span>}
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-text-tertiary transition-transform duration-300 group-hover:bg-bg-input ${isOpen ? 'rotate-180 bg-bg-input text-text-primary' : ''}`}>
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-text-tertiary transition-[transform,background-color,color] duration-[250ms] ease-sculpted motion-reduce:transition-none group-hover:bg-bg-input ${isOpen ? 'rotate-180 bg-bg-input text-text-primary' : ''}`}>
                     <ChevronDown size={14} strokeWidth={2.5} />
                 </div>
             </button>
 
-            <AnimatePresence>
-                {isOpen && (
-                    <motion.div
-                        key="provider-dropdown"
-                        initial={{ opacity: 0, y: 4, scale: 0.98 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 4, scale: 0.98 }}
-                        transition={{ duration: 0.15, ease: "easeOut" }}
-                        className={`absolute top-full left-0 w-full mt-2 backdrop-blur-xl rounded-xl shadow-2xl overflow-hidden ring-1 ring-black/5 ${isLight ? 'bg-bg-elevated border border-border-subtle' : 'bg-bg-elevated/90 border border-white/5'}`}
-                    >
-                        <div className="max-h-[320px] overflow-y-auto p-1.5 space-y-0.5 custom-scrollbar">
-                            {options.map(option => {
-                                const isSelected = value === option.id;
-                                return (
-                                    <button
-                                        key={option.id}
-                                        onClick={() => { onChange(option.id); setIsOpen(false); }}
-                                        className={`w-full rounded-[10px] p-2 flex items-center gap-3 transition-all duration-200 group relative ${isSelected ? (isLight ? 'bg-bg-item-active shadow-inner' : 'bg-white/10 shadow-inner') : (isLight ? 'hover:bg-bg-item-surface' : 'hover:bg-white/5')}`}
-                                    >
-                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-transform duration-200 ${isSelected ? 'scale-100' : 'scale-95 group-hover:scale-100'} ${getIconStyle(option.color, false, option.neutralTile, option.tileClassName)}`}>
-                                            {option.icon}
+            <SettingsMenu
+                open={isOpen}
+                origin="top"
+                className={`absolute top-full left-0 w-full mt-2 backdrop-blur-xl rounded-xl shadow-2xl overflow-hidden ring-1 ring-black/5 ${isLight ? 'bg-bg-elevated border border-border-subtle' : 'bg-[color:color-mix(in_srgb,var(--bg-elevated)_90%,transparent)] border border-white/5'}`}
+            >
+                <div className="max-h-[320px] overflow-y-auto p-1.5 space-y-0.5 custom-scrollbar">
+                    {options.map(option => {
+                        const isSelected = value === option.id;
+                        return (
+                            <button
+                                key={option.id}
+                                onClick={() => { onChange(option.id); setIsOpen(false); }}
+                                className={`w-full rounded-[10px] p-2 flex items-center gap-3 transition-[background-color,box-shadow] duration-150 ease-out group relative ${isSelected ? (isLight ? 'bg-bg-item-active shadow-inner' : 'bg-white/10 shadow-inner') : (isLight ? 'hover:bg-bg-item-surface' : 'hover:bg-white/5')}`}
+                            >
+                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-transform duration-200 ${isSelected ? 'scale-100' : 'scale-95 group-hover:scale-100'} ${getIconStyle(option.color, false, option.neutralTile, option.tileClassName)}`}>
+                                    {option.icon}
+                                </div>
+                                <div className="flex-1 min-w-0 text-left">
+                                    <div className="flex items-center justify-between mb-0.5">
+                                        <div className="flex items-center gap-2">
+                                            <span className={`text-[13px] font-medium transition-colors ${isSelected && !isLight ? 'text-white' : 'text-text-primary'}`}>{option.label}</span>
+                                            {option.badge && <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide ${getBadgeStyle(option.badge === 'Saved' ? 'green' : option.color)}`}>{t(option.badge)}</span>}
                                         </div>
-                                        <div className="flex-1 min-w-0 text-left">
-                                            <div className="flex items-center justify-between mb-0.5">
-                                                <div className="flex items-center gap-2">
-                                                    <span className={`text-[13px] font-medium transition-colors ${isSelected && !isLight ? 'text-white' : 'text-text-primary'}`}>{option.label}</span>
-                                                    {option.badge && <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide ${getBadgeStyle(option.badge === 'Saved' ? 'green' : option.color)}`}>{t(option.badge)}</span>}
-                                                </div>
-                                                {isSelected && <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}><Check size={14} className="text-accent-primary" strokeWidth={3} /></motion.div>}
-                                            </div>
-                                            <span className={`text-[11px] block truncate transition-colors ${isSelected && !isLight ? 'text-white/70' : 'text-text-tertiary'}`}>{option.desc}</span>
-                                        </div>
-                                        {/* Hover Indicator */}
-                                        {!isSelected && <div className="absolute inset-0 rounded-[10px] ring-1 ring-inset ring-transparent group-hover:ring-border-subtle pointer-events-none" />}
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+                                        {isSelected && <Check size={14} className="text-accent-primary" strokeWidth={3} />}
+                                    </div>
+                                    <span className={`text-[11px] block truncate transition-colors ${isSelected && !isLight ? 'text-white/70' : 'text-text-tertiary'}`}>{option.desc}</span>
+                                </div>
+                                {/* Hover Indicator */}
+                                {!isSelected && <div className="absolute inset-0 rounded-[10px] ring-1 ring-inset ring-transparent group-hover:ring-border-subtle pointer-events-none" />}
+                            </button>
+                        );
+                    })}
+                </div>
+            </SettingsMenu>
         </div>
     );
 };
@@ -485,6 +487,11 @@ const SETTINGS_NAV_ORDER = [
    as aliases rather than repointed at the call site: AI Providers' lightweight
    notice is specifically about embeddings and should land on the Embedding
    sub-tab, not at the top of a combined page. */
+// The Settings card's drop shadow (#settings-panel-wrapper in index.css for
+// light, shadow-2xl for dark), carried by GenieModal's stand-in mid-genie.
+const SETTINGS_SHADOW_LIGHT = '0 20px 60px rgba(0,0,0,0.10), 0 6px 16px rgba(0,0,0,0.06)';
+const SETTINGS_SHADOW_DARK = '0 25px 50px -12px rgba(0,0,0,0.25)';
+
 const isRetrievalTab = (tab: string) =>
     tab === 'retrieval' || tab === 'embedding' || tab === 'reranker';
 
@@ -500,6 +507,8 @@ interface SettingsOverlayProps {
     initialTabSeq?: number;
     initialIsPremium?: boolean | null;
     initialHasNativelyKey?: boolean;
+    /** Close without the genie: the Modes / Profile manager is taking over. */
+    closeInstantly?: boolean;
 }
 
 /**
@@ -531,8 +540,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     initialTabSeq = 0,
     initialIsPremium = null,
     initialHasNativelyKey = false,
+    closeInstantly = false,
 }) => {
-    const isLight = useResolvedTheme() === 'light';
+    const resolvedTheme = useResolvedTheme();
+    const isLight = resolvedTheme === 'light';
     const { t, lang, setLang } = useLanguage();
     const [activeTab, setActiveTab] = useState(initialTab);
 
@@ -564,6 +575,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     const curPanelIdx = SETTINGS_NAV_ORDER.indexOf(panelKey);
     const panelDirection = (prevPanelIdx === -1 || curPanelIdx === -1 || curPanelIdx >= prevPanelIdx) ? 1 : -1;
     useEffect(() => { prevPanelKeyRef.current = panelKey; }, [panelKey]);
+    /* The children's stagger follows the container's direction (see
+       settings-stagger-in in src/index.css). Pinned per section: panelDirection
+       reads 1 again on the next render, and a var that flipped mid-cascade
+       would jump every child still animating. */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const staggerDy = useMemo(() => `${panelDirection * 7}px`, [panelKey]);
 
     /* The modal wrapper already springs in on open (scale 0.94→1, y 20→0).
        Letting the panel play its own enter animation on that same frame stacks
@@ -594,7 +611,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     const navItemClass = (active: boolean, size = 'text-sm') =>
         `w-full text-left px-3 py-2 rounded-lg ${size} font-medium flex items-center gap-3 relative isolate transition-colors duration-150 ease-out ${active
             ? 'text-text-primary'
-            : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`;
+            : 'text-text-secondary hover:text-text-primary hover:bg-[color:color-mix(in_srgb,var(--bg-item-active)_50%,transparent)]'}`;
 
     /* `isolate` on the button + `-z-10` here puts the pill above the button's
        own background box but below its inline content (icon + label), so the
@@ -650,7 +667,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
            click of a deep link did nothing at all. */
     }, [isOpen, initialTab, initialTabSeq]);
 
-    const { shortcuts, updateShortcut, resetShortcuts, conflicts } = useShortcuts();
+    const { shortcuts, updateShortcut, resetShortcuts, conflicts, globalShortcutsEnabled, setGlobalShortcutsEnabled } = useShortcuts();
     // Small badge shown next to a shortcut row when globalShortcut.register()
     // failed for it (another app/OS already owns that key combo). The
     // KeyRecorder right next to it is the fix — recording a new combo
@@ -857,7 +874,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     });
 
     // When the theme changes and the user hasn't saved a custom value, reset to theme-aware default
-    const resolvedTheme = useResolvedTheme();
     useEffect(() => {
         const stored = localStorage.getItem('natively_overlay_opacity');
         const parsed = stored ? parseFloat(stored) : NaN;
@@ -2062,48 +2078,46 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     }, [isOpen, activeTab, selectedInput]);
 
     return (
-        <AnimatePresence>
-            {isOpen && (
-                <motion.div
-                    key="settings-modal"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.2 }}
-                    id="settings-backdrop"
-                    className={`fixed inset-0 z-50 flex items-center justify-center p-8 transition-colors duration-150 ${isPreviewingOpacity ? 'bg-transparent backdrop-blur-none pointer-events-none' : 'bg-black/60'}`}
-                    onClick={(e) => {
-                        // Mirror Modes/Profile (App.tsx) close-on-outside-click.
-                        // Skip when opacity slider preview is active — backdrop is
-                        // invisible but pointer-active; clicking during preview
-                        // would otherwise dismiss Settings mid-drag.
-                        if (e.target !== e.currentTarget) return;
-                        if (isPreviewingOpacity) return;
-                        onClose();
-                    }}
-                >
-                    <motion.div
-                        id="settings-panel-wrapper"
-                        // Phase-1 Soft Orchid rebrand scope: any future Settings dropdown/menu
-                        // that renders via createPortal(..., document.body) will mount OUTSIDE
-                        // this data-settings-theme scope and silently fall back to the blue
-                        // brand accent — portals must be scoped to this subtree (or avoided).
-                        data-settings-theme="periwinkle"
-                        initial={{ scale: 0.94, opacity: 0, y: 20 }}
-                        animate={{ scale: 1, opacity: 1, y: 0 }}
-                        exit={{ scale: 0.94, opacity: 0, y: 20 }}
-                        transition={{
-                            type: "spring",
-                            stiffness: 400,
-                            damping: 32,
-                            mass: 1
-                        }}
-                        className="bg-bg-elevated w-full max-w-4xl h-[80vh] rounded-2xl border border-border-subtle shadow-2xl overflow-hidden relative"
-                    >
+        <>
+            {/* Settings pours out of, and back into, the bottom of the window
+                like every other popup (GenieModal). */}
+            <GenieModal
+                open={isOpen}
+                label="SettingsOverlay"
+                snapshotKey="settings"
+                // The tab this open lands on: activeTab only catches up in an
+                // effect after the card mounts, too late to pick its picture.
+                openingView={initialTab}
+                snapshotPaused={isPreviewingOpacity}
+                closeInstantly={closeInstantly}
+                backdropId="settings-backdrop"
+                padding={32}
+                backdropClassName={`transition-colors duration-150 ${isPreviewingOpacity ? 'bg-transparent backdrop-blur-none pointer-events-none' : isLight ? 'bg-black/[0.06]' : 'bg-black/60'}`}
+                onBackdropClick={() => {
+                    // Mirror Modes/Profile (App.tsx) close-on-outside-click.
+                    // Skip when opacity slider preview is active — backdrop is
+                    // invisible but pointer-active; clicking during preview
+                    // would otherwise dismiss Settings mid-drag.
+                    if (isPreviewingOpacity) return;
+                    onClose();
+                }}
+                wrapClassName="w-full max-w-4xl h-[80vh]"
+                // Phase-1 Soft Orchid rebrand scope: any future Settings dropdown/menu
+                // that renders via createPortal(..., document.body) will mount OUTSIDE
+                // this data-settings-theme scope and silently fall back to the blue
+                // brand accent — portals must be scoped to this subtree (or avoided).
+                cardProps={{ id: 'settings-panel-wrapper', 'data-settings-theme': 'periwinkle' }}
+                cardClassName={`bg-bg-elevated rounded-2xl border border-border-subtle ${isLight ? 'shadow-[0_0_0_1px_rgba(0,0,0,0.06),0_24px_48px_-12px_rgba(0,0,0,0.16),0_8px_16px_-6px_rgba(0,0,0,0.06)]' : 'shadow-2xl'} overflow-hidden relative`}
+                shadow={isLight ? SETTINGS_SHADOW_LIGHT : SETTINGS_SHADOW_DARK}
+                radius={16}
+            >
                         <div
                             id="settings-panel"
+                            data-genie-view={activeTab}
                             className="flex w-full h-full"
-                            style={{ visibility: isPreviewingOpacity ? 'hidden' : 'visible' }}
+                            // Inherit rather than force 'visible': a forced value would show
+                            // the real panel through the card while GenieModal hides it mid-genie.
+                            style={{ visibility: isPreviewingOpacity ? 'hidden' : undefined }}
                         >
                         {/* Sidebar */}
                         <div className="w-64 bg-bg-sidebar flex flex-col border-r border-border-subtle">
@@ -2259,6 +2273,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                 descendants off the scroll container. */}
                             <motion.div
                                 key={panelKey}
+                                style={{ '--settings-stagger-dy': staggerDy } as React.CSSProperties}
                                 initial={animatePanel ? { y: reduceMotion ? 0 : panelDirection * 10 } : false}
                                 animate={{ y: 0 }}
                                 transition={reduceMotion
@@ -2365,7 +2380,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             </div>
                                                             <div>
                                                                 <h3 className="text-sm font-bold text-text-primary">{t('Protect Natively shortcuts')}</h3>
-                                                                <p className="text-xs text-text-secondary mt-0.5">{t('Stops a Natively shortcut from typing into the app underneath. Turn off if your antivirus flags the keyboard hook.')}</p>
+                                                                <p className="text-xs text-text-secondary mt-0.5">{t('Keeps shortcuts from typing into the app below. Turn off if antivirus flags it.')}</p>
                                                             </div>
                                                         </div>
                                                         <SettingsToggle
@@ -2503,31 +2518,29 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 </span>
                                                                 <span className="capitalize text-ellipsis overflow-hidden whitespace-nowrap">{themeMode}</span>
                                                             </div>
-                                                            <ChevronDown size={12} className={`shrink-0 transition-transform ${isThemeDropdownOpen ? 'rotate-180' : ''}`} />
+                                                            <ChevronDown size={12} className={`shrink-0 transition-transform duration-[250ms] ease-sculpted motion-reduce:transition-none ${isThemeDropdownOpen ? 'rotate-180' : ''}`} />
                                                         </button>
 
                                                         {/* Dropdown Menu */}
-                                                        {isThemeDropdownOpen && (
-                                                            <div className="absolute right-0 top-full mt-1 min-w-full w-max bg-bg-elevated border border-border-subtle rounded-lg shadow-xl overflow-hidden z-20 p-1 animated fadeIn select-none">
-                                                                {[
-                                                                    { mode: 'system', label: 'System', icon: <Monitor size={14} /> },
-                                                                    { mode: 'light', label: 'Light', icon: <Sun size={14} /> },
-                                                                    { mode: 'dark', label: 'Dark', icon: <Moon size={14} /> }
-                                                                ].map((option) => (
-                                                                    <button
-                                                                        key={option.mode}
-                                                                        onClick={() => {
-                                                                            handleSetTheme(option.mode as any);
-                                                                            setIsThemeDropdownOpen(false);
-                                                                        }}
-                                                                        className={`w-full text-left px-2 py-1.5 rounded-md text-xs flex items-center gap-2 transition-colors ${themeMode === option.mode ? 'text-text-primary bg-bg-item-active/50' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
-                                                                    >
-                                                                        <span className={themeMode === option.mode ? 'text-text-primary' : 'text-text-secondary group-hover:text-text-primary'}>{option.icon}</span>
-                                                                        <span className="font-medium">{t(option.label)}</span>
-                                                                    </button>
-                                                                ))}
-                                                            </div>
-                                                        )}
+                                                        <SettingsMenu open={isThemeDropdownOpen} origin="top right" className="absolute right-0 top-full mt-1 min-w-full w-max bg-bg-elevated border border-border-subtle rounded-lg shadow-xl overflow-hidden z-20 p-1 select-none">
+                                                            {[
+                                                                { mode: 'system', label: 'System', icon: <Monitor size={14} /> },
+                                                                { mode: 'light', label: 'Light', icon: <Sun size={14} /> },
+                                                                { mode: 'dark', label: 'Dark', icon: <Moon size={14} /> }
+                                                            ].map((option) => (
+                                                                <button
+                                                                    key={option.mode}
+                                                                    onClick={() => {
+                                                                        handleSetTheme(option.mode as any);
+                                                                        setIsThemeDropdownOpen(false);
+                                                                    }}
+                                                                    className={`group w-full text-left px-2 py-1.5 rounded-md text-xs flex items-center gap-2 transition-colors ${themeMode === option.mode ? 'text-text-primary bg-[color:color-mix(in_srgb,var(--bg-item-active)_50%,transparent)]' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
+                                                                >
+                                                                    <span className={themeMode === option.mode ? 'text-text-primary' : 'text-text-secondary group-hover:text-text-primary'}>{option.icon}</span>
+                                                                    <span className="font-medium">{t(option.label)}</span>
+                                                                </button>
+                                                            ))}
+                                                        </SettingsMenu>
                                                     </div>
                                                 </div>
 
@@ -2555,39 +2568,37 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 {lang === 'ja' && t('Japanese')}
                                                                 {lang === 'es' && t('Spanish')}
                                                             </span>
-                                                            <ChevronDown size={12} className={`shrink-0 transition-transform ${isLangDropdownOpen ? 'rotate-180' : ''}`} />
+                                                            <ChevronDown size={12} className={`shrink-0 transition-transform duration-[250ms] ease-sculpted motion-reduce:transition-none ${isLangDropdownOpen ? 'rotate-180' : ''}`} />
                                                         </button>
 
-                                                        {isLangDropdownOpen && (
-                                                            <div className="absolute right-0 top-full mt-1 min-w-full w-max bg-bg-elevated border border-border-subtle rounded-lg shadow-xl overflow-hidden z-20 p-1 animated fadeIn select-none">
-                                                                {[
-                                                                    { code: 'en' as const, label: t('English') },
-                                                                    { code: 'ru' as const, label: t('Russian') },
-                                                                    { code: 'zh' as const, label: t('Chinese') },
-                                                                    { code: 'ja' as const, label: t('Japanese') },
-                                                                    { code: 'es' as const, label: t('Spanish') },
-                                                                ].map((option) => (
-                                                                    <button
-                                                                        key={option.code}
-                                                                        onClick={() => {
-                                                                            setLang(option.code);
-                                                                            setIsLangDropdownOpen(false);
-                                                                        }}
-                                                                        className={`w-full text-left px-2 py-1.5 rounded-md text-xs flex items-center gap-2 transition-colors ${lang === option.code ? 'text-text-primary bg-bg-item-active/50' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
-                                                                    >
-                                                                        {lang === option.code && <Check size={12} className="text-text-primary" />}
-                                                                        <span className={lang === option.code ? 'text-text-primary' : 'text-text-secondary'}>{option.label}</span>
-                                                                    </button>
-                                                                ))}
-                                                            </div>
-                                                        )}
+                                                        <SettingsMenu open={isLangDropdownOpen} origin="top right" className="absolute right-0 top-full mt-1 min-w-full w-max bg-bg-elevated border border-border-subtle rounded-lg shadow-xl overflow-hidden z-20 p-1 select-none">
+                                                            {[
+                                                                { code: 'en' as const, label: t('English') },
+                                                                { code: 'ru' as const, label: t('Russian') },
+                                                                { code: 'zh' as const, label: t('Chinese') },
+                                                                { code: 'ja' as const, label: t('Japanese') },
+                                                                { code: 'es' as const, label: t('Spanish') },
+                                                            ].map((option) => (
+                                                                <button
+                                                                    key={option.code}
+                                                                    onClick={() => {
+                                                                        setLang(option.code);
+                                                                        setIsLangDropdownOpen(false);
+                                                                    }}
+                                                                    className={`w-full text-left px-2 py-1.5 rounded-md text-xs flex items-center gap-2 transition-colors ${lang === option.code ? 'text-text-primary bg-[color:color-mix(in_srgb,var(--bg-item-active)_50%,transparent)]' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
+                                                                >
+                                                                    {lang === option.code && <Check size={12} className="text-text-primary" />}
+                                                                    <span className={lang === option.code ? 'text-text-primary' : 'text-text-secondary'}>{option.label}</span>
+                                                                </button>
+                                                            ))}
+                                                        </SettingsMenu>
                                                     </div>
                                                 </div>
 
                                                 {/* Version */}
                                                 <div className="flex items-start justify-between gap-4 px-4 py-3">
                                                     <div className="flex items-start gap-4">
-                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle flex items-center justify-center text-text-tertiary shrink-0">
+                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
                                                             <BadgeCheck size={20} />
                                                         </div>
                                                         <div>
@@ -2657,11 +2668,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
                                             <div className="pt-1">
                                                 <button
+                                                    type="button"
                                                     onClick={() => setShowAdvancedSettings((s) => !s)}
+                                                    aria-expanded={showAdvancedSettings}
                                                     className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-text-tertiary hover:text-text-secondary transition-colors"
                                                 >
                                                     <DisclosureChevron open={showAdvancedSettings} />
-                                                    {t('Advanced')}
+                                                    {showAdvancedSettings ? t('Hide advanced settings') : t('Show advanced settings')}
                                                 </button>
                                                 <Disclosure open={showAdvancedSettings}>
                                                 <div className="mt-1">
@@ -2695,30 +2708,28 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                             ? 'Modern'
                                                                             : t('Default')}
                                                                 </span>
-                                                                <ChevronDown size={12} className={`shrink-0 transition-transform ${isInterfaceThemeDropdownOpen ? 'rotate-180' : ''}`} />
+                                                                <ChevronDown size={12} className={`shrink-0 transition-transform duration-[250ms] ease-sculpted motion-reduce:transition-none ${isInterfaceThemeDropdownOpen ? 'rotate-180' : ''}`} />
                                                             </button>
 
-                                                            {isInterfaceThemeDropdownOpen && (
-                                                                <div className="absolute right-0 top-full mt-1 w-full bg-bg-elevated border border-border-subtle rounded-lg shadow-xl overflow-hidden z-20 p-1 animated fadeIn select-none">
-                                                                    {([
-                                                                        { mode: 'default' as MeetingInterfaceTheme, label: 'Default' },
-                                                                        { mode: 'liquid-glass' as MeetingInterfaceTheme, label: 'Liquid Glass' },
-                                                                        { mode: 'modern' as MeetingInterfaceTheme, label: 'Modern' },
-                                                                    ] as const).map((option) => (
-                                                                        <button
-                                                                            key={option.mode}
-                                                                            onClick={() => {
-                                                                                setMeetingInterfaceTheme(option.mode);
-                                                                                setMeetingInterfaceThemeState(option.mode);
-                                                                                setIsInterfaceThemeDropdownOpen(false);
-                                                                            }}
-                                                                            className={`w-full text-left px-2.5 py-1.5 rounded-md text-xs flex items-center gap-2 transition-colors ${meetingInterfaceTheme === option.mode ? 'text-text-primary bg-bg-item-active/50' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
-                                                                        >
-                                                                            <span className="font-medium">{t(option.label)}</span>
-                                                                        </button>
-                                                                    ))}
-                                                                </div>
-                                                            )}
+                                                            <SettingsMenu open={isInterfaceThemeDropdownOpen} origin="top right" className="absolute right-0 top-full mt-1 w-full bg-bg-elevated border border-border-subtle rounded-lg shadow-xl overflow-hidden z-20 p-1 select-none">
+                                                                {([
+                                                                    { mode: 'default' as MeetingInterfaceTheme, label: 'Default' },
+                                                                    { mode: 'liquid-glass' as MeetingInterfaceTheme, label: 'Liquid Glass' },
+                                                                    { mode: 'modern' as MeetingInterfaceTheme, label: 'Modern' },
+                                                                ] as const).map((option) => (
+                                                                    <button
+                                                                        key={option.mode}
+                                                                        onClick={() => {
+                                                                            setMeetingInterfaceTheme(option.mode);
+                                                                            setMeetingInterfaceThemeState(option.mode);
+                                                                            setIsInterfaceThemeDropdownOpen(false);
+                                                                        }}
+                                                                        className={`w-full text-left px-2.5 py-1.5 rounded-md text-xs flex items-center gap-2 transition-colors ${meetingInterfaceTheme === option.mode ? 'text-text-primary bg-[color:color-mix(in_srgb,var(--bg-item-active)_50%,transparent)]' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
+                                                                    >
+                                                                        <span className="font-medium">{t(option.label)}</span>
+                                                                    </button>
+                                                                ))}
+                                                            </SettingsMenu>
                                                         </div>
                                                     </div>
 
@@ -2781,10 +2792,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         {showVerboseToast && (
                                                             <motion.div
                                                                 key="verbose-toast"
-                                                                initial={{ opacity: 0, y: -6, height: 0 }}
-                                                                animate={{ opacity: 1, y: 0, height: 'auto' }}
-                                                                exit={{ opacity: 0, y: -4, height: 0 }}
-                                                                transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
+                                                                initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -6, height: 0 }}
+                                                                animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, height: 'auto' }}
+                                                                exit={reduceMotion
+                                                                    ? { opacity: 0, transition: { duration: 0.15 } }
+                                                                    : { opacity: 0, y: -4, height: 0, transition: { duration: 0.15, ease: [0.22, 1, 0.36, 1] } }}
+                                                                transition={{ duration: reduceMotion ? 0.15 : 0.25, ease: [0.22, 1, 0.36, 1] }}
                                                                 className="mx-4 mb-1 overflow-hidden"
                                                             >
                                                                 <div className="px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
@@ -2842,7 +2855,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                     setExportingLogs(false);
                                                                 }
                                                             }}
-                                                            className="shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg bg-bg-item-surface border border-border-subtle text-text-primary hover:bg-bg-item-surface-hover transition-colors disabled:opacity-50"
+                                                            className="shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg bg-bg-item-surface border border-border-subtle text-text-primary hover:bg-[color:var(--bg-row-hover)] transition-colors disabled:opacity-50"
                                                         >
                                                             {exportingLogs ? t('Exporting\u2026') : t('Export')}
                                                         </button>
@@ -3058,11 +3071,31 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         </div>
                                         <button
                                             onClick={resetShortcuts}
-                                            className="flex items-center gap-2 px-4 py-1.5 rounded-full border border-border-subtle bg-bg-subtle/30 hover:bg-bg-subtle hover:border-green-500/30 transition-all duration-200 text-xs font-medium text-text-secondary hover:text-green-500 active:scale-95 mt-1"
+                                            className="flex items-center gap-2 px-4 py-1.5 rounded-full border border-border-subtle hover:bg-bg-item-surface hover:border-green-500/30 transition-[color,background-color,border-color,transform] duration-150 ease-out text-xs font-medium text-text-secondary hover:text-green-500 active:scale-95 mt-1"
                                         >
                                             <RotateCcw size={13} strokeWidth={2.5} />
                                             {t('Restore Default')}
                                         </button>
+                                    </div>
+
+                                    {/* Issue #517: one switch to stop Natively claiming keys OS-wide.
+                                        The card fill is what makes it a card in dark, where
+                                        --border-subtle is transparent. */}
+                                    <div className="flex items-center justify-between gap-4 px-4 py-3 rounded-xl border border-border-subtle bg-bg-card">
+                                        <div>
+                                            <h4 className="text-sm font-bold text-text-primary">{t('Global shortcuts')}</h4>
+                                            <p className="text-xs text-text-secondary mt-0.5">
+                                                {globalShortcutsEnabled
+                                                    ? t('Shortcuts work even when another app is focused.')
+                                                    : t('Shortcuts work only while Natively is focused. Toggle Visibility stays global so you can always bring Natively back.')}
+                                            </p>
+                                        </div>
+                                        <SettingsToggle
+                                            checked={globalShortcutsEnabled}
+                                            label={t('Global shortcuts')}
+                                            onChange={() => setGlobalShortcutsEnabled(!globalShortcutsEnabled)}
+                                            className={globalShortcutsEnabled ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
+                                        />
                                     </div>
 
                                     {/* Surfaces globalShortcut.register() failures in bulk — e.g. on
@@ -3330,7 +3363,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                         console.error('Failed to set Groq model:', e);
                                                                     }
                                                                 }}
-                                                                className={`rounded-lg px-3 py-2.5 text-left transition-all duration-200 ease-in-out active:scale-[0.98] ${groqSttModel === m.id
+                                                                className={`rounded-lg px-3 py-2.5 text-left transition-[background-color,color,box-shadow,transform] duration-150 ease-out active:scale-[0.97] motion-reduce:active:scale-100 ${groqSttModel === m.id
                                                                     ? 'bg-accent-primary text-on-accent shadow-md'
                                                                     : 'bg-bg-input hover:bg-bg-elevated text-text-primary'
                                                                     }`}
@@ -3508,12 +3541,14 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 };
                                                                 return (keyMap[sttProvider] || '').trim();
                                                             })()}
-                                                            className={`px-5 py-2.5 rounded-lg text-xs font-medium transition-colors ${sttSaved
-                                                                ? 'bg-green-500/20 text-green-400'
-                                                                : 'bg-bg-input hover:bg-bg-input/80 border border-border-subtle text-text-primary disabled:opacity-50'
+                                                            className={`px-5 py-2.5 rounded-lg text-xs font-medium transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100 ${sttSaved
+                                                                ? 'bg-green-500/20 text-green-400 border border-green-500/20'
+                                                                : 'bg-bg-input hover:bg-bg-elevated border border-border-subtle text-text-primary disabled:opacity-50'
                                                                 }`}
                                                         >
-                                                            {sttSaving ? t('Saving...') : sttSaved ? t('Saved!') : t('Save')}
+                                                            <LabelSwap id={sttSaving ? 'saving' : sttSaved ? 'saved' : 'save'}>
+                                                                {sttSaving ? t('Saving...') : sttSaved ? t('Saved!') : t('Save')}
+                                                            </LabelSwap>
                                                         </button>
                                                         {(() => {
                                                             const hasKeyMap: Record<string, boolean> = {
@@ -3558,7 +3593,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                         setTimeout(() => setSttSaved(false), 2000);
                                                                     }}
                                                                     disabled={!sttAzureRegion.trim()}
-                                                                    className="px-5 py-2.5 rounded-lg text-xs font-medium bg-bg-input hover:bg-bg-input/80 border border-border-subtle text-text-primary disabled:opacity-50 transition-colors"
+                                                                    className="px-5 py-2.5 rounded-lg text-xs font-medium bg-bg-input hover:bg-bg-elevated border border-border-subtle text-text-primary disabled:opacity-50 transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100"
                                                                 >
                                                                     {t('Save')}
                                                                 </button>
@@ -3587,7 +3622,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                         setSttSaved(true);
                                                                         setTimeout(() => setSttSaved(false), 2000);
                                                                     }}
-                                                                    className="px-5 py-2.5 rounded-lg text-xs font-medium bg-bg-input hover:bg-bg-input/80 border border-border-subtle text-text-primary transition-colors"
+                                                                    className="px-5 py-2.5 rounded-lg text-xs font-medium bg-bg-input hover:bg-bg-elevated border border-border-subtle text-text-primary transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100"
                                                                 >
                                                                     {t('Save')}
                                                                 </button>
@@ -3600,15 +3635,19 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         <button
                                                             onClick={handleTestSttConnection}
                                                             disabled={sttTestStatus === 'testing'}
-                                                            className="text-xs bg-bg-input hover:bg-bg-elevated text-text-primary px-3 py-1.5 rounded-md transition-colors flex items-center gap-2 disabled:opacity-50"
+                                                            className="text-xs bg-bg-input hover:bg-bg-elevated text-text-primary px-3 py-1.5 rounded-md transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100 flex items-center gap-2 disabled:opacity-50"
                                                         >
-                                                            {sttTestStatus === 'testing' ? (
-                                                                <><RefreshCw size={12} className="animate-spin" /> {t('Testing...')}</>
-                                                            ) : sttTestStatus === 'success' ? (
-                                                                <><Check size={12} className="text-green-500" /> {t('Connected')}</>
-                                                            ) : (
-                                                                <>{t('Test Connection')}</>
-                                                            )}
+                                                            <LabelSwap id={sttTestStatus === 'testing' ? 'testing' : sttTestStatus === 'success' ? 'success' : 'idle'}>
+                                                                <span className="inline-flex items-center gap-2">
+                                                                    {sttTestStatus === 'testing' ? (
+                                                                        <><RefreshCw size={12} className="animate-spin" /> {t('Testing...')}</>
+                                                                    ) : sttTestStatus === 'success' ? (
+                                                                        <><Check size={12} className="text-green-500" /> {t('Connected')}</>
+                                                                    ) : (
+                                                                        <>{t('Test Connection')}</>
+                                                                    )}
+                                                                </span>
+                                                            </LabelSwap>
                                                         </button>
                                                         {STT_KEY_URLS[sttProvider] && (
                                                             <button
@@ -3620,9 +3659,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 <ExternalLink size={12} />
                                                             </button>
                                                         )}
-                                                        {sttTestStatus === 'error' && (
+                                                        <LabelSwap id={sttTestStatus === 'error' ? `error:${sttTestError}` : null}>
                                                             <span className="text-xs text-red-400">{sttTestError}</span>
-                                                        )}
+                                                        </LabelSwap>
                                                     </div>
                                                 </div>
                                             )}
@@ -3910,8 +3949,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 </div>
                                                 <div className="h-1.5 bg-bg-input rounded-full overflow-hidden">
                                                     <div
-                                                        className="h-full bg-green-500 transition-all duration-100 ease-out"
-                                                        style={{ width: `${micLevel}%` }}
+                                                        className="h-full w-full origin-left bg-green-500 transition-transform duration-100 ease-out motion-reduce:transition-none"
+                                                        style={{ transform: `scaleX(${Math.min(1, Math.max(0, micLevel / 100))})` }}
                                                     />
                                                 </div>
                                             </div>
@@ -3930,8 +3969,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 </div>
                                                 <div className="h-1.5 bg-bg-input rounded-full overflow-hidden">
                                                     <div
-                                                        className="h-full bg-green-500 transition-all duration-100 ease-out"
-                                                        style={{ width: `${systemAudioLevel}%` }}
+                                                        className="h-full w-full origin-left bg-green-500 transition-transform duration-100 ease-out motion-reduce:transition-none"
+                                                        style={{ transform: `scaleX(${Math.min(1, Math.max(0, systemAudioLevel / 100))})` }}
                                                     />
                                                 </div>
                                                 {systemAudioError && (
@@ -4342,10 +4381,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                             </motion.div>
                         </div>
                     </div>
-                    </motion.div>
-                </motion.div>
-            )
-            }
+            </GenieModal>
 
 
             {/* ------------------------------------------------------------------ */}
@@ -4362,7 +4398,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             >
                 <MockupNativelyInterface opacity={previewOverlayOpacity} theme={meetingInterfaceTheme} />
             </div>
-        </AnimatePresence >
+        </>
     );
 };
 

@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { app } from 'electron';
+import { BUNDLED_LOCAL_EMBEDDING, bundledLocalEmbeddingFiles } from '../rag/bundledLocalEmbedding';
 
 export type RequiredLocalAssetKind = 'model_file' | 'package_dir' | 'worker_file' | 'native_binary';
 
@@ -19,11 +20,16 @@ export interface LocalAssetResolution {
   message: string;
 }
 
+// The preflight checks the model LocalEmbeddingProvider actually loads. Derived
+// from bundledLocalEmbedding.ts so a model swap cannot leave this list pointing
+// at files nothing opens — which would report "assets ready" for an embedder
+// that then fails to load. (Before 2026-09-22 this named MiniLM literally.)
+const [EMBED_CONFIG, EMBED_TOKENIZER, EMBED_TOKENIZER_CONFIG, EMBED_ONNX] = bundledLocalEmbeddingFiles();
 export const REQUIRED_MODEL_FILES: RequiredLocalAsset[] = [
-  { id: 'minilm-config', kind: 'model_file', relativePath: 'Xenova/all-MiniLM-L6-v2/config.json', description: 'MiniLM embedding config' },
-  { id: 'minilm-tokenizer', kind: 'model_file', relativePath: 'Xenova/all-MiniLM-L6-v2/tokenizer.json', description: 'MiniLM embedding tokenizer' },
-  { id: 'minilm-tokenizer-config', kind: 'model_file', relativePath: 'Xenova/all-MiniLM-L6-v2/tokenizer_config.json', description: 'MiniLM embedding tokenizer config' },
-  { id: 'minilm-onnx', kind: 'model_file', relativePath: 'Xenova/all-MiniLM-L6-v2/onnx/model_quantized.onnx', description: 'MiniLM quantized ONNX model' },
+  { id: 'local-embedding-config', kind: 'model_file', relativePath: EMBED_CONFIG, description: `${BUNDLED_LOCAL_EMBEDDING.label} embedding config` },
+  { id: 'local-embedding-tokenizer', kind: 'model_file', relativePath: EMBED_TOKENIZER, description: `${BUNDLED_LOCAL_EMBEDDING.label} embedding tokenizer` },
+  { id: 'local-embedding-tokenizer-config', kind: 'model_file', relativePath: EMBED_TOKENIZER_CONFIG, description: `${BUNDLED_LOCAL_EMBEDDING.label} embedding tokenizer config` },
+  { id: 'local-embedding-onnx', kind: 'model_file', relativePath: EMBED_ONNX, description: `${BUNDLED_LOCAL_EMBEDDING.label} quantized ONNX model` },
 ];
 
 /**

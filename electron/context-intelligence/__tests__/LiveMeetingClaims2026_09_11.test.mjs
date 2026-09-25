@@ -54,8 +54,12 @@ describe('a live meeting claims the transcript as an alternative (General mode)'
   });
 
   test('a coding task stays coding — a live meeting must not turn tasks into transcript lookups', () => {
+    // Since 2026-09-24 the meeting is READ as context for a general turn in a
+    // live meeting (LiveMeetingGeneralTurnContext); the task is still never
+    // CLAIMED as a transcript lookup, so it cannot be graded against speech.
     const d = decision('reverse a linked list in python', true);
-    assert.ok(!d.retrievalPlan.sourceTypes.includes('MEETING_TRANSCRIPT'), JSON.stringify(d.retrievalPlan.sourceTypes));
+    assert.ok(!d.claimRequirements.some((c) => c.claimType === 'MEETING_STATEMENT'), JSON.stringify(d.claimRequirements));
+    assert.equal(d.retrievalPlan.path, 'FAST');
     assert.ok(d.questionTypes.includes('CODING_TASK') || d.questionTypes.includes('GENERAL_TECHNICAL'), JSON.stringify(d.questionTypes));
   });
 });

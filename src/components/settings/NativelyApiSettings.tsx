@@ -18,8 +18,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useT } from '../../i18n';
 import { motion, AnimatePresence, LayoutGroup, useReducedMotion } from 'framer-motion';
 import { AccordionSection, Disclosure } from '../ui/AccordionSection';
-import { InteractiveCard } from '../ui/InteractiveCard';
 import { FreeTrialModal } from '../trial/FreeTrialModal';
+import { useTrialRemaining } from '../trial/useTrialRemaining';
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../../lib/meetingInterfaceTheme';
 import { BEAT, EASE_ENTER, EASE_LEAVE, INK, SETTLE } from '../../lib/plansMotion';
 // Painted as a CSS mask, not rendered as an <img>: the asset is a white
@@ -108,17 +108,6 @@ function setUsageCache(next: UsageData | null): void {
     // session, only the cross-restart benefit is lost.
   }
 }
-
-// Cursor-tracked spotlight colour per tier, so the API card blooms in its OWN
-// hue on hover exactly as the Pro purchase cards do. Values are the tier fills'
-// hues at low alpha; a neutral grey glow here would still have read as a
-// different control from the Pro cards.
-const TIER_GLOW = {
-  Standard: 'rgba(60, 107, 105, 0.34)',
-  Pro: 'rgba(17, 89, 153, 0.34)',
-  Max: 'rgba(102, 60, 104, 0.34)',
-  Ultra: 'rgba(111, 37, 66, 0.34)',
-} as const;
 
 // The plan chooser.
 //
@@ -226,23 +215,83 @@ function pickFeatureIcon(feature: string) {
 // single body, so nothing consumed them any more. Only the container-level
 // opacity crossfade between tiers survives.
 
+// Odometer price: each digit is a reel of 0-9 that rolls to its value. The
+// card body is keyed by plan, so this mounts fresh on every switch; it starts
+// on the previous plan's figure and rolls to the new one on the next frame.
+// The tens reel collapses to zero width for single-digit prices ($8).
+// Two reels cover whole dollars under $100 only; any other label (cents, $100+)
+// is shown as plain text rather than a reel parked between digits.
+const PRICE_DIGITS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+const PRICE_ROLL_EASE = 'cubic-bezier(0.23, 1, 0.32, 1)';
+const reelDollars = (label: string): number | null => {
+  const m = /^\$(\d{1,2})$/.exec(label);
+  return m ? Number(m[1]) : null;
+};
+
+function RollingPrice({ price, from }: { price: string; from: string }) {
+  const reduceMotion = useReducedMotion();
+  const value = reelDollars(price);
+  const [shown, setShown] = useState(reduceMotion ? value : reelDollars(from) ?? value);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setShown(value));
+    return () => cancelAnimationFrame(id);
+  }, [value]);
+
+  if (value === null || shown === null) return <>{price}</>;
+  const tens = Math.floor(shown / 10);
+  const reel = (digit: number, delayMs: number) => (
+    <span style={{ display: 'inline-block', height: '1em', overflow: 'hidden' }}>
+      <span
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          transform: `translateY(${-digit}em)`,
+          transition: reduceMotion ? 'none' : `transform 620ms ${PRICE_ROLL_EASE} ${delayMs}ms`,
+        }}
+      >
+        {PRICE_DIGITS.map((d) => (
+          <span key={d} style={{ height: '1em' }}>{d}</span>
+        ))}
+      </span>
+    </span>
+  );
+
+  return (
+    <span role="img" aria-label={`$${value}`} style={{ display: 'inline-flex' }}>
+      <span aria-hidden="true">$</span>
+      <span
+        aria-hidden="true"
+        style={{
+          display: 'inline-block',
+          overflow: 'hidden',
+          width: tens ? '1ch' : 0,
+          opacity: tens ? 1 : 0,
+          transition: reduceMotion ? 'none' : `width 450ms ${PRICE_ROLL_EASE}, opacity 300ms`,
+        }}
+      >
+        {reel(tens, 0)}
+      </span>
+      <span aria-hidden="true">{reel(shown % 10, 40)}</span>
+    </span>
+  );
+}
+
+// Both tiers' text share one absolutely-positioned cell, so for as long as the
+// two fades overlap the card shows two sets of text. The outgoing tier leaves
+// on the quick clock (150ms) and the incoming one arrives on the tab pill's
+// (250ms smooth-out), the same clock the card's fill now cross-fades on. The
+// stagger that used to sit here had no child variants to act on.
 const cardContainerVariants = {
   enter: (_direction: number) => ({
     opacity: 0,
   }),
   center: {
     opacity: 1,
-    transition: {
-      staggerChildren: 0.07,
-      delayChildren: 0.02,
-    }
+    transition: { duration: 0.25, ease: [0.22, 1, 0.36, 1] as const },
   },
   exit: (_direction: number) => ({
     opacity: 0,
-    transition: {
-      staggerChildren: 0.03,
-      staggerDirection: -1 as const,
-    }
+    transition: { duration: 0.15, ease: 'easeInOut' as const },
   })
 };
 
@@ -330,7 +379,7 @@ function ResourceMeter({
           is a modifier rather than a Tailwind fill, because the hue drives the
           specular's bloom as well as the body and the three have to move
           together. */}
-      <div className={`${sub ? 'h-[2px]' : 'h-[3px]'} natively-meter-track`}>
+      <div className={`${sub ? 'h-[4px]' : 'h-[6px]'} natively-meter-track`}>
         <div
           className={`natively-meter-fill transition-[width] duration-700 ease-out motion-reduce:transition-none ${
             isOver ? 'natively-meter-fill--over' : isHigh ? 'natively-meter-fill--high' : ''
@@ -400,7 +449,7 @@ function KnowledgeUsage({ knowledge, percentOnly = false }: { knowledge: Nativel
           {Math.round(pct)}%
         </span>
       </div>
-      <div className="h-[3px] natively-meter-track">
+      <div className="h-[6px] natively-meter-track">
         <div
           className={`natively-meter-fill transition-[width] duration-700 ease-out motion-reduce:transition-none ${
             worstHalf > 100 ? 'natively-meter-fill--over' : isHigh ? 'natively-meter-fill--high' : ''
@@ -468,33 +517,6 @@ function PlanAllowances({ limits }: { limits: NativelyPlanLimits | undefined }) 
       </dl>
     </div>
   );
-}
-
-// ─── Trial countdown ─────────────────────────────────────────
-// A hook, not a component. This was an 11px clock chip in the section label's
-// `aside` — the right size for a status pill sitting beside three usage
-// meters. With the meters gone (see the active-trial card) the time IS the
-// card's statement, so the caller needs the value, not a rendering of it.
-function useTrialRemaining(expiresAt: string) {
-  const [remaining, setRemaining] = useState(() =>
-    Math.max(0, new Date(expiresAt).getTime() - Date.now()),
-  );
-  useEffect(() => {
-    const id = setInterval(() => {
-      setRemaining(Math.max(0, new Date(expiresAt).getTime() - Date.now()));
-    }, 1000);
-    return () => clearInterval(id);
-  }, [expiresAt]);
-  const totalSec = Math.ceil(remaining / 1000);
-  const m = Math.floor(totalSec / 60);
-  const s = totalSec % 60;
-  return {
-    /** `19:04`. Seconds are zero-padded so the string never changes width. */
-    clock: `${m}:${s.toString().padStart(2, '0')}`,
-    ended: remaining === 0,
-    /** The last two minutes, where the number stops being background. */
-    isWarning: remaining < 2 * 60 * 1000,
-  };
 }
 
 // ─── Active trial card ───────────────────────────────────────
@@ -916,6 +938,23 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
     };
   }, [refreshTrial]);
 
+  // Main ends the trial in two places this panel does not drive: storing a real
+  // Natively key (the purchase path, which can also be a key saved from the box
+  // above) and the BYOK exit. Without this the panel kept its own trialState and
+  // went on rendering "Free trial active" — with a live countdown — beside the
+  // key that had just superseded it.
+  useEffect(() => {
+    const off = window.electronAPI?.onTrialEnded?.(() => {
+      setTrialState(null);
+      setShowTrialModal(false);
+      if (trialPollRef.current) {
+        clearInterval(trialPollRef.current);
+        trialPollRef.current = null;
+      }
+    });
+    return () => off?.();
+  }, []);
+
   const handleStartTrial = async () => {
     setTrialLoading(true);
     setTrialError(null);
@@ -991,8 +1030,13 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
     await window.electronAPI?.endTrialByok?.();
   };
 
-  const handleTrialDone = () => {
-    setTrialState(null);
+  // Closing the options card is NOT the same as ending the trial. This cleared
+  // trialState unconditionally, so opening "See your options" on a live trial
+  // and closing it again wiped the active-trial card and its countdown — the
+  // trial read as ended on the spot, with minutes still on the clock. Only the
+  // deliberate BYOK exit ends anything; the modal reports which happened.
+  const handleTrialDone = (reason: 'byok' | 'dismissed' = 'byok') => {
+    if (reason === 'byok') setTrialState(null);
     setShowTrialModal(false);
   };
 
@@ -1173,7 +1217,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
         {/* Active sliding pill */}
         <div
           aria-hidden="true"
-          className="natively-api-selector-pill-track absolute top-0 bottom-0 left-0 w-1/4 p-1 transition-transform duration-220 ease-[cubic-bezier(0.23,1,0.32,1)] will-change-transform"
+          className="natively-api-selector-pill-track absolute top-0 bottom-0 left-0 w-1/4 p-1 transition-transform duration-[220ms] ease-[cubic-bezier(0.23,1,0.32,1)] will-change-transform"
           style={{
             transform: `translate3d(${
               selectedPlanId === 'natively_api_standard_monthly' ? '0%' :
@@ -1245,6 +1289,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
         const plan = PLANS.find((p) => p.id === selectedPlanId)!;
         const limits = planCatalog?.[plan.planKey];
         const price = plan.price;
+        const prevPrice = PLANS.find((p) => p.id === prevPlanId)?.price ?? price;
         // A verified-live Dodo link (all four checked 2026-09-08). These were
         // the fallback behind getNativelyPricing; with that call removed they
         // are simply the source, and changing a checkout link is now an app
@@ -1263,9 +1308,10 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
             id="natively-api-tabpanel"
             aria-labelledby={`natively-api-tab-${plan.id}`}
           >
-            <InteractiveCard
-              className={`natively-api-detail-card group h-full w-full relative overflow-hidden natively-api-detail-card-${plan.name.toLowerCase()}`}
-              glowColor={TIER_GLOW[plan.name as keyof typeof TIER_GLOW]}
+            {/* A plain surface, deliberately: no cursor spotlight, press scale or
+                hover bloom. The blueprint grid (::before) is always shown. */}
+            <div
+              className={`natively-api-detail-card h-full w-full relative overflow-hidden natively-api-detail-card-${plan.name.toLowerCase()}`}
               data-active={isActive ? "true" : "false"}
               // No inline `transition` here on purpose. index.css already
               // declares `transition: transform/box-shadow/border-color 180ms`
@@ -1274,11 +1320,11 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
               // inline transition string on this element is dead weight. It
               // silently was for a long time: a 280ms value sat here doing
               // nothing while the 180ms from CSS is what actually ran.
-              // Note `background` is NOT in that list, so the tier-fill swap is
-              // instantaneous; the crossfade you see comes from the
-              // AnimatePresence child below, which is a different element.
+              // `background-color` is in that list (250ms smooth-out), so the
+              // tier fill cross-fades on the tab pill's clock; the text
+              // crossfade is the AnimatePresence child below, a different element.
             >
-              <AnimatePresence custom={direction}>
+              <AnimatePresence custom={direction} initial={false}>
                 <motion.div
                   key={selectedPlanId}
                   custom={direction}
@@ -1320,7 +1366,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
                           className="natively-api-on-fill text-[38px] font-bold leading-none"
                           style={{ fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.04em' }}
                         >
-                          {price}
+                          <RollingPrice price={price} from={prevPrice} />
                         </span>
                         <span className="natively-api-on-fill-dim text-[12px] font-medium">/ month</span>
                       </div>
@@ -1377,7 +1423,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
                   </div>
                 </motion.div>
               </AnimatePresence>
-            </InteractiveCard>
+            </div>
           </div>
         );
       })()}
@@ -1400,7 +1446,17 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
 
       {/* ── Free Trial Modal (post-trial) ─────────────── */}
       {showTrialModal && trialState && (
-        <FreeTrialModal usage={trialState.usage} onByok={handleByok} onDone={handleTrialDone} />
+        <FreeTrialModal
+          usage={trialState.usage}
+          onByok={handleByok}
+          onDone={handleTrialDone}
+          // Set only while the trial is actually running. That turns the card
+          // from the post-trial eulogy into the options card the "See your
+          // options" button promises — and gives it a way to close that is not
+          // "end my trial". On the expired path it stays undefined, so that
+          // card is byte-for-byte what it was.
+          activeTrialExpiresAt={trialState.active ? trialState.expiresAt : undefined}
+        />
       )}
 
       {/* ── Active trial status card ──────────────────── */}
@@ -1712,10 +1768,10 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
             // is what made this choppy in the first place.
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0, scale: 0.985 }}
+            exit={prefersReducedMotion ? { opacity: 0, transition: { duration: INK.out } } : { opacity: 0, scale: 0.985 }}
             transition={
               prefersReducedMotion
-                ? { duration: INK.in, delay: BEAT }
+                ? { layout: { duration: 0 }, default: { duration: INK.in, delay: BEAT } }
                 : {
                   // `layout` defaults to a SPRING — name it or the house curves
                   // are silently discarded.
@@ -1791,10 +1847,10 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
           // is what made this choppy in the first place.
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          exit={{ opacity: 0, scale: 0.985 }}
+          exit={prefersReducedMotion ? { opacity: 0, transition: { duration: INK.out } } : { opacity: 0, scale: 0.985 }}
           transition={
             prefersReducedMotion
-              ? { duration: INK.in, delay: usageDelay(BEAT) }
+              ? { layout: { duration: 0 }, default: { duration: INK.in, delay: usageDelay(BEAT) } }
               : {
                 // `layout` defaults to a SPRING — name it or the house curves
                 // are silently discarded.
@@ -1873,10 +1929,10 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
             // is what made this choppy in the first place.
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0, scale: 0.985 }}
+            exit={prefersReducedMotion ? { opacity: 0, transition: { duration: INK.out } } : { opacity: 0, scale: 0.985 }}
             transition={
               prefersReducedMotion
-                ? { duration: INK.in, delay: BEAT }
+                ? { layout: { duration: 0 }, default: { duration: INK.in, delay: BEAT } }
                 : {
                   // `layout` defaults to a SPRING — name it or the house curves
                   // are silently discarded.

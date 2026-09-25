@@ -79,8 +79,7 @@ describe('API detail card — four-slot box-shadow contract', () => {
     test('the rules this contract governs actually exist', () => {
         // Guards against the selectors being renamed out from under the test,
         // which would otherwise make every assertion below vacuously pass.
-        assert.ok(RULES.length >= 16, `expected >=16 shadow rules, found ${RULES.length}`);
-        assert.ok(RULES.some((r) => r.selector.includes(':hover')), 'no hover rule found');
+        assert.ok(RULES.length >= 8, `expected >=8 shadow rules, found ${RULES.length}`);
         assert.ok(RULES.some((r) => r.selector.includes('data-active')), 'no active rule found');
     });
 
@@ -100,53 +99,32 @@ describe('API detail card — four-slot box-shadow contract', () => {
         }
     });
 
-    test('no :hover rule changes border-color', () => {
-        for (const { selector } of RULES) {
-            if (!selector.includes(':hover')) continue;
-            const body = LIVE.slice(LIVE.indexOf(selector));
-            const block = body.slice(0, body.indexOf('}'));
-            // Anchored to a DECLARATION, not the bare substring: `transition:
-            // box-shadow 260ms ..., border-color 260ms ...` legitimately
-            // contains "border-color" while changing nothing about the outline.
-            assert.ok(
-                !/^\s*border-color\s*:/m.test(block),
-                `${selector} sets border-color; only [data-active] may change the outline`,
-            );
+    test('the card surface has no hover state', () => {
+        // Removed on purpose: no bloom, no rim change, no grid brightening.
+        // Anything that reintroduces one should be a deliberate decision.
+        const re = /([^{}]+)\{[^{}]*\}/g;
+        let m;
+        while ((m = re.exec(LIVE))) {
+            const selector = m[1].trim();
+            if (/\.natively-api-detail-card(-standard|-pro|-max|-ultra)?(\[[^\]]*\])*:hover/.test(selector)) {
+                assert.fail(`${selector} gives the API detail card a hover state`);
+            }
         }
     });
 
-    test('hover never changes the rim (slot 1) of the state it overrides', () => {
-        // Pairs each :hover rule with the resting rule for the same tier and
-        // theme, and asserts slot 1 is byte-identical.
-        const rimOf = (r) => splitShadows(r.shadow)[0].replace(/\s+/g, ' ').trim();
-        const key = (sel) => {
-            const tier = sel.match(/detail-card-(standard|pro|max|ultra)/)?.[1];
-            const light = sel.includes("data-theme='light'");
-            const active = sel.includes('data-active');
-            return tier ? `${tier}|${light}|${active}` : null;
-        };
-
-        const rest = new Map();
-        for (const r of RULES) {
-            if (r.selector.includes(':hover')) continue;
-            const k = key(r.selector);
-            // Theme-scoped duplicates exist (liquid-glass vs modern); the last
-            // one in source order is what paints, so let it overwrite.
-            if (k) rest.set(k, rimOf(r));
+    test('the blueprint grid is visible at rest in both themes', () => {
+        // The light veil suppressor sets ::before to opacity 0 at (0,3,1); the
+        // grid's light rule must restate opacity or the grid disappears there.
+        for (const sel of [
+            '[data-interface-theme] .natively-api-detail-card::before {',
+            "[data-theme='light'] [data-interface-theme] .natively-api-detail-card::before {",
+        ]) {
+            const i = LIVE.lastIndexOf(sel);
+            assert.notEqual(i, -1, `${sel} not found`);
+            const block = LIVE.slice(i, LIVE.indexOf('}', i));
+            const op = Number(block.match(/opacity:\s*([0-9.]+)/)?.[1] ?? NaN);
+            assert.ok(op > 0, `${sel} leaves the grid at opacity ${op}`);
         }
-
-        let checked = 0;
-        for (const r of RULES) {
-            if (!r.selector.includes(':hover')) continue;
-            const k = key(r.selector);
-            if (!k || !rest.has(k)) continue;
-            assert.equal(
-                rimOf(r), rest.get(k),
-                `${r.selector} changes the rim on hover — that is the border highlight`,
-            );
-            checked++;
-        }
-        assert.ok(checked >= 8, `expected >=8 hover/rest pairs, compared ${checked}`);
     });
 
     test('no spread-only ring changes between a rest rule and its :hover', () => {
@@ -198,20 +176,4 @@ describe('API detail card — four-slot box-shadow contract', () => {
         assert.ok(compared >= 2, `expected >=2 rest/hover ring pairs, compared ${compared}`);
     });
 
-    test('transform is not CSS-transitioned on the card Framer drives', () => {
-        // InteractiveCard writes transform: scale(...) inline from a spring on
-        // every frame; a CSS transition on the same property re-smooths each
-        // write and makes the press lag.
-        for (const theme of ['liquid-glass', 'modern']) {
-            const sel = `[data-interface-theme="${theme}"] .natively-api-detail-card {`;
-            const i = LIVE.indexOf(sel);
-            assert.notEqual(i, -1, `${sel} not found`);
-            const block = LIVE.slice(i, LIVE.indexOf('}', i));
-            const transition = block.match(/transition:([^;]*);/)?.[1] ?? '';
-            assert.ok(
-                !/\btransform\b/.test(transition),
-                `${theme} still transitions transform: ${transition.trim()}`,
-            );
-        }
-    });
 });

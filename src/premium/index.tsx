@@ -27,16 +27,8 @@ const nullAdCampaigns = (
 });
 
 // ─── Glob-import premium modules (empty {} when premium/ is absent) ──
-const _premiumModal = import.meta.glob<any>(
-  '../../premium/src/PremiumUpgradeModal.tsx',
-  { eager: true }
-);
 const _profileVis = import.meta.glob<any>(
   '../../premium/src/ProfileVisualizer.tsx',
-  { eager: true }
-);
-const _promoToaster = import.meta.glob<any>(
-  '../../premium/src/PremiumPromoToaster.tsx',
   { eager: true }
 );
 const _profileToaster = import.meta.glob<any>(
@@ -83,14 +75,8 @@ function get<T>(mods: Record<string, any>, name: string, fallback: T): T {
 }
 
 // ─── Exports (always safe to import) ─────────────────────────────────
-export const PremiumUpgradeModal: React.FC<any> =
-  get(_premiumModal, 'PremiumUpgradeModal', NullComponent);
-
 export const ProfileVisualizer: React.FC<any> =
   get(_profileVis, 'ProfileVisualizer', NullComponent);
-
-export const PremiumPromoToaster: React.FC<any> =
-  get(_promoToaster, 'PremiumPromoToaster', NullComponent);
 
 export const ProfileFeatureToaster: React.FC<any> =
   get(_profileToaster, 'ProfileFeatureToaster', NullComponent);

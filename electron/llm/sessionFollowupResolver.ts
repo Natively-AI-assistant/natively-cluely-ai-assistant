@@ -23,6 +23,23 @@ import type { ResolvedFollowUp } from './FollowUpResolver';
 import { SessionMemory, type MemoryMode, type MemoryItemKind } from './SessionMemory';
 import type { AnswerType } from './AnswerPlanner';
 
+/** The bare-pronoun fallback, kept as one object so the substitution loop can
+ *  tell it from the specific demonstrative rules. */
+const BARE_PRONOUN_RE = /\b(it|that|there)(?!['’])\b/i;
+
+/**
+ * Does the question name the pronoun's antecedent itself, in a clause BEFORE
+ * the pronoun's own? (2026-09-24, live mock interview.) "How big is your team,
+ * and what is your role on it?" — "it" is the team; substituting the recalled
+ * project gave "…your role on MySQL?". A one-clause follow-up ("What was your
+ * role in it?") has no such clause, so it still resolves.
+ */
+function antecedentInEarlierClause(question: string, pronounAt: number): boolean {
+  const clauses = question.slice(0, pronounAt).split(/,|;|\band\b|\bbut\b/i);
+  clauses.pop(); // the pronoun's own clause
+  return clauses.some((c) => /\b(?:your|the|this|our|my|their)\s+[a-z]{3,}/i.test(c));
+}
+
 // Demonstrative references that point at a remembered entity of a given kind.
 const PROJECT_REF_RE = /\b(that|this|the|your earlier|your first|the previous)\s+(project|app|product|thing you built|system|one|example|internship|company|role)\b|\bthe one you mentioned\b|\bthe (first|second|last) one\b|\byour earlier (example|project|one)\b|\b(it|that|there)\b/i;
 const COMPANY_REF_RE = /\b(that|this|the)\s+(company|customer|client|account|prospect)\b|\bthey\b|\bthem\b/i;
@@ -173,29 +190,40 @@ export function resolveSessionFollowup(input: SessionFollowupInput): SessionFoll
         // "that's" out of it — the apostrophe is a word boundary, so a bare
         // \bthat\b happily rewrote "because that's honestly" into
         // "because <Entity>'s honestly" (live session B).
-        [/\b(it|that|there)(?!['’])\b/i, recalledEntity],
+        [BARE_PRONOUN_RE, recalledEntity],
       ];
       let resolvedQuestion = input.latestQuestion;
+      let namesOwnAntecedent = false;
       for (const [re, rep] of SUBSTITUTIONS) {
-        if (re.test(resolvedQuestion)) { resolvedQuestion = resolvedQuestion.replace(re, rep); break; }
+        const m = re.exec(resolvedQuestion);
+        if (!m) continue;
+        if (re === BARE_PRONOUN_RE && antecedentInEarlierClause(resolvedQuestion, m.index)) { namesOwnAntecedent = true; break; }
+        resolvedQuestion = resolvedQuestion.replace(re, rep);
+        break;
       }
-      // Tidy: collapse an accidental "X X" (entity already present) and fix "the <Entity>"
-      // → "<Entity>" for proper nouns, then normalize trailing punctuation.
-      resolvedQuestion = resolvedQuestion
-        .replace(new RegExp(`\\b${recalledEntity}\\s+${recalledEntity}\\b`, 'gi'), recalledEntity)
-        .replace(/\?*\s*$/, '?')
-        .replace(/\s{2,}/g, ' ')
-        .trim();
-      return {
-        resolvedQuestion,
-        resolvedAnswerType: at,
-        resolvedEntity: recalledEntity,
-        confidence: 0.85,
-        reason: 'session_memory_entity',
-        recalledEntity,
-        recalledAgeSeconds,
-        resolvedVia: 'session_memory',
-      };
+      if (namesOwnAntecedent) {
+        // Not a long-range follow-up: the question carries its own subject.
+        recalledEntity = undefined;
+        recalledAgeSeconds = undefined;
+      } else {
+        // Tidy: collapse an accidental "X X" (entity already present) and fix "the <Entity>"
+        // → "<Entity>" for proper nouns, then normalize trailing punctuation.
+        resolvedQuestion = resolvedQuestion
+          .replace(new RegExp(`\\b${recalledEntity}\\s+${recalledEntity}\\b`, 'gi'), recalledEntity)
+          .replace(/\?*\s*$/, '?')
+          .replace(/\s{2,}/g, ' ')
+          .trim();
+        return {
+          resolvedQuestion,
+          resolvedAnswerType: at,
+          resolvedEntity: recalledEntity,
+          confidence: 0.85,
+          reason: 'session_memory_entity',
+          recalledEntity,
+          recalledAgeSeconds,
+          resolvedVia: 'session_memory',
+        };
+      }
     }
   }
 

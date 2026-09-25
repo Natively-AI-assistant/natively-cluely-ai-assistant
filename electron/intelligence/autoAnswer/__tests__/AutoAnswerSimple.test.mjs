@@ -25,7 +25,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const Simple = require(path.resolve(__dirname, '../../../../dist-electron/electron/intelligence/autoAnswer/SimpleAutoAnswer.js'));
 const { isMidWordCut } = require(path.resolve(__dirname, '../../../../dist-electron/electron/intelligence/autoAnswer/AutoAnswerText.js'));
-const { SimpleAutoAnswerEngine, STABILITY_MS, ENDPOINT_CONFIRM_MS, RETRY_MS, RETRY_TTL_MS, HELD_MAX_AGE_MS, EARLY_JUDGE_MS } = Simple;
+const { SimpleAutoAnswerEngine, STABILITY_MS, ENDPOINT_CONFIRM_MS, PROVIDER_CATCHUP_TOLERANCE_MS, RETRY_MS, RETRY_TTL_MS, HELD_MAX_AGE_MS, EARLY_JUDGE_MS } = Simple;
 
 const flush = () => new Promise((r) => setImmediate(r));
 const YES = (over = {}) => JSON.stringify({ is_ask: true, directed_at_user: true, complete: true, act: 'question', answerability: 0.95, question_text: null, ...over });
@@ -253,6 +253,25 @@ test('the local VAD stop is ignored while an interim is still dangling (its fina
   assert.match(h.texts()[0], /alternatives here\?$/);
 });
 
+test('the local VAD stop waits for in-flight finals when provider is lagging, then trailing final arms endpoint confirm', async () => {
+  const h = makeSimple(async () => YES());
+  // Intermediate final arrives while interviewer is speaking
+  h.interviewer('Why did you choose PostgreSQL over the', true);
+  // Time passes while speech continues physically, exceeding provider catchup tolerance
+  await h.advance(PROVIDER_CATCHUP_TOLERANCE_MS + 50);
+  // Local VAD detects silence and fires speech end
+  h.engine.onLocalSpeechEnd();
+  // At ENDPOINT_CONFIRM_MS + 50, it must NOT have committed yet because provider was lagging
+  await h.advance(ENDPOINT_CONFIRM_MS + 50);
+  assert.deepEqual(h.texts(), [], 'not committed prematurely while trailing final is still in flight');
+  // Trailing final arrives from provider
+  h.interviewer('alternatives here?', true);
+  // Now trailing final arms ENDPOINT_CONFIRM_MS
+  await h.advance(ENDPOINT_CONFIRM_MS + 50);
+  assert.equal(h.texts().length, 1, 'committed full question once trailing final landed');
+  assert.match(h.texts()[0], /alternatives here\?$/);
+});
+
 test('the local VAD hint is taken only from providers that stream interims', () => {
   const { acceptsLocalSpeechEndHint } = Simple;
   for (const p of ['deepgram', 'soniox', 'nvidia_nim', 'apple-speech', 'natively', 'elevenlabs', 'google']) {
@@ -420,6 +439,35 @@ test('prefetch: rationed by time, so a chatty meeting cannot stack generations',
   assert.equal(prefetched.length, 2, 'once the window passes, prefetch is allowed again');
 });
 
+// ── Latency work (2026-09-22): a superseded judge call is aborted, not left to finish ──
+// 41 of 83 judge calls in the 2026-09-22 telemetry were 'stale': the interviewer
+// kept talking, the controller discarded the verdict — and the request ran to
+// completion anyway, spending money and rate-limit headroom on nothing. The
+// controller now hands the host an AbortSignal and aborts it on supersede.
+
+test('supersede aborts the in-flight judge call through the host signal', async () => {
+  const h = makeSimple(() => new Promise(() => {}));   // a judge that never answers on its own
+  h.interviewer('Why did you choose PostgreSQL over the alternatives here?');
+  await h.advance(EARLY_JUDGE_MS + 60);
+  assert.equal(h.state.judgeCalls.length, 1);
+  const signal = h.state.judgeSignals[0];
+  assert.ok(signal && typeof signal.aborted === 'boolean', 'the host receives an AbortSignal');
+  assert.equal(signal.aborted, false, 'live while the verdict is wanted');
+  h.interviewer('and also how', false);                 // interviewer resumes → supersede
+  assert.equal(signal.aborted, true, 'superseded → aborted, so the provider call stops costing');
+});
+
+test('a verdict that arrives after the meeting moved on is still recorded as stale (abort does not lose telemetry)', async () => {
+  const resolvers = [];
+  const h = makeSimple(() => new Promise((r) => resolvers.push(r)));
+  h.interviewer('Why did you choose PostgreSQL over the alternatives here?');
+  await h.advance(EARLY_JUDGE_MS + 60);
+  h.interviewer('and also how about the indexes on it?', true);   // a new final supersedes
+  resolvers[0](YES());
+  await flush(); await flush();
+  const judged = h.state.events.filter(e => e.name === 'auto_answer_judged');
+  assert.ok(judged.some(e => e.judgeOutcome === 'stale'), 'the superseded call reports stale');
+});
 // ── Latency work (2026-09-22): question-shaped candidates always prefetch ──
 // Live telemetry (9 auto answers, Deepgram + gpt-5.6-luna): the judge took
 // 1.2-2.5 s and the answer's first token another 0.7-2.7 s, SERIALLY, because
@@ -463,36 +511,6 @@ test('prefetch: a statement inside the window is still rationed — the shape by
   h.interviewer('The second thing to know is that the cache is invalidated on write, not on read.');
   await h.advance(STABILITY_MS + 200);
   assert.equal(prefetched.length, 1, 'a second statement 3 s later does not spend another generation');
-});
-
-// ── Latency work (2026-09-22): a superseded judge call is aborted, not left to finish ──
-// 41 of 83 judge calls in the 2026-09-22 telemetry were 'stale': the interviewer
-// kept talking, the controller discarded the verdict — and the request ran to
-// completion anyway, spending money and rate-limit headroom on nothing. The
-// controller now hands the host an AbortSignal and aborts it on supersede.
-
-test('supersede aborts the in-flight judge call through the host signal', async () => {
-  const h = makeSimple(() => new Promise(() => {}));   // a judge that never answers on its own
-  h.interviewer('Why did you choose PostgreSQL over the alternatives here?');
-  await h.advance(EARLY_JUDGE_MS + 60);
-  assert.equal(h.state.judgeCalls.length, 1);
-  const signal = h.state.judgeSignals[0];
-  assert.ok(signal && typeof signal.aborted === 'boolean', 'the host receives an AbortSignal');
-  assert.equal(signal.aborted, false, 'live while the verdict is wanted');
-  h.interviewer('and also how', false);                 // interviewer resumes → supersede
-  assert.equal(signal.aborted, true, 'superseded → aborted, so the provider call stops costing');
-});
-
-test('a verdict that arrives after the meeting moved on is still recorded as stale (abort does not lose telemetry)', async () => {
-  const resolvers = [];
-  const h = makeSimple(() => new Promise((r) => resolvers.push(r)));
-  h.interviewer('Why did you choose PostgreSQL over the alternatives here?');
-  await h.advance(EARLY_JUDGE_MS + 60);
-  h.interviewer('and also how about the indexes on it?', true);   // a new final supersedes
-  resolvers[0](YES());
-  await flush(); await flush();
-  const judged = h.state.events.filter(e => e.name === 'auto_answer_judged');
-  assert.ok(judged.some(e => e.judgeOutcome === 'stale'), 'the superseded call reports stale');
 });
 
 test('prefetch: a stale speculative snapshot for ANOTHER question is not reused', async () => {

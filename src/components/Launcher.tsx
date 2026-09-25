@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useT } from '../i18n';
-import { ToggleLeft, ToggleRight, Search, Calendar, ArrowRight, ArrowLeft, MoreHorizontal, Globe, Clock, ChevronRight, Settings, LayoutGrid, RefreshCw, Eye, EyeOff, Ghost, Plus, Mail, Link as LinkIcon, ChevronDown, Trash2, Bell, Download, DownloadCloud, CheckCircle, AlertCircle, User, UserSearch, Sparkles, ArrowUpRight } from 'lucide-react';
+import { ToggleLeft, ToggleRight, Search, Calendar, MoreHorizontal, Globe, Clock, ChevronRight, Settings, LayoutGrid, RefreshCw, Eye, EyeOff, Ghost, Plus, Mail, Link as LinkIcon, ChevronDown, Trash2, Bell, Download, DownloadCloud, CheckCircle, AlertCircle, User, UserSearch, Sparkles, ArrowUpRight } from 'lucide-react';
 import { generateMeetingPDF } from '../utils/pdfGenerator';
 import icon from "./icon.png";
 import mainui from "../UI_comp/mainui.png";
@@ -11,6 +11,7 @@ import TopSearchPill from './TopSearchPill';
 import GlobalChatOverlay from './GlobalChatOverlay';
 import { motion, AnimatePresence, useReducedMotion, type TargetAndTransition, type Variants } from 'framer-motion';
 import { FeatureSpotlight } from './FeatureSpotlight';
+import './LauncherCta.css';
 import { analytics } from '../lib/analytics/analytics.service'; // Added analytics import
 import { useShortcuts } from '../hooks/useShortcuts';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
@@ -88,6 +89,9 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
     const [isDetectable, setIsDetectable] = useState(false);
     const [isMeetingActive, setIsMeetingActive] = useState(false);
     const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
+    // The notes page's "ask about this meeting" chat is open. See the details
+    // panel's z-index below.
+    const [meetingChatOpen, setMeetingChatOpen] = useState(false);
     const [upcomingEvents, setUpcomingEvents] = useState<any[]>([]);
     const [isCalendarConnected, setIsCalendarConnected] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
@@ -308,10 +312,6 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
     const nextMeeting = visibleMeetings[0];
     const moreMeetingsCount = Math.max(0, upcomingMeetings.length - visibleMeetings.length);
 
-    if (!window.electronAPI) {
-        return <div className="text-white p-10">Error: Electron API not initialized. Check preload script.</div>;
-    }
-
     const toggleDetectable = () => {
         const newState = !isDetectable;
         setIsDetectable(newState);
@@ -340,7 +340,10 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
     });
 
 
-    const [forwardMeeting, setForwardMeeting] = useState<Meeting | null>(null);
+    // A transcript moment to open the selected meeting at (a "Search past
+    // meetings" hit). Cleared by any other navigation so a later open starts on
+    // the summary as usual.
+    const [selectedMomentMs, setSelectedMomentMs] = useState<number | null>(null);
     const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
     const [menuEntered, setMenuEntered] = useState(false);
 
@@ -370,7 +373,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
     }, [selectedMeeting, isGlobalChatOpen, onPageChange]);
 
     const handleOpenMeeting = async (meeting: Meeting) => {
-        setForwardMeeting(null); // Clear forward history on new navigation
+        setSelectedMomentMs(null);
         console.log("[Launcher] Opening meeting:", meeting.id);
         analytics.trackCommandExecuted('open_meeting_details');
 
@@ -396,15 +399,27 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
         setSelectedMeeting(meeting);
     };
 
-    const handleBack = () => {
-        setForwardMeeting(selectedMeeting);
+    // The global chat sits over the notes and closes on the same Esc press.
+    // Stable identity: MeetingDetails re-subscribes its Esc listener whenever
+    // onBack changes, which was every Launcher render.
+    const handleBack = useCallback(() => {
+        if (isGlobalChatOpen) return;
         setSelectedMeeting(null);
-    };
+        setSelectedMomentMs(null);
+    }, [isGlobalChatOpen]);
 
-    const handleForward = () => {
-        if (forwardMeeting) {
-            setSelectedMeeting(forwardMeeting);
-            setForwardMeeting(null);
+    // Open a search hit BY ID at the moment it was said. The hit may be older than
+    // the 50 meetings this list holds, so it is fetched directly rather than looked
+    // up in `meetings`. Returns false when it cannot be opened (caller falls back).
+    const openMeetingAtMoment = async (meetingId: string, momentMs?: number): Promise<boolean> => {
+        try {
+            const full = await window.electronAPI?.getMeetingDetails?.(meetingId);
+            if (!full) return false;
+            setSelectedMomentMs(typeof momentMs === 'number' ? momentMs : null);
+            setSelectedMeeting(full);
+            return true;
+        } catch {
+            return false;
         }
     };
 
@@ -440,7 +455,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
     // hole to the desktop, not a background colour.
     //
     // Because direction is decided by *which layer mounts*, not by which meeting
-    // is selected, handleOpenMeeting / handleForward / handleBack all produce the
+    // is selected, handleOpenMeeting / handleBack both produce the
     // correct motion with no direction state to keep in sync.
     //
     // The details layer is split in two, and that split is the whole reason this
@@ -556,43 +571,15 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
         ? { opacity: 1, transition: { duration: 0.16, ease: 'linear' } }
         : { transform: 'scale(1)', transition: SETTLE };
 
+    // After every hook: an early return above them would change the hook count between renders.
+    if (!window.electronAPI) {
+        return <div className="text-white p-10">Error: Electron API not initialized. Check preload script.</div>;
+    }
+
     return (
         <div className="h-full w-full flex flex-col bg-bg-primary text-text-primary font-sans overflow-hidden selection:bg-accent-secondary/30">
             {/* 1. Header (Static) */}
             <header className={`relative w-full h-[40px] shrink-0 flex items-center justify-between pl-0 drag-region select-none ${isLight ? 'bg-bg-primary' : 'bg-bg-secondary'} border-b border-border-subtle z-[200]`}>
-                {/* Left: Spacing for Traffic Lights + Navigation Arrows */}
-                <div className="flex items-center gap-1 no-drag">
-                    {isMac && <div className="w-[70px]" />} {/* Traffic Light Spacer (macOS only) */}
-
-                    {/* Back Button */}
-                    <button
-                        onClick={selectedMeeting ? handleBack : undefined}
-                        disabled={!selectedMeeting}
-                        className={`
-                            transition-all duration-300 p-1 flex items-center justify-center mt-1 ml-2
-                            ${selectedMeeting
-                                ? `text-text-secondary hover:text-text-primary ${isLight ? 'hover:drop-shadow-[0_0_6px_rgba(0,0,0,0.25)]' : 'hover:drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]'}`
-                                : 'text-text-tertiary opacity-50 cursor-default'}
-                        `}
-                    >
-                        <ArrowLeft size={16} />
-                    </button>
-
-                    {/* Forward Button */}
-                    <button
-                        onClick={handleForward}
-                        disabled={!forwardMeeting}
-                        className={`
-                            transition-all duration-300 p-1 flex items-center justify-center mt-1
-                            ${forwardMeeting
-                                ? `text-text-secondary hover:text-text-primary ${isLight ? 'hover:drop-shadow-[0_0_6px_rgba(0,0,0,0.25)]' : 'hover:drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]'}`
-                                : 'text-text-tertiary opacity-0 cursor-default'}
-                        `}
-                    >
-                        <ArrowRight size={16} />
-                    </button>
-                </div>
-
 
                 {/* Center: Spotlight-style Search Pill */}
                 <TopSearchPill
@@ -621,11 +608,12 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                         void (async () => {
                             try {
                                 const resp = await window.electronAPI.searchGlobalMeetings?.(query);
-                                if (resp?.enabled && Array.isArray(resp.results) && resp.results.length > 0) {
-                                    const top = resp.results[0];
-                                    const meeting = meetings.find((m) => m.id === top.meetingId);
-                                    if (meeting) {
-                                        handleOpenMeeting(meeting);
+                                if (resp?.enabled && Array.isArray(resp.results)) {
+                                    // Best hit that is a real meeting (long-term-memory hits
+                                    // carry a synthetic id), opened at the matching line.
+                                    const top = resp.results.find((r: any) => typeof r?.meetingId === 'string' && !r.meetingId.startsWith('hindsight:'));
+                                    if (top && await openMeetingAtMoment(top.meetingId, top.timestampMs)) {
+                                        analytics.trackCommandExecuted('open_meeting_from_search');
                                         return;
                                     }
                                 }
@@ -638,12 +626,19 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                         if (meeting) {
                             handleOpenMeeting(meeting);
                             analytics.trackCommandExecuted('open_meeting_from_search');
+                            return;
                         }
+                        // A long-term memory can link to a meeting older than the 50
+                        // this list holds — open that one by id.
+                        void openMeetingAtMoment(meetingId).then((opened) => {
+                            if (opened) analytics.trackCommandExecuted('open_meeting_from_search');
+                        });
                     }}
                 />
 
                 {/* Right: Actions */}
-                <div className={`flex items-center gap-1 no-drag shrink-0 ${isMac ? 'mr-1' : ''}`}>
+                {/* ml-auto: sole in-flow child now that the nav arrows are gone (the pill is absolute). */}
+                <div className={`ml-auto flex items-center gap-1 no-drag shrink-0 ${isMac ? 'mr-1' : ''}`}>
                     <div className="relative group/profile-btn select-none">
                         <button
                             data-testid="open-profile-intelligence"
@@ -864,7 +859,13 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                         <motion.div
                             key="details"
                             data-page="details"
-                            className="absolute inset-0 z-20 overflow-hidden"
+                            // z-20 is the cover/uncover order (above the list at
+                            // z-10). While the meeting chat is open the page goes
+                            // above the header (z-[200]) and the undetectable ring
+                            // (z-[100]) too: the chat's dim lives in this page, and
+                            // like the dim behind Settings and the toasters it has to
+                            // cover the whole window, header included.
+                            className={`absolute inset-0 overflow-hidden ${meetingChatOpen ? 'z-[250]' : 'z-20'}`}
                             variants={panelVariants}
                             initial="hidden"
                             animate="shown"
@@ -882,15 +883,30 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                             {/* Settles onto the surface above. MeetingDetails paints
                                 its own root the same grey, so the 20px of travel
                                 only ever uncovers more of that same colour. */}
+                            {/* While the meeting chat is open the settled
+                                transform is forced off (!transform-none beats
+                                Framer's inline style). translateX(0) scale(1) is
+                                invisible but still a transform, and a transformed
+                                ancestor is the containing block for every
+                                position:fixed inside it — it cut the chat's
+                                full-window dim to this layer, short of the header.
+                                Not via transitionEnd: Framer then animates the exit
+                                FROM 'none' as if from scale(0), and the page
+                                collapsed to 20% on the way back (measured). Only
+                                while the chat is open, so the exit always starts
+                                from Framer's own identity transform. */}
                             <motion.div
                                 data-layer="content"
-                                className="relative h-full w-full"
+                                className={`relative h-full w-full ${meetingChatOpen ? '!transform-none' : ''}`}
                                 variants={contentVariants}
                             >
                                 <MeetingDetails
                                     meeting={selectedMeeting}
+                                    initialMomentMs={selectedMomentMs ?? undefined}
                                     onBack={handleBack}
                                     onOpenSettings={onOpenSettings}
+                                    onChatOpenChange={setMeetingChatOpen}
+                                    onTitleSaved={fetchMeetings}
                                 />
                             </motion.div>
                         </motion.div>
@@ -1039,13 +1055,14 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                     analytics.trackCommandExecuted('start_natively_cta');
                                                 }
                                             }}
-                                            className="group relative overflow-hidden text-white px-6 py-3 rounded-full font-celeb font-medium tracking-normal flex items-center justify-center gap-3 backdrop-blur-xl shrink-0 transition-transform duration-200 ease-out active:scale-[0.98] hover:scale-[1.01] hover:brightness-110"
+                                            className="launcher-cta relative overflow-hidden text-white px-6 py-3 rounded-full font-celeb font-medium tracking-normal flex items-center justify-center gap-3 backdrop-blur-xl shrink-0"
+                                            // Hover, press and the shadow all live in LauncherCta.css. Only the
+                                            // bloom colour is set here: no inline `transition`, which would
+                                            // override the stylesheet's and make the hover jump again.
                                             style={{
-                                                boxShadow: isMeetingActive
-                                                    ? 'inset 0 1px 1px rgba(255,255,255,0.7), inset 0 -1px 2px rgba(0,0,0,0.1), 0 2px 10px rgba(16,185,129,0.45), 0 0 0 1px rgba(255,255,255,0.15)'
-                                                    : 'inset 0 1px 1px rgba(255,255,255,0.7), inset 0 -1px 2px rgba(0,0,0,0.1), 0 2px 10px rgba(14,165,233,0.4), 0 0 0 1px rgba(255,255,255,0.15)',
-                                                transition: 'box-shadow 0.36s cubic-bezier(0.25, 1, 0.5, 1)',
-                                            }}
+                                                '--cta-glow': isMeetingActive ? '16, 185, 129' : '14, 165, 233',
+                                                '--cta-glow-a': isMeetingActive ? '0.45' : '0.4',
+                                            } as React.CSSProperties}
                                         >
                                             {/* Blue gradient layer (idle) */}
                                             <div
@@ -1061,7 +1078,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                             {/* Top highlight band — shared between both states */}
                                             <div className="absolute inset-x-3 top-0 h-[40%] bg-gradient-to-b from-white/40 to-transparent blur-[2px] rounded-b-lg opacity-80 pointer-events-none z-10" />
                                             {/* Internal suspended-light hover glow */}
-                                            <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none z-10" />
+                                            <div className="launcher-cta-light absolute inset-0 pointer-events-none z-10" />
 
                                             {/* Button content — crossfade between idle and meeting states.
                                                 popLayout pops the exiting block out of flow the instant it starts

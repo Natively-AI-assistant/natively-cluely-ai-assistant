@@ -1,0 +1,135 @@
+/* Natively light theme, Apple-style revision.
+   Built on Apple's own light system values: grouped background #F2F2F7,
+   apple.com surfaces #F5F5F7 / #FBFBFD, label #1D1D1F, separator hue rgb(60,60,67).
+   Large areas sit on soft cool gray; cards are near white islands, never #FFFFFF.
+   Periwinkle accent unchanged. */
+
+[data-theme='light'] {
+  /* Canvas and surfaces */
+  --bg-primary: #F2F2F7;
+  --bg-secondary: #EBEBF0;
+  --bg-main: #F2F2F7;
+  --bg-sidebar: #EBEBF0;
+  --bg-elevated: #FBFBFD;
+  --bg-card: #FBFBFD;
+  --bg-input: #EFEFF4;
+  --bg-component: #E5E5EA;
+
+  /* Text */
+  --text-primary: #1D1D1F;
+  --text-secondary: #6E6E73;
+  --text-tertiary: #86868B;
+  --text-danger: #D70015;
+
+  /* Accent: periwinkle unchanged */
+  --periwinkle-600: #8050D4;
+  --periwinkle-700: #643EA6;
+  --periwinkle-800: #492E7A;
+  --accent-primary: var(--periwinkle-600);
+  --accent-text: var(--periwinkle-700);
+  --btn-primary-bg: var(--periwinkle-600);
+  --btn-primary-hover: var(--periwinkle-700);
+  --accent-hover: var(--periwinkle-700);
+  --accent-pressed: var(--periwinkle-800);
+  --accent-strong: var(--periwinkle-700);
+  --on-accent: #FFFFFF;
+  --on-accent-surface: color-mix(in srgb, #FFF 18%, transparent);
+  --accent-muted: color-mix(in srgb, #8050D4 10%, transparent);
+  --accent-border: color-mix(in srgb, #8050D4 24%, transparent);
+  --accent-focus: color-mix(in srgb, #8050D4 40%, transparent);
+  --btn-primary-disabled-bg: var(--bg-component);
+  --btn-primary-disabled-text: var(--text-tertiary);
+  --btn-primary-shadow-color: color-mix(in srgb, var(--periwinkle-600) 15%, transparent);
+
+  /* Interactive (Apple systemGray5 / systemGray4 steps) */
+  --bg-item-surface: #E5E5EA;
+  --bg-item-active: color-mix(in srgb, #8050D4 12%, transparent);
+  --bg-row-hover: #DEDEE3;
+  --badge-beta-bg: #FFCC00;
+  --badge-beta-fg: #1C1C1E;
+  --bg-toggle-switch: #D1D1D6;
+
+  /* Borders: Apple separator hue */
+  --border-subtle: rgba(60, 60, 67, 0.12);
+  --border-muted: rgba(60, 60, 67, 0.18);
+
+  /* Shadows */
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 2px 8px rgba(0, 0, 0, 0.04);
+  --shadow-popover: 0 8px 24px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.06);
+
+  /* Meeting notes and Q/A bubbles */
+  --bubble-user-bg: #8050D4;
+  --bubble-user-fg: #FFFFFF;
+  --bubble-user-grad-to: #764AC3;
+  --bubble-user-glow: rgba(128, 80, 212, 0.28);
+  --ai-response-text: #1D1D1F;
+  --ai-response-link: #0066CC;
+  --mn-skel-strong: rgba(60, 60, 67, 0.14);
+  --mn-skel-base: rgba(60, 60, 67, 0.09);
+  --mn-skel-soft: rgba(60, 60, 67, 0.06);
+
+  /* Floating overlay, Apple thick material */
+  --overlay-bg: rgba(242, 242, 247, 0.82);
+  --overlay-border: rgba(60, 60, 67, 0.14);
+  --overlay-border-soft: rgba(60, 60, 67, 0.08);
+  --overlay-undetectable-ring: rgba(0, 0, 0, 0.42);
+  --overlay-panel-bg: rgb(242 242 247 / calc(0.22 + (var(--overlay-opacity) * 0.50)));
+  --overlay-pill-bg: rgba(251, 251, 253, 0.55);
+  --overlay-transcript-bg: rgb(0 0 0 / calc(0.003 + (var(--overlay-opacity) * 0.016)));
+  --overlay-chip-bg: rgba(251, 251, 253, 0.40);
+  --overlay-chip-hover-bg: rgba(235, 235, 240, 0.55);
+  --overlay-input-bg: rgba(251, 251, 253, 0.60);
+  --overlay-input-hover-bg: rgba(251, 251, 253, 0.75);
+  --overlay-input-focus-bg: rgba(251, 251, 253, 0.92);
+  --overlay-control-bg: rgba(118, 118, 128, 0.12);
+  --overlay-control-hover-bg: rgba(118, 118, 128, 0.18);
+  --overlay-code-bg: rgba(242, 242, 247, 0.45);
+  --overlay-code-border: rgba(60, 60, 67, 0.10);
+  --overlay-code-header-bg: rgba(229, 229, 234, 0.50);
+  --overlay-inline-code-bg: rgba(220, 220, 225, 0.65);
+  --overlay-icon-bg: rgba(118, 118, 128, 0.12);
+  --overlay-icon-hover-bg: rgba(118, 118, 128, 0.18);
+  --overlay-panel-shadow: rgb(0 0 0 / calc(0.04 + (var(--overlay-opacity) * 0.08)));
+  --overlay-pill-shadow: rgb(0 0 0 / calc(0.02 + (var(--overlay-opacity) * 0.05)));
+  --overlay-text-primary: rgba(29, 29, 31, 0.96);
+  --overlay-text-secondary: rgba(110, 110, 115, 0.95);
+  --overlay-text-muted: rgba(134, 134, 139, 0.95);
+  --overlay-text-placeholder: rgba(134, 134, 139, 0.90);
+  --overlay-text-strong: #1D1D1F;
+  --hotword-color: #6D5AC7;
+  --overlay-shell-blur: calc(2px + (var(--overlay-opacity) * 18px));
+  --overlay-pill-blur: calc(2px + (var(--overlay-opacity) * 12px));
+  --overlay-transcript-blur: calc(var(--overlay-opacity) * 5px);
+
+  /* Liquid glass */
+  --glass-fill: hsl(240 20% 97% / var(--glass-frost));
+  --glass-rim: 0 0 2px 1px color-mix(in oklch, black, transparent 88%) inset;
+  --glass-drop: 0 4px 16px rgba(0, 0, 0, 0.05), 0 8px 24px rgba(0, 0, 0, 0.05);
+  --lg-clear-bg: rgba(118, 118, 128, 0.10);
+  --lg-clear-hover: rgba(118, 118, 128, 0.16);
+  --lg-clear-lens: rgba(118, 118, 128, 0.08);
+  --lg-clear-underside: inset 0 -1px 0 rgba(60, 60, 67, 0.08);
+
+  /* Legacy action button tokens */
+  --legacy-action-bg: #2563EB;
+  --legacy-action-hover: #1d4ed8;
+  --legacy-action-fg: #FFFFFF;
+  --legacy-action-subtle: rgba(37, 99, 235, 0.08);
+  --legacy-action-subtle-hover: rgba(37, 99, 235, 0.16);
+  --legacy-action-border: rgba(37, 99, 235, 0.24);
+  --legacy-action-shadow: rgba(37, 99, 235, 0.18);
+  --legacy-action-disabled-bg: var(--bg-input);
+  --legacy-action-disabled-border: var(--border-subtle);
+  --legacy-action-disabled-text: var(--text-tertiary);
+
+  /* Scrim & overlay backdrops (Apple macOS Sheet dimming: subtle 6% tint without blur) */
+  --scrim-backdrop: rgba(0, 0, 0, 0.06);
+  --scrim-backdrop-subtle: rgba(0, 0, 0, 0.04);
+}
+
+.ai-response-card p,
+.ai-response-card li,
+.ai-response-card h1,
+.ai-response-card h2,
+.ai-response-card h3 { color: var(--ai-response-text); }
+.ai-response-card a { color: var(--ai-response-link); }

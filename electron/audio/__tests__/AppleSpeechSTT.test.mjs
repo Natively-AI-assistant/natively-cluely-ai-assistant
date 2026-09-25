@@ -477,6 +477,20 @@ function stubSpawn(behaviour) {
   };
 }
 
+/**
+ * Production deliberately unrefs helper timeouts so they cannot keep Electron
+ * alive during shutdown. An isolated Node test may have no other referenced
+ * handles, so retain the runner while asserting those timeout paths.
+ */
+async function observeUnrefedTimeout(work, keepAliveMs = 100) {
+  const keepRunnerAlive = setTimeout(() => {}, keepAliveMs);
+  try {
+    return await work();
+  } finally {
+    clearTimeout(keepRunnerAlive);
+  }
+}
+
 test('locales query parses the helper answer', async () => {
   const result = await readAppleSpeechLocales('/fake/helper', {
     platform: 'darwin',
@@ -515,11 +529,13 @@ test('a missing helper, garbage output, or a hang all degrade to unavailable', a
   });
   assert.deepEqual(garbage, { available: false, supported: [], installed: [], reserved: [], maxReserved: 0 });
 
-  const hung = await readAppleSpeechLocales('/fake/helper', {
-    platform: 'darwin',
-    timeoutMs: 20,
-    spawn: stubSpawn(() => { /* never answers, never closes */ }),
-  });
+  const hung = await observeUnrefedTimeout(() =>
+    readAppleSpeechLocales('/fake/helper', {
+      platform: 'darwin',
+      timeoutMs: 20,
+      spawn: stubSpawn(() => { /* never answers, never closes */ }),
+    }),
+  );
   assert.deepEqual(hung, { available: false, supported: [], installed: [], reserved: [], maxReserved: 0 }, 'a hung probe must not block Settings forever');
 });
 
@@ -621,11 +637,13 @@ test('an exit without release-done is a failure, never a silent success', async 
 });
 
 test('release times out rather than leaving Settings stuck on "Removing…"', async () => {
-  const r = await releaseAppleSpeechLocale('zh-CN', '/fake/helper', {
-    platform: 'darwin',
-    timeoutMs: 20,
-    spawn: stubSpawn(() => { /* never answers */ }),
-  });
+  const r = await observeUnrefedTimeout(() =>
+    releaseAppleSpeechLocale('zh-CN', '/fake/helper', {
+      platform: 'darwin',
+      timeoutMs: 20,
+      spawn: stubSpawn(() => { /* never answers */ }),
+    }),
+  );
   assert.equal(r.ok, false);
   assert.match(r.error, /timed out/i);
 });

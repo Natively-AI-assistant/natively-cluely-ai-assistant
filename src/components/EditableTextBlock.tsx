@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 
 interface EditableTextBlockProps {
     initialValue: string;
@@ -26,9 +26,16 @@ const EditableTextBlock: React.FC<EditableTextBlockProps> = ({
     const contentRef = useRef<HTMLElement>(null);
     const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-    // Sync external changes if not editing
-    useEffect(() => {
-        if (!isEditing) {
+    // The DOM text is written only here, never rendered as a React child: while
+    // editing the browser owns the text node. A child would be re-reconciled
+    // whenever a debounced save changed initialValue mid-edit, rewriting the
+    // node under the caret and throwing it back to the start of the field.
+    // Layout effect so the text is there on first paint; the mount run also
+    // covers autoFocus, which starts in edit mode.
+    const mountedRef = useRef(false);
+    useLayoutEffect(() => {
+        if (!isEditing || !mountedRef.current) {
+            mountedRef.current = true;
             setLocalValue(initialValue);
             if (contentRef.current && contentRef.current.innerText !== initialValue) {
                 contentRef.current.innerText = initialValue;
@@ -141,9 +148,7 @@ const EditableTextBlock: React.FC<EditableTextBlockProps> = ({
             `}
             data-placeholder={placeholder}
             spellCheck={false} // Clean look
-        >
-            {initialValue}
-        </Tag>
+        />
     );
 };
 

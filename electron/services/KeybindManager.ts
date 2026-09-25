@@ -10,6 +10,7 @@ import {
 } from './keybindRegistrationState';
 import { isRegisterableAccelerator, probeAccelerator } from './acceleratorValidation';
 import { buildChordTable, type Win32Chord } from './winChord';
+import { SettingsManager } from './SettingsManager';
 
 export interface KeybindConfig {
     id: string;
@@ -25,7 +26,7 @@ export const DEFAULT_KEYBINDS: KeybindConfig[] = [
     { id: 'general:toggle-mouse-passthrough', label: 'Toggle Mouse Passthrough', accelerator: 'CommandOrControl+Shift+B', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+B' },
     { id: 'general:process-screenshots', label: 'Process Screenshots', accelerator: 'CommandOrControl+Enter', isGlobal: true, defaultAccelerator: 'CommandOrControl+Enter' },
     { id: 'general:capture-and-process', label: 'Capture Screen & Ask AI (Global)', accelerator: 'CommandOrControl+Shift+Enter', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+Enter' },
-    { id: 'general:reset-cancel', label: 'Reset / Cancel', accelerator: 'CommandOrControl+R', isGlobal: true, defaultAccelerator: 'CommandOrControl+R' },
+    { id: 'general:reset-cancel', label: 'Reset / Cancel', accelerator: 'CommandOrControl+R', isGlobal: false, defaultAccelerator: 'CommandOrControl+R' },
     { id: 'general:take-screenshot', label: 'Take Screenshot', accelerator: 'CommandOrControl+H', isGlobal: true, defaultAccelerator: 'CommandOrControl+H' },
     { id: 'general:selective-screenshot', label: 'Selective Screenshot', accelerator: 'CommandOrControl+Shift+H', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+H' },
     // Capture the active browser tab's page context via the companion extension;
@@ -104,13 +105,32 @@ export class KeybindManager {
         this.notifyChordsChanged();
     }
 
+    public getGlobalShortcutsEnabled(): boolean {
+        return SettingsManager.getInstance().get('globalShortcutsEnabled') !== false;
+    }
+
+    public setGlobalShortcutsEnabled(enabled: boolean): void {
+        if (this.getGlobalShortcutsEnabled() === enabled) return;
+        SettingsManager.getInstance().set('globalShortcutsEnabled', enabled);
+        console.log(`[KeybindManager] Global shortcuts ${enabled ? 'enabled' : 'disabled'}`);
+        this.registerGlobalShortcuts();
+        this.notifyChordsChanged();
+        this.broadcastUpdate();
+    }
+
     private shouldRegister(actionId: string): boolean {
+        // Issue #517: with global shortcuts off, only Toggle Visibility stays
+        // OS-wide. Without it a hidden stealth window (no Dock/taskbar icon)
+        // has no way back short of the tray or a relaunch.
+        if (!this.getGlobalShortcutsEnabled()) return actionId === 'general:toggle-visibility';
         if (this.activeMode === 'overlay') return true;
 
-        // In launcher mode, register visibility + movement shortcuts
+        // In launcher mode, register visibility shortcuts. window:move-* is NOT
+        // global here (issue #517): Cmd/Ctrl+Shift+Arrow is word selection in
+        // every editor and browser, and the launcher moves itself with those
+        // keys through its own focused handler (Launcher.tsx).
         if (actionId === 'general:toggle-visibility') return true;
         if (actionId === 'general:toggle-mouse-passthrough') return true;
-        if (actionId.startsWith('window:move-')) return true;
 
         // Screenshot & screen-analyze shortcuts must work globally in BOTH modes.
         // Without these, Cmd+H / Cmd+Shift+H / Cmd+Shift+Enter do nothing in
@@ -332,6 +352,7 @@ export class KeybindManager {
     public resetKeybinds() {
         this.keybinds.clear();
         DEFAULT_KEYBINDS.forEach(kb => this.keybinds.set(kb.id, { ...kb }));
+        SettingsManager.getInstance().set('globalShortcutsEnabled', true);
         this.save();
         this.registerGlobalShortcuts();
         this.broadcastUpdate();
@@ -678,6 +699,14 @@ export class KeybindManager {
         // happens in the constructor, long before any window exists.
         ipcMain.handle('keybinds:get-registration-failures', () => {
             return this.getRegistrationFailures();
+        });
+
+        ipcMain.handle('keybinds:get-global-enabled', () => this.getGlobalShortcutsEnabled());
+
+        ipcMain.handle('keybinds:set-global-enabled', (_, enabled: unknown) => {
+            if (typeof enabled !== 'boolean') return this.getGlobalShortcutsEnabled();
+            this.setGlobalShortcutsEnabled(enabled);
+            return this.getGlobalShortcutsEnabled();
         });
 
         ipcMain.handle('keybinds:reset', () => {

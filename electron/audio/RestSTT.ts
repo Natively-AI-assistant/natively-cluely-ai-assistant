@@ -251,8 +251,10 @@ export class RestSTT extends EventEmitter {
 
     /**
      * Called when the native SilenceSuppressor detects speech has ended.
-     * The internal Rust engine already applies a 150-200ms VAD hangover to avoid
-     * word-breaks, so we flush immediately without adding redundant TS debouncing.
+     * The native suppressor already holds a hangover before it reports the end
+     * (VAD_HANGOVER / speech_hangover: 600 ms system audio, 500 ms microphone —
+     * not the 150-200 ms this comment used to claim), so we flush immediately
+     * without adding redundant TS debouncing.
      */
     public notifySpeechEnded(): void {
         if (!this.isActive) return;

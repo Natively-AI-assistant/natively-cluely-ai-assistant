@@ -338,6 +338,16 @@ jobs:
         if: ${{ !cancelled() && steps.smoke_scope.outputs.mode != 'invalid' }}
         run: npm run test:lib
 
+      # src/components/**/__tests__ (renderer component contracts: Settings,
+      # Plans & Billing, the search pill, onboarding toasters). Previously
+      # unwired like src/lib was, so six were failing on main unseen. Both legs:
+      # the suites read source text or import pure .mjs/.ts helpers, nothing
+      # platform-specific. The one assertion that reads the private premium
+      # submodule skips in the fork-safe core scope.
+      - name: Run renderer component tests
+        if: ${{ !cancelled() && steps.smoke_scope.outputs.mode != 'invalid' }}
+        run: npm run test:components
+
       # Runs on BOTH legs by design. scripts/package-app.js and
       # scripts/run-with-env.mjs exist solely to reconcile /bin/sh and cmd.exe
       # behavior for `npm run dist` and `test:electron`; verifying them on one
