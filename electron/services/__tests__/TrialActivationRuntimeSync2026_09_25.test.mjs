@@ -82,9 +82,19 @@ before(() => {
     session: {}, globalShortcut: {}, Menu: {}, Tray: {}, clipboard: {},
   };
 
+  // trial:start binds the trial to getHardwareId() from the Rust native module
+  // and refuses without one (fail-closed, F-601). This file is about what
+  // happens AFTER a trial starts, so it supplies a stand-in module rather than
+  // needing the native build (Build Smoke's macOS leg does not build it). Every
+  // other export is a no-op function, which is all the loader's validation and
+  // the module-load-time wiring need.
+  const fakeNative = new Proxy({ getHardwareId: () => 'trial-runtime-sync-test-hwid' }, {
+    get: (target, key) => (key in target ? target[key] : key === 'then' ? undefined : function nativeStub() {}),
+  });
   const origLoad = Module._load;
   Module._load = function patched(request, ...rest) {
     if (request === 'electron') return fakeElectron;
+    if (/[\\/]native-module[\\/]index\.[^\\/]+\.node$/.test(request)) return fakeNative;
     return origLoad.call(this, request, ...rest);
   };
 
