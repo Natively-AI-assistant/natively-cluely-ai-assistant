@@ -176,6 +176,10 @@ describe('Parakeet TDT Download & Engine Config', () => {
       const livePidFile = path.join(tmpDir, `encoder-model.int8.onnx.partial.${process.pid}.${Date.now()}.xyz789`);
       fs.writeFileSync(livePidFile, 'live pid content');
 
+      // 2b. Partial file from current PID created 15 minutes ago (must still be kept because process is alive)
+      const livePidOldFile = path.join(tmpDir, `encoder-model.int8.onnx.partial.${process.pid}.${Date.now() - 15 * 60 * 1000}.old123`);
+      fs.writeFileSync(livePidOldFile, 'live pid old content');
+
       // 3. Normal model file (should be kept)
       const validFile = path.join(tmpDir, 'vocab.txt');
       fs.writeFileSync(validFile, 'vocab');
@@ -184,6 +188,7 @@ describe('Parakeet TDT Download & Engine Config', () => {
 
       assert.equal(fs.existsSync(deadPidFile), false, 'dead PID partial file must be deleted');
       assert.equal(fs.existsSync(livePidFile), true, 'live PID recent partial file must be kept');
+      assert.equal(fs.existsSync(livePidOldFile), true, 'live PID old partial file must be kept because process is active');
       assert.equal(fs.existsSync(validFile), true, 'regular model file must be kept');
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
