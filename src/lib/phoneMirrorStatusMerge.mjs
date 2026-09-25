@@ -7,7 +7,7 @@
  * reads 'port undefined · bound to undefined (loopback only)'".
  *
  * The launcher window deliberately receives only the small flag subset of a
- * status broadcast — { running, enabled, clients, extensionConnected } — see the
+ * status broadcast — { running, enabled, clients, extensionConnected, extPairedAt } — see the
  * onStatusChange listener in electron/ipcHandlers.ts (large payloads into a
  * software-composited Windows launcher hurt paint). PhoneMirrorSettings is
  * mounted INSIDE the launcher (SettingsOverlay) and holds the full snapshot it
@@ -18,7 +18,7 @@
  *
  * Rules:
  *  - full snapshot → same short-circuit as before: identical qr / url / tokens /
- *    running / clients / extensionConnected keeps `prev` (React skips the
+ *    running / clients / extensionConnected / extPairedAt keeps `prev` (React skips the
  *    render); anything else replaces the state with the snapshot.
  *  - partial (flag subset) → only the known flags it actually carries are laid
  *    over `prev`; nothing else is touched. Same object back when none changed.
@@ -27,7 +27,7 @@
  */
 
 /** Flags the launcher-side subset may carry. Anything else is ignored. */
-const PARTIAL_KEYS = ['running', 'enabled', 'clients', 'extensionConnected'];
+const PARTIAL_KEYS = ['running', 'enabled', 'clients', 'extensionConnected', 'extPairedAt'];
 
 /**
  * @param {unknown} next
@@ -59,7 +59,8 @@ export function mergePhoneMirrorStatus(prev, next) {
       prev.extToken === n.extToken &&
       prev.running === n.running &&
       prev.clients === n.clients &&
-      prev.extensionConnected === n.extensionConnected
+      prev.extensionConnected === n.extensionConnected &&
+      prev.extPairedAt === n.extPairedAt
     ) {
       return prev;
     }
@@ -75,4 +76,21 @@ export function mergePhoneMirrorStatus(prev, next) {
     changed = true;
   }
   return changed ? merged : prev;
+}
+
+/**
+ * Has the extension pairing window Settings opened at `armedAt` done its job?
+ * Yes once the extension is connected AND the service stamped a successful
+ * /pair at or after `armedAt`. The stamp is what a Re-pair needs: the extension
+ * stays connected on the same token, so extensionConnected never changes. A
+ * stamp from before this window (an earlier pairing) does not count.
+ *
+ * @param {{ extensionConnected?: boolean, extPairedAt?: number } | null | undefined} info
+ * @param {number} armedAt epoch ms when this window was opened (renderer Date.now())
+ * @returns {boolean}
+ */
+export function extensionPairingSatisfied(info, armedAt) {
+  if (!info || !info.extensionConnected) return false;
+  const stamp = typeof info.extPairedAt === 'number' ? info.extPairedAt : 0;
+  return stamp > 0 && stamp >= armedAt;
 }

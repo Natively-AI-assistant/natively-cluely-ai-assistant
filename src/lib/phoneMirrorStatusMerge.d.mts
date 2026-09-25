@@ -12,3 +12,12 @@ export function isPartialPhoneMirrorStatus(next: unknown): boolean;
  * `prev`. Returns `prev` itself when nothing changed.
  */
 export function mergePhoneMirrorStatus<T extends Record<string, any>>(prev: T, next: unknown): T;
+
+/**
+ * True once the extension is connected and the service stamped a successful
+ * /pair at or after `armedAt` (the moment Settings opened the pairing window).
+ */
+export function extensionPairingSatisfied(
+  info: { extensionConnected?: boolean; extPairedAt?: number } | null | undefined,
+  armedAt: number,
+): boolean;

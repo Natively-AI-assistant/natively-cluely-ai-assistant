@@ -3,7 +3,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { useT } from '../../i18n';
-import { isPartialPhoneMirrorStatus, mergePhoneMirrorStatus } from '../../lib/phoneMirrorStatusMerge.mjs';
+import { extensionPairingSatisfied, isPartialPhoneMirrorStatus, mergePhoneMirrorStatus } from '../../lib/phoneMirrorStatusMerge.mjs';
 import type { BrowserContextSettings, PhoneMirrorInfo } from '../../types/electron';
 import { LiquidGlassBadge } from '../../ui-components/LiquidGlassBadge';
 import { LiquidGlassButton } from '../../ui-components/LiquidGlassButton';
@@ -807,8 +807,10 @@ export const PhoneMirrorSettings: React.FC = () => {
   // "Connect browser extension" — arm the 60s one-click pairing window on the
   // desktop, then run a local countdown so the user knows how long they have to
   // click "Connect to Natively" in the extension popup.
+  const armedAtRef = useRef(0);
   const onArmExtension = useCallback(async () => {
     setArmError(null);
+    armedAtRef.current = Date.now();
     try {
       const result = await window.electronAPI.phoneMirrorArmExtension();
       if (result && typeof result === 'object' && 'error' in result && result.error) {
@@ -836,6 +838,13 @@ export const PhoneMirrorSettings: React.FC = () => {
     prevExtConnectedRef.current = info.extensionConnected;
     if (!was && info.extensionConnected) setArmDeadline(null);
   }, [info.extensionConnected]);
+  // A Re-pair never makes that edge: the extension stays connected on the same
+  // token. The service stamps extPairedAt when /pair succeeds, so a stamp from
+  // after this window opened, with the extension connected, ends it too. (Both
+  // clocks are this machine's Date.now().)
+  useEffect(() => {
+    if (armDeadline !== null && extensionPairingSatisfied(info, armedAtRef.current)) setArmDeadline(null);
+  }, [armDeadline, info]);
 
   // Manual fallback: the raw `port:token` string for the extension's "Pair
   // manually instead" field. It carries the EXTENSION token (loopback-scoped),
