@@ -45,7 +45,13 @@ const HEALTH_TIMEOUT_MS = 10000;
 const AVAILABILITY_TTL_MS = 30_000;   // cache health so per-retain/recall calls are cheap
 const AUTH_FAILURE_TTL_MS = 5 * 60_000; // cache 401/403 longer — don't spam a rejected key
 const SPAWN_POLL_INTERVAL_MS = 5000;  // poll for readiness (like OllamaManager)
-const SPAWN_MAX_ATTEMPTS = 36;        // 36 * 5s = 180s (first boot downloads embedding models)
+// A cold Hindsight boot can spend several minutes downloading/loading the local
+// embedding and reranker models on CPU. The previous 180s deadline was shorter
+// than the observed first boot: the child stayed alive, became healthy just after
+// the deadline, and the manager had already declared it unreachable with no poll
+// left to broadcast recovery. Keep this in sync with hindsight-dev-server.py's
+// HINDSIGHT_START_TIMEOUT default.
+const SPAWN_MAX_ATTEMPTS = 72;        // 72 * 5s = 360s
 const USER_MANAGED_RETRY_MS = 30_000; // user-run sidecars may finish booting after Electron
 const USER_MANAGED_INITIAL_RETRY_MS = 5000;
 const SYNTHETIC_LOCAL_BASEURL = 'http://localhost:8888'; // bundled dev server's default port
