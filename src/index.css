@@ -10164,7 +10164,11 @@ html[data-platform="linux"][data-window="launcher"] body {
   white-space: pre;
   overflow: hidden;
   pointer-events: none;
-  font: inherit;
+  /* No `font: inherit`. This rule lands after `@tailwind utilities`, so the
+     shorthand overrode the element's own `text-[13px] leading-relaxed` and the
+     mirror measured the text at the wrapper's 16px while the input drew it at
+     13px — the caret drifted ~1.5px further right with every character. The
+     family and weight already inherit; the size comes from those classes. */
 }
 /* Takes width, paints nothing — the real input still renders the glyphs. */
 .nat-caret-mirror > .nat-caret-text {

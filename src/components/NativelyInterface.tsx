@@ -1753,6 +1753,20 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // on React's render cycle for stop signals.
   const [stealthTapActive, setStealthTapActive] = useState<boolean>(false);
   const stealthTapActiveRef = useRef<boolean>(false);
+  const caretMirrorRef = useRef<HTMLDivElement>(null);
+  // While the stealth hook is engaged the input is never DOM-focused (always
+  // on Windows), so the browser does not scroll it to the insertion point as
+  // text is appended: a sentence longer than the box stays pinned to its start
+  // and the drawn caret runs off past the right edge. Scroll the input to its
+  // end and give the caret mirror the same offset, so the glyphs and the caret
+  // shift together and the caret stays on the last character.
+  useLayoutEffect(() => {
+    const input = textInputRef.current;
+    const mirror = caretMirrorRef.current;
+    if (!stealthTapActive || !input || !mirror) return;
+    input.scrollLeft = input.scrollWidth;
+    mirror.scrollLeft = input.scrollLeft;
+  }, [stealthTapActive, inputValue]);
   // True when the click-to-engage stealth path is safe. False when an IME
   // (Pinyin / Hangul / Kanji / …) is enabled in macOS HIToolbox: the tap
   // captures below the IME so composition would never reach the chat box.
@@ -11246,12 +11260,17 @@ Provide only the answer, nothing else.`;
                       keystrokes ARE arriving via StealthKeyboardManager. Mirror
                       the text invisibly to occupy the same width, then draw a
                       blinking pipe after it. Pointer-events:none so it can
-                      never intercept the click that engages the tap. */}
+                      never intercept the click that engages the tap.
+                      No `appearance.inputStyle` here: that carries the input's
+                      semi-transparent background, and this layer sits ON TOP
+                      of the input, so it veiled the typed text for the whole
+                      session — dim while engaged, full contrast the moment the
+                      session ended (clicking another app). */}
                   {stealthTapActive && (
                     <div
+                      ref={caretMirrorRef}
                       aria-hidden="true"
                       className="nat-caret-mirror pl-3 pr-10 py-2.5 text-[13px] leading-relaxed"
-                      style={appearance.inputStyle}
                     >
                       <span className="nat-caret-text">{inputValue}</span>
                       <span className="nat-caret" />
