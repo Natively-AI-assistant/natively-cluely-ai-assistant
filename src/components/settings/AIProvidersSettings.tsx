@@ -227,6 +227,10 @@ export const AIP_CSS = `
     --aip-dur-travel: 220ms;
 
     --aip-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+    /* Codex action buttons (transitions.dev 17 Tooltip) — softer muted tones */
+    --codex-refresh-hover-color: #82b997;
+    --codex-logout-hover-color:  #cc7e7e;
 }
 
 .aip-root[data-theme='light'] {
@@ -296,6 +300,9 @@ export const AIP_CSS = `
     --aip-warn-border:   rgba(161,98,7,0.20);
     --aip-danger-bg:     rgba(239,68,68,0.08);
     --aip-danger-border: rgba(185,28,28,0.20);
+
+    --codex-refresh-hover-color: #3b7754;
+    --codex-logout-hover-color:  #a54848;
 }
 
 /* ── Motion. Two easings: ease-out for everything, spring ONLY for the switch
@@ -628,6 +635,48 @@ export const AIP_CSS = `
 .aip-btn[data-tone='ok']:hover:not(:disabled),
 .aip-btn[data-tone='info']:hover:not(:disabled),
 .aip-btn[data-tone='danger']:hover:not(:disabled) { filter: brightness(1.08); }
+
+/* ── Codex action buttons (transitions.dev 17 Tooltip + custom soft colors) ── */
+.aip-btn.aip-codex-action-btn {
+    background: transparent !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+    /* transform: the shared press would otherwise snap (this list replaces it). */
+    transition: color 200ms cubic-bezier(0.22, 1, 0.36, 1),
+                transform var(--aip-dur-press) var(--aip-ease-out);
+}
+.aip-btn.aip-codex-action-btn:hover:not(:disabled),
+.aip-btn.aip-codex-action-btn:focus-visible:not(:disabled),
+.aip-btn.aip-codex-action-btn:active:not(:disabled) {
+    background: transparent !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+}
+.t-tt-wrap:hover .aip-codex-refresh-btn:not(:disabled),
+.aip-codex-refresh-btn:focus-visible:not(:disabled) {
+    color: var(--codex-refresh-hover-color) !important;
+}
+.t-tt-wrap:hover .aip-codex-logout-btn:not(:disabled),
+.aip-codex-logout-btn:focus-visible:not(:disabled) {
+    color: var(--codex-logout-hover-color) !important;
+}
+/* Tooltip below the button with muted, understated styling */
+.t-tt-wrap .t-tt {
+    top: calc(100% + 5px);
+    bottom: auto;
+    transform-origin: 50% 0%;
+    padding: 3px 7px;
+    border-radius: 5px;
+    background: var(--tt-bg);
+    color: var(--tt-fg);
+    font-size: 10.5px;
+    font-weight: 450;
+    line-height: 1.2;
+    letter-spacing: 0.01em;
+    border: 1px solid var(--tt-border);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
 
 /* ── Chips: DUAL encoding — dashed border off / solid + tinted on — so the
       state survives colour-blindness and greyscale. ───────────────────── */
@@ -4750,33 +4799,42 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         {/* Refresh / Sign out act on Natively's own tokens only, so a
                             `codex login` session gets the sign-in button below instead —
                             signing in here takes precedence over the CLI login.
-                            Icon-only beside the switch, the same header shape as Ollama's
-                            refresh; the title doubles as the tooltip and aria-label. */}
+                            Icon-only beside the switch with transitions.dev #17 tooltips. */}
                         {codexOauthStatus.signedIn && codexOauthStatus.source !== 'codex-cli' && <>
-                            <button
-                                type="button"
-                                onClick={handleCodexRefresh}
-                                disabled={codexOauthInProgress}
-                                className="aip-btn"
-                                data-icon="true"
-                                data-variant="ghost"
-                                title={t('Refresh session')}
-                                aria-label={t('Refresh session')}
-                            >
-                                <RefreshCw size={16} strokeWidth={1.75} />
-                            </button>
-                            <button
-                                type="button"
-                                onClick={handleCodexSignOut}
-                                disabled={codexOauthInProgress}
-                                className="aip-btn"
-                                data-icon="true"
-                                data-variant="ghost"
-                                title={t('Sign out')}
-                                aria-label={t('Sign out')}
-                            >
-                                <LogOut size={16} strokeWidth={1.75} />
-                            </button>
+                            <span className="t-tt-wrap">
+                                <button
+                                    type="button"
+                                    onClick={handleCodexRefresh}
+                                    disabled={codexOauthInProgress}
+                                    className="aip-btn aip-codex-action-btn aip-codex-refresh-btn t-tt-trigger"
+                                    data-icon="true"
+                                    data-variant="ghost"
+                                    aria-label={t('Refresh session')}
+                                    aria-describedby="codex-tt-refresh"
+                                >
+                                    <RefreshCw size={16} strokeWidth={1.75} className={codexOauthInProgress ? 'aip-spinner' : undefined} />
+                                </button>
+                                <span className="t-tt" id="codex-tt-refresh" role="tooltip">
+                                    {t('Refresh')}
+                                </span>
+                            </span>
+                            <span className="t-tt-wrap">
+                                <button
+                                    type="button"
+                                    onClick={handleCodexSignOut}
+                                    disabled={codexOauthInProgress}
+                                    className="aip-btn aip-codex-action-btn aip-codex-logout-btn t-tt-trigger"
+                                    data-icon="true"
+                                    data-variant="ghost"
+                                    aria-label={t('Sign out')}
+                                    aria-describedby="codex-tt-logout"
+                                >
+                                    <LogOut size={16} strokeWidth={1.75} />
+                                </button>
+                                <span className="t-tt" id="codex-tt-logout" role="tooltip">
+                                    {t('Logout')}
+                                </span>
+                            </span>
                         </>}
                         <AipSwitch
                             checked={!disabledProviders.includes('codex-cli')}
