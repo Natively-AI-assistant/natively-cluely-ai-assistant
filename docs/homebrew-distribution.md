@@ -71,8 +71,8 @@ Homebrew will download the new DMGs, verify the SHA256 checksums, and submit the
 ## Release Asset Naming Requirements
 
 To ensure Homebrew continues to resolve releases cleanly:
-1. Release tags should follow `V<version>` (e.g. `V2.8.8` or `V2.9.0`).
+1. Release tags should follow `V<version>` (e.g. `V2.8.8` or `V2.9.0`), which triggers `.github/workflows/release-macos.yml` to automatically build, sign, and notarize the macOS DMGs.
 2. Release assets attached to the GitHub release must keep the established naming format:
    - `Natively-<version>-arm64.dmg` (for Apple Silicon)
    - `Natively-<version>.dmg` (for Intel x64)
-3. Both DMGs must be code-signed and notarized (as handled by `.github/workflows/release-macos.yml`).
+3. Both DMGs must be code-signed and notarized (as handled automatically by `.github/workflows/release-macos.yml`).

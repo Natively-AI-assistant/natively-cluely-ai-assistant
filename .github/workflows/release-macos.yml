@@ -37,6 +37,7 @@ on:
   push:
     tags:
       - 'v*'
+      - 'V*'
   workflow_dispatch: {} # manual trigger uses the branch/tag selected in the Actions UI
 
 permissions:
