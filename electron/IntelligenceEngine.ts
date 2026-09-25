@@ -1249,9 +1249,10 @@ export class IntelligenceEngine extends EventEmitter {
         // (WhatToAnswerLLM passes isCodeVerificationEnabled() straight to
         // formatAnswerPlanForPrompt, which does not know about isSpeculative).
         // Discarding the text hid that; revealing it would put the raw block in
-        // the UI and the session record. Retain the verification mode established
-        // for the generation so a runtime toggle never leaks or wrongly strips.
-        const shouldStripSpec = finished.codeVerificationEnabled ?? isCodeVerificationEnabled();
+        // the UI and the session record. Strip if the completed answer contains
+        // the block, or if verification was active for the generation or currently.
+        const containsSpecBlock = /<verification_spec>[\s\S]*?(?:<\/verification_spec>|$)/i.test(text);
+        const shouldStripSpec = containsSpecBlock || Boolean(finished.codeVerificationEnabled) || isCodeVerificationEnabled();
         if (shouldStripSpec) {
             try {
                 const { stripVerificationSpec } = require('./llm/codingContract') as typeof import('./llm/codingContract');
@@ -1317,7 +1318,7 @@ export class IntelligenceEngine extends EventEmitter {
         if (alreadyPainting) {
             console.log(`[IntelligenceEngine] Finishing the adopted prefetch that streamed live (${text.length} chars, gen ${generationId})`);
             let pending = streamed?.pendingBuffer ?? '';
-            if (shouldStripSpec) {
+            if (shouldStripSpec || /<verification_spec/i.test(pending)) {
                 try {
                     const { stripVerificationSpec } = require('./llm/codingContract') as typeof import('./llm/codingContract');
                     pending = stripVerificationSpec(pending);
@@ -4042,6 +4043,7 @@ export class IntelligenceEngine extends EventEmitter {
                 meetingId: meetingMarker,
                 surface: 'what_to_answer' as const,
                 generationId,
+                codeVerificationEnabled: shouldStripSpec,
                 ...(wtaContextOsGeneration ? { contextOsGeneration: wtaContextOsGeneration } : {}),
                 ...(wtaV3Prompt ? { v3Prompt: wtaV3Prompt } : {}),
             });

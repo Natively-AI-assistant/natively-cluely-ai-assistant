@@ -103,6 +103,12 @@ export interface WhatToAnswerRequestSnapshot {
    *  block is suppressed. Opaque (`unknown`) to avoid a cross-module type cycle;
    *  WhatToAnswerLLM narrows it at the use site. Absent → legacy assembly. */
   readonly contextOsGeneration?: unknown;
+  /**
+   * Code verification mode pinned at t0 for this request. When true, prompt
+   * formatting includes the <verification_spec> contract and output stripping
+   * is required before display.
+   */
+  readonly codeVerificationEnabled?: boolean;
 }
 
 /** Minimal interface for the bits of ModesManager the snapshot reads. Keeps this

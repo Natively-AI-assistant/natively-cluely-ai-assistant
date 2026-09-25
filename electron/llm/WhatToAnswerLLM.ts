@@ -319,7 +319,8 @@ ${promptInstruction.trim()}
             // the signature for callers; it is not read here.
             void intentResult;
             if (answerPlan) {
-                intentContextParts.push(formatAnswerPlanForPrompt(answerPlan, isCodeVerificationEnabled()));
+                const includeVerificationSpec = requestSnapshot?.codeVerificationEnabled ?? isCodeVerificationEnabled();
+                intentContextParts.push(formatAnswerPlanForPrompt(answerPlan, includeVerificationSpec));
             }
             if (instructionContext) {
                 intentContextParts.push(instructionContext);

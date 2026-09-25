@@ -385,7 +385,7 @@ export class SimpleAutoAnswerEngine {
             this.lastInterviewerAt = now;
             if (this.localSpeechEndedAt !== null && (now - this.localSpeechEndedAt) <= STABILITY_MS) {
                 this.localSpeechEndedAt = null;
-                this.arm(ENDPOINT_CONFIRM_MS);
+                this.arm(ENDPOINT_CONFIRM_MS, false);
             } else {
                 this.arm(STABILITY_MS);
             }

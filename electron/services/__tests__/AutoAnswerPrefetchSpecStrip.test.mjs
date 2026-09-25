@@ -138,7 +138,7 @@ test('an adopted streaming prefetch emits suggested_answer_discard when empty af
     delete process.env.NATIVELY_CODE_VERIFY;
 });
 
-test('when code verification is disabled, literal <verification_spec in examples is preserved', async () => {
+test('an adopted prefetch containing a <verification_spec> block is stripped even if verification was not marked enabled', async () => {
     delete process.env.NATIVELY_CODE_VERIFY;
     const { IntelligenceEngine } = await import(pathToFileURL(enginePath).href);
     const { SessionTracker } = require(sessionPath);
@@ -148,13 +148,46 @@ test('when code verification is disabled, literal <verification_spec in examples
     const finals = [];
     engine.on('suggested_answer', (answer) => finals.push(answer));
 
-    const exampleAnswer = 'Here is an XML example: <verification_spec>test</verification_spec> and more code.';
+    const exampleAnswer = 'Here is the solution code.\n<verification_spec>{"entry":"test","cases":[]}</verification_spec>';
     engine.revealSpeculativeAnswer(
         {
             generationId: 4,
             question: QUESTION,
             confidence: 0.9,
             text: exampleAnswer,
+            writeDecision: { policy: 'store_conversational_only' },
+            codeVerificationEnabled: false,
+        },
+        true,
+        {
+            emitted: true,
+            pendingBuffer: '',
+        },
+    );
+
+    assert.equal(finals.length, 1);
+    assert.ok(!finals[0].includes('verification_spec'), 'verification block must be stripped even when flag is false');
+    assert.ok(finals[0].includes('Here is the solution code.'), 'solution text preserved');
+    engine.reset();
+});
+
+test('an adopted prefetch without <verification_spec> is preserved unmodified when verification is disabled', async () => {
+    delete process.env.NATIVELY_CODE_VERIFY;
+    const { IntelligenceEngine } = await import(pathToFileURL(enginePath).href);
+    const { SessionTracker } = require(sessionPath);
+    const session = new SessionTracker();
+    const engine = new IntelligenceEngine({ setNegotiationCoachingHandler() {} }, session);
+
+    const finals = [];
+    engine.on('suggested_answer', (answer) => finals.push(answer));
+
+    const cleanAnswer = 'Here is a regular explanation without any hidden tags.';
+    engine.revealSpeculativeAnswer(
+        {
+            generationId: 5,
+            question: QUESTION,
+            confidence: 0.9,
+            text: cleanAnswer,
             writeDecision: { policy: 'store_conversational_only' },
         },
         true,
@@ -165,6 +198,6 @@ test('when code verification is disabled, literal <verification_spec in examples
     );
 
     assert.equal(finals.length, 1);
-    assert.equal(finals[0], exampleAnswer, 'unmodified when verification is disabled');
+    assert.equal(finals[0], cleanAnswer, 'unmodified when no verification block');
     engine.reset();
 });
