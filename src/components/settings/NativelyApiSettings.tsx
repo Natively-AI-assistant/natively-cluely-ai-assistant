@@ -330,7 +330,7 @@ function ResourceMeter({
           is a modifier rather than a Tailwind fill, because the hue drives the
           specular's bloom as well as the body and the three have to move
           together. */}
-      <div className={`${sub ? 'h-[2px]' : 'h-[3px]'} natively-meter-track`}>
+      <div className={`${sub ? 'h-[4px]' : 'h-[6px]'} natively-meter-track`}>
         <div
           className={`natively-meter-fill transition-[width] duration-700 ease-out motion-reduce:transition-none ${
             isOver ? 'natively-meter-fill--over' : isHigh ? 'natively-meter-fill--high' : ''
@@ -400,7 +400,7 @@ function KnowledgeUsage({ knowledge, percentOnly = false }: { knowledge: Nativel
           {Math.round(pct)}%
         </span>
       </div>
-      <div className="h-[3px] natively-meter-track">
+      <div className="h-[6px] natively-meter-track">
         <div
           className={`natively-meter-fill transition-[width] duration-700 ease-out motion-reduce:transition-none ${
             worstHalf > 100 ? 'natively-meter-fill--over' : isHigh ? 'natively-meter-fill--high' : ''
