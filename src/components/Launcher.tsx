@@ -342,6 +342,10 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
 
 
     const [forwardMeeting, setForwardMeeting] = useState<Meeting | null>(null);
+    // A transcript moment to open the selected meeting at (a "Search past
+    // meetings" hit). Cleared by any other navigation so a later open starts on
+    // the summary as usual.
+    const [selectedMomentMs, setSelectedMomentMs] = useState<number | null>(null);
     const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
     const [menuEntered, setMenuEntered] = useState(false);
 
@@ -371,6 +375,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
     }, [selectedMeeting, isGlobalChatOpen, onPageChange]);
 
     const handleOpenMeeting = async (meeting: Meeting) => {
+        setSelectedMomentMs(null);
         setForwardMeeting(null); // Clear forward history on new navigation
         console.log("[Launcher] Opening meeting:", meeting.id);
         analytics.trackCommandExecuted('open_meeting_details');
@@ -400,6 +405,23 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
     const handleBack = () => {
         setForwardMeeting(selectedMeeting);
         setSelectedMeeting(null);
+        setSelectedMomentMs(null);
+    };
+
+    // Open a search hit BY ID at the moment it was said. The hit may be older than
+    // the 50 meetings this list holds, so it is fetched directly rather than looked
+    // up in `meetings`. Returns false when it cannot be opened (caller falls back).
+    const openMeetingAtMoment = async (meetingId: string, momentMs?: number): Promise<boolean> => {
+        try {
+            const full = await window.electronAPI?.getMeetingDetails?.(meetingId);
+            if (!full) return false;
+            setForwardMeeting(null);
+            setSelectedMomentMs(typeof momentMs === 'number' ? momentMs : null);
+            setSelectedMeeting(full);
+            return true;
+        } catch {
+            return false;
+        }
     };
 
     const handleForward = () => {
@@ -622,11 +644,12 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                         void (async () => {
                             try {
                                 const resp = await window.electronAPI.searchGlobalMeetings?.(query);
-                                if (resp?.enabled && Array.isArray(resp.results) && resp.results.length > 0) {
-                                    const top = resp.results[0];
-                                    const meeting = meetings.find((m) => m.id === top.meetingId);
-                                    if (meeting) {
-                                        handleOpenMeeting(meeting);
+                                if (resp?.enabled && Array.isArray(resp.results)) {
+                                    // Best hit that is a real meeting (long-term-memory hits
+                                    // carry a synthetic id), opened at the matching line.
+                                    const top = resp.results.find((r: any) => typeof r?.meetingId === 'string' && !r.meetingId.startsWith('hindsight:'));
+                                    if (top && await openMeetingAtMoment(top.meetingId, top.timestampMs)) {
+                                        analytics.trackCommandExecuted('open_meeting_from_search');
                                         return;
                                     }
                                 }
@@ -639,7 +662,13 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                         if (meeting) {
                             handleOpenMeeting(meeting);
                             analytics.trackCommandExecuted('open_meeting_from_search');
+                            return;
                         }
+                        // A long-term memory can link to a meeting older than the 50
+                        // this list holds — open that one by id.
+                        void openMeetingAtMoment(meetingId).then((opened) => {
+                            if (opened) analytics.trackCommandExecuted('open_meeting_from_search');
+                        });
                     }}
                 />
 
@@ -890,6 +919,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                             >
                                 <MeetingDetails
                                     meeting={selectedMeeting}
+                                    initialMomentMs={selectedMomentMs ?? undefined}
                                     onBack={handleBack}
                                     onOpenSettings={onOpenSettings}
                                 />

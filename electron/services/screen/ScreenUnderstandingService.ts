@@ -397,9 +397,10 @@ export class ScreenUnderstandingService {
   }
 
   private isTechnicalMode(modeTemplateType?: string): boolean {
-    if (!modeTemplateType) return false;
-    const technical = ['technical-interview', 'coding', 'debug', 'code-review'];
-    return technical.some(m => modeTemplateType.toLowerCase().includes(m));
+    // Shared with the adaptive image-quality exemption (technicalMode.ts).
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { isTechnicalModeTemplate } = require('./technicalMode') as typeof import('./technicalMode');
+    return isTechnicalModeTemplate(modeTemplateType);
   }
 
   private classifyScreenType(text: string, transcript?: string): ScreenType {

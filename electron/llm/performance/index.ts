@@ -27,3 +27,4 @@ export * from './capabilityView';
 export * from './wiring';
 export * from './fixtures';
 export * from './calibration';
+export * from './forget';
