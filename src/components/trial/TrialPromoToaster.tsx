@@ -84,7 +84,7 @@ const ITEM = {
 const INCLUDED: { value: string; label: string }[] = [
   { value: formatCompact(TRIAL_FALLBACK_LIMITS.ai_tokens),       label: 'AI tokens' },
   { value: `${TRIAL_FALLBACK_LIMITS.stt_minutes} min`,           label: 'Transcription' },
-  { value: String(TRIAL_FALLBACK_LIMITS.search_requests),        label: 'Research searches' },
+  { value: String(TRIAL_FALLBACK_LIMITS.search_requests),        label: 'Searches' },
 ];
 
 interface Props {
