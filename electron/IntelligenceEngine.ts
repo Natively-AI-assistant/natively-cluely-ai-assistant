@@ -1247,14 +1247,14 @@ export class IntelligenceEngine extends EventEmitter {
         // (WhatToAnswerLLM passes isCodeVerificationEnabled() straight to
         // formatAnswerPlanForPrompt, which does not know about isSpeculative).
         // Discarding the text hid that; revealing it would put the raw block in
-        // the UI and the session record. No-op when the answer has none.
-        try {
-            const { stripVerificationSpec } = require('./llm/codingContract') as typeof import('./llm/codingContract');
-            text = stripVerificationSpec(text);
-        } catch (err) {
-            console.warn('[IntelligenceEngine] Prefetched answer spec strip failed:', err);
+        if (isCodeVerificationEnabled()) {
+            try {
+                const { stripVerificationSpec } = require('./llm/codingContract') as typeof import('./llm/codingContract');
+                text = stripVerificationSpec(text);
+            } catch (err) {
+                console.warn('[IntelligenceEngine] Prefetched answer spec strip failed:', err);
+            }
         }
-        text = text.replace(/\s*<verification_spec[\s\S]*$/i, '').trim();
         try {
             const cleaned = cleanAnswerArtifacts(text);
             if (cleaned.trim().length >= 10) text = cleaned;
@@ -1312,11 +1312,12 @@ export class IntelligenceEngine extends EventEmitter {
         if (alreadyPainting) {
             console.log(`[IntelligenceEngine] Finishing the adopted prefetch that streamed live (${text.length} chars, gen ${generationId})`);
             let pending = streamed?.pendingBuffer ?? '';
-            try {
-                const { stripVerificationSpec } = require('./llm/codingContract') as typeof import('./llm/codingContract');
-                pending = stripVerificationSpec(pending);
-            } catch { /* emit as-is */ }
-            pending = pending.replace(/\s*<verification_spec[\s\S]*$/i, '').trim();
+            if (isCodeVerificationEnabled()) {
+                try {
+                    const { stripVerificationSpec } = require('./llm/codingContract') as typeof import('./llm/codingContract');
+                    pending = stripVerificationSpec(pending);
+                } catch { /* emit as-is */ }
+            }
             if (pending.trim()) this.emit('suggested_answer_token', pending, finished.question, finished.confidence, generationId);
         } else {
             console.log(`[IntelligenceEngine] Revealing the prefetched answer (${text.length} chars, prefetch gen ${finished.generationId} → ${generationId})`);

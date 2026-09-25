@@ -14,14 +14,18 @@
 
 let cachedEnv: boolean | null = null;
 
+export const _resetCachedEnvForTesting = (): void => {
+  cachedEnv = null;
+};
+
 const envEnabled = (): boolean => {
-  if (cachedEnv !== null) return cachedEnv;
+  if (cachedEnv !== null && !process.env.NATIVELY_TEST_USERDATA) return cachedEnv;
   let on = false;
   try {
     const v = (process.env.NATIVELY_CODE_VERIFY || '').trim().toLowerCase();
     on = v === 'on' || v === 'true' || v === '1' || v === 'enabled';
   } catch { on = false; }
-  cachedEnv = on;
+  if (!process.env.NATIVELY_TEST_USERDATA) cachedEnv = on;
   return on;
 };
 
