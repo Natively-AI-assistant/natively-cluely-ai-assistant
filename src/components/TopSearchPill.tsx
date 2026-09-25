@@ -414,10 +414,16 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                 document.body
             )}
 
-            {/* Search Pill Container */}
+            {/* Search Pill Container. will-change-transform gives the pill its own
+                compositor layer. Without it the open dropdown, which hangs below the
+                header, was painted into the header's layer and stretched it: on the first
+                open and close after a load, the new area showed the header's colour for
+                2-4 frames before it was drawn, a full-width band up to ~20px under the top
+                bar (recorded frame by frame; it takes the header's colour when that is
+                changed). */}
             <div
                 ref={containerRef}
-                className="absolute left-1/2 -translate-x-1/2 top-[7px] no-drag z-40"
+                className="absolute left-1/2 -translate-x-1/2 top-[7px] no-drag z-40 will-change-transform"
             >
                 <div className="relative">
                     <motion.div
