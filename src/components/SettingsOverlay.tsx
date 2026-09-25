@@ -2380,7 +2380,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             </div>
                                                             <div>
                                                                 <h3 className="text-sm font-bold text-text-primary">{t('Protect Natively shortcuts')}</h3>
-                                                                <p className="text-xs text-text-secondary mt-0.5">{t('Stops a Natively shortcut from typing into the app underneath. Turn off if your antivirus flags the keyboard hook.')}</p>
+                                                                <p className="text-xs text-text-secondary mt-0.5">{t('Keeps shortcuts from typing into the app below. Turn off if antivirus flags it.')}</p>
                                                             </div>
                                                         </div>
                                                         <SettingsToggle
@@ -2668,11 +2668,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
                                             <div className="pt-1">
                                                 <button
+                                                    type="button"
                                                     onClick={() => setShowAdvancedSettings((s) => !s)}
+                                                    aria-expanded={showAdvancedSettings}
                                                     className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-text-tertiary hover:text-text-secondary transition-colors"
                                                 >
                                                     <DisclosureChevron open={showAdvancedSettings} />
-                                                    {t('Advanced')}
+                                                    {showAdvancedSettings ? t('Hide advanced settings') : t('Show advanced settings')}
                                                 </button>
                                                 <Disclosure open={showAdvancedSettings}>
                                                 <div className="mt-1">

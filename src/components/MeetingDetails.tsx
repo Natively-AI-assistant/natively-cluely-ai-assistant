@@ -1264,9 +1264,11 @@ interface MeetingDetailsProps {
      * window the way the dim behind Settings and the toasters does.
      */
     onChatOpenChange?: (open: boolean) => void;
+    // The Home list reads titles from the DB; tell it to re-read after a rename.
+    onTitleSaved?: () => void;
 }
 
-const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting, initialMomentMs, onChatOpenChange }) => {
+const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting, initialMomentMs, onChatOpenChange, onBack, onTitleSaved }) => {
     const t = useT();
     const isLight = useResolvedTheme() === 'light';
     // We need local state for the meeting object to reflect optimistic updates
@@ -1282,6 +1284,23 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     }, [isChatOpen, onChatOpenChange]);
     useEffect(() => () => onChatOpenChange?.(false), [onChatOpenChange]);
     const [submittedQuery, setSubmittedQuery] = useState('');
+
+    // Esc goes back to the meeting list (no visible hint). It yields to anything
+    // else Esc should close first: the meeting chat, a field being edited, an open
+    // dialog, and — checked after this tick, since Settings and the search pill
+    // register their listeners later — any handler that already claimed the key.
+    useEffect(() => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key !== 'Escape' || e.defaultPrevented || isChatOpen) return;
+            const el = e.target as HTMLElement | null;
+            if (el?.closest('input, textarea, select, [contenteditable="true"]')) return;
+            if (document.querySelector('[role="dialog"], [aria-modal="true"]')) return;
+            timer = setTimeout(() => { if (!e.defaultPrevented) onBack(); }, 0);
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => { window.removeEventListener('keydown', onKeyDown); clearTimeout(timer); };
+    }, [isChatOpen, onBack]);
 
     // Stable client-side keys for the action-item and key-point lists. The
     // persisted shape is string[], so React keyed the rows by index, but the
@@ -1813,6 +1832,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
         setMeeting(prev => ({ ...prev, title: newTitle }));
         if (window.electronAPI?.updateMeetingTitle) {
             await window.electronAPI.updateMeetingTitle(meeting.id, newTitle);
+            onTitleSaved?.();
         }
     };
 
@@ -1878,6 +1898,16 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                     content width: a two-container split would offset this column from the one below
                     by the scrollbar width on platforms with classic (non-overlay) scrollbars. */}
                 <div className={`sticky top-0 z-20 ${isLight ? 'bg-bg-secondary' : 'bg-bg-elevated'}`}>
+                    {/* Absolute so the header content keeps its original position. */}
+                    <button
+                        type="button"
+                        onClick={onBack}
+                        aria-label={t("Back")}
+                        title={t("Back")}
+                        className="absolute left-3 top-3 z-10 p-1.5 rounded-md text-text-tertiary hover:text-text-primary transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border-subtle"
+                    >
+                        <ArrowLeft size={19} />
+                    </button>
                     <motion.div
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}

@@ -8504,175 +8504,6 @@ html[data-platform="linux"][data-window="launcher"] body {
 
 
 
-/* The generic light-theme hover that used to sit here is GONE, and the comment
-   with it claimed its box-shadow was live. It was not: at (0,4,0) it ties the
-   per-tier light hovers below, which come later in source, and every render of
-   this card carries a tier class (NativelyApiSettings.tsx:896). Nothing it
-   declared ever painted. */
-
-
-/* The ENTER half of the card's asymmetric hover. Declares `transition` and
-   nothing else: no box-shadow, so it cannot participate in (or violate) the
-   four-slot contract, and at (0,3,0) it outranks the base rule's leave timing
-   from anywhere in the file.
-   cubic-bezier(0.32, 0.72, 0, 1) moves immediately — no ease-in sluggishness —
-   but spreads the travel across the middle (~55% at the 30% mark, against the
-   old curve's 83%), which is what makes the arrival legible rather than instant. */
-@media (hover: hover) and (pointer: fine) {
-  [data-interface-theme] .natively-api-detail-card:hover {
-    transition: box-shadow 260ms cubic-bezier(0.32, 0.72, 0, 1),
-                border-color 260ms cubic-bezier(0.32, 0.72, 0, 1),
-                background-color 250ms cubic-bezier(0.22, 1, 0.36, 1) !important;
-  }
-}
-
-
-/* Per-tier hover bloom. The Pro purchase cards glow in their OWN hue on hover
-   (.pricing-card-yearly:hover uses its blue, lifetime its violet); a neutral
-   grey glow here read as a different control. Deepens the resting shadow the
-   committed-fill block already carries rather than introducing one.
-   Obeys the four-slot contract above the committed fills: slot 1 repeats each
-   tier's RESTING rim byte-for-byte, so the hairline against the border does not
-   move; hover lives entirely in the floor (slot 2), the tier-hued ambient
-   bloom (slot 3) and the contact shadow (slot 4). */
-@media (hover: hover) and (pointer: fine) {
-  [data-interface-theme] .natively-api-detail-card-standard:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.16),
-      inset 0 -3px 8px rgba(0, 0, 0, 0.40),
-      0 12px 32px rgba(60, 107, 105, 0.28),
-      0 4px 12px rgba(0, 0, 0, 0.25) !important;
-  }
-  [data-interface-theme] .natively-api-detail-card-pro:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.17),
-      inset 0 -3px 8px rgba(0, 0, 0, 0.40),
-      0 12px 32px rgba(17, 89, 153, 0.28),
-      0 4px 12px rgba(0, 0, 0, 0.25) !important;
-  }
-  [data-interface-theme] .natively-api-detail-card-max:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.18),
-      inset 0 -3px 8px rgba(0, 0, 0, 0.40),
-      0 12px 32px rgba(102, 60, 104, 0.28),
-      0 4px 12px rgba(0, 0, 0, 0.25) !important;
-  }
-  [data-interface-theme] .natively-api-detail-card-ultra:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.20),
-      inset 0 -3px 8px rgba(0, 0, 0, 0.40),
-      0 12px 32px rgba(111, 37, 66, 0.28),
-      0 4px 12px rgba(0, 0, 0, 0.25) !important;
-  }
-}
-
-
-/* Active + hover. Without these the per-tier bloom above — (0,3,0), later in
-   source than every [data-active="true"] rule — would win on the CURRENT plan's
-   card and replace its tier-hued rim with the generic one, i.e. the active
-   card's outline would change on hover. That is exactly the border-highlight
-   behaviour being removed, and it also breaks the four-slot contract's promise
-   that slot 1 never moves. These sit at (0,4,0) so they outrank it, repeat the
-   active rim verbatim, and let hover act only on slots 2-4. */
-@media (hover: hover) and (pointer: fine) {
-  [data-interface-theme] .natively-api-detail-card-standard[data-active="true"]:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(165, 209, 207, 0.72),
-      inset 0 -3px 8px rgba(0, 0, 0, 0.50),
-      0 12px 32px rgba(60, 107, 105, 0.28),
-      0 4px 12px rgba(0, 0, 0, 0.25) !important;
-  }
-  [data-interface-theme] .natively-api-detail-card-pro[data-active="true"]:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(151, 199, 241, 0.78),
-      inset 0 -3px 8px rgba(0, 0, 0, 0.50),
-      0 12px 32px rgba(17, 89, 153, 0.28),
-      0 4px 12px rgba(0, 0, 0, 0.25) !important;
-  }
-  [data-interface-theme] .natively-api-detail-card-max[data-active="true"]:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(203, 175, 204, 0.84),
-      inset 0 -3px 8px rgba(0, 0, 0, 0.50),
-      0 12px 32px rgba(102, 60, 104, 0.28),
-      0 4px 12px rgba(0, 0, 0, 0.25) !important;
-  }
-  [data-interface-theme] .natively-api-detail-card-ultra[data-active="true"]:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(207, 160, 179, 0.90),
-      inset 0 -3px 8px rgba(0, 0, 0, 0.50),
-      0 12px 32px rgba(111, 37, 66, 0.28),
-      0 4px 12px rgba(0, 0, 0, 0.25) !important;
-  }
-}
-
-
-/* Light-theme per-tier hover bloom (mirrors the dark rules above and the
-   Pro cards' own light hovers). */
-@media (hover: hover) and (pointer: fine) {
-  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-standard:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.55),
-      inset 0 -2.5px 6px rgba(0, 0, 0, 0.06),
-      0 12px 28px rgba(60, 107, 105, 0.18),
-      0 4px 12px rgba(15, 23, 42, 0.05) !important;
-  }
-  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-pro:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.60),
-      inset 0 -2.5px 6px rgba(0, 0, 0, 0.06),
-      0 12px 28px rgba(17, 89, 153, 0.18),
-      0 4px 12px rgba(15, 23, 42, 0.05) !important;
-  }
-  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-max:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.65),
-      inset 0 -2.5px 6px rgba(0, 0, 0, 0.06),
-      0 12px 28px rgba(102, 60, 104, 0.18),
-      0 4px 12px rgba(15, 23, 42, 0.05) !important;
-  }
-  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-ultra:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.70),
-      inset 0 -2.5px 6px rgba(0, 0, 0, 0.06),
-      0 12px 28px rgba(111, 37, 66, 0.18),
-      0 4px 12px rgba(15, 23, 42, 0.05) !important;
-  }
-}
-
-
-/* Light active + hover — (0,5,0), outranking the light per-tier bloom (0,4,0)
-   for the same reason as the dark pair above. */
-@media (hover: hover) and (pointer: fine) {
-  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-standard[data-active="true"]:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.9),
-      inset 0 -2.5px 6px rgba(0, 0, 0, 0.05),
-      0 12px 28px rgba(60, 107, 105, 0.18),
-      0 4px 12px rgba(15, 23, 42, 0.05) !important;
-  }
-  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-pro[data-active="true"]:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.9),
-      inset 0 -2.5px 6px rgba(0, 0, 0, 0.05),
-      0 12px 28px rgba(17, 89, 153, 0.18),
-      0 4px 12px rgba(15, 23, 42, 0.05) !important;
-  }
-  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-max[data-active="true"]:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.9),
-      inset 0 -2.5px 6px rgba(0, 0, 0, 0.05),
-      0 12px 28px rgba(102, 60, 104, 0.18),
-      0 4px 12px rgba(15, 23, 42, 0.05) !important;
-  }
-  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-ultra[data-active="true"]:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.9),
-      inset 0 -2.5px 6px rgba(0, 0, 0, 0.05),
-      0 12px 28px rgba(111, 37, 66, 0.18),
-      0 4px 12px rgba(15, 23, 42, 0.05) !important;
-  }
-}
-
 /* ------------------------------------------------------------------ */
 /* Settings — section entrance stagger                                 */
 /* ------------------------------------------------------------------ */
@@ -9988,14 +9819,15 @@ html[data-platform="linux"][data-window="launcher"] body {
   z-index: 1 !important;
   pointer-events: none !important;
   border-radius: inherit !important;
-  opacity: 0.55 !important;
+  /* Fixed at what used to be the hover strength: the grid is always shown and
+     the card has no hover state. */
+  opacity: 0.8 !important;
   mix-blend-mode: normal !important;
   background-color: transparent !important;
   background-image:
     linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px) !important;
   background-size: 24px 24px !important;
-  transition: opacity 180ms cubic-bezier(0.23, 1, 0.32, 1) !important;
 }
 
 /* On a light ground a white grid is invisible, so it inverts to ink — the same
@@ -10008,7 +9840,10 @@ html[data-platform="linux"][data-window="launcher"] body {
     linear-gradient(rgba(16, 22, 43, 0.030) 1px, transparent 1px),
     linear-gradient(90deg, rgba(16, 22, 43, 0.030) 1px, transparent 1px) !important;
 }
+/* `opacity` restated here: the light veil suppressor further up sits at
+   (0,3,1) and would otherwise hide the grid, leaving it visible only on hover. */
 [data-theme='light'] [data-interface-theme] .natively-api-detail-card::before {
+  opacity: 0.8 !important;
   background-image:
     linear-gradient(rgba(16, 22, 43, 0.090) 1px, transparent 1px),
     linear-gradient(90deg, rgba(16, 22, 43, 0.090) 1px, transparent 1px) !important;
@@ -10017,8 +9852,7 @@ html[data-platform="linux"][data-window="launcher"] body {
 /* hover brightened the grid before; it still does */
 @media (hover: hover) and (pointer: fine) {
   [data-interface-theme] .pricing-card-yearly:hover::before,
-  [data-interface-theme] .pricing-card-lifetime:hover::before,
-  [data-interface-theme] .natively-api-detail-card:hover::before {
+  [data-interface-theme] .pricing-card-lifetime:hover::before {
     opacity: 0.8 !important;
   }
 }
@@ -10343,7 +10177,11 @@ html[data-platform="linux"][data-window="launcher"] body {
   white-space: pre;
   overflow: hidden;
   pointer-events: none;
-  font: inherit;
+  /* No `font: inherit`. This rule lands after `@tailwind utilities`, so the
+     shorthand overrode the element's own `text-[13px] leading-relaxed` and the
+     mirror measured the text at the wrapper's 16px while the input drew it at
+     13px — the caret drifted ~1.5px further right with every character. The
+     family and weight already inherit; the size comes from those classes. */
 }
 /* Takes width, paints nothing — the real input still renders the glyphs. */
 .nat-caret-mirror > .nat-caret-text {

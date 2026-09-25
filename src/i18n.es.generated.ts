@@ -370,6 +370,8 @@ export const ES_GENERATED: Record<string, string> = {
     "Help Guide": "Guía de ayuda",
     "Hi there,\\n\\nI enjoyed our conversation. Let me know if you have any questions.\\n\\nBest,": "Hi there,\\n\\nI enjoyed our conversation. Let me know if you have any questions.\\n\\nBest,",
     "Hide": "Ocultar",
+    "Show advanced settings": "Mostrar configuración avanzada",
+    "Hide advanced settings": "Ocultar configuración avanzada",
     "Hide developer options": "Hide developer options",
     "Hide evidence": "Ocultar fuentes",
     "Hide individual features": "Hide individual features",

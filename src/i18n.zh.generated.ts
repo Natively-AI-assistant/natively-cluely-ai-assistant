@@ -369,6 +369,8 @@ export const ZH_GENERATED: Record<string, string> = {
     "Help Guide": "帮助指南",
     "Hi there,\\n\\nI enjoyed our conversation. Let me know if you have any questions.\\n\\nBest,": "Hi there,\\n\\nI enjoyed our conversation. Let me know if you have any questions.\\n\\nBest,",
     "Hide": "隐藏",
+    "Show advanced settings": "显示高级设置",
+    "Hide advanced settings": "隐藏高级设置",
     "Hide developer options": "Hide developer options",
     "Hide evidence": "隐藏来源",
     "Hide individual features": "Hide individual features",

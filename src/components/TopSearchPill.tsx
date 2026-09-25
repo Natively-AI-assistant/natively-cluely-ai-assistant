@@ -350,13 +350,18 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                     >
                         {/* Main Pill */}
                         <div className="relative">
+                            {/* Same surface as the "My Natively" section below (Launcher.tsx), recessed
+                                into the header with an inner top shadow and a hairline ring. Only the
+                                open results panel casts a drop, so it reads above the page. */}
                             <div
                                 className={`
                                     relative overflow-hidden
-                                    ${isLight ? 'bg-[#F2F2F7]/90' : 'bg-[#161618]/90'}
                                     backdrop-blur-xl backdrop-saturate-150
-                                    rounded-2xl
-                                    shadow-sm
+                                    rounded-2xl ring-1
+                                    transition-[box-shadow] duration-150 ease-out
+                                    ${isLight
+                                        ? `bg-bg-secondary ${showResults ? 'shadow-[inset_0_1px_2px_rgba(0,0,0,0.08),0_8px_24px_rgba(0,0,0,0.10)]' : 'shadow-[inset_0_1px_2px_rgba(0,0,0,0.08)]'} ${isExpanded ? 'ring-black/[0.14]' : 'ring-black/[0.08] hover:ring-black/[0.14]'}`
+                                        : `bg-bg-elevated ${showResults ? 'shadow-[inset_0_1px_2px_rgba(0,0,0,0.6),0_12px_32px_rgba(0,0,0,0.55)]' : 'shadow-[inset_0_1px_2px_rgba(0,0,0,0.6)]'} ${isExpanded ? 'ring-white/[0.14]' : 'ring-white/[0.08] hover:ring-white/[0.12]'}`}
                                 `}
                             >
                                 {/* Input Row */}

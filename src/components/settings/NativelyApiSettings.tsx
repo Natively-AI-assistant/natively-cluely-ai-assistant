@@ -18,7 +18,6 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useT } from '../../i18n';
 import { motion, AnimatePresence, LayoutGroup, useReducedMotion } from 'framer-motion';
 import { AccordionSection, Disclosure } from '../ui/AccordionSection';
-import { InteractiveCard } from '../ui/InteractiveCard';
 import { FreeTrialModal } from '../trial/FreeTrialModal';
 import { useTrialRemaining } from '../trial/useTrialRemaining';
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../../lib/meetingInterfaceTheme';
@@ -109,17 +108,6 @@ function setUsageCache(next: UsageData | null): void {
     // session, only the cross-restart benefit is lost.
   }
 }
-
-// Cursor-tracked spotlight colour per tier, so the API card blooms in its OWN
-// hue on hover exactly as the Pro purchase cards do. Values are the tier fills'
-// hues at low alpha; a neutral grey glow here would still have read as a
-// different control from the Pro cards.
-const TIER_GLOW = {
-  Standard: 'rgba(60, 107, 105, 0.34)',
-  Pro: 'rgba(17, 89, 153, 0.34)',
-  Max: 'rgba(102, 60, 104, 0.34)',
-  Ultra: 'rgba(111, 37, 66, 0.34)',
-} as const;
 
 // The plan chooser.
 //
@@ -226,6 +214,59 @@ function pickFeatureIcon(feature: string) {
 // left column, the features panel and the CTA block) with a mesh header +
 // single body, so nothing consumed them any more. Only the container-level
 // opacity crossfade between tiers survives.
+
+// Odometer price: each digit is a reel of 0-9 that rolls to its value. The
+// card body is keyed by plan, so this mounts fresh on every switch; it starts
+// on the previous plan's figure and rolls to the new one on the next frame.
+// The tens reel collapses to zero width for single-digit prices ($8).
+const PRICE_DIGITS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+const PRICE_ROLL_EASE = 'cubic-bezier(0.23, 1, 0.32, 1)';
+
+function RollingPrice({ value, from }: { value: number; from: number }) {
+  const reduceMotion = useReducedMotion();
+  const [shown, setShown] = useState(reduceMotion ? value : from);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setShown(value));
+    return () => cancelAnimationFrame(id);
+  }, [value]);
+
+  const tens = Math.floor(shown / 10);
+  const reel = (digit: number, delayMs: number) => (
+    <span style={{ display: 'inline-block', height: '1em', overflow: 'hidden' }}>
+      <span
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          transform: `translateY(${-digit}em)`,
+          transition: reduceMotion ? 'none' : `transform 620ms ${PRICE_ROLL_EASE} ${delayMs}ms`,
+        }}
+      >
+        {PRICE_DIGITS.map((d) => (
+          <span key={d} style={{ height: '1em' }}>{d}</span>
+        ))}
+      </span>
+    </span>
+  );
+
+  return (
+    <span role="img" aria-label={`$${value}`} style={{ display: 'inline-flex' }}>
+      <span aria-hidden="true">$</span>
+      <span
+        aria-hidden="true"
+        style={{
+          display: 'inline-block',
+          overflow: 'hidden',
+          width: tens ? '1ch' : 0,
+          opacity: tens ? 1 : 0,
+          transition: reduceMotion ? 'none' : `width 450ms ${PRICE_ROLL_EASE}, opacity 300ms`,
+        }}
+      >
+        {reel(tens, 0)}
+      </span>
+      <span aria-hidden="true">{reel(shown % 10, 40)}</span>
+    </span>
+  );
+}
 
 // Both tiers' text share one absolutely-positioned cell, so for as long as the
 // two fades overlap the card shows two sets of text. The outgoing tier leaves
@@ -1240,6 +1281,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
         const plan = PLANS.find((p) => p.id === selectedPlanId)!;
         const limits = planCatalog?.[plan.planKey];
         const price = plan.price;
+        const prevPrice = PLANS.find((p) => p.id === prevPlanId)?.price ?? price;
         // A verified-live Dodo link (all four checked 2026-09-08). These were
         // the fallback behind getNativelyPricing; with that call removed they
         // are simply the source, and changing a checkout link is now an app
@@ -1258,9 +1300,10 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
             id="natively-api-tabpanel"
             aria-labelledby={`natively-api-tab-${plan.id}`}
           >
-            <InteractiveCard
-              className={`natively-api-detail-card group h-full w-full relative overflow-hidden natively-api-detail-card-${plan.name.toLowerCase()}`}
-              glowColor={TIER_GLOW[plan.name as keyof typeof TIER_GLOW]}
+            {/* A plain surface, deliberately: no cursor spotlight, press scale or
+                hover bloom. The blueprint grid (::before) is always shown. */}
+            <div
+              className={`natively-api-detail-card h-full w-full relative overflow-hidden natively-api-detail-card-${plan.name.toLowerCase()}`}
               data-active={isActive ? "true" : "false"}
               // No inline `transition` here on purpose. index.css already
               // declares `transition: transform/box-shadow/border-color 180ms`
@@ -1315,7 +1358,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
                           className="natively-api-on-fill text-[38px] font-bold leading-none"
                           style={{ fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.04em' }}
                         >
-                          {price}
+                          <RollingPrice value={Number(price.slice(1))} from={Number(prevPrice.slice(1))} />
                         </span>
                         <span className="natively-api-on-fill-dim text-[12px] font-medium">/ month</span>
                       </div>
@@ -1372,7 +1415,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
                   </div>
                 </motion.div>
               </AnimatePresence>
-            </InteractiveCard>
+            </div>
           </div>
         );
       })()}
