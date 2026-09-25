@@ -53,6 +53,7 @@ export class RecapLLM {
             yield* this.llmHelper.streamChat(fittedContext, undefined, undefined, promptOverride, true);
         } catch (error) {
             console.error("[RecapLLM] Streaming generation failed:", error);
+            throw error; // the engine emits 'error' — see ClarifyLLM.generateStream
         }
     }
 

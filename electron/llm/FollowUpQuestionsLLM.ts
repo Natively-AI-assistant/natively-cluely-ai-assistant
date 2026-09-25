@@ -40,6 +40,7 @@ export class FollowUpQuestionsLLM {
             yield* this.llmHelper.streamChat(fittedContext, undefined, undefined, this.resolvePrompt(), true);
         } catch (e) {
             console.error("[FollowUpQuestionsLLM] Stream Failed:", e);
+            throw e; // the engine emits 'error' — see ClarifyLLM.generateStream
         }
     }
 }

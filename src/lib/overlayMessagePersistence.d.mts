@@ -18,6 +18,16 @@ export function applyWhatToAnswerNullFeedbackMessages<T extends { id: string; ro
   idFactory?: () => string,
 ): T[];
 
+export function intelligenceErrorIntent(mode: string, activeStreamIntent: string | null): string | null;
+
+export function settleStreamingOnErrorMessages<T extends { id: string; role: string; text: string; intent?: string; isStreaming?: boolean }>(
+  prev: T[],
+  intent: string | null,
+  partialText: string,
+  errorText: string,
+  idFactory?: () => string,
+): T[];
+
 export function discardStreamingByIntentMessages<T extends { id: string; role: string; text: string; intent?: string; isStreaming?: boolean }>(
   prev: T[],
   intent?: string,
