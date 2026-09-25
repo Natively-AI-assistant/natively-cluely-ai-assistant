@@ -275,7 +275,7 @@ const PRIMARY_CTX: CtxOption[] = [
     ipcKey: 'browserAutoDetectCoding',
     label: 'Auto-detect coding problems',
     Icon: Braces,
-    desc: 'Recognize high-confidence coding and interview pages, on this computer.',
+    desc: 'Recognize high-confidence coding and interview pages locally.',
   },
   {
     field: 'autoAttachCoding',
@@ -1047,7 +1047,7 @@ export const PhoneMirrorSettings: React.FC = () => {
               description={
                 view.exposeOnLan
                   ? t('Scan the code with your phone camera, or open the link on it.')
-                  : t('LAN access is off. Turn it on, or open the link on this computer.')
+                  : t('LAN is off. Turn it on, or open the link on this computer.')
               }
               control={revealButton(showPairing, () => setShowPairing((v) => !v), t('Show code'), t('Hide code'), 'min-w-[112px]')}
             >
@@ -1131,8 +1131,8 @@ export const PhoneMirrorSettings: React.FC = () => {
               descriptionKey={confirmReset ? 'confirm' : 'idle'}
               description={
                 confirmReset
-                  ? t('Phones disconnect, old links stop working, and the extension must re-pair.')
-                  : t('Disconnects all phones and the extension. Use it if a link was shared.')
+                  ? t('Old links stop working. Re-pair the extension.')
+                  : t('Disconnects all phones and the extension. Use if a link leaked.')
               }
               control={
                 <Presence kind="control" id={confirmReset ? 'confirm' : 'idle'}>
@@ -1210,11 +1210,11 @@ export const PhoneMirrorSettings: React.FC = () => {
             description={
               shownRunning ? (
                 <>
-                  {t('Sends the active tab to Natively. Press')}{' '}
+                  {t('Sends your active tab to Natively.')}{' '}
                   <kbd className="px-1.5 py-0.5 rounded bg-bg-input border border-border-subtle font-mono text-[10px] text-text-primary">
                     {isMac ? '⌘' : 'Ctrl'}+Y
                   </kbd>{' '}
-                  {t('to capture it manually.')}
+                  {t('captures it manually.')}
                 </>
               ) : (
                 t('Turn on Phone Mirror first. The extension connects through it.')
@@ -1260,7 +1260,7 @@ export const PhoneMirrorSettings: React.FC = () => {
             <SyncRow
               icon={<ClipboardPaste size={20} />}
               title={t('Pair manually')}
-              description={t("If one-click pairing fails, paste this into the extension's manual field.")}
+              description={t('If one-click pairing fails, paste this into the extension manually.')}
               control={revealButton(showManualPair, () => setShowManualPair((v) => !v), t('Show'), t('Hide'), 'min-w-[84px]')}
             >
               <Collapse open={showManualPair}>
