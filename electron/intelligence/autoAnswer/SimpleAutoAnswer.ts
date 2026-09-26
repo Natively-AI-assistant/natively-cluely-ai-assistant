@@ -127,9 +127,20 @@ export const PREFETCH_MIN_INTERVAL_MS = 25_000;
 export function acceptsLocalSpeechEndHint(sttProvider: string): boolean {
     return !['none', 'groq', 'azure', 'ibmwatson', 'openai', 'local-whisper'].includes(sttProvider);
 }
-/** The shape that earns an unrationed prefetch: a trailing '?' or an interrogative lead. */
+/** A transcript stretch split after . ? ! — the unit a question's shape lives in. */
+export function sentencesOf(text: string): string[] {
+    return text.split(/(?<=[.?!])\s+/).map(s => s.trim()).filter(Boolean);
+}
+/**
+ * The shape that earns an unrationed prefetch: a sentence that ends in '?' or
+ * opens with an interrogative lead. Per SENTENCE, not per candidate: a
+ * candidate usually opens with the lead-in the judge already ruled silent
+ * ("Great. So I'm Sarah, I lead the platform team…"), and a whole-candidate
+ * test read THAT as the lead — live 2026-09-26 "…Let's start with you. Tell me
+ * a little bit about yourself" got no head start.
+ */
 export function isQuestionShaped(candidate: string): boolean {
-    return /\?\s*$/.test(candidate) || FALLBACK_INTERROGATIVE.test(candidate);
+    return sentencesOf(candidate).some(s => /\?\s*$/.test(s) || FALLBACK_INTERROGATIVE.test(s));
 }
 /**
  * How long after an automatic answer a manual press still counts as "that
@@ -233,6 +244,15 @@ export interface SimpleAutoAnswerHost {
 
 export class SimpleAutoAnswerEngine {
     private pending: Array<{ text: string; at: number; speaker?: string; glueNext?: boolean }> = [];
+    /**
+     * How many leading `pending` finals a verdict has already ruled NOT an ask
+     * (a statement, a rhetorical question, logistics). They stay in the
+     * candidate — the judge needs them as context — but a question's SHAPE is
+     * only read from the finals after them: otherwise "Great. So I'm Sarah…"
+     * is the lead of every later candidate, the prefetch never gets its head
+     * start, and a judge failure has no question to fall back on.
+     */
+    private judgedParts = 0;
     /** Latest interviewer interim — the evidence for whether a final cut a word in half. */
     private lastInterviewerInterim = '';
     /** speakerId per interviewer final, when the STT diarizes. Keyed by normalized text. */
@@ -389,7 +409,10 @@ export class SimpleAutoAnswerEngine {
     private onStoppage(early: boolean): void {
         if (!this.host.isEnabled() || !this.host.isMeetingActive()) return;
         const now = this.clock.now();
+        const before = this.pending.length;
         this.pending = this.pending.filter(p => now - p.at <= PENDING_MAX_AGE_MS);
+        // Finals arrive in time order, so aged-out ones are always a prefix.
+        this.judgedParts = Math.max(0, this.judgedParts - (before - this.pending.length));
         if (this.pending.length === 0) return;
         const candidate = joinTranscriptParts(this.pending);
         const key = normalizeForCompare(candidate);
@@ -443,8 +466,13 @@ export class SimpleAutoAnswerEngine {
         // Key any speculation the engine starts on its own interims to THIS
         // candidate, so the dispatch below can claim it by id.
         this.host.noteCandidate?.(id, this.sequence);
-        this.maybePrefetch(id, candidate, now);
+        this.maybePrefetch(id, candidate, this.unjudgedText(), now);
         void this.consult(id, candidate, now, early);
+    }
+
+    /** The finals no verdict has ruled on yet — where a new ask's shape is read. */
+    private unjudgedText(): string {
+        return joinTranscriptParts(this.pending.slice(Math.min(this.judgedParts, this.pending.length)));
     }
 
     /**
@@ -468,12 +496,13 @@ export class SimpleAutoAnswerEngine {
      * only, never over a live stream or an existing speculation), so this can
      * be optimistic without stacking generations.
      */
-    private maybePrefetch(id: string, candidate: string, now: number): void {
+    private maybePrefetch(id: string, candidate: string, unjudged: string, now: number): void {
         if (!this.host.prefetchAnswer) return;
         // Question-shaped asks always get the head start; everything else is
         // rationed by time. See PREFETCH_MIN_INTERVAL_MS for why both exist.
+        // The shape is read from the unjudged finals only (see judgedParts).
         const rationed = this.lastPrefetchAt !== null && now - this.lastPrefetchAt < PREFETCH_MIN_INTERVAL_MS;
-        if (rationed && !isQuestionShaped(candidate)) return;
+        if (rationed && !isQuestionShaped(unjudged)) return;
         this.lastPrefetchAt = now;
         try {
             this.host.prefetchAnswer(id, candidate);
@@ -487,6 +516,8 @@ export class SimpleAutoAnswerEngine {
         let timedOut = false;
         const turns = this.turnsBefore(committedAt);
         const parts = this.pending.map(p => ({ speaker: p.speaker, text: p.text }));
+        const partsAtConsult = this.pending.length;
+        const unjudged = this.unjudgedText();
         let raw: string | null = null;
         let outcome: 'verdict' | 'timeout' | 'error' | 'unparseable' | 'absent' = 'verdict';
         if (!this.host.judgeCandidate) {
@@ -564,10 +595,14 @@ export class SimpleAutoAnswerEngine {
             // A transient judge failure must not silence the question forever
             // (review 2026-08-25): clear the key so the next stoppage retries.
             this.lastJudgedKey = '';
-            // Near-legacy fallback: a trailing '?', or — on providers that
-            // never guarantee punctuation — an interrogative-led utterance.
-            const interrogative = FALLBACK_INTERROGATIVE.test(candidate);
-            if (/\?\s*$/.test(candidate) || (!this.punctuationGuaranteed && interrogative)) {
+            // Near-legacy fallback: a question mark, or — on providers that
+            // never guarantee punctuation — an interrogative-led utterance,
+            // read per sentence from the finals no verdict has ruled on (the
+            // lead-in a verdict already called a statement is not the ask).
+            const fresh = sentencesOf(unjudged);
+            const asked = /\?\s*$/.test(candidate) || fresh.some(s => /\?\s*$/.test(s));
+            const interrogative = fresh.some(s => FALLBACK_INTERROGATIVE.test(s));
+            if (asked || (!this.punctuationGuaranteed && interrogative)) {
                 this.host.log?.(`[AutoAnswer:simple] judge ${outcome} — fallback dispatch`);
                 this.deliver(id, candidate, 0.9, 'general_question', committedAt);
             }
@@ -587,6 +622,9 @@ export class SimpleAutoAnswerEngine {
             const reason = route.route === 'wait_incomplete' ? 'incomplete' : route.reason;
             this.emit({ name: 'auto_answer_ignored', questionId: id, skipReason: reason, dialogueAct: verdict.act, answerability: verdict.answerability });
             if (route.route === 'wait_incomplete') this.lastJudgedKey = '';   // more speech may finish it → re-judge then
+            // Ruled not an ask: these finals stay as context, but a later
+            // ask's shape is read after them. An INCOMPLETE ask stays open.
+            else this.judgedParts = partsAtConsult;
             return;
         }
         const text = route.questionText ?? candidate;
@@ -608,6 +646,7 @@ export class SimpleAutoAnswerEngine {
             this.deliver(id, text, route.answerability, route.act, committedAt);
         } else {
             this.emit({ name: 'auto_answer_ignored', questionId: id, skipReason: 'low_answerability', answerability: route.answerability });
+            this.judgedParts = partsAtConsult;
         }
     }
 
@@ -656,6 +695,7 @@ export class SimpleAutoAnswerEngine {
             const reuseSpeculative = Boolean(snapshot && snapshot.questionId === id && snapshot.text);
             this.lastAnsweredText = text;
             this.pending = [];
+            this.judgedParts = 0;
             this.lastJudgedKey = '';
             this.emit({ name: 'auto_answer_decision', questionId: id, action: 'auto', answerability });
             if (reuseSpeculative) this.host.log?.(`[AutoAnswer:simple] reusing the prefetched answer for ${id}`);
@@ -736,6 +776,7 @@ export class SimpleAutoAnswerEngine {
         this.dropParked();
         this.clearFeedback();
         this.pending = [];
+        this.judgedParts = 0;
         this.lastInterviewerInterim = '';
         this.lastInterviewerAt = 0;
         this.speakerByTurn.clear();
