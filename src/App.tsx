@@ -501,7 +501,7 @@ const App: React.FC = () => {
       // DEV-only card overrides (?forceCard, ?forceAd, ?review=force,
       // ?extToaster=force): the card goes through the orchestrator, takes the
       // one slot like any card, and records no ledger outcome (spec §10).
-      const forced = import.meta.env.DEV ? forcedCardFromQuery(window.location.search) : null;
+      const forced = import.meta.env.DEV ? forcedCardFromQuery(window.location.search, { adsAvailable: PREMIUM_ADS_AVAILABLE }) : null;
       if (forced) orch.forceCard(forced);
     });
     return () => {

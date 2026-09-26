@@ -16,12 +16,10 @@ const FORCE_AD_ALIASES: Record<string, ToasterId> = {
   max_ultra_upgrade: 'max_ultra',
 };
 
-/**
- * The card a DEV URL asks for: `?forceCard=<stage id>`, or the older
- * `?forceAd=<ad>`, `?review=force` and `?extToaster=force`. Null for none.
- */
-export function forcedCardFromQuery(search: string): ToasterId | null {
-  const params = new URLSearchParams(search);
+/** Cards drawn by the premium submodule; without it they render nothing. */
+const PREMIUM_CARDS = new Set<string>(['natively_api_new', 'natively_api_existing', 'profile_ad', 'jd_ad', 'max_ultra']);
+
+function requested(params: URLSearchParams): ToasterId | null {
   const card = params.get('forceCard');
   if (card) return card as ToasterId;
   const ad = params.get('forceAd');
@@ -29,4 +27,19 @@ export function forcedCardFromQuery(search: string): ToasterId | null {
   if (params.get('review') === 'force') return 'review_prompt';
   if (params.get('extToaster') === 'force') return 'browser_extension';
   return null;
+}
+
+/**
+ * The card a DEV URL asks for: `?forceCard=<stage id>`, or the older
+ * `?forceAd=<ad>`, `?review=force` and `?extToaster=force`. Null for none, and
+ * null for an ad when the premium module is absent: it would render nothing
+ * that could ever close, and hold the one card slot for the whole session.
+ */
+export function forcedCardFromQuery(search: string, opts: { adsAvailable?: boolean } = {}): ToasterId | null {
+  const id = requested(new URLSearchParams(search));
+  if (id && PREMIUM_CARDS.has(id) && opts.adsAvailable === false) {
+    console.warn(`[DEV] card override ${id} skipped: the ads need the premium module`);
+    return null;
+  }
+  return id;
 }

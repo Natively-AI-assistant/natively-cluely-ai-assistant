@@ -93,3 +93,14 @@ test('forcedCardFromQuery: ?forceCard, and the older ?forceAd / ?review / ?extTo
   assert.equal(forcedCardFromQuery('?window=launcher'), null);
   assert.equal(forcedCardFromQuery('?review=off'), null);
 });
+
+// Final review I1: without the premium module an ad renders nothing, and
+// nothing on screen can ever close it, so forcing one held the card slot for
+// the whole session (no card at all). The ads are not forced then.
+test('forcedCardFromQuery: no ad is forced when the premium module is absent', () => {
+  for (const q of ['?forceAd=profile', '?forceCard=jd_ad', '?forceAd=natively_api', '?forceCard=natively_api_new', '?forceAd=max_ultra_upgrade']) {
+    assert.equal(forcedCardFromQuery(q, { adsAvailable: false }), null, q);
+  }
+  assert.equal(forcedCardFromQuery('?forceCard=support', { adsAvailable: false }), 'support', 'cards in this repo are unaffected');
+  assert.equal(forcedCardFromQuery('?forceAd=profile', { adsAvailable: true }), 'profile_ad');
+});

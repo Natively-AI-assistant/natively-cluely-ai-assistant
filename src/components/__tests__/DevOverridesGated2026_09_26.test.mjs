@@ -20,7 +20,7 @@ const review = read('components/ReviewPromptHost.tsx');
 const ext = read('components/onboarding/BrowserExtensionToaster.tsx');
 
 test('App forces a card through the orchestrator, in DEV only', () => {
-  assert.ok(app.includes('const forced = import.meta.env.DEV ? forcedCardFromQuery(window.location.search) : null;'));
+  assert.ok(app.includes('const forced = import.meta.env.DEV ? forcedCardFromQuery(window.location.search, { adsAvailable: PREMIUM_ADS_AVAILABLE }) : null;'));
   assert.ok(app.includes('if (forced) orch.forceCard(forced);'));
   assert.ok(!app.includes("get('forceAd')"), 'no second path renders an ad');
 });
