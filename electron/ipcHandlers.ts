@@ -341,57 +341,62 @@ export function initializeIpcHandlers(appState: AppState): void {
    * recordings are never touched. Callers decide WHEN; see settleExpiredTrial
    * and the `trial:wipe-profile-data` handler.
    */
-  const wipeTrialProfileData = (): { success: boolean; error?: string } => {
+  const wipeTrialProfileData = (): { success: boolean; failed: string[] } => {
+    // Every step runs, and every step that fails is named: a wipe that left
+    // data behind must never read as success (toaster policy §5 row 5).
+    const failed: string[] = [];
+    const step = (name: string, fn: () => void) => {
+      try { fn(); } catch (e: any) {
+        failed.push(name);
+        console.warn(`[IPC] trial wipe: ${name} failed:`, e?.message || e);
+      }
+    };
+
     // Profile raw-text indexes hold the résumé/JD text and vectors; clear them even if the orchestrator is absent.
-    try { require('./services/knowledge/v3ProfileSources').wipeProfileRawIndexes(); } catch { /* non-fatal */ }
-    try {
-      // 1. Disable knowledge mode + wipe orchestrator in-memory caches
-      try {
-        const orchestrator = appState.getKnowledgeOrchestrator();
-        if (orchestrator) {
-          orchestrator.setKnowledgeMode(false);
-          const { DocType } = require('../premium/electron/knowledge/types');
-          orchestrator.deleteDocumentsByType(DocType.RESUME);
-          orchestrator.deleteDocumentsByType(DocType.JD);
-          // …and their raw-text indexes (text + vectors under profile:<kind>:<version>).
-          try { require('./services/knowledge/v3ProfileSources').kickProfileRawIndex(orchestrator); } catch { /* non-fatal */ }
-        }
-      } catch {
-        /* ignore — orchestrator may not be initialised */
-      }
+    step('raw-indexes', () => require('./services/knowledge/v3ProfileSources').wipeProfileRawIndexes());
 
-      // 2. Wipe Pro-specific SQLite tables
-      //    NOT wiped: meetings, transcripts, audio chunks (user's own recordings)
-      try {
-        const sqliteDb = DatabaseManager.getInstance().getDb();
-        if (sqliteDb) {
-          sqliteDb.exec(`
-            DELETE FROM company_dossiers;
-            DELETE FROM knowledge_documents;
-            DELETE FROM resume_nodes;
-            DELETE FROM user_profile;
-          `);
-        }
-      } catch (dbErr: any) {
-        console.warn('[IPC] trial:wipe-profile-data: SQLite wipe partial error:', dbErr.message);
-      }
+    // 1. Disable knowledge mode + wipe orchestrator in-memory caches. No
+    //    orchestrator (not initialised, or an open-source build) is nothing to wipe.
+    step('knowledge', () => {
+      const orchestrator = appState.getKnowledgeOrchestrator();
+      if (!orchestrator) return;
+      orchestrator.setKnowledgeMode(false);
+      const { DocType } = require('../premium/electron/knowledge/types');
+      orchestrator.deleteDocumentsByType(DocType.RESUME);
+      orchestrator.deleteDocumentsByType(DocType.JD);
+      // …and their raw-text indexes (text + vectors under profile:<kind>:<version>).
+      try { require('./services/knowledge/v3ProfileSources').kickProfileRawIndex(orchestrator); } catch { /* a re-index kick, not a wipe */ }
+    });
 
-      // 2b. PII BACKSTOP (2026-07-02): also wipe the profile OKF packs (name/
-      //     companies/education) — the raw DELETE above does not cover the
-      //     knowledge_sources/packs/cards rows. See the trial:end-byok backstop.
-      try {
-        const { ProfilePackBuilder } = require('./services/knowledge/ProfilePackBuilder') as typeof import('./services/knowledge/ProfilePackBuilder');
-        ProfilePackBuilder.getInstance().deleteAllProfilePacks();
-      } catch (piiErr: any) {
-        console.warn('[IPC] trial:wipe-profile-data: profile OKF pack wipe failed:', piiErr?.message || piiErr);
+    // 2. Wipe Pro-specific SQLite tables, one statement each: a multi-statement
+    //    exec stops at its first error, so one missing table used to leave the
+    //    rest untouched. A table that does not exist holds nothing to wipe.
+    //    NOT wiped: meetings, transcripts, audio chunks (user's own recordings)
+    const sqliteDb = (() => { try { return DatabaseManager.getInstance().getDb(); } catch { return null; } })();
+    if (sqliteDb) {
+      for (const table of ['company_dossiers', 'knowledge_documents', 'resume_nodes', 'user_profile']) {
+        step(`sqlite:${table}`, () => {
+          try { sqliteDb.exec(`DELETE FROM ${table};`); }
+          catch (e: any) { if (!/no such table/i.test(String(e?.message))) throw e; }
+        });
       }
-
-      return { success: true };
-    } catch (error: any) {
-      console.error('[IPC] trial:wipe-profile-data error:', error);
-      return { success: false, error: error.message };
     }
+
+    // 2b. PII BACKSTOP (2026-07-02): also wipe the profile OKF packs (name/
+    //     companies/education) — the raw DELETE above does not cover the
+    //     knowledge_sources/packs/cards rows.
+    step('profile-packs', () => {
+      const { ProfilePackBuilder } = require('./services/knowledge/ProfilePackBuilder') as typeof import('./services/knowledge/ProfilePackBuilder');
+      ProfilePackBuilder.getInstance().deleteAllProfilePacks();
+    });
+
+    return { success: failed.length === 0, failed };
   };
+
+  // Trials whose expiry wipe already ran in this process. The persisted
+  // once-marker is the real record; this keeps the wipe to once per launch
+  // when the settings store cannot write it (degraded) or a step failed.
+  const expiryWipeAttempted = new Set<string>();
 
   /**
    * Settle an EXPIRED trial token in one place (toaster policy Phase 0,
@@ -437,7 +442,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         wipedForThisTrial: sm.get('trialExpiryWipedFor') === trialId,
       });
 
-      if (decision.wipe) {
+      if (decision.wipe && !expiryWipeAttempted.has(trialId)) {
+        expiryWipeAttempted.add(trialId);
         const wiped = wipeTrialProfileData();
         if (wiped.success) sm.set('trialExpiryWipedFor', trialId);
       }
@@ -11717,13 +11723,21 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   // End trial via BYOK path: wipe Pro-ingested data, clear trial token + natively key.
   safeHandle('trial:end-byok', async () => {
-    // Profile raw-text indexes hold the résumé/JD text and vectors; clear them even if the orchestrator is absent.
-    try { require('./services/knowledge/v3ProfileSources').wipeProfileRawIndexes(); } catch { /* non-fatal */ }
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
 
-      // 1. Fire-and-forget analytics (non-blocking)
+      // Wipe FIRST. A wipe that fails leaves the trial exactly as it was (token,
+      // key, licence), says so, and announces nothing, so the card can show the
+      // error with Try again instead of "All set" (toaster policy §5 row 5).
+      const wiped = wipeTrialProfileData();
+      if (!wiped.success) {
+        console.warn('[IPC] trial:end-byok: wipe incomplete:', wiped.failed.join(', '));
+        return { success: false, error: 'wipe_failed' };
+      }
+      const trialId = cm.getTrialStartedAt() || cm.getTrialExpiresAt();
+      if (trialId) SettingsManager.getInstance().set('trialExpiryWipedFor', trialId);
+
       const token = cm.getTrialToken();
       if (token) {
         fetch(`${NATIVELY_API_BASE}/v1/trial/convert`, {
@@ -11734,20 +11748,14 @@ export function initializeIpcHandlers(appState: AppState): void {
         }).catch(() => {});
       }
 
-      // 2. Clear trial token
       cm.clearTrialToken();
 
-      // 3. Clear the trial sentinel key + revert model / STT to open defaults
       cm.setNativelyApiKey('');
       const llmHelper = appState.processingHelper?.getLLMHelper?.();
       if (llmHelper) llmHelper.setNativelyKey(null);
-      // The mirror of the trial:start gap: setNativelyApiKey('') reverts the
-      // stored default off 'natively', but LLMHelper would keep routing there
-      // with a null key and the chip would keep reading "Natively API".
       syncNativelyModelRuntime();
       await appState.reconfigureSttProvider();
 
-      // 4. Deactivate Pro license (removes license.enc)
       try {
         const { LicenseManager } = require('../premium/electron/services/LicenseManager');
         await LicenseManager.getInstance().deactivate();
@@ -11755,56 +11763,6 @@ export function initializeIpcHandlers(appState: AppState): void {
         /* LicenseManager not available in this build */
       }
 
-      // 5. Disable knowledge mode + wipe orchestrator in-memory caches for resume/JD
-      try {
-        const orchestrator = appState.getKnowledgeOrchestrator();
-        if (orchestrator) {
-          orchestrator.setKnowledgeMode(false);
-          const { DocType } = require('../premium/electron/knowledge/types');
-          orchestrator.deleteDocumentsByType(DocType.RESUME);
-          orchestrator.deleteDocumentsByType(DocType.JD);
-          // …and their raw-text indexes (text + vectors under profile:<kind>:<version>).
-          try { require('./services/knowledge/v3ProfileSources').kickProfileRawIndex(orchestrator); } catch { /* non-fatal */ }
-        }
-      } catch {
-        /* ignore */
-      }
-
-      // 6. Wipe Pro-specific cached data from local SQLite
-      //    Targets: company dossiers, knowledge docs (+ cascades), resume nodes, user profile
-      //    NOT wiped: meetings, transcripts, chunks (user's own recordings)
-      try {
-        const sqliteDb = DatabaseManager.getInstance().getDb();
-        if (sqliteDb) {
-          sqliteDb.exec(`
-            DELETE FROM company_dossiers;
-            DELETE FROM knowledge_documents;
-            DELETE FROM resume_nodes;
-            DELETE FROM user_profile;
-          `);
-          console.log('[IPC] trial:end-byok: Pro data wiped from SQLite');
-        }
-      } catch (dbErr: any) {
-        console.warn('[IPC] trial:end-byok: SQLite wipe partial error:', dbErr.message);
-      }
-
-      // 6b. PII BACKSTOP (2026-07-02): the profile OKF packs (knowledge_sources/
-      //     packs/cards hanging off the reserved '__profile_okf__' mode) hold the
-      //     candidate's name / companies / education. Step 5's deleteProfilePack
-      //     runs ONLY when the orchestrator is present AND swallows its own
-      //     errors, so on trial-end with an uninitialized orchestrator the PII
-      //     would survive. Delete the profile OKF rows directly as a backstop
-      //     regardless of orchestrator state. Document reference-file packs (any
-      //     OTHER mode_id) are intentionally NOT touched — those are the user's
-      //     own uploaded documents, not Pro profile data.
-      try {
-        const { ProfilePackBuilder } = require('./services/knowledge/ProfilePackBuilder') as typeof import('./services/knowledge/ProfilePackBuilder');
-        ProfilePackBuilder.getInstance().deleteAllProfilePacks();
-      } catch (piiErr: any) {
-        console.warn('[IPC] trial:end-byok: profile OKF pack wipe failed:', piiErr?.message || piiErr);
-      }
-
-      // 7. Notify all windows to refresh license + model state
       clearActiveModeOnLicenseLoss();
       BrowserWindow.getAllWindows().forEach((win) => {
         if (!win.isDestroyed()) {

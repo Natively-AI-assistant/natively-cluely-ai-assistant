@@ -733,10 +733,15 @@ const App: React.FC = () => {
     }).catch(() => {});
 
     // Listen for trial-ended event (emitted by trial:end-byok IPC)
-    const removeTrialListener = window.electronAPI?.onTrialEnded?.(() => {
+    const removeTrialListener = window.electronAPI?.onTrialEnded?.((data) => {
       setActiveTrial(null);
-      setShowTrialExpiredModal(false);
-      setTrialEndedDue(false);
+      // The BYOK exit is announced while its card is still Cleaning up; that
+      // card closes itself once the user leaves "All set". Every other ending
+      // (a licence or key superseded the trial) takes the card away.
+      if (data?.choice !== 'byok') {
+        setShowTrialExpiredModal(false);
+        setTrialEndedDue(false);
+      }
       if (trialEndedTimer) { clearTimeout(trialEndedTimer); trialEndedTimer = null; }
       if (trialPollId) { clearInterval(trialPollId); trialPollId = null; }
     });
@@ -1360,18 +1365,22 @@ const App: React.FC = () => {
           <FreeTrialModal
             usage={activeTrial?.usage ?? { ai: 0, ai_tokens: 0, stt_seconds: 0, search: 0 }}
             onByok={async () => {
-              await window.electronAPI?.endTrialByok?.();
+              // A wipe that did not finish must not read as "All set": the card
+              // shows the error with Try again (toaster policy §5 row 5).
+              const res = await window.electronAPI?.endTrialByok?.();
+              if (!res?.success) throw new Error('wipe_failed');
             }}
             onStandard={async () => {
-              // Wipe resume + JD (orchestrator caches + SQLite) before checkout opens
-              await window.electronAPI?.wipeTrialProfileData?.().catch(() => {});
-              // Revert active mode to none — Standard plan has no modes access
+              // The profile wipe already ran once, at expiry (main,
+              // settleExpiredTrial). Standard has no modes access.
               await window.electronAPI?.modesSetActive?.(null).catch(() => {});
             }}
-            onDone={() => {
+            onDone={(reason) => {
               setShowTrialExpiredModal(false);
               setTrialEndedDue(false);
               setActiveTrial(null);
+              // "Add my keys" after a finished BYOK exit.
+              if (reason === 'byok') openSettingsExclusive('ai-providers');
             }}
           />
         )}

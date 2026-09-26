@@ -42,6 +42,6 @@ test('unmount clears the delay', () => {
 });
 
 test('closing the card releases the slot', () => {
-  const done = app.slice(app.indexOf('onDone={() => {', app.indexOf('showTrialExpiredModal && (')));
+  const done = app.slice(app.indexOf('onDone={(reason) => {', app.indexOf('showTrialExpiredModal && (')));
   assert.ok(done.slice(0, 200).includes('setTrialEndedDue(false);'));
 });

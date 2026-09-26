@@ -131,6 +131,10 @@ interface TrialModalProps {
 
 type Step = 'choose' | 'wiping' | 'done';
 
+// A wipe that did not finish (toaster policy §5 row 5). Never the exception
+// text: the trial is untouched, so trying again is safe.
+const WIPE_FAILED_COPY = "Couldn't clear your trial data. Nothing was changed. Try again.";
+
 export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onStandard, onDone, activeTrialExpiresAt }) => {
   const [step,       setStep]       = useState<Step>('choose');
   const [error,      setError]      = useState<string | null>(null);
@@ -170,7 +174,7 @@ export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onSta
     setStep('wiping');
     setError(null);
     try   { await onByok(); endedRef.current = true; setStep('done'); }
-    catch (e: any) { setError(e?.message || 'Something went wrong. Restart the app.'); setStep('choose'); }
+    catch { setError(WIPE_FAILED_COPY); setStep('choose'); }
   };
 
   // The trial is still running and this is the options card, not the eulogy.
@@ -436,7 +440,7 @@ export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onSta
                     onFocus={e => (e.currentTarget.style.color = INK.body)}
                     onBlur={e => (e.currentTarget.style.color = INK.faint)}
                   >
-                    {isActiveTrial ? 'End trial, use my own keys' : 'Use my own API keys'}
+                    {error ? 'Try again' : isActiveTrial ? 'End trial, use my own keys' : 'Use my own API keys'}
                   </button>
                 </div>
                 <div style={{ marginTop: '14px', fontSize: '11.5px', fontWeight: 500, color: INK.faint }}>
@@ -497,7 +501,7 @@ export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onSta
                     transition: `border-color ${ctaDur}ms ${EASE_CSS}, background-color ${ctaDur}ms ${EASE_CSS}, color ${ctaDur}ms ${EASE_CSS}`,
                   }}
                 >
-                  <span>Open Natively</span>
+                  <span>Add my keys</span>
                   <ArrowRight size={14} strokeWidth={1.9} aria-hidden />
                 </button>
               )}
