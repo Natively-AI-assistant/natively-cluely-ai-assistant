@@ -7,6 +7,7 @@ import { app, BrowserWindow, dialog, desktopCapturer, ipcMain, shell, systemPref
 import { setOpenAtLogin, getOpenAtLogin } from './utils/windowsTaskbarPolicy';
 import { micSettingsUri } from '../src/lib/micPermissionPolicy.mjs';
 import { resolveMacScreenStatus } from '../src/lib/permissionAttentionPolicy.mjs';
+import { hasOwnAiKey, resolveExpiredTrial } from '../src/lib/trialPolicy.mjs';
 import { TEXT_PLACEHOLDER_RE } from './utils/curlPlaceholderPolicy';
 import { routeOverlayUiAction } from './utils/overlayUiActionRouter';
 import * as fs from 'fs';
@@ -333,6 +334,9 @@ export function initializeIpcHandlers(appState: AppState): void {
     BrowserWindow.getAllWindows().forEach((win) => {
       if (!win.isDestroyed()) win.webContents.send('credentials-changed');
     });
+    // A key saved while an expired trial token lingers supersedes that trial:
+    // settle it now so an open "Trial ended" card closes at once.
+    settleExpiredTrial('credentials changed');
   };
 
   /**
@@ -738,6 +742,139 @@ export function initializeIpcHandlers(appState: AppState): void {
    * caller sees a key that is no longer the sentinel and returns immediately —
    * which is what keeps two reconfigureSttProvider() rebuilds from racing.
    */
+  const isLicensed = (): boolean => {
+    try {
+      const { LicenseManager } = require('../premium/electron/services/LicenseManager');
+      return LicenseManager.getInstance().isPremium() === true;
+    } catch {
+      return false;
+    }
+  };
+
+  /**
+   * Remove the Pro-only profile data a free trial left behind (résumé/JD
+   * documents, their indexes and profile packs). Meetings, transcripts and
+   * recordings are never touched. Callers decide WHEN; see settleExpiredTrial
+   * and the `trial:wipe-profile-data` handler.
+   */
+  const wipeTrialProfileData = (): { success: boolean; error?: string } => {
+    // Profile raw-text indexes hold the résumé/JD text and vectors; clear them even if the orchestrator is absent.
+    try { require('./services/knowledge/v3ProfileSources').wipeProfileRawIndexes(); } catch { /* non-fatal */ }
+    try {
+      // 1. Disable knowledge mode + wipe orchestrator in-memory caches
+      try {
+        const orchestrator = appState.getKnowledgeOrchestrator();
+        if (orchestrator) {
+          orchestrator.setKnowledgeMode(false);
+          const { DocType } = require('../premium/electron/knowledge/types');
+          orchestrator.deleteDocumentsByType(DocType.RESUME);
+          orchestrator.deleteDocumentsByType(DocType.JD);
+          // …and their raw-text indexes (text + vectors under profile:<kind>:<version>).
+          try { require('./services/knowledge/v3ProfileSources').kickProfileRawIndex(orchestrator); } catch { /* non-fatal */ }
+        }
+      } catch {
+        /* ignore — orchestrator may not be initialised */
+      }
+
+      // 2. Wipe Pro-specific SQLite tables
+      //    NOT wiped: meetings, transcripts, audio chunks (user's own recordings)
+      try {
+        const sqliteDb = DatabaseManager.getInstance().getDb();
+        if (sqliteDb) {
+          sqliteDb.exec(`
+            DELETE FROM company_dossiers;
+            DELETE FROM knowledge_documents;
+            DELETE FROM resume_nodes;
+            DELETE FROM user_profile;
+          `);
+        }
+      } catch (dbErr: any) {
+        console.warn('[IPC] trial:wipe-profile-data: SQLite wipe partial error:', dbErr.message);
+      }
+
+      // 2b. PII BACKSTOP (2026-07-02): also wipe the profile OKF packs (name/
+      //     companies/education) — the raw DELETE above does not cover the
+      //     knowledge_sources/packs/cards rows. See the trial:end-byok backstop.
+      try {
+        const { ProfilePackBuilder } = require('./services/knowledge/ProfilePackBuilder') as typeof import('./services/knowledge/ProfilePackBuilder');
+        ProfilePackBuilder.getInstance().deleteAllProfilePacks();
+      } catch (piiErr: any) {
+        console.warn('[IPC] trial:wipe-profile-data: profile OKF pack wipe failed:', piiErr?.message || piiErr);
+      }
+
+      return { success: true };
+    } catch (error: any) {
+      console.error('[IPC] trial:wipe-profile-data error:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  /**
+   * Settle an EXPIRED trial token in one place (toaster policy Phase 0,
+   * src/lib/trialPolicy.mjs). Called from every path where the answer can
+   * change: the startup read, the status poll, licence activation, a Natively
+   * key save, and every credentials change.
+   *
+   * - A licence, a real Natively key or an own AI key supersedes the trial:
+   *   the token is cleared (trialClaimed stays) and every window is told
+   *   (`trial-ended`, choice 'superseded'), which closes an open card.
+   * - Otherwise the "Trial ended" card is shown (showEndedCard).
+   * - The profile wipe runs once per trial, and never for a licensed user.
+   *
+   * Idempotent: once cleared there is no token; once wiped the marker blocks
+   * a second wipe. A trial with time left is never touched. Fails OPEN (no
+   * card): a wall the user cannot close must never be raised on a guess.
+   */
+  const settleExpiredTrial = (
+    reason: string,
+    opts: { serverExpired?: boolean } = {},
+  ): { showEndedCard: boolean; wipe: boolean; clearToken: boolean } => {
+    const none = { showEndedCard: false, wipe: false, clearToken: false };
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cm = CredentialsManager.getInstance();
+      const token = cm.getTrialToken();
+      if (!token) return none;
+      const expiresAt = cm.getTrialExpiresAt();
+      const expired = opts.serverExpired === true
+        || (!!expiresAt && new Date(expiresAt).getTime() <= Date.now());
+      if (!expired) return none;
+
+      const trialId = cm.getTrialStartedAt() || expiresAt || 'unknown-trial';
+      const nativelyKey = cm.getNativelyApiKey();
+      const sm = SettingsManager.getInstance();
+      const licensed = isLicensed();
+      const decision = resolveExpiredTrial({
+        hasToken: true,
+        expired: true,
+        licensed,
+        hasRealNativelyKey: !!nativelyKey && nativelyKey !== TRIAL_SENTINEL_KEY,
+        hasOwnAiKey: hasOwnAiKey(cm.getAllCredentials()),
+        wipedForThisTrial: sm.get('trialExpiryWipedFor') === trialId,
+      });
+
+      if (decision.wipe) {
+        const wiped = wipeTrialProfileData();
+        if (wiped.success) sm.set('trialExpiryWipedFor', trialId);
+      }
+      if (decision.clearToken) {
+        cm.clearTrialToken();
+        // clearTrialToken refuses while the credential store is degraded; only
+        // announce an end that actually happened.
+        if (!cm.getTrialToken()) {
+          console.log(`[IPC] Expired trial superseded (${reason}) — token cleared, Trial ended card suppressed`);
+          BrowserWindow.getAllWindows().forEach((win) => {
+            if (!win.isDestroyed()) win.webContents.send('trial-ended', { choice: 'superseded' });
+          });
+        }
+      }
+      return decision;
+    } catch (e: any) {
+      console.warn('[IPC] settleExpiredTrial failed:', e?.message || e);
+      return none;
+    }
+  };
+
   const endExpiredTrialRuntime = async (reason: string): Promise<boolean> => {
     let sttNeedsRebuild = false;
     try {
@@ -838,6 +975,9 @@ export function initializeIpcHandlers(appState: AppState): void {
           if (!win.isDestroyed())
             win.webContents.send('license-status-changed', { isPremium: true });
         });
+        // A licence supersedes an EXPIRED trial (a running one keeps going: the
+        // licence is the Pro app, not AI access).
+        settleExpiredTrial('licence activated');
       }
       return result;
     } catch (err: any) {
@@ -11042,6 +11182,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       // not a verdict on the key — it means the key is good and only the Pro
       // entitlement is still settling. The one case that must NOT end the trial
       // is a 4xx refusal, and the branch above hands the trial back there.
+      if (apiKey && !liveTrialUnderneath && !keyRejection) {
+        settleExpiredTrial('Natively key saved');
+      }
       if (apiKey && liveTrialUnderneath && !keyRejection) {
         cm.clearTrialToken();
         console.log('[IPC] set-natively-api-key: real key stored — free trial ended (purchased)');
@@ -11286,6 +11429,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const localExpiry = cm.getTrialExpiresAt();
       if (localExpiry && new Date(localExpiry).getTime() <= Date.now()) {
         await endExpiredTrialRuntime('Trial expired (local clock)');
+        settleExpiredTrial('status poll (local clock)');
       }
 
       const res = await fetch(`${NATIVELY_API_BASE}/v1/trial/status`, {
@@ -11302,7 +11446,12 @@ export function initializeIpcHandlers(appState: AppState): void {
       // The server's verdict wins: it can end a trial before this machine's
       // clock says so, and /v1/trial/status answers 200 with `expired: true`
       // rather than a 4xx, so this is the one reliable signal.
-      if (data?.expired) await endExpiredTrialRuntime('Trial expired (server)');
+      if (data?.expired) {
+        await endExpiredTrialRuntime('Trial expired (server)');
+        const settled = settleExpiredTrial('status poll (server)', { serverExpired: true });
+        // A superseded token is gone by now; the renderer then drops the card.
+        return { ...data, showEndedCard: settled.showEndedCard };
+      }
       return data;
     } catch (error: any) {
       return { ok: false, error: error.message || 'network_error' };
@@ -11325,12 +11474,22 @@ export function initializeIpcHandlers(appState: AppState): void {
       // read, and the part that matters (the credential and model revert) runs
       // synchronously anyway; only the STT rebuild is deferred.
       if (expired) void endExpiredTrialRuntime('Trial expired (startup read)');
+      const expiresAt = cm.getTrialExpiresAt();
+      const startedAt = cm.getTrialStartedAt();
+      // Decide the card, the wipe and the token in main (settleExpiredTrial).
+      const settled = expired ? settleExpiredTrial('startup read') : null;
+      // Judge by the token itself: the expiry revert above broadcasts a
+      // credentials change, which may already have settled (and cleared) it.
+      if (expired && !cm.getTrialToken()) {
+        return { hasToken: false, trialClaimed: true, superseded: true, expired: true, showEndedCard: false };
+      }
       return {
         hasToken: true,
         trialClaimed: true,
-        expiresAt: cm.getTrialExpiresAt(),
-        startedAt: cm.getTrialStartedAt(),
+        expiresAt,
+        startedAt,
         expired,
+        showEndedCard: settled?.showEndedCard === true,
       };
     } catch {
       return { hasToken: false, trialClaimed: false };
@@ -11632,55 +11791,9 @@ export function initializeIpcHandlers(appState: AppState): void {
   // trial token or natively key. Called automatically when trial expires so that
   // profile intelligence data can't linger in SQLite after the trial window closes.
   safeHandle('trial:wipe-profile-data', async () => {
-    // Profile raw-text indexes hold the résumé/JD text and vectors; clear them even if the orchestrator is absent.
-    try { require('./services/knowledge/v3ProfileSources').wipeProfileRawIndexes(); } catch { /* non-fatal */ }
-    try {
-      // 1. Disable knowledge mode + wipe orchestrator in-memory caches
-      try {
-        const orchestrator = appState.getKnowledgeOrchestrator();
-        if (orchestrator) {
-          orchestrator.setKnowledgeMode(false);
-          const { DocType } = require('../premium/electron/knowledge/types');
-          orchestrator.deleteDocumentsByType(DocType.RESUME);
-          orchestrator.deleteDocumentsByType(DocType.JD);
-          // …and their raw-text indexes (text + vectors under profile:<kind>:<version>).
-          try { require('./services/knowledge/v3ProfileSources').kickProfileRawIndex(orchestrator); } catch { /* non-fatal */ }
-        }
-      } catch {
-        /* ignore — orchestrator may not be initialised */
-      }
-
-      // 2. Wipe Pro-specific SQLite tables
-      //    NOT wiped: meetings, transcripts, audio chunks (user's own recordings)
-      try {
-        const sqliteDb = DatabaseManager.getInstance().getDb();
-        if (sqliteDb) {
-          sqliteDb.exec(`
-            DELETE FROM company_dossiers;
-            DELETE FROM knowledge_documents;
-            DELETE FROM resume_nodes;
-            DELETE FROM user_profile;
-          `);
-        }
-      } catch (dbErr: any) {
-        console.warn('[IPC] trial:wipe-profile-data: SQLite wipe partial error:', dbErr.message);
-      }
-
-      // 2b. PII BACKSTOP (2026-07-02): also wipe the profile OKF packs (name/
-      //     companies/education) — the raw DELETE above does not cover the
-      //     knowledge_sources/packs/cards rows. See the trial:end-byok backstop.
-      try {
-        const { ProfilePackBuilder } = require('./services/knowledge/ProfilePackBuilder') as typeof import('./services/knowledge/ProfilePackBuilder');
-        ProfilePackBuilder.getInstance().deleteAllProfilePacks();
-      } catch (piiErr: any) {
-        console.warn('[IPC] trial:wipe-profile-data: profile OKF pack wipe failed:', piiErr?.message || piiErr);
-      }
-
-      return { success: true };
-    } catch (error: any) {
-      console.error('[IPC] trial:wipe-profile-data error:', error);
-      return { success: false, error: error.message };
-    }
+    // Never for a licensed user: résumé/JD data is theirs (toaster policy Phase 0).
+    if (isLicensed()) return { success: false, error: 'licensed' };
+    return wipeTrialProfileData();
   });
 
   // Custom Provider Handlers
