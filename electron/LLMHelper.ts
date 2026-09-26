@@ -184,8 +184,8 @@ const CLAUDE_MODEL = "claude-sonnet-4-6"
 const FAST_MODEL_JUDGE_RUNG_TIMEOUT_MS = 1800
 /** OpenRouter's judge model: the small tier Natively's decision route also runs. */
 export const OPENROUTER_JUDGE_MODEL = 'openrouter/google/gemini-3.1-flash-lite'
-/** The gateway rung is the judge's LAST model rung, so it may use most of the controller's 2.5 s. */
-const GATEWAY_JUDGE_RUNG_TIMEOUT_MS = 2300
+/** The judge's LAST model rung (the gateway, else Natively) may use most of the controller's 2.5 s. */
+const LAST_JUDGE_RUNG_TIMEOUT_MS = 2300
 /**
  * First-token budgets for the Gemini TEXT cascade, per rung.
  *
@@ -5737,10 +5737,17 @@ let isMultimodal = !!(imagePaths?.length);
     // verdict to gemini-3.8-flash, which is slower AND cannot take thinkingLevel
     // 'minimal' (it 400s and falls back to 'low', paying thinking overhead every
     // consult). `purpose:'decision'` pins gemini-3.1-flash-lite server-side.
+    // Last model rung unless a gateway rung follows: then it may use most of
+    // the controller's 2.5 s, as the gateway rung does. Measured 2026-09-27,
+    // 80 live decision calls: 5% took over 1.8 s, most of them 1.87-1.97 s,
+    // and 1 in 80 over 2.4 s. At 1.8 s each of those aborted, nothing beneath
+    // could finish in the ~0.7 s left, and the engine fell back to the
+    // heuristic verdict: 8 judge timeouts in ~110 consults across two runs.
+    const judgeGateway = this.judgeGatewayModel();
     if (this.nativelyKey) {
       try {
         const text = await this.generateWithNatively(message, undefined, undefined, {
-          purpose: 'decision', timeoutMs: FAST_MODEL_JUDGE_RUNG_TIMEOUT_MS, signal,
+          purpose: 'decision', timeoutMs: judgeGateway ? FAST_MODEL_JUDGE_RUNG_TIMEOUT_MS : LAST_JUDGE_RUNG_TIMEOUT_MS, signal,
         });
         if (text) return text;
       } catch { if (aborted()) throw abortError(); }
@@ -5756,9 +5763,8 @@ let isMultimodal = !!(imagePaths?.length);
     // small tier, so the model the user chose to answer with judges. No JSON
     // mode: measured on flash-lite, it moved the verdict itself (natively-api
     // decisionGenerationConfig); the parser finds the object in plain text.
-    const judgeGateway = this.judgeGatewayModel();
     if (judgeGateway) {
-      const viaGateway = await this.callFastModel(message, { signal, json: false, timeoutMs: GATEWAY_JUDGE_RUNG_TIMEOUT_MS, modelId: judgeGateway });
+      const viaGateway = await this.callFastModel(message, { signal, json: false, timeoutMs: LAST_JUDGE_RUNG_TIMEOUT_MS, modelId: judgeGateway });
       if (viaGateway) return viaGateway;
     }
     if (aborted()) throw abortError();
