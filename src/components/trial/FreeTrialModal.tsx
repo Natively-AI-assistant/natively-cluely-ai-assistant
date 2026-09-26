@@ -104,7 +104,8 @@ const ITEM = {
 
 interface TrialModalProps {
   usage:      TrialUsage;
-  onByok:     () => Promise<void>;
+  /** force: end the trial even if the wipe keeps failing. Says whether data was left behind. */
+  onByok:     (opts?: { force?: boolean }) => Promise<{ wipeIncomplete?: boolean } | void>;
   onStandard?: () => Promise<void>;
   /**
    * `'byok'` when the user deliberately ended the trial from this card and the
@@ -133,7 +134,7 @@ type Step = 'choose' | 'wiping' | 'done';
 
 // A wipe that did not finish (toaster policy §5 row 5). Never the exception
 // text: the trial is untouched, so trying again is safe.
-const WIPE_FAILED_COPY = "Couldn't clear your trial data. Nothing was changed. Try again.";
+const WIPE_FAILED_COPY = "Couldn't finish clearing your trial data. Try again.";
 
 export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onStandard, onDone, activeTrialExpiresAt }) => {
   const [step,       setStep]       = useState<Step>('choose');
@@ -170,11 +171,23 @@ export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onSta
   // genie's close animation outlives the render that sets it.
   const endedRef = React.useRef(false);
 
-  const handleByok = async () => {
+  // A wipe that keeps failing (a full disk, a locked database) must not wall
+  // the user in: after the second failure the card offers "End trial anyway".
+  const [wipeFailures, setWipeFailures] = useState(0);
+  const [wipeIncomplete, setWipeIncomplete] = useState(false);
+  const handleByok = async (opts?: { force?: boolean }) => {
     setStep('wiping');
     setError(null);
-    try   { await onByok(); endedRef.current = true; setStep('done'); }
-    catch { setError(WIPE_FAILED_COPY); setStep('choose'); }
+    try {
+      const result = await onByok(opts);
+      setWipeIncomplete(!!result?.wipeIncomplete);
+      endedRef.current = true;
+      setStep('done');
+    } catch {
+      setWipeFailures((n) => n + 1);
+      setError(WIPE_FAILED_COPY);
+      setStep('choose');
+    }
   };
 
   // The trial is still running and this is the options card, not the eulogy.
@@ -426,7 +439,7 @@ export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onSta
 
                   <button
                     type="button"
-                    onClick={handleByok}
+                    onClick={() => handleByok()}
                     style={{
                       background: 'none', border: 0, padding: '9px 0',
                       flex: 'none', whiteSpace: 'nowrap',
@@ -442,6 +455,26 @@ export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onSta
                   >
                     {error ? 'Try again' : isActiveTrial ? 'End trial, use my own keys' : 'Use my own API keys'}
                   </button>
+                  {wipeFailures >= 2 && (
+                    <button
+                      type="button"
+                      onClick={() => handleByok({ force: true })}
+                      style={{
+                        background: 'none', border: 0, padding: '9px 0',
+                        flex: 'none', whiteSpace: 'nowrap',
+                        cursor: 'pointer', fontFamily: FONT,
+                        fontSize: '13px', fontWeight: 500, letterSpacing: '-0.008em',
+                        color: INK.faint,
+                        transition: `color 200ms ${EASE_CSS}`,
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.color = INK.body)}
+                      onMouseLeave={e => (e.currentTarget.style.color = INK.faint)}
+                      onFocus={e => (e.currentTarget.style.color = INK.body)}
+                      onBlur={e => (e.currentTarget.style.color = INK.faint)}
+                    >
+                      End trial anyway
+                    </button>
+                  )}
                 </div>
                 <div style={{ marginTop: '14px', fontSize: '11.5px', fontWeight: 500, color: INK.faint }}>
                   Cancel anytime. Secure checkout by Dodo Payments.
@@ -483,7 +516,8 @@ export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onSta
                 All set.
               </h2>
               <p id="trial-end-desc" style={{ fontSize: '13px', lineHeight: 1.55, color: INK.body, margin: 0, maxWidth: '300px' }}>
-                Trial data is gone. Add your keys in Settings, AI Providers, to get started.
+                {wipeIncomplete ? "Trial ended. Some trial data couldn't be cleared." : 'Trial data is gone.'}{' '}
+                Add your keys in Settings, AI Providers, to get started.
               </p>
               {onDone && (
                 <button

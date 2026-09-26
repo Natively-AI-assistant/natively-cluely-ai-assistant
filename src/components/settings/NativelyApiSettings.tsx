@@ -1085,11 +1085,12 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
     }
   };
 
-  const handleByok = async () => {
+  const handleByok = async (opts?: { force?: boolean }) => {
     // Only wipe — modal transitions to DoneState, then onDone closes it. A wipe
     // that did not finish throws, so the card shows Try again, not "All set".
-    const res = await window.electronAPI?.endTrialByok?.();
+    const res = await window.electronAPI?.endTrialByok?.(opts);
     if (!res?.success) throw new Error('wipe_failed');
+    return { wipeIncomplete: !!res.wipeIncomplete };
   };
 
   // Closing the options card is NOT the same as ending the trial. This cleared

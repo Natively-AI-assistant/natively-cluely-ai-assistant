@@ -11722,7 +11722,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // End trial via BYOK path: wipe Pro-ingested data, clear trial token + natively key.
-  safeHandle('trial:end-byok', async () => {
+  safeHandle('trial:end-byok', async (_event, opts?: { force?: boolean }) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
@@ -11730,13 +11730,22 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Wipe FIRST. A wipe that fails leaves the trial exactly as it was (token,
       // key, licence), says so, and announces nothing, so the card can show the
       // error with Try again instead of "All set" (toaster policy §5 row 5).
+      // After repeated failures (a full disk, a locked database) the card offers
+      // "End trial anyway" (force): the trial ends and the card says honestly
+      // that some data was left behind, so nobody is walled in for good.
       const wiped = wipeTrialProfileData();
       if (!wiped.success) {
-        console.warn('[IPC] trial:end-byok: wipe incomplete:', wiped.failed.join(', '));
-        return { success: false, error: 'wipe_failed' };
+        console.warn('[IPC] trial:end-byok: wipe incomplete:', wiped.failed.join(', '), opts?.force ? '(ending anyway)' : '');
+        if (!opts?.force) return { success: false, error: 'wipe_failed' };
       }
       // No once-marker needed: the token is cleared below, so the expiry
       // settle never sees this trial again.
+
+      // From here on every step is best-effort: the decision has been carried
+      // out, and a later step failing must not read as "the wipe failed".
+      const step = async (name: string, fn: () => unknown) => {
+        try { await fn(); } catch (e: any) { console.warn(`[IPC] trial:end-byok: ${name} failed:`, e?.message || e); }
+      };
 
       const token = cm.getTrialToken();
       if (token) {
@@ -11748,22 +11757,23 @@ export function initializeIpcHandlers(appState: AppState): void {
         }).catch(() => {});
       }
 
-      cm.clearTrialToken();
-
-      cm.setNativelyApiKey('');
-      const llmHelper = appState.processingHelper?.getLLMHelper?.();
-      if (llmHelper) llmHelper.setNativelyKey(null);
-      syncNativelyModelRuntime();
-      await appState.reconfigureSttProvider();
-
-      try {
-        const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-        await LicenseManager.getInstance().deactivate();
-      } catch {
-        /* LicenseManager not available in this build */
-      }
-
-      clearActiveModeOnLicenseLoss();
+      await step('clear trial token', () => cm.clearTrialToken());
+      await step('clear Natively key', () => cm.setNativelyApiKey(''));
+      await step('LLM runtime', () => {
+        const llmHelper = appState.processingHelper?.getLLMHelper?.();
+        if (llmHelper) llmHelper.setNativelyKey(null);
+        syncNativelyModelRuntime();
+      });
+      await step('speech provider', () => appState.reconfigureSttProvider());
+      await step('licence', async () => {
+        try {
+          const { LicenseManager } = require('../premium/electron/services/LicenseManager');
+          await LicenseManager.getInstance().deactivate();
+        } catch {
+          /* LicenseManager not available in this build */
+        }
+      });
+      await step('active mode', () => clearActiveModeOnLicenseLoss());
       BrowserWindow.getAllWindows().forEach((win) => {
         if (!win.isDestroyed()) {
           win.webContents.send('license-status-changed', { isPremium: false });
@@ -11771,7 +11781,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         }
       });
 
-      return { success: true };
+      return { success: true, wipeIncomplete: !wiped.success };
     } catch (error: any) {
       console.error('[IPC] trial:end-byok error:', error);
       return { success: false, error: error.message };

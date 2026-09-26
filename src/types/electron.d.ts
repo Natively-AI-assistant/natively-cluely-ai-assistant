@@ -311,7 +311,7 @@ export interface ElectronAPI {
   getTrialStatus: () => Promise<{ ok: boolean; expired?: boolean; showEndedCard?: boolean; remaining_ms?: number; started_at?: string; expires_at?: string; converted_to?: string | null; usage?: { ai: number; stt_seconds: number; search: number }; limits?: object; error?: string }>
   getLocalTrial:  () => Promise<{ hasToken: boolean; trialClaimed?: boolean; expiresAt?: string; startedAt?: string; expired?: boolean; showEndedCard?: boolean; superseded?: boolean }>
   convertTrial:   (choice: string) => Promise<{ ok: boolean }>
-  endTrialByok:        () => Promise<{ success: boolean; error?: string }>
+  endTrialByok:        (opts?: { force?: boolean }) => Promise<{ success: boolean; wipeIncomplete?: boolean; error?: string }>
   wipeTrialProfileData: () => Promise<{ success: boolean; failed?: string[]; error?: string }>
   // Card ledger (toaster policy, src/lib/cards/cardPolicy.mjs)
   cardsGet: () => Promise<{ ok: boolean; ledger?: import('../lib/cards/cardPolicy.mjs').Ledger; error?: string }>

@@ -26,6 +26,7 @@ const handlers = new Map();
 let sends = [];
 let wipes = 0;
 let wipeStepThrows = false;
+let sttRejects = false;
 let verifyReply = { status: 503, body: {} };
 let statusReply = { status: 503, body: {} };
 let statusCalls = 0;
@@ -101,7 +102,7 @@ before(() => {
   const appState = {
     processingHelper: { getLLMHelper: () => llmHelper },
     sendModelChanged: noop,
-    reconfigureSttProvider: async () => {},
+    reconfigureSttProvider: async () => { if (sttRejects) throw new Error('stt restart failed'); },
     // The wipe's first act is switching knowledge mode off; count wipes there.
     getKnowledgeOrchestrator: () => ({
       setKnowledgeMode: () => { wipes += 1; if (wipeStepThrows) throw new Error('disk full'); },
@@ -134,10 +135,46 @@ describe('trial:end-byok', () => {
   test('a clean wipe ends the trial and says so once', async () => {
     giveTrial(minutesAgo(1), minutesAgo(32));
     const res = await handlers.get('trial:end-byok')({});
-    assert.deepEqual(res, { success: true });
+    assert.deepEqual(res, { success: true, wipeIncomplete: false });
     assert.ok(!cm.getTrialToken(), 'the token is gone');
     assert.equal(ended().length, 1);
     assert.deepEqual(ended()[0].data, { choice: 'byok' });
+  });
+});
+
+// Final review I2: a wipe that keeps failing (full disk, a locked database)
+// must not wall the user in behind a card that cannot close. After a second
+// failure the card offers "End trial anyway" (force), which ends the trial and
+// says honestly that some data was left behind.
+describe('trial:end-byok, forced after repeated failures', () => {
+  test('ends the trial even though the wipe failed, and says so', async () => {
+    giveTrial(minutesAgo(1), minutesAgo(34));
+    wipeStepThrows = true;
+    try {
+      const res = await handlers.get('trial:end-byok')({}, { force: true });
+      assert.deepEqual(res, { success: true, wipeIncomplete: true });
+      assert.ok(!cm.getTrialToken(), 'the trial ended');
+      assert.equal(ended().length, 1);
+    } finally {
+      wipeStepThrows = false;
+    }
+  });
+});
+
+// Final review minor #1 (re-graded: it completes the same trap): once the wipe
+// has succeeded, a later step failing must not read as "the wipe failed".
+describe('trial:end-byok, after a clean wipe', () => {
+  test('a step after the wipe that throws does not undo the success', async () => {
+    giveTrial(minutesAgo(1), minutesAgo(35));
+    sttRejects = true;
+    try {
+      const res = await handlers.get('trial:end-byok')({});
+      assert.deepEqual(res, { success: true, wipeIncomplete: false });
+      assert.ok(!cm.getTrialToken());
+      assert.equal(ended().length, 1);
+    } finally {
+      sttRejects = false;
+    }
   });
 });
 

@@ -27,8 +27,9 @@ const modal = read('trial/FreeTrialModal.tsx');
 const appCard = app.slice(app.indexOf('showTrialExpiredModal && ('), app.indexOf('{/* Ad toasters */}'));
 
 test('App: a failed BYOK wipe throws, so the card cannot say "All set"', () => {
-  assert.ok(appCard.includes("const res = await window.electronAPI?.endTrialByok?.();"));
+  assert.ok(appCard.includes("const res = await window.electronAPI?.endTrialByok?.(opts);"));
   assert.ok(appCard.includes("if (!res?.success) throw new Error('wipe_failed');"));
+  assert.ok(appCard.includes('return { wipeIncomplete: !!res.wipeIncomplete };'), 'the card learns whether data was left behind');
 });
 
 test('App: "Add my keys" opens Settings → AI Providers', () => {
@@ -53,7 +54,9 @@ test('Settings never opens a second Trial ended card', () => {
 
 test('Settings: its options card ends the trial honestly and is not unmounted mid-wipe', () => {
   const byok = settings.slice(settings.indexOf('const handleByok'), settings.indexOf('const handleTrialDone'));
+  assert.ok(byok.includes('const res = await window.electronAPI?.endTrialByok?.(opts);'));
   assert.ok(byok.includes("if (!res?.success) throw new Error('wipe_failed');"));
+  assert.ok(byok.includes('return { wipeIncomplete: !!res.wipeIncomplete };'));
   const ended = settings.slice(settings.indexOf('const off = window.electronAPI?.onTrialEnded?.('), settings.indexOf('return () => off?.();'));
   assert.ok(ended.includes("if (data?.choice === 'byok' && showTrialModalRef.current) return;"));
   const done = settings.slice(settings.indexOf('const handleTrialDone'), settings.indexOf('};', settings.indexOf('const handleTrialDone')));
@@ -62,8 +65,26 @@ test('Settings: its options card ends the trial honestly and is not unmounted mi
 
 test('the card: a failed wipe says so in plain words, with Try again', () => {
   const byok = modal.slice(modal.indexOf('const handleByok'), modal.indexOf('// The trial is still running'));
-  assert.ok(byok.includes('catch { setError(WIPE_FAILED_COPY); setStep(\'choose\'); }'), 'never the exception text');
+  assert.ok(byok.includes('setWipeFailures((n) => n + 1);'), 'counts failures');
+  assert.ok(byok.includes('setError(WIPE_FAILED_COPY);') && !/e\??\.message/.test(byok), 'never the exception text');
+  // Steps commit in order, so a late failure is a PARTIAL wipe: never claim nothing changed.
+  assert.ok(modal.includes('const WIPE_FAILED_COPY = "Couldn\'t finish clearing your trial data. Try again.";'));
   assert.ok(modal.includes("{error ? 'Try again' : isActiveTrial ? 'End trial, use my own keys' : 'Use my own API keys'}"));
+});
+
+// Final review I2: a wipe that keeps failing (full disk, a locked database)
+// must not wall the user in behind a card that cannot close.
+test('the card: after a second failure, End trial anyway', () => {
+  assert.ok(modal.includes('{wipeFailures >= 2 && ('), 'offered only after repeated failures');
+  assert.ok(modal.includes('onClick={() => handleByok({ force: true })}'));
+  assert.ok(modal.includes('End trial anyway'));
+});
+
+test('the card: All set says honestly when data was left behind', () => {
+  const byok = modal.slice(modal.indexOf('const handleByok'), modal.indexOf('// The trial is still running'));
+  assert.ok(byok.includes('const result = await onByok(opts);'));
+  assert.ok(byok.includes('setWipeIncomplete(!!result?.wipeIncomplete);'));
+  assert.ok(modal.includes("{wipeIncomplete ? \"Trial ended. Some trial data couldn't be cleared.\" : 'Trial data is gone.'}"));
 });
 
 test('the card: All set leads to the keys', () => {

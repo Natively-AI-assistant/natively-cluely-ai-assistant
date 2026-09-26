@@ -1395,11 +1395,13 @@ const App: React.FC = () => {
         {!isolateModals && (isLauncherWindow || isDefault) && showTrialExpiredModal && (
           <FreeTrialModal
             usage={activeTrial?.usage ?? { ai: 0, ai_tokens: 0, stt_seconds: 0, search: 0 }}
-            onByok={async () => {
+            onByok={async (opts) => {
               // A wipe that did not finish must not read as "All set": the card
-              // shows the error with Try again (toaster policy §5 row 5).
-              const res = await window.electronAPI?.endTrialByok?.();
+              // shows the error with Try again (toaster policy §5 row 5). After
+              // repeated failures it may end the trial anyway (opts.force).
+              const res = await window.electronAPI?.endTrialByok?.(opts);
               if (!res?.success) throw new Error('wipe_failed');
+              return { wipeIncomplete: !!res.wipeIncomplete };
             }}
             onStandard={async () => {
               // The profile wipe already ran once, at expiry (main,
