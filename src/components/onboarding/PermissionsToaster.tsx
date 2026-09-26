@@ -5,8 +5,10 @@
 // Split-view permissions onboarding card.
 // Shows once on first launch, after the launcher UI is visible.
 // macOS: raises the mic consent prompt, opens System Settings for screen recording.
-// Windows: mic only — there is no per-app screen-capture gate — and the macOS
-// visual guide is not rendered at all.
+// Windows: the same card and rows. Microphone is the real privacy status and
+// opens ms-settings:privacy-microphone; Screen Recording is a live capture
+// probe (Windows has no consent for it) whose only remedy is to check again.
+// The guide pane shows the Windows Settings switches, never the macOS dialog.
 //
 // Row presentation lives in src/lib/permissionRowPolicy.mjs so both platform
 // branches are testable without mutating process.platform (CLAUDE.md). This
@@ -18,7 +20,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { X, Monitor, Mic, Settings, Check, Lock, Loader2, Circle } from 'lucide-react';
+import { X, Monitor, Mic, Settings, Check, Lock, Loader2, Circle, RotateCw } from 'lucide-react';
 import nativelyIcon from '../../../assets/icon.png';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { LiquidGlassButton } from '../../ui-components/LiquidGlassButton';
@@ -192,6 +194,15 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
     refreshStatus().then(() => setReady(true));
   }, [isOpen, refreshStatus]);
 
+  // Windows: Settings is a separate app, and a toggle flipped there while the
+  // card still has focus (side-by-side windows) fires no focus event. Poll
+  // while the card is up so grants and revocations land without a click.
+  useEffect(() => {
+    if (!ready || platform !== 'win32') return;
+    const id = setInterval(refreshStatus, 2000);
+    return () => clearInterval(id);
+  }, [ready, platform, refreshStatus]);
+
   useEffect(() => {
     if (!ready) return;
     // The only way a grant reaches this card. Every row action is fire-and-
@@ -214,6 +225,12 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
   }, [platform]);
 
   const handleRowAction = useCallback(async (kind: RowKind, remedy: RowPresentation['remedy']) => {
+    if (remedy === 'recheck') {
+      // win32 Screen Recording: nothing to open, so re-run the capture probe.
+      setRequesting(kind);
+      try { await refreshStatus(); } finally { setRequesting(null); }
+      return;
+    }
     if (remedy === 'request') {
       // macOS consent prompt. CR-03: re-read the real status rather than
       // asserting one — off darwin nothing is requested at all.
@@ -246,12 +263,16 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
   // ('request'). That matters: until an app has requested once, it does not
   // appear in System Settings > Privacy > Microphone at all, so sending a fresh
   // install straight to Settings would strand it with nothing to toggle.
+  const hasScreenRow = platform === 'darwin' || platform === 'win32';
+  const screenRow = hasScreenRow ? describePermRow(platform, 'screen', scrStatus) : null;
+  const micRow = describePermRow(platform, 'microphone', micStatus);
   const openSettingsForNext = useCallback(async () => {
-    const screen = platform === 'darwin' ? describePermRow(platform, 'screen', scrStatus) : null;
-    const mic = describePermRow(platform, 'microphone', micStatus);
-    if (screen && screen.tone !== 'granted') { await handleRowAction('screen', screen.remedy); return; }
-    if (mic.tone !== 'granted') await handleRowAction('microphone', mic.remedy);
-  }, [platform, scrStatus, micStatus, handleRowAction]);
+    if (screenRow && screenRow.tone !== 'granted') { await handleRowAction('screen', screenRow.remedy); return; }
+    if (micRow.tone !== 'granted') await handleRowAction('microphone', micRow.remedy);
+  }, [screenRow, micRow, handleRowAction]);
+  // Same order openSettingsForNext resolves in. Only win32's screen probe can
+  // make it a recheck; on macOS this is always 'Open Settings'.
+  const nextIsRecheck = !!screenRow && screenRow.tone !== 'granted' && screenRow.remedy === 'recheck';
 
   // The host unmounts us the moment it hears onDismiss, which would cut the
   // genie off — so close first, report after.
@@ -263,10 +284,13 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
   }, [closeThen, onDismiss]);
 
   const isMac = platform === 'darwin';
+  const isWin = platform === 'win32';
+  // macOS and Windows share the split card; only the guide pane differs.
+  const hasGuide = isMac || isWin;
   const allResolved = allPermissionsResolved(platform, { microphone: micStatus, screen: scrStatus });
-  const checking = micStatus === 'loading' || (isMac && scrStatus === 'loading');
+  const checking = micStatus === 'loading' || (hasScreenRow && scrStatus === 'loading');
 
-  const CARD_W = isMac ? '600px' : '420px';
+  const CARD_W = hasGuide ? '600px' : '420px';
 
   // The same rows in both states. Once granted, PermItem already draws its own
   // check badge and stops being interactive, so the resolved state needs no
@@ -279,11 +303,11 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
       transition={{ delay: 0.12 }}
       style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '24px' }}
     >
-      {isMac && (
+      {screenRow && (
         <PermItem
           icon={Monitor}
           label="Screen Recording"
-          row={describePermRow(platform, 'screen', scrStatus)}
+          row={screenRow}
           busy={requesting === 'screen'}
           enter={enter}
           reduced={reduced}
@@ -293,7 +317,7 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
       <PermItem
         icon={Mic}
         label="Microphone"
-        row={describePermRow(platform, 'microphone', micStatus)}
+        row={micRow}
         busy={requesting === 'microphone'}
         enter={enter}
         reduced={reduced}
@@ -305,7 +329,7 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
   // What the card shows is decided by the statuses, so its pictures are kept
   // per combination: an open never pours out last time's checkmarks, and a
   // picture taken while the consent prompt is up is never kept.
-  const genieView = `perm:${platform}:mic=${micStatus}:screen=${isMac ? scrStatus : 'none'}`;
+  const genieView = `perm:${platform}:mic=${micStatus}:screen=${hasScreenRow ? scrStatus : 'none'}`;
 
   return (
     <GenieModal
@@ -321,8 +345,8 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
       wrapStyle={{ width: CARD_W, maxWidth: '92vw' }}
       cardStyle={{
         // Matches BrowserExtensionToaster's frame so the two onboarding
-        // cards read as one family. Windows renders no visual guide, so
-        // it loses that column rather than leaving an empty pane.
+        // cards read as one family. macOS and Windows carry the guide
+        // column; any other platform loses it rather than an empty pane.
         background: colors.cardBg,
         boxShadow: colors.boxShadow,
         fontFamily: T.font,
@@ -337,10 +361,10 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
       shadow={colors.boxShadow}
       radius={20}
     >
-      {/* On macOS the close sits on the inset panel (below), as it does
-          on the extension card. Windows has no panel, so it falls back
-          to the card corner. */}
-      {!isMac && (
+      {/* With a guide pane (macOS, Windows) the close sits on the inset
+          panel below, as it does on the extension card. Without one it
+          falls back to the card corner. */}
+      {!hasGuide && (
       <button onClick={handleDismiss} aria-label="Dismiss"
         style={{
           position: 'absolute', top: '16px', right: '16px', zIndex: 10,
@@ -367,12 +391,12 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
           marginTop:auto, which is what holds the column together at
           that floor instead of the flex:1 row list that used to strand
           the gap ABOVE the button. */}
-      <div style={{ display: 'flex', alignItems: 'stretch', minHeight: isMac ? '440px' : undefined }}>
+      <div style={{ display: 'flex', alignItems: 'stretch', minHeight: hasGuide ? '440px' : undefined }}>
 
         {/* ── LEFT: Permission controls ── */}
         <div style={{
-          flex: isMac ? '1 1 58%' : 1, minWidth: 0,
-          padding: isMac ? '40px 28px 34px 40px' : '32px 32px 28px',
+          flex: hasGuide ? '1 1 58%' : 1, minWidth: 0,
+          padding: hasGuide ? '40px 28px 34px 40px' : '32px 32px 28px',
           display: 'flex', flexDirection: 'column',
         }}>
 
@@ -384,7 +408,7 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
           </div>
 
           {allResolved ? (
-            <AllSetPanel isLight={isLight} reduced={reduced} enter={enter} onContinue={handleDismiss} rows={permRows} />
+            <AllSetPanel isLight={isLight} reduced={reduced} enter={enter} onContinue={handleDismiss} rows={permRows} lighterCta={isWin} />
           ) : (
             <>
               {/* Title + subtitle */}
@@ -397,7 +421,7 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
                   Let's get you set up
                 </h2>
                 <p id="perm-toast-desc" style={{ fontSize: '13px', lineHeight: 1.65, color: t3, margin: 0 }}>
-                  {isMac
+                  {hasGuide
                     ? 'Natively needs a few permissions to capture meetings and transcribe speech.'
                     : 'Natively needs microphone access to transcribe speech.'}
                 </p>
@@ -416,8 +440,8 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
                 <PrimaryButton
                   isLight={isLight}
                   disabled={checking}
-                  icon={Settings}
-                  label="Open Settings"
+                  icon={nextIsRecheck ? RotateCw : Settings}
+                  label={nextIsRecheck ? 'Check Again' : 'Open Settings'}
                   onClick={openSettingsForNext}
                 />
               </motion.div>
@@ -425,11 +449,11 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
           )}
         </div>
 
-        {/* ── RIGHT: Visual guide — macOS only ──
-             The mock below is a macOS consent dialog and a macOS
-             Privacy & Security row. Showing either on Windows would be
-             troubleshooting for the wrong OS (CLAUDE.md). */}
-        {isMac && (
+        {/* ── RIGHT: Visual guide — macOS and Windows ──
+             Each platform gets its own: the macOS consent dialog and
+             Privacy & Security row, or the two Windows Settings switches.
+             One platform's guide is never shown on the other (CLAUDE.md). */}
+        {hasGuide && (
           <motion.div
             initial={enter ? { opacity: 0, x: 20 } : false} animate={{ opacity: 1, x: 0 }}
             transition={{ ...SPRING.gentle, delay: 0.08 }}
@@ -481,7 +505,9 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
 
               {allResolved
                 ? <GuideResolved isLight={isLight} colors={colors} t3={t3} />
-                : <GuideSteps colors={colors} t3={t3} reduced={reduced} enter={enter} />}
+                : isWin
+                  ? <WinGuideSteps colors={colors} t3={t3} reduced={reduced} enter={enter} />
+                  : <GuideSteps colors={colors} t3={t3} reduced={reduced} enter={enter} />}
             </div>
           </motion.div>
         )}
@@ -535,7 +561,7 @@ function QuietButton({ isLight, label, onClick }: {
 }
 
 function PrimaryButton({
-  label, icon: Icon, onClick, disabled, variant = 'blue',
+  label, icon: Icon, onClick, disabled, variant = 'blue', lighter = false,
 }: {
   isLight: boolean;
   label: string;
@@ -543,11 +569,13 @@ function PrimaryButton({
   onClick: () => void;
   disabled?: boolean;
   variant?: 'blue' | 'green';
+  /** Lighter green body (lg-green-light). Windows only; macOS keeps the default. */
+  lighter?: boolean;
 }) {
   return (
     <LiquidGlassButton
       variant={variant === 'green' ? 'green' : 'action'}
-      className="lg-sm lg-wide"
+      className={lighter ? 'lg-sm lg-wide lg-green-light' : 'lg-sm lg-wide'}
       onClick={onClick}
       disabled={disabled}
       icon={Icon ? <Icon size={15} strokeWidth={2} /> : undefined}
@@ -572,9 +600,9 @@ function PrimaryButton({
 // everything. This is what it renders now.
 // Same two rows as every other state — the card does not change shape when the
 // permissions come good, only the heading, each row's status and the footer.
-function AllSetPanel({ isLight, reduced, enter, onContinue, rows }: {
+function AllSetPanel({ isLight, reduced, enter, onContinue, rows, lighterCta = false }: {
   isLight: boolean; reduced: boolean; enter: boolean; onContinue: () => void;
-  rows: React.ReactNode;
+  rows: React.ReactNode; lighterCta?: boolean;
 }) {
   const t1 = isLight ? '#1C1C1E' : '#FFFFFF';
   const t3 = isLight ? 'rgba(28, 28, 30, 0.48)' : 'rgba(255, 255, 255, 0.44)';
@@ -597,7 +625,7 @@ function AllSetPanel({ isLight, reduced, enter, onContinue, rows }: {
 
       {/* marginTop:auto holds the action on the 440 floor, as in every other state. */}
       <div style={{ marginTop: 'auto' }}>
-        <PrimaryButton isLight={isLight} variant="green" label="Continue" onClick={onContinue} />
+        <PrimaryButton isLight={isLight} variant="green" lighter={lighterCta} label="Continue" onClick={onContinue} />
       </div>
     </motion.div>
   );
@@ -727,6 +755,72 @@ function GuideSteps({ colors, t3, reduced, enter }: {
 
       <p style={{ fontSize: '10px', fontWeight: 500, color: t3, lineHeight: 1.4, margin: '6px 0 0', textAlign: 'center', opacity: 0.85, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
         System Settings → Privacy &amp; Security
+      </p>
+    </div>
+  );
+}
+
+// ─── Guide: the two Windows switches ──────────────────────────
+// Windows counterpart of GuideSteps, in the same panel style. Windows has no
+// consent dialog, so there is nothing to mock for step 1: both steps are the
+// switches in Settings > Privacy & security > Microphone, and the desktop-apps
+// one is what Natively (an unpackaged Win32 app) is actually gated on.
+function WinGuideSteps({ colors, t3, reduced, enter }: {
+  colors: CardColors;
+  t3: string;
+  reduced: boolean;
+  enter: boolean;
+}) {
+  const rise = (delay: number) => (!enter
+    ? { initial: false as const }
+    : reduced
+    ? { initial: { opacity: 0 }, animate: { opacity: 1 }, transition: { duration: 0.2, delay } }
+    : { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 }, transition: { type: 'spring' as const, stiffness: 180, damping: 18, delay } });
+
+  const row = (Icon: React.ElementType, label: string, delay: number) => (
+    <motion.div
+      {...rise(delay)}
+      style={{
+        width: '188px',
+        backgroundColor: colors.panelBg,
+        borderRadius: '10px',
+        padding: '9px 11px',
+        border: colors.panelBorder,
+        boxShadow: colors.panelShadow,
+        display: 'flex', alignItems: 'center', gap: '9px',
+        textAlign: 'left',
+      }}
+    >
+      <div style={{
+        width: '22px', height: '22px', borderRadius: '5px', flexShrink: 0,
+        background: colors.panelIconBg, border: colors.panelIconBorder,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        <Icon size={13} strokeWidth={1.75} color={colors.panelText} />
+      </div>
+      <span style={{ fontSize: '11px', fontWeight: 550, color: colors.panelText, flex: 1, letterSpacing: '-0.01em', lineHeight: 1.3 }}>
+        {label}
+      </span>
+      {/* A still switch in its target position, as in GuideSteps. */}
+      <div aria-hidden style={{
+        width: '26px', height: '15px', borderRadius: '7.5px',
+        padding: '1.5px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+        flexShrink: 0,
+        background: 'linear-gradient(160deg, #34D399 0%, #10B981 100%)',
+        boxShadow: '0 0 8px rgba(52,211,153,0.3)',
+      }}>
+        <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' }} />
+      </div>
+    </motion.div>
+  );
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', position: 'relative', zIndex: 1, width: '100%' }}>
+      {row(Mic, 'Microphone access', 0.15)}
+      <div aria-hidden style={{ width: '1.5px', height: '14px', background: colors.connector, borderRadius: '1px' }} />
+      {row(Monitor, 'Let desktop apps access your microphone', 0.25)}
+      <p style={{ fontSize: '10px', fontWeight: 500, color: t3, lineHeight: 1.4, margin: '6px 0 0', textAlign: 'center', opacity: 0.85, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+        Settings → Privacy &amp; security → Microphone
       </p>
     </div>
   );

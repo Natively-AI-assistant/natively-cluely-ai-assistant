@@ -717,7 +717,11 @@ const App: React.FC = () => {
         maybeCheck()
           .then((p) => {
             const blocked = (s?: string) => s === 'denied' || s === 'restricted';
-            const macTCCBlocked = p?.platform === 'darwin' && (blocked(p.microphone) || blocked(p.screen));
+            // Despite the name this is just "re-raise the permissions card".
+            // win32 re-raises on a revoked microphone privacy switch. Its screen
+            // row is a capture probe with no OS denial, so it never re-raises.
+            const macTCCBlocked = (p?.platform === 'darwin' && (blocked(p.microphone) || blocked(p.screen)))
+              || (p?.platform === 'win32' && blocked(p.microphone));
             setOrchestratorUserState({
               permsShown,
               macTCCBlocked,
