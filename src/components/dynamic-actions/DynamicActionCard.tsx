@@ -10,7 +10,7 @@ import './dynamicActionCard.css'
 /** Why a card left, so its exit can say so. */
 export type CardExitReason = 'accept' | 'dismiss' | 'expire'
 /** Per card id, set by the bar BEFORE it removes the card (a removed card never sees new props). */
-export type CardExits = Record<string, { reason: CardExitReason; tween: boolean }>
+export type CardExits = Record<string, { reason: CardExitReason; tween: boolean; settle?: () => void }>
 
 interface Props {
   action: DynamicActionPayload
@@ -21,6 +21,8 @@ interface Props {
   onDismiss: (actionId: string) => void
   /** The overlay's opacity-scaled chip fill (appearance.chipStyle), as the quick actions use. */
   surfaceStyle?: React.CSSProperties
+  /** The slot finished opening: the overlay may settle the window height now. */
+  onEntered?: () => void
 }
 
 // One glyph per KIND of result, monochrome in the muted text colour. The card
@@ -69,7 +71,7 @@ export const cardExitMs = (reason: CardExitReason) =>
 // actions below glide instead of jumping. The bar asks the overlay to own the
 // window height for the tween (requestHeightMotion); when it can't, the exit
 // collapses the slot in one step after its fade.
-export const DynamicActionCard: React.FC<Props> = ({ action, isPrimary, pressing = false, onAccept, onDismiss, surfaceStyle }) => {
+export const DynamicActionCard: React.FC<Props> = ({ action, isPrimary, pressing = false, onAccept, onDismiss, surfaceStyle, onEntered }) => {
   const [busy, setBusy] = useState(false)
   const reduce = useReducedMotion() ?? false
   const Icon = glyphFor(action.type)
@@ -121,6 +123,7 @@ export const DynamicActionCard: React.FC<Props> = ({ action, isPrimary, pressing
       initial="hidden"
       animate="shown"
       exit="exit"
+      onAnimationComplete={(definition) => { if (definition === 'shown') onEntered?.() }}
       data-testid={`dynamic-action-card-${action.id}`}
     >
       <div

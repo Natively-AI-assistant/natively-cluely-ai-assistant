@@ -178,7 +178,7 @@ function MotionScene() {
           <DynamicActionBar
             onAcceptAction={(a) => { (window as any).__accepted.push({ id: a.id, t: performance.now() }); }}
             surfaceStyle={appearance.chipStyle}
-            requestHeightMotion={(growPx, durationMs) => { (window as any).__heightCalls.push({ growPx, durationMs, t: performance.now() }); return grant; }}
+            requestHeightMotion={(growPx, durationMs) => { const call = { growPx, durationMs, t: performance.now(), settledAt: null as number | null }; (window as any).__heightCalls.push(call); return grant ? () => { call.settledAt ??= performance.now(); } : null; }}
           />
           <Transcript />
           <QuickActions chipStyle={appearance.chipStyle} />

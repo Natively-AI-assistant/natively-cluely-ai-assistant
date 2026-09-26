@@ -16,10 +16,11 @@ interface Props {
   // reads as the quick actions do at every overlay opacity.
   surfaceStyle?: React.CSSProperties;
   // Asks the overlay to own the window height while a card's slot tweens open
-  // (growPx > 0) or closed: one window resize up front, none per frame. False
-  // = the overlay can't right now (an answer is streaming, another transition
-  // holds the height channel); an exit then collapses its slot in one step.
-  requestHeightMotion?: (growPx: number, durationMs: number) => boolean;
+  // (growPx > 0) or closed: one window resize up front, none per frame. Returns
+  // the settle to call when the tween is DONE, or null when the overlay can't
+  // hold the channel (an answer is streaming, another transition holds it); an
+  // exit then collapses its slot in one step.
+  requestHeightMotion?: (growPx: number, durationMs: number) => (() => void) | null;
 }
 
 /** A card's slot: the 36px row plus its 3px above and below. */
@@ -62,9 +63,10 @@ export const DynamicActionBar: React.FC<Props> = ({
     if (leaving.length === 0) return;
     // Accept starts an answer in the same moment, and the overlay must keep
     // reporting that growth; so an accepted card never holds the height channel.
-    const tween = reason !== 'accept' && !reduceRef.current
-      && (requestRef.current?.(0, cardExitMs(reason)) ?? false);
-    for (const id of leaving) exitsRef.current[id] = { reason, tween };
+    const settle = reason !== 'accept' && !reduceRef.current
+      ? (requestRef.current?.(0, cardExitMs(reason)) ?? null)
+      : null;
+    for (const id of leaving) exitsRef.current[id] = { reason, tween: settle !== null, settle: settle ?? undefined };
   }, [maxVisible]);
 
   const handleIncoming = useCallback(
@@ -188,12 +190,20 @@ export const DynamicActionBar: React.FC<Props> = ({
   // A card whose slot is about to open: the window must LEAD that growth.
   // Runs after the new card is in the DOM at height 0, before it paints.
   const shownIdsRef = useRef<string[]>([]);
+  const enterSettleRef = useRef<Record<string, () => void>>({});
   useLayoutEffect(() => {
     const before = new Set(shownIdsRef.current);
-    const added = visible.filter((a) => !before.has(a.id)).length;
+    const added = visible.filter((a) => !before.has(a.id));
     shownIdsRef.current = visible.map((a) => a.id);
-    if (added > 0 && !reduceRef.current) requestRef.current?.(added * CARD_SLOT_PX, CARD_ENTER_MS);
+    if (added.length === 0 || reduceRef.current) return;
+    const settle = requestRef.current?.(added.length * CARD_SLOT_PX, CARD_ENTER_MS);
+    if (settle) for (const a of added) enterSettleRef.current[a.id] = settle;
   }, [visible]);
+  const entered = useCallback((id: string) => {
+    const settle = enterSettleRef.current[id];
+    delete enterSettleRef.current[id];
+    settle?.();
+  }, []);
 
   return (
     <div
@@ -205,8 +215,15 @@ export const DynamicActionBar: React.FC<Props> = ({
         initial={false}
         custom={exitsRef.current}
         onExitComplete={() => {
+          // Every exiting card is done: settle the window height their tween held.
           const live = new Set(actionsRef.current.map((a) => a.id));
-          for (const id of Object.keys(exitsRef.current)) if (!live.has(id)) delete exitsRef.current[id];
+          for (const id of Object.keys(exitsRef.current)) {
+            if (live.has(id)) continue;
+            exitsRef.current[id].settle?.();
+            enterSettleRef.current[id]?.();   // left before it finished opening
+            delete exitsRef.current[id];
+            delete enterSettleRef.current[id];
+          }
         }}
       >
         {visible.map((a, i) => (
@@ -218,6 +235,7 @@ export const DynamicActionBar: React.FC<Props> = ({
             onAccept={(action) => accept(action)}
             onDismiss={dismiss}
             surfaceStyle={surfaceStyle}
+            onEntered={() => entered(a.id)}
           />
         ))}
       </AnimatePresence>
