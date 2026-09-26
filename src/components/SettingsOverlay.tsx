@@ -36,6 +36,7 @@ import {
     getDefaultOverlayOpacity,
 } from '../lib/overlayAppearance';
 import { getMeetingInterfaceTheme, setMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
+import { setGenieAnimationEnabled, useGenieAnimationEnabled } from '../lib/genieAnimationSetting';
 import { KeyRecorder } from './ui/KeyRecorder';
 import { Disclosure, DisclosureChevron } from './ui/AccordionSection';
 import { Presence, SettingsMenu, SettingsMotionReady } from './settings/SettingsRow';
@@ -713,6 +714,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     const [meetingRetention, setMeetingRetention] = useState<'forever' | '7d' | '30d' | 'never'>('forever');
     const [codeVerification, setCodeVerification] = useState(false);
     const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
+    const genieAnimationEnabled = useGenieAnimationEnabled();
 
     useEffect(() => {
         if (!showVerboseToast) return;
@@ -2755,6 +2757,27 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 window.electronAPI?.setOverlayMousePassthrough(newState);
                                                             }}
                                                             className={isMousePassthrough ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
+                                                        />
+                                                    </div>
+
+                                                    {/* Genie animation — off uses the plain fade and keeps no pictures of popups */}
+                                                    <div className="flex items-center justify-between px-4 py-3">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                                <Sparkles size={20} />
+                                                            </div>
+                                                            <div>
+                                                                <h3 className="text-sm font-bold text-text-primary">{t('Genie animation')}</h3>
+                                                                <p className="text-xs text-text-secondary mt-0.5">
+                                                                    {t('Popups pour in and out. Turn off for a simple fade and lower memory use.')}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                        <SettingsToggle
+                                                            checked={genieAnimationEnabled}
+                                                            label={t('Genie animation')}
+                                                            onChange={() => setGenieAnimationEnabled(!genieAnimationEnabled)}
+                                                            className={genieAnimationEnabled ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
                                                         />
                                                     </div>
 
