@@ -86,8 +86,7 @@ test('an unreadable licence still protects the user: no card, no wipe', async ()
   assert.equal(wipes, 0, 'nor lose its profile data');
 });
 
-test('the wipe IPC refuses too', async () => {
-  const res = await handlers.get('trial:wipe-profile-data')({});
-  assert.deepEqual(res, { success: false, error: 'licensed' });
+test('no renderer route can wipe it either (trial:wipe-profile-data is gone, toaster policy Phase 4)', () => {
+  assert.equal(handlers.get('trial:wipe-profile-data'), undefined);
   assert.equal(wipes, 0);
 });

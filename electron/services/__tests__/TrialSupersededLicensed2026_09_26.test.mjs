@@ -105,9 +105,8 @@ describe('a licensed user whose old trial expired', () => {
     assert.equal(sm.get('trialExpiryWipedFor'), undefined);
   });
 
-  test('the wipe IPC refuses outright for a licensed user', async () => {
-    const res = await handlers.get('trial:wipe-profile-data')({});
-    assert.deepEqual(res, { success: false, error: 'licensed' });
+  test('no renderer route can wipe a licensed user\'s data (trial:wipe-profile-data is gone, toaster policy Phase 4)', () => {
+    assert.equal(handlers.get('trial:wipe-profile-data'), undefined);
     assert.equal(wipes, 0);
   });
 });

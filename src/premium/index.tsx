@@ -11,21 +11,6 @@ import React from 'react';
 // ─── No-op fallbacks ────────────────────────────────────────────────
 const NullComponent: React.FC<any> = () => null;
 
-const nullAdCampaigns = (
-  _planDetails: { isPremium: boolean; plan?: string; provider?: string },
-  _hasProfile: boolean,
-  _isAppReady: boolean,
-  _appStartTime?: number,
-  _lastMeetingEndTime?: number | null,
-  _isProcessingMeeting?: boolean,
-  _hasNativelyApi?: boolean,
-  _enabled?: boolean,
-) => ({
-  activeAd: null as string | null,
-  dismissAd: (_campaignId?: string) => {},
-  previewAd: (_ad: any) => {},
-});
-
 // ─── Glob-import premium modules (empty {} when premium/ is absent) ──
 const _profileVis = import.meta.glob<any>(
   '../../premium/src/ProfileVisualizer.tsx',
@@ -41,10 +26,6 @@ const _jdToaster = import.meta.glob<any>(
 );
 const _remoteCampaignToaster = import.meta.glob<any>(
   '../../premium/src/RemoteCampaignToaster.tsx',
-  { eager: true }
-);
-const _adHook = import.meta.glob<any>(
-  '../../premium/src/useAdCampaigns.ts',
   { eager: true }
 );
 const _negotiationCard = import.meta.glob<any>(
@@ -97,9 +78,6 @@ export const JDAwarenessToaster: React.FC<any> =
 
 export const RemoteCampaignToaster: React.FC<any> =
   get(_remoteCampaignToaster, 'RemoteCampaignToaster', NullComponent);
-
-export const useAdCampaigns: typeof nullAdCampaigns =
-  get(_adHook, 'useAdCampaigns', nullAdCampaigns);
 
 export const NegotiationCoachingCard: React.FC<any> =
   get(_negotiationCard, 'NegotiationCoachingCard', NullComponent);

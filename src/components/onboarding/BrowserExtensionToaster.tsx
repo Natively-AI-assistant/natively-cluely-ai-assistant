@@ -19,7 +19,6 @@ import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import chromeArt from '../../assets/cards/chrome.jpg';
 import { GenieModal } from '../ui/GenieModal';
 
-const DISMISS_KEY = 'natively_ext_connect_dismissed_v1';
 const MIN_VERSION = '2.8.0';
 
 // Canonical Chrome Web Store URL (also in HelpSettings.tsx).
@@ -151,10 +150,9 @@ interface Props {
   isOpen:    boolean;
   /** Why it closed, for the host's card ledger: 'acted' after "Add to Chrome", else nothing. */
   onDismiss: (reason?: 'acted' | 'connected') => void;
-  onSkip?:   () => void;
 }
 
-export const BrowserExtensionToaster: React.FC<Props> = ({ isOpen, onDismiss, onSkip }) => {
+export const BrowserExtensionToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
   const [opening, setOpening]       = useState(false);
   // The store link did not open: say so and offer the link to copy.
   const [storeFailed, setStoreFailed] = useState(false);
@@ -186,21 +184,13 @@ export const BrowserExtensionToaster: React.FC<Props> = ({ isOpen, onDismiss, on
   }, []);
 
   // ─── Dismiss handlers ───────────────────────────────────────
-  // The permanent flag is written at once, not after the exit, so quitting
-  // mid-animation still counts as a dismiss.
-  const persistDismiss = () => {
-    try { localStorage.setItem(DISMISS_KEY, '1'); } catch { /* ignore */ }
-  };
-
-  const handlePermanentDismiss = useCallback(() => {
-    persistDismiss();
+  // A plain close (✕, Escape, backdrop, "Not now") is a "later": the card
+  // ledger counts the strike and decides when it may return.
+  const handleDismiss = useCallback(() => {
     closeThen(onDismiss);
   }, [closeThen, onDismiss]);
 
-  const handleNotNow = () => {
-    persistDismiss();
-    closeThen(() => { onDismiss(); onSkip?.(); });
-  };
+  const handleNotNow = () => closeThen(onDismiss);
 
   const handleInstall = async () => {
     if (opening) return;
@@ -230,7 +220,6 @@ export const BrowserExtensionToaster: React.FC<Props> = ({ isOpen, onDismiss, on
     if (!isOpen || testForceShow) return;
     const unsub = window.electronAPI?.onPhoneMirrorStatus?.(info => {
       if (info?.extensionConnected) {
-        persistDismiss();
         // Connecting retires the card (spec §6 row 9).
         closeThen(() => onDismiss('connected'));
       }
@@ -242,11 +231,11 @@ export const BrowserExtensionToaster: React.FC<Props> = ({ isOpen, onDismiss, on
   useEffect(() => {
     if (!visible) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') handlePermanentDismiss();
+      if (e.key === 'Escape') handleDismiss();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [visible, handlePermanentDismiss]);
+  }, [visible, handleDismiss]);
 
   // Reset transient interaction state whenever the card closes. `opening`
   // stays set through the close, so a picture of the card opening the store
@@ -265,7 +254,7 @@ export const BrowserExtensionToaster: React.FC<Props> = ({ isOpen, onDismiss, on
       // A picture of the card opening the store is never one the next open shows.
       keepPictures={!opening}
       zIndex={9998}
-      onBackdropClick={handlePermanentDismiss}
+      onBackdropClick={handleDismiss}
       onClosed={() => { const after = afterCloseRef.current; afterCloseRef.current = null; after?.(); }}
       // Dims, never blurs: frosting the whole launcher behind the card left it
       // unreadable (see 3a9901ae4, which set this for every onboarding scrim).
@@ -507,7 +496,7 @@ export const BrowserExtensionToaster: React.FC<Props> = ({ isOpen, onDismiss, on
                 themes, so its ink is dark in both. */}
             <button
               type="button"
-              onClick={handlePermanentDismiss}
+              onClick={handleDismiss}
               aria-label="Close"
               style={{
                 position: 'absolute', top: '8px', right: '8px', zIndex: 2,

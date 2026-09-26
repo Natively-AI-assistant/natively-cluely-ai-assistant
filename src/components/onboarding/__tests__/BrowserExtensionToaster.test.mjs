@@ -69,24 +69,20 @@ test('versionGte: boundary cases', () => {
     'the component still exports the comparator this test mirrors');
 });
 
-test('dismiss key is the documented one', () => {
-  assert.match(source, /const\s+DISMISS_KEY\s*=\s*'natively_ext_connect_dismissed_v1'/);
-});
-
 test('CTA opens the canonical Chrome Web Store listing', () => {
   assert.ok(source.includes('chromewebstore.google.com/detail/lmhgnkbjnelmciecjkleaomjpejcgaln'));
   assert.ok(source.includes('utm_source=item-share-cb'));
   assert.ok(source.includes('window.electronAPI.openExternal(CHROME_STORE_URL)'));
 });
 
-test('install closes the card WITHOUT the permanent dismiss', () => {
-  // A user who opens the store but does not install should see this again.
+test('install closes the card as acted, once the store opened', () => {
+  // A user who opens the store but does not install sees it once more (the
+  // ledger's 7-day follow-up).
   const install = source.slice(source.indexOf('const handleInstall'), source.indexOf('// ─── Auto-dismiss'));
   // Toaster policy: opening the store is the card's action, so the ledger
   // schedules the single follow-up rather than counting a strike, but only
   // when the store actually opened (open-external answers { ok }).
   assert.ok(install.includes("if (opened) closeThen(() => onDismiss('acted'));"), 'install reports acted once the store opened');
-  assert.ok(!install.includes('DISMISS_KEY'), 'install must not set the permanent flag');
 });
 
 test('auto-dismisses the moment the extension connects', () => {
@@ -98,17 +94,17 @@ test('auto-dismisses the moment the extension connects', () => {
   assert.ok(source.includes('return () => { unsub?.(); };'), 'subscription is cleaned up');
 });
 
-test('Escape and backdrop click both dismiss permanently', () => {
-  assert.ok(source.includes("if (e.key === 'Escape') handlePermanentDismiss();"));
-  assert.ok(rendered.includes('onBackdropClick={handlePermanentDismiss}'));
+test('Escape and backdrop click both dismiss (a "later": the ledger decides)', () => {
+  assert.ok(source.includes("if (e.key === 'Escape') handleDismiss();"));
+  assert.ok(rendered.includes('onBackdropClick={handleDismiss}'));
   assert.ok(modal.includes('if (e.target === e.currentTarget && !closing) onBackdropClick?.();'),
     'a click on the dim, not on the card');
 });
 
-test('"Not now" dismisses permanently and reports the skip', () => {
+test('"Not now" is a plain close: a strike, never a permanent flag or a skip', () => {
   const notNow = source.slice(source.indexOf('const handleNotNow'), source.indexOf('const handleInstall'));
-  assert.ok(notNow.includes('persistDismiss()'));
-  assert.ok(notNow.includes('onDismiss(); onSkip?.();'), 'both reports wait for the exit, in order');
+  assert.ok(notNow.includes('closeThen(onDismiss)'), 'reports once the exit has played');
+  assert.ok(!/onSkip|localStorage/.test(notNow));
 });
 
 // ─── Close sequencing ───────────────────────────────────────────
@@ -117,7 +113,7 @@ test('"Not now" dismisses permanently and reports the skip', () => {
 // close itself first and report after.
 
 test('every way out plays the genie before reporting to the host', () => {
-  const handlers = rendered.slice(rendered.indexOf('const handlePermanentDismiss'), rendered.indexOf('const item = reduced'));
+  const handlers = rendered.slice(rendered.indexOf('const handleDismiss'), rendered.indexOf('const item = reduced'));
   // No handler may call the host directly: only through closeThen.
   const direct = handlers.match(/^\s*onDismiss\(\);/gm) || [];
   assert.equal(direct.length, 0, 'onDismiss called outside closeThen');
@@ -133,7 +129,7 @@ test('every way out plays the genie before reporting to the host', () => {
   assert.ok(rendered.includes('open={visible}'));
   assert.ok(rendered.includes('setVisible(isOpen || testForceShow);'));
   assert.ok(rendered.includes('onClosed={() => { const after = afterCloseRef.current; afterCloseRef.current = null; after?.(); }}'));
-  const own = rendered.slice(rendered.indexOf('const closeThen'), rendered.indexOf('const persistDismiss'));
+  const own = rendered.slice(rendered.indexOf('const closeThen'), rendered.indexOf('const handleDismiss'));
   assert.ok(own.includes('if (afterCloseRef.current) return;'), 'the first way out wins');
   assert.ok(own.includes('setVisible(false);'));
   assert.ok(!/after\s*\(/.test(own), 'closeThen only schedules the report');

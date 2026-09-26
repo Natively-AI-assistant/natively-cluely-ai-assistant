@@ -39,14 +39,7 @@ import { collectRendererLegacy } from './lib/cards/rendererLegacy.mjs'
 import { cardInputsFromSources } from './lib/cards/cardInputs.mjs'
 import { isMac } from "./utils/platformUtils"
 import { trackAppOpen } from "./lib/toasterGating"
-import {
-  JDAwarenessToaster,
-  ProfileFeatureToaster,
-  RemoteCampaignToaster,
-  NativelyApiPromoToaster,
-  MaxUltraUpgradeToaster,
-  PREMIUM_ADS_AVAILABLE
-} from './premium'
+import { PREMIUM_ADS_AVAILABLE } from './premium'
 import { analytics } from "./lib/analytics/analytics.service"
 import { ErrorBoundary } from "./components/ErrorBoundary"
 import ModesSettings from "./components/settings/ModesSettings"
@@ -405,11 +398,6 @@ const App: React.FC = () => {
   };
   const isAppReady = !isSettingsWindow && !isOverlayWindow && !isModelSelectorWindow && !showStartup && !isSettingsOpen && !isManagerOpen && isLauncherMainView;
 
-  // Gate useAdCampaigns behind orchestrator eligibility. Ads only self-schedule
-  // when (a) the orchestrator is ready (no other toaster active) and (b) the
-  // `ads` stage's prerequisites have been met. We approximate (b) with the
-  // simple "no orchestrated toaster is active" gate — useAdCampaigns has its
-  // own eligibility logic for which ad to show.
   const orch = (isLauncherWindow || isDefault) ? getOrchestrator() : null;
   // Stable subscribe/snapshot refs for useSyncExternalStore — without these,
   // .bind() creates a new function on every render, causing the store to
@@ -423,20 +411,6 @@ const App: React.FC = () => {
     [orch],
   );
   const orchState = useSyncExternalStore(orchSubscribe, orchSnapshot);
-  // Dev-only: `?forceAd=<ad>` (natively_api, profile, jd,
-  // max_ultra_upgrade) opens that ad immediately, skipping the campaign
-  // scheduler, so its design can be checked by hand or by
-  // scripts/audit/toaster-preview.mjs.
-  const [forcedAd, setForcedAd] = useState<string | null>(() =>
-    import.meta.env.DEV ? new URLSearchParams(window.location.search).get('forceAd') : null
-  );
-
-  // Ads are scheduled by the onboarding orchestrator like every other card
-  // (toaster policy; OrchestratedToasterHost renders them). Only the DEV-only
-  // ?forceAd preview renders here, and it records nothing.
-  const activeAd = forcedAd;
-  const dismissAd = (..._args: unknown[]) => { setForcedAd(null); };
-
   // ── Card scheduler inputs (toaster policy) ──────────────────────────────
   // What decides which card is relevant (keys, plan, profile, JD, trial,
   // extension, quota) is read live and re-read whenever it can have changed;
@@ -1033,7 +1007,6 @@ const App: React.FC = () => {
 
   const handleStartMeeting = async () => {
     try {
-      localStorage.setItem('natively_last_meeting_start', Date.now().toString());
       // Self-heal a poisoned preference. Until the picker started filtering
       // them, Natively's own system-audio tap aggregate could be enumerated as
       // an input device (private CoreAudio aggregates are hidden from other
@@ -1111,16 +1084,6 @@ const App: React.FC = () => {
     console.log("[App.tsx] meeting ended from the pill");
     analytics.trackMeetingEnded();
     setIsProcessingMeeting(true);
-
-    const startStr = localStorage.getItem('natively_last_meeting_start');
-    if (startStr) {
-      const duration = Date.now() - parseInt(startStr, 10);
-      const threshold = import.meta.env.DEV ? 10000 : 180000;
-      if (duration >= threshold) {
-        localStorage.setItem('natively_show_profile_toaster', 'true');
-      }
-      localStorage.removeItem('natively_last_meeting_start');
-    }
   };
 
   const interfaceThemeAttribute = meetingInterfaceTheme === 'default' ? undefined : meetingInterfaceTheme;
@@ -1416,42 +1379,6 @@ const App: React.FC = () => {
               if (reason === 'byok') openSettingsExclusive('ai-providers');
             }}
           />
-        )}
-
-        {/* Ad toasters */}
-        {!isolateModals && isLauncherMainView && !isSettingsOpen && (
-          <NativelyApiPromoToaster
-            isOpen={activeAd === 'natively_api'}
-            onDismiss={() => dismissAd('natively_api')}
-            onOpenSettings={(tab: string) => openSettingsExclusive(tab)}
-          />
-        )}
-        {!isolateModals && isLauncherMainView && (
-          <>
-            <ProfileFeatureToaster
-              isOpen={activeAd === 'profile'}
-              onDismiss={dismissAd}
-              onSetupProfile={() => openProfileExclusive()}
-            />
-            <JDAwarenessToaster
-              isOpen={activeAd === 'jd'}
-              onDismiss={dismissAd}
-              onSetupJD={() => openProfileExclusive()}
-            />
-            <MaxUltraUpgradeToaster
-              isOpen={activeAd === 'max_ultra_upgrade'}
-              onDismiss={dismissAd}
-              onUpgrade={() => openSettingsExclusive('plans')}
-            />
-
-            {/* Remote Campaigns Render Logic (Commented out)
-            <RemoteCampaignToaster
-              isOpen={typeof activeAd === 'object' && activeAd !== null}
-              campaign={typeof activeAd === 'object' && activeAd !== null ? activeAd : undefined as any}
-              onDismiss={dismissAd}
-            />
-            */}
-          </>
         )}
 
       </div>

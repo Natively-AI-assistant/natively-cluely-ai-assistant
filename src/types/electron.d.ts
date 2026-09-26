@@ -270,7 +270,6 @@ export interface ElectronAPI {
     eligible?: { eligible: boolean; reason: string };
     error?: string;
   }>
-  reviewRecordSession: () => Promise<{ ok: boolean; error?: string }>
   reviewFlushSession: () => Promise<{ ok: boolean; totals?: { session_count: number; total_usage_ms: number; usage_ms: number; counted: boolean }; error?: string }>
   reviewMarkShown: () => Promise<{ ok: boolean; error?: string }>
   reviewDismissLater: () => Promise<{ ok: boolean; error?: string }>
@@ -312,7 +311,6 @@ export interface ElectronAPI {
   getLocalTrial:  () => Promise<{ hasToken: boolean; trialClaimed?: boolean; expiresAt?: string; startedAt?: string; expired?: boolean; showEndedCard?: boolean; superseded?: boolean }>
   convertTrial:   (choice: string) => Promise<{ ok: boolean }>
   endTrialByok:        (opts?: { force?: boolean }) => Promise<{ success: boolean; wipeIncomplete?: boolean; error?: string }>
-  wipeTrialProfileData: () => Promise<{ success: boolean; failed?: string[]; error?: string }>
   // Card ledger (toaster policy, src/lib/cards/cardPolicy.mjs)
   cardsGet: () => Promise<{ ok: boolean; ledger?: import('../lib/cards/cardPolicy.mjs').Ledger; error?: string }>
   cardsRecord: (id: string, outcome: string, meta?: { until?: number }) => Promise<{ ok: boolean; ledger?: import('../lib/cards/cardPolicy.mjs').Ledger; error?: string }>

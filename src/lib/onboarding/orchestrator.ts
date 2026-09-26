@@ -185,8 +185,7 @@ export type OrchestratorEvent =
   | { type: 'usage:tick'; deltaMs: number }
   | { type: 'foreground:change'; isForeground: boolean }
   | { type: 'meeting:state'; isActive: boolean }
-  | { type: 'user-state:change'; patch: Partial<UserState> }
-  | { type: 'queue:set'; queue: ToasterId[] };
+  | { type: 'user-state:change'; patch: Partial<UserState> };
 
 type Listener = (state: OrchestratorState) => void;
 
@@ -407,17 +406,6 @@ export class OnboardingOrchestrator {
         this.applyUserState(event.patch);
         break;
 
-      case 'queue:set':
-        if (this.state.activeToasterId) {
-          // Cannot mutate queue while a toaster is visible — caller must
-          // dismiss first. Silently ignore.
-          return;
-        }
-        this.state.queue = event.queue.filter(
-          id => !this.stageConfigs.some(c => c.id === id),
-        ).concat(event.queue);
-        this.persist();
-        break;
     }
     this.notify();
   }

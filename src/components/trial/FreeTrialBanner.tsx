@@ -10,8 +10,6 @@ import {
   type TrialLimits, type TrialUsage,
 } from '../../types/nativelyUsage';
 
-const PLAN_PRO_URL = 'https://checkout.dodopayments.com/buy/pdt_0NcM6Aw0IWdspbsgUeCLA';
-
 interface TrialBannerProps {
   expiresAt: string; // ISO timestamp
   usage: TrialUsage;

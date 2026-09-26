@@ -350,8 +350,8 @@ export function initializeIpcHandlers(appState: AppState): void {
   /**
    * Remove the Pro-only profile data a free trial left behind (résumé/JD
    * documents, their indexes and profile packs). Meetings, transcripts and
-   * recordings are never touched. Callers decide WHEN; see settleExpiredTrial
-   * and the `trial:wipe-profile-data` handler.
+   * recordings are never touched. Callers decide WHEN: settleExpiredTrial (the
+   * expiry, once) and trial:end-byok ("Use my own API keys").
    */
   const wipeTrialProfileData = (): { success: boolean; failed: string[] } => {
     // Every step runs, and every step that fails is named: a wipe that left
@@ -11590,17 +11590,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle('review:record-session', async () => {
-    try {
-      const { ReviewService, getReviewApiKey, getReviewHardwareId } = require('./services/ReviewService');
-      const svc = ReviewService.getInstance();
-      svc.recordSessionStart();
-      return { ok: true };
-    } catch (error: any) {
-      console.error('[IPC] review:record-session failed:', error);
-      return { ok: false, error: error?.message || 'unknown' };
-    }
-  });
 
   safeHandle('review:flush-session', async () => {
     try {
@@ -11798,15 +11787,6 @@ export function initializeIpcHandlers(appState: AppState): void {
       console.error('[IPC] trial:end-byok error:', error);
       return { success: false, error: error.message };
     }
-  });
-
-  // Wipe only Pro profile data (resume + JD + company dossiers) without clearing
-  // trial token or natively key. Called automatically when trial expires so that
-  // profile intelligence data can't linger in SQLite after the trial window closes.
-  safeHandle('trial:wipe-profile-data', async () => {
-    // Never for a licensed user: résumé/JD data is theirs (toaster policy Phase 0).
-    if (isLicensed()) return { success: false, error: 'licensed' };
-    return wipeTrialProfileData();
   });
 
   // ── Card ledger (toaster policy, src/lib/cards/cardPolicy.mjs) ──────────

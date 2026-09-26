@@ -28,7 +28,7 @@ const ADS = ['ProfileFeatureToaster', 'JDAwarenessToaster', 'MaxUltraUpgradeToas
 for (const name of ADS) {
   test(`${name}: a plain close plays the genie, then reports`, { skip }, () => {
     const src = code(name);
-    assert.ok(/const handleDismiss = \(\) => \{ stamp\(\); closeThen\(\(\) => onDismiss\(\)\); \};/.test(src), 'handleDismiss closes first');
+    assert.ok(/const handleDismiss = \(\) => \{ closeThen\(\(\) => onDismiss\(\)\); \};/.test(src), 'handleDismiss closes first');
     assert.ok(src.includes('const closeThen = (report: () => void) => {'), 'one close-then-report helper');
     assert.ok(/onClosed=\{\(\) => \{[^}]*reportClosed\(\)/.test(src), 'reports from GenieModal onClosed');
     // No plain dismiss reaches the host directly.
@@ -38,14 +38,14 @@ for (const name of ADS) {
 
 test('MaxUltraUpgradeToaster: "I\'m happy with Pro" and a plan close first', { skip }, () => {
   const src = code('MaxUltraUpgradeToaster');
-  assert.ok(src.includes("const handleHappyWithPro = () => { stamp(); closeThen(() => onDismiss('never')); };"));
+  assert.ok(src.includes("const handleHappyWithPro = () => { closeThen(() => onDismiss('never')); };"));
   const plan = src.slice(src.indexOf('const handlePlan'), src.indexOf('useEffect(', src.indexOf('const handlePlan')));
   assert.ok(plan.includes("closeThen(() => onDismiss('acted'));"), 'the plan reports once the card has gone');
   assert.ok(plan.indexOf('openExternal') < plan.indexOf('closeThen('), 'checkout opens at once, not after the genie');
 });
 
 test('NativelyApiPromoToaster: the decline closes first', { skip }, () => {
-  assert.ok(code('NativelyApiPromoToaster').includes("const handleDecline = () => { stamp(); closeThen(() => onDismiss('never')); };"));
+  assert.ok(code('NativelyApiPromoToaster').includes("const handleDecline = () => { closeThen(() => onDismiss('never')); };"));
 });
 
 test('hand-overs stay instant', { skip }, () => {
