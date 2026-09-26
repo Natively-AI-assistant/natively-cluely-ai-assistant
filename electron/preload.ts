@@ -271,6 +271,8 @@ interface ElectronAPI {
   getTrialStatus: () => Promise<{
     ok: boolean;
     expired?: boolean;
+    /** Main's verdict on an expired trial: must the user choose? */
+    showEndedCard?: boolean;
     remaining_ms?: number;
     started_at?: string;
     expires_at?: string;
@@ -285,6 +287,9 @@ interface ElectronAPI {
     expiresAt?: string;
     startedAt?: string;
     expired?: boolean;
+    showEndedCard?: boolean;
+    /** The expired token was cleared: a licence or key replaced the trial. */
+    superseded?: boolean;
   }>;
   convertTrial: (choice: string) => Promise<{ ok: boolean }>;
   endTrialByok: () => Promise<{ success: boolean; error?: string }>;

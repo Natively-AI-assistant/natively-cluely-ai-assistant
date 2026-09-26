@@ -623,20 +623,16 @@ const App: React.FC = () => {
 
     // ── Trial: check stored token and start polling if active ──
     let trialPollId: ReturnType<typeof setInterval> | null = null;
-    let profileWiped = false; // guard: only wipe once per session
     const checkTrial = async () => {
       try {
         const res = await window.electronAPI?.getTrialStatus?.();
         if (!res?.ok) return;
         if (res.expired) {
           setActiveTrial(null);
-          // Auto-wipe profile data the first time expiry is detected so that
-          // resume/JD data doesn't linger in SQLite beyond the trial window.
-          if (!profileWiped) {
-            profileWiped = true;
-            window.electronAPI?.wipeTrialProfileData?.().catch(() => {});
-          }
-          setShowTrialExpiredModal(true);
+          // Main settles the expiry: the profile wipe runs there, once per trial
+          // and never for a licensed user, and main says whether the user still
+          // has to choose (toaster policy Phase 0, settleExpiredTrial).
+          if (res.showEndedCard) setShowTrialExpiredModal(true);
           if (trialPollId) { clearInterval(trialPollId); trialPollId = null; }
         } else {
           setActiveTrial({
@@ -650,13 +646,10 @@ const App: React.FC = () => {
     window.electronAPI?.getLocalTrial?.().then((local: any) => {
       if (!local?.hasToken) return;
       if (local.expired) {
-        // (expiry branch below)
-        // Already expired at launch — wipe immediately then show modal after a brief delay
-        if (!profileWiped) {
-          profileWiped = true;
-          window.electronAPI?.wipeTrialProfileData?.().catch(() => {});
-        }
-        setTimeout(() => setShowTrialExpiredModal(true), 10_000);
+        // Already expired at launch. Main has settled it (wiped once if due) and
+        // says whether the user still has to choose; a licence or key replaced
+        // the trial otherwise, and the token is already gone.
+        if (local.showEndedCard) setTimeout(() => setShowTrialExpiredModal(true), 10_000);
         return;
       }
       // Seed the banner from the LOCAL token before the first poll answers.
