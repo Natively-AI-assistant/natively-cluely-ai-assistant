@@ -28,9 +28,12 @@ import {
 } from '../../premium';
 import { CARDS, DAY_MS } from '../../lib/cards/cardPolicy.mjs';
 import { createShowingRecorder } from '../../lib/cards/outcomeLatch.mjs';
+import { startTrialWithRetry } from '../../lib/trial/trialStart.mjs';
 
 /** Why a card closed, as the card reports it: its primary action, an explicit "never", or a plain close. */
-type CloseReason = 'acted' | 'never' | undefined;
+// 'after_error': the trial promo closed after our own error (network, server);
+// that showing ends with no outcome, so it is no strike (spec §6 row 8).
+type CloseReason = 'acted' | 'never' | 'after_error' | undefined;
 
 /** Write one card outcome to the main-process ledger (cards:record). */
 function recordCard(card: string, outcome: string, meta?: { until?: number }): void {
@@ -106,7 +109,8 @@ export const OrchestratedToasterHost: React.FC<HostProps> = ({ onOpenSettings, o
   const onDismiss = (id: ToasterId) => () => orch.markDismissed(id);
   /** Close a card, recording why: its own reason, else a plain "later". */
   const closeWith = (id: ToasterId) => (reason?: CloseReason) => {
-    recorder.outcome(reason ?? 'later');
+    if (reason === 'after_error') recorder.end();
+    else recorder.outcome(reason ?? 'later');
     orch.markDismissed(id);
   };
   const openSettings = (tab: string) => {
@@ -178,13 +182,18 @@ export const OrchestratedToasterHost: React.FC<HostProps> = ({ onOpenSettings, o
           hasTrialToken={orch.getUserState().hasTrialToken}
           onDismiss={closeWith('trial_promo')}
           onStartTrial={async () => {
-            const res = await window.electronAPI?.startTrial?.();
-            if (!res?.ok) throw new Error(res?.error || 'Could not start trial');
-            orch.setUserState({ hasTrialToken: true, trialClaimed: true });
-            recorder.outcome('acted');
+            // Our own errors (network, server) are retried once; the server's
+            // answers are final (spec §6 row 8).
+            const kind = await startTrialWithRetry(() => window.electronAPI?.startTrial?.() ?? Promise.resolve(undefined));
+            if (kind === 'started') { orch.setUserState({ hasTrialToken: true, trialClaimed: true }); recorder.outcome('acted'); }
+            // Already used on this device: the promo retires and the card
+            // offers a key or the user's own keys instead.
+            if (kind === 'unavailable') { orch.setUserState({ trialClaimed: true }); recorder.outcome('never'); }
             // The toaster reports the dismiss itself, once its close has
             // played: dismissing here would unmount it mid-genie.
+            return kind;
           }}
+          onGetKey={() => openSettings('plans')}
           onManualSetup={() => {
             // "I'll set up manually" is a decision: the trial promo retires.
             recorder.outcome('acted');

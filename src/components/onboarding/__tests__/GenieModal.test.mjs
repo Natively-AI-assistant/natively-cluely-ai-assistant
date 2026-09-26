@@ -543,8 +543,8 @@ test('pictures: a card showing one of several things is keyed by which', () => {
 test('pictures: a card that opens reset keeps only its untouched picture', () => {
   assert.ok(code('components/ReviewModal.tsx').includes('keepPictures={step === "review" && rating === 0 && hoverRating === 0 && !text}'));
   // The trial promo is remounted fresh for every showing: a picture of it
-  // starting, or of a failed start's error, is never what the next one shows.
-  assert.ok(code('components/trial/TrialPromoToaster.tsx').includes('keepPictures={!starting && !error}'));
+  // starting, or of a failed start's message, is never what the next one shows.
+  assert.ok(code('components/trial/TrialPromoToaster.tsx').includes('keepPictures={!starting && !message}'));
 });
 
 test('pictures (premium): the Natively API card has one picture per variant', { skip: !existsSync(resolve(SRC, '../premium/src/NativelyApiPromoToaster.tsx')) && 'premium not checked out' }, () => {

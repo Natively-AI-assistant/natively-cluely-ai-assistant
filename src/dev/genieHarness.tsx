@@ -49,6 +49,7 @@ import { NativelyQuotaBanner } from '../components/NativelyQuotaBanner';
 import { HindsightStatusBanner } from '../components/HindsightStatusBanner';
 import { ProviderChangeNotice, type ProviderChangeWarning, type ReindexProgress, type EmbeddingDegradedNotice } from '../components/ProviderChangeNotice';
 import { TrialPromoToaster } from '../components/trial/TrialPromoToaster';
+import type { TrialStartKind } from '../lib/trial/trialStart.mjs';
 import { NativelyApiPromoToaster } from '../premium';
 
 // Outside Electron there is no capturePage. A probe that wants pictures
@@ -130,9 +131,10 @@ function CardsStage() {
           hasTrialToken={false}
           onDismiss={() => setTrial(false)}
           onStartTrial={() => trialOutcome === 'hang'
-            ? new Promise<void>(() => {})
-            : Promise.reject(new Error('Could not start trial. Check your connection.'))}
+            ? new Promise<TrialStartKind>(() => {})
+            : Promise.resolve<TrialStartKind>('failed')}
           onManualSetup={() => {}}
+          onGetKey={() => {}}
         />
       )}
     </>
