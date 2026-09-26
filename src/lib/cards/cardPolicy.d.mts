@@ -58,5 +58,6 @@ export function applyOutcome(ledger: Ledger, id: CardId | string, outcome: Outco
 export function isCardAvailable(ledger: Ledger, id: CardId | string, now: number): boolean;
 export function promoBudgetOpen(ledger: Ledger, now: number): boolean;
 export function dayOneOver(ledger: Ledger, now: number): boolean;
+export function msUntilCardAllowed(ledger: Ledger, id: CardId | string, now: number): number | null;
 export function pickPromotional(candidateIds: readonly (CardId | string)[], ledger: Ledger, now: number): CardId | null;
 export function migrateLegacy(ledger: Ledger, legacy: LegacyCardHistory | null | undefined, now: number): Ledger;

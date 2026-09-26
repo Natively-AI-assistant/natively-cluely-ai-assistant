@@ -30,6 +30,11 @@
 // Functionally equivalent today, but do not remove the extension — it is
 // the only thing preventing a repeat of the orchestrator.mjs shadowing bug.
 import { loadState, saveState } from './persistence.ts';
+import { CARDS, msUntilCardAllowed } from '../cards/cardPolicy.mjs';
+import type { CardId, Ledger } from '../cards/cardPolicy.mjs';
+
+/** Minimum gap between one card closing and the next opening (toaster policy §3.2). */
+export const CARD_SPACING_MS = 60_000;
 
 // ─── Types ────────────────────────────────────────────────────────
 
@@ -87,6 +92,10 @@ export interface UserState {
   activeModeSet: boolean;
   donationShouldShow: boolean;
   isV2_8_OrNewer: boolean;
+  /** The main-process card ledger (cards:get); null until it has loaded. */
+  cardLedger: Ledger | null;
+  /** The Trial ended card is on screen: nothing else may open. */
+  trialEndedOpen: boolean;
 }
 
 export interface Triggers {
@@ -123,6 +132,13 @@ export interface StageConfig {
    * triggered by separate user actions (profile_intelligence, modes_manager).
    */
   isGateOnly?: boolean;
+  /**
+   * The card-ledger entry this stage is (src/lib/cards/cardPolicy.mjs). A
+   * stage with a card also obeys the ledger (strikes, retirement), its class
+   * rules (promo: day one and the 72 h budget) and one card of its class per
+   * launch.
+   */
+  card?: CardId;
 }
 
 export interface Ctx {
@@ -169,6 +185,8 @@ export const DEFAULT_USER_STATE: UserState = {
   activeModeSet: false,
   donationShouldShow: false,
   isV2_8_OrNewer: true,
+  cardLedger: null,
+  trialEndedOpen: false,
 };
 
 // ─── Orchestrator ─────────────────────────────────────────────────
@@ -193,6 +211,11 @@ export class OnboardingOrchestrator {
   // the very next RAF frame by a still-true reEligibility predicate, which is
   // what made the X appear to do nothing for a re-eligible stage.
   private dismissedThisSession = new Set<ToasterId>();
+  // Card pacing for THIS launch (not persisted; toaster policy §3.2).
+  // performance.now() when the last rendered card closed, for the spacing.
+  private lastCardClosedAt: number | null = null;
+  private onboardingShownThisLaunch = false;
+  private promoShownThisLaunch = false;
 
   constructor() {
     this.state = loadState();
@@ -454,6 +477,12 @@ export class OnboardingOrchestrator {
       ) continue;
 
       let delay = 0;
+      if (config.card) {
+        const wait = this.cardWaitMs(config.card, ctx);
+        if (wait === null) continue; // not this launch, or waiting for the ledger (an event re-arms)
+        delay = Math.max(delay, wait);
+      }
+      if (!config.isGateOnly) delay = Math.max(delay, this.spacingRemainingMs());
       if (triggers.requiresHomepageDuration != null) {
         delay = Math.max(delay, triggers.requiresHomepageDuration - ctx.homepageMountedFor);
       }
@@ -472,7 +501,8 @@ export class OnboardingOrchestrator {
       this.state.appInForeground &&
       this.state.homepageCurrentlyMounted &&
       !this.state.meetingActive &&
-      this.state.activeToasterId === null
+      this.state.activeToasterId === null &&
+      !this.userState.trialEndedOpen
     );
   }
 
@@ -523,6 +553,10 @@ export class OnboardingOrchestrator {
           }
           this.state.activeToasterId = id;
           this.state.lastShownTimes[id] = ctx.now;
+          if (config.card) {
+            if (CARDS[config.card]?.cls === 'onboarding') this.onboardingShownThisLaunch = true;
+            else this.promoShownThisLaunch = true;
+          }
           this.persist();
           this.notify();
           return; // single-slot invariant
@@ -568,7 +602,34 @@ export class OnboardingOrchestrator {
     // 6. Custom predicate (e.g. DonationManager fetch outcome)
     if (config.customPredicate && !config.customPredicate(ctx)) return false;
 
+    // 7. Spacing after the previous card, and the card ledger.
+    if (!config.isGateOnly && this.spacingRemainingMs() > 0) return false;
+    if (config.card) {
+      const wait = this.cardWaitMs(config.card, ctx);
+      if (wait === null || wait > 0) return false;
+    }
+
     return true;
+  }
+
+  /** ms left of the gap after the last rendered card closed (0 = none). */
+  private spacingRemainingMs(): number {
+    if (this.lastCardClosedAt === null) return 0;
+    return Math.max(0, CARD_SPACING_MS - (performance.now() - this.lastCardClosedAt));
+  }
+
+  /**
+   * ms until this card may show (0 = now), or null when it cannot this launch:
+   * the ledger has not loaded, the card is retired, or its class already had
+   * its one card this launch.
+   */
+  private cardWaitMs(card: CardId, ctx: Ctx): number | null {
+    const ledger = ctx.userState.cardLedger;
+    if (!ledger) return null;
+    const cls = CARDS[card]?.cls;
+    if (!cls) return null;
+    if (cls === 'onboarding' ? this.onboardingShownThisLaunch : this.promoShownThisLaunch) return null;
+    return msUntilCardAllowed(ledger, card, ctx.now);
   }
 
   // ─── Toaster dismissal / skip ─────────────────────────────────
@@ -590,6 +651,8 @@ export class OnboardingOrchestrator {
     // (they're auto-completed inside evaluateAndDispatch).
     if (this.state.activeToasterId !== id && this.state.activeToasterId !== null) return;
     const ts = Date.now();
+    const cfg = this.stageConfigs.find(c => c.id === id);
+    if (cfg && !cfg.isGateOnly) this.lastCardClosedAt = performance.now();
     this.state.completed[id] = ts;
     if (explicitSkip) this.state.skipped.add(id);
     this.state.activeToasterId = null;

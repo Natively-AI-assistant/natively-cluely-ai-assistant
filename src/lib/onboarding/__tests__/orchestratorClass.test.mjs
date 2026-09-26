@@ -386,7 +386,10 @@ test('dismissing permissions does NOT wedge other toaster stages', () => {
       isV2_8_OrNewer: true,
     },
   });
-  mockNow += 6_000; // > browser_extension requiresHomepageDuration (5 s)
+  // > browser_extension requiresHomepageDuration (5 s) AND the 60 s spacing
+  // after the previous card closed (toaster policy §3.2, CARD_SPACING_MS).
+  mockNow += 61_000;
+  flushOneFrame();
   flushOneFrame();
 
   assert.equal(

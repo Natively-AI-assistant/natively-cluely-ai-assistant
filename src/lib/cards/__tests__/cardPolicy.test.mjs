@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 
 import {
   DAY_MS, CARDS, emptyLedger, entryOf, applyOutcome, isCardAvailable,
-  promoBudgetOpen, dayOneOver, pickPromotional, migrateLegacy,
+  promoBudgetOpen, dayOneOver, pickPromotional, migrateLegacy, msUntilCardAllowed,
 } from '../cardPolicy.mjs';
 
 const T0 = Date.UTC(2026, 8, 1); // 2026-09-01
@@ -208,4 +208,42 @@ test('migration ignores garbage fields and keeps the rest', () => {
   assert.equal(l.firstLaunchAt, T0);
   assert.equal(l.launchCount, 0);
   assert.equal(entryOf(l, 'review_prompt').retired, true);
+});
+
+// ── how long until the ledger allows a card (the scheduler's deadline) ────
+test('msUntilCardAllowed: a fresh onboarding card is allowed now', () => {
+  assert.equal(msUntilCardAllowed(emptyLedger(T0), 'browser_extension', T0), 0);
+});
+
+test('msUntilCardAllowed: a retired card never is', () => {
+  assert.equal(msUntilCardAllowed(after(emptyLedger(T0), 'jd_ad', ['never', T0]), 'jd_ad', T0 + 99 * D), null);
+});
+
+test('msUntilCardAllowed: an unknown card never is', () => {
+  assert.equal(msUntilCardAllowed(emptyLedger(T0), 'nope', T0), null);
+});
+
+test('msUntilCardAllowed: a strike wait counts down', () => {
+  const l = after(emptyLedger(T0), 'browser_extension', ['later', T0]);
+  assert.equal(msUntilCardAllowed(l, 'browser_extension', T0 + D), 6 * D);
+});
+
+test('msUntilCardAllowed: a promo waits for day one', () => {
+  assert.equal(msUntilCardAllowed(emptyLedger(T0), 'support', T0 + 3_600_000), D - 3_600_000);
+});
+
+test('msUntilCardAllowed: a promo waits for the budget', () => {
+  const l = after(emptyLedger(T0), 'jd_ad', ['shown', T0 + 10 * D]);
+  assert.equal(msUntilCardAllowed(l, 'support', T0 + 11 * D), 2 * D);
+});
+
+test('msUntilCardAllowed: the longest wait wins', () => {
+  let l = after(emptyLedger(T0), 'jd_ad', ['shown', T0 + 10 * D]);
+  l = after(l, 'support', ['later', T0 + 10 * D]); // own wait: until T0+17D; budget: until T0+13D
+  assert.equal(msUntilCardAllowed(l, 'support', T0 + 11 * D), 6 * D);
+});
+
+test('msUntilCardAllowed: Max/Ultra waits out its billing cycle', () => {
+  const l = after(emptyLedger(T0), 'max_ultra', ['acted', T0 + 2 * D, { until: T0 + 20 * D }]);
+  assert.equal(msUntilCardAllowed(l, 'max_ultra', T0 + 5 * D), 15 * D);
 });

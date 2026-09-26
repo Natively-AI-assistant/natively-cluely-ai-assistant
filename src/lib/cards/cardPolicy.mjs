@@ -152,6 +152,26 @@ export function dayOneOver(ledger, now) {
 }
 
 /**
+ * Milliseconds until the ledger allows this card (0 = now), or null when it
+ * never will (retired, or not a card). Promotional cards also wait for day one
+ * and the promo budget. The scheduler turns this into its next deadline and
+ * adds the per-launch caps, which the ledger cannot know.
+ */
+export function msUntilCardAllowed(ledger, id, now) {
+  if (!Object.prototype.hasOwnProperty.call(CARDS, id)) return null;
+  const e = entryOf(ledger, id);
+  if (e.retired) return null;
+  let at = now;
+  if (isNum(e.nextEligibleAt)) at = Math.max(at, e.nextEligibleAt);
+  if (isNum(e.retiredUntil)) at = Math.max(at, e.retiredUntil);
+  if (CARDS[id].cls === 'promo') {
+    at = Math.max(at, ledger.firstLaunchAt + DAY_ONE_MS);
+    if (isNum(ledger.lastPromoShownAt)) at = Math.max(at, ledger.lastPromoShownAt + PROMO_BUDGET_MS);
+  }
+  return at - now;
+}
+
+/**
  * The promotional card to show now, or null: past day one, budget open, and
  * the highest-priority available card among the eligible candidates.
  */
