@@ -380,6 +380,14 @@ const App: React.FC = () => {
   // The card is due (expired at launch) but still inside its 10 s delay: it
   // already owns the card slot, so no other card can open under it.
   const [trialEndedDue, setTrialEndedDue] = useState(false);
+  // 0:00 on the banner: settle the expiry from the LOCAL clock and open the
+  // card at once, offline included, instead of waiting for the next poll
+  // (toaster policy §5 row 2).
+  const handleTrialClockExpired = useCallback(() => {
+    window.electronAPI?.getLocalTrial?.().then((local: any) => {
+      if (local?.showEndedCard) { setActiveTrial(null); setShowTrialExpiredModal(true); }
+    }).catch(() => {});
+  }, []);
 
   const isManagerOpen = activeManagerPanel !== null;
   const managerContentVariants = {
@@ -678,6 +686,9 @@ const App: React.FC = () => {
       .catch(() => {});
 
     // ── Trial: check stored token and start polling if active ──
+    // Only the launcher keeps the trial clock (toaster policy §7.5): App also
+    // mounts in the overlay, and every poll there could settle the expiry too.
+    const ownsTrialClock = isLauncherWindow || isDefault;
     let trialPollId: ReturnType<typeof setInterval> | null = null;
     let trialEndedTimer: ReturnType<typeof setTimeout> | null = null;
     const checkTrial = async () => {
@@ -700,7 +711,7 @@ const App: React.FC = () => {
         }
       } catch { /* ignore — non-critical */ }
     };
-    window.electronAPI?.getLocalTrial?.().then((local: any) => {
+    if (ownsTrialClock) window.electronAPI?.getLocalTrial?.().then((local: any) => {
       if (!local?.hasToken) return;
       if (local.expired) {
         // Already expired at launch. Main has settled it (wiped once if due) and
@@ -763,7 +774,7 @@ const App: React.FC = () => {
       // a token already existed). Guarded so a re-issue of the same trial — the
       // API is idempotent per hardware id — cannot leak a second interval, which
       // would also be the only thing that ever notices this trial expiring.
-      if (!trialPollId) {
+      if (ownsTrialClock && !trialPollId) {
         checkTrial();
         trialPollId = setInterval(checkTrial, 30_000);
       }
@@ -1357,6 +1368,7 @@ const App: React.FC = () => {
             usage={activeTrial.usage}
             limits={activeTrial.limits}
             onUpgrade={() => openSettingsExclusive('plans')}
+            onExpired={handleTrialClockExpired}
           />
         )}
 

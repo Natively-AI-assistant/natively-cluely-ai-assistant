@@ -17,7 +17,9 @@ interface TrialBannerProps {
   usage: TrialUsage;
   /** The trial's allowances from /v1/trial/status. Falls back when absent. */
   limits?: TrialLimits;
-  onUpgrade: () => void; // opens FreeTrialModal
+  onUpgrade: () => void; // opens Settings → Plans
+  /** The clock reached 0:00 (called once per trial). */
+  onExpired?: () => void;
 }
 
 function fmt(ms: number): string {
@@ -28,16 +30,22 @@ function fmt(ms: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-export const FreeTrialBanner: React.FC<TrialBannerProps> = ({ expiresAt, usage, limits, onUpgrade }) => {
+export const FreeTrialBanner: React.FC<TrialBannerProps> = ({ expiresAt, usage, limits, onUpgrade, onExpired }) => {
   const [remaining, setRemaining] = useState(() =>
     Math.max(0, new Date(expiresAt).getTime() - Date.now()),
   );
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // 0:00 hands straight to Trial ended, without waiting for a server poll.
+  const onExpiredRef = useRef(onExpired);
+  onExpiredRef.current = onExpired;
+  const expiredReportedRef = useRef(false);
 
   useEffect(() => {
+    expiredReportedRef.current = false;
     const tick = () => {
       const left = Math.max(0, new Date(expiresAt).getTime() - Date.now());
       setRemaining(left);
+      if (left === 0 && !expiredReportedRef.current) { expiredReportedRef.current = true; onExpiredRef.current?.(); }
       if (left === 0 && intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
@@ -99,7 +107,7 @@ export const FreeTrialBanner: React.FC<TrialBannerProps> = ({ expiresAt, usage, 
             >
               {expired ? 'Trial ended' : fmt(remaining)}
             </span>
-            <span className="text-[10px] text-text-tertiary/70 font-medium">free trial</span>
+            <span className="text-[10px] text-text-tertiary opacity-70 font-medium">free trial</span>
           </div>
 
           {/* Usage mini-bars */}
@@ -142,7 +150,7 @@ function UsagePip({
       <Icon
         size={10}
         strokeWidth={2}
-        className={isHigh ? 'text-amber-400 shrink-0' : 'text-text-tertiary/60 shrink-0'}
+        className={isHigh ? 'text-amber-400 shrink-0' : 'text-text-tertiary opacity-60 shrink-0'}
       />
       <div className="h-[3px] w-12 bg-bg-input rounded-full overflow-hidden shrink-0">
         <div
