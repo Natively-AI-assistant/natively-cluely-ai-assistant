@@ -535,4 +535,8 @@ export const RU_GENERATED: Record<string, string> = {
     'To ensure responses remain fresh and varied across long meeting sessions:': 'Чтобы ответы оставались свежими и разнообразными на протяжении долгих встреч:',
     'Similarity Prevention: Computes Jaccard similarity and sentence structure matches to block the AI from repeating recently used phrases or patterns.': 'Предотвращение повторов: вычисляет сходство по Жаккару и совпадения структуры предложений, чтобы не дать ИИ повторять недавно использованные фразы или шаблоны.',
     'Boilerplate Compressing: Condenses repetitive prompt headers (e.g. "Based on the code on your screen...", "Sure, I can help with that...") directly into speakable, action-oriented answers.': 'Сжатие шаблонных фраз: сжимает повторяющиеся вводные (например, «Based on the code on your screen...», «Sure, I can help with that...») прямо в удобные для проговаривания, ориентированные на действие ответы.',
+    "Generate": "Создать",
+    "Generating…": "Создание…",
+    "Couldn't write the draft. Try again.": "Не удалось написать черновик. Попробуйте ещё раз.",
+    "Write a follow-up from these notes when you need one.": "Когда понадобится, создайте письмо по этим заметкам.",
 };

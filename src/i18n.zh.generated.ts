@@ -1050,4 +1050,8 @@ export const ZH_GENERATED: Record<string, string> = {
     "On Auto this stays on your own endpoint — pick a Background Model to use another.": "在“自动”模式下会继续使用你自己的端点 — 如需使用其他模型，请选择一个 Background Model。",
     "Not applied: the providers it can use are switched off.": "未生效：它可使用的提供商都已关闭。",
     "Not applied to the current Active Model — pick a Background Model above for this to take effect.": "对当前 Active Model 不生效 — 请在上方选择一个 Background Model 使其生效。",
+    "Generate": "生成",
+    "Generating…": "正在生成…",
+    "Couldn't write the draft. Try again.": "无法撰写草稿。请重试。",
+    "Write a follow-up from these notes when you need one.": "需要时，可根据这些笔记生成跟进草稿。",
 };

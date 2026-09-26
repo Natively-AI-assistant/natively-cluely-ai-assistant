@@ -1051,4 +1051,8 @@ export const ES_GENERATED: Record<string, string> = {
     "On Auto this stays on your own endpoint — pick a Background Model to use another.": "En Auto se queda en tu propio endpoint — elige un Background Model para usar otro.",
     "Not applied: the providers it can use are switched off.": "No se aplica: los proveedores que puede usar están desactivados.",
     "Not applied to the current Active Model — pick a Background Model above for this to take effect.": "No se aplica al Active Model actual — elige un Background Model arriba para que surta efecto.",
+    "Generate": "Generar",
+    "Generating…": "Generando…",
+    "Couldn't write the draft. Try again.": "No se pudo redactar el borrador. Inténtalo de nuevo.",
+    "Write a follow-up from these notes when you need one.": "Redacta un seguimiento a partir de estas notas cuando lo necesites.",
 };

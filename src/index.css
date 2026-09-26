@@ -7214,12 +7214,13 @@ html[data-platform="linux"][data-window="launcher"] body {
 /* ── Pill: dark theme (card fill × 0.86) ─────────────────────────────── */
 [data-interface-theme] .natively-api-selector-bar .natively-api-selector-pill {
   /* Not `all`: only the properties that actually change on a tier switch.
-     The slide itself lives on .natively-api-selector-pill-track and is
-     deliberately left alone. */
+     The slide itself lives on .natively-api-selector-pill-track; the colour
+     rides on the same clock as that slide (250ms smooth-out), so the pill
+     arrives and settles its tint in one motion. */
   transition:
-    background 260ms cubic-bezier(0.23, 1, 0.32, 1),
-    box-shadow 260ms cubic-bezier(0.23, 1, 0.32, 1),
-    border-color 260ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+    background 250ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 250ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 250ms cubic-bezier(0.22, 1, 0.36, 1) !important;
 }
 
 /* The four pills ARE the four card fills surfacing up through the segmented
@@ -8956,6 +8957,266 @@ html[data-platform="linux"][data-window="launcher"] body {
   /* Reduced motion does not mean invisible — the placeholder keeps its full
      legibility, it just stops moving. */
   .mn-skel { animation: none; opacity: 0.85; }
+}
+
+/* ── Meeting-notes follow-up draft: texts reveal ───────────────────────────────
+   transitions.dev #18. Nothing moves while the draft is written. When a first
+   draft lands, the "Write a follow-up…" hint fades out in place (.is-hiding),
+   then the Subject line and the mail card rise in one stagger step apart
+   (.is-shown) — FollowUpDraftReveal in MeetingDetails.tsx. A draft that was
+   already saved carries .is-shown from its first paint, so it never animates.
+   The variables are scoped to .mn-followup (the whole section); every t-*
+   rule below is its snippet verbatim and global. src/components/ui/
+   textsReveal.css carries the same .t-stagger rules and ProviderChangeNotice
+   .css the same .t-icon-swap rules — keep the copies identical and tune
+   through the variables, never the rules.
+   The section's controls use the rest of the scale: icon swap (#09) on
+   Copy → Check, text states swap (#04) timing on the Copy / Generate labels,
+   shimmer text (#15) on "Generating…", menu dropdown (#05) on the tone menu. */
+.mn-followup {
+  --stagger-dur: 500ms;
+  --stagger-distance: 12px;
+  --stagger-stagger: 40ms;
+  --stagger-blur: 3px;
+  --stagger-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --icon-swap-dur: 250ms;
+  --icon-swap-blur: 2px;
+  --icon-swap-start-scale: 0.25;
+  --icon-swap-ease: ease-in-out;
+
+  --text-swap-dur: 150ms;
+  --text-swap-translate-y: 4px;
+  --text-swap-blur: 2px;
+  --text-swap-ease: ease-in-out;
+
+  /* Theme-following shimmer: the band is the primary ink sweeping over the
+     tertiary one, in both themes (the snippet's greys are light-mode only). */
+  --shimmer-dur: 2000ms;
+  --shimmer-base: var(--text-tertiary);
+  --shimmer-highlight: var(--text-primary);
+  --shimmer-band: 400%;
+  --shimmer-ease: linear;
+
+  --dropdown-open-dur: 250ms;
+  --dropdown-close-dur: 150ms;
+  --dropdown-pre-scale: 0.97;
+  --dropdown-closing-scale: 0.99;
+  --dropdown-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Lines start translated down + blurred + invisible; .is-shown
+   on the parent flips them to their resting state. The second
+   line's transition-delay holds it back by --stagger-stagger
+   so the eye lands on the headline first. */
+.t-stagger-line {
+  display: block;
+  opacity: 0;
+  transform: translateY(var(--stagger-distance));
+  filter: blur(var(--stagger-blur));
+  transition:
+    opacity   var(--stagger-dur) var(--stagger-ease),
+    transform var(--stagger-dur) var(--stagger-ease),
+    filter    var(--stagger-dur) var(--stagger-ease);
+  will-change: transform, opacity, filter;
+}
+.t-stagger-line--2 { transition-delay: var(--stagger-stagger); }
+
+.t-stagger.is-shown .t-stagger-line {
+  opacity: 1;
+  transform: translateY(0);
+  filter: blur(0);
+}
+/* Exit decouples from the stagger: same fade for every line,
+   no Y return, no blur — so the disappearance reads as a
+   single quiet fade instead of a reverse reveal. */
+.t-stagger.is-hiding .t-stagger-line {
+  opacity: 0;
+  transform: translateY(0);
+  filter: blur(0);
+  transition:
+    opacity 200ms ease,
+    transform 0s linear,
+    filter 0s linear;
+  transition-delay: 0s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-stagger-line { transition: none !important; }
+}
+
+/* Icon swap (transitions.dev #09) — Copy → Check. */
+.t-icon-swap {
+  position: relative;
+  display: inline-grid;
+}
+.t-icon-swap .t-icon {
+  grid-area: 1 / 1;
+  transition:
+    opacity   var(--icon-swap-dur) var(--icon-swap-ease),
+    filter    var(--icon-swap-dur) var(--icon-swap-ease),
+    transform var(--icon-swap-dur) var(--icon-swap-ease);
+  will-change: opacity, filter, transform;
+}
+.t-icon-swap[data-state="a"] .t-icon[data-icon="a"],
+.t-icon-swap[data-state="b"] .t-icon[data-icon="b"] {
+  opacity: 1;
+  filter: blur(0);
+  transform: scale(1);
+}
+.t-icon-swap[data-state="a"] .t-icon[data-icon="b"],
+.t-icon-swap[data-state="b"] .t-icon[data-icon="a"] {
+  opacity: 0;
+  filter: blur(var(--icon-swap-blur));
+  transform: scale(var(--icon-swap-start-scale));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-icon-swap .t-icon { transition: none !important; }
+}
+
+/* Shimmer text (transitions.dev #15) — "Generating…". */
+.t-shimmer {
+  position: relative;
+  display: inline-block;
+  color: var(--shimmer-base);
+}
+.t-shimmer::before {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: linear-gradient(
+    90deg,
+    transparent          0%,
+    transparent         40%,
+    var(--shimmer-highlight) 50%,
+    transparent         60%,
+    transparent        100%
+  );
+  background-size: var(--shimmer-band) 100%;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: t-shimmer var(--shimmer-dur) var(--shimmer-ease) infinite;
+}
+@keyframes t-shimmer {
+  0%   { background-position: 100% 0; }
+  100% { background-position: 0% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-shimmer::before { animation: none !important; }
+}
+
+/* Menu dropdown (transitions.dev #05) — the tone menu. */
+.t-dropdown {
+  transform-origin: top left;
+  transform: scale(var(--dropdown-pre-scale));
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform var(--dropdown-open-dur) var(--dropdown-ease),
+    opacity   var(--dropdown-open-dur) var(--dropdown-ease);
+  will-change: transform, opacity;
+}
+.t-dropdown[data-origin="top-right"]     { transform-origin: top right; }
+.t-dropdown[data-origin="top-center"]    { transform-origin: top center; }
+.t-dropdown[data-origin="bottom-left"]   { transform-origin: bottom left; }
+.t-dropdown[data-origin="bottom-center"] { transform-origin: bottom center; }
+.t-dropdown[data-origin="bottom-right"]  { transform-origin: bottom right; }
+
+.t-dropdown.is-open {
+  transform: scale(1);
+  opacity: 1;
+  pointer-events: auto;
+}
+.t-dropdown.is-closing {
+  transform: scale(var(--dropdown-closing-scale));
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform var(--dropdown-close-dur) var(--dropdown-ease),
+    opacity   var(--dropdown-close-dur) var(--dropdown-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-dropdown { transition: none !important; }
+}
+
+/* Text states swap (transitions.dev #04), for React: the snippet's timing and
+   its exit-up-then-enter-from-below order, as keyframes on keyed spans rather
+   than a class toggled on one node. Every label the slot can show is stacked
+   invisibly in the same grid cell, so the button keeps one width through the
+   swap instead of jumping when "Copy" becomes "Copied". (SwapText in
+   MeetingDetails.tsx.) */
+.mn-swap { display: inline-grid; }
+.mn-swap > * { grid-area: 1 / 1; }
+.mn-swap-sizer { visibility: hidden; }
+@keyframes mn-swap-exit {
+  to {
+    opacity: 0;
+    transform: translateY(calc(var(--text-swap-translate-y) * -1));
+    filter: blur(var(--text-swap-blur));
+  }
+}
+@keyframes mn-swap-enter {
+  from {
+    opacity: 0;
+    transform: translateY(var(--text-swap-translate-y));
+    filter: blur(var(--text-swap-blur));
+  }
+}
+.mn-swap-out { animation: mn-swap-exit var(--text-swap-dur) var(--text-swap-ease) forwards; }
+.mn-swap-in  { animation: mn-swap-enter var(--text-swap-dur) var(--text-swap-ease) var(--text-swap-dur) backwards; }
+
+/* The header's right slot: Generate before a draft exists, the tone +
+   Regenerate group after. Both sit in one grid cell (so the header never
+   changes height) and cross-fade with the icon swap's blur and timing, at
+   the dropdown's gentler pre-scale — a whole control group, not a glyph. */
+.mn-fu-actions { display: inline-grid; justify-items: end; align-items: center; }
+.mn-fu-actions > * {
+  grid-area: 1 / 1;
+  transition:
+    opacity   var(--icon-swap-dur) var(--icon-swap-ease),
+    filter    var(--icon-swap-dur) var(--icon-swap-ease),
+    transform var(--icon-swap-dur) var(--icon-swap-ease);
+}
+.mn-fu-actions > [data-active="false"] {
+  opacity: 0;
+  filter: blur(var(--icon-swap-blur));
+  transform: scale(var(--dropdown-pre-scale));
+  pointer-events: none;
+}
+
+/* The Regenerate tooltip (the committed .t-tt) belongs to a button at the
+   content column's right edge: anchor it to the button's right side instead
+   of centring it, so it never hangs past the column. */
+.mn-followup .t-tt {
+  left: auto;
+  right: 0;
+  transform: scale(var(--tt-scale));
+  transform-origin: 100% 0%;
+}
+.mn-followup .t-tt-wrap:hover .t-tt,
+.mn-followup .t-tt-trigger:focus-visible + .t-tt {
+  transform: scale(1);
+}
+
+/* A rewritten draft (Regenerate / a tone change) settles in with the
+   skeleton-reveal cross-blur (--duration-slow, --ease-in-out, --blur-small)
+   from the dimmed state the card holds while it is rewritten. */
+@keyframes mn-fu-body-in {
+  from { opacity: 0.5; filter: blur(2px); }
+}
+.mn-fu-body-in { animation: mn-fu-body-in 400ms ease-in-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mn-swap-out { display: none; }
+  .mn-swap-in, .mn-fu-body-in { animation: none; }
+  .mn-fu-actions > * { transition: none; }
 }
 
 /* Reduced-motion equivalent of the text reveal below: one short cross-fade on

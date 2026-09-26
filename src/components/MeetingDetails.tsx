@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useId, useMemo } from 'react';
 import { useT } from '../i18n';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
-import { ArrowLeft, Search, Mail, Link, ChevronDown, Play, ArrowUp, Copy, Check, MoreHorizontal, Settings, ArrowRight, RefreshCw, Info, Eye, EyeOff, History, Pencil, X, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Search, Mail, Link, ChevronDown, Play, ArrowUp, Copy, Check, MoreHorizontal, Settings, ArrowRight, RefreshCw, Info, Eye, EyeOff, History, Pencil, X, ChevronRight, SquarePen } from 'lucide-react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { genMessageId } from '../utils/messageId';
 import { mapLanguageForPrism, isBlockCode } from '../utils/prismLanguage';
@@ -816,66 +816,141 @@ const UsageInteraction: React.FC<{
     );
 };
 
-// Tone dropdown for the follow-up draft regeneration toolbar.
+type FollowUpTone = 'professional' | 'warm' | 'concise' | 'friendly';
+
+/** The dropdown snippet's --dropdown-close-dur (index.css, .mn-followup). */
+const TONE_MENU_CLOSE_MS = 150;
+
+// Tone picker for the follow-up draft. Picking a tone rewrites the draft in it.
 // Must be a named component (not an IIFE) so React can track its hooks stably.
+// Motion is transitions.dev's menu dropdown: the menu grows from the trigger's
+// top-right corner (it sits at the page's right edge) and closes quicker and
+// quieter than it opens, with .is-closing held for the close duration.
 const ToneDropdown: React.FC<{
-    followUpTone: 'professional' | 'warm' | 'concise' | 'friendly';
+    followUpTone: FollowUpTone;
     isRegeneratingFollowUp: boolean;
-    onSelect: (tone: 'professional' | 'warm' | 'concise' | 'friendly') => void;
+    onSelect: (tone: FollowUpTone) => void;
 }> = ({ followUpTone, isRegeneratingFollowUp, onSelect }) => {
     const t = useT();
-    const toneOptions: { value: 'professional' | 'warm' | 'concise' | 'friendly'; label: string }[] = [
+    const isLight = useResolvedTheme() === 'light';
+    const toneOptions: { value: FollowUpTone; label: string }[] = [
         { value: 'professional', label: t('Professional') },
         { value: 'warm',         label: t('Warm')         },
         { value: 'concise',      label: t('Concise')      },
         { value: 'friendly',     label: t('Friendly')     },
     ];
-    const [toneOpen, setToneOpen] = useState(false);
-    const toneRef = useRef<HTMLDivElement>(null);
+    const [open, setOpen] = useState(false);
+    const [closing, setClosing] = useState(false);
+    const rootRef = useRef<HTMLDivElement>(null);
+    const triggerRef = useRef<HTMLButtonElement>(null);
+    const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
+    const closeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+    const menuId = useId();
+
+    const openMenu = () => {
+        clearTimeout(closeTimer.current);
+        setClosing(false);
+        setOpen(true);
+    };
+    // `refocus`: hand focus back to the trigger (Escape, a pick) rather than
+    // letting it fall to <body> when the menu goes inert.
+    const close = (refocus: boolean) => {
+        setOpen(false);
+        setClosing(true);
+        clearTimeout(closeTimer.current);
+        closeTimer.current = setTimeout(() => setClosing(false), TONE_MENU_CLOSE_MS);
+        if (refocus) triggerRef.current?.focus({ preventScroll: true });
+    };
+    useEffect(() => () => clearTimeout(closeTimer.current), []);
+    // Opening moves focus onto the current tone, so the arrow keys work at once and
+    // the trigger's focus ring does not sit around it while the menu is up.
     useEffect(() => {
-        if (!toneOpen) return;
-        const handler = (e: MouseEvent) => {
-            if (toneRef.current && !toneRef.current.contains(e.target as Node)) setToneOpen(false);
+        if (!open) return;
+        const selected = toneOptions.findIndex(o => o.value === followUpTone);
+        itemRefs.current[Math.max(0, selected)]?.focus({ preventScroll: true });
+        const onDown = (e: MouseEvent) => {
+            if (rootRef.current && !rootRef.current.contains(e.target as Node)) close(false);
         };
-        document.addEventListener('mousedown', handler);
-        return () => document.removeEventListener('mousedown', handler);
-    }, [toneOpen]);
+        document.addEventListener('mousedown', onDown);
+        return () => document.removeEventListener('mousedown', onDown);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open]);
+
+    const onMenuKeyDown = (e: React.KeyboardEvent) => {
+        const items = itemRefs.current.filter(Boolean) as HTMLButtonElement[];
+        const at = items.indexOf(document.activeElement as HTMLButtonElement);
+        const go = (i: number) => { e.preventDefault(); items[(i + items.length) % items.length]?.focus(); };
+        if (e.key === 'ArrowDown') go(at + 1);
+        else if (e.key === 'ArrowUp') go(at - 1);
+        else if (e.key === 'Home') go(0);
+        else if (e.key === 'End') go(items.length - 1);
+        else if (e.key === 'Escape') { e.preventDefault(); close(true); }
+        else if (e.key === 'Tab') close(false);
+    };
+
     return (
-        <div ref={toneRef} className="relative w-fit">
+        <div ref={rootRef} className="relative">
             <button
+                ref={triggerRef}
                 type="button"
                 disabled={isRegeneratingFollowUp}
-                onClick={() => setToneOpen(v => !v)}
-                className="h-7 inline-flex items-center gap-1.5 text-[11px] font-medium pl-2.5 pr-2 rounded-md text-text-secondary hover:text-text-primary hover:bg-white/[0.06] disabled:opacity-50 transition-colors"
+                onClick={() => (open ? close(false) : openMenu())}
+                onKeyDown={(e) => { if (e.key === 'ArrowDown' && !open) { e.preventDefault(); openMenu(); } }}
+                aria-haspopup="menu"
+                aria-expanded={open}
+                aria-controls={menuId}
+                className={`h-7 inline-flex items-center gap-1 text-[11px] font-medium pl-2.5 pr-1.5 rounded-md hover:text-text-primary disabled:opacity-50 disabled:hover:bg-transparent transition-colors focus-visible:[outline-offset:-1px] focus-visible:[outline-width:1.5px] ${isLight ? 'hover:bg-black/[0.05]' : 'hover:bg-white/[0.06]'} ${open ? `text-text-primary ${isLight ? 'bg-black/[0.05]' : 'bg-white/[0.06]'}` : 'text-text-secondary'}`}
             >
-                <span>{toneOptions.find(o => o.value === followUpTone)?.label ?? t('Tone')}</span>
-                <ChevronDown className={`w-3 h-3 text-text-tertiary transition-transform duration-150 ${toneOpen ? 'rotate-180' : ''}`} strokeWidth={2.5} />
+                {/* Every tone stacked invisibly in one cell: the trigger is always as wide
+                    as the longest label, so it never jumps on a pick and the menu under
+                    it can be exactly its width. */}
+                <span className="grid text-left">
+                    {toneOptions.map(o => (
+                        <span key={o.value} aria-hidden="true" className="invisible col-start-1 row-start-1">{o.label}</span>
+                    ))}
+                    <span className="col-start-1 row-start-1">{toneOptions.find(o => o.value === followUpTone)?.label ?? t('Tone')}</span>
+                </span>
+                {/* Flips (scaleY) rather than turns, so the "v" becomes a "^" in place. */}
+                <ChevronDown
+                    className="w-3 h-3 text-text-tertiary"
+                    strokeWidth={2.5}
+                    style={{ transform: `scaleY(${open ? -1 : 1})`, transition: 'transform var(--dropdown-open-dur) var(--dropdown-ease)' }}
+                />
             </button>
-            <AnimatePresence>
-                {toneOpen && (
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.96, y: -2 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.96, y: -2 }}
-                        transition={{ duration: 0.1, ease: [0.23, 1, 0.32, 1] }}
-                        className="absolute left-0 top-full mt-1 z-50 w-full rounded-lg border border-border-subtle bg-[#121214] overflow-hidden py-0.5 shadow-[0_4px_16px_rgba(0,0,0,0.5)]"
-                    >
-                        {toneOptions.map((opt) => (
-                            <button
-                                key={opt.value}
-                                type="button"
-                                onClick={() => { onSelect(opt.value); setToneOpen(false); }}
-                                className={`w-full text-left flex items-center justify-between px-2.5 py-1.5 text-[11px] font-medium transition-colors ${followUpTone === opt.value ? 'text-text-primary bg-white/[0.06]' : 'text-text-secondary hover:text-text-primary hover:bg-white/[0.04]'}`}
-                            >
-                                <span>{opt.label}</span>
-                                {followUpTone === opt.value && (
-                                    <Check className="w-3 h-3 text-text-tertiary shrink-0" strokeWidth={2.5} />
-                                )}
-                            </button>
-                        ))}
-                    </motion.div>
-                )}
-            </AnimatePresence>
+            {/* Exactly the trigger's width (left-0 right-0 of its wrapper). The rows'
+                text starts where the trigger's does: 1px border + 3px padding + 6px. */}
+            <div
+                id={menuId}
+                role="menu"
+                data-origin="top-center"
+                inert={!open}
+                onKeyDown={onMenuKeyDown}
+                className={`t-dropdown${open ? ' is-open' : closing ? ' is-closing' : ''} absolute left-0 right-0 top-full mt-1 z-50 p-[3px] rounded-lg border ${isLight
+                    ? 'bg-white border-black/[0.08] shadow-[0_6px_20px_rgba(0,0,0,0.12),0_1px_2px_rgba(0,0,0,0.06)]'
+                    : 'bg-[#1C1C1F] border-white/[0.08] shadow-[0_6px_20px_rgba(0,0,0,0.5),0_1px_2px_rgba(0,0,0,0.3)]'}`}
+            >
+                {toneOptions.map((opt, i) => {
+                    const selected = followUpTone === opt.value;
+                    return (
+                        <button
+                            key={opt.value}
+                            ref={(el) => { itemRefs.current[i] = el; }}
+                            type="button"
+                            role="menuitemradio"
+                            aria-checked={selected}
+                            tabIndex={-1}
+                            onClick={() => { close(true); if (!selected) onSelect(opt.value); }}
+                            className={`w-full h-[26px] flex items-center pl-1.5 pr-1.5 rounded-[5px] text-left text-[11px] font-medium focus-visible:outline-none transition-colors ${selected
+                                ? 'text-text-primary'
+                                : 'text-text-secondary hover:text-text-primary focus-visible:text-text-primary'} ${isLight
+                                ? 'hover:bg-black/[0.05] focus-visible:bg-black/[0.05]'
+                                : 'hover:bg-white/[0.06] focus-visible:bg-white/[0.06]'}`}
+                        >
+                            <span>{opt.label}</span>
+                        </button>
+                    );
+                })}
+            </div>
         </div>
     );
 };
@@ -1003,6 +1078,122 @@ const SUMMARY_IN_PROGRESS: ReadonlySet<string> = new Set<MeetingSummaryStatus>([
     'validating',
 ]);
 
+/** Matches the Texts-reveal snippet's fixed 200ms `.is-hiding` fade (index.css). */
+const FOLLOW_UP_HIDE_MS = 200;
+
+/** The text-swap snippet's --text-swap-dur (index.css, .mn-followup). */
+const SWAP_MS = 150;
+
+/**
+ * A label that swaps in place (transitions.dev text states swap, as keyframes on
+ * keyed spans — see .mn-swap in index.css): the old label exits up and blurs,
+ * then the new one rises in. `value` keys the swap; `sizers` are every label the
+ * slot can show, stacked invisibly so the button holds one width throughout.
+ * The first paint never animates.
+ */
+const SwapText: React.FC<{ value: string; sizers: React.ReactNode[]; children: React.ReactNode }> = ({ value, sizers, children }) => {
+    const nodeRef = useRef<React.ReactNode>(children);
+    const valueRef = useRef(value);
+    const [leaving, setLeaving] = useState<{ key: string; node: React.ReactNode } | null>(null);
+    const [swapped, setSwapped] = useState(false);
+    useLayoutEffect(() => {
+        if (valueRef.current === value) return;
+        // nodeRef still holds the previous commit's label (it is updated after paint).
+        setLeaving({ key: valueRef.current, node: nodeRef.current });
+        valueRef.current = value;
+        setSwapped(true);
+        const id = setTimeout(() => setLeaving(null), SWAP_MS * 2);
+        return () => clearTimeout(id);
+    }, [value]);
+    useEffect(() => { nodeRef.current = children; });
+    return (
+        <span className="mn-swap">
+            {sizers.map((node, i) => <span key={`z${i}`} aria-hidden="true" className="mn-swap-sizer">{node}</span>)}
+            {leaving && <span key={`o${leaving.key}`} aria-hidden="true" className="mn-swap-out">{leaving.node}</span>}
+            <span key={`i${value}`} className={swapped ? 'mn-swap-in' : undefined}>{children}</span>
+        </span>
+    );
+};
+
+/** Copy for the follow-up card: Copy → Check is transitions.dev's icon swap. */
+const FollowUpCopyButton: React.FC<{ copied: boolean; onCopy: () => void; isLight: boolean }> = ({ copied, onCopy, isLight }) => {
+    const t = useT();
+    const prefersReducedMotion = useReducedMotion();
+    return (
+        <motion.button
+            type="button"
+            onClick={onCopy}
+            whileTap={prefersReducedMotion ? undefined : { scale: 0.96 }}
+            transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
+            aria-label={copied ? t('Copied') : t('Copy follow-up draft')}
+            className={`h-7 inline-flex items-center gap-1.5 pl-2 pr-2.5 rounded-md text-[11px] font-medium text-text-secondary hover:text-text-primary transition-colors ${isLight ? 'hover:bg-black/[0.05]' : 'hover:bg-white/[0.06]'}`}
+        >
+            <span className="t-icon-swap w-3.5 h-3.5" data-state={copied ? 'b' : 'a'} aria-hidden="true">
+                <Copy className="t-icon w-3.5 h-3.5" data-icon="a" strokeWidth={2} />
+                <Check className="t-icon w-3.5 h-3.5 text-emerald-500" data-icon="b" strokeWidth={2.5} />
+            </span>
+            <SwapText value={copied ? 'copied' : 'copy'} sizers={[t('Copy'), t('Copied')]}>
+                {copied ? t('Copied') : t('Copy')}
+            </SwapText>
+        </motion.button>
+    );
+};
+
+/**
+ * The follow-up draft as a mail card: a header strip with the subject and Copy,
+ * then the message. It enters as a Transitions.dev "Texts reveal" (the same
+ * wiring as UpcomingCalendarCard's heading): at rest it carries `.is-shown`
+ * from the first paint, so a saved draft never animates; with `reveal` (a draft
+ * that just came back from Generate) it mounts without it, commits that start
+ * state with one reflow, then adds it, and the card rises in. While the draft is
+ * rewritten (`busy`) the message dims; the rewrite then settles in by `bodyKey`.
+ */
+const FollowUpDraftCard: React.FC<{
+    reveal: boolean;
+    subjectLabel?: React.ReactNode;
+    subject?: React.ReactNode;
+    subjectText?: string;
+    body: React.ReactNode;
+    bodyKey: number;
+    busy: boolean;
+    copied: boolean;
+    onCopy: () => void;
+    isLight: boolean;
+}> = ({ reveal, subjectLabel, subject, subjectText, body, bodyKey, busy, copied, onCopy, isLight }) => {
+    const ref = useRef<HTMLDivElement>(null);
+    const [shown, setShown] = useState(!reveal);
+    useLayoutEffect(() => {
+        if (shown) return;
+        void ref.current?.offsetHeight;
+        setShown(true);
+    }, [shown]);
+    return (
+        <div ref={ref} className={`t-stagger${shown ? ' is-shown' : ''}`}>
+            <div className={`t-stagger-line t-stagger-line--1 rounded-xl border overflow-hidden ${isLight ? 'border-black/[0.08] bg-black/[0.015]' : 'border-white/[0.08] bg-white/[0.02]'}`}>
+                <div className={`flex items-center gap-2.5 min-h-10 pl-3.5 pr-1.5 py-1.5 border-b ${isLight ? 'border-black/[0.06]' : 'border-white/[0.06]'}`}>
+                    {subject && (
+                        <p className="min-w-0 flex-1 truncate text-[12.5px] select-text" title={subjectText}>
+                            {/* mr-1 on top of the literal space: a clear gap after the label that
+                                still reads "Subject: …" when the line is selected or copied. */}
+                            <span className="text-text-tertiary mr-1">{subjectLabel}</span>{' '}
+                            <span className="font-medium text-text-primary">{subject}</span>
+                        </p>
+                    )}
+                    <div className="ml-auto shrink-0">
+                        <FollowUpCopyButton copied={copied} onCopy={onCopy} isLight={isLight} />
+                    </div>
+                </div>
+                <pre
+                    aria-busy={busy}
+                    className={`px-3.5 py-3 text-[12.5px] text-text-secondary leading-relaxed whitespace-pre-wrap font-sans select-text cursor-text transition-opacity duration-[250ms] ease-in-out ${busy ? 'opacity-50' : ''}`}
+                >
+                    <span key={bodyKey} className={`block${bodyKey > 0 ? ' mn-fu-body-in' : ''}`}>{body}</span>
+                </pre>
+            </div>
+        </div>
+    );
+};
+
 // One placeholder line. Height is the type's cap height, not its line box, and
 // the radius is a full pill — it should read as a stroke of text waiting to be
 // set, not as a wireframe block. The tone carries the note's own typographic
@@ -1128,10 +1319,9 @@ const SUMMARY_STAGES: ReadonlyArray<MeetingSummaryStatus> = [
  */
 const MeetingNotesSkeleton: React.FC<{
     status: MeetingSummaryStatus | undefined;
-    isLight: boolean;
     still: boolean;
     t: (text: string) => string;
-}> = ({ status, isLight, still, t }) => {
+}> = ({ status, still, t }) => {
     const statusLabel =
         status === 'chunking' ? t('Reading the transcript')
         : status === 'summarizing_chunks' ? t('Summarizing')
@@ -1234,18 +1424,15 @@ const MeetingNotesSkeleton: React.FC<{
                 </motion.section>
             ))}
 
-            {/* Follow-up draft — header bar plus the bordered prose card. */}
+            {/* Follow-up draft — header bar plus the one-line Generate hint. The draft
+                itself is written on demand, so the notes never arrive with its card. */}
             <motion.section {...enter(5)} className="mb-8">
                 <div className="h-7 flex items-center mb-3">
                     <SkeletonLine w={118} h={13} tone="strong" />
                 </div>
-                <div className={`p-3 rounded-[10px] border ${isLight ? 'border-black/[0.06] bg-black/[0.015]' : 'border-white/10 bg-white/[0.02]'}`}>
-                    {/* h-5 is the draft's own line box (text-[12.5px] x leading-relaxed). */}
-                    {['86%', '93%', '69%'].map((w, i) => (
-                        <div key={i} className="h-5 flex items-center">
-                            <SkeletonLine w={w} h={9} tone="soft" />
-                        </div>
-                    ))}
+                {/* h-5 is the hint's own line box (text-[12.5px] x leading-relaxed). */}
+                <div className="h-5 flex items-center">
+                    <SkeletonLine w={236} h={9} tone="soft" />
                 </div>
             </motion.section>
         </div>
@@ -1345,6 +1532,7 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     const followUpBody = typeof rawFollowUp === 'string' ? rawFollowUp : (rawFollowUp?.body || '');
     const followUpSubject = typeof rawFollowUp === 'string' ? undefined : rawFollowUp?.subject;
     const followUpDraftTone = (typeof rawFollowUp === 'string' ? undefined : rawFollowUp?.tone) as 'professional' | 'warm' | 'concise' | 'friendly' | undefined;
+    const hasFollowUpDraft = followUpBody.trim().length > 0;
 
     // Regenerate / evidence-jump / speaker-rename UI state.
     const [isRegenerating, setIsRegenerating] = useState(false);
@@ -1353,6 +1541,22 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     const [followUpTone, setFollowUpTone] = useState<'professional' | 'warm' | 'concise' | 'friendly'>(followUpDraftTone || 'professional');
     // Local "Copied!" confirmation for the follow-up copy button.
     const [followUpCopied, setFollowUpCopied] = useState(false);
+    // The last Generate / Regenerate of the draft came back without one.
+    const [followUpFailed, setFollowUpFailed] = useState(false);
+    // The first draft's entrance. 'armed' by a Generate click on a meeting with no
+    // draft: once the draft lands, the hint fades out in place (FOLLOW_UP_HIDE_MS),
+    // then 'reveal' mounts the draft to play its staggered rise. A draft already
+    // saved when the notes open never arms, so it never animates.
+    const [followUpEntrance, setFollowUpEntrance] = useState<'none' | 'armed' | 'reveal'>('none');
+    // Bumped when a Regenerate / tone change rewrites an existing draft, so the new
+    // text settles in (FollowUpDraftCard's bodyKey) instead of snapping.
+    const [followUpBodyKey, setFollowUpBodyKey] = useState(0);
+    const followUpRegenTipId = useId();
+    useEffect(() => {
+        if (followUpEntrance !== 'armed' || !hasFollowUpDraft) return;
+        const id = setTimeout(() => setFollowUpEntrance('reveal'), FOLLOW_UP_HIDE_MS);
+        return () => clearTimeout(id);
+    }, [followUpEntrance, hasFollowUpDraft]);
     const [showEvidence, setShowEvidence] = useState(false);
     const [pendingScrollTs, setPendingScrollTs] = useState<number | null>(null);
     // "Search past meetings" opens a meeting AT the line that matched: land on the
@@ -1675,13 +1879,27 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
         } catch { /* swallow */ } finally { setIsRegenerating(false); }
     };
 
+    const copyFollowUp = () => {
+        copyRecipe((followUpSubject ? `Subject: ${followUpSubject}\n\n` : '') + followUpBody);
+        setFollowUpCopied(true);
+        setTimeout(() => setFollowUpCopied(false), 1500);
+    };
+
     const handleRegenerateFollowUp = async (tone?: 'professional' | 'warm' | 'concise' | 'friendly') => {
         if (isRegeneratingFollowUp || !window.electronAPI?.regenerateMeetingFollowUp) return;
         setIsRegeneratingFollowUp(true);
+        setFollowUpFailed(false);
+        // Only a FIRST draft gets the entrance; a Regenerate rewrites the card in place.
+        const rewriting = hasFollowUpDraft;
+        if (!rewriting && !prefersReducedMotion) setFollowUpEntrance('armed');
         try {
             const res = await window.electronAPI.regenerateMeetingFollowUp(meeting.id, tone);
-            if (res?.success) await reloadMeeting();
-        } catch { /* swallow */ } finally { setIsRegeneratingFollowUp(false); }
+            if (res?.success) {
+                await reloadMeeting();
+                if (rewriting) setFollowUpBodyKey(k => k + 1);
+            }
+            else { setFollowUpFailed(true); setFollowUpEntrance('none'); }
+        } catch { setFollowUpFailed(true); setFollowUpEntrance('none'); } finally { setIsRegeneratingFollowUp(false); }
     };
 
     const handleSaveSpeakerLabel = async (speakerId: string, name: string) => {
@@ -2030,7 +2248,6 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                             >
                                 <MeetingNotesSkeleton
                                     status={v3SummaryStatus}
-                                    isLight={isLight}
                                     still={Boolean(prefersReducedMotion)}
                                     t={t}
                                 />
@@ -2431,85 +2648,103 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                     </section>
                                 )}
 
-                                {/* V3 follow-up draft — human prose, copy + regenerate + tone. */}
-                                {isV3Summary && followUpBody.trim() && (() => { const h = revealBlock(); return (
-                                    <section className="mb-8">
+                                {/* V3 follow-up draft — written on demand: notes save without one and
+                                    offer Generate. Once written: a mail card with Copy, plus tone and
+                                    Regenerate in the header. Motion: .mn-followup in index.css. */}
+                                {isV3Summary && (() => { const h = revealBlock(); const hasFollowUp = hasFollowUpDraft; return (
+                                    <section className="mb-8 mn-followup">
                                         <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
                                             <h2 className={`text-lg font-semibold text-text-primary${h.cls}`} style={h.style} data-rw={h['data-rw']}>{t('Follow-up draft')}</h2>
-                                            <div className="flex items-center gap-1 p-1 rounded-lg bg-white/[0.03] border border-border-subtle">
-                                                {/* Copy — with a real copied-confirmation state. */}
-                                                <motion.button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        copyRecipe((followUpSubject ? `Subject: ${followUpSubject}\n\n` : '') + followUpBody);
-                                                        setFollowUpCopied(true);
-                                                        setTimeout(() => setFollowUpCopied(false), 1500);
-                                                    }}
-                                                    whileTap={prefersReducedMotion ? undefined : { scale: 0.96 }}
-                                                    transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
-                                                    aria-label={followUpCopied ? t('Copied') : t('Copy follow-up draft')}
-                                                    className="h-7 inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-white/[0.06] transition-colors"
-                                                >
-                                                    <span className="relative w-3.5 h-3.5 shrink-0">
-                                                        <AnimatePresence initial={false} mode="wait">
-                                                            {followUpCopied ? (
-                                                                <motion.span
-                                                                    key="check"
-                                                                    initial={prefersReducedMotion ? { opacity: 0 } : { scale: 0.6, opacity: 0 }}
-                                                                    animate={prefersReducedMotion ? { opacity: 1 } : { scale: 1, opacity: 1 }}
-                                                                    exit={prefersReducedMotion ? { opacity: 0 } : { scale: 0.6, opacity: 0 }}
-                                                                    transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
-                                                                    className="absolute inset-0 flex items-center justify-center text-accent-primary"
-                                                                >
-                                                                    <Check className="w-3.5 h-3.5" strokeWidth={2.5} />
-                                                                </motion.span>
-                                                            ) : (
-                                                                <motion.span
-                                                                    key="copy"
-                                                                    initial={prefersReducedMotion ? { opacity: 0 } : { scale: 0.6, opacity: 0 }}
-                                                                    animate={prefersReducedMotion ? { opacity: 1 } : { scale: 1, opacity: 1 }}
-                                                                    exit={prefersReducedMotion ? { opacity: 0 } : { scale: 0.6, opacity: 0 }}
-                                                                    transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
-                                                                    className="absolute inset-0 flex items-center justify-center"
-                                                                >
-                                                                    <Copy className="w-3.5 h-3.5" strokeWidth={2} />
-                                                                </motion.span>
-                                                            )}
-                                                        </AnimatePresence>
-                                                    </span>
-                                                    <span className="min-w-[30px] text-left">{followUpCopied ? t('Copied') : t('Copy')}</span>
-                                                </motion.button>
-
-                                                <div className="w-px h-4 bg-border-subtle shrink-0" aria-hidden="true" />
-
-                                                {/* Regenerate — icon spins while regenerating. */}
-                                                <motion.button
-                                                    type="button"
-                                                    onClick={() => handleRegenerateFollowUp()}
-                                                    disabled={isRegeneratingFollowUp}
-                                                    whileTap={prefersReducedMotion || isRegeneratingFollowUp ? undefined : { scale: 0.96 }}
-                                                    transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
-                                                    className="h-7 inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-white/[0.06] disabled:opacity-50 disabled:hover:bg-transparent transition-colors"
-                                                >
-                                                    <RefreshCw
-                                                        className={`w-3.5 h-3.5 shrink-0 ${isRegeneratingFollowUp && !prefersReducedMotion ? 'animate-spin' : ''}`}
-                                                        strokeWidth={2}
+                                            {/* One slot, two states that cross-fade in place: Generate before a
+                                                draft exists, the tone + Regenerate group after. */}
+                                            <div className="mn-fu-actions">
+                                                <div data-active={!hasFollowUp} inert={hasFollowUp}>
+                                                    {/* Generate — the only thing that writes a first draft. No tone
+                                                        argument: the mode's natural tone, changeable once it exists. */}
+                                                    <motion.button
+                                                        type="button"
+                                                        onClick={() => handleRegenerateFollowUp()}
+                                                        disabled={isRegeneratingFollowUp}
+                                                        aria-busy={isRegeneratingFollowUp}
+                                                        whileTap={prefersReducedMotion || isRegeneratingFollowUp ? undefined : { scale: 0.96 }}
+                                                        transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
+                                                        className={`h-8 inline-flex items-center gap-1.5 pl-2.5 pr-3 rounded-lg border text-[12px] font-medium text-text-primary transition-colors disabled:cursor-default ${isLight
+                                                            ? 'bg-black/[0.03] border-black/[0.08] hover:bg-black/[0.06] disabled:hover:bg-black/[0.03]'
+                                                            : 'bg-white/[0.05] border-white/[0.08] hover:bg-white/[0.09] disabled:hover:bg-white/[0.05]'}`}
+                                                    >
+                                                        <SquarePen className="w-3.5 h-3.5 shrink-0" strokeWidth={2} />
+                                                        <SwapText value={isRegeneratingFollowUp ? 'busy' : 'idle'} sizers={[t('Generate'), t('Generating…')]}>
+                                                            {isRegeneratingFollowUp
+                                                                ? <span className="t-shimmer" data-text={t('Generating…')}>{t('Generating…')}</span>
+                                                                : t('Generate')}
+                                                        </SwapText>
+                                                    </motion.button>
+                                                </div>
+                                                <div data-active={hasFollowUp} inert={!hasFollowUp} className="flex items-center gap-0.5 p-1 rounded-lg bg-white/[0.03] border border-border-subtle">
+                                                    <ToneDropdown
+                                                        followUpTone={followUpTone}
+                                                        isRegeneratingFollowUp={isRegeneratingFollowUp}
+                                                        onSelect={(tone) => { setFollowUpTone(tone); handleRegenerateFollowUp(tone); }}
                                                     />
-                                                    <span>{isRegeneratingFollowUp ? t('Regenerating…') : t('Regenerate')}</span>
-                                                </motion.button>
-
-                                                <div className="w-px h-4 bg-border-subtle shrink-0" aria-hidden="true" />
-
-                                                {/* Tone — custom dropdown */}
-                                                <ToneDropdown
-                                                    followUpTone={followUpTone}
-                                                    isRegeneratingFollowUp={isRegeneratingFollowUp}
-                                                    onSelect={(tone) => { setFollowUpTone(tone); handleRegenerateFollowUp(tone); }}
-                                                />
+                                                    <div className="w-px h-4 bg-border-subtle shrink-0" aria-hidden="true" />
+                                                    {/* Regenerate — icon-only with the committed .t-tt tooltip; turns on
+                                                        hover and spins while rewriting, like "Regenerate notes". */}
+                                                    <span className="t-tt-wrap">
+                                                        <motion.button
+                                                            type="button"
+                                                            onClick={() => handleRegenerateFollowUp()}
+                                                            disabled={isRegeneratingFollowUp}
+                                                            aria-label={isRegeneratingFollowUp ? t('Regenerating…') : t('Regenerate')}
+                                                            aria-describedby={followUpRegenTipId}
+                                                            initial="rest"
+                                                            whileHover={prefersReducedMotion || isRegeneratingFollowUp ? undefined : 'hover'}
+                                                            whileTap={prefersReducedMotion || isRegeneratingFollowUp ? undefined : { scale: 0.96 }}
+                                                            transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
+                                                            className="t-tt-trigger h-7 w-7 inline-flex items-center justify-center rounded-md text-text-secondary hover:text-text-primary hover:bg-white/[0.06] disabled:cursor-default disabled:hover:bg-transparent transition-colors"
+                                                        >
+                                                            <motion.span
+                                                                className="w-3.5 h-3.5 inline-flex"
+                                                                variants={prefersReducedMotion ? undefined : { rest: { rotate: 0 }, hover: { rotate: -180 } }}
+                                                                transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
+                                                            >
+                                                                <RefreshCw
+                                                                    className={`w-3.5 h-3.5 ${isRegeneratingFollowUp && !prefersReducedMotion ? 'animate-spin' : ''}`}
+                                                                    strokeWidth={2}
+                                                                />
+                                                            </motion.span>
+                                                        </motion.button>
+                                                        <span className="t-tt" id={followUpRegenTipId} role="tooltip">{t('Regenerate')}</span>
+                                                    </span>
+                                                </div>
                                             </div>
                                         </div>
-                                        {followUpSubject && <p className="text-[12.5px] text-text-tertiary mb-1">{revealWords(t('Subject:'))} {revealWords(followUpSubject)}</p>}
-                                        <pre className="text-[12.5px] text-text-secondary leading-relaxed whitespace-pre-wrap font-sans select-text cursor-text p-3 rounded-[10px] border border-white/10 bg-white/[0.02]">{revealWords(followUpBody)}</pre>
+                                        {/* Transitions.dev "Texts reveal" (.t-stagger). Nothing moves while the
+                                            draft is being written — only the button says so. When a first draft
+                                            lands, the hint fades out in place, then the card rises in
+                                            (FollowUpDraftCard). Only the visible block takes part in the notes'
+                                            reveal cascade. */}
+                                        {(() => {
+                                            const hintHiding = hasFollowUp && followUpEntrance === 'armed';
+                                            const hintText = followUpFailed ? t("Couldn't write the draft. Try again.") : t('Write a follow-up from these notes when you need one.');
+                                            return !hasFollowUp || hintHiding ? (
+                                                <div className={`t-stagger${hintHiding ? ' is-hiding' : ' is-shown'}`}>
+                                                    <p className="t-stagger-line text-[12.5px] text-text-tertiary leading-relaxed">{revealWords(hintText)}</p>
+                                                </div>
+                                            ) : (
+                                                <FollowUpDraftCard
+                                                    reveal={followUpEntrance === 'reveal'}
+                                                    subjectLabel={followUpSubject ? revealWords(t('Subject:')) : undefined}
+                                                    subject={followUpSubject ? revealWords(followUpSubject) : undefined}
+                                                    subjectText={followUpSubject}
+                                                    body={revealWords(followUpBody)}
+                                                    bodyKey={followUpBodyKey}
+                                                    busy={isRegeneratingFollowUp}
+                                                    copied={followUpCopied}
+                                                    onCopy={copyFollowUp}
+                                                    isLight={isLight}
+                                                />
+                                            );
+                                        })()}
                                     </section>
                                 ); })()}
 

@@ -1050,4 +1050,8 @@ export const JA_GENERATED: Record<string, string> = {
     "On Auto this stays on your own endpoint — pick a Background Model to use another.": "「自動」では自分のエンドポイントのまま使われます — 別のものを使うには Background Model を選んでください。",
     "Not applied: the providers it can use are switched off.": "適用されません: 使用できるプロバイダーがオフになっています。",
     "Not applied to the current Active Model — pick a Background Model above for this to take effect.": "現在のモデルには適用されません — 有効にするには上で Background Model を選んでください。",
+    "Generate": "生成",
+    "Generating…": "生成中…",
+    "Couldn't write the draft. Try again.": "下書きを作成できませんでした。もう一度お試しください。",
+    "Write a follow-up from these notes when you need one.": "必要なときに、このメモからフォローアップを作成できます。",
 };

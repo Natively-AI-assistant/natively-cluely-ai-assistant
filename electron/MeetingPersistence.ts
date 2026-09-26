@@ -8,6 +8,7 @@ import { DatabaseManager, Meeting } from './db/DatabaseManager';
 import { GROQ_SUMMARY_JSON_PROMPT } from './llm';
 import { buildPostCallEnhancements } from './services/post-call/PostCallWorkflow';
 import { MeetingContextAssembler } from './services/meeting/MeetingContextAssembler';
+import { followUpRedraftPlan } from './services/meeting/FollowUpDraftGenerator';
 import { cleanMeetingTitle, isAnswerFragmentTitle, isAnswerShapedGeneration } from './services/meeting/MeetingSummaryV3';
 import { NOTE_CALL_TIMEOUT_MS } from './services/meeting/generateStructured';
 import type { MeetingSummaryTelemetryMeta } from './services/meeting/types';
@@ -625,9 +626,8 @@ export class MeetingPersistence {
                     },
                     startedAtMs: v3StartedMs,
                     startedAtIso: new Date(v3StartedMs).toISOString(),
-                    // Phase 8 — LLM follow-up draft. Gated by flag; scope already enforced by
-                    // postCallSummaryAllowed (we are inside that branch).
-                    generateFollowUpDraft: isIntelligenceFlagEnabled('followUpDraftV2'),
+                    // No follow-up draft here: it is written on demand, when the user
+                    // clicks Generate on the notes (regenerateFollowUpDraft below).
                     // #1 — constrained LLM Summary polish (note-content-only, gated, safe fallback).
                     polishSummary: isIntelligenceFlagEnabled('meetingSummaryLlmPolish'),
                     onStatusUpdate: status => db.updateSummaryStatus(meetingId, status),
@@ -804,7 +804,9 @@ Return ONLY valid JSON (no markdown code blocks):
                     actionItemsStructured: Array.isArray(summaryData.actionItemsStructured) && summaryData.actionItemsStructured.length > 0
                         ? summaryData.actionItemsStructured
                         : postCallEnhancements.actionItemsStructured,
-                    followUpDraft: summaryData.followUpDraft || postCallEnhancements.followUpDraft,
+                    // No follow-up draft: V3 notes offer Generate, and a saved template
+                    // draft would hide that button. The V2 branch below keeps its
+                    // deterministic draft — V2 has no on-demand route.
                 }
                 : {
                     ...summaryData,
@@ -1184,6 +1186,11 @@ Return ONLY valid JSON (no markdown code blocks):
         }
 
         db.updateSummaryStatus(meetingId, 'queued');
+        // The follow-up draft is on demand: re-draft it against the new notes only when
+        // the user already asked for one, in the tone they last chose. Otherwise the
+        // notes come back with Generate, as they do after a meeting.
+        const followUpPlan = followUpRedraftPlan((details.detailedSummary as any)?.followUpDraft);
+
         try {
             const startedMs = Date.now();
             const assembler = new MeetingContextAssembler(this.llmHelper);
@@ -1201,9 +1208,10 @@ Return ONLY valid JSON (no markdown code blocks):
                 },
                 startedAtMs: startedMs,
                 startedAtIso: new Date(startedMs).toISOString(),
-                generateFollowUpDraft: isIntelligenceFlagEnabled('followUpDraftV2'),
+                generateFollowUpDraft: followUpPlan.redraft && isIntelligenceFlagEnabled('followUpDraftV2'),
                 polishSummary: isIntelligenceFlagEnabled('meetingSummaryLlmPolish'),
-                followUpTone: opts?.tone,
+                followUpTone: opts?.tone ?? followUpPlan.tone,
+                followUpSenderName: followUpPlan.redraft ? followUpSenderName() : undefined,
                 onStatusUpdate: status => db.updateSummaryStatus(meetingId, status),
             });
 
@@ -1258,7 +1266,9 @@ Return ONLY valid JSON (no markdown code blocks):
     }
 
     /**
-     * Regenerate ONLY the follow-up draft for a saved V3 meeting (cheap; no re-summarize).
+     * Write the follow-up draft for a saved V3 meeting, or rewrite it (cheap; no
+     * re-summarize). This is the ONLY place a draft is first written: meetings save
+     * without one and the notes offer Generate, which lands here.
      */
     public async regenerateFollowUpDraft(meetingId: string, tone?: 'professional' | 'warm' | 'concise' | 'friendly'): Promise<boolean> {
         const db = DatabaseManager.getInstance();
@@ -1294,6 +1304,9 @@ Return ONLY valid JSON (no markdown code blocks):
                 },
                 mode: detailed.mode?.selectedTemplateType,
                 tone,
+                senderName: followUpSenderName(),
+                // NATIVELY_FOLLOWUP_DRAFT_V2=0 kill switch: the template draft, no LLM call.
+                deterministicOnly: !isIntelligenceFlagEnabled('followUpDraftV2'),
             });
             const ok = db.replaceDetailedSummary(meetingId, { ...detailed, followUpDraft: draft });
             try {
@@ -1363,6 +1376,22 @@ function computeCrossMeetingRecall(
 // Build the persisted detailedSummary blob from a MeetingSummaryV3, preserving back-compat
 // V2 bridge fields. Mirrors the inline mapping in processAndSaveMeeting so regenerate and
 // initial save produce identical shapes.
+/**
+ * The user's own name, to sign follow-up drafts with: the Google account connected
+ * for Calendar sync (CalendarManager reads it from that sign-in's id_token). Only
+ * the name is used, never the email. Undefined when Calendar is not connected or
+ * the account carried no name, and the draft is then signed with no name.
+ */
+function followUpSenderName(): string | undefined {
+    try {
+        const { CalendarManager } = require('./services/CalendarManager');
+        const status = CalendarManager.getInstance().getConnectionStatus();
+        return status?.connected && typeof status.name === 'string' ? status.name : undefined;
+    } catch {
+        return undefined;
+    }
+}
+
 function buildV3DetailedSummary(v3: import('./services/meeting/types').MeetingSummaryV3, prev?: any): any {
     return {
         ...(prev && typeof prev === 'object' ? { speakerLabels: prev.speakerLabels } : {}),
