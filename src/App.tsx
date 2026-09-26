@@ -35,6 +35,7 @@ import { ProviderChangeNotice, type EmbeddingDegradedNotice } from "./components
 import { clampOverlayOpacity, OVERLAY_OPACITY_DEFAULT, getDefaultOverlayOpacity } from "./lib/overlayAppearance"
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from './lib/meetingInterfaceTheme'
 import { permissionsNeedAttention } from './lib/permissionAttentionPolicy.mjs'
+import { collectRendererLegacy } from './lib/cards/rendererLegacy.mjs'
 import { isMac } from "./utils/platformUtils"
 import { trackAppOpen } from "./lib/toasterGating"
 import {
@@ -704,6 +705,12 @@ const App: React.FC = () => {
     // ── Onboarding orchestrator — push user-state patches ─────
     // The orchestrator owns scheduling; we just feed it the latest user state.
     if (isLauncherWindow || isDefault) {
+      // Card ledger (toaster policy): hand main this window's pre-ledger card
+      // history once; main ignores every import after the first.
+      try {
+        window.electronAPI?.cardsImportLegacy?.(collectRendererLegacy(localStorage)).catch(() => {});
+      } catch { /* storage unavailable */ }
+
       // Permissions state — first launch, then only when a required permission
       // needs attention (mac: mic/screen; Windows: mic). See permissionAttentionPolicy.mjs.
       const permsShown = localStorage.getItem('natively_perms_shown_v1') === '1';
