@@ -2210,7 +2210,7 @@ export class LLMHelper {
 
   public setGroqFastTextMode(enabled: boolean) {
     this.groqFastTextMode = enabled;
-    console.log(`[LLMHelper] Groq Fast Text Mode: ${enabled}`);
+    console.log(`[LLMHelper] Fast Mode: ${enabled}`);
   }
 
   public getGroqFastTextMode(): boolean {
@@ -4607,22 +4607,22 @@ let isMultimodal = !!(imagePaths?.length);
         this.currentModelId === 'natively'
       ) && !this.isCodexCliModel(this.currentModelId) && !this.activeIsSelfHosted();
       if (fastModeAppliesNS && this.isCodexAvailable()) {
-        console.log(`[LLMHelper] ⚡️ Fast Text Mode Active. Routing to Codex CLI...`);
+        console.log(`[LLMHelper] ⚡️ Fast Mode fallback: routing to Codex CLI...`);
         try {
           return await this.generateWithCodexCli(cloudUserContent, openaiSystemPrompt, true);
         } catch (e: any) {
-          console.warn("[LLMHelper] Codex CLI Fast Text failed, falling back to standard fast routing:", e.message);
+          console.warn("[LLMHelper] Fast Mode fallback on Codex CLI failed, trying the next:", e.message);
         }
       }
 
       if (fastModeAppliesNS && this.groqClient && !this._groqLocalDisabled) {
-        console.log(`[LLMHelper] ⚡️ Groq Fast Text Mode Active. Routing to Groq...`);
+        console.log(`[LLMHelper] ⚡️ Fast Mode fallback: routing to Groq...`);
         try {
           // intentional: Fast Text Mode always uses baseline GROQ_MODEL for speed — do not thread currentModelId
           // CACHE: pass system separately so Groq prefix-cache hits across turns.
           return await this.generateWithGroq(cloudUserContent, GROQ_MODEL, skipSystemPrompt ? undefined : finalGroqPrompt);
         } catch (e: any) {
-          console.warn("[LLMHelper] Groq Fast Text failed, falling back to standard routing:", e.message);
+          console.warn("[LLMHelper] Fast Mode fallback on Groq failed, falling back to standard routing:", e.message);
           if (typeof e?.message === 'string' && /401|invalid[_\s-]api[_\s-]key/i.test(e.message)) {
             this._groqLocalDisabled = true;
             console.warn("[LLMHelper] Local Groq key rejected (401) — disabling local Groq for the rest of this session.");
@@ -9984,21 +9984,21 @@ let isMultimodal = !!(imagePaths?.length);
     ) && !this.isCodexCliModel(this.currentModelId) && !this.activeIsSelfHosted();
     if (fastModeApplies) {
       if (this.isCodexAvailable()) {
-        console.log(`[LLMHelper] ⚡️ Fast Text Mode Active (Streaming). Routing to Codex CLI...`);
+        console.log(`[LLMHelper] ⚡️ Fast Mode fallback (Streaming): routing to Codex CLI...`);
         try {
           yield* this.trackCommit(this.streamWithCodexCli(userContent, finalSystemPrompt, true, undefined, abortSignal), commit);
           return;
         } catch (e: any) {
           if (commit.emitted) {
-            console.warn("[LLMHelper] Codex CLI Fast Text failed AFTER first token — ending stream rather than appending a second answer:", e.message);
+            console.warn("[LLMHelper] Fast Mode fallback on Codex CLI failed AFTER first token — ending stream rather than appending a second answer:", e.message);
             yield LLMHelper.TRUNCATION_SENTINEL;
             return;
           }
-          console.warn("[LLMHelper] Codex CLI Fast Text streaming failed, falling back:", e.message);
+          console.warn("[LLMHelper] Fast Mode fallback on Codex CLI failed, falling back:", e.message);
         }
       }
       if (this.groqClient && !this._groqLocalDisabled) {
-        console.log(`[LLMHelper] ⚡️ Groq Fast Text Mode Active (Streaming). Routing to local Groq...`);
+        console.log(`[LLMHelper] ⚡️ Fast Mode fallback (Streaming): routing to Groq...`);
         try {
           const groqSystem = systemPromptOverride || GROQ_SYSTEM_PROMPT;
           const finalGroqSystem = this.injectLanguageInstruction(groqSystem);
@@ -10017,17 +10017,17 @@ let isMultimodal = !!(imagePaths?.length);
             console.warn("[LLMHelper] Local Groq key rejected (401) — disabling local Groq for the rest of this session. Re-enable by saving a new key in Settings.");
           }
           if (commit.emitted) {
-            console.warn("[LLMHelper] Groq Fast Text failed AFTER first token — ending stream rather than appending a second answer:", e.message);
+            console.warn("[LLMHelper] Fast Mode fallback on Groq failed AFTER first token — ending stream rather than appending a second answer:", e.message);
             yield LLMHelper.TRUNCATION_SENTINEL;
             return;
           }
-          console.warn("[LLMHelper] Groq Fast Text streaming failed, falling back:", e.message);
+          console.warn("[LLMHelper] Fast Mode fallback on Groq failed, falling back:", e.message);
         }
         // Local Groq failed — fall through to Natively if available
       }
       if (this.hasNatively()) {
         // streamWithNatively → generateWithNatively → sends fast_mode:true → server Groq pool
-        console.log(`[LLMHelper] ⚡️ Groq Fast Text Mode Active (Streaming). Routing to Natively server Groq pool...`);
+        console.log(`[LLMHelper] ⚡️ Fast Mode fallback (Streaming): routing to the Natively server's fast tier...`);
         try {
           yield* this.trackCommit(this.streamWithNatively(userContent, finalSystemPrompt, undefined, abortSignal), commit);
           return;
