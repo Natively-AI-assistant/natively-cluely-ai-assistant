@@ -43,12 +43,13 @@ for (const e of ev) {
 }
 for (const g of gens.values()) {
   const candidates = turns.filter((t) => t.speechStart <= (g.first ?? g.final));
-  let best = null; let bestScore = -1;
-  for (const t of candidates) {
-    const sc = overlap(g.q, t.text) + (t === candidates[candidates.length - 1] ? 0.001 : 0);
-    if (sc > bestScore) { bestScore = sc; best = t; }
-  }
-  g.turn = best?.id ?? null; g.qScore = +bestScore.toFixed(2);
+  // The question label often carries the lead-in turns before the ask, and
+  // overlap() normalizes by the shorter text, so EVERY earlier turn contained
+  // in it scores ~1. The ask is the latest of the near-best matches.
+  const scored = candidates.map((t) => ({ t, sc: overlap(g.q, t.text) }));
+  const top = Math.max(-1, ...scored.map((x) => x.sc));
+  const best = [...scored].reverse().find((x) => x.sc >= top - 0.1) ?? null;
+  g.turn = best?.t.id ?? null; g.qScore = best ? +best.sc.toFixed(2) : -1;
 }
 
 const rows = [];
