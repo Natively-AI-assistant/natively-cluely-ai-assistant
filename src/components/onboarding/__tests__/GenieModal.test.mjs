@@ -521,7 +521,7 @@ test('the corner notices go through GenieModal as notices, and stay mounted so t
 test('pictures: a card whose content is new each time keeps none', () => {
   assert.ok(/forOpen: \(\) => \{\s*const card = genieRef\.current\?\.cardRef\.current;\s*if \(!card \|\| !keepRef\.current\) return null;/.test(modal), 'no picture to open with');
   assert.ok(modal.includes('keepOnCloseRef.current = card && keepRef.current &&'), 'none kept at the close');
-  assert.ok(modal.includes('if (!open || !shown || !keepPictures) return;'), 'none taken while open');
+  assert.ok(modal.includes('if (!open || !shown || !keepPictures || !genieEnabled) return;'), 'none taken while open (nor with the genie turned off in Settings)');
   assert.ok(modal.includes('if (keepRef.current && last && !changedSinceShotRef.current'), 'the close never reuses a picture from before they were turned off');
   assert.ok(code('components/NativelyQuotaBanner.tsx').includes('keepPictures={false}'), 'quota readings');
   assert.ok(code('components/trial/FreeTrialModal.tsx').includes('keepPictures={false}'), 'trial usage');
@@ -655,4 +655,14 @@ test('a confirm asked from inside Settings opens above it', () => {
   const genieLayer = Number(modal.match(/zIndex = (\d+),/)?.[1]);
   assert.ok(layer > genieLayer, `${layer} > ${genieLayer}`);
   assert.equal((confirm.match(/style=\{\{ zIndex: CONFIRM_LAYER \}\}/g) || []).length, 2, 'the dim and the panel both');
+});
+
+// Settings → Advanced → "Genie animation" off: every card falls back to the
+// reduced-motion fade, and no picture is decoded ahead of time or taken.
+test('the genie setting stands the animation down and stops its pictures', () => {
+  const hook = code('components/onboarding/useGenieCard.ts');
+  assert.ok(/const reduced = \(useReducedMotion\(\) \?\? false\) \|\| !genieEnabled;/.test(hook), 'off takes the reduced-motion path');
+  assert.ok(modal.includes('useEffect(() => { if (genieEnabled) void warmGenieSnapshots(); }, [genieEnabled]);'), 'no pictures decoded ahead of time');
+  const settings = code('components/SettingsOverlay.tsx');
+  assert.ok(settings.includes("label={t('Genie animation')}") && settings.includes('setGenieAnimationEnabled(!genieAnimationEnabled)'), 'the toggle lives in Settings');
 });
