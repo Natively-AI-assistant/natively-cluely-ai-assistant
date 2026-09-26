@@ -3299,7 +3299,8 @@ export class AppState {
     // active résumé's name, else the connected Calendar account's.
     userName: () => {
       try {
-        const resume = (this.processingHelper?.getLLMHelper?.()?.getKnowledgeOrchestrator?.() as any)?.activeResume?.structured_data;
+        const orchestrator = this.knowledgeOrchestrator ?? this.processingHelper?.getLLMHelper?.()?.getKnowledgeOrchestrator?.();
+        const resume = (orchestrator as any)?.activeResume?.structured_data;
         const fromResume = resume?.identity?.name || resume?.name;
         if (typeof fromResume === 'string' && fromResume.trim()) return fromResume;
         const { CalendarManager } = require('./services/CalendarManager');

@@ -38,7 +38,7 @@ import { systemClock } from './AutoAnswerClock';
 import {
     JUDGE_DEADLINE_MS, JUDGE_CONTEXT_TURNS, parseJudgeVerdict, routeForVerdict, type JudgeRequest,
 } from './AutoAnswerJudge';
-import { isMidWordCut, joinTranscriptParts, normalizeForCompare } from './AutoAnswerText';
+import { isMidWordCut, joinTranscriptParts, normalizeForCompare, tokenContainment } from './AutoAnswerText';
 import type { AutoAnswerThresholds } from './AutoAnswerPolicy';
 import { DEFAULT_THRESHOLDS } from './AutoAnswerPolicy';
 import type { AutoAnswerQuestion, AutoAnswerTelemetryEvent } from './AutoAnswerTypes';
@@ -243,6 +243,9 @@ export interface SimpleAutoAnswerHost {
      */
     logContent?(label: string, text: string): void;
 }
+
+/** Share of a picked ask's words that must come from ruled-out finals for it to count as resurfaced. */
+export const RULED_OUT_CONTAINMENT = 0.9;
 
 export class SimpleAutoAnswerEngine {
     private pending: Array<{ text: string; at: number; speaker?: string; glueNext?: boolean }> = [];
@@ -464,7 +467,9 @@ export class SimpleAutoAnswerEngine {
             candidateWordCount: words, endpointSource: 'quiet_window',
         });
         this.lastJudgedKey = key;
-        this.host.logContent?.(`judging ${id} (${words}w)`, candidate);
+        // Whether the judge can tell an ask to the USER from one to a named
+        // teammate. Known/unknown only: the trace never prints the name.
+        this.host.logContent?.(`judging ${id} (${words}w, user name ${this.host.userName?.() ? 'known' : 'unknown'})`, candidate);
         // Key any speculation the engine starts on its own interims to THIS
         // candidate, so the dispatch below can claim it by id.
         this.host.noteCandidate?.(id, this.sequence);
@@ -520,6 +525,7 @@ export class SimpleAutoAnswerEngine {
         const parts = this.pending.map(p => ({ speaker: p.speaker, text: p.text }));
         const partsAtConsult = this.pending.length;
         const unjudged = this.unjudgedText();
+        const ruledOut = joinTranscriptParts(this.pending.slice(0, Math.min(this.judgedParts, this.pending.length)));
         let raw: string | null = null;
         let outcome: 'verdict' | 'timeout' | 'error' | 'unparseable' | 'absent' = 'verdict';
         if (!this.host.judgeCandidate) {
@@ -628,6 +634,22 @@ export class SimpleAutoAnswerEngine {
             // Ruled not an ask: these finals stay as context, but a later
             // ask's shape is read after them. An INCOMPLETE ask stays open.
             else this.judgedParts = partsAtConsult;
+            return;
+        }
+        // The ask the judge picked lies wholly in finals an EARLIER verdict
+        // ruled not an ask, and not in the new speech: someone replied to it,
+        // and the reply made it look open. Live 2026-09-27 (team meet): "Raj,
+        // can you make sure support knows…" was ruled silent (a request to a
+        // teammate), then Raj's "Yes, I'll post in their channel" arrived, the
+        // merged candidate was judged again, and the Raj request got answered.
+        // An incomplete ask never counts as ruled out (judgedParts does not
+        // advance on it), so speech that FINISHES a question is unaffected.
+        if (route.action === 'answer' && route.questionText && ruledOut
+            && tokenContainment(route.questionText, ruledOut) >= RULED_OUT_CONTAINMENT
+            && tokenContainment(route.questionText, unjudged) < RULED_OUT_CONTAINMENT) {
+            this.host.logContent?.(`ruled-out ask resurfaced ${id}`, route.questionText);
+            this.emit({ name: 'auto_answer_ignored', questionId: id, skipReason: 'already_ruled_out', answerability: route.answerability });
+            this.judgedParts = partsAtConsult;
             return;
         }
         const text = route.questionText ?? candidate;
