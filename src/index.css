@@ -5115,13 +5115,19 @@ html[data-platform="linux"][data-window="launcher"] body {
 }
 @media (hover: hover) and (pointer: fine) {
   [data-interface-theme="liquid-glass"] .pricing-cta-yearly:hover {
-    background: radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 1) 0%, rgba(248, 250, 252, 1) 100%) !important;
     transform: translateY(-1px) !important;
     box-shadow: 
       inset 0 2px 3px rgba(255, 255, 255, 0.95), 
       inset 0 -2.5px 3px rgba(15, 23, 42, 0.16), 
       0 6px 14px rgba(0, 0, 0, 0.22) !important;
   }
+  /* The gloss, on a layer so it can fade (6a, further down). */
+  [data-interface-theme="liquid-glass"] .pricing-cta-yearly:hover::after {
+    opacity: 1;
+  }
+}
+[data-interface-theme="liquid-glass"] .pricing-cta-yearly::after {
+  background-image: radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 1) 0%, rgba(248, 250, 252, 1) 100%);
 }
 [data-interface-theme="liquid-glass"] .pricing-cta-yearly:active {
   transform: translateY(0) scale(0.97) !important;
@@ -5145,13 +5151,19 @@ html[data-platform="linux"][data-window="launcher"] body {
 }
 @media (hover: hover) and (pointer: fine) {
   [data-interface-theme="liquid-glass"] .pricing-cta-lifetime:hover {
-    background: radial-gradient(circle at 50% 0%, rgba(135, 164, 246, 1) 0%, rgba(44, 68, 187, 1) 100%) !important;
     transform: translateY(-1px) !important;
     box-shadow: 
       inset 0 3px 4px rgba(255, 255, 255, 0.55), 
       inset 0 -3px 4px rgba(0, 0, 0, 0.4), 
       0 6px 16px rgba(78, 111, 226, 0.35) !important;
   }
+  /* The gloss, on a layer so it can fade (6a, further down). */
+  [data-interface-theme="liquid-glass"] .pricing-cta-lifetime:hover::after {
+    opacity: 1;
+  }
+}
+[data-interface-theme="liquid-glass"] .pricing-cta-lifetime::after {
+  background-image: radial-gradient(circle at 50% 0%, rgba(135, 164, 246, 1) 0%, rgba(44, 68, 187, 1) 100%);
 }
 [data-interface-theme="liquid-glass"] .pricing-cta-lifetime:active {
   transform: translateY(0) scale(0.97) !important;
@@ -5422,13 +5434,19 @@ html[data-platform="linux"][data-window="launcher"] body {
 }
 @media (hover: hover) and (pointer: fine) {
   [data-interface-theme="modern"] .pricing-cta-yearly:hover {
-    background: radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 1) 0%, rgba(248, 250, 252, 1) 100%) !important;
     transform: translateY(-1px) !important;
     box-shadow: 
       inset 0 2px 3px rgba(255, 255, 255, 0.95), 
       inset 0 -2.5px 3px rgba(15, 23, 42, 0.16), 
       0 6px 14px rgba(0, 0, 0, 0.22) !important;
   }
+  /* The gloss, on a layer so it can fade (6a, further down). */
+  [data-interface-theme="modern"] .pricing-cta-yearly:hover::after {
+    opacity: 1;
+  }
+}
+[data-interface-theme="modern"] .pricing-cta-yearly::after {
+  background-image: radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 1) 0%, rgba(248, 250, 252, 1) 100%);
 }
 [data-interface-theme="modern"] .pricing-cta-yearly:active {
   transform: translateY(0) scale(0.97) !important;
@@ -5452,13 +5470,19 @@ html[data-platform="linux"][data-window="launcher"] body {
 }
 @media (hover: hover) and (pointer: fine) {
   [data-interface-theme="modern"] .pricing-cta-lifetime:hover {
-    background: radial-gradient(circle at 50% 0%, rgba(135, 164, 246, 1) 0%, rgba(44, 68, 187, 1) 100%) !important;
     transform: translateY(-1px) !important;
     box-shadow: 
       inset 0 3px 4px rgba(255, 255, 255, 0.55), 
       inset 0 -3px 4px rgba(0, 0, 0, 0.4), 
       0 6px 16px rgba(78, 111, 226, 0.35) !important;
   }
+  /* The gloss, on a layer so it can fade (6a, further down). */
+  [data-interface-theme="modern"] .pricing-cta-lifetime:hover::after {
+    opacity: 1;
+  }
+}
+[data-interface-theme="modern"] .pricing-cta-lifetime::after {
+  background-image: radial-gradient(circle at 50% 0%, rgba(135, 164, 246, 1) 0%, rgba(44, 68, 187, 1) 100%);
 }
 [data-interface-theme="modern"] .pricing-cta-lifetime:active {
   transform: translateY(0) scale(0.97) !important;
@@ -7576,9 +7600,16 @@ html[data-platform="linux"][data-window="launcher"] body {
     0 3px 8px rgba(15, 23, 42, 0.16) !important;
 }
 
+[data-theme='light'] [data-interface-theme="liquid-glass"] .pricing-cta-yearly::after,
+[data-theme='light'] [data-interface-theme="modern"] .pricing-cta-yearly::after {
+  background-image: radial-gradient(circle at 50% 0%, #303a5c 0%, #1c2440 100%);
+}
+[data-theme='light'] [data-interface-theme="liquid-glass"] .pricing-cta-yearly:hover::after,
+[data-theme='light'] [data-interface-theme="modern"] .pricing-cta-yearly:hover::after {
+  opacity: 1;
+}
 [data-theme='light'] [data-interface-theme="liquid-glass"] .pricing-cta-yearly:hover,
 [data-theme='light'] [data-interface-theme="modern"] .pricing-cta-yearly:hover {
-  background: radial-gradient(circle at 50% 0%, #303a5c 0%, #1c2440 100%) !important;
   box-shadow:
     inset 0 1.5px 0 rgba(255, 255, 255, 0.20),
     inset 0 -2.5px 3px rgba(0, 0, 0, 0.28),
@@ -7662,9 +7693,14 @@ html[data-platform="linux"][data-window="launcher"] body {
     0 2px 8px rgba(15, 23, 42, 0.18) !important;
 }
 
+[data-theme='light'] [data-interface-theme] .pro-teaser .pro-teaser-cta::after {
+  background-image: radial-gradient(circle at 50% 0%, #303a5c 0%, #1c2440 100%);
+}
 @media (hover: hover) and (pointer: fine) {
+  [data-theme='light'] [data-interface-theme] .pro-teaser:hover .pro-teaser-cta::after {
+    opacity: 1;
+  }
   [data-theme='light'] [data-interface-theme] .pro-teaser:hover .pro-teaser-cta {
-    background: radial-gradient(circle at 50% 0%, #303a5c 0%, #1c2440 100%) !important;
     box-shadow:
       inset 0 1.5px 0 rgba(255, 255, 255, 0.20),
       0 5px 14px rgba(15, 23, 42, 0.24) !important;
@@ -7683,9 +7719,16 @@ html[data-platform="linux"][data-window="launcher"] body {
     0 3px 10px rgba(46, 71, 208, 0.18) !important;
 }
 
+[data-theme='light'] [data-interface-theme="liquid-glass"] .pricing-cta-lifetime::after,
+[data-theme='light'] [data-interface-theme="modern"] .pricing-cta-lifetime::after {
+  background-image: radial-gradient(circle at 50% 0%, #80a0ff 0%, #263baf 100%);
+}
+[data-theme='light'] [data-interface-theme="liquid-glass"] .pricing-cta-lifetime:hover::after,
+[data-theme='light'] [data-interface-theme="modern"] .pricing-cta-lifetime:hover::after {
+  opacity: 1;
+}
 [data-theme='light'] [data-interface-theme="liquid-glass"] .pricing-cta-lifetime:hover,
 [data-theme='light'] [data-interface-theme="modern"] .pricing-cta-lifetime:hover {
-  background: radial-gradient(circle at 50% 0%, #80a0ff 0%, #263baf 100%) !important;
   box-shadow: 
     inset 0 3px 4px rgba(255, 255, 255, 0.55), 
     inset 0 -3px 4px rgba(0, 0, 0, 0.30), 
@@ -9580,6 +9623,123 @@ html[data-platform="linux"][data-window="launcher"] body {
   box-shadow: inset 0 0 0 1px rgba(16, 22, 43, 0.14) !important;
   -webkit-mask-image: var(--lgc-face-mask-top), var(--lgc-cap-mask) !important;
   mask-image: var(--lgc-face-mask-top), var(--lgc-cap-mask) !important;
+}
+
+/* ── 6a. The hover clock ──────────────────────────────────────────────────
+   Hover on these cards used to arrive in 180ms, and the pills' gloss in
+   0ms: it was a radial-gradient BACKGROUND, and a gradient cannot be
+   interpolated, so it swapped in one frame while the fill and shadow around
+   it were still easing. The same gradients now paint on ::after (declared
+   beside each hover rule further up), which fades, and everything hover
+   changes runs on one slower clock:
+     in   300ms  declared on :hover, so it drives the arrival
+     out  400ms  declared on the resting state, so it drives the leave
+   easeInOutSine, as the pills already used. The look at rest and at full
+   hover is unchanged; only the time it takes to get there moved.
+   Movement keeps its 180ms: the lift and the press are not what read as
+   fast, and a slower transform would make a release trail the finger. The
+   press's shadow change is restated on :active below, which has to win over
+   :hover because the pointer is still over the pill while pressing. */
+
+/* The gloss layer. Under the rim (::before, z -1) and over the fill, which
+   is where the gloss sat when it was the background. */
+[data-interface-theme] .pricing-cta-yearly::after,
+[data-interface-theme] .pricing-cta-lifetime::after,
+[data-interface-theme] .pro-teaser .pro-teaser-cta::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  z-index: -2;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 400ms cubic-bezier(.37, 0, .63, 1);
+}
+
+/* out. Movement (the 1px lift, the press) keeps its 180ms everywhere, so a
+   release still snaps back up as it did; only light and colour slow down. */
+[data-interface-theme] .pricing-cta-yearly,
+[data-interface-theme] .pricing-cta-lifetime,
+[data-interface-theme] .pro-teaser .pro-teaser-cta {
+  transition:
+    background-color 400ms cubic-bezier(.37, 0, .63, 1),
+    box-shadow 400ms cubic-bezier(.37, 0, .63, 1),
+    transform 180ms cubic-bezier(.37, 0, .63, 1) !important;
+}
+[data-interface-theme] .pricing-card-yearly,
+[data-interface-theme] .pricing-card-lifetime {
+  transition:
+    transform 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 400ms cubic-bezier(.37, 0, .63, 1),
+    border-color 400ms cubic-bezier(.37, 0, .63, 1) !important;
+}
+[data-interface-theme] .pro-teaser {
+  transition:
+    transform 180ms cubic-bezier(.37, 0, .63, 1),
+    box-shadow 400ms cubic-bezier(.37, 0, .63, 1),
+    border-color 400ms cubic-bezier(.37, 0, .63, 1) !important;
+}
+/* The rims (::after) had no box-shadow transition at all, so their hover
+   change snapped; ::before is the grid on the cards and the noise on the
+   plaque, and both brighten on hover. */
+[data-interface-theme] .pricing-card-yearly::after,
+[data-interface-theme] .pricing-card-lifetime::after,
+[data-interface-theme] .pricing-card-yearly::before,
+[data-interface-theme] .pricing-card-lifetime::before,
+[data-interface-theme] .pro-teaser::after,
+[data-interface-theme] .pro-teaser::before {
+  transition:
+    box-shadow 400ms cubic-bezier(.37, 0, .63, 1),
+    opacity 400ms cubic-bezier(.37, 0, .63, 1) !important;
+}
+
+/* in */
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme] .pricing-cta-yearly:hover,
+  [data-interface-theme] .pricing-cta-lifetime:hover,
+  [data-interface-theme] .pro-teaser:hover .pro-teaser-cta {
+    transition:
+      background-color 300ms cubic-bezier(.37, 0, .63, 1),
+      box-shadow 300ms cubic-bezier(.37, 0, .63, 1),
+      transform 180ms cubic-bezier(.37, 0, .63, 1) !important;
+  }
+  [data-interface-theme] .pricing-cta-yearly:hover::after,
+  [data-interface-theme] .pricing-cta-lifetime:hover::after,
+  [data-interface-theme] .pro-teaser:hover .pro-teaser-cta::after {
+    transition: opacity 300ms cubic-bezier(.37, 0, .63, 1);
+  }
+  [data-interface-theme] .pricing-card-yearly:hover,
+  [data-interface-theme] .pricing-card-lifetime:hover {
+    transition:
+      transform 180ms cubic-bezier(0.23, 1, 0.32, 1),
+      box-shadow 300ms cubic-bezier(.37, 0, .63, 1),
+      border-color 300ms cubic-bezier(.37, 0, .63, 1) !important;
+  }
+  [data-interface-theme] .pro-teaser:hover {
+    transition:
+      transform 180ms cubic-bezier(.37, 0, .63, 1),
+      box-shadow 300ms cubic-bezier(.37, 0, .63, 1),
+      border-color 300ms cubic-bezier(.37, 0, .63, 1) !important;
+  }
+  [data-interface-theme] .pricing-card-yearly:hover::after,
+  [data-interface-theme] .pricing-card-lifetime:hover::after,
+  [data-interface-theme] .pricing-card-yearly:hover::before,
+  [data-interface-theme] .pricing-card-lifetime:hover::before,
+  [data-interface-theme] .pro-teaser:hover::after,
+  [data-interface-theme] .pro-teaser:hover::before {
+    transition:
+      box-shadow 300ms cubic-bezier(.37, 0, .63, 1),
+      opacity 300ms cubic-bezier(.37, 0, .63, 1) !important;
+  }
+}
+
+/* press: the same 180ms it always had */
+[data-interface-theme] .pricing-cta-yearly:active,
+[data-interface-theme] .pricing-cta-lifetime:active {
+  transition:
+    background-color 180ms cubic-bezier(.37, 0, .63, 1),
+    box-shadow 180ms cubic-bezier(.37, 0, .63, 1),
+    transform 180ms cubic-bezier(.37, 0, .63, 1) !important;
 }
 
 /* ── 6. Hover and press ───────────────────────────────────────────────────
