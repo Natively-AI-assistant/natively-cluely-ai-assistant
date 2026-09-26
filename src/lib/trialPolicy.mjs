@@ -34,9 +34,13 @@ const AI_KEY_FIELDS = [
  * does the Natively key, which the caller checks separately.
  *
  * @param {Record<string, unknown> | null | undefined} creds CredentialsManager.getAllCredentials()
+ * @param {{ codexReady?: boolean }} [routes] what only main knows: a ready Codex route
+ *   (Codex enabled and signed in, including the Codex CLI's own `codex login`,
+ *   which stores nothing in Natively's credentials)
  * @returns {boolean}
  */
-export function hasOwnAiKey(creds) {
+export function hasOwnAiKey(creds, routes) {
+  if (routes?.codexReady === true) return true;
   if (!creds) return false;
   for (const field of AI_KEY_FIELDS) {
     const v = creds[field];

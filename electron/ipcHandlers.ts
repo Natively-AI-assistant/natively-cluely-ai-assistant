@@ -315,6 +315,18 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Defined above every safeHandle registration: source-contract tests scan
   // each handler's text up to the next registration, and these helpers are
   // not part of any handler.
+  // A Codex route the model router would answer through: Codex enabled and
+  // signed in, Natively's own ChatGPT sign-in OR the Codex CLI's `codex
+  // login` (which stores nothing in Natively's credentials).
+  const codexRouteReady = (): boolean => {
+    try {
+      return appState.processingHelper?.getLLMHelper?.()?.getCodexCliConfig?.()?.enabled === true
+        && getCodexAuthStatus().signedIn;
+    } catch {
+      return false;
+    }
+  };
+
   const isLicensed = (): boolean => {
     try {
       const { LicenseManager } = require('../premium/electron/services/LicenseManager');
@@ -438,7 +450,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         expired: true,
         licensed,
         hasRealNativelyKey: !!nativelyKey && nativelyKey !== TRIAL_SENTINEL_KEY,
-        hasOwnAiKey: hasOwnAiKey(cm.getAllCredentials()),
+        hasOwnAiKey: hasOwnAiKey(cm.getAllCredentials(), { codexReady: codexRouteReady() }),
         wipedForThisTrial: sm.get('trialExpiryWipedFor') === trialId,
       });
 
@@ -12093,7 +12105,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         // Any AI route of the user's own, by the same rule the Trial ended card
         // uses (custom and cURL providers count), so the card scheduler and
         // main never disagree about who is "key-less".
-        hasOwnAiKey: hasOwnAiKey(creds),
+        hasOwnAiKey: hasOwnAiKey(creds, { codexReady: codexRouteReady() }),
         googleServiceAccountPath: creds.googleServiceAccountPath || null,
         sttProvider: creds.sttProvider || 'none',
         nvidiaNimSttModel: creds.nvidiaNimSttModel || 'nemotron-asr-streaming',

@@ -71,3 +71,22 @@ test('hasOwnAiKey: an empty sign-in or a default local URL is not a route', () =
   // Ollama has a default URL and no opt-in field: its presence says nothing.
   assert.equal(hasOwnAiKey({ ollamaBaseUrl: 'http://localhost:11434' }), false);
 });
+
+// Final review I3: the Codex CLI's own `codex login` stores nothing in
+// Natively's credentials, yet the model router answers through it when Codex
+// is enabled (getCodexAuthStatus().signedIn, source 'codex-cli'). Main knows
+// that route; it passes it in.
+test('hasOwnAiKey: a ready Codex route (incl. the Codex CLI login) counts', () => {
+  assert.equal(hasOwnAiKey({}, { codexReady: true }), true);
+  assert.equal(hasOwnAiKey({}, { codexReady: false }), false);
+  assert.equal(hasOwnAiKey({}), false, 'no routes passed: nothing assumed');
+});
+
+test('main tells the rule about the Codex route in both places it asks', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { fileURLToPath } = await import('node:url');
+  const { dirname, join } = await import('node:path');
+  const ipc = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../../electron/ipcHandlers.ts'), 'utf8');
+  assert.ok(ipc.includes('const codexRouteReady = (): boolean => {'));
+  assert.equal((ipc.match(/hasOwnAiKey\(.*?, \{ codexReady: codexRouteReady\(\) \}\)/g) || []).length, 2, 'settleExpiredTrial and get-stored-credentials');
+});

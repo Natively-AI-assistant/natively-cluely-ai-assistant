@@ -1,4 +1,4 @@
-export function hasOwnAiKey(creds: Record<string, unknown> | null | undefined): boolean;
+export function hasOwnAiKey(creds: Record<string, unknown> | null | undefined, routes?: { codexReady?: boolean }): boolean;
 
 export function resolveExpiredTrial(
   s: {
