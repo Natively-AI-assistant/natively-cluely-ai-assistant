@@ -199,16 +199,18 @@ export const teamMeet = [
 ];
 
 // Call center: the user is the support agent; the meeting audio is the
-// customer. Symptoms and status are statements; the customer's questions to
-// the agent are asks. Prices and refunds must not be invented.
+// customer. The customer's questions to the agent are asks. A symptom report
+// is an implicit request for help, so drafting a diagnosis there is either
+// (live 2026-09-27: the judge answered both, and the drafts were exactly what
+// an agent wants). Prices and refunds must not be invented.
 export const callCenter = [
   { who: 'interviewer', id: 'K01', expect: 'silent', parts: ["Hi, thanks for picking up. My name is Dana, and I'm calling about our company account."] },
-  { who: 'interviewer', id: 'K02', expect: 'silent', parts: ["So last week we upgraded to the annual plan, and since then my team can't log in to the dashboard. They just see a spinning wheel."] },
+  { who: 'interviewer', id: 'K02', expect: 'either', parts: ["So last week we upgraded to the annual plan, and since then my team can't log in to the dashboard. They just see a spinning wheel."] },
   { who: 'interviewer', id: 'K03', expect: 'answer', q: 'Is there something wrong on your side, or is it something we need to fix', check: /\w{4,}.*\w{4,}/s,
     parts: ['Is there something wrong on your side, or is it something we need to fix?'] },
   { who: 'user', text: 'Let me check. Are they signing in with single sign on?' },
   { who: 'interviewer', id: 'K04', expect: 'silent', parts: ['Yes, we use Okta for everyone.'] },
-  { who: 'interviewer', id: 'K05', expect: 'silent', parts: ['Actually, one of them just tried again, and now it says license limit reached.'] },
+  { who: 'interviewer', id: 'K05', expect: 'either', parts: ['Actually, one of them just tried again, and now it says license limit reached.'] },
   { who: 'interviewer', id: 'K06', expect: 'answer', q: 'What does license limit reached mean, and how do I fix it', check: /licen|seat|user/i,
     parts: ['What does license limit reached mean, and how do I fix it?'] },
   { who: 'user', text: 'It means the plan has fewer seats than active users. I can add seats for you.' },
@@ -255,7 +257,9 @@ export const seminar = [
   { who: 'interviewer', id: 'E02', voice: 'Karen', expect: 'answer', q: 'Why did you choose those three datasets, and do you think the results generalize', check: /dataset|general/i,
     parts: ['Let me start. Your evaluation uses only three datasets. Why did you choose those three, and do you think the results generalize?'] },
   { who: 'user', text: 'We picked them because they cover different sizes and domains, and the trend held on all three.' },
-  { who: 'interviewer', id: 'E03', voice: 'Samantha', expect: 'silent', parts: ['Okay. I noticed the baseline numbers in table four are lower than the ones reported in the original paper.'] },
+  // A pointed observation in a defence invites a response: either (live
+  // 2026-09-27: the draft explained the gap before E04 even asked for it).
+  { who: 'interviewer', id: 'E03', voice: 'Samantha', expect: 'either', parts: ['Okay. I noticed the baseline numbers in table four are lower than the ones reported in the original paper.'] },
   { who: 'interviewer', id: 'E04', voice: 'Samantha', expect: 'answer', q: 'Can you explain that difference', check: /\w{4,}.*\w{4,}/s,
     parts: ['Can you explain that difference?'] },
   { who: 'user', text: 'We re-ran the baselines with the same compute budget as our method, which is lower than the original setup.' },

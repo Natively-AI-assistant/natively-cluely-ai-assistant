@@ -24,7 +24,9 @@ function overlap(a, b) {
   return n / Math.min(A.size, B.size);
 }
 
-const turns = r.turns.filter((t) => t.who === 'interviewer');
+// The script's CURRENT label wins over the one saved at run time, so a label
+// corrected after a run (call-center symptom reports → either) rescores it.
+const turns = r.turns.filter((t) => t.who === 'interviewer').map((t) => ({ ...t, expect: byId[t.id]?.expect ?? t.expect }));
 // Main sends each answer to ONE window, whichever mode the app is in
 // (WindowHelper.getMainWindow): the overlay, or the launcher when someone
 // switched to it mid-run. Either way the engine answered.
@@ -44,6 +46,13 @@ for (const e of ev) {
   if (e.k === 'final') { g.final = e.t; g.q = e.q ?? g.q; g.answer = e.answer; g.first = g.first ?? e.t; }
   gens.set(key, g);
 }
+// A MANUAL What to Answer (the Cmd+1 shortcut, which the dev app also holds
+// system-wide, the pill, a screenshot) carries no question, so its label is
+// the fixed 'What to Answer'; Auto Answer always passes the question it
+// judged. Live 2026-09-27 (recruit1): two such runs landed mid-run and scored
+// as false fires. They are not Auto Answer's, so they are set aside and counted.
+const manual = [...gens.values()].filter((g) => g.q === 'What to Answer');
+for (const g of manual) gens.delete(g.gen);
 for (const g of gens.values()) {
   const candidates = turns.filter((t) => t.speechStart <= (g.first ?? g.final));
   // The question label often carries the lead-in turns before the ask, and
@@ -93,6 +102,7 @@ const med = (a) => (a.length ? a[Math.floor((a.length - 1) / 2)] : null);
 const p90 = (a) => (a.length ? a[Math.min(a.length - 1, Math.ceil(a.length * 0.9) - 1)] : null);
 console.log(`\nanswer turns: ${answered.filter((x) => x.verdict === 'OK').length}/${answered.length} fired; silent turns: ${rows.filter((x) => x.expect === 'silent' && x.verdict === 'OK').length}/${rows.filter((x) => x.expect === 'silent').length} quiet; content checks ${answered.filter((x) => x.check).length}/${answered.filter((x) => x.check !== null).length}`);
 console.log(`stop→first token: median ${med(firsts)} ms, p90 ${p90(firsts)} ms, max ${firsts[firsts.length - 1] ?? null} ms`);
+if (manual.length) console.log(`manual What-to-Answer runs set aside (not Auto Answer): ${manual.length}`);
 const orphans = [...gens.values()].filter((g) => !g.turn);
 if (orphans.length) console.log(`unattributed generations: ${orphans.length}`);
 
