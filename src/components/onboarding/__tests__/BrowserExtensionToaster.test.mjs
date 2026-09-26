@@ -69,40 +69,42 @@ test('versionGte: boundary cases', () => {
     'the component still exports the comparator this test mirrors');
 });
 
-test('dismiss key is the documented one', () => {
-  assert.match(source, /const\s+DISMISS_KEY\s*=\s*'natively_ext_connect_dismissed_v1'/);
-});
-
 test('CTA opens the canonical Chrome Web Store listing', () => {
   assert.ok(source.includes('chromewebstore.google.com/detail/lmhgnkbjnelmciecjkleaomjpejcgaln'));
   assert.ok(source.includes('utm_source=item-share-cb'));
-  assert.ok(source.includes('window.electronAPI?.openExternal?.(CHROME_STORE_URL)'));
+  assert.ok(source.includes('window.electronAPI.openExternal(CHROME_STORE_URL)'));
 });
 
-test('install closes the card WITHOUT the permanent dismiss', () => {
-  // A user who opens the store but does not install should see this again.
+test('install closes the card as acted, once the store opened', () => {
+  // A user who opens the store but does not install sees it once more (the
+  // ledger's 7-day follow-up).
   const install = source.slice(source.indexOf('const handleInstall'), source.indexOf('// ─── Auto-dismiss'));
-  assert.ok(install.includes('onDismiss()'));
-  assert.ok(!install.includes('DISMISS_KEY'), 'install must not set the permanent flag');
+  // Toaster policy: opening the store is the card's action, so the ledger
+  // schedules the single follow-up rather than counting a strike, but only
+  // when the store actually opened (open-external answers { ok }).
+  assert.ok(install.includes("if (opened) closeThen(() => onDismiss('acted'));"), 'install reports acted once the store opened');
 });
 
 test('auto-dismisses the moment the extension connects', () => {
   assert.ok(source.includes('window.electronAPI?.onPhoneMirrorStatus?.(info =>'));
   assert.ok(source.includes('if (info?.extensionConnected)'));
+  // Connecting retires the card (spec §6 row 9): no follow-up, no strike.
+  const connect = source.slice(source.indexOf('if (info?.extensionConnected)'), source.indexOf('return () => { unsub?.(); };'));
+  assert.ok(connect.includes("closeThen(() => onDismiss('connected'))"), 'connecting reports connected');
   assert.ok(source.includes('return () => { unsub?.(); };'), 'subscription is cleaned up');
 });
 
-test('Escape and backdrop click both dismiss permanently', () => {
-  assert.ok(source.includes("if (e.key === 'Escape') handlePermanentDismiss();"));
-  assert.ok(rendered.includes('onBackdropClick={handlePermanentDismiss}'));
+test('Escape and backdrop click both dismiss (a "later": the ledger decides)', () => {
+  assert.ok(source.includes("if (e.key === 'Escape') handleDismiss();"));
+  assert.ok(rendered.includes('onBackdropClick={handleDismiss}'));
   assert.ok(modal.includes('if (e.target === e.currentTarget && !closing) onBackdropClick?.();'),
     'a click on the dim, not on the card');
 });
 
-test('"Not now" dismisses permanently and reports the skip', () => {
+test('"Not now" is a plain close: a strike, never a permanent flag or a skip', () => {
   const notNow = source.slice(source.indexOf('const handleNotNow'), source.indexOf('const handleInstall'));
-  assert.ok(notNow.includes('persistDismiss()'));
-  assert.ok(notNow.includes('onDismiss(); onSkip?.();'), 'both reports wait for the exit, in order');
+  assert.ok(notNow.includes('closeThen(onDismiss)'), 'reports once the exit has played');
+  assert.ok(!/onSkip|localStorage/.test(notNow));
 });
 
 // ─── Close sequencing ───────────────────────────────────────────
@@ -111,12 +113,12 @@ test('"Not now" dismisses permanently and reports the skip', () => {
 // close itself first and report after.
 
 test('every way out plays the genie before reporting to the host', () => {
-  const handlers = rendered.slice(rendered.indexOf('const handlePermanentDismiss'), rendered.indexOf('const item = reduced'));
+  const handlers = rendered.slice(rendered.indexOf('const handleDismiss'), rendered.indexOf('const item = reduced'));
   // No handler may call the host directly: only through closeThen.
   const direct = handlers.match(/^\s*onDismiss\(\);/gm) || [];
   assert.equal(direct.length, 0, 'onDismiss called outside closeThen');
   assert.ok(handlers.includes('closeThen(onDismiss)'), 'Escape, backdrop and close');
-  assert.ok(handlers.includes('closeThen(() => onDismiss())'), 'install');
+  assert.ok(handlers.includes("closeThen(() => onDismiss('acted'))"), 'install');
   assert.ok(hook.includes('Promise.all([a, b]).then(() => { if (!live) return; setDone(true); finishClose(); });'),
     'reports once the card and scrim have both finished');
   assert.ok(hook.includes('cleanup = () => { live = false; clearTimeout(t); a.stop(); b.stop(); stopTrack(); runRef.current = null; };'),
@@ -125,9 +127,10 @@ test('every way out plays the genie before reporting to the host', () => {
   // The card keeps its own open state and reports once GenieModal says the
   // close has played.
   assert.ok(rendered.includes('open={visible}'));
-  assert.ok(rendered.includes('setVisible(isOpen || testForceShow);'));
+  // (?extToaster=force is now a DEV card override through the orchestrator, spec §10.)
+  assert.ok(rendered.includes('setVisible(isOpen);'));
   assert.ok(rendered.includes('onClosed={() => { const after = afterCloseRef.current; afterCloseRef.current = null; after?.(); }}'));
-  const own = rendered.slice(rendered.indexOf('const closeThen'), rendered.indexOf('const persistDismiss'));
+  const own = rendered.slice(rendered.indexOf('const closeThen'), rendered.indexOf('const handleDismiss'));
   assert.ok(own.includes('if (afterCloseRef.current) return;'), 'the first way out wins');
   assert.ok(own.includes('setVisible(false);'));
   assert.ok(!/after\s*\(/.test(own), 'closeThen only schedules the report');
@@ -473,4 +476,18 @@ test('copy is present and dash-free', () => {
   for (const glyph of ['—', '–', '−']) {
     assert.ok(!rendered.includes(glyph), `rendered copy contains ${glyph}`);
   }
+});
+
+// ─── The store link failed (toaster policy Phase 3, spec §6 row 9) ─
+test('a store link that did not open says so, offers the link, and records nothing', () => {
+  const install = source.slice(source.indexOf('const handleInstall'), source.indexOf('// ─── Auto-dismiss'));
+  assert.ok(install.includes("(await window.electronAPI.openExternal(CHROME_STORE_URL))?.ok === true"), 'reads the answer');
+  assert.ok(install.includes('else { setStoreFailed(true); setOpening(false); }'), 'stays open, no outcome');
+  assert.ok(rendered.includes("Couldn't open the Chrome Web Store."));
+  assert.ok(rendered.includes('navigator.clipboard?.writeText(CHROME_STORE_URL)'), 'the link to copy');
+});
+
+test('host: connecting retires the card', () => {
+  const host = readFileSync(resolve(__dirname, '../OrchestratedToasterHost.tsx'), 'utf8');
+  assert.ok(host.includes("else if (reason === 'connected') recorder.outcome('never');"));
 });

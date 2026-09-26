@@ -202,7 +202,6 @@ interface ElectronAPI {
     eligible?: { eligible: boolean; reason: string };
     error?: string;
   }>;
-  reviewRecordSession: () => Promise<{ ok: boolean; error?: string }>;
   reviewFlushSession: () => Promise<{ ok: boolean; totals?: { session_count: number; total_usage_ms: number; usage_ms: number; counted: boolean }; error?: string }>;
   reviewMarkShown: () => Promise<{ ok: boolean; error?: string }>;
   reviewDismissLater: () => Promise<{ ok: boolean; error?: string }>;
@@ -224,6 +223,8 @@ interface ElectronAPI {
    *  plan table never carries its own copy of numbers the server enforces. */
   getNativelyPlans: () => Promise<NativelyPlansResponse>;
   getStoredCredentials: () => Promise<{
+    /** Any AI route of the user's own (trialPolicy.hasOwnAiKey: custom and cURL providers count). */
+    hasOwnAiKey?: boolean;
     hasGeminiKey: boolean;
     hasGroqKey: boolean;
     hasOpenaiKey: boolean;
@@ -271,6 +272,8 @@ interface ElectronAPI {
   getTrialStatus: () => Promise<{
     ok: boolean;
     expired?: boolean;
+    /** Main's verdict on an expired trial: must the user choose? */
+    showEndedCard?: boolean;
     remaining_ms?: number;
     started_at?: string;
     expires_at?: string;
@@ -285,10 +288,18 @@ interface ElectronAPI {
     expiresAt?: string;
     startedAt?: string;
     expired?: boolean;
+    showEndedCard?: boolean;
+    /** The expired token was cleared: a licence or key replaced the trial. */
+    superseded?: boolean;
   }>;
   convertTrial: (choice: string) => Promise<{ ok: boolean }>;
-  endTrialByok: () => Promise<{ success: boolean; error?: string }>;
+  endTrialByok: (opts?: { force?: boolean }) => Promise<{ success: boolean; wipeIncomplete?: boolean; error?: string }>;
   onTrialEnded: (cb: (data: { choice: string }) => void) => () => void;
+  // Card ledger (toaster policy): shows, strikes and retirements per card.
+  cardsGet: () => Promise<{ ok: boolean; ledger?: any; error?: string }>;
+  cardsRecord: (id: string, outcome: string, meta?: { until?: number }) => Promise<{ ok: boolean; ledger?: any; error?: string }>;
+  cardsImportLegacy: (legacy: Record<string, unknown>) => Promise<{ ok: boolean; ledger?: any; error?: string }>;
+  onCardsChanged: (cb: (ledger: any) => void) => () => void;
   /** Emitted by `trial:start` so a trial claimed mid-session unlocks without a relaunch. */
   onTrialStarted: (cb: (data: {
     expiresAt: string;
@@ -1652,7 +1663,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // ── In-app review / testimonial prompt ─────────────────────────────────
   reviewGetPromptState: () => ipcRenderer.invoke('review:get-prompt-state'),
-  reviewRecordSession: () => ipcRenderer.invoke('review:record-session'),
   reviewFlushSession: () => ipcRenderer.invoke('review:flush-session'),
   reviewMarkShown: () => ipcRenderer.invoke('review:mark-shown'),
   reviewDismissLater: () => ipcRenderer.invoke('review:dismiss-later'),
@@ -1684,12 +1694,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getTrialStatus: () => ipcRenderer.invoke('trial:status'),
   getLocalTrial: () => ipcRenderer.invoke('trial:get-local'),
   convertTrial: (choice: string) => ipcRenderer.invoke('trial:convert', choice),
-  endTrialByok: () => ipcRenderer.invoke('trial:end-byok'),
-  wipeTrialProfileData: () => ipcRenderer.invoke('trial:wipe-profile-data'),
+  endTrialByok: (opts?: { force?: boolean }) => ipcRenderer.invoke('trial:end-byok', opts),
   onTrialEnded: (cb: (data: { choice: string }) => void) => {
     const sub = (_: any, data: any) => cb(data);
     ipcRenderer.on('trial-ended', sub);
     return () => ipcRenderer.removeListener('trial-ended', sub);
+  },
+  cardsGet: () => ipcRenderer.invoke('cards:get'),
+  cardsRecord: (id: string, outcome: string, meta?: { until?: number }) => ipcRenderer.invoke('cards:record', id, outcome, meta),
+  cardsImportLegacy: (legacy: Record<string, unknown>) => ipcRenderer.invoke('cards:import-legacy', legacy),
+  onCardsChanged: (cb: (ledger: any) => void) => {
+    const sub = (_: any, ledger: any) => cb(ledger);
+    ipcRenderer.on('cards:changed', sub);
+    return () => ipcRenderer.removeListener('cards:changed', sub);
   },
   onTrialStarted: (cb: (data: any) => void) => {
     const sub = (_: any, data: any) => cb(data);

@@ -16,7 +16,6 @@ import { FreeTrialBanner }      from "./components/trial/FreeTrialBanner"
 import type { TrialUsage, TrialLimits } from './types/nativelyUsage';
 import { FreeTrialModal }       from "./components/trial/FreeTrialModal"
 import { OrchestratorProvider, OrchestratedToasterHost, setUserState as setOrchestratorUserState, emitOrchestratorEvent } from "./components/onboarding/OrchestratedToasterHost"
-import ReviewPromptHost from "./components/ReviewPromptHost"
 // NOTE: explicit `.ts` extension is load-bearing. Vite's default resolver
 // tries `.mjs` before `.ts` (see DEFAULT_EXTENSIONS in vite/dist/node/constants.js),
 // and this directory also has an `orchestrator.mjs` companion (kept for
@@ -35,16 +34,12 @@ import { ProviderChangeNotice, type EmbeddingDegradedNotice } from "./components
 import { clampOverlayOpacity, OVERLAY_OPACITY_DEFAULT, getDefaultOverlayOpacity } from "./lib/overlayAppearance"
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from './lib/meetingInterfaceTheme'
 import { permissionsNeedAttention } from './lib/permissionAttentionPolicy.mjs'
+import { collectRendererLegacy } from './lib/cards/rendererLegacy.mjs'
+import { cardInputsFromSources } from './lib/cards/cardInputs.mjs'
+import { forcedCardFromQuery } from './lib/onboarding/devOverrides.ts'
 import { isMac } from "./utils/platformUtils"
 import { trackAppOpen } from "./lib/toasterGating"
-import {
-  JDAwarenessToaster,
-  ProfileFeatureToaster,
-  RemoteCampaignToaster,
-  NativelyApiPromoToaster,
-  MaxUltraUpgradeToaster,
-  useAdCampaigns
-} from './premium'
+import { PREMIUM_ADS_AVAILABLE } from './premium'
 import { analytics } from "./lib/analytics/analytics.service"
 import { ErrorBoundary } from "./components/ErrorBoundary"
 import ModesSettings from "./components/settings/ModesSettings"
@@ -53,30 +48,10 @@ import { GENIE_CLOSE_MS } from "./components/onboarding/useGenieCard"
 import { ProfileIntelligenceSettings } from "./components/ProfileIntelligenceSettings"
 import { useResolvedTheme } from "./hooks/useResolvedTheme"
 
+// How often the launcher may re-read the card inputs when it regains focus
+// (main caches /usage for 60 s; toaster policy §6 row 18).
+const CARD_INPUTS_FOCUS_REFRESH_MS = 5 * 60_000;
 
-// DEV-ONLY: should the launcher mount an uncontrolled ReviewPromptHost?
-// Mirrors ReviewPromptHost.tsx's isDevForceShow() so a developer running
-// the real onboarding funnel is not forced into the review modal every
-// reload. Production builds are unconditionally false.
-function shouldMountDevReviewHost(): boolean {
-  try {
-    if (typeof window === 'undefined') return false
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const dev: boolean = !!(import.meta as any)?.env?.DEV
-    if (!dev) return false
-    const params = new URLSearchParams(window.location?.search || '')
-    const explicit = params.get('review')
-    if (explicit === 'off') return false
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const w = window as any
-    if (w.__reviewForceShow === false) return false
-    // Dev default ON. Developers who want to test the real funnel append
-    // ?review=off or set window.__reviewForceShow = false.
-    return true
-  } catch {
-    return false
-  }
-}
 
 const queryClient = new QueryClient()
 const CropperWindow = React.lazy(() => import('./components/Cropper'))
@@ -375,6 +350,17 @@ const App: React.FC = () => {
   const [showTrialExpiredModal, setShowTrialExpiredModal] = useState(() =>
     import.meta.env.DEV && new URLSearchParams(window.location.search).has('forceTrialEnded')
   );
+  // The card is due (expired at launch) but still inside its 10 s delay: it
+  // already owns the card slot, so no other card can open under it.
+  const [trialEndedDue, setTrialEndedDue] = useState(false);
+  // 0:00 on the banner: settle the expiry from the LOCAL clock and open the
+  // card at once, offline included, instead of waiting for the next poll
+  // (toaster policy §5 row 2).
+  const handleTrialClockExpired = useCallback(() => {
+    window.electronAPI?.getLocalTrial?.().then((local: any) => {
+      if (local?.showEndedCard) { setActiveTrial(null); setShowTrialExpiredModal(true); }
+    }).catch(() => {});
+  }, []);
 
   const isManagerOpen = activeManagerPanel !== null;
   const managerContentVariants = {
@@ -388,11 +374,6 @@ const App: React.FC = () => {
   };
   const isAppReady = !isSettingsWindow && !isOverlayWindow && !isModelSelectorWindow && !showStartup && !isSettingsOpen && !isManagerOpen && isLauncherMainView;
 
-  // Gate useAdCampaigns behind orchestrator eligibility. Ads only self-schedule
-  // when (a) the orchestrator is ready (no other toaster active) and (b) the
-  // `ads` stage's prerequisites have been met. We approximate (b) with the
-  // simple "no orchestrated toaster is active" gate — useAdCampaigns has its
-  // own eligibility logic for which ad to show.
   const orch = (isLauncherWindow || isDefault) ? getOrchestrator() : null;
   // Stable subscribe/snapshot refs for useSyncExternalStore — without these,
   // .bind() creates a new function on every render, causing the store to
@@ -406,33 +387,85 @@ const App: React.FC = () => {
     [orch],
   );
   const orchState = useSyncExternalStore(orchSubscribe, orchSnapshot);
-  const orchestratorAllowsAds = orchState
-    ? orchState.activeToasterId === null
-    : false;
+  // ── Card scheduler inputs (toaster policy) ──────────────────────────────
+  // What decides which card is relevant (keys, plan, profile, JD, trial,
+  // extension, quota) is read live and re-read whenever it can have changed;
+  // the card ledger arrives from main and follows every cards:changed.
+  const refreshCardInputsRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    if (!isLauncherWindow && !isDefault) return;
+    const api = window.electronAPI;
+    let disposed = false;
+    // Refreshes overlap (focus, credentials, licence, extension); one carrying
+    // the /usage network call can land after a newer one. Only the latest writes.
+    let refreshSeq = 0;
+    const refresh = async () => {
+      const mine = ++refreshSeq;
+      const [creds, licence, profile, trialLocal, extension] = await Promise.all([
+        api?.getStoredCredentials?.().catch(() => undefined),
+        api?.licenseGetDetails?.().catch(() => undefined),
+        api?.profileGetStatus?.().catch(() => undefined),
+        api?.getLocalTrial?.().catch(() => undefined),
+        api?.phoneMirrorGetInfo?.().catch(() => undefined),
+      ]);
+      const usage = creds?.hasNativelyKey ? await api?.getNativelyUsage?.().catch(() => undefined) : undefined;
+      if (disposed || mine !== refreshSeq) return;
+      setOrchestratorUserState({
+        ...cardInputsFromSources({ creds, licence, profile, trialLocal, extension, usage }),
+        adsAvailable: PREMIUM_ADS_AVAILABLE,
+      });
+    };
+    refreshCardInputsRef.current = () => { void refresh(); };
+    const applyLedger = (ledger: unknown) => {
+      if (!disposed && ledger) setOrchestratorUserState({ cardLedger: ledger as never });
+    };
+    // Hand main this window's pre-ledger card history first (main ignores
+    // every import after the first), then load the ledger. Until it loads, no
+    // card stage shows.
+    let legacy = {};
+    try { legacy = collectRendererLegacy(localStorage); } catch { /* storage unavailable */ }
+    Promise.resolve(api?.cardsImportLegacy?.(legacy))
+      .catch(() => undefined)
+      .then(() => api?.cardsGet?.())
+      .then((res) => { if (res?.ok) applyLedger(res.ledger); })
+      .catch(() => {});
+    void refresh();
+    const offs = [
+      api?.onCardsChanged?.(applyLedger),
+      api?.onCredentialsChanged?.(() => { void refresh(); }),
+      // Trial start, end and expiry all broadcast credentials-changed too
+      // (syncNativelyModelRuntime), so they need no subscription of their own.
+      api?.onLicenseStatusChanged?.(() => { void refresh(); }),
+      api?.onPhoneMirrorStatus?.(() => { void refresh(); }),
+    ];
+    // Quota climbs during the day: re-read on focus, at most every 5 minutes,
+    // so Max/Ultra can meet a Pro user who crossed 80 % without a relaunch.
+    let lastFocusRefresh = Date.now();
+    const onFocus = () => {
+      const now = Date.now();
+      if (now - lastFocusRefresh < CARD_INPUTS_FOCUS_REFRESH_MS) return;
+      lastFocusRefresh = now;
+      void refresh();
+    };
+    window.addEventListener('focus', onFocus);
+    return () => {
+      disposed = true;
+      window.removeEventListener('focus', onFocus);
+      offs.forEach((off) => { try { off?.(); } catch { /* already gone */ } });
+    };
+  }, [isLauncherWindow, isDefault]);
 
-  // Dev-only: `?forceAd=<ad>` (natively_api, profile, jd,
-  // max_ultra_upgrade) opens that ad immediately, skipping the campaign
-  // scheduler, so its design can be checked by hand or by
-  // scripts/audit/toaster-preview.mjs.
-  const [forcedAd, setForcedAd] = useState<string | null>(() =>
-    import.meta.env.DEV ? new URLSearchParams(window.location.search).get('forceAd') : null
-  );
+  // Profile / JD edits happen in the managers and keys in Settings: re-read
+  // the inputs when either closes.
+  useEffect(() => {
+    if (!isSettingsOpen && !isManagerOpen) refreshCardInputsRef.current();
+  }, [isSettingsOpen, isManagerOpen]);
 
-  const { activeAd: scheduledAd, dismissAd: dismissScheduledAd } = useAdCampaigns(
-    planDetails,
-    hasProfile,
-    isAppReady,
-    appStartTime,
-    lastMeetingEndTime,
-    isProcessingMeeting,
-    hasNativelyApi,
-    orchestratorAllowsAds
-  );
-  const activeAd = forcedAd ?? scheduledAd;
-  const dismissAd: typeof dismissScheduledAd = (...args) => {
-    if (forcedAd) { setForcedAd(null); return; }
-    return dismissScheduledAd(...args);
-  };
+  // The Trial ended card owns the screen while it is open.
+  useEffect(() => {
+    if (!isLauncherWindow && !isDefault) return;
+    setOrchestratorUserState({ trialEndedOpen: showTrialExpiredModal || trialEndedDue });
+  }, [showTrialExpiredModal, trialEndedDue, isLauncherWindow, isDefault]);
 
   // Start the onboarding orchestrator (launcher window only). Stages are
   // registered lazily; the drain loop only runs while foreground + homepage
@@ -444,7 +477,7 @@ const App: React.FC = () => {
     // entirely — no drain loop, no toasters. Lets the same build A/B the
     // orchestrator ON vs OFF to confirm/deny the 2026-07-04 native-leak
     // regression in the field. Remove once the leak fix is field-verified.
-    if (new URLSearchParams(window.location.search).get('noorch') === '1' || isolateOnboarding) {
+    if ((import.meta.env.DEV && new URLSearchParams(window.location.search).get('noorch') === '1') || isolateOnboarding) {
       console.warn(`[LeakTest] onboarding orchestrator disabled (${isolateOnboarding ? 'launcher isolation' : '?noorch=1'})`);
       return;
     }
@@ -465,15 +498,11 @@ const App: React.FC = () => {
       const orch = getOrchestrator();
       orch.start([...STAGES, QUIET_WINDOW_STAGE]);
       stopFn = () => orch.stop();
-      // DEV-ONLY: opt-in flag for review-prompt force-show. We do NOT
-      // mutate orchestrator state on boot — the host file
-      // (ReviewPromptHost.tsx) mounts an uncontrolled <ReviewPromptHost />
-      // whenever `isDevForceShow()` returns true (URL ?review=force, dev
-      // build default, or window.__reviewForceShow toggle). Clobbering
-      // markDismissed() here would silently rewrite every dev user's
-      // persisted onboarding ledger on every reload — defeating the point
-      // of testing the real funnel. Production builds are unaffected
-      // because isDevForceShow() defaults to false.
+      // DEV-only card overrides (?forceCard, ?forceAd, ?review=force,
+      // ?extToaster=force): the card goes through the orchestrator, takes the
+      // one slot like any card, and records no ledger outcome (spec §10).
+      const forced = import.meta.env.DEV ? forcedCardFromQuery(window.location.search, { adsAvailable: PREMIUM_ADS_AVAILABLE }) : null;
+      if (forced) orch.forceCard(forced);
     });
     return () => {
       cancelled = true;
@@ -622,21 +651,21 @@ const App: React.FC = () => {
       .catch(() => {});
 
     // ── Trial: check stored token and start polling if active ──
+    // Only the launcher keeps the trial clock (toaster policy §7.5): App also
+    // mounts in the overlay, and every poll there could settle the expiry too.
+    const ownsTrialClock = isLauncherWindow || isDefault;
     let trialPollId: ReturnType<typeof setInterval> | null = null;
-    let profileWiped = false; // guard: only wipe once per session
+    let trialEndedTimer: ReturnType<typeof setTimeout> | null = null;
     const checkTrial = async () => {
       try {
         const res = await window.electronAPI?.getTrialStatus?.();
         if (!res?.ok) return;
         if (res.expired) {
           setActiveTrial(null);
-          // Auto-wipe profile data the first time expiry is detected so that
-          // resume/JD data doesn't linger in SQLite beyond the trial window.
-          if (!profileWiped) {
-            profileWiped = true;
-            window.electronAPI?.wipeTrialProfileData?.().catch(() => {});
-          }
-          setShowTrialExpiredModal(true);
+          // Main settles the expiry: the profile wipe runs there, once per trial
+          // and never for a licensed user, and main says whether the user still
+          // has to choose (toaster policy Phase 0, settleExpiredTrial).
+          if (res.showEndedCard) setShowTrialExpiredModal(true);
           if (trialPollId) { clearInterval(trialPollId); trialPollId = null; }
         } else {
           setActiveTrial({
@@ -647,16 +676,16 @@ const App: React.FC = () => {
         }
       } catch { /* ignore — non-critical */ }
     };
-    window.electronAPI?.getLocalTrial?.().then((local: any) => {
+    if (ownsTrialClock) window.electronAPI?.getLocalTrial?.().then((local: any) => {
       if (!local?.hasToken) return;
       if (local.expired) {
-        // (expiry branch below)
-        // Already expired at launch — wipe immediately then show modal after a brief delay
-        if (!profileWiped) {
-          profileWiped = true;
-          window.electronAPI?.wipeTrialProfileData?.().catch(() => {});
+        // Already expired at launch. Main has settled it (wiped once if due) and
+        // says whether the user still has to choose; a licence or key replaced
+        // the trial otherwise, and the token is already gone.
+        if (local.showEndedCard) {
+          setTrialEndedDue(true);
+          trialEndedTimer = setTimeout(() => { trialEndedTimer = null; setShowTrialExpiredModal(true); }, 10_000);
         }
-        setTimeout(() => setShowTrialExpiredModal(true), 10_000);
         return;
       }
       // Seed the banner from the LOCAL token before the first poll answers.
@@ -680,9 +709,16 @@ const App: React.FC = () => {
     }).catch(() => {});
 
     // Listen for trial-ended event (emitted by trial:end-byok IPC)
-    const removeTrialListener = window.electronAPI?.onTrialEnded?.(() => {
+    const removeTrialListener = window.electronAPI?.onTrialEnded?.((data) => {
       setActiveTrial(null);
-      setShowTrialExpiredModal(false);
+      // The BYOK exit is announced while its card is still Cleaning up; that
+      // card closes itself once the user leaves "All set". Every other ending
+      // (a licence or key superseded the trial) takes the card away.
+      if (data?.choice !== 'byok') {
+        setShowTrialExpiredModal(false);
+        setTrialEndedDue(false);
+      }
+      if (trialEndedTimer) { clearTimeout(trialEndedTimer); trialEndedTimer = null; }
       if (trialPollId) { clearInterval(trialPollId); trialPollId = null; }
     });
 
@@ -698,11 +734,12 @@ const App: React.FC = () => {
         limits: data?.limits as TrialLimits | undefined,
       });
       setShowTrialExpiredModal(false);
+      setTrialEndedDue(false);
       // Start the status poll if the mount path did not (it only starts one when
       // a token already existed). Guarded so a re-issue of the same trial — the
       // API is idempotent per hardware id — cannot leak a second interval, which
       // would also be the only thing that ever notices this trial expiring.
-      if (!trialPollId) {
+      if (ownsTrialClock && !trialPollId) {
         checkTrial();
         trialPollId = setInterval(checkTrial, 30_000);
       }
@@ -872,6 +909,7 @@ const App: React.FC = () => {
       if (removeReindexProgress) removeReindexProgress();
       if (removeLicenseListener) removeLicenseListener();
       if (trialPollId) clearInterval(trialPollId);
+      if (trialEndedTimer) clearTimeout(trialEndedTimer);
       if (removeTrialListener) removeTrialListener();
       if (removeTrialStartedListener) removeTrialStartedListener();
       if (removeOpenSettingsTab) removeOpenSettingsTab();
@@ -941,7 +979,6 @@ const App: React.FC = () => {
 
   const handleStartMeeting = async () => {
     try {
-      localStorage.setItem('natively_last_meeting_start', Date.now().toString());
       // Self-heal a poisoned preference. Until the picker started filtering
       // them, Natively's own system-audio tap aggregate could be enumerated as
       // an input device (private CoreAudio aggregates are hidden from other
@@ -1019,16 +1056,6 @@ const App: React.FC = () => {
     console.log("[App.tsx] meeting ended from the pill");
     analytics.trackMeetingEnded();
     setIsProcessingMeeting(true);
-
-    const startStr = localStorage.getItem('natively_last_meeting_start');
-    if (startStr) {
-      const duration = Date.now() - parseInt(startStr, 10);
-      const threshold = import.meta.env.DEV ? 10000 : 180000;
-      if (duration >= threshold) {
-        localStorage.setItem('natively_show_profile_toaster', 'true');
-      }
-      localStorage.removeItem('natively_last_meeting_start');
-    }
   };
 
   const interfaceThemeAttribute = meetingInterfaceTheme === 'default' ? undefined : meetingInterfaceTheme;
@@ -1277,16 +1304,10 @@ const App: React.FC = () => {
         {/* Orchestrated onboarding toasters (single-slot, controlled by OnboardingOrchestrator) */}
         {!isolateOnboarding && (
           <OrchestratorProvider>
-            <OrchestratedToasterHost />
+            <OrchestratedToasterHost onOpenSettings={openSettingsExclusive} onOpenProfile={openProfileExclusive} />
           </OrchestratorProvider>
         )}
 
-        {/* DEV-ONLY: direct ReviewPromptHost mount for iterating on the modal UX.
-            Gated on import.meta.env.DEV plus the same opt-in flags the host
-            already respects (?review=force, window.__reviewForceShow). When
-            active, this bypasses the orchestrator entirely so the persisted
-            onboarding ledger is not modified. */}
-        {!isolateGlobalSurfaces && shouldMountDevReviewHost() && <ReviewPromptHost />}
 
         {/* Free trial countdown banner — only in launcher window while trial is active */}
         {!isolateGlobalSurfaces && (isLauncherWindow || isDefault) && activeTrial && (
@@ -1295,6 +1316,7 @@ const App: React.FC = () => {
             usage={activeTrial.usage}
             limits={activeTrial.limits}
             onUpgrade={() => openSettingsExclusive('plans')}
+            onExpired={handleTrialClockExpired}
           />
         )}
 
@@ -1302,56 +1324,27 @@ const App: React.FC = () => {
         {!isolateModals && (isLauncherWindow || isDefault) && showTrialExpiredModal && (
           <FreeTrialModal
             usage={activeTrial?.usage ?? { ai: 0, ai_tokens: 0, stt_seconds: 0, search: 0 }}
-            onByok={async () => {
-              await window.electronAPI?.endTrialByok?.();
+            onByok={async (opts) => {
+              // A wipe that did not finish must not read as "All set": the card
+              // shows the error with Try again (toaster policy §5 row 5). After
+              // repeated failures it may end the trial anyway (opts.force).
+              const res = await window.electronAPI?.endTrialByok?.(opts);
+              if (!res?.success) throw new Error('wipe_failed');
+              return { wipeIncomplete: !!res.wipeIncomplete };
             }}
             onStandard={async () => {
-              // Wipe resume + JD (orchestrator caches + SQLite) before checkout opens
-              await window.electronAPI?.wipeTrialProfileData?.().catch(() => {});
-              // Revert active mode to none — Standard plan has no modes access
+              // The profile wipe already ran once, at expiry (main,
+              // settleExpiredTrial). Standard has no modes access.
               await window.electronAPI?.modesSetActive?.(null).catch(() => {});
             }}
-            onDone={() => {
+            onDone={(reason) => {
               setShowTrialExpiredModal(false);
+              setTrialEndedDue(false);
               setActiveTrial(null);
+              // "Add my keys" after a finished BYOK exit.
+              if (reason === 'byok') openSettingsExclusive('ai-providers');
             }}
           />
-        )}
-
-        {/* Ad toasters */}
-        {!isolateModals && isLauncherMainView && !isSettingsOpen && (
-          <NativelyApiPromoToaster
-            isOpen={activeAd === 'natively_api'}
-            onDismiss={() => dismissAd('natively_api')}
-            onOpenSettings={(tab: string) => openSettingsExclusive(tab)}
-          />
-        )}
-        {!isolateModals && isLauncherMainView && (
-          <>
-            <ProfileFeatureToaster
-              isOpen={activeAd === 'profile'}
-              onDismiss={dismissAd}
-              onSetupProfile={() => openProfileExclusive()}
-            />
-            <JDAwarenessToaster
-              isOpen={activeAd === 'jd'}
-              onDismiss={dismissAd}
-              onSetupJD={() => openProfileExclusive()}
-            />
-            <MaxUltraUpgradeToaster
-              isOpen={activeAd === 'max_ultra_upgrade'}
-              onDismiss={dismissAd}
-              onUpgrade={() => openSettingsExclusive('plans')}
-            />
-
-            {/* Remote Campaigns Render Logic (Commented out)
-            <RemoteCampaignToaster
-              isOpen={typeof activeAd === 'object' && activeAd !== null}
-              campaign={typeof activeAd === 'object' && activeAd !== null ? activeAd : undefined as any}
-              onDismiss={dismissAd}
-            />
-            */}
-          </>
         )}
 
       </div>

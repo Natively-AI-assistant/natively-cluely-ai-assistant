@@ -19,7 +19,6 @@ import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import chromeArt from '../../assets/cards/chrome.jpg';
 import { GenieModal } from '../ui/GenieModal';
 
-const DISMISS_KEY = 'natively_ext_connect_dismissed_v1';
 const MIN_VERSION = '2.8.0';
 
 // Canonical Chrome Web Store URL (also in HelpSettings.tsx).
@@ -149,12 +148,15 @@ export function versionGte(a: string, b: string = MIN_VERSION): boolean {
 
 interface Props {
   isOpen:    boolean;
-  onDismiss: () => void;
-  onSkip?:   () => void;
+  /** Why it closed, for the host's card ledger: 'acted' after "Add to Chrome", else nothing. */
+  onDismiss: (reason?: 'acted' | 'connected') => void;
 }
 
-export const BrowserExtensionToaster: React.FC<Props> = ({ isOpen, onDismiss, onSkip }) => {
+export const BrowserExtensionToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
   const [opening, setOpening]       = useState(false);
+  // The store link did not open: say so and offer the link to copy.
+  const [storeFailed, setStoreFailed] = useState(false);
+  const [copied, setCopied]           = useState(false);
   const [plateHover, setPlateHover] = useState(false);
   const [ctaActive, setCtaActive]   = useState(false);
   const [ctaPressed, setCtaPressed] = useState(false);
@@ -162,15 +164,11 @@ export const BrowserExtensionToaster: React.FC<Props> = ({ isOpen, onDismiss, on
   const isLight = useResolvedTheme() === 'light';
   const INK = isLight ? INK_LIGHT : INK_DARK;
 
-  // Test hook: ?extToaster=force bypasses the orchestrator and shows immediately.
-  const testForceShow = typeof window !== 'undefined'
-    && new URLSearchParams(window.location.search).get('extToaster') === 'force';
-
   // Starts closed, so the first thing the card does is pour out.
   const [visible, setVisible] = useState(false);
   useEffect(() => {
-    setVisible(isOpen || testForceShow);
-  }, [isOpen, testForceShow]);
+    setVisible(isOpen);
+  }, [isOpen]);
 
   // The orchestrator unmounts this the moment it hears "dismissed", so every
   // way out closes the card first (the genie) and reports from onClosed.
@@ -182,57 +180,58 @@ export const BrowserExtensionToaster: React.FC<Props> = ({ isOpen, onDismiss, on
   }, []);
 
   // ─── Dismiss handlers ───────────────────────────────────────
-  // The permanent flag is written at once, not after the exit, so quitting
-  // mid-animation still counts as a dismiss.
-  const persistDismiss = () => {
-    try { localStorage.setItem(DISMISS_KEY, '1'); } catch { /* ignore */ }
-  };
-
-  const handlePermanentDismiss = useCallback(() => {
-    persistDismiss();
+  // A plain close (✕, Escape, backdrop, "Not now") is a "later": the card
+  // ledger counts the strike and decides when it may return.
+  const handleDismiss = useCallback(() => {
     closeThen(onDismiss);
   }, [closeThen, onDismiss]);
 
-  const handleNotNow = () => {
-    persistDismiss();
-    closeThen(() => { onDismiss(); onSkip?.(); });
-  };
+  const handleNotNow = () => closeThen(onDismiss);
 
   const handleInstall = async () => {
     if (opening) return;
+    setOpening(true);
+    setStoreFailed(false);
+    let opened = false;
     try {
-      setOpening(true);
-      await window.electronAPI?.openExternal?.(CHROME_STORE_URL);
+      opened = window.electronAPI?.openExternal
+        ? (await window.electronAPI.openExternal(CHROME_STORE_URL))?.ok === true
+        : !!window.open(CHROME_STORE_URL, '_blank');
     } catch (e) {
       console.warn('[BrowserExtensionToaster] openExternal failed:', e);
-    } finally {
-      // Close now; the user is in the Chrome store. Not a permanent
-      // dismiss, so they can return next launch if they didn't install.
-      closeThen(() => onDismiss());
     }
+    // Opened: close now, the user is in the Chrome store. Not a permanent
+    // dismiss, so they can return next launch if they didn't install.
+    // Not opened: stay, say so, offer the link, and record nothing.
+    if (opened) closeThen(() => onDismiss('acted'));
+    else { setStoreFailed(true); setOpening(false); }
+  };
+
+  const copyStoreLink = async () => {
+    try { await navigator.clipboard?.writeText(CHROME_STORE_URL); setCopied(true); } catch { /* clipboard refused */ }
   };
 
   // ─── Auto-dismiss when the extension connects ──────────────
   useEffect(() => {
-    if (!isOpen || testForceShow) return;
+    if (!isOpen) return;
     const unsub = window.electronAPI?.onPhoneMirrorStatus?.(info => {
       if (info?.extensionConnected) {
-        persistDismiss();
-        closeThen(onDismiss);
+        // Connecting retires the card (spec §6 row 9).
+        closeThen(() => onDismiss('connected'));
       }
     });
     return () => { unsub?.(); };
-  }, [isOpen, testForceShow, onDismiss, closeThen]);
+  }, [isOpen, onDismiss, closeThen]);
 
   // ─── Escape key ─────────────────────────────────────────────
   useEffect(() => {
     if (!visible) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') handlePermanentDismiss();
+      if (e.key === 'Escape') handleDismiss();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [visible, handlePermanentDismiss]);
+  }, [visible, handleDismiss]);
 
   // Reset transient interaction state whenever the card closes. `opening`
   // stays set through the close, so a picture of the card opening the store
@@ -251,7 +250,7 @@ export const BrowserExtensionToaster: React.FC<Props> = ({ isOpen, onDismiss, on
       // A picture of the card opening the store is never one the next open shows.
       keepPictures={!opening}
       zIndex={9998}
-      onBackdropClick={handlePermanentDismiss}
+      onBackdropClick={handleDismiss}
       onClosed={() => { const after = afterCloseRef.current; afterCloseRef.current = null; after?.(); }}
       // Dims, never blurs: frosting the whole launcher behind the card left it
       // unreadable (see 3a9901ae4, which set this for every onboarding scrim).
@@ -376,6 +375,25 @@ export const BrowserExtensionToaster: React.FC<Props> = ({ isOpen, onDismiss, on
             marginTop: 'auto', paddingTop: '34px',
             display: 'flex', alignItems: 'center', gap: '22px', flexWrap: 'wrap',
           }}>
+            {storeFailed && (
+              <p role="alert" style={{
+                // Its own line at the top of the action row, right above the buttons.
+                flexBasis: '100%', margin: 0, fontSize: '12px', lineHeight: 1.45,
+                color: isLight ? '#B42318' : '#FCA5A5',
+              }}>
+                Couldn't open the Chrome Web Store.{' '}
+                <button
+                  type="button"
+                  onClick={copyStoreLink}
+                  style={{
+                    background: 'none', border: 0, padding: 0, cursor: 'pointer',
+                    font: 'inherit', color: 'inherit', textDecoration: 'underline',
+                  }}
+                >
+                  {copied ? 'Link copied' : 'Copy the link'}
+                </button>
+              </p>
+            )}
             {/*
               Outlined, not filled. On a flat card a filled button is the
               strongest object on the page and pulls the eye off the
@@ -474,7 +492,7 @@ export const BrowserExtensionToaster: React.FC<Props> = ({ isOpen, onDismiss, on
                 themes, so its ink is dark in both. */}
             <button
               type="button"
-              onClick={handlePermanentDismiss}
+              onClick={handleDismiss}
               aria-label="Close"
               style={{
                 position: 'absolute', top: '8px', right: '8px', zIndex: 2,

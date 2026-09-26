@@ -260,28 +260,10 @@ test('trial_promo: skipped when isPremium', () => {
 
 // ─── Support ──────────────────────────────────────────────────────
 
-test('support: skipped when !donationShouldShow', () => {
-  const ctx = makeCtx({
-    completed: { quiet_window: 1 },
-    turnCount: 15,
-    homepageMountedFor: 11_000,
-  });
-  assert.equal(show('support', ctx), false);
-});
-
 test('support: skipped when isPremium', () => {
   const ctx = makeCtx({
     userState: { ...DEFAULT_USER_STATE, isPremium: true, donationShouldShow: true },
     completed: { quiet_window: 1 },
-    turnCount: 15,
-    homepageMountedFor: 11_000,
-  });
-  assert.equal(show('support', ctx), false);
-});
-
-test('support: requires quiet_window prerequisite', () => {
-  const ctx = makeCtx({
-    userState: { ...DEFAULT_USER_STATE, donationShouldShow: true },
     turnCount: 15,
     homepageMountedFor: 11_000,
   });
@@ -309,33 +291,6 @@ test('support: fires with quiet_window + 10 turns + 10s homepage', () => {
 });
 
 // ─── Ads ──────────────────────────────────────────────────────────
-
-test('ads: requires startupCount >= 4', () => {
-  const ctx = makeCtx({
-    completed: { support: 1 },
-    startupCount: 3,
-    homepageMountedFor: 11_000,
-  });
-  assert.equal(show('ads', ctx), false);
-});
-
-test('ads: requires support prerequisite', () => {
-  const ctx = makeCtx({
-    startupCount: 5,
-    homepageMountedFor: 11_000,
-  });
-  assert.equal(show('ads', ctx), false);
-});
-
-test('ads: skipped when isPremium', () => {
-  const ctx = makeCtx({
-    userState: { ...DEFAULT_USER_STATE, isPremium: true },
-    completed: { support: 1 },
-    startupCount: 5,
-    homepageMountedFor: 11_000,
-  });
-  assert.equal(show('ads', ctx), false);
-});
 
 // ─── Review prompt ────────────────────────────────────────────────
 
@@ -376,12 +331,11 @@ test('review_prompt: withheld until at least one engagement gate is met', () => 
 });
 
 test('review_prompt: engagement does not bypass the other triggers', () => {
-  // Fully engaged, but the ads stage has not completed — order still holds.
+  // Fully engaged, but not yet 10 s on the home screen.
   const ctx = makeCtx({
-    completed: {},
     startupCount: 99,
     totalUsageMs: 99 * 60 * 1000,
-    homepageMountedFor: 11_000,
+    homepageMountedFor: 5_000,
   });
   assert.equal(show('review_prompt', ctx), false);
 });
@@ -407,22 +361,15 @@ test('any stage with requiresForeground: blocked when !appInForeground', () => {
 
 // ─── Cooldown ─────────────────────────────────────────────────────
 
+// The generic cooldown mechanism (card stages now wait via the card ledger).
+const COOLDOWN_STAGE = { id: 'cooldown_probe', order: 1, triggers: {}, cooldownMs: () => 7 * 24 * 60 * 60 * 1000 };
+
 test('cooldown blocks re-fire within cooldown window', () => {
-  const config = stageById['browser_extension'];
-  const ctx = makeCtx({
-    completed: { permissions: 1 },
-    homepageMountedFor: 6_000,
-    lastShownTimes: { browser_extension: Date.now() - 1000 }, // 1s ago
-  });
-  assert.equal(show('browser_extension', ctx), false);
+  const ctx = makeCtx({ lastShownTimes: { cooldown_probe: Date.now() - 1000 } }); // 1s ago
+  assert.equal(shouldShowToaster(COOLDOWN_STAGE, ctx), false);
 });
 
 test('cooldown allows re-fire after window elapses', () => {
-  const config = stageById['browser_extension'];
-  const ctx = makeCtx({
-    completed: { permissions: 1 },
-    homepageMountedFor: 6_000,
-    lastShownTimes: { browser_extension: Date.now() - 8 * 24 * 60 * 60 * 1000 }, // 8 days ago
-  });
-  assert.equal(show('browser_extension', ctx), true);
+  const ctx = makeCtx({ lastShownTimes: { cooldown_probe: Date.now() - 8 * 24 * 60 * 60 * 1000 } }); // 8 days ago
+  assert.equal(shouldShowToaster(COOLDOWN_STAGE, ctx), true);
 });

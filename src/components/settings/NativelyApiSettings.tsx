@@ -820,6 +820,9 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
   const [trialLoading, setTrialLoading] = useState(false);
   const [trialError, setTrialError] = useState<string | null>(null);
   const [showTrialModal, setShowTrialModal] = useState(false);
+  // Read by the trial-ended listener, which is registered once.
+  const showTrialModalRef = useRef(showTrialModal);
+  showTrialModalRef.current = showTrialModal;
 
   // The offer's gate, and its process memo (see trialOfferLastSettled).
   const trialSettling = isLoading || isCheckingTrial;
@@ -946,7 +949,8 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
       limits: (res as { limits?: TrialLimits }).limits,
     });
     if (res.expired) {
-      setShowTrialModal(true);
+      // The Trial ended card has one host, the launcher (App.tsx): opening a
+      // second copy here put two on screen (toaster policy §5 row 3).
       if (trialPollRef.current) {
         clearInterval(trialPollRef.current);
         trialPollRef.current = null;
@@ -977,8 +981,8 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
             startedAt: local.startedAt ?? '',
             usage: { ai: 0, ai_tokens: 0, stt_seconds: 0, search: 0 },
           });
-          setShowTrialModal(true);
-          refreshTrial(); // updates usage counters in the modal
+          // The Trial ended card itself is the launcher's (App.tsx), not this pane's.
+          refreshTrial(); // updates usage counters
           return;
         }
 
@@ -1012,13 +1016,16 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
   // went on rendering "Free trial active" — with a live countdown — beside the
   // key that had just superseded it.
   useEffect(() => {
-    const off = window.electronAPI?.onTrialEnded?.(() => {
-      setTrialState(null);
-      setShowTrialModal(false);
+    const off = window.electronAPI?.onTrialEnded?.((data) => {
       if (trialPollRef.current) {
         clearInterval(trialPollRef.current);
         trialPollRef.current = null;
       }
+      // The options card's own BYOK exit is announced while it is still
+      // Cleaning up; it finishes itself (handleTrialDone).
+      if (data?.choice === 'byok' && showTrialModalRef.current) return;
+      setTrialState(null);
+      setShowTrialModal(false);
     });
     return () => off?.();
   }, []);
@@ -1093,9 +1100,12 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
     }
   };
 
-  const handleByok = async () => {
-    // Only wipe — modal transitions to DoneState, then onDone closes it
-    await window.electronAPI?.endTrialByok?.();
+  const handleByok = async (opts?: { force?: boolean }) => {
+    // Only wipe — modal transitions to DoneState, then onDone closes it. A wipe
+    // that did not finish throws, so the card shows Try again, not "All set".
+    const res = await window.electronAPI?.endTrialByok?.(opts);
+    if (!res?.success) throw new Error('wipe_failed');
+    return { wipeIncomplete: !!res.wipeIncomplete };
   };
 
   // Closing the options card is NOT the same as ending the trial. This cleared
@@ -1106,6 +1116,8 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
   const handleTrialDone = (reason: 'byok' | 'dismissed' = 'byok') => {
     if (reason === 'byok') setTrialState(null);
     setShowTrialModal(false);
+    // "Add my keys": the keys live on AI Providers.
+    if (reason === 'byok') window.electronAPI?.openSettingsTab?.('ai-providers');
   };
 
   // Single box, two credential types. A Natively API key (`natively_sk_...`)
@@ -1513,7 +1525,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
           both the saved and unsaved states without its own header row. */}
 
       {/* ── Free Trial Modal (post-trial) ─────────────── */}
-      {showTrialModal && trialState && (
+      {showTrialModal && trialState?.active && (
         <FreeTrialModal
           usage={trialState.usage}
           onByok={handleByok}

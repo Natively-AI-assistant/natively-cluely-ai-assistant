@@ -334,17 +334,50 @@ test('a broken permission pushed before start() still brings the card back', () 
 
 // The un-skip is for the permissions card only. trial_promo also declares a
 // reEligibility rule; a skipped trial promo must not be re-armed just because
-// a key or trial flag flips mid-session.
-test('a skipped trial promo stays skipped when its reEligibility flips', () => {
+// a key or trial flag flips mid-session. Under the toaster policy a card's
+// skip no longer persists (the card ledger owns its waits), so the guarantee
+// is "not again this launch".
+test('a skipped trial promo is not re-armed this launch when its reEligibility flips', async () => {
+  const { emptyLedger } = await loadModule(join(__dirname, '..', '..', 'cards', 'cardPolicy.mjs'));
   localStorage.clear();
   timerQueue = [];
   mockNow = 0;
+  const trial = { ...STAGES.find((s) => s.id === 'trial_promo'), requiresStages: undefined };
   const orch = new OnboardingOrchestrator();
-  orch.start(STAGES);
+  orch.start([trial]);
+  orch.emit({ type: 'launcher:mounted' });
+  orch.emit({ type: 'foreground:change', isForeground: true });
+  orch.setUserState({ cardLedger: emptyLedger(Date.now()) });
+  mockNow += 10_000;
+  for (let i = 0; i < 5; i++) flushOneFrame();
+  assert.equal(orch.getSnapshot().activeToasterId, 'trial_promo', 'precondition: the promo shows');
   orch.markSkipped('trial_promo');
   orch.setUserState({ hasNativelyKey: true });
   orch.setUserState({ hasNativelyKey: false });
-  assert.ok(orch.getSnapshot().skipped.has('trial_promo'), 'trial_promo must stay skipped');
+  mockNow += 120_000;
+  for (let i = 0; i < 5; i++) flushOneFrame();
+  assert.equal(orch.getSnapshot().activeToasterId, null, 'trial_promo must not come back this launch');
+});
+
+// A persisted queue from an older build must follow the current catalog:
+// stages added since (the ad stages) have to reach existing users, and
+// stages removed since must not linger.
+test('start() rebuilds a stale persisted queue from the catalog', () => {
+  localStorage.clear();
+  timerQueue = [];
+  mockNow = 0;
+  const first = new OnboardingOrchestrator();
+  first.start(STAGES);
+  const key = 'natively_onboarding_state_v1';
+  const saved = JSON.parse(localStorage.getItem(key));
+  saved.queue = ['permissions', 'legacy_stage_from_an_old_build'];
+  localStorage.setItem(key, JSON.stringify(saved));
+
+  const next = new OnboardingOrchestrator();
+  next.start(STAGES);
+
+  const catalogOrder = [...STAGES].sort((a, b) => a.order - b.order).map((s) => s.id);
+  assert.deepEqual(next.getSnapshot().queue, catalogOrder);
 });
 
 test('dismissing permissions does NOT wedge other toaster stages', () => {
@@ -363,14 +396,21 @@ test('dismissing permissions does NOT wedge other toaster stages', () => {
       extensionSupported: true,
       extensionConnected: false,
       isV2_8_OrNewer: true,
+      // browser_extension is a card stage: it needs the card ledger loaded.
+      cardLedger: { version: 1, firstLaunchAt: Date.now() - 2 * 86_400_000, launchCount: 1, lastPromoShownAt: null, imported: {}, cards: {} },
     },
   });
-  mockNow += 6_000; // > browser_extension requiresHomepageDuration (5 s)
+  // > browser_extension requiresHomepageDuration (5 s) AND the 60 s spacing
+  // after the previous card closed (toaster policy §3.2, CARD_SPACING_MS).
+  mockNow += 61_000;
+  flushOneFrame();
   flushOneFrame();
 
+  // The next onboarding card for a user with no keys is the free-trial promo
+  // (toaster policy §3.3: permissions → trial promo → extension).
   assert.equal(
     orch.getSnapshot().activeToasterId,
-    'browser_extension',
+    'trial_promo',
     'the next stage must still be reachable — the session guard is per-stage, not global',
   );
 });

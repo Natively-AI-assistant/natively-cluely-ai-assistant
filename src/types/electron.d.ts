@@ -175,7 +175,7 @@ export interface ElectronAPI {
   onMeetingStateChanged: (callback: (data: { isActive: boolean }) => void) => () => void
   onWindowMaximizedChanged: (callback: (isMaximized: boolean) => void) => () => void
   onEnsureExpanded: (callback: () => void) => () => void
-  openExternal: (url: string) => Promise<void>
+  openExternal: (url: string) => Promise<{ ok: boolean }>
   // Genie snapshots (electron/genieSnapshots.ts): pictures of popup cards the genie warps.
   genieSnapshotCapture?: (rect: { x: number; y: number; width: number; height: number }) => Promise<{ png: Uint8Array; width: number; height: number } | null>
   genieSnapshotSave?: (key: string, png: Uint8Array) => Promise<boolean>
@@ -270,7 +270,6 @@ export interface ElectronAPI {
     eligible?: { eligible: boolean; reason: string };
     error?: string;
   }>
-  reviewRecordSession: () => Promise<{ ok: boolean; error?: string }>
   reviewFlushSession: () => Promise<{ ok: boolean; totals?: { session_count: number; total_usage_ms: number; usage_ms: number; counted: boolean }; error?: string }>
   reviewMarkShown: () => Promise<{ ok: boolean; error?: string }>
   reviewDismissLater: () => Promise<{ ok: boolean; error?: string }>
@@ -288,7 +287,7 @@ export interface ElectronAPI {
   // bridge. Four user-facing categories over five server-side meters.
   getNativelyUsage: (force?: boolean) => Promise<import('./nativelyUsage').NativelyUsageResponse>
   getNativelyPlans: () => Promise<import('./nativelyUsage').NativelyPlansResponse>
-  getStoredCredentials: () => Promise<{ hasNativelyKey?: boolean; hasGeminiKey: boolean; hasGroqKey: boolean; hasOpenaiKey: boolean; hasClaudeKey: boolean; hasDeepseekKey: boolean; hasNvidiaNimKey?: boolean; hasOpenrouterKey?: boolean; hasFluxionKey?: boolean; fluxionProtocol?: 'openai' | 'anthropic'; hasLitellmBaseURL?: boolean; litellmBaseURL?: string | null; litellmMaxTokens?: number | null; hasNinerouterBaseURL?: boolean; hasNinerouterKey?: boolean; ninerouterBaseURL?: string | null; ninerouterMaxTokens?: number | null; ninerouterThinking?: string | null; ninerouterModelMeta?: Record<string, { reasoning?: boolean; thinkingCanDisable?: boolean; thinkingFormat?: string }>; googleServiceAccountPath: string | null; sttProvider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech'; hasSttGroqKey: boolean; hasSttOpenaiKey: boolean; hasDeepgramKey: boolean; hasElevenLabsKey: boolean; hasAzureKey: boolean; azureRegion: string; hasIbmWatsonKey: boolean; ibmWatsonRegion: string; groqSttModel?: string; nvidiaNimSttModel?: string; sttModels?: { deepgram?: string; openai?: string }; hasSonioxKey?: boolean; hasTavilyKey?: boolean; geminiPreferredModel?: string; groqPreferredModel?: string; openaiPreferredModel?: string; claudePreferredModel?: string; deepseekPreferredModel?: string; nvidia_nimPreferredModel?: string; openrouterPreferredModel?: string; fluxionPreferredModel?: string; litellmPreferredModel?: string; ninerouterPreferredModel?: string; disabledProviders?: string[]; cloudEnabledModels?: Record<string, string[]>; sttGroqKey?: string; sttOpenaiKey?: string; sttDeepgramKey?: string; sttElevenLabsKey?: string; sttAzureKey?: string; sttIbmKey?: string; sttSonioxKey?: string; openAiSttBaseUrl?: string }>
+  getStoredCredentials: () => Promise<{ hasNativelyKey?: boolean; hasOwnAiKey?: boolean; hasGeminiKey: boolean; hasGroqKey: boolean; hasOpenaiKey: boolean; hasClaudeKey: boolean; hasDeepseekKey: boolean; hasNvidiaNimKey?: boolean; hasOpenrouterKey?: boolean; hasFluxionKey?: boolean; fluxionProtocol?: 'openai' | 'anthropic'; hasLitellmBaseURL?: boolean; litellmBaseURL?: string | null; litellmMaxTokens?: number | null; hasNinerouterBaseURL?: boolean; hasNinerouterKey?: boolean; ninerouterBaseURL?: string | null; ninerouterMaxTokens?: number | null; ninerouterThinking?: string | null; ninerouterModelMeta?: Record<string, { reasoning?: boolean; thinkingCanDisable?: boolean; thinkingFormat?: string }>; googleServiceAccountPath: string | null; sttProvider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech'; hasSttGroqKey: boolean; hasSttOpenaiKey: boolean; hasDeepgramKey: boolean; hasElevenLabsKey: boolean; hasAzureKey: boolean; azureRegion: string; hasIbmWatsonKey: boolean; ibmWatsonRegion: string; groqSttModel?: string; nvidiaNimSttModel?: string; sttModels?: { deepgram?: string; openai?: string }; hasSonioxKey?: boolean; hasTavilyKey?: boolean; geminiPreferredModel?: string; groqPreferredModel?: string; openaiPreferredModel?: string; claudePreferredModel?: string; deepseekPreferredModel?: string; nvidia_nimPreferredModel?: string; openrouterPreferredModel?: string; fluxionPreferredModel?: string; litellmPreferredModel?: string; ninerouterPreferredModel?: string; disabledProviders?: string[]; cloudEnabledModels?: Record<string, string[]>; sttGroqKey?: string; sttOpenaiKey?: string; sttDeepgramKey?: string; sttElevenLabsKey?: string; sttAzureKey?: string; sttIbmKey?: string; sttSonioxKey?: string; openAiSttBaseUrl?: string }>
   // R-10 resolution flow: ambiguous credential stores (names + last-4 only; null when nothing to resolve).
   getAmbiguousCredentialStores: () => Promise<{
     keyring: { keys: { name: string; last4: string }[]; mtimeIso: string | null };
@@ -308,11 +307,15 @@ export interface ElectronAPI {
   // Free Trial
   /** `persisted: false` = started and live for THIS session, but the credential store could not write it, so a restart loses it. The server keeps the trial and re-issues it (idempotent per hardware id). */
   startTrial:     () => Promise<{ ok: boolean; hasToken?: boolean; persisted?: boolean; started_at?: string; expires_at?: string; expired?: boolean; already_used?: boolean; converted_to?: string | null; usage?: { ai: number; stt_seconds: number; search: number }; limits?: { duration_ms: number; ai_requests: number; stt_minutes: number; search_requests: number }; error?: string; status?: number }>
-  getTrialStatus: () => Promise<{ ok: boolean; expired?: boolean; remaining_ms?: number; started_at?: string; expires_at?: string; converted_to?: string | null; usage?: { ai: number; stt_seconds: number; search: number }; limits?: object; error?: string }>
-  getLocalTrial:  () => Promise<{ hasToken: boolean; trialClaimed?: boolean; expiresAt?: string; startedAt?: string; expired?: boolean }>
+  getTrialStatus: () => Promise<{ ok: boolean; expired?: boolean; showEndedCard?: boolean; remaining_ms?: number; started_at?: string; expires_at?: string; converted_to?: string | null; usage?: { ai: number; stt_seconds: number; search: number }; limits?: object; error?: string }>
+  getLocalTrial:  () => Promise<{ hasToken: boolean; trialClaimed?: boolean; expiresAt?: string; startedAt?: string; expired?: boolean; showEndedCard?: boolean; superseded?: boolean }>
   convertTrial:   (choice: string) => Promise<{ ok: boolean }>
-  endTrialByok:        () => Promise<{ success: boolean; error?: string }>
-  wipeTrialProfileData: () => Promise<{ success: boolean; error?: string }>
+  endTrialByok:        (opts?: { force?: boolean }) => Promise<{ success: boolean; wipeIncomplete?: boolean; error?: string }>
+  // Card ledger (toaster policy, src/lib/cards/cardPolicy.mjs)
+  cardsGet: () => Promise<{ ok: boolean; ledger?: import('../lib/cards/cardPolicy.mjs').Ledger; error?: string }>
+  cardsRecord: (id: string, outcome: string, meta?: { until?: number }) => Promise<{ ok: boolean; ledger?: import('../lib/cards/cardPolicy.mjs').Ledger; error?: string }>
+  cardsImportLegacy: (legacy: import('../lib/cards/cardPolicy.mjs').LegacyCardHistory) => Promise<{ ok: boolean; ledger?: import('../lib/cards/cardPolicy.mjs').Ledger; error?: string }>
+  onCardsChanged: (cb: (ledger: import('../lib/cards/cardPolicy.mjs').Ledger) => void) => () => void
   onTrialEnded:   (cb: (data: { choice: string }) => void) => () => void
   /** Emitted by `trial:start`, so a trial claimed mid-session unlocks Pro surfaces without a relaunch. */
   onTrialStarted: (cb: (data: { expiresAt: string; startedAt: string; usage?: { ai: number; ai_tokens?: number; stt_seconds: number; search: number }; limits?: { duration_ms: number; ai_requests: number; stt_minutes: number; search_requests: number } }) => void) => () => void

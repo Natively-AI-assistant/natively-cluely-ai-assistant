@@ -243,6 +243,10 @@ export interface AppSettings {
     seenProfileOnboarding?: boolean;
     seenModesOnboarding?: boolean;
     permsShown?: boolean;
+    // The trialStartedAt of the free trial whose profile data the expiry wipe
+    // already removed, so the wipe runs once per trial however many windows or
+    // launches notice the expiry (ipcHandlers.ts settleExpiredTrial).
+    trialExpiryWipedFor?: string;
     // Live SessionMemory rollout controls (release 2026-06-07c). Env vars take
     // precedence; these let the rollout be driven from settings without a redeploy.
     enableLiveSessionMemory?: boolean;
