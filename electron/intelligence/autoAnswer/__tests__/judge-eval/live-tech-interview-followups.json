@@ -2,8 +2,14 @@
   {
     "text": "Right. And when would you pick one over the other?",
     "ctx": [
-      { "role": "interviewer", "text": "Nice. What's the difference between a process and a thread?" },
-      { "role": "user", "text": "A process has its own memory space, and threads share memory inside one process." }
+      {
+        "role": "interviewer",
+        "text": "Nice. What's the difference between a process and a thread?"
+      },
+      {
+        "role": "user",
+        "text": "A process has its own memory space, and threads share memory inside one process."
+      }
     ],
     "lastAnswered": "Nice. What's the difference between a process and a thread?",
     "expect": "ask",
@@ -12,17 +18,26 @@
   {
     "text": "Why not just restart it on a schedule?",
     "ctx": [
-      { "role": "interviewer", "text": "Say a Node service in production is slowly running out of memory over a few days. How would you go about debugging that?" }
+      {
+        "role": "interviewer",
+        "text": "Say a Node service in production is slowly running out of memory over a few days. How would you go about debugging that?"
+      }
     ],
     "lastAnswered": "Say a Node service in production is slowly running out of memory over a few days. How would you go about debugging that?",
     "expect": "ask",
-    "note": "live T16: challenge follow-up asked while the previous answer streamed"
+    "note": "live T16: challenge follow-up asked while the previous answer streamed. deepseek-flash reads it as rhetorical (a DeepSeek-rung miss); a 'challenge questions are asks' rule did not move it."
   },
   {
     "text": "Take your time. And feel free to use whatever language you're comfortable with. What's the time complexity of your remove operation? And why?",
     "ctx": [
-      { "role": "interviewer", "text": "I want you to design a data structure that supports three operations. First, insert a value. Second, remove a value. And third, get a random element, where every element has the same probability of being returned. All three should run in average constant time." },
-      { "role": "user", "text": "Thanks. I'll use Python. I'm thinking a list for the values, plus a dictionary from each value to its index in the list." }
+      {
+        "role": "interviewer",
+        "text": "I want you to design a data structure that supports three operations. First, insert a value. Second, remove a value. And third, get a random element, where every element has the same probability of being returned. All three should run in average constant time."
+      },
+      {
+        "role": "user",
+        "text": "Thanks. I'll use Python. I'm thinking a list for the values, plus a dictionary from each value to its index in the list."
+      }
     ],
     "lastAnswered": "design a data structure that supports three operations. First, insert a value. Second, remove a value. And third, get a random element, where every element has the same probability of being returned. All three should run in average constant time.",
     "expect": "ask",
@@ -31,8 +46,14 @@
   {
     "text": "And how would that change if the list had a million items?",
     "ctx": [
-      { "role": "interviewer", "text": "Build a small app that fetches the users from our API and renders them as a list." },
-      { "role": "user", "text": "Okay, I'd fetch on mount and map over the users to render list items." }
+      {
+        "role": "interviewer",
+        "text": "Build a small app that fetches the users from our API and renders them as a list."
+      },
+      {
+        "role": "user",
+        "text": "Okay, I'd fetch on mount and map over the users to render list items."
+      }
     ],
     "lastAnswered": "Build a small app that fetches the users from our API and renders them as a list.",
     "expect": "ask",
@@ -41,8 +62,14 @@
   {
     "text": "Can you also explain why you picked React for this?",
     "ctx": [
-      { "role": "interviewer", "text": "Build a small app that fetches the users from our API and renders them as a list." },
-      { "role": "user", "text": "Okay, I'd fetch on mount with React and map over the users to render list items." }
+      {
+        "role": "interviewer",
+        "text": "Build a small app that fetches the users from our API and renders them as a list."
+      },
+      {
+        "role": "user",
+        "text": "Okay, I'd fetch on mount with React and map over the users to render list items."
+      }
     ],
     "lastAnswered": "Build a small app that fetches the users from our API and renders them as a list.",
     "expect": "ask",
@@ -51,7 +78,10 @@
   {
     "text": "All that I'm going to be giving you is an API endpoint. It's hosted on Render, and you hit it and you get back a JSON list of users.",
     "ctx": [
-      { "role": "interviewer", "text": "Build a small app that fetches the users from our API and renders them as a list." }
+      {
+        "role": "interviewer",
+        "text": "Build a small app that fetches the users from our API and renders them as a list."
+      }
     ],
     "lastAnswered": "Build a small app that fetches the users from our API and renders them as a list.",
     "expect": "none",
@@ -60,8 +90,14 @@
   {
     "text": "The endpoint is paginated. It returns twenty items per page, and there's a next cursor in the response.",
     "ctx": [
-      { "role": "interviewer", "text": "Build a small app that fetches the users from our API and renders them as a list." },
-      { "role": "interviewer", "text": "All that I'm going to be giving you is an API endpoint." }
+      {
+        "role": "interviewer",
+        "text": "Build a small app that fetches the users from our API and renders them as a list."
+      },
+      {
+        "role": "interviewer",
+        "text": "All that I'm going to be giving you is an API endpoint."
+      }
     ],
     "lastAnswered": "Build a small app that fetches the users from our API and renders them as a list.",
     "expect": "none",
@@ -70,8 +106,14 @@
   {
     "text": "So you're swapping the element with the last one and then popping it, right?",
     "ctx": [
-      { "role": "interviewer", "text": "What's the time complexity of your remove operation, and why?" },
-      { "role": "user", "text": "It's constant, because I swap with the last element and pop." }
+      {
+        "role": "interviewer",
+        "text": "What's the time complexity of your remove operation, and why?"
+      },
+      {
+        "role": "user",
+        "text": "It's constant, because I swap with the last element and pop."
+      }
     ],
     "lastAnswered": "What's the time complexity of your remove operation, and why?",
     "expect": "none",
@@ -80,8 +122,14 @@
   {
     "text": "Okay, so it sounds like you'd cache on the client side.",
     "ctx": [
-      { "role": "interviewer", "text": "How would you keep the list fast when users scroll back and forth?" },
-      { "role": "user", "text": "I'd keep the pages I already fetched in memory and only request new ones." }
+      {
+        "role": "interviewer",
+        "text": "How would you keep the list fast when users scroll back and forth?"
+      },
+      {
+        "role": "user",
+        "text": "I'd keep the pages I already fetched in memory and only request new ones."
+      }
     ],
     "lastAnswered": "How would you keep the list fast when users scroll back and forth?",
     "expect": "none",
@@ -90,7 +138,10 @@
   {
     "text": "Take your time, and feel free to use whatever language you're comfortable with.",
     "ctx": [
-      { "role": "interviewer", "text": "I want you to design a data structure that supports insert, remove and get random, all in average constant time." }
+      {
+        "role": "interviewer",
+        "text": "I want you to design a data structure that supports insert, remove and get random, all in average constant time."
+      }
     ],
     "lastAnswered": "I want you to design a data structure that supports insert, remove and get random, all in average constant time.",
     "expect": "none",
@@ -99,8 +150,14 @@
   {
     "text": "Good. We'll come back to the networking side a bit later.",
     "ctx": [
-      { "role": "interviewer", "text": "Can you walk me through what happens when you type a URL into the browser and press enter?" },
-      { "role": "user", "text": "The browser resolves the name with DNS, opens a TCP and TLS connection, and sends the HTTP request." }
+      {
+        "role": "interviewer",
+        "text": "Can you walk me through what happens when you type a URL into the browser and press enter?"
+      },
+      {
+        "role": "user",
+        "text": "The browser resolves the name with DNS, opens a TCP and TLS connection, and sends the HTTP request."
+      }
     ],
     "lastAnswered": "Can you walk me through what happens when you type a URL into the browser and press enter?",
     "expect": "none",
@@ -109,8 +166,14 @@
   {
     "text": "Hmm, let me think how to phrase this next one.",
     "ctx": [
-      { "role": "interviewer", "text": "Tell me about a time you disagreed with a teammate on a technical decision, and how you resolved it." },
-      { "role": "user", "text": "We disagreed about moving to an event queue. I wrote a small prototype and we compared the numbers together." }
+      {
+        "role": "interviewer",
+        "text": "Tell me about a time you disagreed with a teammate on a technical decision, and how you resolved it."
+      },
+      {
+        "role": "user",
+        "text": "We disagreed about moving to an event queue. I wrote a small prototype and we compared the numbers together."
+      }
     ],
     "lastAnswered": "Tell me about a time you disagreed with a teammate on a technical decision, and how you resolved it.",
     "expect": "none",
@@ -119,16 +182,22 @@
   {
     "text": "Say a Node service in production is slowly running out of memory over a few days.",
     "ctx": [
-      { "role": "interviewer", "text": "Hmm, let me think how to phrase this next one." }
+      {
+        "role": "interviewer",
+        "text": "Hmm, let me think how to phrase this next one."
+      }
     ],
     "lastAnswered": "Tell me about a time you disagreed with a teammate on a technical decision, and how you resolved it.",
     "expect": "none",
-    "note": "live T15 middle: the setup, the question not asked yet"
+    "note": "live T15 middle: the setup, the question not asked yet. KNOWN FALSE FIRE on both rungs (2026-09-26). A 'hypothetical setup is incomplete' rule fixed it but cost senior-swe-strings #11 3/3 on flash-lite; rejected. Live cost: the setup gets an on-topic answer, then the question gets a second one."
   },
   {
     "text": "I want you to design a data structure that supports three operations. First, insert a value.",
     "ctx": [
-      { "role": "interviewer", "text": "Alright, let's move on to coding." }
+      {
+        "role": "interviewer",
+        "text": "Alright, let's move on to coding."
+      }
     ],
     "lastAnswered": "Can you walk me through what happens when you type a URL into the browser and press enter?",
     "expect": "none",
@@ -137,8 +206,14 @@
   {
     "text": "Good question. We run a weekly rotation with a secondary, and most pages are about deploys.",
     "ctx": [
-      { "role": "interviewer", "text": "Okay, we're almost at time. Do you have any questions for me?" },
-      { "role": "user", "text": "Yes. What does on call look like for the platform team?" }
+      {
+        "role": "interviewer",
+        "text": "Okay, we're almost at time. Do you have any questions for me?"
+      },
+      {
+        "role": "user",
+        "text": "Yes. What does on call look like for the platform team?"
+      }
     ],
     "lastAnswered": "Okay, we're almost at time. Do you have any questions for me?",
     "expect": "none",
@@ -147,10 +222,41 @@
   {
     "text": "Thanks so much for your time today. We'll be in touch soon.",
     "ctx": [
-      { "role": "interviewer", "text": "Good question. We run a weekly rotation with a secondary, and most pages are about deploys." }
+      {
+        "role": "interviewer",
+        "text": "Good question. We run a weekly rotation with a secondary, and most pages are about deploys."
+      }
     ],
     "lastAnswered": "Okay, we're almost at time. Do you have any questions for me?",
     "expect": "none",
     "note": "live T19: closing"
+  },
+  {
+    "text": "Great. So I'm Sarah, I lead the platform team here. We'll spend about 45 minutes today: a few questions about your background, then some fundamentals, and then a coding problem.",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Hi there, thanks for making the time today. Can you hear me okay?"
+      },
+      {
+        "role": "user",
+        "text": "Yes, I can hear you fine, thanks for having me."
+      }
+    ],
+    "lastAnswered": "Hi there, thanks for making the time today. Can you hear me okay?",
+    "expect": "none",
+    "note": "live 2026-09-26 run 3 T02: flash-lite answered the session agenda (social a=0.5). KNOWN FALSE FIRE on flash-lite. An 'agenda is a plan statement' rule fixed it but also flipped senior-swe-strings #11 (2/2); rejected."
+  },
+  {
+    "text": "Imagine you have a million users and the database is the bottleneck. How would you scale the reads?",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Okay, let's talk about scaling."
+      }
+    ],
+    "lastAnswered": null,
+    "expect": "ask",
+    "note": "a setup WITH its question — must still fire"
   }
 ]
