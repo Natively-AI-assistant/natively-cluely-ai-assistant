@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useT } from '../../i18n';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import {
     Check,
     CheckCircle,
@@ -87,6 +87,12 @@ export const SkillsSettings: React.FC = () => {
     const motionReady = useMotionReadyAfter(loadedOnce);
     // Only a load that runs long enough to notice gets the spinner.
     const refreshing = useSettledFlag(loading);
+    // skills:list is a synchronous read of the local folder, a few ms, so the
+    // spinner above almost never shows and a click looked like it did nothing.
+    // Each click turns the glyph once instead: a running total of turns, so a
+    // second click mid-turn adds one more rather than restarting from 0deg.
+    const [refreshTurns, setRefreshTurns] = useState(0);
+    const reduceMotion = useReducedMotion();
     const [status, setStatus] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
     const [preview, setPreview] = useState<{
@@ -417,14 +423,30 @@ export const SkillsSettings: React.FC = () => {
                     </p>
                 </div>
                 <button
-                    onClick={loadSkills}
+                    onClick={() => {
+                        setRefreshTurns((n) => n + 1);
+                        void loadSkills();
+                    }}
                     disabled={loading}
                     className="flex items-center gap-2 px-4 py-1.5 rounded-full border border-border-subtle hover:bg-bg-item-surface transition-[color,background-color,transform,opacity] duration-150 ease-out text-xs font-medium text-text-secondary hover:text-text-primary active:scale-[0.97] motion-reduce:active:scale-100 mt-1 disabled:opacity-60"
                 >
                     {/* Cross-fades to a spinner and back, instead of a spinning
                         glyph that snapped to 0deg mid-turn when loading ended. */}
                     <Presence kind="icon" id={refreshing ? 'busy' : 'idle'}>
-                        {refreshing ? <Loader2 size={13} strokeWidth={2.5} className="animate-spin" /> : <RefreshCw size={13} strokeWidth={2.5} />}
+                        {refreshing ? <Loader2 size={13} strokeWidth={2.5} className="animate-spin" /> : (
+                            // One turn per click: 500ms (--duration-very-slow) on
+                            // --ease-smooth-out, so it answers at once and lands
+                            // softly. initial={false}: when the spinner hands back
+                            // after a slow load, the glyph returns at rest.
+                            <motion.span
+                                className="inline-flex"
+                                initial={false}
+                                animate={{ rotate: reduceMotion ? 0 : refreshTurns * 360 }}
+                                transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+                            >
+                                <RefreshCw size={13} strokeWidth={2.5} />
+                            </motion.span>
+                        )}
                     </Presence>
                     {t('Refresh')}
                 </button>
