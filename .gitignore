@@ -641,6 +641,7 @@ resources/models/Xenova/multilingual-e5-small/*
 # that is not recoverable from the vendor's docs, plus the reasoning behind the
 # `ninerouter` internal id. A later session changing this provider needs it.
 !docs/ninerouter-provider-design-2026-09-20.md
+!docs/homebrew-distribution.md
 
 # Live RAG probe scratch userdata — the probes mkdir these and the app fills
 # them with a multi-MB natively.db. Generated output, not a fixture.
