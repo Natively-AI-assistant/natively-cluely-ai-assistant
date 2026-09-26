@@ -14,6 +14,8 @@
  *   # what generateWithNatively sends — the server picks the model (flash-lite).
  *   JUDGE_EVAL_PROVIDER=natively NATIVELY_API_KEY=… node …/judgeEval.mjs
  *   # The DeepSeek rung: deepseek-flash, thinking disabled, JSON mode.
+ *   # The gateway rung for OpenRouter users: flash-lite via OpenRouter, temperature 0, no JSON.
+ *   JUDGE_EVAL_PROVIDER=openrouter OPENROUTER_API_KEY=… node …/judgeEval.mjs
  *   JUDGE_EVAL_PROVIDER=deepseek DEEPSEEK_API_KEY=… node …/judgeEval.mjs
  *
  * Why it exists: the judge prompt was twice "improved" by reasoning about it
@@ -39,7 +41,7 @@ const { buildJudgePrompt, parseJudgeVerdict, routeForVerdict } = dist('intellige
 const { resolveAutoAnswerThresholds } = dist('context-intelligence/policies/mode-policy-registry.js');
 
 const PROVIDER = process.env.JUDGE_EVAL_PROVIDER ?? 'gemini';
-const MODEL = process.env.JUDGE_EVAL_MODEL ?? ({ gemini: 'gemini-3.1-flash-lite', natively: 'server-decision-tier', deepseek: 'deepseek-flash' }[PROVIDER] ?? 'gpt-5.4-mini');
+const MODEL = process.env.JUDGE_EVAL_MODEL ?? ({ gemini: 'gemini-3.1-flash-lite', natively: 'server-decision-tier', deepseek: 'deepseek-flash', openrouter: 'google/gemini-3.1-flash-lite' }[PROVIDER] ?? 'gpt-5.4-mini');
 const { getOpenAiReasoningEffort } = dist('llm/modelCapabilities.js');
 const CONCURRENCY = 6;
 /**
@@ -78,6 +80,7 @@ function keyFromEnv(name) {
 function apiKey() {
   if (PROVIDER === 'natively') return keyFromEnv('NATIVELY_API_KEY');
   if (PROVIDER === 'deepseek') return keyFromEnv('DEEPSEEK_API_KEY');
+  if (PROVIDER === 'openrouter') return keyFromEnv('OPENROUTER_API_KEY');
   if (PROVIDER !== 'gemini') {
     if (process.env.OPENAI_API_KEY) return process.env.OPENAI_API_KEY;
     throw new Error('set OPENAI_API_KEY');
@@ -111,6 +114,15 @@ async function judge(c) {
         const j = await res.json();
         if (!res.ok || j.error) { await new Promise(r => setTimeout(r, 1500 * (attempt + 1))); continue; }
         raw = j.content ?? null;
+      } else if (PROVIDER === 'openrouter') {
+        // The gateway judge rung (LLMHelper.judgeGatewayModel): temperature 0, no JSON mode.
+        const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${KEY}` },
+          body: JSON.stringify({ model: MODEL, messages: [{ role: 'user', content: prompt }], temperature: 0, max_tokens: 256 }),
+        });
+        const j = await res.json();
+        if (j.error) { await new Promise(r => setTimeout(r, 1500 * (attempt + 1))); continue; }
+        raw = j.choices?.[0]?.message?.content ?? null;
       } else if (PROVIDER === 'deepseek') {
         const res = await fetch('https://api.deepseek.com/chat/completions', {
           method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${KEY}` },

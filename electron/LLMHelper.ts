@@ -182,6 +182,10 @@ const CLAUDE_MODEL = "claude-sonnet-4-6"
 // lever is prompt size: JUDGE_PROMPT_RULES alone is 7420 chars of the ~12.2k
 // total, so trimming the boilerplate would buy more than any timeout tuning.
 const FAST_MODEL_JUDGE_RUNG_TIMEOUT_MS = 1800
+/** OpenRouter's judge model: the small tier Natively's decision route also runs. */
+export const OPENROUTER_JUDGE_MODEL = 'openrouter/google/gemini-3.1-flash-lite'
+/** The gateway rung is the judge's LAST model rung, so it may use most of the controller's 2.5 s. */
+const GATEWAY_JUDGE_RUNG_TIMEOUT_MS = 2300
 /**
  * First-token budgets for the Gemini TEXT cascade, per rung.
  *
@@ -5386,11 +5390,28 @@ let isMultimodal = !!(imagePaths?.length);
    * that distinction because its deadline and supersede must propagate rather
    * than quietly spend a ladder call.
    */
+  /**
+   * The model the Auto Answer judge runs on when the user's only LLM keys are
+   * gateway keys (see generateJudgeVerdict). Null when the selected model is not
+   * on a gateway, or the gateway's client is not configured.
+   */
+  private judgeGatewayModel(): string | null {
+    const family = this.resolveFastModelFamily(this.currentModelId);
+    if (family === 'openrouter') return this.openrouterClient ? OPENROUTER_JUDGE_MODEL : null;
+    if (family === 'fluxion') return (this.fluxionOpenAIClient || this.fluxionAnthropicClient) ? this.currentModelId : null;
+    if (family === 'ninerouter') return this.ninerouterClient ? this.currentModelId : null;
+    if (family === 'nvidia_nim') return this.nvidiaNimClient ? this.currentModelId : null;
+    if (family === 'litellm') return this.litellmClient ? this.currentModelId : null;
+    return null;
+  }
+
   private async callFastModel(
     message: string,
-    opts: { signal?: AbortSignal; timeoutMs?: number; json?: boolean } = {},
+    opts: { signal?: AbortSignal; timeoutMs?: number; json?: boolean; modelId?: string } = {},
   ): Promise<string | null> {
-    const modelId = this.fastModelId;
+    // `modelId` dispatches a specific model through the same seam (the judge's
+    // gateway rung); the default is the user's Fast Response pick.
+    const modelId = opts.modelId ?? this.fastModelId;
     if (!modelId) return null;
     if (this.isLocalOnlyMode) return null;
 
@@ -5723,6 +5744,22 @@ let isMultimodal = !!(imagePaths?.length);
         });
         if (text) return text;
       } catch { if (aborted()) throw abortError(); }
+    }
+    if (aborted()) throw abortError();
+
+    // Gateway-only users. OpenRouter, Fluxion, 9Router, NVIDIA NIM and LiteLLM
+    // had no rung above AND none in the structured ladder below, so the judge
+    // threw "No reasoning model available" on every candidate and Auto Answer
+    // fell back to firing only when the transcript ended in '?' — "Tell me about
+    // yourself." never fired (2026-09-27). OpenRouter gets the same small tier
+    // Natively's decision route runs (flash-lite); the others have no known
+    // small tier, so the model the user chose to answer with judges. No JSON
+    // mode: measured on flash-lite, it moved the verdict itself (natively-api
+    // decisionGenerationConfig); the parser finds the object in plain text.
+    const judgeGateway = this.judgeGatewayModel();
+    if (judgeGateway) {
+      const viaGateway = await this.callFastModel(message, { signal, json: false, timeoutMs: GATEWAY_JUDGE_RUNG_TIMEOUT_MS, modelId: judgeGateway });
+      if (viaGateway) return viaGateway;
     }
     if (aborted()) throw abortError();
 
