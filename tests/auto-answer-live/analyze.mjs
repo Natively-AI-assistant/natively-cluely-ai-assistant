@@ -48,7 +48,9 @@ for (const g of gens.values()) {
   // in it scores ~1. The ask is the latest of the near-best matches.
   const scored = candidates.map((t) => ({ t, sc: overlap(g.q, t.text) }));
   const top = Math.max(-1, ...scored.map((x) => x.sc));
-  const best = [...scored].reverse().find((x) => x.sc >= top - 0.1) ?? null;
+  // (The ask itself may be cut short in the label when the judge fired on its
+  // main clause, so "near-best" is generous: 0.6.)
+  const best = [...scored].reverse().find((x) => x.sc >= Math.min(top, 0.6)) ?? null;
   g.turn = best?.t.id ?? null; g.qScore = best ? +best.sc.toFixed(2) : -1;
 }
 
