@@ -8,7 +8,7 @@ import { mapLanguageForPrism, isBlockCode } from '../utils/prismLanguage';
 import { registerPrismLanguages } from '../utils/registerPrismLanguages';
 import MeetingChatOverlay from './MeetingChatOverlay';
 import GlassSurface from '../ui-components/GlassSurface';
-// .lg-bubble (the Usage tab's question bubble) and .lg-chip (the gist tag).
+// .lg-bubble (the Usage tab's question bubble).
 // Imported here rather than left to arrive through Launcher's LiquidGlassBadge import.
 import '../ui-components/LiquidGlassButton.css';
 import EditableTextBlock from './EditableTextBlock';
@@ -316,7 +316,8 @@ const CopyButton: React.FC<{ text: string }> = ({ text }) => {
             type="button"
             onClick={handle}
             aria-label={copied ? t('Copied') : t('Copy code')}
-            className="relative w-6 h-6 inline-flex items-center justify-center rounded-md text-white/40 hover:text-white/80 hover:bg-white/[0.06] transition-[color,background-color,transform] duration-100 ease-out active:scale-[0.92] opacity-100 md:opacity-0 md:group-hover:opacity-100 focus:outline-none focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-white/20"
+            // opacity is in the list so the hover reveal fades rather than popping in.
+            className="relative w-6 h-6 inline-flex items-center justify-center rounded-md text-white/40 hover:text-white/80 hover:bg-white/[0.06] transition-[color,background-color,transform,opacity] duration-150 ease-out active:scale-[0.92] opacity-100 md:opacity-0 md:group-hover:opacity-100 focus:outline-none focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-white/20"
         >
             <AnimatePresence mode="wait" initial={false}>
                 {copied ? (
@@ -329,52 +330,6 @@ const CopyButton: React.FC<{ text: string }> = ({ text }) => {
                     </motion.span>
                 )}
             </AnimatePresence>
-        </button>
-    );
-};
-
-// Strip markdown to plain text for the "copy whole answer" action — drops
-// heading hashes, list bullets, emphasis, and code fences but keeps the words and
-// code body, so what lands on the clipboard reads like the rendered answer.
-function markdownToPlainText(md: string): string {
-    return md
-        .replace(/```[\w+#-]*\n?/g, '')      // fence openers
-        .replace(/```/g, '')                  // fence closers
-        .replace(/^#{1,6}\s+/gm, '')          // heading hashes
-        .replace(/^\s*[-*+]\s+/gm, '• ')      // list bullets
-        .replace(/^\s*\d+\.\s+/gm, (m) => m.trim() + ' ')
-        .replace(/\*\*([^*]+)\*\*/g, '$1')    // bold
-        .replace(/\*([^*]+)\*/g, '$1')        // italic
-        .replace(/`([^`]+)`/g, '$1')          // inline code
-        .replace(/\n{3,}/g, '\n\n')
-        .trim();
-}
-
-// Text button used in the answer-level hover action bar (copy whole answer).
-// Same copy→check feedback as CopyButton but with a visible label.
-const AnswerCopyButton: React.FC<{ text: string }> = ({ text }) => {
-    const t = useT();
-    const [copied, setCopied] = useState(false);
-    const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-    useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
-    const handle = () => {
-        const p = navigator.clipboard?.writeText(text);
-        if (!p) return;
-        p.then(() => {
-            setCopied(true);
-            if (timer.current) clearTimeout(timer.current);
-            timer.current = setTimeout(() => setCopied(false), 2000);
-        }).catch(() => {});
-    };
-    return (
-        <button
-            type="button"
-            onClick={handle}
-            aria-label={copied ? t('Copied answer') : t('Copy answer')}
-            className="inline-flex items-center gap-1 h-6 px-1.5 rounded-md cursor-default select-none text-[11px] font-medium text-text-tertiary hover:text-text-secondary hover:bg-white/[0.05] transition-[color,background-color,transform] duration-[120ms] ease-out active:scale-[0.97] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/25"
-        >
-            {copied ? <Check className="w-3 h-3 text-emerald-400" strokeWidth={2.5} /> : <Copy className="w-3 h-3" strokeWidth={2} />}
-            <span>{copied ? t('Copied') : t('Copy')}</span>
         </button>
     );
 };
@@ -736,10 +691,11 @@ const CodingAnswerBlock: React.FC<{ sections: CodingSection[]; firstView?: boole
 };
 
 // One Q&A pair in the usage/history tab. Owns its first-view entrance (question
-// enters from the right, answer settles just after) and a hover-revealed
-// answer-action bar (copy full answer + timestamp). Entrance plays only the first
-// time this interaction is seen this session — history is read-mostly, so
-// re-viewing must be instant, never a re-cascade.
+// enters from the right, answer settles just after) and the answer's
+// hover-revealed timestamp. Copying is the tab's own "Copy usage" — there is no
+// per-answer copy. Entrance plays only the first time this interaction is seen
+// this session — history is read-mostly, so re-viewing must be instant, never a
+// re-cascade.
 const UsageInteraction: React.FC<{
     interaction: { timestamp: number; question?: string; answer?: string };
     id: string;
@@ -749,8 +705,11 @@ const UsageInteraction: React.FC<{
     const firstView = !seenInteractionIds.has(id);
     useEffect(() => { seenInteractionIds.add(id); }, [id]);
 
-    const codingSections = interaction.answer ? parseCodingTemplate(interaction.answer) : null;
-    const answerPlain = interaction.answer ? markdownToPlainText(splitGistLine(interaction.answer).body) : '';
+    // Persisted answers can end with the live overlay's [[GIST]] line. History has
+    // no use for it, so it is stripped before either renderer sees the answer —
+    // no chip, and no stray marker line at the end of a coding answer's last section.
+    const answerBody = interaction.answer ? splitGistLine(interaction.answer).body : '';
+    const codingSections = answerBody ? parseCodingTemplate(answerBody) : null;
 
     const enter = (offset: { x?: number; y?: number }, delay: number) => {
         // Repeat views are always instant. First view: full slide-in normally,
@@ -790,23 +749,15 @@ const UsageInteraction: React.FC<{
                         <div className="text-text-secondary text-[15px] leading-relaxed max-w-none select-text">
                             {codingSections
                                 ? <CodingAnswerBlock sections={codingSections} firstView={firstView} />
-                                : (() => {
-                                    // Teleprompter gist: persisted answers can end with a
-                                    // [[GIST]] line — render it as a summary chip, not text.
-                                    const { body: gistBody, gist: gistLine } = splitGistLine(interaction.answer || '');
-                                    return (
-                                        <>
-                                            <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
-                                                {cleanMarkdown(gistBody)}
-                                            </ReactMarkdown>
-                                            {gistLine && <div className="overlay-gist-chip lg-chip">{gistLine}</div>}
-                                        </>
-                                    );
-                                })()}
+                                : (
+                                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
+                                        {cleanMarkdown(answerBody)}
+                                    </ReactMarkdown>
+                                )}
                         </div>
-                        {/* Answer action bar — bottom-left, revealed on hover/focus-within */}
-                        <div className="flex items-center gap-2 mt-2 opacity-0 translate-y-1 [@media(hover:hover)]:group-hover/a:opacity-100 [@media(hover:hover)]:group-hover/a:translate-y-0 group-focus-within/a:opacity-100 group-focus-within/a:translate-y-0 [@media(hover:none)]:opacity-100 transition-all duration-[160ms] ease-out select-none">
-                            <AnswerCopyButton text={answerPlain} />
+                        {/* Timestamp — bottom-left, revealed on hover/focus-within. h-6 is the
+                            row the removed Copy button set, so the gap between answers holds. */}
+                        <div className="flex items-center h-6 mt-2 opacity-0 translate-y-1 [@media(hover:hover)]:group-hover/a:opacity-100 [@media(hover:hover)]:group-hover/a:translate-y-0 group-focus-within/a:opacity-100 group-focus-within/a:translate-y-0 [@media(hover:none)]:opacity-100 transition-all duration-[160ms] ease-out select-none">
                             <span className="text-[11px] text-text-tertiary cursor-default">{formatTime(interaction.timestamp)}</span>
                         </div>
                     </div>
@@ -1111,6 +1062,66 @@ const SwapText: React.FC<{ value: string; sizers: React.ReactNode[]; children: R
             {sizers.map((node, i) => <span key={`z${i}`} aria-hidden="true" className="mn-swap-sizer">{node}</span>)}
             {leaving && <span key={`o${leaving.key}`} aria-hidden="true" className="mn-swap-out">{leaving.node}</span>}
             <span key={`i${value}`} className={swapped ? 'mn-swap-in' : undefined}>{children}</span>
+        </span>
+    );
+};
+
+/** The widest the speaker rename field grows before its text scrolls. */
+const SPEAKER_INPUT_MAX_W = 200;
+
+/** The speaker chip ⇄ rename-field morph (--mn-chip-morph-dur in index.css). */
+const CHIP_MORPH_MS = 720;
+
+/**
+ * The speaker rename field. It is as wide as its text — or, while empty, as the
+ * name it replaces, which it shows as the placeholder — so the pill grows and
+ * shrinks as you type, easing between widths (.mn-chip-input--animate). It used
+ * to be a fixed 112px, which made the pill about four times the chip it opened
+ * from. The width is measured off a hidden copy of the text in the same type.
+ * The ease is switched on only after the first paint, so the field does not
+ * visibly shrink from the browser's default input width as it opens.
+ */
+const SpeakerNameInput: React.FC<{
+    value: string;
+    placeholder: string;
+    onChange: (value: string) => void;
+    onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+}> = ({ value, placeholder, onChange, onKeyDown }) => {
+    const mirrorRef = useRef<HTMLSpanElement>(null);
+    const [width, setWidth] = useState<number | null>(null);
+    const [animate, setAnimate] = useState(false);
+    useLayoutEffect(() => {
+        const el = mirrorRef.current;
+        if (!el) return;
+        // +2: room for the caret after the last character (and offsetWidth's
+        // rounding). offsetWidth, not a rect: layout px, the unit `width` takes,
+        // whatever zoom or transform an ancestor applies.
+        setWidth(Math.min(SPEAKER_INPUT_MAX_W, el.offsetWidth + 2));
+    }, [value, placeholder]);
+    useEffect(() => {
+        const id = requestAnimationFrame(() => setAnimate(true));
+        return () => cancelAnimationFrame(id);
+    }, []);
+    return (
+        <span className="relative inline-flex">
+            <span ref={mirrorRef} aria-hidden="true" className="absolute left-0 top-0 invisible whitespace-pre pointer-events-none text-[11px] font-medium">
+                {value || placeholder}
+            </span>
+            <input
+                autoFocus
+                value={value}
+                onChange={e => onChange(e.target.value)}
+                onKeyDown={onKeyDown}
+                placeholder={placeholder}
+                style={width != null ? { width } : undefined}
+                // font-medium: the chip's own weight, so the name does not change as
+                // the chip becomes the field. focus-visible:outline-none, not just
+                // outline-none: index.css's app-wide `*:focus-visible` ring comes later
+                // and ties on specificity, and a text input is :focus-visible even when
+                // clicked — it drew an accent rectangle inside the pill, whose own
+                // accent border already says "editing".
+                className={`min-w-0 text-[11px] font-medium bg-transparent text-text-primary placeholder:text-text-tertiary outline-none focus-visible:outline-none${animate ? ' mn-chip-input--animate' : ''}`}
+            />
         </span>
     );
 };
@@ -1439,6 +1450,19 @@ const MeetingNotesSkeleton: React.FC<{
     );
 };
 
+/** The tabs, in the order they sit in the tab row — the swap travels by it. */
+const NOTES_TABS = ['summary', 'transcript', 'usage'] as const;
+type NotesTab = typeof NOTES_TABS[number];
+
+/** How long a transcript line stays marked after an evidence jump lands on it,
+ *  before its highlight fades (--mn-hl-out in index.css). Counted from when the
+ *  scroll settles: timing it from the click, as before, spent most of it on the
+ *  scroll itself. */
+const JUMP_HIGHLIGHT_HOLD_MS = 1500;
+
+/** The Summary cards' stagger (--duration-stagger). */
+const CARD_STAGGER_MS = 40;
+
 interface MeetingDetailsProps {
     meeting: Meeting;
     onBack: () => void;
@@ -1460,7 +1484,19 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     const isLight = useResolvedTheme() === 'light';
     // We need local state for the meeting object to reflect optimistic updates
     const [meeting, setMeeting] = useState<Meeting>(initialMeeting);
-    const [activeTab, setActiveTab] = useState<'summary' | 'transcript' | 'usage'>('summary');
+    const [activeTab, setActiveTab] = useState<NotesTab>('summary');
+    // How the tab panel arrives after the reader switches tabs (see switchTab):
+    // from the side of travel, or a plain fade. null until the first switch, so
+    // neither the first paint nor a jump that opens straight onto a tab
+    // (initialMomentMs) animates underneath Launcher's own page transition.
+    const [tabSwap, setTabSwap] = useState<{ dir: -1 | 1; fadeOnly: boolean } | null>(null);
+    // Whether the Summary cards rise in with the note's reveal. True for the
+    // first render of the notes in this open; a tab switch turns it off, so a
+    // return to Summary never replays it — unless the notes are still being
+    // written, in which case they mount fresh when they land and should.
+    const [cardsEntrance, setCardsEntrance] = useState(true);
+    const mainRef = useRef<HTMLElement | null>(null);
+    const transcriptListRef = useRef<HTMLDivElement | null>(null);
     const [query, setQuery] = useState('');
     const [isCopied, setIsCopied] = useState(false);
     const [isChatOpen, setIsChatOpen] = useState(false);
@@ -1564,11 +1600,23 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     // line). Keyed on the meeting too, so a second hit in another meeting re-jumps.
     useEffect(() => {
         if (typeof initialMomentMs !== 'number') return;
+        // Not a swap: this lands during Launcher's page transition.
+        setTabSwap(null);
         setActiveTab('transcript');
         setPendingScrollTs(initialMomentMs);
     }, [initialMeeting.id, initialMomentMs]);
     const [editingSpeaker, setEditingSpeaker] = useState<string | null>(null);
     const [speakerDraft, setSpeakerDraft] = useState('');
+    // A chip ⇄ rename-field swap morphs one pill in place: whichever arrives
+    // starts at the width the other had on screen (@starting-style,
+    // .mn-chip-morph-in / -out) and eases to its own. Cleared once the morph is
+    // done, so a later remount (a tab switch back) does not replay it.
+    const [chipMorph, setChipMorph] = useState<{ id: string; from: number } | null>(null);
+    useEffect(() => {
+        if (!chipMorph) return;
+        const t = setTimeout(() => setChipMorph(null), CHIP_MORPH_MS + 150);
+        return () => clearTimeout(t);
+    }, [chipMorph]);
     // Armed for exactly one materialisation: on mount when the notes are already
     // there, and again the moment generation finishes. Dropped when the cascade
     // ends, after which React renders plain strings — so no span survives into
@@ -1957,11 +2005,89 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
         return [time, who, quote].filter(Boolean).join(' · ');
     };
 
+    // A tab switch the reader asked for. The new tab eases in from the side of
+    // travel — a tab to the right comes in from the right — and the Summary
+    // cards stand down until the notes next arrive for real.
+    const switchTab = (next: NotesTab) => {
+        if (next === activeTab) return;
+        const dir = NOTES_TABS.indexOf(next) > NOTES_TABS.indexOf(activeTab) ? 1 : -1;
+        const fadeOnly = next === 'usage'
+            && (meeting.usage ?? []).some((u, i) => !seenInteractionIds.has(`${u.timestamp}-${i}`));
+        const swap = () => {
+            setTabSwap({ dir, fadeOnly });
+            setCardsEntrance(isSummaryGenerating);
+            setActiveTab(next);
+        };
+        // Leaving Transcript mid-jump drops the jump: its effect's cleanup only
+        // cancels the hold, so a still-pending line would skip the next tab's
+        // scroll-to-top and be scrolled to and re-marked on the way back.
+        const main = mainRef.current;
+        if (next !== 'transcript' && pendingScrollTs != null && main) {
+            setPendingScrollTs(null);
+            // And stop its glide first. A smooth scroll outlives the tab swap and
+            // the scroll-to-top: the new tab read 0 for a frame, then the glide
+            // carried it to its bottom (measured: Usage at 78px, its max). Any
+            // instant scroll stops it, but only if that stop reaches the
+            // compositor BEFORE the content changes — issued in the same frame as
+            // the swap it is lost. So stop now and swap on the next frame (0px).
+            main.scrollBy({ top: 0, behavior: 'instant' });
+            requestAnimationFrame(swap);
+            return;
+        }
+        swap();
+    };
+
+    // Each tab opens at its top: a scrolled Summary used to open Transcript part
+    // way down. A layout effect, so it lands before the new tab paints. Skipped
+    // for an evidence jump, which scrolls to its line instead. (A jump still
+    // gliding when the reader leaves is stopped in switchTab, not here.)
+    useLayoutEffect(() => {
+        if (pendingScrollTs == null && mainRef.current) mainRef.current.scrollTop = 0;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeTab]);
+
+    // Evidence jump: bring the matched line to the middle of the view, then hold
+    // its highlight for JUMP_HIGHLIGHT_HOLD_MS once the scroll has settled. An
+    // effect rather than the callback ref it used to be — a new ref function on
+    // every render re-ran scrollIntoView and queued another timer each time.
+    //
+    // "Settled" is read off the scroll position, frame by frame, not off
+    // `scrollend`: that event can be stale — queued by a scroll that ended just
+    // before the click — and one arriving before the smooth scroll had begun cut
+    // the hold short (measured: the highlight left ~150ms after landing). A
+    // position still for 4 frames and 100ms has landed; that also covers a line
+    // already in the middle, which never scrolls at all.
+    useEffect(() => {
+        if (pendingScrollTs == null || activeTab !== 'transcript') return;
+        const main = mainRef.current;
+        const row = transcriptListRef.current?.querySelector<HTMLElement>('[data-jump-target]');
+        if (!main || !row) return;
+        let hold: ReturnType<typeof setTimeout> | undefined;
+        let raf = 0;
+        const startedAt = performance.now();
+        let lastTop = main.scrollTop;
+        let stillSince = startedAt;
+        let stillFrames = 0;
+        const watch = (now: number) => {
+            const top = main.scrollTop;
+            if (top !== lastTop) { lastTop = top; stillSince = now; stillFrames = 0; }
+            else stillFrames += 1;
+            if ((stillFrames >= 4 && now - stillSince >= 100) || now - startedAt > 3000) {
+                hold = setTimeout(() => setPendingScrollTs(null), JUMP_HIGHLIGHT_HOLD_MS);
+                return;
+            }
+            raf = requestAnimationFrame(watch);
+        };
+        row.scrollIntoView({ behavior: prefersReducedMotion ? 'auto' : 'smooth', block: 'center' });
+        raf = requestAnimationFrame(watch);
+        return () => { cancelAnimationFrame(raf); clearTimeout(hold); };
+    }, [pendingScrollTs, activeTab, prefersReducedMotion]);
+
     // Jump to the transcript tab and scroll to the segment nearest an evidence timestamp.
     const jumpToEvidence = (evidence?: Evidence[]) => {
         const ts = evidenceTimestamp(evidence);
         if (typeof ts !== 'number') return;
-        setActiveTab('transcript');
+        switchTab('transcript');
         setPendingScrollTs(ts);
     };
 
@@ -2031,7 +2157,8 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
         } else if (activeTab === 'transcript' && meeting.transcript) {
             textToCopy = meeting.transcript.map(t => `[${formatTime(t.timestamp)}] ${resolveSpeakerName(t.speaker)}: ${t.text}`).join('\n');
         } else if (activeTab === 'usage' && meeting.usage) {
-            textToCopy = meeting.usage.map(u => `Q: ${u.question || ''}\nA: ${u.answer || ''}`).join('\n\n');
+            // Without the overlay's [[GIST]] line, as the tab shows it.
+            textToCopy = meeting.usage.map(u => `Q: ${u.question || ''}\nA: ${splitGistLine(u.answer || '').body}`).join('\n\n');
         }
 
         if (!textToCopy) return;
@@ -2105,33 +2232,49 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
     };
 
 
+    // The Summary cards' entrance: rides the note's reveal (REVEAL_START_DELAY_MS)
+    // on a short stagger, only while `cardsEntrance` holds (see its declaration).
+    let cardSlot = 0;
+    const cardIn = (): { className: string; style?: React.CSSProperties } => {
+        if (!cardsEntrance || prefersReducedMotion) return { className: '' };
+        return { className: ' mn-card-in', style: { animationDelay: `${REVEAL_START_DELAY_MS + CARD_STAGGER_MS * cardSlot++}ms` } };
+    };
+
     // Dark theme sits on the elevated grey (#151515) rather than the near-black
     // --bg-secondary, matching the Launcher hero section. Light theme is unchanged.
+    // mn-root carries the page's motion variables (index.css).
     return (
-        <div className={`h-full w-full flex flex-col ${isLight ? 'bg-bg-secondary' : 'bg-bg-elevated'} text-text-secondary font-sans overflow-hidden`}>
-            {/* Main Content */}
-            <main className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+        <div className={`mn-root relative h-full w-full flex flex-col ${isLight ? 'bg-bg-secondary' : 'bg-bg-elevated'} text-text-secondary font-sans overflow-hidden`}>
+            {/* Back sits on the root, outside the scroll box, so nothing that moves <main>'s
+                contents can carry it: a sticky header still travels with the content while a
+                macOS trackpad rubber-bands the scroller at either end (the launcher window runs
+                with scrollBounce). Left-anchored, so it lands on the same pixels it had inside
+                the header whatever the scrollbar width. z-30 clears the header's z-20; the chat
+                overlay's z-[300] still covers it. */}
+            <button
+                type="button"
+                onClick={onBack}
+                aria-label={t("Back")}
+                title={t("Back")}
+                className="absolute left-3 top-3 z-30 p-1.5 rounded-md text-text-tertiary hover:text-text-primary transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border-subtle"
+            >
+                <ArrowLeft size={19} />
+            </button>
+            {/* Main Content. overscroll-y-contain: a scroll that runs past the top or bottom
+                stops here instead of chaining into the window-level bounce, which would move
+                the whole launcher, pinned header included. */}
+            <main ref={mainRef} className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain custom-scrollbar">
                 {/* Pinned header — date, title and the tab row stay put; only tab content scrolls.
                     Kept inside <main> (rather than hoisted above it) so it shares the scroll box's
                     content width: a two-container split would offset this column from the one below
                     by the scrollbar width on platforms with classic (non-overlay) scrollbars. */}
                 <div className={`sticky top-0 z-20 ${isLight ? 'bg-bg-secondary' : 'bg-bg-elevated'}`}>
-                    {/* Absolute so the header content keeps its original position. */}
-                    <button
-                        type="button"
-                        onClick={onBack}
-                        aria-label={t("Back")}
-                        title={t("Back")}
-                        className="absolute left-3 top-3 z-10 p-1.5 rounded-md text-text-tertiary hover:text-text-primary transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border-subtle"
-                    >
-                        <ArrowLeft size={19} />
-                    </button>
-                    <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.1, duration: 0.3 }}
-                        className="max-w-4xl mx-auto px-8 pt-8 pb-8"
-                    >
+                    {/* No entrance of its own (nor on the body below): Launcher's page
+                        transition brings the whole page in, and a second fade + 10px lift
+                        under it multiplied the two opacities, so the page arrived dimmer
+                        and later than that transition — and the note's reveal timed
+                        against it — were tuned for. */}
+                    <div className="max-w-4xl mx-auto px-8 pt-8 pb-8">
                     {/* Meta Info & Actions Row */}
                     <div className="flex items-start justify-between mb-6">
                         <div className="w-full pr-4">
@@ -2191,10 +2334,10 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                             surface it read as a raised container, but on the elevated grey it was
                             within ~3 levels of the page and the control lost its shape. */}
                         <div className={`p-1 rounded-xl inline-flex items-center gap-0.5 ${isLight ? 'bg-[#E5E5EA] border border-black/[0.04]' : 'bg-[#0D0D0F] border border-white/[0.08]'}`}>
-                            {['summary', 'transcript', 'usage'].map((tab) => (
+                            {NOTES_TABS.map((tab) => (
                                 <button
                                     key={tab}
-                                    onClick={() => setActiveTab(tab as any)}
+                                    onClick={() => switchTab(tab)}
                                     className={`
                                         relative px-3 py-1 text-[13px] font-medium rounded-lg transition-all duration-200 z-10
                                         ${activeTab === tab ? (isLight ? 'text-black' : 'text-[#E9E9E9]') : `${isLight ? 'text-text-secondary' : 'text-text-tertiary'} hover:text-text-primary`}
@@ -2216,27 +2359,43 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                         {/* Copy Button - Inline with Tabs (Always visible) */}
                         {/* handleCopy's summary branch reads detailedSummary, which is a
                             truthy-but-empty placeholder during generation — copying would
-                            silently yield a header and nothing else. */}
-                        <button
-                            onClick={handleCopy}
-                            disabled={activeTab === 'summary' && isSummaryGenerating}
-                            className="flex items-center gap-2 text-xs font-medium text-text-secondary hover:text-text-primary transition-colors disabled:opacity-40 disabled:cursor-default disabled:hover:text-text-secondary"
-                        >
-                            {isCopied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
-                            {isCopied ? t('Copied') : activeTab === 'summary' ? t('Copy full summary') : activeTab === 'transcript' ? t('Copy full transcript') : t('Copy usage')}
-                        </button>
+                            silently yield a header and nothing else.
+                            Copy → Check is the icon swap; the label is a text swap whose width
+                            holds on "Copied" (it used to shrink, jumping the icon ~60px under
+                            the pointer) and which swaps in place when the tab changes. opacity
+                            joins the transition so the disabled dim fades out as notes land. */}
+                        {(() => {
+                            const copyLabel = activeTab === 'summary' ? t('Copy full summary') : activeTab === 'transcript' ? t('Copy full transcript') : t('Copy usage');
+                            return (
+                                <button
+                                    onClick={handleCopy}
+                                    disabled={activeTab === 'summary' && isSummaryGenerating}
+                                    className="flex items-center gap-2 text-xs font-medium text-text-secondary hover:text-text-primary transition-[color,opacity] disabled:opacity-40 disabled:cursor-default disabled:hover:text-text-secondary"
+                                >
+                                    <span className="t-icon-swap w-3.5 h-3.5" data-state={isCopied ? 'b' : 'a'} aria-hidden="true">
+                                        <Copy className="t-icon w-3.5 h-3.5" data-icon="a" size={14} />
+                                        <Check className="t-icon w-3.5 h-3.5 text-emerald-500" data-icon="b" size={14} />
+                                    </span>
+                                    <SwapText value={isCopied ? 'copied' : activeTab} sizers={[copyLabel, t('Copied')]}>
+                                        {isCopied ? t('Copied') : copyLabel}
+                                    </SwapText>
+                                </button>
+                            );
+                        })()}
                     </div>
-                    </motion.div>
+                    </div>
                 </div>
 
-                <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.1, duration: 0.3 }}
-                    className="max-w-4xl mx-auto px-8 pb-32" // pb-32 for floating footer clearance
-                >
-                    {/* Tab Content */}
-                    <div className="space-y-8">
+                <div className="max-w-4xl mx-auto px-8 pb-32">{/* pb-32 for floating footer clearance */}
+                    {/* Tab Content — keyed by tab, so a switch remounts it and the swap
+                        (.mn-tab-in, index.css) plays on the incoming tab only. */}
+                    <div
+                        key={activeTab}
+                        className={`space-y-8${tabSwap ? (tabSwap.fadeOnly ? ' mn-tab-in--fade' : ' mn-tab-in') : ''}`}
+                        style={tabSwap && !tabSwap.fadeOnly
+                            ? { '--mn-tab-from': `calc(var(--mn-tab-distance) * ${tabSwap.dir})` } as React.CSSProperties
+                            : undefined}
+                    >
                         {/* Using standard divs for content, framer motion for layout */}
                         {activeTab === 'summary' && (
                         <div className="relative">
@@ -2273,13 +2432,15 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                     disabled={isRegenerating}
                                     whileTap={prefersReducedMotion || isRegenerating ? undefined : { scale: 0.97 }}
                                     transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
-                                    className={`h-8 inline-flex items-center gap-1.5 text-[12px] font-medium px-3 rounded-md text-text-primary disabled:opacity-50 transition-colors ${isLight ? 'bg-black/[0.05] hover:bg-black/[0.09]' : 'bg-white/[0.06] hover:bg-white/[0.1]'}`}
+                                    className={`h-8 inline-flex items-center gap-1.5 text-[12px] font-medium px-3 rounded-md text-text-primary disabled:opacity-50 transition-[color,background-color,opacity] ${isLight ? 'bg-black/[0.05] hover:bg-black/[0.09]' : 'bg-white/[0.06] hover:bg-white/[0.1]'}`}
                                 >
                                     <RefreshCw
                                         className={`w-3.5 h-3.5 shrink-0 ${isRegenerating && !prefersReducedMotion ? 'animate-spin' : ''}`}
                                         strokeWidth={2}
                                     />
-                                    <span>{isRegenerating ? t('Generating…') : t('Try again')}</span>
+                                    <SwapText value={isRegenerating ? 'busy' : 'idle'} sizers={[t('Try again'), t('Generating…')]}>
+                                        {isRegenerating ? t('Generating…') : t('Try again')}
+                                    </SwapText>
                                 </motion.button>
                             </motion.div>
                         ) : (
@@ -2325,7 +2486,8 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
 
                                 {/* V3 — product-grade structured notes: fast skim, decisions, actions, open questions, risks, quality.
                                     The four callout cards below form one coherent family: same radius, padding, icon
-                                    treatment and type scale. They fade + lift in with a short ease-out stagger. */}
+                                    treatment and type scale. They rise in with the note's reveal on a short stagger
+                                    (cardIn / .mn-card-in), and only then — never on a return to this tab. */}
 
                                 {/* 1. Source quality — severity-aware. Benign cleanup notes (segments removed/cleaned)
                                     read as quiet info; genuine concerns (speaker labels, coverage, "verify") stay amber. */}
@@ -2334,12 +2496,11 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                     const sqWarnings = meeting.detailedSummary?.sourceQuality?.warnings ?? [];
                                     const realIssues = sqWarnings.filter(w => !isBenignQualityNote(w));
                                     if (realIssues.length === 0) return null;
+                                    const c = cardIn();
                                     return (
-                                        <motion.div
-                                            initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 6 }}
-                                            animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
-                                            transition={{ duration: 0.24, ease: [0.25, 0.46, 0.45, 0.94] }}
-                                            className="mb-4 flex items-start gap-2.5 px-4 py-3 rounded-lg bg-white/[0.08]"
+                                        <div
+                                            className={`mb-4 flex items-start gap-2.5 px-4 py-3 rounded-lg bg-white/[0.08]${c.className}`}
+                                            style={c.style}
                                         >
                                             <Info className="w-3.5 h-3.5 text-text-tertiary shrink-0 mt-[1px]" strokeWidth={2} />
                                             <div className="space-y-0.5">
@@ -2347,17 +2508,15 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                     <p key={i} className="text-[12.5px] text-text-secondary leading-snug">{w}</p>
                                                 ))}
                                             </div>
-                                        </motion.div>
+                                        </div>
                                     );
                                 })()}
 
                                 {/* 2. Toolbar */}
-                                {isV3Summary && (
-                                    <motion.div
-                                        initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 12 }}
-                                        animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
-                                        transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1], delay: prefersReducedMotion ? 0 : 0.05 }}
-                                        className="mb-6 flex flex-wrap items-center gap-2"
+                                {isV3Summary && (() => { const c = cardIn(); return (
+                                    <div
+                                        className={`mb-6 flex flex-wrap items-center gap-2${c.className}`}
+                                        style={c.style}
                                     >
                                         <div className="flex items-center gap-1 p-1 rounded-lg bg-white/[0.03] border border-border-subtle">
                                             <motion.button
@@ -2368,7 +2527,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                 whileHover={prefersReducedMotion || isRegenerating ? undefined : 'hover'}
                                                 whileTap={prefersReducedMotion || isRegenerating ? undefined : { scale: 0.96 }}
                                                 transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
-                                                className="h-7 inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-white/[0.06] disabled:opacity-50 disabled:hover:bg-transparent transition-colors"
+                                                className="h-7 inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-white/[0.06] disabled:opacity-50 disabled:hover:bg-transparent transition-[color,background-color,opacity]"
                                             >
                                                 <motion.span
                                                     className="w-3.5 h-3.5 shrink-0 inline-flex"
@@ -2380,7 +2539,11 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                         strokeWidth={2}
                                                     />
                                                 </motion.span>
-                                                <span>{isRegenerating ? t('Regenerating…') : t('Regenerate notes')}</span>
+                                                {/* Held width: "Regenerating…" used to shrink the button and
+                                                    shove Show evidence left under the pointer. */}
+                                                <SwapText value={isRegenerating ? 'busy' : 'idle'} sizers={[t('Regenerate notes'), t('Regenerating…')]}>
+                                                    {isRegenerating ? t('Regenerating…') : t('Regenerate notes')}
+                                                </SwapText>
                                             </motion.button>
 
                                             <div className="w-px h-4 bg-border-subtle shrink-0" aria-hidden="true" />
@@ -2393,23 +2556,15 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                 aria-pressed={showEvidence}
                                                 className={`h-7 inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 rounded-md transition-colors ${showEvidence ? 'text-accent-primary bg-accent-subtle' : 'text-text-secondary hover:text-text-primary hover:bg-white/[0.06]'}`}
                                             >
-                                                <span className="relative w-3.5 h-3.5 shrink-0">
-                                                    <AnimatePresence initial={false} mode="wait">
-                                                        <motion.span
-                                                            key={showEvidence ? 'eye' : 'eyeoff'}
-                                                            initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.6 }}
-                                                            animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, scale: 1 }}
-                                                            exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.6 }}
-                                                            transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
-                                                            className="absolute inset-0 flex items-center justify-center"
-                                                        >
-                                                            {showEvidence
-                                                                ? <Eye className="w-3.5 h-3.5" strokeWidth={2} />
-                                                                : <EyeOff className="w-3.5 h-3.5" strokeWidth={2} />}
-                                                        </motion.span>
-                                                    </AnimatePresence>
+                                                {/* The icon swap cross-fades both glyphs at once; the old
+                                                    wait-mode pair spent 320ms fading one out, then the other in. */}
+                                                <span className="t-icon-swap w-3.5 h-3.5 shrink-0" data-state={showEvidence ? 'b' : 'a'} aria-hidden="true">
+                                                    <EyeOff className="t-icon w-3.5 h-3.5" data-icon="a" strokeWidth={2} />
+                                                    <Eye className="t-icon w-3.5 h-3.5" data-icon="b" strokeWidth={2} />
                                                 </span>
-                                                <span>{showEvidence ? t('Hide evidence') : t('Show evidence')}</span>
+                                                <SwapText value={showEvidence ? 'hide' : 'show'} sizers={[t('Show evidence'), t('Hide evidence')]}>
+                                                    {showEvidence ? t('Hide evidence') : t('Show evidence')}
+                                                </SwapText>
                                             </motion.button>
                                         </div>
                                         {v3SummaryStatus && v3SummaryStatus !== 'completed' && (
@@ -2418,12 +2573,12 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                 {v3SummaryStatus.replace(/_/g, ' ')}
                                             </span>
                                         )}
-                                    </motion.div>
-                                )}
+                                    </div>
+                                ); })()}
 
                                 {/* 3. Mode auto-detect suggestion */}
                                 {isV3Summary && v3Mode?.detectedModeName && v3Mode?.detectedConfidence != null && v3Mode.detectedConfidence >= 0.5 &&
-                                  v3Mode.detectedModeName !== v3Mode.selectedModeName && (
+                                  v3Mode.detectedModeName !== v3Mode.selectedModeName && (() => { const c = cardIn(); return (
                                     <motion.button
                                         type="button"
                                         // The DETECTED mode, by id when the detector matched one
@@ -2434,11 +2589,9 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                             ? { modeId: v3Mode.detectedModeId }
                                             : { templateType: (v3Mode.detectedModeName || '').toLowerCase() })}
                                         disabled={isRegenerating || detectedNeedsPro}
-                                        initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 6 }}
-                                        animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
                                         whileTap={prefersReducedMotion || isRegenerating ? undefined : { scale: 0.99, transition: { duration: 0.1 } }}
-                                        transition={{ duration: 0.24, ease: [0.25, 0.46, 0.45, 0.94], delay: prefersReducedMotion ? 0 : 0.06 }}
-                                        className="mb-5 w-full text-left flex items-center justify-between gap-3 px-4 py-3.5 rounded-lg bg-white/[0.08] hover:bg-white/[0.11] active:bg-white/[0.06] disabled:opacity-40 transition-colors duration-150 group"
+                                        style={c.style}
+                                        className={`mb-5 w-full text-left flex items-center justify-between gap-3 px-4 py-3.5 rounded-lg bg-white/[0.08] hover:bg-white/[0.11] active:bg-white/[0.06] disabled:opacity-40 transition-[color,background-color,opacity] duration-150 group${c.className}`}
                                     >
                                         <div className="min-w-0">
                                             <p className="text-[11px] font-medium uppercase tracking-[0.06em] text-text-tertiary mb-1">
@@ -2454,15 +2607,13 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                         </div>
                                         <ChevronRight className="shrink-0 w-4 h-4 text-text-tertiary group-hover:text-accent-primary group-hover:translate-x-0.5 transition-all duration-150" strokeWidth={2} />
                                     </motion.button>
-                                )}
+                                ); })()}
 
                                 {/* 4. Cross-meeting recall — still-open carryover from prior meetings (Phase 13). */}
-                                {isV3Summary && meeting.detailedSummary?.crossMeeting?.stillOpen && meeting.detailedSummary.crossMeeting.stillOpen.length > 0 && (
-                                    <motion.section
-                                        initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 6 }}
-                                        animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
-                                        transition={{ duration: 0.24, ease: [0.25, 0.46, 0.45, 0.94], delay: prefersReducedMotion ? 0 : 0.12 }}
-                                        className="mb-6 px-4 py-3.5 rounded-lg bg-white/[0.08]"
+                                {isV3Summary && meeting.detailedSummary?.crossMeeting?.stillOpen && meeting.detailedSummary.crossMeeting.stillOpen.length > 0 && (() => { const c = cardIn(); return (
+                                    <section
+                                        className={`mb-6 px-4 py-3.5 rounded-lg bg-white/[0.08]${c.className}`}
+                                        style={c.style}
                                     >
                                         <div className="flex items-center gap-2 mb-2.5">
                                             <History className="w-3.5 h-3.5 text-text-tertiary shrink-0" strokeWidth={2} />
@@ -2476,8 +2627,8 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                 </li>
                                             ))}
                                         </ul>
-                                    </motion.section>
-                                )}
+                                    </section>
+                                ); })()}
 
                                 {/* Summary on top — outcome-first, grounded. Then the mode's template sections below. */}
                                 {isV3Summary && v3Tldr.length > 0 && (() => { const h = revealBlock(); return (
@@ -2534,8 +2685,19 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                             />
                                                             <div className="min-w-0 flex-1">
                                                                 <p className="text-sm text-text-secondary leading-relaxed">{revealWords(bullet.text)}</p>
-                                                                {showEvidence && evidenceLabel(bullet.evidence) && (
-                                                                    <button type="button" onClick={() => jumpToEvidence(bullet.evidence)} className="text-[11px] text-accent-primary hover:text-accent-hover mt-1 text-left">↳ {evidenceLabel(bullet.evidence)}</button>
+                                                                {/* Always mounted, grown open by Show evidence (.mn-ev), so the
+                                                                    note opens up rather than every bullet jumping a line in one
+                                                                    frame; inert while closed keeps it out of the tab order. The
+                                                                    old mt-1 is padding inside the clip, and the focus ring is
+                                                                    drawn inside the button where the clip cannot cut it. */}
+                                                                {evidenceLabel(bullet.evidence) && (
+                                                                    <div className="mn-ev" data-open={showEvidence} inert={!showEvidence}>
+                                                                        <div className="mn-ev-inner">
+                                                                            <div className="pt-1">
+                                                                                <button type="button" onClick={() => jumpToEvidence(bullet.evidence)} className="text-[11px] text-accent-primary hover:text-accent-hover transition-colors text-left focus-visible:[outline-offset:-2px]">↳ {evidenceLabel(bullet.evidence)}</button>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
                                                                 )}
                                                             </div>
                                                         </li>
@@ -2931,82 +3093,111 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                         )}
 
                         {activeTab === 'transcript' && (
-                            <motion.section initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                            // No fade of its own: the tab swap (.mn-tab-in) brings it in.
+                            <section>
                                 {/* Speaker rename row: distinct speakers + inline rename (Phase 9). */}
                                 {(() => {
                                     const speakers = Array.from(new Set((meeting.transcript || [])
                                         .filter(e => !['system', 'ai', 'assistant', 'model'].includes((e.speaker || '').toLowerCase()))
                                         .map(e => e.speaker)));
                                     if (speakers.length === 0) return null;
+                                    // Leaving the field (Save, Cancel, Enter, Esc) hands its on-screen
+                                    // width to the chip that replaces it, so the pill eases back down
+                                    // rather than snapping. offsetWidth, not a rect: layout width,
+                                    // unaffected by the press scale a button may be holding.
+                                    const endSpeakerEdit = (id: string, save: boolean, from: Element) => {
+                                        const field = from.closest<HTMLElement>('[data-speaker-editor]');
+                                        if (field) setChipMorph({ id, from: field.offsetWidth });
+                                        if (save) handleSaveSpeakerLabel(id, speakerDraft);
+                                        else setEditingSpeaker(null);
+                                    };
                                     return (
                                         <div className="mb-5 flex flex-wrap items-center gap-2">
                                             <span className="text-[11px] font-medium text-text-tertiary uppercase tracking-wide mr-0.5">{t('Speakers')}</span>
-                                            <AnimatePresence initial={false} mode="popLayout">
+                                            {/* Chip ⇄ rename field is ONE pill morphing: the arriving element
+                                                starts at the leaving one's width and look (.mn-chip-morph-in /
+                                                -out, index.css) and eases to its own, and the chips after it are
+                                                pushed along by that width in normal flow. It used to swap in a
+                                                single frame to a pill about four times the chip's width. */}
                                             {speakers.map((sp) => {
                                                 const display = resolveSpeakerName(sp);
                                                 const id = (sp || '').toLowerCase().replace(/^(user|me)$/, 'me').replace(/^(interviewer|them|other|system|assistant)$/, 'speaker_1').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'unknown';
+                                                const morphFrom = chipMorph?.id === id ? chipMorph.from : null;
+                                                const morphStyle = morphFrom != null ? { '--mn-chip-from-w': `${morphFrom}px` } as React.CSSProperties : undefined;
                                                 if (editingSpeaker === id) {
                                                     return (
-                                                        <motion.span
-                                                            key={id}
-                                                            layout
-                                                            initial={prefersReducedMotion ? undefined : { opacity: 0, scale: 0.96 }}
-                                                            animate={prefersReducedMotion ? undefined : { opacity: 1, scale: 1 }}
-                                                            transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
-                                                            className="inline-flex items-center gap-1 h-7 pl-2 pr-1 rounded-full bg-bg-secondary border border-accent-focus ring-1 ring-accent-border"
+                                                        <span
+                                                            key={`${id}:edit`}
+                                                            data-speaker-editor=""
+                                                            style={morphStyle}
+                                                            // pl-2.5 and the field's font-medium match the chip, so the
+                                                            // name stays exactly where it was as the chip becomes the field.
+                                                            // A soft accent tint and no border (Evin picked it from four
+                                                            // mocks over the near-black fill + accent ring it had); the
+                                                            // transparent border keeps the chip's exact box.
+                                                            className={`inline-flex items-center gap-1 h-7 pl-2.5 pr-1 rounded-full bg-accent-subtle border border-transparent${morphFrom != null ? ' mn-chip-morph-in' : ''}`}
                                                         >
-                                                            <input
-                                                                autoFocus
+                                                            <SpeakerNameInput
                                                                 value={speakerDraft}
-                                                                onChange={e => setSpeakerDraft(e.target.value)}
-                                                                onKeyDown={e => { if (e.key === 'Enter') handleSaveSpeakerLabel(id, speakerDraft); if (e.key === 'Escape') setEditingSpeaker(null); }}
                                                                 placeholder={display}
-                                                                className="text-[11px] bg-transparent text-text-primary placeholder:text-text-tertiary outline-none w-28"
+                                                                onChange={setSpeakerDraft}
+                                                                onKeyDown={e => {
+                                                                    if (e.key === 'Enter') endSpeakerEdit(id, true, e.currentTarget);
+                                                                    if (e.key === 'Escape') endSpeakerEdit(id, false, e.currentTarget);
+                                                                }}
                                                             />
-                                                            <motion.button
-                                                                type="button"
-                                                                onMouseDown={e => e.preventDefault()}
-                                                                onClick={() => handleSaveSpeakerLabel(id, speakerDraft)}
-                                                                whileTap={prefersReducedMotion ? undefined : { scale: 0.9 }}
-                                                                className="inline-flex items-center justify-center w-5 h-5 rounded-full text-accent-primary hover:bg-accent-muted transition-colors"
-                                                                title={t("Save")}
-                                                            >
-                                                                <Check className="w-3 h-3" strokeWidth={2.5} />
-                                                            </motion.button>
-                                                            <motion.button
-                                                                type="button"
-                                                                onMouseDown={e => e.preventDefault()}
-                                                                onClick={() => setEditingSpeaker(null)}
-                                                                whileTap={prefersReducedMotion ? undefined : { scale: 0.9 }}
-                                                                className="inline-flex items-center justify-center w-5 h-5 rounded-full text-text-tertiary hover:text-text-primary hover:bg-white/[0.08] transition-colors"
-                                                                title={t("Cancel")}
-                                                            >
-                                                                <X className="w-3 h-3" strokeWidth={2.5} />
-                                                            </motion.button>
-                                                        </motion.span>
+                                                            <span className="mn-chip-editor-actions inline-flex items-center gap-1">
+                                                                <motion.button
+                                                                    type="button"
+                                                                    onMouseDown={e => e.preventDefault()}
+                                                                    onClick={e => endSpeakerEdit(id, true, e.currentTarget)}
+                                                                    whileTap={prefersReducedMotion ? undefined : { scale: 0.9 }}
+                                                                    className="inline-flex items-center justify-center w-5 h-5 rounded-full text-accent-primary hover:bg-accent-muted transition-colors"
+                                                                    title={t("Save")}
+                                                                >
+                                                                    <Check className="w-3 h-3" strokeWidth={2.5} />
+                                                                </motion.button>
+                                                                <motion.button
+                                                                    type="button"
+                                                                    onMouseDown={e => e.preventDefault()}
+                                                                    onClick={e => endSpeakerEdit(id, false, e.currentTarget)}
+                                                                    whileTap={prefersReducedMotion ? undefined : { scale: 0.9 }}
+                                                                    className="inline-flex items-center justify-center w-5 h-5 rounded-full text-text-tertiary hover:text-text-primary hover:bg-white/[0.08] transition-colors"
+                                                                    title={t("Cancel")}
+                                                                >
+                                                                    <X className="w-3 h-3" strokeWidth={2.5} />
+                                                                </motion.button>
+                                                            </span>
+                                                        </span>
                                                     );
                                                 }
                                                 return (
                                                     <motion.button
                                                         key={id}
-                                                        layout
                                                         type="button"
-                                                        onClick={() => { setEditingSpeaker(id); setSpeakerDraft(display); }}
+                                                        onClick={e => {
+                                                            setChipMorph({ id, from: e.currentTarget.offsetWidth });
+                                                            setEditingSpeaker(id);
+                                                            setSpeakerDraft(display);
+                                                        }}
                                                         whileTap={prefersReducedMotion ? undefined : { scale: 0.96 }}
                                                         transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
-                                                        className="group inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-white/[0.04] hover:bg-white/[0.08] text-text-secondary hover:text-text-primary border border-border-subtle transition-colors"
+                                                        style={morphStyle}
+                                                        className={`mn-chip inline-flex items-center h-7 px-2.5 rounded-full bg-white/[0.04] hover:bg-white/[0.08] text-text-secondary hover:text-text-primary border border-border-subtle transition-colors${morphFrom != null ? ' mn-chip-morph-out' : ''}`}
                                                         title={t("Rename speaker")}
                                                     >
                                                         <span className="text-[11px] font-medium">{display}</span>
-                                                        <Pencil className="w-2.5 h-2.5 text-text-tertiary opacity-0 group-hover:opacity-100 transition-opacity shrink-0" strokeWidth={2} />
+                                                        {/* No room at rest; the chip grows to fit it on hover (.mn-chip-pencil). */}
+                                                        <span className="mn-chip-pencil" aria-hidden="true">
+                                                            <Pencil className="w-2.5 h-2.5 text-text-tertiary" strokeWidth={2} />
+                                                        </span>
                                                     </motion.button>
                                                 );
                                             })}
-                                            </AnimatePresence>
                                         </div>
                                     );
                                 })()}
-                                <div className="space-y-6">
+                                <div ref={transcriptListRef} className="space-y-6">
                                     {(() => {
                                         const filteredTranscript = meeting.transcript?.filter(entry => {
                                             const isHidden = ['system', 'ai', 'assistant', 'model'].includes(entry.speaker?.toLowerCase());
@@ -3023,11 +3214,15 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                             return d < best.d ? { d, idx } : best;
                                         }, { d: Infinity, idx: -1 }).idx;
 
+                                        // The matched line is marked by .mn-ts-row's layer (index.css), and
+                                        // scrolled to by the evidence-jump effect, which finds it by
+                                        // data-jump-target.
                                         return filteredTranscript.map((entry, i) => (
                                             <div
                                                 key={i}
-                                                className={`group rounded-md transition-colors ${i === scrollIndex ? 'bg-accent-subtle ring-1 ring-accent-border -mx-2 px-2 py-1' : ''}`}
-                                                ref={i === scrollIndex ? (el) => { if (el && pendingScrollTs != null) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(() => setPendingScrollTs(null), 1500); } } : undefined}
+                                                className="group mn-ts-row"
+                                                data-highlight={i === scrollIndex ? 'true' : undefined}
+                                                data-jump-target={i === scrollIndex ? '' : undefined}
                                             >
                                                 <div className="flex items-center gap-2 mb-1">
                                                     <span className="text-xs font-semibold text-text-secondary">
@@ -3040,7 +3235,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                         ));
                                     })()}
                                 </div>
-                            </motion.section>
+                            </section>
                         )}
 
                         {activeTab === 'usage' && (
@@ -3068,7 +3263,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                             </section>
                         )}
                     </div>
-                </motion.div>
+                </div>
             </main>
 
             {/* Floating Footer (Ask Bar). While the chat is open this bar is the chat's

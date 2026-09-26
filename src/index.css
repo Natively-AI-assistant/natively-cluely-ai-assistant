@@ -8965,14 +8965,16 @@ html[data-platform="linux"][data-window="launcher"] body {
    then the Subject line and the mail card rise in one stagger step apart
    (.is-shown) — FollowUpDraftReveal in MeetingDetails.tsx. A draft that was
    already saved carries .is-shown from its first paint, so it never animates.
-   The variables are scoped to .mn-followup (the whole section); every t-*
-   rule below is its snippet verbatim and global. src/components/ui/
-   textsReveal.css carries the same .t-stagger rules and ProviderChangeNotice
-   .css the same .t-icon-swap rules — keep the copies identical and tune
-   through the variables, never the rules.
+   The variables are scoped to .mn-root (the whole notes page, so the header
+   Copy, the toolbar and the Usage tab's Copy share them) as well as
+   .mn-followup; every t-* rule below is its snippet verbatim and global.
+   src/components/ui/textsReveal.css carries the same .t-stagger rules and
+   ProviderChangeNotice.css the same .t-icon-swap rules — keep the copies
+   identical and tune through the variables, never the rules.
    The section's controls use the rest of the scale: icon swap (#09) on
    Copy → Check, text states swap (#04) timing on the Copy / Generate labels,
    shimmer text (#15) on "Generating…", menu dropdown (#05) on the tone menu. */
+.mn-root,
 .mn-followup {
   --stagger-dur: 500ms;
   --stagger-distance: 12px;
@@ -9151,10 +9153,17 @@ html[data-platform="linux"][data-window="launcher"] body {
    than a class toggled on one node. Every label the slot can show is stacked
    invisibly in the same grid cell, so the button keeps one width through the
    swap instead of jumping when "Copy" becomes "Copied". (SwapText in
-   MeetingDetails.tsx.) */
-.mn-swap { display: inline-grid; }
+   MeetingDetails.tsx.) The outgoing label is taken out of the cell's sizing:
+   where the set of labels itself changes (the header Copy follows the tab),
+   a longer departing label would otherwise hold the button wide for the
+   length of its exit and then let it snap narrower. text-align: start, because
+   a button centres its text: a shorter label ("Copied" in a cell held to
+   "Copy full summary") floated ~35px off its icon instead of sitting where it
+   would at its own width — the spare width belongs after the label. */
+.mn-swap { display: inline-grid; position: relative; text-align: start; }
 .mn-swap > * { grid-area: 1 / 1; }
 .mn-swap-sizer { visibility: hidden; }
+.mn-swap > .mn-swap-out { position: absolute; top: 0; left: 0; white-space: nowrap; }
 @keyframes mn-swap-exit {
   to {
     opacity: 0;
@@ -9217,6 +9226,240 @@ html[data-platform="linux"][data-window="launcher"] body {
   .mn-swap-out { display: none; }
   .mn-swap-in, .mn-fu-body-in { animation: none; }
   .mn-fu-actions > * { transition: none; }
+}
+
+/* ── Meeting notes: tab swap, summary cards, evidence lines, jump highlight ──
+   The rest of the page's motion, on the same scale as the follow-up section
+   above. No motion tokens are imported in this app, so the values are the
+   tokens' literals, named here once. */
+.mn-root {
+  /* Tab swap: transitions.dev #08's page-slide values (--duration-fast,
+     --distance-base, --blur-medium, --ease-smooth-out). */
+  --mn-tab-dur: 250ms;
+  --mn-tab-distance: 8px;
+  --mn-tab-blur: 3px;
+  --mn-tab-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Summary cards: a content reveal (--duration-slow, --distance-base). */
+  --mn-card-dur: 400ms;
+  --mn-card-distance: 8px;
+  --mn-card-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* #21 accordion, for the evidence lines. Symmetric, by the polish rules. */
+  --acc-expand: 250ms;
+  --acc-collapse: 250ms;
+  --acc-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Transcript jump highlight: in with the scroll, out slowly once read. */
+  --mn-hl-in: 250ms;
+  --mn-hl-out: 500ms;
+  --mn-hl-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Speaker chip: every change of the pill's width — making room for the
+     pencil on hover, opening into its rename field and closing back, following
+     your typing — rides Apple's default spring (SwiftUI .smooth: response 0.5,
+     damping 1; the Plans accordions' curve, AccordionSection.css). It was the
+     smooth-out cubic, which put ~80% of each move in its first ~110ms and read
+     as a snap; Evin asked for it slower. Critically damped, so the same curve
+     over a shorter time is the same spring at a quicker response. */
+  --mn-spring: linear(0, 0.0229, 0.0789, 0.1534, 0.2363, 0.3211, 0.4034, 0.4807, 0.5515, 0.6152, 0.6717, 0.7214, 0.7645, 0.8018, 0.8337, 0.861, 0.8841, 0.9036, 0.9201, 0.9339, 0.9454, 0.9551, 0.9631, 0.9698, 0.9753, 0.9799, 0.9837, 0.9868, 0.9894, 0.9915, 0.9932, 0.9946, 0.9958, 0.9968, 0.9975, 0.9982, 0.9987, 0.9991, 0.9995, 0.9998, 1);
+  --mn-chip-morph-dur: 720ms; /* open / close — response 0.5 (CHIP_MORPH_MS) */
+  --mn-chip-hover-dur: 600ms; /* room for the pencil, both ways — response ~0.4 */
+  --mn-chip-type-dur: 300ms;  /* following keystrokes: settles between them */
+}
+
+/* Tab swap. The #08 snippet slides two absolutely positioned pages, which
+   would collapse a scroller whose tabs differ in height, and holding both
+   tabs in flow for even a frame doubles the page (see handoffExit in
+   MeetingDetails.tsx for what that did to the tab row's pill). So only the
+   incoming tab moves, as a keyframe on a wrapper keyed by the tab; the
+   outgoing one leaves at once. --mn-tab-from is set per swap: +distance
+   toward a tab on the right, -distance toward one on the left. No `forwards`
+   fill, so at rest the panel carries no transform or filter. */
+@keyframes mn-tab-in {
+  from {
+    opacity: 0;
+    transform: translateX(var(--mn-tab-from, 0px));
+    filter: blur(var(--mn-tab-blur));
+  }
+}
+.mn-tab-in { animation: mn-tab-in var(--mn-tab-dur) var(--mn-tab-ease); }
+/* Opacity only, for a Usage tab whose items still owe their own first-view
+   slide: a travelling panel under them would move them twice. */
+.mn-tab-in--fade { animation: mn-fade-in var(--mn-tab-dur) var(--mn-tab-ease); }
+
+/* Summary cards (source quality, toolbar, template suggestion, earlier
+   meetings) rise in with the note's reveal: its start and a 40ms stagger,
+   set inline. CSS, not Framer `initial`: the cards sit under the notes'
+   AnimatePresence initial={false}, whose context blocks `initial` on every
+   descendant — their old Framer entrances never played (measured). */
+@keyframes mn-card-in {
+  from { opacity: 0; transform: translateY(var(--mn-card-distance)); }
+}
+.mn-card-in { animation: mn-card-in var(--mn-card-dur) var(--mn-card-ease) backwards; }
+
+/* Evidence lines (Show evidence): #21's grid-rows height with its fade and
+   2px unblur, so each bullet grows open instead of the whole note jumping a
+   line per bullet in one frame. The snippet's .t-acc-panel rules under mn-
+   names: the .t-acc classes are global in two other stylesheets whose
+   variables are scoped to their own components. min-height 0 keeps the 0fr
+   row able to close; padding lives INSIDE .mn-ev-inner, never on the track.
+   An open line rests at filter: none rather than blur(0), so it holds no
+   layer. */
+.mn-ev {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--acc-collapse) var(--acc-ease);
+}
+.mn-ev[data-open="true"] {
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--acc-expand) var(--acc-ease);
+}
+.mn-ev-inner {
+  overflow: hidden;
+  min-height: 0;
+  opacity: 0;
+  filter: blur(2px);
+  transition:
+    opacity var(--acc-collapse) var(--acc-ease),
+    filter var(--acc-collapse) var(--acc-ease);
+}
+.mn-ev[data-open="true"] .mn-ev-inner {
+  opacity: 1;
+  filter: none;
+  transition:
+    opacity var(--acc-expand) var(--acc-ease),
+    filter var(--acc-expand) var(--acc-ease);
+}
+
+/* Transcript jump highlight (an evidence link, or a search hit opening the
+   meeting at a line). A layer behind the line rather than padding on it, so
+   marking a line moves nothing — the old -mx-2 px-2 py-1 pushed every line
+   below it down 8px and back. Same box as before: 8px out to the sides, 4px
+   above and below, rounded-md, 1px accent ring. */
+.mn-ts-row { position: relative; isolation: isolate; }
+.mn-ts-row::before {
+  content: '';
+  position: absolute;
+  inset: -4px -8px;
+  z-index: -1;
+  border-radius: 6px;
+  background: var(--accent-subtle);
+  box-shadow: 0 0 0 1px var(--accent-border);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--mn-hl-out) var(--mn-hl-ease);
+}
+.mn-ts-row[data-highlight="true"]::before {
+  opacity: 1;
+  transition-duration: var(--mn-hl-in);
+}
+
+/* Speaker chip (Transcript). The rename pencil takes no room at rest, so the
+   chip hugs its name; it used to hold an invisible 16px for the pencil. On
+   hover — or keyboard focus — the chip grows to fit it (#01 card resize, on
+   the pencil's slot: the chip's own width is just its content; on the spring,
+   --mn-chip-hover-dur both ways) and the pencil arrives in the new room with
+   the icon-swap blur and scale: 120ms after the room starts opening, when about
+   half of it is there, over 250ms ease-out. Out is never delayed: the pencil
+   is gone in 150ms, before the closing slot can
+   clip it to a sliver, while the chip settles back over the full resize. */
+.mn-chip-pencil {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: 0;
+  overflow: hidden;
+  /* No will-change: the #01 snippet's `will-change: width` hints a property
+     the compositor cannot take (width is layout), which this stylesheet's
+     composited-motion contract forbids. */
+  transition: width var(--mn-chip-hover-dur) var(--mn-spring);
+}
+.mn-chip-pencil > svg {
+  flex-shrink: 0;
+  opacity: 0;
+  filter: blur(var(--icon-swap-blur));
+  transform: scale(var(--icon-swap-start-scale));
+  transition:
+    opacity   150ms ease-out,
+    filter    150ms ease-out,
+    transform 150ms ease-out;
+}
+.mn-chip:hover .mn-chip-pencil,
+.mn-chip:focus-visible .mn-chip-pencil {
+  width: 16px; /* the old 6px gap + the 10px glyph */
+}
+.mn-chip:hover .mn-chip-pencil > svg,
+.mn-chip:focus-visible .mn-chip-pencil > svg {
+  opacity: 1;
+  filter: none;
+  transform: none;
+  transition-duration: 250ms;
+  transition-delay: 120ms;
+}
+
+/* Speaker chip ⇄ rename field: one pill morphing (#01 card resize), not a
+   swap. The field is the chip in a soft accent tint with no border — Evin's
+   pick from four mocks, over a near-black fill with an accent ring that
+   flashed in mid-morph. Opening, the tint is there from the first frame and
+   only the width moves: the field starts at the chip's on-screen width
+   (--mn-chip-from-w, set inline for one morph, via @starting-style) and
+   eases to its own `width: auto` — interpolate-size lets a transition land
+   on auto. Closing, the chip starts at the field's width and tint and eases
+   back to its own size and grey. The clip keeps the growing field's buttons
+   inside the pill; they fade in as the room opens, not after it (a delay
+   left the pill empty for a beat). overflow: clip, NOT hidden: hidden makes
+   the pill a scroll container, and the field's autofocus scrolled it 10px
+   to bring the input into view — the name jumped left and crept back over
+   the morph (measured). clip cannot be scrolled — but it also stops the pill
+   being a scroll container, so as a flex item its min-width: auto becomes
+   its content width and pinned the growing field at full size from frame
+   one; min-width: 0 lets it start narrower than its contents again. The
+   class is on only for the duration of one morph (CHIP_MORPH_MS in
+   MeetingDetails.tsx), so a remount later never replays it. */
+.mn-chip-morph-in,
+.mn-chip-morph-out {
+  interpolate-size: allow-keywords;
+  overflow: clip;
+  min-width: 0;
+  transition:
+    width            var(--mn-chip-morph-dur) var(--mn-spring),
+    background-color var(--mn-chip-morph-dur) var(--mn-spring),
+    border-color     var(--mn-chip-morph-dur) var(--mn-spring),
+    color            150ms ease;
+}
+@starting-style {
+  .mn-chip-morph-in {
+    width: var(--mn-chip-from-w);
+  }
+  /* the field's look: bg-accent-subtle, no visible border */
+  .mn-chip-morph-out {
+    width: var(--mn-chip-from-w);
+    background-color: var(--accent-subtle);
+    border-color: transparent;
+  }
+}
+.mn-chip-morph-in .mn-chip-editor-actions {
+  animation: mn-fade-in 300ms ease-out backwards;
+}
+
+/* The rename field follows its text as you type (SpeakerNameInput sets the
+   width); the pill, being auto-width, follows the field. The pill's spring at
+   --mn-chip-type-dur: short enough that a keystroke's few pixels mostly settle
+   before the next one. */
+.mn-chip-input--animate {
+  transition: width var(--mn-chip-type-dur) var(--mn-spring);
+}
+
+/* !important as in the #21 snippet: the open-state rules ([data-open],
+   [data-highlight], :hover) out-rank a plain class and would keep their
+   transitions. */
+@media (prefers-reduced-motion: reduce) {
+  .mn-tab-in, .mn-tab-in--fade, .mn-card-in { animation: none; }
+  .mn-ev, .mn-ev-inner, .mn-ts-row::before,
+  .mn-chip-pencil, .mn-chip-pencil > svg,
+  .mn-chip-morph-in, .mn-chip-morph-out, .mn-chip-input--animate { transition: none !important; }
+  .mn-chip-morph-in .mn-chip-editor-actions { animation: none; }
 }
 
 /* Reduced-motion equivalent of the text reveal below: one short cross-fade on
