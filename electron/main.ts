@@ -196,12 +196,20 @@ process.on('uncaughtException', (err) => {
       // app.whenReady() if the bundle is loaded in a non-Electron context.
       const { dialog, app: electronApp } = require('electron');
       // showErrorBox is modal and blocks until the user clicks OK.
-      dialog.showErrorBox(
-        packaged
-          ? 'Natively was built for a different chip — please reinstall'
-          : 'Native modules are wrong architecture — run this command to fix:',
-        detail,
-      );
+      // A system dialog would show in a screen share while Undetectable is on
+      // (stealthPromptGate.ts). Settings are not loaded yet, so the saved flag
+      // is read directly; unreadable settings still get the dialog.
+      const { savedUndetectableOn } = require('./services/stealthPromptGate');
+      if (savedUndetectableOn(electronApp.getPath('userData'))) {
+        console.error('[nativeArch] ' + detail + ' (error dialog skipped: Undetectable is on)');
+      } else {
+        dialog.showErrorBox(
+          packaged
+            ? 'Natively was built for a different chip — please reinstall'
+            : 'Native modules are wrong architecture — run this command to fix:',
+          detail,
+        );
+      }
       electronApp.exit(1);
     } catch {
       // Electron not loaded (running under bare Node in a test) — exit
@@ -830,6 +838,9 @@ type MacScreenCaptureCapability = {
 };
 
 let latestSystemAudioPermissionWarning: string | null = null;
+// Undetectable mode for the windows setContentProtection cannot reach (file
+// pickers, message boxes, tooltips, popups). Built in initializeApp.
+let foreignWindowCaptureGuard: ForeignWindowCaptureGuard | null = null;
 
 function rememberSystemAudioPermissionWarning(message: string): void {
   latestSystemAudioPermissionWarning = message;
@@ -1311,6 +1322,8 @@ import { ReleaseNotesManager } from "./update/ReleaseNotesManager"
 import { OllamaManager } from './services/OllamaManager'
 import { ProviderStatusRegistry } from './services/ProviderStatusRegistry'
 import { decideToggle, decideDockTransition } from './services/toggleStateReducer'
+import { nativePromptsBlocked } from './services/stealthPromptGate'
+import { createForeignWindowCaptureGuard, wrapAsyncDialogs, type ForeignWindowCaptureGuard } from './services/foreignWindowCaptureGuard'
 import { acceptsLocalSpeechEndHint } from './intelligence/autoAnswer/SimpleAutoAnswer'
 import { NativeOomTrace } from './utils/NativeOomTrace'
 import { setStealthHookAvailabilityProvider } from './utils/windowsFocusPolicy'
@@ -7779,6 +7792,7 @@ export class AppState {
     this.settingsWindowHelper.setContentProtection(state)
     this.modelSelectorWindowHelper.setContentProtection(state)
     this.cropperWindowHelper.setContentProtection(state)
+    foreignWindowCaptureGuard?.sync(state)
 
     if (process.platform === 'win32') {
       this.windowHelper.syncOverlayInteractionPolicy();
@@ -8751,7 +8765,7 @@ async function initializeApp() {
   // a usable window, and every failure inside is already isolated per extension.
   try {
     const { wireExtensions, startExtensions } = require('./services/extensions/appWiring');
-    const extensionManager = wireExtensions();
+    const extensionManager = wireExtensions({ isUndetectable: () => appState.getUndetectable() });
     void startExtensions(extensionManager);
   } catch (err: any) {
     // A subsystem that cannot be built leaves the built-in reranker in place,
@@ -9257,10 +9271,39 @@ if (process.env.THINKING_MATRIX === '1') {
     }, 800);
   }
 
+  // Undetectable also covers the process's non-BrowserWindow windows: file
+  // pickers, message boxes, tooltips, popups (foreignWindowCaptureGuard.ts).
+  try {
+    foreignWindowCaptureGuard = createForeignWindowCaptureGuard({
+      native: () => {
+        const { loadNativeModule } = require('./audio/nativeModuleLoader');
+        return loadNativeModule();
+      },
+      ownHandles: () => BrowserWindow.getAllWindows()
+        .filter((w) => !w.isDestroyed())
+        .map((w) => w.getNativeWindowHandle()),
+      isUndetectable: () => appState.getUndetectable(),
+      log: (message) => console.warn(message),
+    });
+    wrapAsyncDialogs(require('electron').dialog, foreignWindowCaptureGuard);
+    foreignWindowCaptureGuard.sync(appState.getUndetectable());
+    // An activation change resets sharing state on macOS; re-apply at once
+    // rather than waiting for the next interval tick.
+    const resweep = () => { foreignWindowCaptureGuard?.sweep(); };
+    app.on('did-become-active', resweep);
+    app.on('browser-window-focus', resweep);
+  } catch (e) {
+    console.error('[Main] Failed to start the foreign-window capture guard:', e);
+  }
+
   // Initialize CalendarManager
   try {
     const { CalendarManager } = require('./services/CalendarManager');
     const calMgr = CalendarManager.getInstance();
+    // Reminders are system notifications (with a chime): their own OS window,
+    // outside content protection. Checked when each one fires, not when it is
+    // scheduled, since the mode can change during the wait.
+    calMgr.setNotificationSuppressor(() => nativePromptsBlocked(() => appState.getUndetectable()));
     calMgr.init();
 
     calMgr.on('start-meeting-requested', (event: any) => {
@@ -9476,16 +9519,23 @@ if (process.env.THINKING_MATRIX === '1') {
         reloadsInWindow: history.length,
         windowMs: RENDERER_RELOAD_WINDOW_MS,
       });
-      try {
-        // dialog is not imported at module top — require it lazily (matches
-        // the native-arch gate handler's pattern above).
-        const { dialog } = require('electron');
-        dialog.showErrorBox(
-          'Natively — display error',
-          'A window keeps crashing while rendering. Please restart Natively. ' +
-          'If this continues, update to the latest version.'
-        );
-      } catch { /* dialog best-effort */ }
+      // A system dialog would show in a screen share (stealthPromptGate.ts),
+      // and this one can fire mid-meeting. While Undetectable is on it is
+      // logged instead; the app still exits below, just without a message.
+      if (nativePromptsBlocked(() => appState.getUndetectable())) {
+        logToFile('[main] render-process-gone-loop-giveup: error dialog skipped (Undetectable is on)');
+      } else {
+        try {
+          // dialog is not imported at module top — require it lazily (matches
+          // the native-arch gate handler's pattern above).
+          const { dialog } = require('electron');
+          dialog.showErrorBox(
+            'Natively — display error',
+            'A window keeps crashing while rendering. Please restart Natively. ' +
+            'If this continues, update to the latest version.'
+          );
+        } catch { /* dialog best-effort */ }
+      }
       // showErrorBox is modal and blocks until the user clicks OK, so the
       // terminal sequence runs AFTER they have seen the message. We told them
       // to restart, so actually end the process — leaving it alive here meant

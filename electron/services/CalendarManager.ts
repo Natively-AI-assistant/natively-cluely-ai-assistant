@@ -458,6 +458,12 @@ export class CalendarManager extends EventEmitter {
     // =========================================================================
 
     private reminderTimeouts: NodeJS.Timeout[] = [];
+    // Injected by main.ts (Undetectable mode). Asked when a reminder fires.
+    private notificationSuppressed: () => boolean = () => false;
+
+    public setNotificationSuppressor(isSuppressed: () => boolean): void {
+        this.notificationSuppressed = isSuppressed;
+    }
 
     private scheduleReminders(events: CalendarEvent[]) {
         // Clear existing
@@ -488,6 +494,13 @@ export class CalendarManager extends EventEmitter {
     }
 
     private showNotification(event: CalendarEvent) {
+        // A system notification is its own OS window (and it chimes), outside
+        // the content protection Undetectable mode relies on, so it would show
+        // in a screen share. The launcher's calendar card still counts down.
+        if (this.notificationSuppressed()) {
+            console.log('[CalendarManager] Reminder skipped: Undetectable is on');
+            return;
+        }
         const { Notification } = require('electron');
         const notif = new Notification({
             title: 'Meeting starting soon',

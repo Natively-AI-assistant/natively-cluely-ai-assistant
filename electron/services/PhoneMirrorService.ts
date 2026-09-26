@@ -302,6 +302,22 @@ export class PhoneMirrorService {
     this.hasShownLanBindDialog = true;
   }
 
+  /**
+   * Whether phone-mirror:enable binding with `exposeOnLan` needs the "Allow
+   * LAN access?" consent first: the same per-session rule setExposeOnLan()
+   * enforces. A saved phoneMirrorExposeOnLan does not satisfy it, because
+   * _start() persists whatever it was given and enable used to bind 0.0.0.0
+   * without asking. (The boot-time restore still binds from the saved value
+   * without a prompt, as it always has; that path is not an IPC request.)
+   */
+  needsLanBindConfirmation(exposeOnLan: boolean): boolean {
+    if (exposeOnLan !== true || this.hasShownLanBindDialog) return false;
+    // Already on the LAN, or starting there (_start sets exposeOnLan first):
+    // start() returns that server, so this call binds nothing new, and a
+    // decline could not stop the bind already under way.
+    return !((this.isRunning() || this.starting !== null) && this.exposeOnLan);
+  }
+
   async rotateToken(): Promise<PhoneMirrorInfo> {
     // Rotate BOTH secrets — the "Rotate token" button is the single deliberate
     // reset for every paired surface. The phone token is per-session anyway; the

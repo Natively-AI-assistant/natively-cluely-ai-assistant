@@ -10,14 +10,17 @@
 // which stalls IPC the overlay depends on.
 //
 // This renders in a Radix portal inside the existing window instead, so nothing
-// blocks and focus is never handed to an OS-level dialog.
+// blocks and focus is never handed to an OS-level dialog. Staying inside the
+// window also keeps it under the window's content protection: a native dialog
+// is its own OS window, and it showed up in screen shares while Undetectable
+// was on.
 //
 // Its dim and panel sit above the popup cards (GenieModal, z-index 300), not
 // at the shared dialog's z-50: a confirm asked from inside Settings otherwise
 // opened BEHIND it, invisible, while its modal dim swallowed every click, so
 // Settings looked frozen.
 
-import React from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import { useT } from '../../i18n';
@@ -107,5 +110,50 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
         </DialogPrimitive.Root>
     );
 };
+
+type ConfirmOptions = Pick<ConfirmDialogProps, 'title' | 'description' | 'confirmLabel' | 'cancelLabel' | 'destructive'>;
+
+/**
+ * Promise-shaped stand-in for `window.confirm()`, for call sites that read as
+ * a guard clause: `if (!(await confirm({ title }))) return;`. Render `dialog`
+ * once in the calling component. Resolves `false` on cancel, on dismiss, when
+ * a second confirm replaces the first, and on unmount.
+ */
+export function useConfirmDialog(): {
+    confirm: (options: ConfirmOptions) => Promise<boolean>;
+    dialog: React.ReactNode;
+} {
+    const [pending, setPending] = useState<ConfirmOptions | null>(null);
+    const resolverRef = useRef<((ok: boolean) => void) | null>(null);
+
+    const settle = useCallback((ok: boolean) => {
+        const resolve = resolverRef.current;
+        resolverRef.current = null;
+        setPending(null);
+        resolve?.(ok);
+    }, []);
+
+    const confirm = useCallback((options: ConfirmOptions) => new Promise<boolean>((resolve) => {
+        resolverRef.current?.(false);
+        resolverRef.current = resolve;
+        setPending(options);
+    }), []);
+
+    useEffect(() => () => {
+        resolverRef.current?.(false);
+        resolverRef.current = null;
+    }, []);
+
+    const dialog = pending ? (
+        <ConfirmDialog
+            open
+            {...pending}
+            onOpenChange={(next) => { if (!next) settle(false); }}
+            onConfirm={() => settle(true)}
+        />
+    ) : null;
+
+    return { confirm, dialog };
+}
 
 export default ConfirmDialog;

@@ -37,6 +37,7 @@ import {
 } from '../lib/overlayAppearance';
 import { getMeetingInterfaceTheme, setMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
 import { KeyRecorder } from './ui/KeyRecorder';
+import { useConfirmDialog } from './ui/ConfirmDialog';
 import { ModelSelectorLabel } from './ui/ModelSelectorLabel';
 import { Disclosure, DisclosureChevron } from './ui/AccordionSection';
 import { Presence, SettingsMenu, SettingsMotionReady } from './settings/SettingsRow';
@@ -640,6 +641,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     const isLight = resolvedTheme === 'light';
     const { t, lang, setLang } = useLanguage();
     const [activeTab, setActiveTab] = useState(initialTab);
+    // In-window confirms only: see ConfirmDialog.tsx for why never confirm().
+    const { confirm: askConfirm, dialog: confirmDialog } = useConfirmDialog();
 
     /* ---------------------------------------------------------------- */
     /* Section transition                                                */
@@ -1868,7 +1871,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     };
 
     const handleRemoveSttKey = async (provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox') => {
-        if (!confirm(`Are you sure you want to remove the ${provider === 'ibmwatson' ? 'IBM Watson' : provider.charAt(0).toUpperCase() + provider.slice(1)} API key?`)) return;
+        if (!(await askConfirm({ title: `Are you sure you want to remove the ${provider === 'ibmwatson' ? 'IBM Watson' : provider.charAt(0).toUpperCase() + provider.slice(1)} API key?` }))) return;
 
         try {
             if (provider === 'groq') {
@@ -1913,7 +1916,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     };
 
     const handleRemoveTavilyKey = async () => {
-        if (!confirm('Are you sure you want to remove the Tavily API Key?')) return;
+        if (!(await askConfirm({ title: 'Are you sure you want to remove the Tavily API Key?' }))) return;
 
         try {
             await window.electronAPI?.setTavilyApiKey?.('');
@@ -2263,6 +2266,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
     return (
         <>
+            {confirmDialog}
             {/* Settings pours out of, and back into, the bottom of the window
                 like every other popup (GenieModal). */}
             <GenieModal

@@ -4687,19 +4687,17 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                             className="text-xs aip-warn-fg mt-0.5 font-medium"
                         />
                     </div>
-                    {/* aria-disabled, not disabled: the onClick guard below is the
-                        only thing that explains WHY the toggle is unavailable, and
-                        Stage 3 owns replacing that alert() with an inline hint.
-                        Hard-disabling here would make it unreachable dead code. */}
+                    {/* When unavailable, the click does nothing: the reason is
+                        already spelled out inline by the AipRevealNote above. It
+                        used to also alert() it, but a native alert is its own OS
+                        window outside content protection, so it showed up in
+                        screen shares while Undetectable was on. */}
                     <AipSwitch
                         checked={fastResponseMode}
                         disabled={!canUseFastMode}
                         label={t('Fast Response Mode')}
                         onChange={async () => {
-                            if (!canUseFastMode) {
-                                alert(fastModeUnavailableNote);
-                                return;
-                            }
+                            if (!canUseFastMode) return;
                             const newState = !fastResponseMode;
                             setFastResponseMode(newState);
                             localStorage.setItem('natively_groq_fast_text', String(newState));
@@ -5786,18 +5784,20 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                 <label className="block aip-label mb-1">
                                     {t('Screenshot / Vision Support')}
                                 </label>
-                                {/* A native <select> ignores every --aip-* token; swapping
-                                    it for AipSelect is Stage 5's job (the option labels
-                                    are translated keys that need re-plumbing). */}
-                                <select
+                                {/* AipSelect, never a native <select>: a native popup
+                                    is its own OS window outside content protection, so
+                                    its options showed up in screen shares while
+                                    Undetectable was on. */}
+                                <AipSelect
                                     value={customVision}
-                                    onChange={(e) => setCustomVision(e.target.value as 'auto' | 'on' | 'off')}
-                                    className="aip-input"
-                                >
-                                    <option value="auto">{t('Auto-detect (recommended)')}</option>
-                                    <option value="on">{t('Always send screenshots')}</option>
-                                    <option value="off">{t('Never send screenshots (text only)')}</option>
-                                </select>
+                                    onChange={(v) => setCustomVision(v as 'auto' | 'on' | 'off')}
+                                    label={t('Screenshot / Vision Support')}
+                                    options={[
+                                        { id: 'auto', name: t('Auto-detect (recommended)') },
+                                        { id: 'on', name: t('Always send screenshots') },
+                                        { id: 'off', name: t('Never send screenshots (text only)') },
+                                    ]}
+                                />
                                 <p className="text-[10px] aip-muted mt-1">
                                     {t('Auto-detect enables vision when your cURL uses')} <code className="aip-code-inline">{"{{IMAGE_BASE64}}"}</code> {t('or an OpenAI-style')} <code className="aip-code-inline">messages</code> {t('body. Choose “Always” only if your endpoint accepts images another way; “Never” keeps this provider out of screenshot analysis.')}
                                 </p>

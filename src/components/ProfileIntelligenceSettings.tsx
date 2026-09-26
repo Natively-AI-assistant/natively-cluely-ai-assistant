@@ -12,6 +12,7 @@ import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { LiquidGlassButton, useLensTracking } from '../ui-components/LiquidGlassButton';
 import { truncateResumeSummary } from '../utils/resumeSummary.mjs';
 import { CHECKOUT_URLS } from '../config/urls';
+import { useConfirmDialog } from './ui/ConfirmDialog';
 
 const openExternal = (url: string) => {
     if ((window as any).electronAPI?.openExternal) {
@@ -1951,6 +1952,8 @@ export function ProfileIntelligenceSettings({
     onOpenNativelyAPI?: () => void;
 }) {
     const cachedPremium = readPremiumCache();
+    // In-window confirms only: see ConfirmDialog.tsx for why never confirm().
+    const { confirm: askConfirm, dialog: confirmDialog } = useConfirmDialog();
     // Safe as a panel-level call ONLY because this panel renders exactly one
     // switch. Add a second and it must move into a per-switch component.
     const piToggleInit = useToggleInit();
@@ -2297,7 +2300,7 @@ export function ProfileIntelligenceSettings({
     }, [profileData?.aotStatus?.companyResearch]);
 
     const handleRemoveTavilyKey = async () => {
-        if (!confirm('Remove your Tavily API key?')) return;
+        if (!(await askConfirm({ title: 'Remove your Tavily API key?' }))) return;
         try {
             const res = await window.electronAPI?.setTavilyApiKey?.('');
             if (res?.success) { setHasStoredTavilyKey(false); setTavilyApiKey(''); }
@@ -2532,7 +2535,7 @@ export function ProfileIntelligenceSettings({
                                 // no profile while the resume was in fact saved and live.
                                 // The button is disabled mid-ingest rather than lying.
                                 if (profileUploading) return;
-                                if (!confirm('Delete your resume and its extracted data?')) return;
+                                if (!(await askConfirm({ title: 'Delete your resume and its extracted data?', confirmLabel: 'Delete' }))) return;
                                 try {
                                     await window.electronAPI?.profileDelete?.();
                                     setProfileStatus({ hasProfile: false, profileMode: false });
@@ -3776,6 +3779,7 @@ export function ProfileIntelligenceSettings({
             } as React.CSSProperties}
         >
             <style>{PI_CSS}</style>
+            {confirmDialog}
 
             {/* ── Sidebar ── */}
             <div style={{

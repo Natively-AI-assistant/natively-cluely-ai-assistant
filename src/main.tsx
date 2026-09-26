@@ -1,6 +1,7 @@
 import React from "react"
 import ReactDOM from "react-dom/client"
 import "./index.css"
+import { createSwitchableTooltipGuard, installNativeTooltipGuard, shouldSuppressNativeTooltips } from "./lib/nativeTooltipGuard.mjs"
 
 // ── Renderer crash/hang diagnostics ─────────────────────────────────────────
 // Surface uncaught errors and unhandled promise rejections through console.error
@@ -49,6 +50,27 @@ document.documentElement.setAttribute(
   'data-window',
   new URLSearchParams(window.location.search).get('window') || 'launcher'
 );
+
+// The overlay family never shows a native tooltip: it is a separate OS window
+// outside the overlay's content protection, so it appears in screen shares.
+// Installed before React mounts so no title survives the first commit.
+// The launcher is capture-protected only in Undetectable mode, so it keeps its
+// hover hints otherwise and strips them only while the mode is on.
+const tooltipWindow = new URLSearchParams(window.location.search).get('window') || 'launcher';
+if (shouldSuppressNativeTooltips(tooltipWindow)) {
+  installNativeTooltipGuard(document.documentElement);
+} else if (tooltipWindow === 'launcher') {
+  const launcherTooltipGuard = createSwitchableTooltipGuard(document.documentElement);
+  // A change event is newer than the initial read, so a late read loses.
+  let undetectableEventSeen = false;
+  window.electronAPI?.onUndetectableChanged?.((state) => {
+    undetectableEventSeen = true;
+    launcherTooltipGuard.setActive(state);
+  });
+  window.electronAPI?.getUndetectable?.()
+    .then((state) => { if (!undetectableEventSeen) launcherTooltipGuard.setActive(state); })
+    .catch(() => {});
+}
 
 // Step 1: Apply cached theme synchronously — before React renders.
 // This ensures useResolvedTheme()'s initial useState read sees the correct value.

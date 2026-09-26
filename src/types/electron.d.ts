@@ -1084,6 +1084,8 @@ export interface ElectronAPI {
   // Skills
   skillsRefresh: () => Promise<SkillSummary[]>;
   skillsOpenFolder: () => Promise<{ success: boolean; path: string; error?: string }>;
+  /** Picks a SKILL.md through main's (capture-guarded) dialog; returns skills:upload's payload. */
+  skillsPickFile?: () => Promise<{ canceled: boolean; error?: string; payload?: { kind: 'file'; filename: string; contentBase64: string } }>;
   // Per-skill management: hard-delete. Built-ins are refused inside the
   // manager. Enable/disable is intentionally NOT exposed on the renderer —
   // users who don't want a skill delete it instead.

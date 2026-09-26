@@ -262,6 +262,48 @@ export const SkillsSettings: React.FC = () => {
         }
     };
 
+    // Upload asks main for the file. A picker opened from this page's
+    // <input type="file"> bypasses the dialog wrapper that keeps pickers out of
+    // screen capture in Undetectable mode; main's goes through it. The hidden
+    // input stays only for an older main process without skills:pick-file.
+    const pickingRef = useRef(false);
+    const pickAndUpload = async () => {
+        const pick = window.electronAPI?.skillsPickFile;
+        if (typeof pick !== 'function') {
+            uploadInputRef.current?.click();
+            return;
+        }
+        // One picker at a time: `uploading` only covers the upload, not the
+        // time the picker is open, so a second click would open a second one.
+        if (pickingRef.current) return;
+        pickingRef.current = true;
+        let picked: Awaited<ReturnType<typeof pick>>;
+        try {
+            picked = await pick();
+        } catch (e: any) {
+            picked = { canceled: false, error: e?.message };
+        } finally {
+            pickingRef.current = false;
+        }
+        if (picked.canceled) return;
+        if (!picked.payload) {
+            setSuccess(null);
+            setPreview(null);
+            setStatus(picked.error || t('Could not read that file.'));
+            return;
+        }
+        setUploading(true);
+        setSuccess(null);
+        try {
+            const outcome = await runUpload(picked.payload, false);
+            if (outcome?.stage === 'validated') {
+                setPreview({ payload: picked.payload, preview: outcome.preview });
+            }
+        } finally {
+            setUploading(false);
+        }
+    };
+
     // Drag-and-drop handler. v1: only FILE drops are accepted via drag-drop.
     // Folder drops (which would need a recursive FileSystemDirectoryEntry walk)
     // are NOT supported here — users wanting to install a folder of files
@@ -512,7 +554,7 @@ export const SkillsSettings: React.FC = () => {
                         variant="sky"
                         className="lg-sm shrink-0"
                         disabled={uploading}
-                        onClick={() => uploadInputRef.current?.click()}
+                        onClick={() => { void pickAndUpload(); }}
                     >
                         {t('Upload')}
                     </LiquidGlassButton>

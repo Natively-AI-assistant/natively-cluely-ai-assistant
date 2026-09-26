@@ -1283,6 +1283,8 @@ interface ElectronAPI {
   // (structurally compatible) in src/types/electron.d.ts.
   skillsRefresh: () => Promise<unknown[]>;
   skillsOpenFolder: () => Promise<{ success: boolean; path: string; error?: string }>;
+  /** Picks a SKILL.md through main's (capture-guarded) dialog; returns skills:upload's payload. */
+  skillsPickFile: () => Promise<{ canceled: boolean; error?: string; payload?: { kind: 'file'; filename: string; contentBase64: string } }>;
   skillsDelete: (id: string) => Promise<{ success: boolean; error?: string }>;
   skillsUpload: (
     payload: SkillUploadPayload,
@@ -1556,6 +1558,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Skills — local SKILL.md instructions surfaced in Settings and the overlay.
   skillsRefresh: () => ipcRenderer.invoke('skills:list'),
   skillsOpenFolder: () => ipcRenderer.invoke('skills:open-folder'),
+  skillsPickFile: () => ipcRenderer.invoke('skills:pick-file'),
   // Per-skill management: hard-delete. Built-ins are refused inside the
   // manager. Enable/disable is intentionally NOT exposed — users who don't
   // want a skill delete it instead (see SkillsSettings.tsx).

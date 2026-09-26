@@ -10,6 +10,7 @@ import { resolveMacScreenStatus } from '../src/lib/permissionAttentionPolicy.mjs
 import { hasOwnAiKey, resolveExpiredTrial } from '../src/lib/trialPolicy.mjs';
 import { CARDS, OUTCOMES } from '../src/lib/cards/cardPolicy.mjs';
 import { CardLedger } from './services/cards/CardLedger';
+import { nativePromptsBlocked, UNDETECTABLE_REFUSAL_ERROR, UNDETECTABLE_REFUSAL_MESSAGES } from './services/stealthPromptGate';
 import { TEXT_PLACEHOLDER_RE } from './utils/curlPlaceholderPolicy';
 import { routeOverlayUiAction } from './utils/overlayUiActionRouter';
 import * as fs from 'fs';
@@ -9938,6 +9939,11 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('extensions:install-from-folder', async () => {
     const manager = extensionManager();
     if (!manager) return { success: false, error: 'extensions_unavailable' };
+    // Before the folder picker: it and the trust prompt are both system
+    // windows, which would show in a screen share (stealthPromptGate.ts).
+    if (nativePromptsBlocked(() => appState.getUndetectable())) {
+      return { success: false, error: UNDETECTABLE_REFUSAL_ERROR, errors: [UNDETECTABLE_REFUSAL_MESSAGES.extensionInstall] };
+    }
 
     const { dialog, BrowserWindow } = require('electron');
     const parent = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
@@ -10072,6 +10078,11 @@ export function initializeIpcHandlers(appState: AppState): void {
     const manager = extensionManager();
     if (!manager) return { success: false, error: 'extensions_unavailable' };
     if (typeof id !== 'string' || !id.trim()) return { success: false, error: 'invalid_id' };
+    // Before anything downloads: the trust prompt install() would open is a
+    // system dialog, which would show in a screen share (stealthPromptGate.ts).
+    if (nativePromptsBlocked(() => appState.getUndetectable())) {
+      return { success: false, error: UNDETECTABLE_REFUSAL_ERROR, errors: [UNDETECTABLE_REFUSAL_MESSAGES.extensionInstall] };
+    }
 
     const { stageFromRegistry } = require('./services/extensions/extensionRegistryService') as
       typeof import('./services/extensions/extensionRegistryService');
@@ -17889,6 +17900,38 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  // The Upload button's picker, opened from main. A renderer <input type=file>
+  // opens its picker inside Electron's C++, past the dialog wrapper that keeps
+  // pickers out of screen capture in Undetectable mode (foreignWindowCaptureGuard.ts),
+  // so the pane asks for the file here instead and gets the same payload
+  // skills:upload takes. Files over 1 MiB are refused before reading; smaller
+  // ones reach SkillValidator, which owns the real (100 KiB) limit and message.
+  safeHandle('skills:pick-file', async () => {
+    try {
+      const parent = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+      const options: Electron.OpenDialogOptions = {
+        title: 'Choose a SKILL.md file',
+        properties: ['openFile'],
+        // The old <input accept=".md,text/markdown"> also offered .markdown.
+        filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }],
+      };
+      const picked = parent ? await dialog.showOpenDialog(parent, options) : await dialog.showOpenDialog(options);
+      if (picked.canceled || picked.filePaths.length === 0) return { canceled: true };
+      const filePath = picked.filePaths[0];
+      const stat = await fs.promises.stat(filePath);
+      if (!stat.isFile()) return { canceled: false, error: 'Choose a file, not a folder.' };
+      if (stat.size > 1024 * 1024) return { canceled: false, error: 'That file is too large to be a skill.' };
+      const content = await fs.promises.readFile(filePath);
+      return {
+        canceled: false,
+        payload: { kind: 'file', filename: path.basename(filePath), contentBase64: content.toString('base64') },
+      };
+    } catch (e: any) {
+      console.warn('[IPC] skills:pick-file error:', e?.message || e);
+      return { canceled: false, error: e?.message || 'Could not read that file.' };
+    }
+  });
+
   // Step 3 helper — sweep leftover staging directories from prior installs
   // (e.g. app crashed mid-write). Safe to call any time; idempotent.
   safeHandle('skills:reap-stages', async () => {
@@ -17917,9 +17960,44 @@ export function initializeIpcHandlers(appState: AppState): void {
     return PhoneMirrorService.getInstance().snapshot();
   });
 
+  // The one "Allow LAN access?" consent, for every handler that can bind
+  // 0.0.0.0. Binding there lets any device on the Wi-Fi connect with the
+  // pairing token, so it is a deliberate security widening, confirmed in main
+  // (a renderer must not approve it). While Undetectable is on the system
+  // dialog would show in a screen share, so the bind is refused instead.
+  const confirmLanBind = (service: PhoneMirrorService): 'allowed' | 'declined' | 'refused' => {
+    if (nativePromptsBlocked(() => appState.getUndetectable())) return 'refused';
+    const win = appState.getMainWindow() ?? undefined;
+    const lanBindDialogOptions: Electron.MessageBoxSyncOptions = {
+      type: 'warning',
+      message: 'Allow LAN access?',
+      detail:
+        'This will bind Natively to 0.0.0.0:4123 so any device on this Wi-Fi network can connect with the pairing token. Continue?',
+      buttons: ['Cancel', 'Allow LAN access'],
+      defaultId: 0,
+      cancelId: 0,
+    };
+    // Electron types (options) and (parent, options) but not (undefined, options);
+    // picking the overload by parent presence leaves the runtime call unchanged.
+    const response = win
+      ? dialog.showMessageBoxSync(win, lanBindDialogOptions)
+      : dialog.showMessageBoxSync(lanBindDialogOptions);
+    if (response !== 1) return 'declined';
+    service.markLanBindDialogShown();
+    return 'allowed';
+  };
+
   safeHandle('phone-mirror:enable', async (_, exposeOnLan?: boolean) => {
+    // Enabling with LAN on binds 0.0.0.0 just as the LAN switch does, so it
+    // needs the same consent. It used to skip it entirely.
+    const service = PhoneMirrorService.getInstance();
+    if (service.needsLanBindConfirmation(!!exposeOnLan)) {
+      const consent = confirmLanBind(service);
+      if (consent === 'refused') return { ok: false, declined: true, error: UNDETECTABLE_REFUSAL_MESSAGES.lanAccess };
+      if (consent === 'declined') return { ok: false, declined: true };
+    }
     try {
-      return await PhoneMirrorService.getInstance().start({
+      return await service.start({
         exposeOnLan: !!exposeOnLan,
         persist: true,
       });
@@ -17943,25 +18021,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       // device on the Wi-Fi connect with the pairing token. Surface a modal
       // confirmation; only flip the toggle if the user picks "Allow".
       if (e?.name === 'LANBindConfirmationRequired') {
-        const win = appState.getMainWindow() ?? undefined;
-        const lanBindDialogOptions: Electron.MessageBoxSyncOptions = {
-          type: 'warning',
-          message: 'Allow LAN access?',
-          detail:
-            'This will bind Natively to 0.0.0.0:4123 so any device on this Wi-Fi network can connect with the pairing token. Continue?',
-          buttons: ['Cancel', 'Allow LAN access'],
-          defaultId: 0,
-          cancelId: 0,
-        };
-        // Electron types (options) and (parent, options) but not (undefined, options);
-        // picking the overload by parent presence leaves the runtime call unchanged.
-        const response = win
-          ? dialog.showMessageBoxSync(win, lanBindDialogOptions)
-          : dialog.showMessageBoxSync(lanBindDialogOptions);
-        if (response !== 1) {
-          return { ok: false, declined: true };
-        }
-        service.markLanBindDialogShown();
+        const consent = confirmLanBind(service);
+        if (consent === 'refused') return { ok: false, declined: true, error: UNDETECTABLE_REFUSAL_MESSAGES.lanAccess };
+        if (consent === 'declined') return { ok: false, declined: true };
         try {
           return await service.setExposeOnLan(!!exposeOnLan);
         } catch (e2: any) {

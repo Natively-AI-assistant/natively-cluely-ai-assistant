@@ -11554,7 +11554,11 @@ Provide only the answer, nothing else.`;
 
               {/* Resize handles. EAST-side only — see handleResizePointerDown
                   for why a west-side handle cannot be made artifact-free.
-                  Double-click any of them to return to automatic sizing. */}
+                  Double-click any of them to return to automatic sizing.
+                  No `title` on any of them: Chromium draws a title as a native
+                  OS tooltip window (macOS and Windows alike) that sits outside
+                  this window's content protection, so it shows up in a screen
+                  share. */}
               <div
                 data-resize-handle="e"
                 className="resize-handle resize-handle-e absolute top-4 bottom-4 right-0 z-50 w-4 no-drag touch-none"
@@ -11566,14 +11570,12 @@ Provide only the answer, nothing else.`;
                 onWheel={(e) => {
                   scrollContainerRef.current?.scrollBy({ top: e.deltaY });
                 }}
-                title={t('Drag to resize width · double-click to reset')}
               />
               <div
                 data-resize-handle="s"
                 className="resize-handle resize-handle-s absolute bottom-0 left-8 right-8 z-50 h-4 no-drag touch-none"
                 onPointerDown={(e) => handleResizePointerDown('s', e)}
                 onDoubleClick={handleResizeReset}
-                title={t('Drag to resize height · double-click to reset')}
               />
             </motion.div>
             {/* SE corner handle — OUTSIDE the card, which is overflow-hidden with a
@@ -11592,7 +11594,6 @@ Provide only the answer, nothing else.`;
               }}
               onPointerDown={(e) => handleResizePointerDown('se', e)}
               onDoubleClick={handleResizeReset}
-              title={t('Drag to resize · double-click to reset')}
             />
           </motion.div>
       {/* end always-mounted shell */}

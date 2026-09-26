@@ -205,6 +205,8 @@ export interface OverlayBoundsInput {
  */
 export declare function screenCaptureDisplaysAvailable(): boolean
 
+export declare function setForeignWindowsCaptureExcluded(excluded: boolean, ownHandles: Array<Buffer>): number
+
 /**
  * One joint-state transition from the dual-channel tracker
  * (`channel_state.rs`), delivered to JS through the optional third `start()`
