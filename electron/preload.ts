@@ -294,6 +294,11 @@ interface ElectronAPI {
   convertTrial: (choice: string) => Promise<{ ok: boolean }>;
   endTrialByok: () => Promise<{ success: boolean; error?: string }>;
   onTrialEnded: (cb: (data: { choice: string }) => void) => () => void;
+  // Card ledger (toaster policy): shows, strikes and retirements per card.
+  cardsGet: () => Promise<{ ok: boolean; ledger?: any; error?: string }>;
+  cardsRecord: (id: string, outcome: string, meta?: { until?: number }) => Promise<{ ok: boolean; ledger?: any; error?: string }>;
+  cardsImportLegacy: (legacy: Record<string, unknown>) => Promise<{ ok: boolean; ledger?: any; error?: string }>;
+  onCardsChanged: (cb: (ledger: any) => void) => () => void;
   /** Emitted by `trial:start` so a trial claimed mid-session unlocks without a relaunch. */
   onTrialStarted: (cb: (data: {
     expiresAt: string;
@@ -1695,6 +1700,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const sub = (_: any, data: any) => cb(data);
     ipcRenderer.on('trial-ended', sub);
     return () => ipcRenderer.removeListener('trial-ended', sub);
+  },
+  cardsGet: () => ipcRenderer.invoke('cards:get'),
+  cardsRecord: (id: string, outcome: string, meta?: { until?: number }) => ipcRenderer.invoke('cards:record', id, outcome, meta),
+  cardsImportLegacy: (legacy: Record<string, unknown>) => ipcRenderer.invoke('cards:import-legacy', legacy),
+  onCardsChanged: (cb: (ledger: any) => void) => {
+    const sub = (_: any, ledger: any) => cb(ledger);
+    ipcRenderer.on('cards:changed', sub);
+    return () => ipcRenderer.removeListener('cards:changed', sub);
   },
   onTrialStarted: (cb: (data: any) => void) => {
     const sub = (_: any, data: any) => cb(data);

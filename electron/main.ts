@@ -8613,6 +8613,18 @@ async function initializeApp() {
     console.warn('[Init] ReviewService recordSessionStart failed (non-fatal):', err);
   }
 
+  // Card ledger (toaster policy): count this real app start and, once, seed
+  // it from the pre-ledger review / donation / trial history.
+  try {
+    const { CardLedger } = require('./services/cards/CardLedger');
+    const { gatherMainLegacy } = require('./services/cards/mainLegacy');
+    const cardLedger = CardLedger.getInstance();
+    cardLedger.recordLaunch();
+    cardLedger.importLegacy('main', gatherMainLegacy());
+  } catch (err) {
+    console.warn('[Init] CardLedger startup failed (non-fatal):', err);
+  }
+
   // Generic, provider-agnostic local-model download service. Owns the
   // in-flight state for Whisper (today) and any future local model family
   // (vision, embeddings, …). Instantiated BEFORE createWindow so the

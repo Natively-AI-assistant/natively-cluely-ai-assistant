@@ -8,6 +8,8 @@ import { setOpenAtLogin, getOpenAtLogin } from './utils/windowsTaskbarPolicy';
 import { micSettingsUri } from '../src/lib/micPermissionPolicy.mjs';
 import { resolveMacScreenStatus } from '../src/lib/permissionAttentionPolicy.mjs';
 import { hasOwnAiKey, resolveExpiredTrial } from '../src/lib/trialPolicy.mjs';
+import { CARDS, OUTCOMES } from '../src/lib/cards/cardPolicy.mjs';
+import { CardLedger } from './services/cards/CardLedger';
 import { TEXT_PLACEHOLDER_RE } from './utils/curlPlaceholderPolicy';
 import { routeOverlayUiAction } from './utils/overlayUiActionRouter';
 import * as fs from 'fs';
@@ -11798,6 +11800,55 @@ export function initializeIpcHandlers(appState: AppState): void {
     // Never for a licensed user: résumé/JD data is theirs (toaster policy Phase 0).
     if (isLicensed()) return { success: false, error: 'licensed' };
     return wipeTrialProfileData();
+  });
+
+  // ── Card ledger (toaster policy, src/lib/cards/cardPolicy.mjs) ──────────
+  // Outcomes arrive from the renderer, so everything is validated here: an
+  // unknown card, outcome or payload is refused without writing.
+  const broadcastCardsChanged = (ledger: unknown): void => {
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed()) win.webContents.send('cards:changed', ledger);
+    });
+  };
+
+  safeHandle('cards:get', async () => {
+    try {
+      return { ok: true, ledger: CardLedger.getInstance().get() };
+    } catch (e: any) {
+      return { ok: false, error: e?.message || 'ledger_unavailable' };
+    }
+  });
+
+  safeHandle('cards:record', async (_, id: unknown, outcome: unknown, meta?: unknown) => {
+    if (typeof id !== 'string' || !Object.prototype.hasOwnProperty.call(CARDS, id)) {
+      return { ok: false, error: 'unknown_card' };
+    }
+    if (typeof outcome !== 'string' || !(OUTCOMES as readonly string[]).includes(outcome)) {
+      return { ok: false, error: 'unknown_outcome' };
+    }
+    const until = meta && typeof meta === 'object' && typeof (meta as { until?: unknown }).until === 'number'
+      ? { until: (meta as { until: number }).until }
+      : undefined;
+    try {
+      const ledger = CardLedger.getInstance().record(id, outcome, until);
+      broadcastCardsChanged(ledger);
+      return { ok: true, ledger };
+    } catch (e: any) {
+      return { ok: false, error: e?.message || 'record_failed' };
+    }
+  });
+
+  safeHandle('cards:import-legacy', async (_, legacy: unknown) => {
+    if (!legacy || typeof legacy !== 'object' || Array.isArray(legacy)) {
+      return { ok: false, error: 'invalid_legacy' };
+    }
+    try {
+      const ledger = CardLedger.getInstance().importLegacy('renderer', legacy as Record<string, unknown>);
+      broadcastCardsChanged(ledger);
+      return { ok: true, ledger };
+    } catch (e: any) {
+      return { ok: false, error: e?.message || 'import_failed' };
+    }
   });
 
   // Custom Provider Handlers
