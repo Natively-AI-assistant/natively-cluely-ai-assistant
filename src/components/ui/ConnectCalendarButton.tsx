@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useT } from '../../i18n';
-import { ArrowRight, Loader, Check } from 'lucide-react';
+import { AlertCircle, ArrowRight, Loader, Check } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { getCalendarConnectErrorMessage } from '../../lib/calendarConnectError.mjs';
 // Static import keeps Vite from warning about a "mixed" dynamic+static import
 // graph for analytics.service (App.tsx, Launcher.tsx, NativelyInterface.tsx,
 // and SettingsOverlay.tsx all import it statically). The previous
@@ -19,7 +20,7 @@ const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className
     const t = useT();
     const [loading, setLoading] = useState(false);
     const [connected, setConnected] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [connectError, setConnectError] = useState('');
 
     useEffect(() => {
         if (window.electronAPI) {
@@ -39,22 +40,22 @@ const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className
         if (connected) return; // For now no disconnect here
 
         setLoading(true);
-        setError(null);
+        setConnectError('');
         try {
             const res = await window.electronAPI.calendarConnect();
             if (res.success) {
                 setConnected(true);
-                setError(null);
+                setConnectError('');
                 onConnect?.();
                 // Track calendar connection (analytics imported statically above)
                 analytics.trackCalendarConnected();
-            } else if (res.error) {
+            } else {
                 console.error('[ConnectCalendarButton] Connection error:', res.error);
-                setError(res.error);
+                setConnectError(getCalendarConnectErrorMessage(res.error, t));
             }
-        } catch (err: any) {
+        } catch (err) {
             console.error('[ConnectCalendarButton] Connection exception:', err);
-            setError(err?.message || 'Failed to connect calendar');
+            setConnectError(getCalendarConnectErrorMessage(err, t));
         } finally {
             setLoading(false);
         }
@@ -223,13 +224,11 @@ const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className
                     )}
                 </span>
             </button>
-            {error && (
-                <span
-                    className="text-[11px] text-red-300 bg-red-950/95 backdrop-blur-sm border border-red-500/30 rounded-lg px-2.5 py-1 max-w-[280px] leading-tight text-center"
-                    title={error}
-                >
-                    {error}
-                </span>
+            {connectError && (
+                <p role="alert" title={connectError} className="flex max-h-16 max-w-[280px] items-start gap-1.5 overflow-y-auto rounded-lg border border-red-500/30 bg-red-950/95 px-2.5 py-1 text-left text-[11px] leading-snug text-red-300 backdrop-blur-sm">
+                    <AlertCircle size={13} className="mt-0.5 shrink-0" />
+                    <span>{connectError}</span>
+                </p>
             )}
         </div>
     );
