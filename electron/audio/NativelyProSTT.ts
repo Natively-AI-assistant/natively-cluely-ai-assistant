@@ -1138,6 +1138,14 @@ export class NativelyProSTT extends EventEmitter {
             }
             try { dying.removeAllListeners('error'); } catch {}
             try { dying.removeAllListeners('close'); } catch {}
+            // The close handler just removed is the ONLY consumer of
+            // intentionalClose, so a flag set for this socket must not outlive
+            // it. It did (2026-08-09 → 2026-09-27): every auto-language session
+            // sets it for the language_detected reconnect, the flag stayed TRUE
+            // on the healthy new socket, and the next real drop (1006) read as
+            // intentional — no reconnect, transcription dead for the rest of
+            // the meeting (NativelyProSTTReconnectAfterLanguageDetect2026_09_27).
+            this.intentionalClose = false;
 
             // Narrow cancellation listeners for the DETACHED socket only. They
             // are permitted precisely because `dying` is no longer `this.ws`:
