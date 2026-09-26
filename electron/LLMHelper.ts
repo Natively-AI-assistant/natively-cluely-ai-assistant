@@ -6125,6 +6125,16 @@ let isMultimodal = !!(imagePaths?.length);
       body.purpose = 'extraction';
       delete body.fast_mode;
     }
+    // DECISION hint: an Auto Answer yes/no verdict. The server pins it to
+    // gemini-3.1-flash-lite and skips the DeepSeek-default primary. Until
+    // 2026-09-26 the caller passed it and this function dropped it, so every
+    // Natively judge went to deepseek-flash (1.3-2.2 s, measured) and overran
+    // its 1.8 s rung — live, the verdict timed out and only a trailing '?'
+    // still fired the answer.
+    if (opts?.purpose === 'decision') {
+      body.purpose = 'decision';
+      delete body.fast_mode;
+    }
 
     // Send images as a structured array so the server can build proper Gemini inlineData parts.
     // Embedding base64 in the text content would be truncated at 4000 chars and treated as text.
