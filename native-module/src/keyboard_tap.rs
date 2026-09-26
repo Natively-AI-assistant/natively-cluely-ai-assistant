@@ -73,6 +73,7 @@ use std::thread;
 use napi::bindgen_prelude::*;
 
 use crate::app_chord::AppChordInput;
+use crate::edit_shortcut::{edit_letter, FLAG_CMD as EDIT_FLAG_CMD};
 use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
 
 use core_foundation::base::CFRelease;
@@ -391,6 +392,27 @@ fn tap_callback_inner(
     const FN: u32 = 1 << 23;
     const SYSTEM_MODIFIER_MASK: u32 = CMD | OPT | CTRL | FN;
 
+    // ── EDITING SHORTCUTS (Cmd+V/A/C/X) ──
+    // The filter below sends every Cmd combo to the foreground app, which made
+    // Cmd+V paste into the meeting app instead of the overlay being typed in.
+    // Keep just these four: deliver them tagged with the Cmd flag (the renderer
+    // runs paste/select-all/copy/cut) and swallow the down and its up. Matched
+    // on the character the layout produces, so it follows AZERTY, Dvorak and
+    // the like. Not with Option or Control, which are other shortcuts.
+    if (flags & CMD) != 0 && (flags & (OPT | CTRL)) == 0 && (event_type == 10 || event_type == 11) {
+        if let Some(letter) = edit_letter(&event_unicode_string(event)) {
+            send_payload_to_js(&state, CapturedKey {
+                key_code,
+                chars: letter.to_string(),
+                flags: EDIT_FLAG_CMD,
+                is_key_down: event_type == 10,
+                is_outside_mouse_down: false,
+                app_chord_id: String::new(),
+            });
+            return ptr::null_mut();
+        }
+    }
+
     if (flags & SYSTEM_MODIFIER_MASK) != 0 {
         return event;
     }
@@ -425,29 +447,8 @@ fn tap_callback_inner(
         return event;
     }
 
-    // Pull unicode chars (handles layout, dead keys, IME). 8 UniChars is
-    // enough for any single keystroke including surrogate pairs and IME
-    // composition fragments; longer compositions would be unusual.
-    let mut buf: [UniChar; 8] = [UniChar(0); 8];
-    let mut actual_len: usize = 0;
-    unsafe {
-        CGEventKeyboardGetUnicodeString(event, buf.len(), &mut actual_len, buf.as_mut_ptr());
-    }
-    let chars: String = if actual_len == 0 {
-        String::new()
-    } else {
-        // CGEventKeyboardGetUnicodeString returns the FULL composition length
-        // in actual_len even when the buffer was truncated to max_string_length.
-        // Long IME compositions (Korean Hangul, Japanese kanji) can exceed our
-        // 8-UniChar buffer; without clamping, slice::from_raw_parts reads past
-        // the stack frame — UB / crash / garbage chars. Truncating to buf.len()
-        // loses the tail of the composition (rare, acceptable trade-off for
-        // safety on a short fixed-size buffer).
-        let n = actual_len.min(buf.len());
-        let u16_slice: &[u16] =
-            unsafe { std::slice::from_raw_parts(buf.as_ptr() as *const u16, n) };
-        String::from_utf16_lossy(u16_slice)
-    };
+    // Pull unicode chars (handles layout, dead keys, IME).
+    let chars = event_unicode_string(event);
 
     // flagsChanged (event_type == 12) is filtered out by the pass-through
     // above, so it cannot reach this point. keyDown=10, keyUp=11 are the
@@ -491,6 +492,30 @@ fn tap_callback_inner(
     // `state` (the local Arc clone) drops here, decrementing the refcount
     // we bumped above. The worker-thread-owned Arc lives until cleanup.
     ptr::null_mut()
+}
+
+/// The characters a keystroke produces (layout, dead keys, IME). 8 UniChars is
+/// enough for any single keystroke including surrogate pairs and IME
+/// composition fragments; longer compositions would be unusual.
+fn event_unicode_string(event: *mut c_void) -> String {
+    let mut buf: [UniChar; 8] = [UniChar(0); 8];
+    let mut actual_len: usize = 0;
+    unsafe {
+        CGEventKeyboardGetUnicodeString(event, buf.len(), &mut actual_len, buf.as_mut_ptr());
+    }
+    if actual_len == 0 {
+        return String::new();
+    }
+    // CGEventKeyboardGetUnicodeString returns the FULL composition length
+    // in actual_len even when the buffer was truncated to max_string_length.
+    // Long IME compositions (Korean Hangul, Japanese kanji) can exceed our
+    // 8-UniChar buffer; without clamping, slice::from_raw_parts reads past
+    // the stack frame — UB / crash / garbage chars. Truncating to buf.len()
+    // loses the tail of the composition (rare, acceptable trade-off for
+    // safety on a short fixed-size buffer).
+    let n = actual_len.min(buf.len());
+    let u16_slice: &[u16] = unsafe { std::slice::from_raw_parts(buf.as_ptr() as *const u16, n) };
+    String::from_utf16_lossy(u16_slice)
 }
 
 fn send_payload_to_js(state: &TapState, payload: CapturedKey) {

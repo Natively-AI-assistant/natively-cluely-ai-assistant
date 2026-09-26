@@ -10160,6 +10160,16 @@ html[data-platform="linux"][data-window="launcher"] body {
   visibility: hidden;
   flex: none;
 }
+/* Select all (Ctrl/Cmd+A while stealth typing): the input can't show its own
+   selection (never focused on Windows, readOnly under the tap), so the mirror
+   paints one: the glyph-width copy turns visible with transparent glyphs and a
+   selection-coloured fill laid over the real text. */
+.nat-caret-mirror > .nat-caret-text.nat-caret-selected {
+  visibility: visible;
+  color: transparent;
+  background: color-mix(in srgb, var(--accent-primary) 32%, transparent);
+  border-radius: 2px;
+}
 .nat-caret {
   flex: none;
   display: inline-block;

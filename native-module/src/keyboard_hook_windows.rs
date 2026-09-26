@@ -62,6 +62,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
+use crate::edit_shortcut::{windows_vk_letter, FLAG_CTRL as EDIT_FLAG_CTRL};
 use crate::app_chord::{
     app_chords_from_inputs, match_app_chord, AppChord, AppChordInput, MOD_ALT, MOD_CTRL, MOD_SHIFT,
 };
@@ -361,6 +362,32 @@ unsafe fn keyboard_hook_inner(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRES
     // falls past this and swallows typing into the overlay below.)
     if state.shortcut_only.load(Ordering::Acquire) {
         return pass();
+    }
+
+    // ── EDITING SHORTCUTS (Ctrl+V/A/C/X) ──
+    // The pass-through below sends every Ctrl combo to the foreground app, which
+    // made Ctrl+V paste into the meeting app instead of the overlay being typed
+    // in. Keep just these four: deliver them tagged with the Ctrl flag (the
+    // renderer runs paste/select-all/copy/cut) and swallow the down and its up,
+    // like an app chord. App chords matched above still win. Not with Alt, so
+    // AltGr text is untouched.
+    if is_key_down && ctrl && !alt {
+        if let Some(letter) = windows_vk_letter(vk) {
+            let delivered = send_payload(&state, CapturedKey {
+                key_code: 0,
+                chars: letter.to_string(),
+                flags: EDIT_FLAG_CTRL,
+                is_key_down: true,
+                is_outside_mouse_down: false,
+                app_chord_id: String::new(),
+            });
+            if delivered {
+                let mut ups = state.swallowed_ups.lock().unwrap_or_else(|p| p.into_inner());
+                ups.insert(vk);
+                return LRESULT(1);
+            }
+            // Nowhere to deliver: let the OS have it rather than lose it.
+        }
     }
 
     if (ctrl || alt) && !altgr {

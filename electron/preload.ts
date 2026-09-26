@@ -907,6 +907,10 @@ interface ElectronAPI {
   stealthTapAvailable: () => Promise<boolean>;
   stealthTapOpenSettings: () => Promise<void>;
   stealthTapStop: () => Promise<void>;
+  /** Clipboard text for the stealth-typed box's paste (overlay only). */
+  stealthReadClipboard: () => Promise<string>;
+  /** Copy/cut from the stealth-typed box (overlay only). */
+  stealthWriteClipboard: (text: string) => Promise<void>;
   stealthTapStart: () => Promise<boolean>;
   /** False on macOS when a composition IME (Pinyin/Hangul/Kanji/…) is
    *  enabled — the tap captures below the IME and breaks composition, so
@@ -2765,6 +2769,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   stealthTapAvailable: () => ipcRenderer.invoke('stealth-tap:available'),
   stealthTapOpenSettings: () => ipcRenderer.invoke('stealth-tap:open-settings'),
   stealthTapStop: () => ipcRenderer.invoke('stealth-tap:stop'),
+  stealthReadClipboard: () => ipcRenderer.invoke('stealth-edit:read-clipboard'),
+  stealthWriteClipboard: (text: string) => ipcRenderer.invoke('stealth-edit:write-clipboard', text),
   stealthTapStart: () => ipcRenderer.invoke('stealth-tap:start'),
   stealthTapShouldAutoEngage: () => ipcRenderer.invoke('stealth-tap:should-auto-engage'),
   stealthTapRefreshIme: () => ipcRenderer.invoke('stealth-tap:refresh-ime'),

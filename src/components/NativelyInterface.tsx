@@ -246,6 +246,7 @@ import { decideScrollInterrupt } from '../lib/scrollInterruptDecision.mjs';
 import { decideStreamingHeightCommit } from '../lib/streamingHeightDecision.mjs';
 import { mergeTranscriptChunks } from '../lib/transcriptMerge.mjs';
 import { createTranscriptTailWaiter } from '../lib/answerTailWait.mjs';
+import { backspace, editCommand, editShortcutLetter, paste, typed } from '../lib/stealthEdit.mjs';
 import {
   applyWhatToAnswerNullFeedbackMessages,
   finalizeStreamingByIntentMessages,
@@ -1279,6 +1280,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const t = useT();
   const [isExpanded, setIsExpanded] = useState(true);
   const [inputValue, setInputValue] = useState('');
+  // Latest committed value, for the mount-only stealth key listener's copy/cut.
+  const inputValueRef = useRef('');
+  inputValueRef.current = inputValue;
   const [availableSkills, setAvailableSkills] = useState<SkillSummary[]>([]);
   const [skillPickerIndex, setSkillPickerIndex] = useState(0);
   const { shortcuts, isShortcutPressed } = useShortcuts();
@@ -1755,6 +1759,19 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // the state so the captured-key handler can early-out without depending
   // on React's render cycle for stop signals.
   const [stealthTapActive, setStealthTapActive] = useState<boolean>(false);
+  // Ctrl/Cmd+A while stealth typing selects the whole box (it has no caret, so
+  // "everything" is the only selection); the next keystroke replaces it. Ref for
+  // the mount-only key listener, state to paint the highlight.
+  const stealthAllSelectedRef = useRef(false);
+  const [stealthAllSelected, setStealthAllSelectedState] = useState(false);
+  const markStealthAllSelected = useCallback((on: boolean) => {
+    stealthAllSelectedRef.current = on;
+    setStealthAllSelectedState(on);
+  }, []);
+  // A selection ends with the session, and with the text (Esc, a submit).
+  useEffect(() => {
+    if ((!stealthTapActive || !inputValue) && stealthAllSelectedRef.current) markStealthAllSelected(false);
+  }, [stealthTapActive, inputValue, markStealthAllSelected]);
   const stealthTapActiveRef = useRef<boolean>(false);
   const caretMirrorRef = useRef<HTMLDivElement>(null);
   // While the stealth hook is engaged the input is never DOM-focused (always
@@ -9836,9 +9853,31 @@ Provide only the answer, nothing else.`;
       if (!stealthTapActiveRef.current) return; // ignore other events after stop
       if (!ev.isKeyDown) return; // we only act on keyDown
 
+      // Ctrl/Cmd+V/A/C/X: the hooks deliver these instead of passing them to the
+      // foreground app (native-module/src/edit_shortcut.rs). Never typed as text.
+      const editLetter = editShortcutLetter(ev);
+      if (editLetter === 'v') {
+        window.electronAPI.stealthReadClipboard?.()
+          .then((text) => {
+            const next = paste({ value: inputValueRef.current, allSelected: stealthAllSelectedRef.current }, text ?? '');
+            markStealthAllSelected(next.allSelected);
+            setInputValue(next.value);
+          })
+          .catch(() => {});
+        return;
+      }
+      if (editLetter) {
+        const next = editCommand({ value: inputValueRef.current, allSelected: stealthAllSelectedRef.current }, editLetter);
+        if (next.copy !== undefined) window.electronAPI.stealthWriteClipboard?.(next.copy).catch(() => {});
+        markStealthAllSelected(next.allSelected);
+        if (next.value !== inputValueRef.current) setInputValue(next.value);
+        return;
+      }
+
       switch (ev.keyCode) {
         case 36: // Return
         case 76: // Numpad Enter
+          markStealthAllSelected(false);
           handleManualSubmitRef.current();
           // macOS parity: on macOS the input holds real DOM focus, so submitting
           // leaves the caret in the box and the user can type the next message
@@ -9850,9 +9889,12 @@ Provide only the answer, nothing else.`;
             window.electronAPI.stealthTapStop().catch(() => {});
           }
           return;
-        case 51: // Backspace — delete one char
-          setInputValue((prev) => prev.slice(0, -1));
+        case 51: { // Backspace — delete one char, or the whole selection
+          const wasSelected = stealthAllSelectedRef.current;
+          if (wasSelected) markStealthAllSelected(false);
+          setInputValue((prev) => backspace({ value: prev, allSelected: wasSelected }).value);
           return;
+        }
         // ROUND 4 FIX (#6): Tab (48) and arrows (123-126) used to
         // be no-op'd here. They're now passed through at the Rust
         // layer (keyboard_tap.rs F-key whitelist) so they reach the
@@ -9874,7 +9916,9 @@ Provide only the answer, nothing else.`;
         ev.chars !== '\n' &&
         ev.chars !== '\t'
       ) {
-        setInputValue((prev) => prev + ev.chars);
+        const wasSelected = stealthAllSelectedRef.current;
+        if (wasSelected) markStealthAllSelected(false);
+        setInputValue((prev) => typed({ value: prev, allSelected: wasSelected }, ev.chars).value);
       }
     });
 
@@ -11307,7 +11351,7 @@ Provide only the answer, nothing else.`;
                       aria-hidden="true"
                       className="nat-caret-mirror pl-3 pr-10 py-2.5 text-[13px] leading-relaxed"
                     >
-                      <span className="nat-caret-text">{inputValue}</span>
+                      <span className={`nat-caret-text ${stealthAllSelected ? 'nat-caret-selected' : ''}`}>{inputValue}</span>
                       <span className="nat-caret" />
                     </div>
                   )}
