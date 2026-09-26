@@ -11014,7 +11014,7 @@ Provide only the answer, nothing else.`;
                 <button
                   onClick={handleWhatToSay}
                   aria-busy={busyOverlayActions.has('what_to_say')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}
                   style={appearance.chipStyle}
                 >
                   {busyOverlayActions.has('what_to_say') ? <Loader2 className="w-3 h-3 opacity-70 animate-spin" /> : <Pencil className="w-3 h-3 opacity-70" />} {t('What to answer?')}
@@ -11022,7 +11022,7 @@ Provide only the answer, nothing else.`;
                 <button
                   onClick={handleClarify}
                   aria-busy={busyOverlayActions.has('clarify')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}
                   style={appearance.chipStyle}
                 >
                   {busyOverlayActions.has('clarify') ? <Loader2 className="w-3 h-3 opacity-70 animate-spin" /> : <MessageSquare className="w-3 h-3 opacity-70" />} {t('Clarify')}
@@ -11030,23 +11030,26 @@ Provide only the answer, nothing else.`;
                 <button
                   onClick={actionButtonMode === 'brainstorm' ? handleBrainstorm : handleRecap}
                   aria-busy={busyOverlayActions.has(actionButtonMode === 'brainstorm' ? 'brainstorm' : 'recap')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}
                   style={appearance.chipStyle}
                 >
-                  {actionButtonMode === 'brainstorm' ? (
-                    <>
+                  {/* Both labels share one grid cell and the inactive one is invisible, so
+                      this chip is always as wide as the wider label. Toggling Interview Mode
+                      used to widen it by ~24px ("Brainstorm" vs "Recap"), which overflowed
+                      the row and wrapped Answer onto a second line. */}
+                  <span className="grid">
+                    <span className={`col-start-1 row-start-1 flex items-center justify-center gap-1.5 ${actionButtonMode === 'brainstorm' ? '' : 'invisible'}`} aria-hidden={actionButtonMode !== 'brainstorm'}>
                       {busyOverlayActions.has('brainstorm') ? <Loader2 className="w-3 h-3 opacity-70 animate-spin" /> : <Lightbulb className="w-3 h-3 opacity-70" />} {t('Brainstorm')}
-                    </>
-                  ) : (
-                    <>
+                    </span>
+                    <span className={`col-start-1 row-start-1 flex items-center justify-center gap-1.5 ${actionButtonMode === 'brainstorm' ? 'invisible' : ''}`} aria-hidden={actionButtonMode === 'brainstorm'}>
                       {busyOverlayActions.has('recap') ? <Loader2 className="w-3 h-3 opacity-70 animate-spin" /> : <RefreshCw className="w-3 h-3 opacity-70" />} {t('Recap')}
-                    </>
-                  )}
+                    </span>
+                  </span>
                 </button>
                 <button
                   onClick={handleFollowUpQuestions}
                   aria-busy={busyOverlayActions.has('follow_up_questions')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}
                   style={appearance.chipStyle}
                 >
                   {busyOverlayActions.has('follow_up_questions') ? <Loader2 className="w-3 h-3 opacity-70 animate-spin" /> : <HelpCircle className="w-3 h-3 opacity-70" />} {t('Follow Up Question')}
@@ -11054,7 +11057,7 @@ Provide only the answer, nothing else.`;
                 <button
                   onClick={handleAnswerNow}
                   aria-busy={busyOverlayActions.has('answer_now')}
-                  className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium transition-all active:scale-95 duration-200 interaction-base interaction-press min-w-[74px] whitespace-nowrap shrink-0 ${
+                  className={`flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-medium transition-all active:scale-95 duration-200 interaction-base interaction-press min-w-[74px] whitespace-nowrap shrink-0 ${
                     isManualRecording
                       ? 'bg-red-500/10 text-red-400 ring-1 ring-red-500/20'
                       : 'overlay-chip-surface overlay-text-interactive'
