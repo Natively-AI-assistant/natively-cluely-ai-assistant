@@ -23,6 +23,7 @@ Please do not submit contributions unless you have the legal right to do so.
 - [Development Workflow](#development-workflow)
   - [Prerequisites](#prerequisites)
   - [Local Development](#local-development)
+  - [Detailed Setup Guide](#detailed-setup-guide)
   - [Architecture Overview](#architecture-overview)
 - [Styleguides](#styleguides)
   - [Git Commit Messages](#git-commit-messages)
@@ -69,7 +70,7 @@ Enhancement suggestions are tracked as GitHub issues. When you are creating an e
 
 ### Prerequisites
 
-- Node.js (v20+ recommended)
+- Node.js (v22.6+ required; Node.js 22 LTS recommended)
 - Git
 - Rust (required for native audio capture compilation)
 - Xcode 26+ with the macOS 26 SDK (required only for Apple Speech helper and macOS package builds)
@@ -93,6 +94,10 @@ Use `x64` for Intel or `universal` for both architectures. Regular development, 
 If you've added code that should be tested, add tests.
 If you've changed APIs, update the documentation.
 Ensure the test suite passes.
+
+### Detailed Setup Guide
+
+For native rebuild details, macOS/Windows toolchain notes, common install failures, and scoped verification commands, see [docs/dev-setup.md](docs/dev-setup.md).
 
 ### Architecture Overview
 
