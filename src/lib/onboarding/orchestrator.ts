@@ -212,10 +212,12 @@ export class OnboardingOrchestrator {
     // against the launch baseline so arrival order does not matter.
     this.unskipOnReEligibility(DEFAULT_USER_STATE, this.userState);
 
-    // Build queue if not already populated (e.g. cold launch with no legacy state)
-    if (this.state.queue.length === 0) {
-      this.state.queue = this.stageConfigs.map(c => c.id);
-    }
+    // The queue always follows the catalog. It used to be built only when
+    // empty, so a queue persisted by an older build never picked up stages
+    // added since (the toaster-policy ad stages) and kept ones removed since.
+    // Completion and skips live in `completed` / `skipped`, not in the queue,
+    // so rebuilding it loses nothing.
+    this.state.queue = this.stageConfigs.map(c => c.id);
 
     // Bump startup count on first start per session
     if (!this._sessionStartTracked) {

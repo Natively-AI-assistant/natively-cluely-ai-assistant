@@ -347,6 +347,27 @@ test('a skipped trial promo stays skipped when its reEligibility flips', () => {
   assert.ok(orch.getSnapshot().skipped.has('trial_promo'), 'trial_promo must stay skipped');
 });
 
+// A persisted queue from an older build must follow the current catalog:
+// stages added since (the ad stages) have to reach existing users, and
+// stages removed since must not linger.
+test('start() rebuilds a stale persisted queue from the catalog', () => {
+  localStorage.clear();
+  timerQueue = [];
+  mockNow = 0;
+  const first = new OnboardingOrchestrator();
+  first.start(STAGES);
+  const key = 'natively_onboarding_state_v1';
+  const saved = JSON.parse(localStorage.getItem(key));
+  saved.queue = ['permissions', 'legacy_stage_from_an_old_build'];
+  localStorage.setItem(key, JSON.stringify(saved));
+
+  const next = new OnboardingOrchestrator();
+  next.start(STAGES);
+
+  const catalogOrder = [...STAGES].sort((a, b) => a.order - b.order).map((s) => s.id);
+  assert.deepEqual(next.getSnapshot().queue, catalogOrder);
+});
+
 test('dismissing permissions does NOT wedge other toaster stages', () => {
   const orch = raisePermissions();
   orch.markDismissed('permissions');
