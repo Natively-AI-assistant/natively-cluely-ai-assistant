@@ -731,7 +731,7 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
     // Lifetime pulse one-shot — transient box-shadow override that CSS
     // releases back to its [data-active] steady state after 520ms.
     const lifetimePulseShadow =
-        '0 0 0 2px rgba(190, 185, 255, 0.85), 0 0 64px -4px rgba(140, 130, 240, 0.70), 0 20px 50px rgba(99, 102, 241, 0.42), 0 4px 14px rgba(0, 0, 0, 0.30)';
+        '0 0 0 2px rgba(171, 193, 251, 0.85), 0 0 64px -4px rgba(110, 140, 230, 0.70), 0 20px 50px rgba(78, 111, 226, 0.42), 0 4px 14px rgba(0, 0, 0, 0.30)';
 
     if (isPremium === null) {
         return <div className="p-8 flex justify-center"><div className="w-5 h-5 border-2 border-white/40 border-t-transparent rounded-full animate-spin" /></div>;
@@ -1083,12 +1083,12 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
                                 </p>
                             </InteractiveCard>
 
-                            {/* ── Right: Pro · Lifetime (deeper indigo-violet jelly) ── */}
+                            {/* ── Right: Pro · Lifetime (toggle-blue jelly; violet until 2026-09) ── */}
                             <InteractiveCard
                                 className="pricing-card-lifetime group relative overflow-hidden px-6 py-5 flex flex-col"
                                 data-active="true"
                                 style={{ minHeight: 200, transformStyle: 'preserve-3d' }}
-                                glowColor="rgba(139, 92, 246, 0.32)"
+                                glowColor="rgba(79, 113, 238, 0.32)"
                             >
                                 {/* Label row: Pro · Lifetime + the recommendation.
                                     Without this the two cards read as equally

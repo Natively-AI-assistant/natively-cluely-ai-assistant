@@ -118,7 +118,8 @@ function mustRead(path) {
 }
 
 // The periwinkle scale, the toggle palette (--bubble-user-bg points at
-// --toggle-on) and the bubble pair, from every top-level block whose
+// --toggle-on), the bubble pair and --hotword-color (the gist chip's tint),
+// from every top-level block whose
 // selector is exactly `selector`, in source order so a later block wins as it
 // does in the cascade. Only custom-property declarations are taken.
 function tokensFrom(css, selector) {
@@ -133,7 +134,7 @@ function tokensFrom(css, selector) {
             else if (css[i] === '}') depth--;
         }
         const body = css.slice(open + 1, i - 1).replace(/\/\*[\s\S]*?\*\//g, '');
-        for (const m of body.matchAll(/(--(?:periwinkle|toggle|bubble-user)-[\w-]+)\s*:\s*([^;]+);/g)) {
+        for (const m of body.matchAll(/(--(?:periwinkle|toggle|bubble-user|hotword)-[\w-]+)\s*:\s*([^;]+);/g)) {
             out.push(`${m[1]}: ${m[2].trim()};`);
         }
         at = i;
@@ -191,8 +192,8 @@ const page = (css, rootTokens, lightTokens, chipCss) => `<!doctype html><html da
   .row { width:500px; margin:0 0 28px auto; display:flex; flex-direction:column; align-items:flex-end; }
   .row.wide { width:auto; }
   .chip-row { margin: 0 0 12px; }
-  :root { --hotword-color: #C4B5FD; --overlay-text-secondary: rgba(255, 255, 255, 0.9); }
-  [data-theme='light'] { --hotword-color: #6D5AC7; --overlay-text-secondary: rgba(110, 110, 115, 0.95); }
+  :root { --overlay-text-secondary: rgba(255, 255, 255, 0.9); }
+  [data-theme='light'] { --overlay-text-secondary: rgba(110, 110, 115, 0.95); }
 ${chipCss}
 ${css}
 </style></head><body><div class="stage">

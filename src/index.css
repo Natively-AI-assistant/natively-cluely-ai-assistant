@@ -31,30 +31,38 @@
      values via var()/color-mix() rather than duplicating hex. If the hue
      ever needs adjusting, this is the only place to change it.
      --------------------------------------------------------------------- */
-  /* PERIWINKLE (2026-08), replacing Soft Orchid (2026-07) as the app-wide
-     accent — a re-hue from magenta-violet (H≈330) to blue-violet (H≈296).
-     Renamed as well as revalued, so nothing in the tree still says "orchid":
-     the scale, the .pi-root and .modes-manager-root blocks that consume it,
-     the [data-settings-theme] scoping attribute and both guard tests moved
-     together. If you are grepping for the old name, it is gone.
+  /* TOGGLE BLUE (2026-09), replacing the blue-violet periwinkle (H≈296) of
+     2026-08, which itself replaced Soft Orchid (2026-07). By owner request the
+     whole accent now takes the hue of the Settings toggle's ON colour,
+     --toggle-on #6688F5 (H≈268.5, between Tailwind blue and indigo).
 
-     Derivation, so a future step can be added consistently: -300 is the
-     anchor, picked by eye. Every other step keeps Soft Orchid's OKLCH
-     LIGHTNESS ramp (so all the contrast relationships the old scale was tuned
-     for are preserved), pins hue to the anchor's 296.4°, and scales chroma by
-     1.163 — the anchor's chroma over the old -300's — with per-step gamut
-     clamping. That is why -400 and -500 are more saturated than their orchid
-     counterparts: blue-violet has more gamut headroom there than magenta did. */
-  --periwinkle-50:  #F9F7FF;
-  --periwinkle-100: #EFEAFF;
-  --periwinkle-200: #DED3FF;
-  --periwinkle-300: #B9A1F6; /* dark-mode accent (light bg, needs dark foreground) — the anchor */
-  --periwinkle-400: #AF8CFE;
-  --periwinkle-500: #9C6FF3;
-  --periwinkle-600: #8050D4; /* light-mode accent (contrast-corrected — see PeriwinkleContrastGuard.test.mjs) */
-  --periwinkle-700: #643EA6;
-  --periwinkle-800: #492E7A;
-  --periwinkle-900: #311E52;
+     THE NAME WAS KEPT, only the values moved: --periwinkle-*, the
+     [data-settings-theme="periwinkle"] scope and the two Periwinkle* guard
+     tests still say periwinkle. Renaming reaches the premium submodule
+     (.modes-manager-root) and every Settings pane, so it is a separate step.
+
+     Derivation, so a future step can be added consistently: -500 IS
+     --toggle-on, by construction — #6688F5 has the same OKLCH lightness as the
+     old -500 (0.654 vs 0.648), so it drops onto the scale as-is. Every other
+     step keeps the periwinkle scale's OKLCH LIGHTNESS ramp (so every contrast
+     relationship the old scale was tuned for is preserved), pins hue to
+     268.5°, and scales chroma by 0.873 — #6688F5's chroma over the old -500's
+     — with per-step gamut clamping. Which steps do which job is unchanged:
+     -300 is the dark-mode accent, -600 the light-mode one.
+
+     ONE HAND NUDGE: -600 came out #4A68D4, which as accent text on the real
+     light canvas (--bg-main #F2F2F7) is 4.46:1, a hair under AA. It is taken
+     0.003 darker in OKLCH lightness to #4967D3 (4.52:1; white on it 5.04:1). */
+  --periwinkle-50:  #F6F8FF;
+  --periwinkle-100: #E6EDFF;
+  --periwinkle-200: #CCDAFF;
+  --periwinkle-300: #95AFF6; /* dark-mode accent (light bg, needs dark foreground) */
+  --periwinkle-400: #7F9FFE;
+  --periwinkle-500: #6688F5; /* = --toggle-on, the anchor */
+  --periwinkle-600: #4967D3; /* light-mode accent (contrast-corrected — see PeriwinkleContrastGuard.test.mjs) */
+  --periwinkle-700: #3951A6;
+  --periwinkle-800: #293C7A;
+  --periwinkle-900: #1B2852;
   --periwinkle-on-accent-dark: #14102A;  /* foreground for solid periwinkle-300 fills */
   --periwinkle-on-accent-light: #FFFFFF; /* foreground for solid periwinkle-600 fills */
 
@@ -176,13 +184,19 @@
   --overlay-text-muted: rgba(255, 255, 255, 0.7);
   --overlay-text-placeholder: rgba(255, 255, 255, 0.58);
   --overlay-text-strong: #ffffff;
-  /* Teleprompter hot words — lavender, deliberately NOT --accent-primary.
-     The accent also paints buttons, focus rings and usage bars; the glance
-     highlight is its own concern and moves independently. Defined once per
-     scope that decides light-on-dark vs dark-on-light (i.e. wherever
-     --overlay-text-primary is set), because that is what the ratio depends
-     on. 9.03:1 on the #1E1E1E overlay — see PeriwinkleContrastGuard. */
-  --hotword-color: #C4B5FD;
+  /* Teleprompter hot words (bold words in answers, and the gist chip) —
+     deliberately NOT --accent-primary. The accent also paints buttons, focus
+     rings and usage bars; the glance highlight is its own concern and moves
+     independently. Defined once per scope that decides light-on-dark vs
+     dark-on-light (i.e. wherever --overlay-text-primary is set), because that
+     is what the ratio depends on.
+     2026-09: moved from lavender (#C4B5FD / #6D5AC7) to the toggle blue's hue
+     with the accent scale, by owner request. Same derivation as the scale:
+     each value keeps its lavender's OKLCH lightness, hue 268.5°, chroma
+     x0.873. The light one then went 0.009 darker (#4D68C1 -> #4B65BE) so it
+     holds the lavender's 5.33:1 on white instead of dropping to 5.17.
+     9.22:1 on the #1E1E1E overlay — see PeriwinkleContrastGuard. */
+  --hotword-color: #A9C0FB;
   --overlay-shell-blur: calc(2px + (var(--overlay-opacity) * 18px));
   --overlay-pill-blur: calc(1px + (var(--overlay-opacity) * 12px));
   --overlay-transcript-blur: calc(var(--overlay-opacity) * 6px);
@@ -190,7 +204,7 @@
 
   /* Primary Action Button Defaults (Dark) — promoted to the accent (Phase 2) */
   --btn-primary-bg: var(--periwinkle-300);
-  --btn-primary-hover: #E4BCEF; /* not a canonical scale step — dedicated lighter dark-mode hover tint */
+  --btn-primary-hover: #B9CCFC; /* not a canonical scale step — dedicated lighter dark-mode hover tint (the old #E4BCEF re-hued to 268.5°) */
   --btn-primary-disabled-bg: color-mix(in srgb, var(--periwinkle-300) 12%, transparent);
   --btn-primary-disabled-border: color-mix(in srgb, var(--periwinkle-300) 20%, transparent);
   --btn-primary-disabled-text: color-mix(in srgb, var(--periwinkle-300) 45%, transparent);
@@ -201,7 +215,7 @@
      ="periwinkle"] scoped block below, which is now a redundant no-op override
      kept only so a future Settings-specific divergence has somewhere to go. */
   --accent-subtle: color-mix(in srgb, var(--periwinkle-300) 10%, transparent);
-  --accent-hover: #E4BCEF;
+  --accent-hover: #B9CCFC;
   --accent-pressed: var(--periwinkle-400);
   --accent-strong: var(--periwinkle-500);
   --accent-border: color-mix(in srgb, var(--periwinkle-300) 28%, transparent);
@@ -234,7 +248,7 @@
    data-settings-theme so the rest of the app keeps the blue brand accent. */
 [data-settings-theme="periwinkle"] {
   --accent-primary: var(--periwinkle-300);
-  --accent-hover: #E4BCEF; /* not a canonical scale step — a dedicated lighter dark-mode hover tint */
+  --accent-hover: #B9CCFC; /* not a canonical scale step — a dedicated lighter dark-mode hover tint */
   --accent-pressed: var(--periwinkle-400);
   --accent-strong: var(--periwinkle-500);
   --accent-subtle: color-mix(in srgb, var(--periwinkle-300) 10%, transparent);
@@ -246,7 +260,7 @@
   --on-accent-surface: color-mix(in srgb, var(--periwinkle-on-accent-dark) 12%, transparent);
 
   --btn-primary-bg: var(--periwinkle-300);
-  --btn-primary-hover: #E4BCEF; /* not a canonical scale step — a dedicated lighter dark-mode hover tint */
+  --btn-primary-hover: #B9CCFC; /* not a canonical scale step — a dedicated lighter dark-mode hover tint */
   --btn-primary-disabled-bg: color-mix(in srgb, var(--periwinkle-300) 12%, transparent);
   --btn-primary-disabled-border: color-mix(in srgb, var(--periwinkle-300) 20%, transparent);
   --btn-primary-disabled-text: color-mix(in srgb, var(--periwinkle-300) 45%, transparent);
@@ -257,7 +271,7 @@
    Built on Apple's own light system values: grouped background #F2F2F7,
    apple.com surfaces #F5F5F7 / #FBFBFD, label #1D1D1F, separator hue rgb(60,60,67).
    Large areas sit on soft cool gray; cards are near white islands, never #FFFFFF.
-   Periwinkle accent unchanged. */
+   Accent: the shared --periwinkle-* scale's -600 step. */
 
 [data-theme='light'] {
   /* Canvas and surfaces */
@@ -276,10 +290,9 @@
   --text-tertiary: #86868B;
   --text-danger: #D70015;
 
-  /* Accent: periwinkle unchanged */
-  --periwinkle-600: #8050D4;
-  --periwinkle-700: #643EA6;
-  --periwinkle-800: #492E7A;
+  /* Accent: the -600 step. The scale itself is NOT redeclared here — this
+     block used to repeat -600/-700/-800 as hex, and being later in the file it
+     beat :root, so a :root-only retune left light mode on the old colour. */
   --accent-primary: var(--periwinkle-600);
   --accent-text: var(--periwinkle-700);
   --btn-primary-bg: var(--periwinkle-600);
@@ -289,16 +302,16 @@
   --accent-strong: var(--periwinkle-700);
   --on-accent: #FFFFFF;
   --on-accent-surface: color-mix(in srgb, #FFF 18%, transparent);
-  --accent-muted: color-mix(in srgb, #8050D4 10%, transparent);
-  --accent-border: color-mix(in srgb, #8050D4 24%, transparent);
-  --accent-focus: color-mix(in srgb, #8050D4 40%, transparent);
+  --accent-muted: color-mix(in srgb, var(--periwinkle-600) 10%, transparent);
+  --accent-border: color-mix(in srgb, var(--periwinkle-600) 24%, transparent);
+  --accent-focus: color-mix(in srgb, var(--periwinkle-600) 40%, transparent);
   --btn-primary-disabled-bg: var(--bg-component);
   --btn-primary-disabled-text: var(--text-tertiary);
   --btn-primary-shadow-color: color-mix(in srgb, var(--periwinkle-600) 15%, transparent);
 
   /* Interactive (Apple systemGray5 / systemGray4 steps) */
   --bg-item-surface: #E5E5EA;
-  --bg-item-active: color-mix(in srgb, #8050D4 12%, transparent);
+  --bg-item-active: color-mix(in srgb, var(--periwinkle-600) 12%, transparent);
   --bg-row-hover: #DEDEE3;
   --badge-beta-bg: #FFCC00;
   --badge-beta-fg: #1C1C1E;
@@ -352,7 +365,7 @@
   --overlay-text-muted: rgba(134, 134, 139, 0.95);
   --overlay-text-placeholder: rgba(134, 134, 139, 0.90);
   --overlay-text-strong: #1D1D1F;
-  --hotword-color: #6D5AC7;
+  --hotword-color: #4B65BE;
   --overlay-shell-blur: calc(2px + (var(--overlay-opacity) * 18px));
   --overlay-pill-blur: calc(2px + (var(--overlay-opacity) * 12px));
   --overlay-transcript-blur: calc(var(--overlay-opacity) * 5px);
@@ -485,8 +498,8 @@
   --overlay-text-placeholder: rgba(255, 255, 255, 0.40);
   --overlay-text-strong:      #ffffff;
   /* Light theme + liquid glass still renders WHITE text on a dark glass
-     panel, so it takes the light lavender, not the light-theme one. */
-  --hotword-color:            #C4B5FD;
+     panel, so it takes the light hot-word blue, not the light-theme one. */
+  --hotword-color:            #A9C0FB;
 
   /* Glass surfaces — near-transparent white tints */
   --overlay-panel-bg:           rgba(255, 255, 255, 0.055);
@@ -1413,12 +1426,13 @@
   --overlay-text-placeholder: rgba(255, 255, 255, 0.50);
   --overlay-text-strong:      #ffffff;
   /* Modern forces white text on the slate gradient in BOTH themes, so it
-     takes the light lavender. Measured against all three gradient stops:
-     3.65 / 6.33 / 8.28. The lightest top stop sits under 4.5, but that is
-     pre-existing and system-wide — the modern accent #8FB4F7 measures 3.22
-     and the old orchid highlight 3.42 at the same point, so this is strictly
-     better than what it replaces, not a new shortfall. */
-  --hotword-color:            #C4B5FD;
+     takes the light hot-word blue. Measured against all three gradient stops:
+     3.73 / 6.46 / 8.46. The lightest top stop sits under 4.5, but that is
+     pre-existing and system-wide — the modern accent #8FB4F7 measures 3.22,
+     the old lavender 3.65 and the older orchid highlight 3.42 at the same
+     point, so this is strictly better than what it replaces, not a new
+     shortfall. */
+  --hotword-color:            #A9C0FB;
 
   /* Slate/graphite surfaces — the DARK_GLASS gradient */
   --overlay-panel-bg:           linear-gradient(160deg, rgba(90, 90, 108, 0.88) 0%, rgba(55, 55, 70, 0.93) 50%, rgba(36, 36, 50, 0.97) 100%);
@@ -2642,11 +2656,11 @@ body {
    the spoken-answer ReactMarkdown intents and, via the scoped rule below,
    on the imperative streaming bubble (marked.parse emits bare <strong>). */
 .overlay-hotword {
-  color: var(--hotword-color, #C4B5FD);
+  color: var(--hotword-color, #A9C0FB);
 }
 
 .natively-streaming-answer strong {
-  color: var(--hotword-color, #C4B5FD);
+  color: var(--hotword-color, #A9C0FB);
   font-weight: 600;
 }
 
@@ -2753,8 +2767,8 @@ body {
   font-size: 12px;
   line-height: 1.4;
   color: var(--overlay-text-secondary);
-  background: color-mix(in srgb, var(--hotword-color, #C4B5FD) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--hotword-color, #C4B5FD) 24%, transparent);
+  background: color-mix(in srgb, var(--hotword-color, #A9C0FB) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--hotword-color, #A9C0FB) 24%, transparent);
 }
 
 /* In meeting notes the chip also takes .lg-chip, the subtle Apple-style glass
@@ -2763,7 +2777,7 @@ body {
    box stays 25px tall and nothing around it shifts. The live overlay's chip
    is untouched. */
 .overlay-gist-chip.lg-chip {
-  --lg-chip-tint: var(--hotword-color, #C4B5FD);
+  --lg-chip-tint: var(--hotword-color, #A9C0FB);
   border: 0;
   padding: 4px 11px;
 }
@@ -2774,7 +2788,7 @@ body {
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.08em;
-  color: var(--hotword-color, #C4B5FD);
+  color: var(--hotword-color, #A9C0FB);
 }
 
 .overlay-text-interactive {
@@ -4426,7 +4440,9 @@ html[data-platform="linux"][data-window="launcher"] body {
    THE OTHER SATURATED SURFACES ON THIS TAB, measured rather than assumed —
    the jewel arc has neighbours the old teal ramp never had to care about:
      --accent-primary (the usage bars, directly above the plan selector) is
-       PERIWINKLE: #B9A1F6 257° dark / #8050D4 262° light.
+       TOGGLE BLUE since 2026-09: #95AFF6 224° dark / #4967D3 227° light (it
+       was periwinkle #B9A1F6 257° / #8050D4 262°). The usage-bar fills
+       themselves read --toggle-on #6688F5 226° (.natively-meter-fill).
        *** THE ΔE76 FIGURES BELOW ARE STALE — RE-MEASURE BEFORE RELYING ON
        THEM. *** They were taken when the accent was Soft Orchid (#D9A7E8 286°
        dark / #984DB2 285° light), which measured 12-13° from Max at ΔE76 43.8
@@ -5032,9 +5048,9 @@ html[data-platform="linux"][data-window="launcher"] body {
 /* Lifetime card — premium slate-violet plaque */
 [data-interface-theme="liquid-glass"] .pricing-card-lifetime {
   background:
-    radial-gradient(circle at 50% 0%, rgba(139, 92, 246, 0.35) 0%, transparent 60%),
-    linear-gradient(135deg, rgba(55, 30, 95, 0.50) 0%, rgba(20, 10, 36, 0.65) 100%) !important;
-  border: 1px solid rgba(139, 92, 246, 0.35) !important;
+    radial-gradient(circle at 50% 0%, rgba(79, 113, 238, 0.35) 0%, transparent 60%),
+    linear-gradient(135deg, rgba(26, 40, 93, 0.50) 0%, rgba(8, 14, 36, 0.65) 100%) !important;
+  border: 1px solid rgba(79, 113, 238, 0.35) !important;
   border-radius: 28px !important;
   position: relative;
   overflow: hidden;
@@ -5042,7 +5058,7 @@ html[data-platform="linux"][data-window="launcher"] body {
               box-shadow 180ms cubic-bezier(0.23, 1, 0.32, 1),
               border-color 180ms cubic-bezier(0.23, 1, 0.32, 1) !important;
   box-shadow:
-    inset 0 1px 0 rgba(139, 92, 246, 0.6),
+    inset 0 1px 0 rgba(79, 113, 238, 0.6),
     inset 0 2px 4px rgba(255, 255, 255, 0.22),
     inset 0 -3px 8px rgba(0, 0, 0, 0.4),
     0 4px 16px rgba(0, 0, 0, 0.2) !important;
@@ -5067,12 +5083,12 @@ html[data-platform="linux"][data-window="launcher"] body {
 
 @media (hover: hover) and (pointer: fine) {
   [data-interface-theme="liquid-glass"] .pricing-card-lifetime:hover {
-    border-color: rgba(139, 92, 246, 0.48) !important;
+    border-color: rgba(79, 113, 238, 0.48) !important;
     box-shadow:
-      inset 0 1px 0 rgba(139, 92, 246, 0.6),
+      inset 0 1px 0 rgba(79, 113, 238, 0.6),
       inset 0 2px 6px rgba(255, 255, 255, 0.25),
       inset 0 -3px 8px rgba(0, 0, 0, 0.6),
-      0 12px 32px rgba(139, 92, 246, 0.2),
+      0 12px 32px rgba(79, 113, 238, 0.2),
       0 4px 12px rgba(0, 0, 0, 0.35) !important;
   }
 }
@@ -5116,32 +5132,32 @@ html[data-platform="linux"][data-window="launcher"] body {
 
 /* Lifetime CTA — solid brand violet button */
 [data-interface-theme="liquid-glass"] .pricing-cta-lifetime {
-  background: radial-gradient(circle at 50% 0%, rgba(129, 140, 248, 1) 0%, rgba(79, 70, 229, 1) 100%) !important;
+  background: radial-gradient(circle at 50% 0%, rgba(117, 147, 237, 1) 0%, rgba(54, 82, 212, 1) 100%) !important;
   color: #ffffff !important;
   border: 1px solid rgba(255, 255, 255, 0.25) !important;
   box-shadow: 
     inset 0 2.5px 3px rgba(255, 255, 255, 0.45), 
     inset 0 -2.5px 3px rgba(0, 0, 0, 0.35), 
-    0 3px 10px rgba(99, 102, 241, 0.25) !important;
+    0 3px 10px rgba(78, 111, 226, 0.25) !important;
   transition: background-color 150ms cubic-bezier(0.23, 1, 0.32, 1),
               transform 150ms cubic-bezier(0.23, 1, 0.32, 1),
               box-shadow 150ms cubic-bezier(0.23, 1, 0.32, 1) !important;
 }
 @media (hover: hover) and (pointer: fine) {
   [data-interface-theme="liquid-glass"] .pricing-cta-lifetime:hover {
-    background: radial-gradient(circle at 50% 0%, rgba(147, 157, 255, 1) 0%, rgba(67, 56, 202, 1) 100%) !important;
+    background: radial-gradient(circle at 50% 0%, rgba(135, 164, 246, 1) 0%, rgba(44, 68, 187, 1) 100%) !important;
     transform: translateY(-1px) !important;
     box-shadow: 
       inset 0 3px 4px rgba(255, 255, 255, 0.55), 
       inset 0 -3px 4px rgba(0, 0, 0, 0.4), 
-      0 6px 16px rgba(99, 102, 241, 0.35) !important;
+      0 6px 16px rgba(78, 111, 226, 0.35) !important;
   }
 }
 [data-interface-theme="liquid-glass"] .pricing-cta-lifetime:active {
   transform: translateY(0) scale(0.97) !important;
   box-shadow: 
     inset 0 1px 2px rgba(0, 0, 0, 0.2), 
-    0 2px 4px rgba(99, 102, 241, 0.15) !important;
+    0 2px 4px rgba(78, 111, 226, 0.15) !important;
 }
 
 /* Feature icon chip — small slate square */
@@ -5339,9 +5355,9 @@ html[data-platform="linux"][data-window="launcher"] body {
 /* Lifetime card — premium slate-violet plaque */
 [data-interface-theme="modern"] .pricing-card-lifetime {
   background:
-    radial-gradient(circle at 50% 0%, rgba(139, 92, 246, 0.35) 0%, transparent 60%),
-    linear-gradient(135deg, rgba(55, 30, 95, 0.50) 0%, rgba(20, 10, 36, 0.65) 100%) !important;
-  border: 1px solid rgba(139, 92, 246, 0.35) !important;
+    radial-gradient(circle at 50% 0%, rgba(79, 113, 238, 0.35) 0%, transparent 60%),
+    linear-gradient(135deg, rgba(26, 40, 93, 0.50) 0%, rgba(8, 14, 36, 0.65) 100%) !important;
+  border: 1px solid rgba(79, 113, 238, 0.35) !important;
   border-radius: 28px !important;
   position: relative;
   overflow: hidden;
@@ -5349,7 +5365,7 @@ html[data-platform="linux"][data-window="launcher"] body {
               box-shadow 180ms cubic-bezier(0.23, 1, 0.32, 1),
               border-color 180ms cubic-bezier(0.23, 1, 0.32, 1) !important;
   box-shadow:
-    inset 0 1px 0 rgba(139, 92, 246, 0.6),
+    inset 0 1px 0 rgba(79, 113, 238, 0.6),
     inset 0 2px 4px rgba(255, 255, 255, 0.22),
     inset 0 -3px 8px rgba(0, 0, 0, 0.4),
     0 4px 16px rgba(0, 0, 0, 0.2) !important;
@@ -5374,12 +5390,12 @@ html[data-platform="linux"][data-window="launcher"] body {
 
 @media (hover: hover) and (pointer: fine) {
   [data-interface-theme="modern"] .pricing-card-lifetime:hover {
-    border-color: rgba(139, 92, 246, 0.48) !important;
+    border-color: rgba(79, 113, 238, 0.48) !important;
     box-shadow:
-      inset 0 1px 0 rgba(139, 92, 246, 0.6),
+      inset 0 1px 0 rgba(79, 113, 238, 0.6),
       inset 0 2px 6px rgba(255, 255, 255, 0.25),
       inset 0 -3px 8px rgba(0, 0, 0, 0.6),
-      0 12px 32px rgba(139, 92, 246, 0.2),
+      0 12px 32px rgba(79, 113, 238, 0.2),
       0 4px 12px rgba(0, 0, 0, 0.35) !important;
   }
 }
@@ -5423,32 +5439,32 @@ html[data-platform="linux"][data-window="launcher"] body {
 
 /* Lifetime CTA — solid brand violet button */
 [data-interface-theme="modern"] .pricing-cta-lifetime {
-  background: radial-gradient(circle at 50% 0%, rgba(129, 140, 248, 1) 0%, rgba(79, 70, 229, 1) 100%) !important;
+  background: radial-gradient(circle at 50% 0%, rgba(117, 147, 237, 1) 0%, rgba(54, 82, 212, 1) 100%) !important;
   color: #ffffff !important;
   border: 1px solid rgba(255, 255, 255, 0.25) !important;
   box-shadow: 
     inset 0 2.5px 3px rgba(255, 255, 255, 0.45), 
     inset 0 -2.5px 3px rgba(0, 0, 0, 0.35), 
-    0 3px 10px rgba(99, 102, 241, 0.25) !important;
+    0 3px 10px rgba(78, 111, 226, 0.25) !important;
   transition: background-color 150ms cubic-bezier(0.23, 1, 0.32, 1),
               transform 150ms cubic-bezier(0.23, 1, 0.32, 1),
               box-shadow 150ms cubic-bezier(0.23, 1, 0.32, 1) !important;
 }
 @media (hover: hover) and (pointer: fine) {
   [data-interface-theme="modern"] .pricing-cta-lifetime:hover {
-    background: radial-gradient(circle at 50% 0%, rgba(147, 157, 255, 1) 0%, rgba(67, 56, 202, 1) 100%) !important;
+    background: radial-gradient(circle at 50% 0%, rgba(135, 164, 246, 1) 0%, rgba(44, 68, 187, 1) 100%) !important;
     transform: translateY(-1px) !important;
     box-shadow: 
       inset 0 3px 4px rgba(255, 255, 255, 0.55), 
       inset 0 -3px 4px rgba(0, 0, 0, 0.4), 
-      0 6px 16px rgba(99, 102, 241, 0.35) !important;
+      0 6px 16px rgba(78, 111, 226, 0.35) !important;
   }
 }
 [data-interface-theme="modern"] .pricing-cta-lifetime:active {
   transform: translateY(0) scale(0.97) !important;
   box-shadow: 
     inset 0 1px 2px rgba(0, 0, 0, 0.2), 
-    0 2px 4px rgba(99, 102, 241, 0.15) !important;
+    0 2px 4px rgba(78, 111, 226, 0.15) !important;
 }
 
 /* Feature icon chip — small slate square */
@@ -7437,9 +7453,9 @@ html[data-platform="linux"][data-window="launcher"] body {
 [data-theme='light'] [data-interface-theme="liquid-glass"] .pricing-card-lifetime,
 [data-theme='light'] [data-interface-theme="modern"] .pricing-card-lifetime {
   background:
-    radial-gradient(circle at 50% 0%, rgba(139, 92, 246, 0.16) 0%, transparent 60%),
-    linear-gradient(135deg, rgba(245, 243, 255, 0.85) 0%, rgba(237, 233, 254, 0.9) 100%) !important;
-  border-color: rgba(139, 92, 246, 0.22) !important;
+    radial-gradient(circle at 50% 0%, rgba(79, 113, 238, 0.16) 0%, transparent 60%),
+    linear-gradient(135deg, rgba(241, 245, 255, 0.85) 0%, rgba(229, 236, 254, 0.9) 100%) !important;
+  border-color: rgba(79, 113, 238, 0.22) !important;
   box-shadow:
     inset 0 1.5px 0 rgba(255, 255, 255, 0.8),
     inset 0 3px 6px rgba(255, 255, 255, 0.4),
@@ -7454,12 +7470,12 @@ html[data-platform="linux"][data-window="launcher"] body {
 
 [data-theme='light'] [data-interface-theme="liquid-glass"] .pricing-card-lifetime:hover,
 [data-theme='light'] [data-interface-theme="modern"] .pricing-card-lifetime:hover {
-  border-color: rgba(139, 92, 246, 0.42) !important;
+  border-color: rgba(79, 113, 238, 0.42) !important;
   box-shadow:
     inset 0 1.5px 0 rgba(255, 255, 255, 0.85),
     inset 0 3px 8px rgba(255, 255, 255, 0.55),
     inset 0 -2.5px 6px rgba(0, 0, 0, 0.06),
-    0 12px 28px rgba(139, 92, 246, 0.12),
+    0 12px 28px rgba(79, 113, 238, 0.12),
     0 4px 12px rgba(15, 23, 42, 0.04) !important;
 }
 
@@ -7491,13 +7507,13 @@ html[data-platform="linux"][data-window="launcher"] body {
 }
 
 .pricing-card-lifetime .badge-tier-label {
-  background: linear-gradient(180deg, rgba(139, 92, 246, 0.28) 0%, rgba(109, 40, 217, 0.18) 100%) !important;
-  border: 1px solid rgba(139, 92, 246, 0.42) !important;
-  color: #c4b5fd !important;
+  background: linear-gradient(180deg, rgba(79, 113, 238, 0.28) 0%, rgba(46, 71, 208, 0.18) 100%) !important;
+  border: 1px solid rgba(79, 113, 238, 0.42) !important;
+  color: #a9c0fb !important;
   box-shadow: 
     inset 0 1.5px 0 rgba(255, 255, 255, 0.22),
     inset 0 -2px 4px rgba(0, 0, 0, 0.25),
-    0 2px 6px rgba(139, 92, 246, 0.18) !important;
+    0 2px 6px rgba(79, 113, 238, 0.18) !important;
 }
 
 [data-theme='light'] .pricing-card-yearly .badge-tier-label {
@@ -7511,13 +7527,13 @@ html[data-platform="linux"][data-window="launcher"] body {
 }
 
 [data-theme='light'] .pricing-card-lifetime .badge-tier-label {
-  background: linear-gradient(180deg, rgba(139, 92, 246, 0.18) 0%, rgba(109, 40, 217, 0.10) 100%) !important;
-  border: 1px solid rgba(139, 92, 246, 0.28) !important;
-  color: #6d28d9 !important;
+  background: linear-gradient(180deg, rgba(79, 113, 238, 0.18) 0%, rgba(46, 71, 208, 0.10) 100%) !important;
+  border: 1px solid rgba(79, 113, 238, 0.28) !important;
+  color: #2e47d0 !important;
   box-shadow: 
     inset 0 1.5px 0 rgba(255, 255, 255, 0.85),
-    inset 0 -2px 4px rgba(139, 92, 246, 0.06),
-    0 2px 6px rgba(139, 92, 246, 0.06) !important;
+    inset 0 -2px 4px rgba(79, 113, 238, 0.06),
+    0 2px 6px rgba(79, 113, 238, 0.06) !important;
 }
 
 [data-theme='light'] .feature-icon-chip {
@@ -7574,16 +7590,16 @@ html[data-platform="linux"][data-window="launcher"] body {
    with no light-mode override and no colour, because nothing rendered it
    until now. */
 [data-interface-theme] .pricing-card-lifetime .badge-best-value {
-  color: #e9e2ff !important;
+  color: #dde7ff !important;
 }
 
 [data-theme='light'] [data-interface-theme] .pricing-card-lifetime .badge-best-value {
-  background: linear-gradient(180deg, rgba(139, 92, 246, 0.20) 0%, rgba(109, 40, 217, 0.12) 100%) !important;
-  border: 1px solid rgba(109, 40, 217, 0.32) !important;
-  color: #5b21b6 !important;
+  background: linear-gradient(180deg, rgba(79, 113, 238, 0.20) 0%, rgba(46, 71, 208, 0.12) 100%) !important;
+  border: 1px solid rgba(46, 71, 208, 0.32) !important;
+  color: #263baf !important;
   box-shadow:
     inset 0 1.5px 0 rgba(255, 255, 255, 0.85),
-    0 2px 6px rgba(139, 92, 246, 0.08) !important;
+    0 2px 6px rgba(79, 113, 238, 0.08) !important;
 }
 
 /* ─── Pro teaser plaque: light mode ────────────────────────────────────
@@ -7658,22 +7674,22 @@ html[data-platform="linux"][data-window="launcher"] body {
 /* 6. Lifetime CTA (Vibrant Purple button, refined contrast in Light) */
 [data-theme='light'] [data-interface-theme="liquid-glass"] .pricing-cta-lifetime,
 [data-theme='light'] [data-interface-theme="modern"] .pricing-cta-lifetime {
-  background: radial-gradient(circle at 50% 0%, #a78bfa 0%, #6d28d9 100%) !important;
+  background: radial-gradient(circle at 50% 0%, #7d9cf8 0%, #2e47d0 100%) !important;
   color: #ffffff !important;
-  border: 1px solid rgba(109, 40, 217, 0.25) !important;
+  border: 1px solid rgba(46, 71, 208, 0.25) !important;
   box-shadow: 
     inset 0 2.5px 3px rgba(255, 255, 255, 0.45), 
     inset 0 -2.5px 3px rgba(0, 0, 0, 0.25), 
-    0 3px 10px rgba(109, 40, 217, 0.18) !important;
+    0 3px 10px rgba(46, 71, 208, 0.18) !important;
 }
 
 [data-theme='light'] [data-interface-theme="liquid-glass"] .pricing-cta-lifetime:hover,
 [data-theme='light'] [data-interface-theme="modern"] .pricing-cta-lifetime:hover {
-  background: radial-gradient(circle at 50% 0%, #c084fc 0%, #5b21b6 100%) !important;
+  background: radial-gradient(circle at 50% 0%, #80a0ff 0%, #263baf 100%) !important;
   box-shadow: 
     inset 0 3px 4px rgba(255, 255, 255, 0.55), 
     inset 0 -3px 4px rgba(0, 0, 0, 0.30), 
-    0 6px 16px rgba(109, 40, 217, 0.28) !important;
+    0 6px 16px rgba(46, 71, 208, 0.28) !important;
 }
 
 /* 7. Poster SVG — theme-responsive paint
@@ -7720,7 +7736,7 @@ html[data-platform="linux"][data-window="launcher"] body {
 
 /* ── Ambient bloom, per card ─────────────────────────────────────────────── */
 .pricing-poster-glow-yearly { stop-color: rgba(59, 130, 246, 0.42) !important; }
-.pricing-poster-glow-lifetime { stop-color: rgba(139, 92, 246, 0.45) !important; }
+.pricing-poster-glow-lifetime { stop-color: rgba(79, 113, 238, 0.45) !important; }
 
 /* ── The plate behind (the call/doc the overlay is sitting on top of) ────── */
 .pricing-poster-plate-fill { fill: rgba(255, 255, 255, 0.05) !important; }
@@ -7756,10 +7772,10 @@ html[data-platform="linux"][data-window="launcher"] body {
 
 /* ── The live accent: level meter, source pips, streaming caret, per card ── */
 .pricing-poster-accent-yearly { fill: #8CBBFF !important; }
-.pricing-poster-accent-lifetime { fill: #C3AEFF !important; }
+.pricing-poster-accent-lifetime { fill: #A2BBFE !important; }
 
 [data-theme='light'] .pricing-poster-glow-yearly { stop-color: rgba(59, 130, 246, 0.20) !important; }
-[data-theme='light'] .pricing-poster-glow-lifetime { stop-color: rgba(139, 92, 246, 0.22) !important; }
+[data-theme='light'] .pricing-poster-glow-lifetime { stop-color: rgba(79, 113, 238, 0.22) !important; }
 
 [data-theme='light'] .pricing-poster-plate-fill { fill: rgba(255, 255, 255, 0.50) !important; }
 [data-theme='light'] .pricing-poster-plate-stroke { stroke: rgba(15, 23, 42, 0.12) !important; }
@@ -7780,7 +7796,7 @@ html[data-platform="linux"][data-window="launcher"] body {
 [data-theme='light'] .pricing-poster-source-line { fill: rgba(15, 23, 42, 0.28) !important; }
 
 [data-theme='light'] .pricing-poster-accent-yearly { fill: #2563EB !important; }
-[data-theme='light'] .pricing-poster-accent-lifetime { fill: #6D28D9 !important; }
+[data-theme='light'] .pricing-poster-accent-lifetime { fill: #2E47D0 !important; }
 
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -9040,8 +9056,8 @@ html[data-platform="linux"][data-window="launcher"] body {
 }
 [data-interface-theme] .pricing-card-lifetime {
   background:
-    radial-gradient(circle at 50% 0%, rgba(139, 92, 246, 0.35) 0%, transparent 60%),
-    rgba(37, 20, 65, 0.575) !important;
+    radial-gradient(circle at 50% 0%, rgba(79, 113, 238, 0.35) 0%, transparent 60%),
+    rgba(17, 27, 64, 0.575) !important;
   border: 1px solid transparent !important;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.20) !important;
 }
@@ -9054,8 +9070,8 @@ html[data-platform="linux"][data-window="launcher"] body {
 }
 [data-theme='light'] [data-interface-theme] .pricing-card-lifetime {
   background:
-    radial-gradient(circle at 50% 0%, rgba(139, 92, 246, 0.16) 0%, transparent 60%),
-    rgba(241, 238, 254, 0.875) !important;
+    radial-gradient(circle at 50% 0%, rgba(79, 113, 238, 0.16) 0%, transparent 60%),
+    rgba(235, 240, 254, 0.875) !important;
   border: 1px solid transparent !important;
   box-shadow: 0 4px 16px rgba(15, 23, 42, 0.10) !important;
 }
@@ -9413,17 +9429,21 @@ html[data-platform="linux"][data-window="launcher"] body {
 
 /* Lifetime — a dark body on a dark ground, so the rim is symmetric: it
    catches a bounce from below as well as the key light. The fill is the flat
-   brand violet the old radial ran to; white on it is 6.31:1, clear of the
-   4.5:1 AA floor for 13px text that the gloss it replaces did not meet. */
+   colour the old radial ran to; white on it is 6.34:1, clear of the
+   4.5:1 AA floor for 13px text that the gloss it replaces did not meet.
+   2026-09: every violet/indigo in the lifetime-only rules (card, CTA, badges,
+   poster) moved to the toggle blue's hue by owner request: same OKLCH
+   lightness, hue 268.5, chroma x0.873, and any colour carrying white text
+   held at (or above) its old contrast. #4f46e5 -> #3652d4 here. */
 [data-interface-theme] .pricing-cta-lifetime {
   --lgc-r: 22px;
   --lgc-z: 28px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, .08) 0%, rgba(255, 255, 255, 0) 14%,
                             rgba(255, 255, 255, 0) 86%, rgba(255, 255, 255, .08) 100%),
-    #4f46e5 !important;
+    #3652d4 !important;
   color: #ffffff !important;
-  box-shadow: 0 6px 18px rgba(79, 70, 229, 0.34) !important;
+  box-shadow: 0 6px 18px rgba(54, 82, 212, 0.34) !important;
 }
 [data-interface-theme] .pricing-cta-lifetime::before {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.40);
@@ -9522,11 +9542,11 @@ html[data-platform="linux"][data-window="launcher"] body {
   mask-image: var(--lgc-face-mask-top), var(--lgc-cap-mask);
 }
 [data-theme='light'] [data-interface-theme] .pricing-cta-lifetime {
-  background: #6d28d9 !important;
+  background: #2e47d0 !important;
   color: #ffffff !important;
   box-shadow:
     inset 0 -1px 0 rgba(0, 0, 0, 0.28),
-    0 6px 18px rgba(109, 40, 217, 0.28) !important;
+    0 6px 18px rgba(46, 71, 208, 0.28) !important;
 }
 [data-theme='light'] [data-interface-theme] .pricing-cta-lifetime::before {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.34);
@@ -9580,9 +9600,9 @@ html[data-platform="linux"][data-window="launcher"] body {
       0 6px 16px rgba(0, 0, 0, 0.20) !important;
   }
   [data-interface-theme] .pricing-cta-lifetime:hover {
-    background-color: #5b52ea !important;
+    background-color: #405eda !important;
     transform: translateZ(var(--lgc-z)) translateY(-1px) !important;
-    box-shadow: 0 10px 22px rgba(79, 70, 229, 0.50) !important;
+    box-shadow: 0 10px 22px rgba(54, 82, 212, 0.50) !important;
   }
   [data-interface-theme] .pro-teaser:hover .pro-teaser-cta {
     background-color: #eef2f6 !important;
@@ -9601,7 +9621,7 @@ html[data-platform="linux"][data-window="launcher"] body {
     background-color: #1c2440 !important;
   }
   [data-theme='light'] [data-interface-theme] .pricing-cta-lifetime:hover {
-    background-color: #7c3aed !important;
+    background-color: #3a57e4 !important;
   }
   [data-theme='light'] [data-interface-theme] .pro-teaser:hover .pro-teaser-cta {
     background-color: #1c2440 !important;
@@ -10022,18 +10042,18 @@ html[data-platform="linux"][data-window="launcher"] body {
   box-shadow: inset 0 0 0 1px rgba(147, 197, 253, 0.45);
 }
 [data-interface-theme] .pricing-card-lifetime .badge-tier-label {
-  background: rgba(124, 66, 232, 0.23) !important;
-  color: #c4b5fd !important;
+  background: rgba(61, 91, 224, 0.23) !important;
+  color: #a9c0fb !important;
 }
 [data-interface-theme] .pricing-card-lifetime .badge-tier-label::before {
-  box-shadow: inset 0 0 0 1px rgba(196, 181, 253, 0.45);
+  box-shadow: inset 0 0 0 1px rgba(169, 192, 251, 0.45);
 }
 [data-interface-theme] .pricing-card-lifetime .badge-best-value {
-  background: rgba(139, 92, 246, 0.15) !important;
-  color: #e9e2ff !important;
+  background: rgba(79, 113, 238, 0.15) !important;
+  color: #dde7ff !important;
 }
 [data-interface-theme] .pricing-card-lifetime .badge-best-value::before {
-  box-shadow: inset 0 0 0 1px rgba(196, 181, 253, 0.42);
+  box-shadow: inset 0 0 0 1px rgba(169, 192, 251, 0.42);
 }
 
 [data-theme='light'] [data-interface-theme] .pricing-card-yearly .badge-tier-label {
@@ -10044,18 +10064,18 @@ html[data-platform="linux"][data-window="launcher"] body {
   box-shadow: inset 0 0 0 1px rgba(29, 78, 216, 0.30);
 }
 [data-theme='light'] [data-interface-theme] .pricing-card-lifetime .badge-tier-label {
-  background: rgba(124, 66, 232, 0.14) !important;
-  color: #6d28d9 !important;
+  background: rgba(61, 91, 224, 0.14) !important;
+  color: #2e47d0 !important;
 }
 [data-theme='light'] [data-interface-theme] .pricing-card-lifetime .badge-tier-label::before {
-  box-shadow: inset 0 0 0 1px rgba(109, 40, 217, 0.30);
+  box-shadow: inset 0 0 0 1px rgba(46, 71, 208, 0.30);
 }
 [data-theme='light'] [data-interface-theme] .pricing-card-lifetime .badge-best-value {
-  background: rgba(124, 66, 232, 0.16) !important;
-  color: #5b21b6 !important;
+  background: rgba(61, 91, 224, 0.16) !important;
+  color: #263baf !important;
 }
 [data-theme='light'] [data-interface-theme] .pricing-card-lifetime .badge-best-value::before {
-  box-shadow: inset 0 0 0 1px rgba(91, 33, 182, 0.32);
+  box-shadow: inset 0 0 0 1px rgba(38, 59, 175, 0.32);
 }
 
 /* The teaser plaque is a smaller sibling of the two pricing cards, so it takes
