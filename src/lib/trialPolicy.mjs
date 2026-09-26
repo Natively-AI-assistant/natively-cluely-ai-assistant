@@ -42,6 +42,15 @@ export function hasOwnAiKey(creds) {
     const v = creds[field];
     if (typeof v === 'string' && v.trim().length > 0) return true;
   }
+  // A keyless 9Router: its base URL, not a key, is the presence gate.
+  if (typeof creds.ninerouterBaseURL === 'string' && creds.ninerouterBaseURL.trim().length > 0) return true;
+  // Sign-in routes: ChatGPT (Codex) and Antigravity OAuth. A refresh token is
+  // what keeps the sign-in alive. Ollama is not counted: it has a default URL
+  // and no opt-in field, so its presence says nothing.
+  for (const field of ['codexOAuthTokens', 'antigravityOAuthTokens']) {
+    const t = creds[field];
+    if (t && typeof t === 'object' && typeof t.refreshToken === 'string' && t.refreshToken.length > 0) return true;
+  }
   const custom = creds.customProviders;
   const curl = creds.curlProviders;
   return (Array.isArray(custom) && custom.length > 0) || (Array.isArray(curl) && curl.length > 0);

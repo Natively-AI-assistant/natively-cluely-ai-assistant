@@ -52,3 +52,22 @@ test('hasOwnAiKey: blank values, STT-only keys and the Natively key do not count
   assert.equal(hasOwnAiKey({ deepgramApiKey: 'x', groqSttApiKey: 'x', nativelyApiKey: 'x' }), false);
   assert.equal(hasOwnAiKey({ customProviders: [], curlProviders: [] }), false);
 });
+
+// Toaster policy Phase 3 (Phase 0 deferred minor): sign-in routes are AI
+// routes of the user's own too. A ChatGPT (Codex) or Antigravity sign-in, or a
+// keyless 9Router base URL, used to read as "no keys": the Trial ended wall
+// went up and the key-less cards were offered to someone who is set up.
+test('hasOwnAiKey: a ChatGPT or Antigravity sign-in, or a keyless 9Router, counts', () => {
+  const oauth = { accessToken: 'at', refreshToken: 'rt', expiresAt: Date.now() + 3_600_000 };
+  assert.equal(hasOwnAiKey({ codexOAuthTokens: oauth }), true, 'ChatGPT (Codex) sign-in');
+  assert.equal(hasOwnAiKey({ antigravityOAuthTokens: { ...oauth, projectId: 'p-1' } }), true, 'Antigravity sign-in');
+  assert.equal(hasOwnAiKey({ ninerouterBaseURL: 'http://localhost:20128/v1' }), true, 'keyless 9Router');
+});
+
+test('hasOwnAiKey: an empty sign-in or a default local URL is not a route', () => {
+  assert.equal(hasOwnAiKey({ codexOAuthTokens: { accessToken: '', refreshToken: '' } }), false);
+  assert.equal(hasOwnAiKey({ antigravityOAuthTokens: undefined }), false);
+  assert.equal(hasOwnAiKey({ ninerouterBaseURL: '   ' }), false);
+  // Ollama has a default URL and no opt-in field: its presence says nothing.
+  assert.equal(hasOwnAiKey({ ollamaBaseUrl: 'http://localhost:11434' }), false);
+});
