@@ -42,6 +42,21 @@ const PROVIDER = process.env.JUDGE_EVAL_PROVIDER ?? 'gemini';
 const MODEL = process.env.JUDGE_EVAL_MODEL ?? ({ gemini: 'gemini-3.1-flash-lite', natively: 'server-decision-tier', deepseek: 'deepseek-flash' }[PROVIDER] ?? 'gpt-5.4-mini');
 const { getOpenAiReasoningEffort } = dist('llm/modelCapabilities.js');
 const CONCURRENCY = 6;
+/**
+ * The Gemini request's generationConfig. Default = the client's direct judge
+ * rung (LLMHelper.generateJudgeVerdict). JUDGE_EVAL_GEMINI_CONFIG selects an
+ * arm for A/B: 'server' = natively-api's decision call as of e0c1e4b (thinking
+ * minimal, default temperature, no JSON mode), 'temp0' = that plus
+ * temperature 0, 'json' = that plus JSON mode, 'client' = the default.
+ */
+const GEMINI_ARMS = {
+  client: { temperature: 0, maxOutputTokens: 256, responseMimeType: 'application/json' },
+  server: { thinkingConfig: { thinkingLevel: 'minimal' } },
+  temp0: { thinkingConfig: { thinkingLevel: 'minimal' }, temperature: 0, maxOutputTokens: 256 },
+  json: { thinkingConfig: { thinkingLevel: 'minimal' }, responseMimeType: 'application/json' },
+};
+const GEMINI_GENERATION_CONFIG = GEMINI_ARMS[process.env.JUDGE_EVAL_GEMINI_CONFIG ?? 'client'];
+if (!GEMINI_GENERATION_CONFIG) throw new Error(`JUDGE_EVAL_GEMINI_CONFIG must be one of ${Object.keys(GEMINI_ARMS).join(', ')}`);
 const TH = resolveAutoAnswerThresholds('technical-interview');
 const EVAL_DIR = path.join(__dirname, 'judge-eval');
 const SET_PATHS = process.argv.length > 2
@@ -107,7 +122,7 @@ async function judge(c) {
       } else if (PROVIDER === 'gemini') {
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${KEY}`, {
           method: 'POST', headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0, maxOutputTokens: 256, responseMimeType: 'application/json' } }),
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: GEMINI_GENERATION_CONFIG }),
         });
         const j = await res.json();
         if (j.error) { await new Promise(r => setTimeout(r, 1500 * (attempt + 1))); continue; }

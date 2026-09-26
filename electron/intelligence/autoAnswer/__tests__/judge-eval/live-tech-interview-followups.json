@@ -258,5 +258,101 @@
     "lastAnswered": null,
     "expect": "ask",
     "note": "a setup WITH its question — must still fire"
+  },
+  {
+    "text": "Alright. Let's move on to coding.",
+    "ctx": [
+      {
+        "role": "interviewer",
+        "text": "Hi there, thanks for making the time today. Can you hear me okay?"
+      },
+      {
+        "role": "user",
+        "text": "Yes."
+      },
+      {
+        "role": "user",
+        "text": "I can hear you fine. Thanks for having me."
+      },
+      {
+        "role": "interviewer",
+        "text": "Great. So I'm Sarah,"
+      },
+      {
+        "role": "interviewer",
+        "text": "I lead the platform team here. We'"
+      },
+      {
+        "role": "interviewer",
+        "text": "ll spend about 45 minutes today"
+      },
+      {
+        "role": "interviewer",
+        "text": ": a few questions about your background, then some fundamentals, and then a coding problem."
+      },
+      {
+        "role": "user",
+        "text": "Sounds good."
+      },
+      {
+        "role": "interviewer",
+        "text": "Let's start with you. Tell me a little bit about yourself and what you've been working on recently."
+      },
+      {
+        "role": "user",
+        "text": "Sure. I'm a backend engine"
+      },
+      {
+        "role": "user",
+        "text": "er for the last 3 years I've been building payment services in Go and Node."
+      },
+      {
+        "role": "interviewer",
+        "text": "Nice. What's the difference between a process and a thread?"
+      },
+      {
+        "role": "user",
+        "text": "A process has its own memory space, and threads share memory inside one process."
+      },
+      {
+        "role": "interviewer",
+        "text": "Right. And when would you pick one over the other?"
+      },
+      {
+        "role": "user",
+        "text": "Processes when I want isolation, threads when the work shares a lot of state."
+      },
+      {
+        "role": "interviewer",
+        "text": "Okay. How does a hash map handle collision?"
+      },
+      {
+        "role": "user",
+        "text": "Usually with chaining, or with open addressing and probing."
+      },
+      {
+        "role": "interviewer",
+        "text": "Why do we use consistent h"
+      },
+      {
+        "role": "interviewer",
+        "text": "ashing? Because adding a node shouldn't res"
+      },
+      {
+        "role": "interviewer",
+        "text": "huffle every key. So with that in mind, how would you design a distributed cache for a read-heavy service?"
+      },
+      {
+        "role": "user",
+        "text": "I'd shard keys with consistent hashing."
+      },
+      {
+        "role": "user",
+        "text": "Keep replicas for the hot keys, and use a time-to-live with LRU eviction."
+      }
+    ],
+    "lastAnswered": "Why do we use consistent hashing? Because adding a node shouldn't reshuffle every key. So with that in mind, how would you design a distributed cache for a read-heavy service?",
+    "expect": "none",
+    "note": "live 2026-09-26 run 4 T08, the REAL hot-window context. Direct flash-lite on this prompt: natively-api's decision call as of e0c1e4b (default temperature, no JSON) fired 8/20; temperature 0 alone 0/20; JSON mode (with or without temperature 0, i.e. the client's own Gemini rung) 20/20. A false fire here clears pending, so each later part of the announced spec gets judged alone."
   }
 ]
