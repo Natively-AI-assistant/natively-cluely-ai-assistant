@@ -25,7 +25,10 @@ function overlap(a, b) {
 }
 
 const turns = r.turns.filter((t) => t.who === 'interviewer');
-const ev = r.events.filter((e) => e.win === 'overlay' && e.phase !== 'warmup' && e.t >= (r.warmupEnd ?? 0));
+// Main sends each answer to ONE window, whichever mode the app is in
+// (WindowHelper.getMainWindow): the overlay, or the launcher when someone
+// switched to it mid-run. Either way the engine answered.
+const ev = r.events.filter((e) => (e.win === 'overlay' || e.win === 'launcher') && e.phase !== 'warmup' && e.t >= (r.warmupEnd ?? 0));
 const gens = new Map();
 // Id-less emitters (brainstorm, legacy paths) send tokens and a final with no
 // generationId: one run = the id-less tokens up to and including the id-less final.

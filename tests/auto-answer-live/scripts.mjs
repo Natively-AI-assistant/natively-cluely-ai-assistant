@@ -198,4 +198,91 @@ export const teamMeet = [
   { who: 'interviewer', id: 'M13', voice: 'Samantha', expect: 'silent', parts: ["Perfect, thanks everyone. Let's sync again on Friday."] },
 ];
 
-export const SCRIPTS = { ti: technicalInterview, lfw: lookingForWork, sales: salesCall, lecture, team: teamMeet };
+// Call center: the user is the support agent; the meeting audio is the
+// customer. Symptoms and status are statements; the customer's questions to
+// the agent are asks. Prices and refunds must not be invented.
+export const callCenter = [
+  { who: 'interviewer', id: 'K01', expect: 'silent', parts: ["Hi, thanks for picking up. My name is Dana, and I'm calling about our company account."] },
+  { who: 'interviewer', id: 'K02', expect: 'silent', parts: ["So last week we upgraded to the annual plan, and since then my team can't log in to the dashboard. They just see a spinning wheel."] },
+  { who: 'interviewer', id: 'K03', expect: 'answer', q: 'Is there something wrong on your side, or is it something we need to fix', check: /\w{4,}.*\w{4,}/s,
+    parts: ['Is there something wrong on your side, or is it something we need to fix?'] },
+  { who: 'user', text: 'Let me check. Are they signing in with single sign on?' },
+  { who: 'interviewer', id: 'K04', expect: 'silent', parts: ['Yes, we use Okta for everyone.'] },
+  { who: 'interviewer', id: 'K05', expect: 'silent', parts: ['Actually, one of them just tried again, and now it says license limit reached.'] },
+  { who: 'interviewer', id: 'K06', expect: 'answer', q: 'What does license limit reached mean, and how do I fix it', check: /licen|seat|user/i,
+    parts: ['What does license limit reached mean, and how do I fix it?'] },
+  { who: 'user', text: 'It means the plan has fewer seats than active users. I can add seats for you.' },
+  { who: 'interviewer', id: 'K07', expect: 'answer', q: 'How much would it cost to add five more seats', check: /\w{4,}/,
+    parts: ['How much would it cost to add five more seats?'] },
+  { who: 'user', text: "I'll send you the exact price by email right after this call." },
+  { who: 'interviewer', id: 'K08', expect: 'silent', parts: ['Okay, that works. My manager will need to approve it anyway.'] },
+  { who: 'interviewer', id: 'K09', expect: 'answer', q: "can I get a refund for the days my team couldn't log in", check: /refund|credit|billing|policy|check|confirm/i,
+    parts: ["And can I get a refund for the days my team couldn't log in?"] },
+  { who: 'user', text: "I'll raise that with billing and get back to you today." },
+  { who: 'interviewer', id: 'K10', expect: 'silent', parts: ['Great, thanks so much for your help today.'] },
+];
+
+// Recruiting: the user is the RECRUITER; the meeting audio is the candidate.
+// The candidate's answers, however long, stay quiet (a rhetorical question
+// they answer themselves included); the candidate's questions TO the
+// recruiter are asks.
+export const recruiting = [
+  { who: 'interviewer', id: 'R01', expect: 'silent', parts: ["Hi, thanks for having me. I'm excited to learn more about the role."] },
+  { who: 'user', text: 'Great to meet you. Can you walk me through your background?' },
+  { who: 'interviewer', id: 'R02', expect: 'silent', parts: ["Sure. I've been a backend engineer for six years, mostly at fintech companies. Most recently I led the payments platform team at a startup of about eighty people."] },
+  { who: 'user', text: 'What made you start looking?' },
+  { who: 'interviewer', id: 'R03', expect: 'silent', parts: ["Honestly, the company is being acquired, and I want to stay close to product work rather than move into a big org."] },
+  { who: 'interviewer', id: 'R04', expect: 'silent', parts: ['Why did I pick payments in the first place? Because I like problems where correctness really matters.'] },
+  { who: 'user', text: 'Makes sense. How do you usually handle disagreements with product managers?' },
+  { who: 'interviewer', id: 'R05', expect: 'silent', parts: ["I try to get to the underlying goal. Usually we agree on the goal and only disagree on the path, so I'll prototype both options quickly and compare."] },
+  { who: 'interviewer', id: 'R06', expect: 'answer', q: 'Can I ask what the salary range is for this role', check: /\w{4,}/,
+    parts: ['Can I ask what the salary range is for this role?'] },
+  { who: 'user', text: 'Sure, the base range is one fifty to one eighty, plus equity.' },
+  { who: 'interviewer', id: 'R07', expect: 'answer', q: 'what does the interview process look like from here', check: /\w{4,}.*\w{4,}/s,
+    parts: ['And what does the interview process look like from here?'] },
+  { who: 'user', text: 'Next is a technical screen, then an onsite with four sessions.' },
+  { who: 'interviewer', id: 'R08', expect: 'answer', q: 'Is the role fully remote, or would I need to be in the office', check: /remote|office|hybrid|\w{4,}/i,
+    parts: ['Is the role fully remote, or would I need to be in the office?'] },
+  { who: 'user', text: "It's remote, with one team week per quarter." },
+  { who: 'interviewer', id: 'R09', expect: 'silent', parts: ['That sounds great. Thanks for your time, I really enjoyed the conversation.'] },
+];
+
+// Seminar / thesis defence: the user presented; the committee asks. A
+// committee member's own remark and a question to the rest of the committee
+// stay quiet.
+export const seminar = [
+  { who: 'interviewer', id: 'E01', voice: 'Karen', expect: 'silent', parts: ['Thank you for the presentation. We have about twenty minutes for questions from the committee.'] },
+  { who: 'interviewer', id: 'E02', voice: 'Karen', expect: 'answer', q: 'Why did you choose those three datasets, and do you think the results generalize', check: /dataset|general/i,
+    parts: ['Let me start. Your evaluation uses only three datasets. Why did you choose those three, and do you think the results generalize?'] },
+  { who: 'user', text: 'We picked them because they cover different sizes and domains, and the trend held on all three.' },
+  { who: 'interviewer', id: 'E03', voice: 'Samantha', expect: 'silent', parts: ['Okay. I noticed the baseline numbers in table four are lower than the ones reported in the original paper.'] },
+  { who: 'interviewer', id: 'E04', voice: 'Samantha', expect: 'answer', q: 'Can you explain that difference', check: /\w{4,}.*\w{4,}/s,
+    parts: ['Can you explain that difference?'] },
+  { who: 'user', text: 'We re-ran the baselines with the same compute budget as our method, which is lower than the original setup.' },
+  { who: 'interviewer', id: 'E05', voice: 'Karen', expect: 'silent', parts: ["I'd like to add to that. The compute budget matters a lot here, so it's good that you controlled for it."] },
+  { who: 'interviewer', id: 'E06', voice: 'Samantha', expect: 'answer', q: 'What would you do differently if you had ten times the compute', check: /\w{4,}.*\w{4,}/s,
+    parts: ['What would you do differently if you had ten times the compute?'] },
+  { who: 'user', text: "I'd scale the ablations and add a larger model to test whether the gain holds." },
+  { who: 'interviewer', id: 'E07', voice: 'Samantha', expect: 'silent', parts: ['Those are my questions. Thank you.'] },
+  { who: 'interviewer', id: 'E08', voice: 'Karen', expect: 'either', parts: ['Does anyone else on the committee have questions?'] },
+  { who: 'interviewer', id: 'E09', voice: 'Karen', expect: 'silent', parts: ["Alright, then we'll deliberate and call you back in about fifteen minutes."] },
+];
+
+// General: a casual one-on-one with a manager.
+export const general = [
+  { who: 'interviewer', id: 'G01', expect: 'silent', parts: ['Hey, thanks for jumping on. I just wanted to catch up quickly before the planning meeting.'] },
+  { who: 'interviewer', id: 'G02', expect: 'answer', q: 'How are you feeling about the launch next week', check: /\w{4,}/,
+    parts: ['How are you feeling about the launch next week?'] },
+  { who: 'user', text: 'Pretty good. The main risk is the migration script.' },
+  { who: 'interviewer', id: 'G03', expect: 'silent', parts: ["Yeah, I heard the migration took four hours in staging. That's longer than we planned."] },
+  { who: 'interviewer', id: 'G04', expect: 'answer', q: 'What do you think we should do about it', check: /\w{4,}.*\w{4,}/s,
+    parts: ['What do you think we should do about it?'] },
+  { who: 'user', text: 'We could run it in batches overnight.' },
+  { who: 'interviewer', id: 'G05', expect: 'silent', parts: ["I like that. I'll mention it in planning, and we can decide there."] },
+  { who: 'interviewer', id: 'G06', expect: 'answer', q: 'can you remind me what the difference between a canary release and a blue green deployment is', check: /canary/i,
+    parts: ['By the way, can you remind me what the difference between a canary release and a blue green deployment is?'] },
+  { who: 'user', text: 'A canary sends a small share of traffic to the new version first; blue green switches all traffic at once.' },
+  { who: 'interviewer', id: 'G07', expect: 'silent', parts: ["Cool, that's helpful. Talk to you later."] },
+];
+
+export const SCRIPTS = { ti: technicalInterview, lfw: lookingForWork, sales: salesCall, lecture, team: teamMeet, call: callCenter, recruit: recruiting, seminar, general };
