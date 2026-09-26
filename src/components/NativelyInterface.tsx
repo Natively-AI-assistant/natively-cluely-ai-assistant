@@ -370,6 +370,7 @@ import { getModifierSymbol, isMac, isWindows } from '../utils/platformUtils';
 import { DynamicActionBar } from './dynamic-actions/DynamicActionBar';
 import GlassEffectLayer from './ui/GlassEffectLayer';
 import { OverlayBanner, OverlayBannerButton } from './ui/OverlayBanner';
+import { ModelSelectorLabel } from './ui/ModelSelectorLabel';
 import RollingTranscript from './ui/RollingTranscript';
 
 // PERF: hoisted plugin arrays. ReactMarkdown receives `remarkPlugins` and
@@ -11346,15 +11347,15 @@ Provide only the answer, nothing else.`;
                         window.electronAPI.toggleModelSelector({ x, y, activate: false });
                       }}
                       className={`
-                                                flex items-center gap-2 px-3 py-1.5
+                                                flex items-center gap-2 px-3 h-7
                                                 border rounded-lg transition-colors
-                                                text-xs font-medium w-[140px]
+                                                text-xs font-medium min-w-[140px]
                                                 interaction-base interaction-press
                                                 ${controlSurfaceClass}
                                             `}
                       style={appearance.controlStyle}
                     >
-                      <span className="truncate min-w-0 flex-1">
+                      <ModelSelectorLabel>
                         {(() => {
                           const m = currentModel;
                           const codexCliName = getCodexCliModelDisplayName(m);
@@ -11365,7 +11366,7 @@ Provide only the answer, nothing else.`;
                           // This MUST sit above the displayName branch below:
                           // getCurrentModelDisplayName() returns currentModelId
                           // verbatim for LiteLLM, so that path would render the
-                          // full id and this chip is a 140px truncating control.
+                          // full id and this chip only shows its first 16 characters.
                           if (m.startsWith('litellm/')) return litellmModelLabel(m);
                           // 9Router stacks the same two prefixes — ours and the
                           // instance's upstream namespace — so a raw id reads
@@ -11407,21 +11408,9 @@ Provide only the answer, nothing else.`;
                           if (m === 'deepseek-v4-flash') return 'DeepSeek V4.1 Flash';
                           return m;
                         })()}
-                      </span>
+                      </ModelSelectorLabel>
                       <ChevronDown size={14} className="shrink-0 transition-transform" />
                     </button>
-
-                    {directAssistEnabled && (
-                      <span
-                        className="px-1.5 py-0.5 rounded-md text-[9px] font-semibold uppercase tracking-wide text-emerald-300 bg-emerald-400/10 border border-emerald-400/20"
-                        title={t('Direct Assist sends the current request straight to the active model')}
-                        data-testid="direct-assist-badge"
-                      >
-                        {t('Direct')}
-                      </span>
-                    )}
-
-                    <div className="w-px h-3 mx-1" style={appearance.dividerStyle} />
 
                     <div className="relative">
                       <button
@@ -11450,15 +11439,15 @@ Provide only the answer, nothing else.`;
                           window.electronAPI.toggleSettingsWindow({ x, y });
                         }}
                         className={`
-                                            w-7 h-7 flex items-center justify-center rounded-lg
+                                            w-7 h-7 flex items-center justify-center rounded-lg border
                                             interaction-base interaction-press
                                             ${
                                               isSettingsOpen
-                                                ? 'overlay-icon-surface overlay-icon-surface-hover overlay-text-primary'
-                                                : 'overlay-icon-surface overlay-icon-surface-hover overlay-text-interactive'
+                                                ? 'overlay-control-surface overlay-text-primary'
+                                                : 'overlay-control-surface overlay-text-interactive'
                                             }
                                         `}
-                        style={appearance.iconStyle}
+                        style={appearance.controlStyle}
                       >
                         <SlidersHorizontal className="w-3.5 h-3.5" />
                       </button>
@@ -11473,15 +11462,15 @@ Provide only the answer, nothing else.`;
                           window.electronAPI?.setOverlayMousePassthrough?.(newState);
                         }}
                         className={`
-                                                    w-7 h-7 flex items-center justify-center rounded-lg
+                                                    w-7 h-7 flex items-center justify-center rounded-lg border
                                                     interaction-base interaction-press
                                                     ${
                                                       isMousePassthrough
-                                                        ? 'overlay-icon-surface overlay-icon-surface-hover text-accent-primary opacity-100'
-                                                        : 'overlay-icon-surface overlay-icon-surface-hover overlay-text-interactive'
+                                                        ? 'overlay-control-surface text-accent-primary opacity-100'
+                                                        : 'overlay-control-surface overlay-text-interactive'
                                                     }
                                                 `}
-                        style={appearance.iconStyle}
+                        style={appearance.controlStyle}
                       >
                         <PointerOff className="w-3.5 h-3.5" />
                       </button>

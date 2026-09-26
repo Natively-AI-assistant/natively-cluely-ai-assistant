@@ -37,6 +37,7 @@ import {
 } from '../lib/overlayAppearance';
 import { getMeetingInterfaceTheme, setMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
 import { KeyRecorder } from './ui/KeyRecorder';
+import { ModelSelectorLabel } from './ui/ModelSelectorLabel';
 import { Disclosure, DisclosureChevron } from './ui/AccordionSection';
 import { Presence, SettingsMenu, SettingsMotionReady } from './settings/SettingsRow';
 import { ProfileVisualizer } from '../premium';
@@ -214,12 +215,11 @@ const MockupNativelyInterface = ({ opacity, theme }: { opacity: number; theme: M
                             {/* Bottom Row */}
                             <div className="flex items-center justify-between mt-3 px-0.5">
                                 <div className="flex items-center gap-1.5">
-                                    <div className="flex items-center gap-2 px-3 py-1.5 border rounded-lg text-xs font-medium w-[140px] overlay-control-surface overlay-text-interactive" style={appearance.controlStyle}>
-                                        <span className="truncate min-w-0 flex-1">Gemini 3 Flash</span>
+                                    <div className="flex items-center gap-2 px-3 h-7 border rounded-lg text-xs font-medium min-w-[140px] overlay-control-surface overlay-text-interactive" style={appearance.controlStyle}>
+                                        <ModelSelectorLabel>Gemini 3 Flash</ModelSelectorLabel>
                                         <ChevronDown size={14} className="shrink-0" />
                                     </div>
-                                    <div className="w-px h-3 mx-1" style={appearance.dividerStyle} />
-                                    <div className="w-7 h-7 flex items-center justify-center rounded-lg overlay-icon-surface overlay-text-muted" style={appearance.iconStyle}>
+                                    <div className="w-7 h-7 flex items-center justify-center rounded-lg border overlay-control-surface overlay-text-muted" style={appearance.controlStyle}>
                                         <SlidersHorizontal className="w-3.5 h-3.5" />
                                     </div>
                                 </div>
