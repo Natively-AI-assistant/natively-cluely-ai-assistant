@@ -11827,7 +11827,11 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('cards:get', async () => {
     try {
-      return { ok: true, ledger: CardLedger.getInstance().get() };
+      const cardLedger = CardLedger.getInstance();
+      // Unreadable (e.g. held by an antivirus scanner): the renderer keeps the
+      // ledger unloaded, so no card stage shows rather than retired ones return.
+      if (!cardLedger.isReadable()) return { ok: false, error: 'ledger_unreadable' };
+      return { ok: true, ledger: cardLedger.get() };
     } catch (e: any) {
       return { ok: false, error: e?.message || 'ledger_unavailable' };
     }

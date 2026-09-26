@@ -100,3 +100,38 @@ test('an unknown card is rejected and nothing is written', () => {
   assert.throws(() => l.record('support', 'meh'), /unknown outcome/);
   assert.equal(fs.readFileSync(file, 'utf8'), before);
 });
+
+// Review finding (2026-09-26): an I/O error is not corruption. On Windows an
+// antivirus scanner can hold the file at startup; treating that like a corrupt
+// file overwrote the real ledger (strikes, "never") once the lock cleared.
+test('a ledger that cannot be READ is left alone, and reports itself unavailable', () => {
+  const file = fileFor('unreadable');
+  // A directory where the file should be: existsSync is true, readFileSync
+  // throws EISDIR — an I/O error, like a file an antivirus scanner holds.
+  fs.mkdirSync(file, { recursive: true });
+  const l = new CardLedger(file, () => T0);
+  l.recordLaunch();
+  assert.equal(l.isReadable(), false, 'the scheduler must not run on an empty stand-in');
+  assert.throws(() => l.record('support', 'later'), /ledger_unreadable/);
+  assert.equal(fs.statSync(file).isDirectory(), true, 'the unreadable path was not replaced');
+  assert.equal(fs.existsSync(file + '.bak'), false, 'an I/O error is not corruption');
+});
+
+test('once the lock clears, the real ledger is adopted with this session\'s launches', () => {
+  const file = fileFor('recovers');
+  fs.mkdirSync(file, { recursive: true });
+  const l = new CardLedger(file, () => T0);
+  l.recordLaunch();
+  // The lock clears: the real file is readable again.
+  fs.rmSync(file, { recursive: true });
+  fs.writeFileSync(file, JSON.stringify({
+    version: 1, firstLaunchAt: T0 - 9 * D, launchCount: 7, lastPromoShownAt: null, imported: { main: 1 },
+    cards: { jd_ad: { retired: true, retiredReason: 'never' } },
+  }));
+  assert.equal(l.isReadable(), true);
+  assert.equal(l.get().cards.jd_ad.retired, true, 'the user\'s "never" survives');
+  assert.equal(l.get().launchCount, 8, 'the launch counted while locked is kept');
+  l.record('support', 'later');
+  assert.equal(read(file).cards.jd_ad.retired, true);
+  assert.equal(read(file).cards.support.strikes, 1);
+});
