@@ -317,7 +317,7 @@ const CopyButton: React.FC<{ text: string }> = ({ text }) => {
             onClick={handle}
             aria-label={copied ? t('Copied') : t('Copy code')}
             // opacity is in the list so the hover reveal fades rather than popping in.
-            className="relative w-6 h-6 inline-flex items-center justify-center rounded-md text-white/40 hover:text-white/80 hover:bg-white/[0.06] transition-[color,background-color,transform,opacity] duration-150 ease-out active:scale-[0.92] opacity-100 md:opacity-0 md:group-hover:opacity-100 focus:outline-none focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-white/20"
+            className="relative w-6 h-6 inline-flex items-center justify-center rounded-md text-white/40 hover:text-white/80 hover:bg-white/[0.06] transition-[color,background-color,transform,opacity] duration-150 ease-out active:scale-[0.92] opacity-100 md:opacity-0 md:group-hover:opacity-100 focus:outline-none focus-visible:opacity-100"
         >
             <AnimatePresence mode="wait" initial={false}>
                 {copied ? (
@@ -634,7 +634,7 @@ const CodingAnswerBlock: React.FC<{ sections: CodingSection[]; firstView?: boole
                                         className={[
                                             'relative inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[12.5px] font-medium select-none cursor-default',
                                             'transition-[color,background-color,transform] duration-150 ease-out active:scale-[0.97]',
-                                            'focus:outline-none focus-visible:ring-2 focus-visible:ring-white/25',
+                                            'focus:outline-none',
                                             isActive ? 'text-text-primary' : 'text-white/35 hover:text-text-tertiary hover:bg-white/[0.04]',
                                         ].join(' ')}
                                     >
@@ -2256,7 +2256,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                 onClick={onBack}
                 aria-label={t("Back")}
                 title={t("Back")}
-                className="absolute left-3 top-3 z-30 p-1.5 rounded-md text-text-tertiary hover:text-text-primary transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border-subtle"
+                className="absolute left-3 top-3 z-30 p-1.5 rounded-md text-text-tertiary hover:text-text-primary transition-colors focus-visible:outline-none"
             >
                 <ArrowLeft size={19} />
             </button>

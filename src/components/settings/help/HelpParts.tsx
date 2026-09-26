@@ -416,7 +416,7 @@ export const HelpClip: React.FC<{
           type="button"
           onClick={toggle}
           aria-label={playing ? 'Pause recording' : 'Play recording'}
-          className={`absolute right-2.5 bottom-2.5 w-8 h-8 rounded-full flex items-center justify-center text-white bg-black/55 backdrop-blur-md ring-1 ring-white/15 shadow-sm transition-opacity duration-200 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${
+          className={`absolute right-2.5 bottom-2.5 w-8 h-8 rounded-full flex items-center justify-center text-white bg-black/55 backdrop-blur-md ring-1 ring-white/15 shadow-sm transition-opacity duration-200 focus-visible:opacity-100 focus-visible:outline-none ${
             playing ? 'opacity-0 group-hover/clip:opacity-100' : 'opacity-100'
           }`}
         >
@@ -443,7 +443,7 @@ export const HelpClip: React.FC<{
                   // Not ring-accent-primary/60: a bare var() colour takes no alpha
                   // suffix (tailwind.config.js), so that emitted nothing and the ring
                   // fell back to Tailwind's default blue.
-                  className="group/step w-full text-left rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:color-mix(in_srgb,var(--accent-primary)_60%,transparent)]"
+                  className="group/step w-full text-left rounded-md focus-visible:outline-none"
                 >
                   {/* The track is drawn in the text colour at low strength: --border-subtle
                       is transparent in dark, and a bare var() takes no alpha suffix. */}

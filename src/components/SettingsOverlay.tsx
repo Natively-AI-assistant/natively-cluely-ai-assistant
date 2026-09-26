@@ -351,7 +351,7 @@ const CustomSelect: React.FC<CustomSelectProps> = ({ label, value, options, onCh
                     aria-disabled={disabled}
                     aria-haspopup="listbox"
                     aria-expanded={isOpen}
-                    className={`w-full bg-bg-input border border-border-subtle rounded-lg px-3 py-2.5 text-sm text-text-primary flex items-center justify-between transition-colors outline-none focus-visible:ring-2 focus-visible:ring-accent-border ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-bg-elevated'}`}
+                    className={`w-full bg-bg-input border border-border-subtle rounded-lg px-3 py-2.5 text-sm text-text-primary flex items-center justify-between transition-colors outline-none ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-bg-elevated'}`}
                 >
                     <span className="truncate pr-4">{selectedLabel}</span>
                     <ChevronDown size={14} className={`text-text-secondary transition-transform duration-[250ms] ease-sculpted motion-reduce:transition-none ${isOpen ? 'rotate-180' : ''}`} />
@@ -489,7 +489,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({ value, options, onChang
                 // focus-visible, not focus: a mouse click left the 2px ring on
                 // the trigger after the menu had closed, until something else
                 // took focus. Keyboard focus still gets it.
-                className={`w-full group bg-bg-input border border-border-subtle hover:border-border-muted shadow-sm rounded-xl p-2.5 pr-3.5 flex items-center justify-between transition-[border-color,box-shadow] duration-150 ease-out outline-none focus-visible:ring-2 focus-visible:ring-accent-border ${isOpen ? 'ring-2 ring-accent-border border-accent-focus' : 'hover:shadow-md'}`}
+                className={`w-full group bg-bg-input border border-border-subtle hover:border-border-muted shadow-sm rounded-xl p-2.5 pr-3.5 flex items-center justify-between transition-[border-color,box-shadow] duration-150 ease-out outline-none ${isOpen ? 'ring-2 ring-accent-border border-accent-focus' : 'hover:shadow-md'}`}
             >
                 {selected ? (
                     <div className="flex items-center gap-3 overflow-hidden">

@@ -521,11 +521,6 @@ export const AIP_CSS = `
    .aip-switch::after, both of which already have a nearer positioned ancestor. */
 .aip-card:has(.aip-float) { position: relative; z-index: 40; }
 
-/* Focus. NOTE: the spec's version also set border-radius here; dropped, because
-   at specificity 0,2,0 it outranks Tailwind's .rounded-* (0,1,0) and every
-   focused control visibly snapped its corners. Chromium's outline already
-   follows the element's own border-radius, so it bought nothing. */
-.aip-root :focus-visible { outline: 2px solid var(--aip-accent); outline-offset: 2px; }
 .aip-root :focus:not(:focus-visible) { outline: none; }
 
 .aip-press, .aip-btn, .aip-chip, .aip-tab {

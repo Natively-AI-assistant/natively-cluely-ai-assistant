@@ -892,7 +892,7 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
                             disabled={deactivatePhase !== 'idle'}
                             data-phase={deactivatePhase}
                             aria-busy={deactivatePhase === 'pending'}
-                            className="pro-deactivate-cta shrink-0 px-3.5 py-1.5 text-[12px] font-medium flex items-center justify-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0B2B22]"
+                            className="pro-deactivate-cta shrink-0 px-3.5 py-1.5 text-[12px] font-medium flex items-center justify-center gap-1.5 cursor-pointer focus-visible:outline-none"
                         >
                             {/* No crossfade on the label swap. The change is
                                 instantaneous and user-caused, the press already
@@ -969,7 +969,7 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
                             onClick={() => setPricingOpen((o) => !o)}
                             aria-expanded={pricingOpen}
                             aria-controls="natively-pro-pricing"
-                            className="pro-teaser group relative w-full overflow-hidden text-left flex items-center gap-4 px-5 py-4 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                            className="pro-teaser group relative w-full overflow-hidden text-left flex items-center gap-4 px-5 py-4 cursor-pointer focus-visible:outline-none"
                         >
                             <span className="relative z-[3] min-w-0 flex-1 block">
                                 <span className="pro-teaser-eyebrow inline-flex items-center px-2 py-0.5 rounded-full text-[9.5px] font-bold" style={{ letterSpacing: '0.09em' }}>
@@ -1086,7 +1086,7 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
                                 {/* CTA — neutral-bright jelly, dark text */}
                                 <button
                                     onClick={() => openExternal(yearlyUrl)}
-                                    className="pricing-cta-yearly relative mt-4 h-11 rounded-full text-[13px] font-semibold flex items-center justify-center gap-2 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                                    className="pricing-cta-yearly relative mt-4 h-11 rounded-full text-[13px] font-semibold flex items-center justify-center gap-2 cursor-pointer focus-visible:outline-none"
                                     style={{ letterSpacing: '-0.005em', transform: 'translateZ(28px)' }}
                                 >
                                     Get Pro
@@ -1181,7 +1181,7 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
                                 {/* CTA — tinted jelly, light text, brighter specular crown */}
                                 <button
                                     onClick={() => openExternal(lifetimeUrl)}
-                                    className="pricing-cta-lifetime relative mt-4 h-11 rounded-full text-[13px] font-semibold flex items-center justify-center gap-2 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                                    className="pricing-cta-lifetime relative mt-4 h-11 rounded-full text-[13px] font-semibold flex items-center justify-center gap-2 cursor-pointer focus-visible:outline-none"
                                     style={{ letterSpacing: '-0.005em', transform: 'translateZ(28px)' }}
                                 >
                                     Lock in lifetime

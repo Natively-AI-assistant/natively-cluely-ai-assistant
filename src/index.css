@@ -3114,10 +3114,15 @@ a,
 }
 /* @undetectable-ring:end */
 
-/* Restore keyboard focus rings that Tailwind preflight removes */
+/* No keyboard focus rings anywhere in the app — product decision (2026-09-27):
+   the ring drew stray indigo circles/boxes around buttons, toggles, tabs and
+   rows after any keypress. This rule must stay (not be deleted): without it
+   Chromium's own blue auto-ring comes back. Component rules must not add a
+   focus-only outline/box-shadow either. Text fields keep their own designed
+   focus states (.aurora-focus chat glow, .overlay-input-surface:focus, input
+   border/halo changes) — those are separate rules, untouched by this one. */
 *:focus-visible {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: 2px;
+  outline: none;
 }
 
 /* Utilities for sidebar layout */
@@ -8765,9 +8770,6 @@ html[data-platform="linux"][data-window="launcher"] body {
 }
 .t-toggle:disabled { cursor: not-allowed; opacity: 0.5; }
 .t-toggle[data-on="true"] { background: var(--toggle-on); }
-.t-toggle:focus-visible {
-    box-shadow: 0 0 0 4px var(--toggle-focus-ring);
-}
 /* `hover:` guard so a tap on touch/trackpad doesn't leave a stuck brighten. */
 @media (hover: hover) {
     .t-toggle:not(:disabled):hover { filter: brightness(1.03); }

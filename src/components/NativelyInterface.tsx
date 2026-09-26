@@ -1155,7 +1155,7 @@ const MessageRow = React.memo(
                           title={isOpen ? t('Shrink') : t('Enlarge')}
                           className={`${frameClass} ${
                             isOpen ? 'col-span-full' : ''
-                          } block w-full p-0 transition-transform duration-200 hover:scale-[1.01] active:scale-[0.99] focus:outline-none focus-visible:ring-1 focus-visible:ring-blue-400/60`}
+                          } block w-full p-0 transition-transform duration-200 hover:scale-[1.01] active:scale-[0.99] focus:outline-none`}
                           /* Fixed frame height keeps the bubble's layout (and the
                              overlay's measured content height) stable while the
                              data-URL decodes — a bare auto-height <img> would

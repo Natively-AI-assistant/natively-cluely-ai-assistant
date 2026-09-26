@@ -62,10 +62,8 @@ const BUTTON_BASE =
   'inline-flex items-center justify-center min-h-[24px] px-2.5 py-1 rounded-lg ' +
   'text-[11px] leading-none whitespace-nowrap border transition-colors ' +
   'motion-safe:active:scale-95 ' +
-  // Visible focus ring with a real outline (WCAG 2.2 SC 2.4.11). No
-  // ring-offset: an offset ring on a transparent overlay draws a halo of the
-  // desktop wallpaper behind it.
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/80 ' +
+  // No focus ring — app-wide policy, see the *:focus-visible rule in index.css.
+  'focus-visible:outline-none ' +
   'disabled:opacity-60 disabled:cursor-not-allowed';
 
 const BUTTON_VARIANTS: Record<OverlayBannerButtonVariant, string> = {
@@ -215,7 +213,7 @@ export const OverlayBanner: React.FC<OverlayBannerProps> = ({
             // index.css) instead of `hover:bg-black/5 dark:hover:bg-white/10`,
             // for the same reason as the secondary button: `dark:` is
             // media-based here while the app theme is token-based.
-            className="inline-flex items-center justify-center h-6 w-6 shrink-0 ml-0.5 rounded-md overlay-text-muted overlay-icon-surface-hover transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/80"
+            className="inline-flex items-center justify-center h-6 w-6 shrink-0 ml-0.5 rounded-md overlay-text-muted overlay-icon-surface-hover transition-colors focus-visible:outline-none"
             title={dismissLabel}
             aria-label={dismissLabel}
             {...dismissButtonProps}

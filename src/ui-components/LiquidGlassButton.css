@@ -844,11 +844,6 @@
 }
 .lg-slider:not(:disabled):active::-webkit-slider-thumb { transform: scale(.94); cursor: grabbing; }
 
-/* Keyboard parity with .lg-button's focus ring. */
-.lg-slider:focus-visible {
-    outline: 3px solid rgba(155, 195, 255, .55);
-    outline-offset: 3px;
-}
 
 @media (prefers-contrast: more) {
     .lg-slider::-webkit-slider-thumb,
@@ -1318,15 +1313,6 @@
     }
 }
 
-.lg-button:focus-visible {
-    outline: 3px solid rgba(175, 214, 255, .95);
-    outline-offset: 3px;
-}
-.lg-button.lg-sm:focus-visible {
-    outline-width: 2px;
-    outline-offset: 2px;
-}
-
 /*
   prefers-contrast: more — the whole point of this material is a rim so subtle
   it reads as light rather than as an edge, which is precisely what a
@@ -1354,7 +1340,6 @@
     .lg-button.lg-badge.lg-green { background-color: #103425; }
     .lg-neutral .lg-content { color: #ffffff; }
     .lg-green   .lg-content { color: #eaffe2; }
-    .lg-button:focus-visible { outline-width: 4px; }
 }
 
 /*

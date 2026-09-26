@@ -686,7 +686,7 @@ export const SkillsSettings: React.FC = () => {
                                                 </span>
                                                 <button
                                                     onClick={() => setConfirmingId(null)}
-                                                    className="px-2.5 py-1 rounded-md border border-border-subtle bg-bg-input text-text-secondary text-[11px] font-medium hover:bg-bg-elevated hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-muted transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100"
+                                                    className="px-2.5 py-1 rounded-md border border-border-subtle bg-bg-input text-text-secondary text-[11px] font-medium hover:bg-bg-elevated hover:text-text-primary focus:outline-none transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100"
                                                     title={t("Cancel (Escape)")}
                                                 >
                                                     {t('Cancel')}
@@ -694,7 +694,7 @@ export const SkillsSettings: React.FC = () => {
                                                 <button
                                                     onClick={() => commitDeleteSkill(skill.id, skill.name)}
                                                     disabled={deletingIds.has(skill.id)}
-                                                    className="px-2.5 py-1 rounded-md bg-red-500 text-white text-[11px] font-semibold hover:bg-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-60 disabled:cursor-not-allowed transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100"
+                                                    className="px-2.5 py-1 rounded-md bg-red-500 text-white text-[11px] font-semibold hover:bg-red-600 focus:outline-none disabled:opacity-60 disabled:cursor-not-allowed transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100"
                                                     title={t("Delete this skill")}
                                                 >
                                                     {deletingIds.has(skill.id) ? t('Deleting…') : t('Delete')}
@@ -705,7 +705,7 @@ export const SkillsSettings: React.FC = () => {
                                                 <button
                                                     onClick={() => requestDeleteSkill(skill.id)}
                                                     disabled={deletingIds.has(skill.id)}
-                                                    className="p-1.5 rounded-lg text-text-secondary hover:text-red-400 hover:bg-red-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-60 disabled:cursor-not-allowed transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100"
+                                                    className="p-1.5 rounded-lg text-text-secondary hover:text-red-400 hover:bg-red-500/10 focus:outline-none disabled:opacity-60 disabled:cursor-not-allowed transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100"
                                                     title={t("Delete skill")}
                                                     aria-label={`Delete ${skill.name}`}
                                                 >
