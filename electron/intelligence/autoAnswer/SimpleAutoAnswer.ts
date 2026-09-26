@@ -226,6 +226,8 @@ export interface SimpleAutoAnswerHost {
     /** Start the answer WHILE the judge decides (see PREFETCH_MIN_ANSWERABILITY). */
     prefetchAnswer?(questionId: string, text: string): void;
     modeName?(): string | null;
+    /** The USER's name, so the judge can tell an ask to them from one to a teammate. */
+    userName?(): string | null;
     telemetry?(event: AutoAnswerTelemetryEvent): void;
     log?(line: string): void;
     /**
@@ -538,6 +540,7 @@ export class SimpleAutoAnswerEngine {
                         modeName: this.host.modeName?.() ?? null,
                         questionId: id,
                         lastAnsweredText: this.lastAnsweredText,
+                        userName: this.host.userName?.() ?? null,
                     }, abort.signal),
                     new Promise<null>((resolve) => {
                         timer = this.clock.setTimeout(() => { timedOut = true; resolve(null); }, JUDGE_DEADLINE_MS);

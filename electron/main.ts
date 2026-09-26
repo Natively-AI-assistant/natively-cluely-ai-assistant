@@ -3295,6 +3295,17 @@ export class AppState {
         return ModesManager.getInstance().getActiveMode()?.name ?? null;
       } catch { return null; }
     },
+    // Who the USER is, so "Raj, can you…" in a team meet stays quiet: the
+    // active résumé's name, else the connected Calendar account's.
+    userName: () => {
+      try {
+        const resume = (this.processingHelper?.getLLMHelper?.()?.getKnowledgeOrchestrator?.() as any)?.activeResume?.structured_data;
+        const fromResume = resume?.identity?.name || resume?.name;
+        if (typeof fromResume === 'string' && fromResume.trim()) return fromResume;
+        const { CalendarManager } = require('./services/CalendarManager');
+        return CalendarManager.getInstance().getConnectionStatus().name ?? null;
+      } catch { return null; }
+    },
     telemetry: (event) => {
       try {
         const { telemetryService } = require('./services/telemetry/TelemetryService');

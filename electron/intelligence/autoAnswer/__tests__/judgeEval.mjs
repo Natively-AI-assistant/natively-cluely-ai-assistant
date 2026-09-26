@@ -37,7 +37,11 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const dist = (f) => require(path.resolve(__dirname, '../../../../dist-electron/electron', f));
-const { buildJudgePrompt, parseJudgeVerdict, routeForVerdict } = dist('intelligence/autoAnswer/AutoAnswerJudge.js');
+// JUDGE_EVAL_JUDGE_JS: score an edited prompt from a one-file bundle without
+// rebuilding dist-electron under a running app.
+const { buildJudgePrompt, parseJudgeVerdict, routeForVerdict } = process.env.JUDGE_EVAL_JUDGE_JS
+  ? require(path.resolve(process.env.JUDGE_EVAL_JUDGE_JS))
+  : dist('intelligence/autoAnswer/AutoAnswerJudge.js');
 const { resolveAutoAnswerThresholds } = dist('context-intelligence/policies/mode-policy-registry.js');
 
 const PROVIDER = process.env.JUDGE_EVAL_PROVIDER ?? 'gemini';
@@ -101,6 +105,9 @@ async function judge(c) {
     modeName: c.modeName ?? 'Technical Interview',
     questionId: 'eval',
     lastAnsweredText: c.lastAnswered ?? null,
+    // JUDGE_EVAL_USER_NAME gives every candidate a USER name (what a résumé does
+    // live); JUDGE_EVAL_NO_NAME strips the set's own, for the before/after A/B.
+    userName: process.env.JUDGE_EVAL_NO_NAME ? null : (c.userName ?? process.env.JUDGE_EVAL_USER_NAME ?? null),
   });
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
