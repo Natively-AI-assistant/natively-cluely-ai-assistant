@@ -6,6 +6,7 @@ import { validateCurl } from '../../lib/curl-validator';
 import { ProviderCard } from './ProviderCard';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useToggleInit } from './useToggleInit';
+import { PICKER_LABEL_MAX_CHARS, PICKER_MENU_WIDTH, capPickerLabel } from './SettingsRow';
 import { motion, useReducedMotion } from 'framer-motion';
 
 // Official provider marks, vendored from @lobehub/icons-static-svg v1.94.0 (MIT).
@@ -96,21 +97,16 @@ import { LiquidGlassBadge } from '../../ui-components/LiquidGlassBadge';
    bring the sheet with it or every .aip-* class silently resolves to nothing.
    Duplicate <style> elements are harmless: identical rules, same cascade. */
 /**
- * The container class for an "Active <thing>" model selector — the control on
- * the right of a hero card.
+ * The container class for a selector on the right of a hero card (Active Model,
+ * Background Model, AI Response Language here; Active Embedding Model, Active
+ * Reranker and the embedding width picker in Retrieval).
  *
- * Defined ONCE because it has to be identical across panels: Retrieval stacks
- * Active Embedding Model directly above Active Reranker, and the two had
- * drifted to 179px and 192px, so their left edges did not line up. The wider
- * of the two is kept — reranker labels ("Voyage Rerank 2.5 Lite") and embedding
- * ids ("lfm-2.5-embedding-350m:free") are both long enough that narrowing would
- * start truncating names that fit today.
- *
- * A selector holding a VALUE rather than a name (the embedding width picker,
- * "3072d") overrides this with its own narrow width — this is the default for
- * the model selectors only.
+ * It fits its content: the picker grows with its label, which the selector caps
+ * at PICKER_LABEL_MAX_CHARS characters. shrink-0 keeps the label whole when the
+ * text beside it runs long (Background Model's warning line). The trigger fills
+ * this box, since .aip-select-trigger is width:100%.
  */
-export const AIP_ACTIVE_SELECT_CONTAINER = 'relative min-w-[150px] max-w-[240px] w-full sm:w-48';
+export const AIP_ACTIVE_SELECT_CONTAINER = 'relative shrink-0';
 
 export const AIP_CSS = `
 .aip-root {
@@ -2010,9 +2006,15 @@ interface ModelSelectProps {
     onChange: (value: string) => void;
     placeholder?: string;
     className?: string;
+    /** Sizes the picker. The trigger fills this box (.aip-select-trigger is width:100%). */
+    containerClassName?: string;
+    /** Caps the trigger's label at this many characters (see capPickerLabel). */
+    maxLabelChars?: number;
+    /** Sizes the open menu. Defaults to the trigger's width. */
+    menuClassName?: string;
 }
 
-const ModelSelect: React.FC<ModelSelectProps> = ({ value, options, onChange, placeholder, className = "" }) => {
+const ModelSelect: React.FC<ModelSelectProps> = ({ value, options, onChange, placeholder, className = "", containerClassName = "relative", maxLabelChars, menuClassName = "w-full" }) => {
     const t = useT();
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = React.useRef<HTMLDivElement>(null);
@@ -2029,24 +2031,27 @@ const ModelSelect: React.FC<ModelSelectProps> = ({ value, options, onChange, pla
 
     const selectedOption = options.find(o => o.id === value);
     const resolvedPlaceholder = placeholder ?? t('Select model');
+    const fullLabel = selectedOption ? selectedOption.name : resolvedPlaceholder;
+    const shownLabel = maxLabelChars ? capPickerLabel(fullLabel, maxLabelChars) : fullLabel;
 
     return (
-        <div className="relative" ref={containerRef}>
+        <div className={containerClassName} ref={containerRef}>
             <button
                 onClick={() => setIsOpen(!isOpen)}
                 aria-expanded={isOpen}
                 aria-haspopup="listbox"
                 className={`aip-select-trigger w-40 ${className}`}
+                title={shownLabel !== fullLabel ? fullLabel : undefined}
                 type="button"
             >
-                <span className="truncate pr-2">{selectedOption ? selectedOption.name : resolvedPlaceholder}</span>
+                <span className="truncate pr-2">{shownLabel}</span>
                 <ChevronDown size={14} strokeWidth={1.75} className="aip-select-chevron" aria-hidden="true" />
             </button>
 
             {isOpen && (
                 <div
                     role="listbox"
-                    className="aip-float aip-scroll-y aip-panel-fade absolute top-full right-0 mt-1 w-full z-50 max-h-60 p-1 custom-scrollbar"
+                    className={`aip-float aip-scroll-y aip-panel-fade absolute top-full right-0 mt-1 ${menuClassName} z-50 max-h-60 p-1 custom-scrollbar`}
                 >
                     {options.map((option) => (
                         <button
@@ -3153,7 +3158,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         const allowed = fastModelDispatchable === null
             ? []
             : all.filter((o) => fastModelDispatchable.includes(o.id));
-        const opts = [{ id: 'auto', name: t('Auto (recommended)') }, ...allowed];
+        const opts = [{ id: 'auto', name: t('Auto') }, ...allowed];
         if (fastModel !== 'auto' && !allowed.some((o) => o.id === fastModel)) {
             const saved = all.find((o) => o.id === fastModel);
             opts.push({ id: fastModel, name: `${saved?.name ?? fastModel} ${t('(not supported)')}` });
@@ -4299,6 +4304,9 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         <p className="text-[10px] aip-muted mt-0.5">{t('Applies to new chats instantly.')}</p>
                     </div>
                     <ModelSelect
+                        containerClassName={AIP_ACTIVE_SELECT_CONTAINER}
+                        maxLabelChars={PICKER_LABEL_MAX_CHARS}
+                        menuClassName={PICKER_MENU_WIDTH}
                         value={defaultModel}
                         options={buildAvailableModelOptions()}
                         onChange={(val) => {
@@ -4322,6 +4330,9 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         )}
                     </div>
                     <ModelSelect
+                        containerClassName={AIP_ACTIVE_SELECT_CONTAINER}
+                        maxLabelChars={PICKER_LABEL_MAX_CHARS}
+                        menuClassName={PICKER_MENU_WIDTH}
                         value={fastModel}
                         options={buildFastModelOptions()}
                         onChange={async (val) => {
@@ -4355,16 +4366,17 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                             }
                         </p>
                     </div>
-                    <div className="relative" ref={aiLangDropdownRef}>
+                    <div className={AIP_ACTIVE_SELECT_CONTAINER} ref={aiLangDropdownRef}>
                         <button
+                            type="button"
                             onClick={onToggleAiLangDropdown}
                             aria-expanded={isAiLangDropdownOpen}
-                            className="aip-btn min-w-[110px] justify-between"
+                            className="aip-select-trigger"
                         >
-                            <span className="capitalize text-ellipsis overflow-hidden whitespace-nowrap flex items-center gap-1">
-                                {aiResponseLanguage === 'auto' ? t('Auto') : aiResponseLanguage}
+                            <span className="capitalize truncate pr-2">
+                                {capPickerLabel(aiResponseLanguage === 'auto' ? t('Auto') : aiResponseLanguage)}
                             </span>
-                            <ChevronDown size={12} strokeWidth={1.75} className={`shrink-0 transition-transform ${isAiLangDropdownOpen ? 'rotate-180' : ''}`} />
+                            <ChevronDown size={14} strokeWidth={1.75} className="aip-select-chevron" aria-hidden="true" />
                         </button>
 
                         {isAiLangDropdownOpen && (

@@ -22,6 +22,17 @@ export type Lang = 'en' | 'ru' | 'zh' | 'ja' | 'es';
 const STORAGE_KEY = 'natively_lang';
 const SUPPORTED_LANGS: Lang[] = ['en', 'ru', 'zh', 'ja', 'es'];
 
+// Each language named in itself, never passed through t(): a language picker
+// must read the same in every interface language, or someone who switched to
+// Russian by mistake has to find "English" spelled as «Английский».
+export const LANG_NATIVE_NAMES: Record<Lang, string> = {
+    en: 'English',
+    ru: 'Русский',
+    zh: '中文',
+    ja: '日本語',
+    es: 'Español',
+};
+
 function isSupportedLang(v: string | null): v is Lang {
     return v !== null && (SUPPORTED_LANGS as string[]).includes(v);
 }

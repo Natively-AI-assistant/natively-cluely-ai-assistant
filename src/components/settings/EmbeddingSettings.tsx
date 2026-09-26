@@ -3,6 +3,7 @@ import { AlertCircle, Check, ChevronDown, Download, ExternalLink, FolderOpen, Ha
 import { useT } from '../../i18n';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { AIP_ACTIVE_SELECT_CONTAINER, AIP_CSS, AipBadge, AipModelList, AipProviderMark, type AipTone } from './AIProvidersSettings';
+import { PICKER_MENU_WIDTH, RETRIEVAL_HERO_PICKER_ATTR, RETRIEVAL_HERO_PICKER_MIN_WIDTH, capPickerLabel } from './SettingsRow';
 import { isMac, isWindows } from '../../utils/platformUtils';
 
 // Embeddings — configured INDEPENDENTLY of the generation model.
@@ -199,6 +200,9 @@ interface EmbeddingModelSelectProps {
     ariaLabel?: string;
     /** Native tooltip — used to explain why the control is disabled. */
     title?: string;
+    /** Sizes the open menu. Defaults to fitting its options; the Active card's
+     *  picker passes w-full so the menu is exactly as wide as its button. */
+    menuClassName?: string;
 }
 
 const EmbeddingModelSelect: React.FC<EmbeddingModelSelectProps> = ({
@@ -212,6 +216,7 @@ const EmbeddingModelSelect: React.FC<EmbeddingModelSelectProps> = ({
     containerClassName = AIP_ACTIVE_SELECT_CONTAINER,
     ariaLabel,
     title,
+    menuClassName = PICKER_MENU_WIDTH,
 }) => {
     const t = useT();
     const [isOpen, setIsOpen] = useState(false);
@@ -232,6 +237,7 @@ const EmbeddingModelSelect: React.FC<EmbeddingModelSelectProps> = ({
         || (selectedOption ? (selectedOption.triggerName || selectedOption.name) : null)
         || (value && value.includes('::') ? bareModelName(value.split('::').slice(1).join('::')) : null)
         || (placeholder || t('Select model'));
+    const shownLabel = capPickerLabel(resolvedLabel);
 
     return (
         <div className={containerClassName} ref={containerRef}>
@@ -241,18 +247,18 @@ const EmbeddingModelSelect: React.FC<EmbeddingModelSelectProps> = ({
                 aria-expanded={isOpen}
                 aria-haspopup="listbox"
                 aria-label={ariaLabel}
-                title={title}
+                title={title ?? (shownLabel !== resolvedLabel ? resolvedLabel : undefined)}
                 disabled={disabled}
                 className={`aip-select-trigger cursor-pointer flex items-center justify-between w-full ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}
             >
-                <span className="truncate pr-2 text-xs">{resolvedLabel}</span>
+                <span className="truncate pr-2 text-xs">{shownLabel}</span>
                 <ChevronDown size={14} strokeWidth={1.75} className={`aip-select-chevron transition-transform duration-150 shrink-0 ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
             </button>
 
             {isOpen && (
                 <div
                     role="listbox"
-                    className="aip-float aip-scroll-y aip-panel-fade absolute top-full right-0 mt-1 w-full z-50 max-h-60 p-1 custom-scrollbar shadow-lg"
+                    className={`aip-float aip-scroll-y aip-panel-fade absolute top-full right-0 mt-1 ${menuClassName} z-50 max-h-60 p-1 custom-scrollbar shadow-lg`}
                 >
                     {options.map((option) => (
                         <button
@@ -267,6 +273,7 @@ const EmbeddingModelSelect: React.FC<EmbeddingModelSelectProps> = ({
                                 setIsOpen(false);
                             }}
                             className={`aip-select-option flex items-center justify-between w-full text-left px-3 py-2 rounded-md text-xs cursor-pointer ${value === option.id ? 'aip-text font-medium' : ''}`}
+                            title={option.name}
                         >
                             <span className="truncate flex-1">{option.name}</span>
                             {value === option.id && (
@@ -1101,8 +1108,6 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                                 // width belongs to.
                                 ariaLabel={target ? `${t('Output width for')} ${target.label || target.id}` : t('Output width')}
                                 title={hint}
-                                // Narrow: it holds "3072d", not a model name.
-                                containerClassName="relative shrink-0 w-[104px]"
                                 value={current ? String(current) : ''}
                                 options={(fixedWidth || !widths ? (current ? [current] : []) : widths)
                                     .map(d => ({ id: String(d), name: `${d}d` }))}
@@ -1512,8 +1517,11 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                         </p>
                     </div>
 
-                    <div className="shrink-0">
+                    <div className="shrink-0" {...{ [RETRIEVAL_HERO_PICKER_ATTR]: '' }} style={{ minWidth: RETRIEVAL_HERO_PICKER_MIN_WIDTH }}>
                         <EmbeddingModelSelect
+                            // The menu matches the button's width; a name too
+                            // long for it truncates and shows whole on hover.
+                            menuClassName="w-full"
                             value={activeOptionId}
                             displayLabel={activeDisplayLabel}
                             options={activeOptions}

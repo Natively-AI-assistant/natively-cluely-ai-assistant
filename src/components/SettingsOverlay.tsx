@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
-import { useLanguage, useT } from '../i18n';
+import { LANG_NATIVE_NAMES, useLanguage, useT } from '../i18n';
 import packageJson from '../../package.json';
 import {
     X, Mic, Speaker, Monitor, Keyboard, User, LifeBuoy, LogOut, Upload,
@@ -7,7 +7,7 @@ import {
     Camera, RotateCcw, Eye, Layout, MessageSquare, Crop,
     ChevronDown, ChevronUp, Check, BadgeCheck, Power, Palette, Calendar, Ghost, Sun, Moon, RefreshCw, Info, Globe, FlaskConical, Terminal, Download, Settings, Activity, ExternalLink, Trash2,
     Sparkles, Pencil, Briefcase, Building2, Search, MapPin, CheckCircle, HelpCircle, Zap, SlidersHorizontal, PointerOff, Folder,
-    Star, AlertCircle, Gift, Smartphone, Cpu, Shield, Code2, Headphones, Boxes
+    Star, AlertCircle, Gift, Smartphone, Cpu, Shield, Code2, Headphones, Boxes, Languages
 } from 'lucide-react';
 import { AutoAnswerIcon } from './AutoAnswerIcon';
 import { HiCreditCard } from 'react-icons/hi2';
@@ -2518,12 +2518,18 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         </div>
                                                     </div>
 
+                                                    {/* Theme, Language, Meeting Interface Style and the Check
+                                                        and Export buttons share px-2.5 + min-w-[105px], so they
+                                                        match. 105px holds the widest label each can show in
+                                                        English: Theme "System" with its icon (104.9px, icon at
+                                                        gap-1.5) and Check's "Up to date" (104.4px), so no state
+                                                        resizes them. A longer label ("Liquid Glass") still grows. */}
                                                     <div className="relative" ref={themeDropdownRef}>
                                                         <button
                                                             onClick={() => setIsThemeDropdownOpen(!isThemeDropdownOpen)}
-                                                            className="bg-bg-component hover:bg-bg-elevated border border-border-subtle text-text-primary px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 min-w-[110px] justify-between"
+                                                            className="bg-bg-component hover:bg-bg-elevated border border-border-subtle text-text-primary px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 min-w-[105px] justify-between"
                                                         >
-                                                            <div className="flex items-center gap-2 overflow-hidden">
+                                                            <div className="flex items-center gap-1.5 overflow-hidden">
                                                                 <span className="text-text-secondary shrink-0">
                                                                     {themeMode === 'system' && <Monitor size={14} />}
                                                                     {themeMode === 'light' && <Sun size={14} />}
@@ -2570,27 +2576,37 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     </div>
 
                                                     <div className="relative" ref={langDropdownRef}>
+                                                        {/* The language name is centred, in the button and in
+                                                            the menu. In the button it travels with an icon, like
+                                                            Theme's and Check's, and the two are centred together.
+                                                            Two spacers share the free space. The right one holds
+                                                            the chevron and never gets narrower than the chevron
+                                                            plus the old 8px gap, so a long name slides left
+                                                            instead of under it. The button keeps the 105px of its
+                                                            column: "English" with its icon fills it. */}
                                                         <button
                                                             onClick={() => setIsLangDropdownOpen(!isLangDropdownOpen)}
-                                                            className="bg-bg-component hover:bg-bg-elevated border border-border-subtle text-text-primary px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 min-w-[110px] justify-between"
+                                                            className="bg-bg-component hover:bg-bg-elevated border border-border-subtle text-text-primary px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center min-w-[105px]"
                                                         >
-                                                            <span className="text-ellipsis overflow-hidden whitespace-nowrap">
-                                                                {lang === 'en' && t('English')}
-                                                                {lang === 'ru' && t('Russian')}
-                                                                {lang === 'zh' && t('Chinese')}
-                                                                {lang === 'ja' && t('Japanese')}
-                                                                {lang === 'es' && t('Spanish')}
+                                                            <span aria-hidden="true" className="flex-1 basis-0 min-w-0" />
+                                                            <span className="min-w-0 flex items-center gap-1.5">
+                                                                <Languages size={14} className="text-text-secondary shrink-0" aria-hidden="true" />
+                                                                <span className="min-w-0 text-ellipsis overflow-hidden whitespace-nowrap">
+                                                                    {LANG_NATIVE_NAMES[lang]}
+                                                                </span>
                                                             </span>
-                                                            <ChevronDown size={12} className={`shrink-0 transition-transform duration-[250ms] ease-sculpted motion-reduce:transition-none ${isLangDropdownOpen ? 'rotate-180' : ''}`} />
+                                                            <span aria-hidden="true" className="flex-1 basis-0 min-w-[20px] flex justify-end">
+                                                                <ChevronDown size={12} className={`shrink-0 transition-transform duration-[250ms] ease-sculpted motion-reduce:transition-none ${isLangDropdownOpen ? 'rotate-180' : ''}`} />
+                                                            </span>
                                                         </button>
 
                                                         <SettingsMenu open={isLangDropdownOpen} origin="top right" className="absolute right-0 top-full mt-1 min-w-full w-max bg-bg-elevated border border-border-subtle rounded-lg shadow-xl overflow-hidden z-20 p-1 select-none">
                                                             {[
-                                                                { code: 'en' as const, label: t('English') },
-                                                                { code: 'ru' as const, label: t('Russian') },
-                                                                { code: 'zh' as const, label: t('Chinese') },
-                                                                { code: 'ja' as const, label: t('Japanese') },
-                                                                { code: 'es' as const, label: t('Spanish') },
+                                                                { code: 'en' as const, label: LANG_NATIVE_NAMES.en },
+                                                                { code: 'ru' as const, label: LANG_NATIVE_NAMES.ru },
+                                                                { code: 'zh' as const, label: LANG_NATIVE_NAMES.zh },
+                                                                { code: 'ja' as const, label: LANG_NATIVE_NAMES.ja },
+                                                                { code: 'es' as const, label: LANG_NATIVE_NAMES.es },
                                                             ].map((option) => (
                                                                 <button
                                                                     key={option.code}
@@ -2598,9 +2614,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                         setLang(option.code);
                                                                         setIsLangDropdownOpen(false);
                                                                     }}
-                                                                    className={`w-full text-left px-2 py-1.5 rounded-md text-xs flex items-center gap-2 transition-colors ${lang === option.code ? 'text-text-primary bg-[color:color-mix(in_srgb,var(--bg-item-active)_50%,transparent)]' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
+                                                                    className={`relative w-full text-center px-5 py-1.5 rounded-md text-xs flex items-center justify-center transition-colors ${lang === option.code ? 'text-text-primary bg-[color:color-mix(in_srgb,var(--bg-item-active)_50%,transparent)]' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
                                                                 >
-                                                                    {lang === option.code && <Check size={12} className="text-text-primary" />}
+                                                                    {/* Pinned left, out of the flow, so the tick does not push
+                                                                        the selected name off centre; px-5 keeps every name
+                                                                        clear of it. */}
+                                                                    {lang === option.code && <Check size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-text-primary" />}
                                                                     <span className={lang === option.code ? 'text-text-primary' : 'text-text-secondary'}>{option.label}</span>
                                                                 </button>
                                                             ))}
@@ -2608,9 +2627,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     </div>
                                                 </div>
 
-                                                {/* Version */}
-                                                <div className="flex items-start justify-between gap-4 px-4 py-3">
-                                                    <div className="flex items-start gap-4">
+                                                {/* Version. items-center like the Theme and Language rows:
+                                                    items-start pinned the Check button 5px above their
+                                                    buttons, which sit on their tile's centre line. */}
+                                                <div className="flex items-center justify-between gap-4 px-4 py-3">
+                                                    <div className="flex items-center gap-4">
                                                         <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
                                                             <BadgeCheck size={20} />
                                                         </div>
@@ -2636,7 +2657,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             }
                                                         }}
                                                         disabled={updateStatus === 'checking'}
-                                                        className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors flex items-center justify-center gap-2 shrink-0 min-w-[110px] ${
+                                                        className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors flex items-center justify-start gap-2 shrink-0 min-w-[105px] ${
                                                             updateStatus === 'checking'
                                                                 ? 'bg-bg-input text-text-tertiary border-border-subtle cursor-wait'
                                                                 : updateStatus === 'available'
@@ -2648,6 +2669,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                             : 'bg-bg-component hover:bg-bg-elevated text-text-primary border-border-subtle'
                                                         }`}
                                                     >
+                                                        {/* justify-start puts the glyph where Theme's and Language's
+                                                            icons start; centred, it sat 12px further in. */}
                                                         {updateStatus === 'checking' ? (
                                                             <>
                                                                 <RefreshCw size={14} className="animate-spin" />
@@ -2712,7 +2735,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         <div className="relative" ref={interfaceThemeDropdownRef}>
                                                             <button
                                                                 onClick={() => setIsInterfaceThemeDropdownOpen(!isInterfaceThemeDropdownOpen)}
-                                                                className="bg-bg-component hover:bg-bg-elevated border border-border-subtle text-text-primary px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 min-w-[110px] justify-between"
+                                                                className="bg-bg-component hover:bg-bg-elevated border border-border-subtle text-text-primary px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 min-w-[105px] justify-between"
                                                             >
                                                                 <span className="text-ellipsis overflow-hidden whitespace-nowrap">
                                                                     {meetingInterfaceTheme === 'liquid-glass'
@@ -2724,7 +2747,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 <ChevronDown size={12} className={`shrink-0 transition-transform duration-[250ms] ease-sculpted motion-reduce:transition-none ${isInterfaceThemeDropdownOpen ? 'rotate-180' : ''}`} />
                                                             </button>
 
-                                                            <SettingsMenu open={isInterfaceThemeDropdownOpen} origin="top right" className="absolute right-0 top-full mt-1 w-full bg-bg-elevated border border-border-subtle rounded-lg shadow-xl overflow-hidden z-20 p-1 select-none">
+                                                            <SettingsMenu open={isInterfaceThemeDropdownOpen} origin="top right" className="absolute right-0 top-full mt-1 min-w-full w-max bg-bg-elevated border border-border-subtle rounded-lg shadow-xl overflow-hidden z-20 p-1 select-none">
                                                                 {([
                                                                     { mode: 'default' as MeetingInterfaceTheme, label: 'Default' },
                                                                     { mode: 'liquid-glass' as MeetingInterfaceTheme, label: 'Liquid Glass' },
@@ -2868,8 +2891,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                     setExportingLogs(false);
                                                                 }
                                                             }}
-                                                            className="shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg bg-bg-item-surface border border-border-subtle text-text-primary hover:bg-[color:var(--bg-row-hover)] transition-colors disabled:opacity-50"
+                                                            className="shrink-0 min-w-[105px] text-xs font-medium px-2.5 py-1.5 rounded-lg bg-bg-item-surface border border-border-subtle text-text-primary hover:bg-[color:var(--bg-row-hover)] transition-colors disabled:opacity-50"
                                                         >
+                                                            {/* min-w-[105px] + px-2.5 like every other control in this
+                                                                column; it also holds "Exporting…", so the swap can't
+                                                                resize the box. */}
                                                             {exportingLogs ? t('Exporting\u2026') : t('Export')}
                                                         </button>
                                                     </div>

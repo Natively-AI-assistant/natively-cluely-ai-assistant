@@ -287,6 +287,28 @@ export const SETTINGS_INPUT =
 // Sync's field label ("PAIRING LINK").
 export const SETTINGS_FIELD_LABEL = 'text-xs font-medium text-text-secondary uppercase tracking-wide block';
 
+/* A dropdown on the right of a settings row grows with its label, up to
+   PICKER_LABEL_MAX_CHARS characters ("Gemini 3.8 Flash"); capPickerLabel cuts
+   anything longer. Its menu sizes to its options, so a short label like "Auto"
+   still opens a menu wide enough to read the choices in it. */
+export const PICKER_LABEL_MAX_CHARS = 16;
+export const PICKER_MENU_WIDTH = 'min-w-full w-max max-w-[18rem]';
+
+/* The Active Embedding Model and Active Reranker picker boxes carry this
+   attribute and this min-width; the Retrieval page sets the variable to the
+   wider of the two so they match (useMatchedHeroPickers). Anywhere else the
+   variable is unset and each box fits its own label. */
+export const RETRIEVAL_HERO_PICKER_ATTR = 'data-retrieval-hero-picker';
+export const RETRIEVAL_HERO_PICKER_MIN_WIDTH = 'var(--retrieval-hero-picker-w, 0px)';
+
+/** A label longer than `max` characters (spaces included) keeps its first
+ *  max-1 and ends in an ellipsis, so what shows is never more than `max`. */
+export const capPickerLabel = (label: string, max: number = PICKER_LABEL_MAX_CHARS): string => {
+    const chars = Array.from(label);
+    if (chars.length <= max) return label;
+    return `${chars.slice(0, max - 1).join('').trimEnd()}…`;
+};
+
 // Audio's section heading.
 export const SettingsSectionHeading: React.FC<{ title: string; subtitle?: React.ReactNode }> = ({ title, subtitle }) => (
   <>
