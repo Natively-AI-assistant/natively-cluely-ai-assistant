@@ -44,7 +44,7 @@ test('pictures are kept per permission state', () => {
   // must never pour out when the card opens in another.
   const view = rendered.match(/const genieView = `([^`]*)`;/);
   assert.ok(view, 'the view is built from the statuses');
-  for (const part of ['${platform}', '${micStatus}', '${isMac ? scrStatus :']) {
+  for (const part of ['${platform}', '${micStatus}', '${hasScreenRow ? scrStatus :']) {
     assert.ok(view[1].includes(part), part);
   }
   assert.ok(rendered.includes('openingView={genieView}'), 'the open looks up this state, not the last one remembered');
@@ -85,13 +85,19 @@ test('the genie pours the card out whole: nothing inside animates in on top of i
 });
 
 test('both platforms keep their layout', () => {
-  // Windows: microphone only, no macOS guide, a narrower card with its close
-  // in the corner. None of that moves with the genie.
-  assert.ok(rendered.includes("const CARD_W = isMac ? '600px' : '420px';"));
+  // macOS and Windows share the 600px split card: both rows, the guide pane
+  // and its close. Only the guide differs, and each platform gets its own.
+  // Anything else keeps the narrow mic-only card with its close in the corner.
+  // None of that moves with the genie.
+  assert.ok(rendered.includes("const hasGuide = isMac || isWin;"));
+  assert.ok(rendered.includes("const CARD_W = hasGuide ? '600px' : '420px';"));
   assert.ok(rendered.includes("wrapStyle={{ width: CARD_W, maxWidth: '92vw' }}"));
-  assert.ok(rendered.includes('{!isMac && ('), 'Windows keeps its corner close');
-  assert.ok(rendered.includes('{isMac && (\n        <PermItem'), 'the screen row is macOS only');
-  assert.ok(/\{isMac && \(\s*<motion\.div[\s\S]{0,200}flex: '0 0 40%'/.test(rendered), 'the guide is macOS only');
+  assert.ok(rendered.includes('{!hasGuide && ('), 'a card without a guide keeps its corner close');
+  assert.ok(rendered.includes("const hasScreenRow = platform === 'darwin' || platform === 'win32';"));
+  assert.ok(rendered.includes('{screenRow && (\n        <PermItem'), 'the screen row is macOS and Windows');
+  assert.ok(/\{hasGuide && \(\s*<motion\.div[\s\S]{0,200}flex: '0 0 40%'/.test(rendered), 'the guide is macOS and Windows');
+  assert.ok(/isWin\s*\?\s*<WinGuideSteps[\s\S]{0,120}:\s*<GuideSteps/.test(rendered),
+    'Windows gets the Windows guide, never the macOS dialog');
 });
 
 test('dialog semantics', () => {

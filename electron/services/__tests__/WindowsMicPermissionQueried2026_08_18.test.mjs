@@ -41,6 +41,17 @@ test('Windows queries the real microphone status instead of hardcoding granted',
     'the win32 branch must not return a hardcoded granted microphone');
 });
 
+test('Windows screen status comes from a bounded capture probe, not a hardcoded grant', () => {
+  const body = permissionsCheckBody();
+  const i = body.indexOf("process.platform === 'win32'");
+  const j = body.indexOf('// Linux', i);
+  const win = body.slice(i, j);
+  assert.ok(/desktopCapturer\.getSources\(/.test(win), 'the win32 branch must probe desktopCapturer');
+  assert.ok(/screen-capture-probe-timeout/.test(win), 'the probe must be bounded by a timeout');
+  assert.ok(/let screen = 'unknown'/.test(win), 'a failed probe must not report granted');
+  assert.ok(!/screen: 'granted', platform: 'win32'/.test(win), 'screen must not be hardcoded granted');
+});
+
 test('a failed query falls back to granted so it cannot lock out a working machine', () => {
   const body = permissionsCheckBody();
   const i = body.indexOf("process.platform === 'win32'");
