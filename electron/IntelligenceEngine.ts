@@ -808,6 +808,7 @@ export class IntelligenceEngine extends EventEmitter {
             // Re-check mode: a high-priority mode may have started during the debounce window.
             if (this.activeMode !== 'idle' && this.activeMode !== 'assist') return;
             // Don't overwrite a speculative stream that is already in flight.
+            this.releaseExpiredSpeculation();
             if (this.speculativeText !== null) return;
             if (Date.now() - this.lastTriggerTime < this.triggerCooldown) return;
             console.log(`[IntelligenceEngine] Speculative inference fired on interim`, { length: text.length, confidence });
@@ -1008,7 +1009,12 @@ export class IntelligenceEngine extends EventEmitter {
     async handleSuggestionTrigger(trigger: SuggestionTrigger): Promise<void> {
         // An absent confidence is not a low one: the planner substitutes the
         // intent classifier's score. Only an EXPLICIT sub-threshold value skips.
-        if (trigger.confidence !== undefined && trigger.confidence < 0.5) return;
+        // Not for an AUTOMATIC trigger: its confidence is the judge's
+        // answerability, already held to Auto Answer's own floor (0.30, a user
+        // decision). This 0.5 line silently dropped every 0.3-0.5 verdict — the
+        // judge's logistics band ("can you hear me okay?") — after the engine
+        // had reported it dispatched, leaving its prefetch orphaned (2026-09-26).
+        if (!trigger.automatic && trigger.confidence !== undefined && trigger.confidence < 0.5) return;
 
         if (trigger.automatic) { this.automaticTriggerPending = true; this.automaticTriggerCancelled = false; }
         try {
@@ -1177,6 +1183,7 @@ export class IntelligenceEngine extends EventEmitter {
      */
     prefetchAutoAnswer(questionId: string, text: string): void {
         if (this.activeMode !== 'idle' && this.activeMode !== 'assist') return;
+        this.releaseExpiredSpeculation();
         if (this.speculativeText !== null) return;
         if (this.speculativeTimer !== null) return;
         if (Date.now() - this.lastTriggerTime < this.triggerCooldown) return;
@@ -1187,6 +1194,31 @@ export class IntelligenceEngine extends EventEmitter {
         console.log(`[IntelligenceEngine] Auto Answer prefetch fired while the judge decides`, { questionId, length: trimmed.length });
         this.runWhatShouldISay(trimmed, 0.9, undefined, { speculative: true })
             .catch(err => console.error('[IntelligenceEngine] Auto Answer prefetch error:', err));
+    }
+
+    /**
+     * Free the speculative slot when what holds it can no longer be adopted.
+     *
+     * `speculativeText` is only ever cleared by an adoption, a dispatch that
+     * finds it stale, or a reset — never by its own expiry. So one prefetch the
+     * judge turned down (a statement, a comprehension check) kept the slot
+     * after its adoption window closed, and every later prefetch and interim
+     * speculation returned early on `speculativeText !== null` until some
+     * dispatch happened to sweep it. Live 2026-09-26: 3 prefetches in 12 asks,
+     * and 3 dispatches that found the slot "expired". A run still STREAMING
+     * keeps its slot — its expiry bounds adoption, not the stream.
+     */
+    private releaseExpiredSpeculation(now: number = Date.now()): void {
+        if (this.speculativeText === null || now <= this.speculativeTextExpiry) return;
+        const streaming = this.activeMode === 'what_to_say'
+            && this.speculativeGenerationId !== null
+            && this.speculativeGenerationId === this.currentGenerationId;
+        if (streaming) return;
+        this.speculativeText = null;
+        this.speculativeTextExpiry = Infinity;
+        this.speculativeQuestionId = null;
+        this.speculativeAnswer = null;
+        this.speculativeAdoptedGenerationId = null;
     }
 
     /**
@@ -1422,6 +1454,7 @@ export class IntelligenceEngine extends EventEmitter {
             lastTriggerTime: this.lastTriggerTime,
             cooldownMs: this.triggerCooldown,
             lastTriggerQuestion: this.lastTriggerQuestion ?? undefined,
+            automatic: trigger.automatic === true,
         });
     }
 
