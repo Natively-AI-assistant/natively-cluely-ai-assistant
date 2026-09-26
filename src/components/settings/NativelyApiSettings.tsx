@@ -290,22 +290,37 @@ function RollingPrice({ price, from }: { price: string; from: string }) {
   );
 }
 
-// Both tiers' text share one absolutely-positioned cell, so for as long as the
-// two fades overlap the card shows two sets of text. The outgoing tier leaves
-// on the quick clock (150ms) and the incoming one arrives on the tab pill's
-// (250ms smooth-out), the same clock the card's fill now cross-fades on. The
-// stagger that used to sit here had no child variants to act on.
+// Both tiers' text share one absolutely-positioned cell, so a plain crossfade
+// double-exposed them: for as long as the two fades overlapped the card showed
+// two sets of text in one place. Now it is a directional handoff that follows
+// the tab pill: the incoming tier arrives 8px from the side the pill is
+// travelling toward, sharpening from a 2px blur, on the pill's own clock
+// (250ms smooth-out, the clock the card's fill cross-fades on too); the
+// outgoing one leaves 4px the other way on the quick clock (150ms), so it is
+// mostly gone before the new text has moved. Reduced motion keeps only the
+// fade: index.css pins filter and transform on `.natively-api-detail-card > div`.
+const TIER_SWAP_EASE = [0.22, 1, 0.36, 1] as const;
 const cardContainerVariants = {
-  enter: (_direction: number) => ({
+  enter: (direction: number) => ({
     opacity: 0,
+    x: direction * 8,
+    filter: 'blur(2px)',
   }),
   center: {
     opacity: 1,
-    transition: { duration: 0.25, ease: [0.22, 1, 0.36, 1] as const },
+    x: 0,
+    filter: 'blur(0px)',
+    // Then cleared: framer animates to blur(0px) and would leave it there, and
+    // any filter at rest makes this the backdrop root for the glass inside it
+    // and the containing block for fixed children.
+    transitionEnd: { filter: 'none' },
+    transition: { duration: 0.25, ease: TIER_SWAP_EASE },
   },
-  exit: (_direction: number) => ({
+  exit: (direction: number) => ({
     opacity: 0,
-    transition: { duration: 0.15, ease: 'easeInOut' as const },
+    x: direction * -4,
+    filter: 'blur(2px)',
+    transition: { duration: 0.15, ease: TIER_SWAP_EASE },
   })
 };
 
@@ -1270,7 +1285,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
         {/* Active sliding pill */}
         <div
           aria-hidden="true"
-          className="natively-api-selector-pill-track absolute top-0 bottom-0 left-0 w-1/4 p-1 transition-transform duration-[220ms] ease-[cubic-bezier(0.23,1,0.32,1)] will-change-transform"
+          className="natively-api-selector-pill-track absolute top-0 bottom-0 left-0 w-1/4 p-1 transition-transform duration-[250ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform"
           style={{
             transform: `translate3d(${
               selectedPlanId === 'natively_api_standard_monthly' ? '0%' :
@@ -2049,9 +2064,12 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
                 }
             }
           >
+            {/* hoverFill off, as on How it works below: the header answers the
+                pointer by brightening its chevron, not by filling the row. */}
             <AccordionSection
               title="Change plan"
               className="bg-bg-item-surface rounded-2xl border-border-subtle !mb-0"
+              hoverFill={false}
             >
               {PlansCard}
             </AccordionSection>

@@ -4,7 +4,7 @@ import { AnimatePresence, motion, useReducedMotion, type Variants, useMotionValu
 import { CheckCircle, AlertCircle, X, ChevronDown } from 'lucide-react';
 import { InteractiveCard } from '../ui/InteractiveCard';
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../../lib/meetingInterfaceTheme';
-import { Disclosure } from '../ui/AccordionSection';
+import { AccordionPanel } from '../ui/AccordionSection';
 import { getLicenseSnapshot, setLicenseSnapshot } from '../../lib/licenseCache';
 import { BEAT, EASE_ENTER, EASE_LEAVE, INK, SETTLE } from '../../lib/plansMotion';
 import { SwapLabel } from './SettingsRow';
@@ -444,6 +444,8 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
     // Whether the Yearly/Lifetime grid is revealed. Only consulted when
     // `collapsePricing` is set; otherwise the grid is always shown.
     const [pricingOpen, setPricingOpen] = useState(false);
+    // The teaser row: opening the grid scrolls it into view, never past this.
+    const teaserRef = useRef<HTMLButtonElement>(null);
 
 
     // Seeded from the process-level snapshot so a revisit's first render already
@@ -962,6 +964,7 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
                         it, on the two card CTAs only. */}
                     {collapsePricing && (
                         <button
+                            ref={teaserRef}
                             type="button"
                             onClick={() => setPricingOpen((o) => !o)}
                             aria-expanded={pricingOpen}
@@ -989,20 +992,30 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
                                 <SwapLabel id={pricingOpen ? 'hide' : 'show'} sizers={['See pricing', 'Hide']}>
                                     {pricingOpen ? 'Hide' : 'See pricing'}
                                 </SwapLabel>
+                                {/* Turns on the grid's own spring and clock
+                                    (acc-spring-turn), so the two land together. */}
                                 <ChevronDown
                                     size={14}
-                                    className={`shrink-0 transition-transform duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none ${pricingOpen ? 'rotate-0' : '-rotate-90'}`}
+                                    className={`acc-spring-turn shrink-0 ${pricingOpen ? 'rotate-0' : '-rotate-90'}`}
                                 />
                             </span>
                         </button>
                     )}
 
                     {/* ── Choose-your-plan hero ────────────────────────────── */}
-                    <Disclosure open={collapsePricing ? pricingOpen : true}>
-                    {/* No top padding here: the parent's `space-y-4` already
-                        supplies the gap, and it only exists while the disclosure
-                        is mounted, so a collapsed teaser has no dead space
-                        hanging off its bottom edge. */}
+                    {/* The Plans accordions' motion (AccordionPanel): the grid
+                        grows on the Apple spring, its cards settle in, and the
+                        page glides it into view. The panel stays in the DOM
+                        while collapsed, so it takes no `space-y-4` gap (!mt-0);
+                        the gap is padding inside the moving body instead, and
+                        opens with it. Without a teaser the grid leads the
+                        section and needs no gap at all. */}
+                    <AccordionPanel
+                        open={collapsePricing ? pricingOpen : true}
+                        anchorRef={teaserRef}
+                        className="!mt-0"
+                        bodyClassName={collapsePricing ? 'pt-4' : ''}
+                    >
                     <div className="space-y-3" id="natively-pro-pricing">
 
                         {/* Two-card pricing grid. Lifetime is the recommended
@@ -1227,7 +1240,7 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
                             </p>
                         </div>
                     </div>
-                    </Disclosure>
+                    </AccordionPanel>
 
                     {/* "Already purchased? Enter your license key" card intentionally
                         removed — the Natively key card (NativelyApiSettings.tsx,

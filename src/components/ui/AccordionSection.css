@@ -16,7 +16,8 @@
  * are marked ADDED and are scoped to .acc-section.
  */
 
-.acc-section {
+.acc-section,
+.acc-spring-turn {
   /* Apple's default UI spring (SwiftUI .smooth: response 0.5, damping 1.0,
      no overshoot) as a CSS curve. It starts from rest and settles softly:
      half the height at ~130ms, 90% at ~300ms, still by ~450ms. The snippet's
@@ -34,9 +35,12 @@
   --acc-content-in: 600ms;
   --acc-content-fade-in: 350ms;
   --acc-content-delay: 80ms;
-  --acc-content-out: 150ms;
-  /* Opacity starts fast in both directions: on the spring's slow start plus
-     the delay, the content read as late (20% visible at 145ms). */
+  /* Leaving rides the same spring, a little shorter than the collapse, so the
+     content dims just ahead of the edge closing on it. At 150ms smooth-out
+     it was at 28% within 36ms: the close popped. */
+  --acc-content-out: 400ms;
+  /* The fade-in starts fast: on the spring's slow start plus the delay, the
+     content read as late (20% visible at 145ms). */
   --acc-fade-ease: cubic-bezier(0.22, 1, 0.36, 1);
   --acc-content-distance: 8px;
   --acc-content-blur: 2px;
@@ -100,8 +104,9 @@
    open   the space starts opening, then 80ms later the content settles in:
           down 8px from under the header and sharpening from a 2px blur on
           the same spring, while its fade starts fast so it never reads late
-   close  the content is gone in 150ms, before the space has closed a fifth
-          of the way, then the empty card eases shut
+   close  the content dims and drifts up on the spring, a little ahead of
+          the edge closing on it: still ~70% there at 50ms, gone by the time
+          about a quarter of the height is left, never a pop
 
    The resting state is `none` for filter and transform, not blur(0) and
    translateY(0): any filter or transform at rest makes this box the
@@ -120,9 +125,9 @@
   filter: blur(var(--acc-content-blur));
   transform: translateY(calc(var(--acc-content-distance) * -1));
   transition:
-    opacity var(--acc-content-out) var(--acc-fade-ease),
-    filter var(--acc-content-out) var(--acc-fade-ease),
-    transform var(--acc-content-out) var(--acc-fade-ease);
+    opacity var(--acc-content-out) var(--acc-spring),
+    filter var(--acc-content-out) var(--acc-spring),
+    transform var(--acc-content-out) var(--acc-spring);
 }
 .acc-section[data-open="true"] .acc-section-body {
   opacity: 1;
@@ -136,6 +141,21 @@
 
 @media (prefers-reduced-motion: reduce) {
   .acc-section-body {
+    transition: none !important;
+  }
+}
+
+/* ── ADDED: a trigger's chevron that TURNS rather than flips ────────────────
+   The Pro teaser's "See pricing" pill turns its arrow a quarter (> to v)
+   instead of flipping it, but on the same spring and clock as the panel it
+   opens, so the two land together. The rotation itself stays on the element
+   (Tailwind's rotate utilities); this only times it. */
+.acc-spring-turn {
+  transition: transform var(--acc-chevron) var(--acc-spring);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .acc-spring-turn {
     transition: none !important;
   }
 }
