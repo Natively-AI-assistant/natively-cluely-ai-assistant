@@ -553,7 +553,8 @@ test('pictures (premium): the Natively API card has one picture per variant', { 
   const nap = code('../premium/src/NativelyApiPromoToaster.tsx');
   assert.ok(nap.includes('openingView={variant ?? undefined}'));
   assert.ok(nap.includes("'data-genie-view': variant ?? undefined,"));
-  assert.ok(nap.includes('const visible = isOpen && variant !== null;'), 'the variant is known before the card opens');
+  // (`&& !closing`: the card closes itself before it reports, final review #5.)
+  assert.ok(/const visible = isOpen && variant !== null(?: && !closing)?;/.test(nap), 'the variant is known before the card opens');
 });
 
 // ─── Pictures in memory (executed) ──────────────────────────────
