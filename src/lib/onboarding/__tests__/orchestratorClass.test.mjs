@@ -384,6 +384,8 @@ test('dismissing permissions does NOT wedge other toaster stages', () => {
       extensionSupported: true,
       extensionConnected: false,
       isV2_8_OrNewer: true,
+      // browser_extension is a card stage: it needs the card ledger loaded.
+      cardLedger: { version: 1, firstLaunchAt: Date.now() - 2 * 86_400_000, launchCount: 1, lastPromoShownAt: null, imported: {}, cards: {} },
     },
   });
   // > browser_extension requiresHomepageDuration (5 s) AND the 60 s spacing
@@ -392,9 +394,11 @@ test('dismissing permissions does NOT wedge other toaster stages', () => {
   flushOneFrame();
   flushOneFrame();
 
+  // The next onboarding card for a user with no keys is the free-trial promo
+  // (toaster policy §3.3: permissions → trial promo → extension).
   assert.equal(
     orch.getSnapshot().activeToasterId,
-    'browser_extension',
+    'trial_promo',
     'the next stage must still be reachable — the session guard is per-stage, not global',
   );
 });

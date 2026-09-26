@@ -47,7 +47,12 @@ export type ToasterId =
   | 'quiet_window'
   | 'support'
   | 'ads'
-  | 'review_prompt';
+  | 'review_prompt'
+  | 'natively_api_new'
+  | 'natively_api_existing'
+  | 'profile_ad'
+  | 'jd_ad'
+  | 'max_ultra';
 
 export interface OrchestratorState {
   version: string;
@@ -92,6 +97,15 @@ export interface UserState {
   activeModeSet: boolean;
   donationShouldShow: boolean;
   isV2_8_OrNewer: boolean;
+  /** Has an AI route of its own (src/lib/trialPolicy.mjs hasOwnAiKey). */
+  hasOwnAiKey: boolean;
+  /** Licence plan: 'free' without one; 'other' for lifetime/legacy plans. */
+  planTier: 'free' | 'pro' | 'max' | 'ultra' | 'other';
+  hasJD: boolean;
+  /** Highest Natively quota use this cycle, 0–100 (0 without a Natively key). */
+  nativelyQuotaPct: number;
+  /** A free trial was ever claimed on this device (one per device). */
+  trialClaimed: boolean;
   /** The main-process card ledger (cards:get); null until it has loaded. */
   cardLedger: Ledger | null;
   /** The Trial ended card is on screen: nothing else may open. */
@@ -185,6 +199,11 @@ export const DEFAULT_USER_STATE: UserState = {
   activeModeSet: false,
   donationShouldShow: false,
   isV2_8_OrNewer: true,
+  hasOwnAiKey: false,
+  planTier: 'free',
+  hasJD: false,
+  nativelyQuotaPct: 0,
+  trialClaimed: false,
   cardLedger: null,
   trialEndedOpen: false,
 };
