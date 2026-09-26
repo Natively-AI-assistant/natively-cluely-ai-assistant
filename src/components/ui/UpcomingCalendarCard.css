@@ -1,0 +1,250 @@
+/* Transitions.dev — Banner stacking */
+
+/*
+  Usage:
+    <div class="t-stack">
+      <div class="t-stack-banner" data-depth="0">…</div>
+    </div>
+
+  Sonner-style. Append a new banner with .is-enter + data-depth
+  0, step every older banner's data-depth one back, force one
+  reflow, then remove .is-enter in the same task (a rAF hop is
+  skipped when the frame clock is throttled). A fourth banner
+  gets .is-leaving; remove it after --stack-close. Hover spread
+  is geometry in JS: pointer inside the collapsed stack box adds
+  .is-spread, and it holds until the pointer leaves the taller
+  spread column ((stack height + gap) * 2 above).
+*/
+
+:root {
+  --stack-open: 350ms;
+  --stack-close: 250ms;
+  --stack-rise: 60px;
+  --stack-blur: 2px;
+  --stack-scale: 0.97;
+  --stack-peek: 12px;
+  --stack-spread-gap: 8px;
+  --stack-depth-scale: 0.06;
+  --stack-depth-fade: 0.4;
+  --stack-depth1-blur: 1px;
+  --stack-depth2-blur: 2px;
+  --stack-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.t-stack { position: relative; }
+.t-stack-banner {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  /* Centre origin so an arriving banner scales like a toast; the
+     push-back depths switch to the bottom edge, which they can do
+     freely because the swap happens at identity. */
+  transform-origin: 50% 50%;
+  /* Explicit blur(0) rather than an unset filter — blur → none is
+     not reliably interpolated, and the cross-blur would snap. */
+  filter: blur(0);
+  will-change: transform, opacity, filter;
+  transition:
+    transform var(--stack-open) var(--stack-ease),
+    opacity var(--stack-open) var(--stack-ease),
+    filter var(--stack-open) var(--stack-ease);
+}
+.t-stack-banner[data-depth="0"] {
+  z-index: 3;
+  transform: translateY(0) scale(1);
+  opacity: 1;
+}
+.t-stack-banner[data-depth="1"] {
+  z-index: 2;
+  transform-origin: 50% 100%;
+  transform: translateY(calc(var(--stack-peek) * -1))
+             scale(calc(1 - var(--stack-depth-scale)));
+  opacity: calc(1 - var(--stack-depth-fade));
+  filter: blur(var(--stack-depth1-blur));
+}
+.t-stack-banner[data-depth="2"] {
+  z-index: 1;
+  transform-origin: 50% 100%;
+  transform: translateY(calc(var(--stack-peek) * -2))
+             scale(calc(1 - var(--stack-depth-scale) * 2));
+  opacity: calc(1 - var(--stack-depth-fade) * 1.6);
+  filter: blur(var(--stack-depth2-blur));
+}
+/* Spread: newest stays put, older ones climb one banner height
+   each (100% = the banner's own height). Driven by a class, not
+   :hover — the gaps between spread banners belong to no element. */
+.t-stack.is-spread .t-stack-banner[data-depth="1"],
+.t-stack.is-spread .t-stack-banner[data-depth="2"] { opacity: 1; filter: blur(0); }
+.t-stack.is-spread .t-stack-banner[data-depth="1"] {
+  transform: translateY(calc((100% + var(--stack-spread-gap)) * -1)) scale(1);
+}
+.t-stack.is-spread .t-stack-banner[data-depth="2"] {
+  transform: translateY(calc((100% + var(--stack-spread-gap)) * -2)) scale(1);
+}
+.t-stack-banner.is-enter {
+  transition: none;
+  transform: translateY(var(--stack-rise)) scale(var(--stack-scale));
+  opacity: 0;
+  filter: blur(var(--stack-blur));
+}
+.t-stack-banner.is-leaving {
+  z-index: 0;
+  transform-origin: 50% 100%;
+  transform: translateY(calc(var(--stack-peek) * -3))
+             scale(calc(1 - var(--stack-depth-scale) * 3));
+  opacity: 0;
+  filter: blur(var(--stack-blur));
+  transition:
+    transform var(--stack-close) var(--stack-ease),
+    opacity var(--stack-close) var(--stack-ease),
+    filter var(--stack-close) var(--stack-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-stack-banner { transition: none !important; transform: none !important; filter: none !important; }
+}
+
+/* ─── Host: the Launcher calendar card (UpcomingCalendarCard.tsx) ────────────
+   Everything above is the Transitions.dev snippet, verbatim. Everything below
+   fits it to this card. */
+
+/* The snippet's depth tuning, adjusted for this card. At the defaults (12px
+   peek, 40% fade, 1-2px blur) dark banners over the indigo backdrop blur
+   into one soft shadow, and the stack reads as a single card. These keep
+   the three edges visible. Scoped to the stack, not :root. */
+.cal-stack {
+  --stack-peek: 14px;
+  --stack-depth-fade: 0.22;
+  --stack-depth1-blur: 0.5px;
+  --stack-depth2-blur: 1px;
+}
+
+/* The snippet pins banners to the left edge only; here they span the stack. */
+.cal-stack .t-stack-banner { right: 0; height: 100%; }
+
+/* The banner is OPAQUE on purpose. A translucent front banner would show the
+   banners stacked behind it through its face, and backdrop-filter is no help
+   here: the depth rules put `filter` and opacity < 1 on these same elements.
+   Dark navy with a teal corner, after the card in the original calendar art. */
+.cal-banner {
+  background: linear-gradient(165deg, #2c2688 0%, #201b6b 58%, #173d5e 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.09),
+    0 10px 24px -12px rgba(6, 3, 40, 0.75);
+}
+
+/* A peeking banner shows only its top edge. Its text would read through the
+   gap and the blur as noise, so it stays hidden until the stack spreads. */
+.cal-stack .t-stack-banner .cal-banner-body {
+  transition: opacity var(--stack-open) var(--stack-ease);
+}
+.cal-stack:not(.is-spread) .t-stack-banner[data-depth="1"] .cal-banner-body,
+.cal-stack:not(.is-spread) .t-stack-banner[data-depth="2"] .cal-banner-body,
+.cal-stack .t-stack-banner.is-leaving .cal-banner-body {
+  opacity: 0;
+}
+
+/* Placeholder slots behind real meetings give the stack its depth. They stay
+   tucked where they are and fade out when the meetings spread, so only real
+   meetings climb. (0,5,0) outranks the snippet's (0,4,0) spread rules. */
+.cal-stack.is-spread .t-stack-banner.cal-filler[data-depth="1"] {
+  transform: translateY(calc(var(--stack-peek) * -1)) scale(calc(1 - var(--stack-depth-scale)));
+  opacity: 0;
+}
+.cal-stack.is-spread .t-stack-banner.cal-filler[data-depth="2"] {
+  transform: translateY(calc(var(--stack-peek) * -2)) scale(calc(1 - var(--stack-depth-scale) * 2));
+  opacity: 0;
+}
+
+/* The header gives way while the spread column covers it. */
+.cal-stack-header { transition: opacity var(--stack-open) var(--stack-ease); }
+.cal-stack-header.is-covered { opacity: 0; }
+
+/* Reduced motion means gentler, not absent (src/ui-components/design.md). The
+   snippet's guard drops every transform, which would stack all three banners
+   on one spot and hide two meetings. Keep the resting geometry and the
+   spread, with no transitions. */
+@media (prefers-reduced-motion: reduce) {
+  .cal-stack .t-stack-banner[data-depth="1"] {
+    transform: translateY(calc(var(--stack-peek) * -1)) scale(calc(1 - var(--stack-depth-scale))) !important;
+  }
+  .cal-stack .t-stack-banner[data-depth="2"] {
+    transform: translateY(calc(var(--stack-peek) * -2)) scale(calc(1 - var(--stack-depth-scale) * 2)) !important;
+  }
+  .cal-stack.is-spread .t-stack-banner[data-depth="1"] {
+    transform: translateY(calc((100% + var(--stack-spread-gap)) * -1)) scale(1) !important;
+  }
+  .cal-stack.is-spread .t-stack-banner[data-depth="2"] {
+    transform: translateY(calc((100% + var(--stack-spread-gap)) * -2)) scale(1) !important;
+  }
+  .cal-stack .t-stack-banner .cal-banner-body,
+  .cal-stack-header { transition: none; }
+}
+
+/* Transitions.dev — Texts reveal */
+
+/*
+  Usage:
+    <div class="t-stagger">
+      <strong class="t-stagger-line t-stagger-line--1">…</strong>
+      <span class="t-stagger-line t-stagger-line--2">…</span>
+    </div>
+
+  State:
+    - Add `.is-shown` to play the staggered entrance.
+    - Add `.is-hiding` (and remove `.is-shown`) to fade
+      out in place over a short 200ms — independent of the
+      entrance timing so the exit doesn't replay the stagger.
+
+  Add more lines by adding `.t-stagger-line--N` with
+  `transition-delay: calc(var(--stagger-stagger) * (N - 1))`.
+*/
+
+:root {
+  --stagger-dur: 500ms;
+  --stagger-distance: 12px;
+  --stagger-stagger: 40ms;
+  --stagger-blur: 3px;
+  --stagger-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Lines start translated down + blurred + invisible; .is-shown
+   on the parent flips them to their resting state. The second
+   line's transition-delay holds it back by --stagger-stagger
+   so the eye lands on the headline first. */
+.t-stagger-line {
+  display: block;
+  opacity: 0;
+  transform: translateY(var(--stagger-distance));
+  filter: blur(var(--stagger-blur));
+  transition:
+    opacity   var(--stagger-dur) var(--stagger-ease),
+    transform var(--stagger-dur) var(--stagger-ease),
+    filter    var(--stagger-dur) var(--stagger-ease);
+  will-change: transform, opacity, filter;
+}
+.t-stagger-line--2 { transition-delay: var(--stagger-stagger); }
+
+.t-stagger.is-shown .t-stagger-line {
+  opacity: 1;
+  transform: translateY(0);
+  filter: blur(0);
+}
+/* Exit decouples from the stagger: same fade for every line,
+   no Y return, no blur — so the disappearance reads as a
+   single quiet fade instead of a reverse reveal. */
+.t-stagger.is-hiding .t-stagger-line {
+  opacity: 0;
+  transform: translateY(0);
+  filter: blur(0);
+  transition:
+    opacity 200ms ease,
+    transform 0s linear,
+    filter 0s linear;
+  transition-delay: 0s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-stagger-line { transition: none !important; }
+}

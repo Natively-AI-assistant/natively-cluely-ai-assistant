@@ -9,10 +9,34 @@ import { motion } from 'framer-motion';
 // the analytics chunk" gesture, but it triggered Vite's dynamic-import
 // warning at build time and made the chunk boundary platform-dependent.
 import { analytics } from '../../lib/analytics/analytics.service';
+import { LiquidGlassButton } from '../../ui-components/LiquidGlassButton';
+
+/*
+  Liquid Glass (src/ui-components/design.md) at UI scale, in the box of the
+  button it replaced. `sky` is used because it has ONE treatment for both
+  themes: this button always sits on the calendar card's indigo backdrop, so
+  `clear`'s light-theme inversion (a dark rim meant for a white panel) would be
+  wrong here. The body is fed a translucent white so the backdrop shows
+  through; the white label on it measures 5.85:1 at its worst point.
+*/
+const GLASS_STYLE = {
+    '--lg-sky-bg': 'rgba(255, 255, 255, .14)',
+    '--lg-sky-hover': 'rgba(255, 255, 255, .22)',
+    '--lg-pill-h': '36px',
+    '--lg-label-size': '13px',
+    '--lg-icon-gap': '10px',
+    padding: '0 20px 0 16px',
+} as React.CSSProperties;
 
 interface ConnectCalendarButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
     variant?: 'default' | 'dark';
-    onConnect?: () => void;
+    /**
+     * The calendar is connected. `fresh` is true only when this click's
+     * sign-in just completed; the status check on mount reports an existing
+     * connection with `fresh: false`, so a host can animate the moment of
+     * linking without replaying it on every launch.
+     */
+    onConnect?: (info: { fresh: boolean }) => void;
 }
 
 const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className = '', variant = 'default', onConnect, ...props }) => {
@@ -26,7 +50,7 @@ const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className
             window.electronAPI.getCalendarStatus().then(status => {
                 setConnected(status.connected);
                 if (status.connected) {
-                    onConnect?.();
+                    onConnect?.({ fresh: false });
                 }
             });
         }
@@ -45,7 +69,7 @@ const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className
             if (res.success) {
                 setConnected(true);
                 setError(null);
-                onConnect?.();
+                onConnect?.({ fresh: true });
                 // Track calendar connection (analytics imported statically above)
                 analytics.trackCalendarConnected();
             } else if (res.error) {
@@ -150,79 +174,35 @@ const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className
     }
 
     return (
-        <div className="flex flex-col items-center gap-1.5 w-fit">
-            <button
+        // The caller's className lands here, not on the button: a Tailwind
+        // translate is a `transform`, which the material's :active scale would
+        // replace, so the pill would jump on every press.
+        <div className={`flex flex-col items-center gap-1.5 w-fit ${className}`}>
+            <LiquidGlassButton
+                {...props}
+                variant="sky"
+                className="lg-sm"
+                style={GLASS_STYLE}
                 onClick={handleClick}
                 disabled={loading}
-                className={`
-                    group relative
-                    flex items-center gap-2.5
-                    pl-4 pr-5 py-2
-                    rounded-full
-                    text-[13px] font-medium
-                    transition-all duration-300 ease-out
-                    hover:brightness-125
-                    active:scale-[0.98]
-                    overflow-hidden
-                    ${loading ? 'opacity-80 cursor-wait' : ''}
-                    ${className}
-                `}
-                style={{
-                    // Base Fill: Dark Purple
-                    backgroundColor: 'rgba(60, 20, 80, 0.4)',
-                    // Blur: Backdrop filter 12-16px
-                    backdropFilter: 'blur(14px)',
-                    WebkitBackdropFilter: 'blur(14px)',
-                    // Text Color
-                    color: '#F4F6FA',
-                }}
-                {...props}
+                icon={loading ? (
+                    <Loader size={14} className="animate-spin" />
+                ) : (
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="opacity-90">
+                        <path d="M23.52 12.212c0-.848-.076-1.654-.216-2.428H12v4.594h6.473c-.28 1.503-1.12 2.775-2.38 3.619v3.01h3.84c2.247-2.07 3.54-5.118 3.54-8.795z" fill="white" />
+                        <path d="M12 24c3.24 0 5.957-1.074 7.942-2.906l-3.84-3.01c-1.078.722-2.454 1.15-4.102 1.15-3.124 0-5.77-2.112-6.72-4.954H1.322v3.106C3.38 21.442 7.378 24 12 24z" fill="white" />
+                        <path d="M5.28 14.28A7.276 7.276 0 0 1 4.908 12c0-.8.14-1.57.387-2.28V6.613H1.322A11.968 11.968 0 0 0 0 12c0 1.943.468 3.774 1.322 5.387l3.96-3.107z" fill="white" />
+                        <path d="M12 4.75c1.764 0 3.345.607 4.588 1.795l3.433-3.434C17.95 1.258 15.234 0 12 0 7.378 0 3.378 2.558 1.322 6.613l3.957 3.107c.95-2.842 3.595-4.97 6.72-4.97z" fill="white" />
+                    </svg>
+                )}
             >
-                {/* Gradient Border */}
-                <div
-                    className="absolute inset-0 rounded-full pointer-events-none transition-opacity duration-300 group-hover:opacity-80"
-                    style={{
-                        padding: '1px',
-                        background: 'linear-gradient(to right, #6EA8FF, #8B7CFF)',
-                        WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
-                        WebkitMaskComposite: 'xor',
-                        maskComposite: 'exclude',
-                        opacity: 0.5, // 40-60% opacity
-                    }}
-                />
-
-                {/* Inner Highlight (Top Edge) */}
-                <div
-                    className="absolute inset-0 rounded-full pointer-events-none"
-                    style={{
-                        boxShadow: 'inset 0 1px 0 0 rgba(255, 255, 255, 0.08)',
-                    }}
-                />
-
-                {/* Content */}
-                <span className="relative z-10 flex items-center gap-2.5 font-semibold">
-                    {loading ? (
-                        <Loader size={14} className="animate-spin" />
-                    ) : (
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="opacity-90">
-                            <path d="M23.52 12.212c0-.848-.076-1.654-.216-2.428H12v4.594h6.473c-.28 1.503-1.12 2.775-2.38 3.619v3.01h3.84c2.247-2.07 3.54-5.118 3.54-8.795z" fill="white" />
-                            <path d="M12 24c3.24 0 5.957-1.074 7.942-2.906l-3.84-3.01c-1.078.722-2.454 1.15-4.102 1.15-3.124 0-5.77-2.112-6.72-4.954H1.322v3.106C3.38 21.442 7.378 24 12 24z" fill="white" />
-                            <path d="M5.28 14.28A7.276 7.276 0 0 1 4.908 12c0-.8.14-1.57.387-2.28V6.613H1.322A11.968 11.968 0 0 0 0 12c0 1.943.468 3.774 1.322 5.387l3.96-3.107z" fill="white" />
-                            <path d="M12 4.75c1.764 0 3.345.607 4.588 1.795l3.433-3.434C17.95 1.258 15.234 0 12 0 7.378 0 3.378 2.558 1.322 6.613l3.957 3.107c.95-2.842 3.595-4.97 6.72-4.97z" fill="white" />
-                        </svg>
-                    )}
-
+                {/* The label box clips, so the arrow no longer nudges on hover;
+                    the lens is the hover cue now. */}
+                <span className="inline-flex items-center gap-2.5">
                     {loading ? t('Connecting...') : t('Connect calendar')}
-
-                    {!loading && (
-                        <ArrowRight
-                            size={13}
-                            className="transition-transform group-hover:translate-x-0.5"
-                            style={{ color: 'rgba(244, 246, 250, 0.9)' }} // Slightly brighter/matching text
-                        />
-                    )}
+                    {!loading && <ArrowRight size={13} style={{ color: 'rgba(244, 246, 250, 0.9)' }} />}
                 </span>
-            </button>
+            </LiquidGlassButton>
             {error && (
                 <span
                     className="text-[11px] text-red-300 bg-red-950/95 backdrop-blur-sm border border-red-500/30 rounded-lg px-2.5 py-1 max-w-[280px] leading-tight text-center"
