@@ -521,8 +521,8 @@ const HelpPane: React.FC<{
                         <p>During a meeting, the model button under the overlay's ask box switches models without opening Settings.</p>
                         <HelpDefinitions
                             items={[
-                                { term: 'Background Model', detail: 'Runs Auto Answer and quick background decisions. Auto is recommended.' },
-                                { term: 'Fast Response Mode', detail: "Faster text answers through Groq, Natively API or a Codex sign-in. AI Providers says when it can't apply." },
+                                { term: 'Background Model', detail: 'Runs Auto Answer, quick background decisions and Fast Response Mode. Auto is recommended.' },
+                                { term: 'Fast Response Mode', detail: "Text answers from the Background Model instead of the Active Model. On Auto, whichever connected model this computer has measured fastest. AI Providers says when it can't apply." },
                                 { term: 'Direct Assist', detail: 'Sends what you type, say or capture straight to the model, unprocessed. In beta.' },
                                 { term: 'Custom Providers', detail: <>A cURL command, with <code className="font-mono text-text-primary">{'{{TEXT}}'}</code> where the question goes.</> },
                             ]}

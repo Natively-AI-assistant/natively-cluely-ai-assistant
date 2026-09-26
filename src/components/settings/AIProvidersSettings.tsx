@@ -2167,42 +2167,6 @@ const ModelSelect: React.FC<ModelSelectProps> = ({ value, options, onChange, pla
     );
 };
 
-/**
- * Codex model picker. Was a free-text input beside a narrow "Preset" dropdown,
- * which showed the same id twice — once as editable text, once as the dropdown's
- * value. The dropdown is now the whole control.
- *
- * `options` is the installed Codex CLI's catalogue when one exists, otherwise
- * the built-in presets (codexModelOptions). A model already persisted from
- * elsewhere still renders and stays selected (it is prepended), so no existing
- * configuration breaks. When the list came from the CLI, such a value is marked
- * as not in it — the CLI dropping a model is the best signal we have that the
- * backend no longer offers it. Without a CLI list there is nothing to compare
- * against, so no marker.
- */
-const CodexCliModelField: React.FC<{
-    label: string;
-    value: string;
-    options: { id: string; name: string }[];
-    fromCodexCli: boolean;
-    onSelect: (value: string) => void;
-}> = ({ label, value, options, fromCodexCli, onSelect }) => {
-    const t = useT();
-    return (
-    <label className="space-y-1 block min-w-0">
-        <span className="aip-label">{label}</span>
-        <ModelSelect
-            value={value}
-            options={value && !options.some(option => option.id === value)
-                ? [{ id: value, name: fromCodexCli ? `${prettifyModelId(value)} (${t('not in your Codex CLI list')})` : prettifyModelId(value) }, ...options]
-                : options}
-            onChange={onSelect}
-            placeholder={t("Select a model")}
-        />
-    </label>
-    );
-};
-
 interface AIProvidersSettingsProps {
     aiResponseLanguage: string;
     availableAiLanguages: any[];
@@ -2523,6 +2487,11 @@ const readCodexSignInStatus = async (): Promise<CodexSignInStatus | null> => {
     return { signedIn: !!status.signedIn, source: status.source ?? null, cliLogin: status.cliLogin, email: status.email, expiresAt: status.expiresAt };
 };
 
+/** Key-backed vendors among LLMHelper's AUTO_FAST_TIERS (Groq, DeepSeek Flash,
+    Gemini Flash-Lite, GPT-5.5, Claude Haiku). Natively and Codex, the other two
+    candidates, are checked by their own sign-in state. */
+const AUTO_FAST_VENDORS = ['groq', 'deepseek', 'gemini', 'openai', 'claude'] as const;
+
 export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     aiResponseLanguage,
     availableAiLanguages,
@@ -2719,9 +2688,10 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     };
 
     // --- Local (Codex CLI) ---
-    const [codexCliConfig, setCodexCliConfig] = useState({ enabled: false, path: 'codex', model: 'gpt-5.5', fastModel: 'gpt-5.5', timeoutMs: 60000, sandboxMode: 'read-only' as string, serviceTier: 'default', modelReasoningEffort: undefined as string | undefined });
+    const [codexCliConfig, setCodexCliConfig] = useState({ enabled: false, path: 'codex', model: 'gpt-5.5', timeoutMs: 60000, sandboxMode: 'read-only' as string, serviceTier: 'default', modelReasoningEffort: undefined as string | undefined });
     // The installed Codex CLI's model list (models_cache.json); null until read.
     const [codexModelCatalog, setCodexModelCatalog] = useState<CodexModelCatalogResult | null>(null);
+    const [codexModelsRefreshing, setCodexModelsRefreshing] = useState(false);
     const codexModels = codexModelOptions(codexModelCatalog);
     const codexModelsFromCli = codexModelCatalog?.source === 'codex-cli' && codexModelCatalog.models.length > 0;
     const [codexCliStatus, setCodexCliStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
@@ -2799,18 +2769,52 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     const [credentialsLoaded, setCredentialsLoaded] = useState(false);
     // Card rows that open on a saved key stay still while the stored ones load.
     const motionReady = useMotionReadyAfter(credentialsLoaded);
-    const canUseFastMode = !!(hasStoredKey.groq || hasStoredKey.natively || (codexCliConfig.enabled && codexOauthStatus.signedIn));
-    // Mirror of LLMHelper's `fastModeApplies` (2026-09-22): the runtime routes
-    // through fast mode ONLY when the active model is itself a Groq or Natively
-    // model, or Codex CLI is signed in — a Groq key with, say, an OpenAI model
-    // selected leaves the switch on and silently ignored. The switch's
-    // availability (canUseFastMode) is about KEYS; this is about the MODEL, and
+    // Fast Response Mode answers with the Background Model when one is picked
+    // (LLMHelper.openFastModelStream). On Auto it is the fastest connected
+    // candidate by this computer's own measurements (LLMHelper.autoFastPick) —
+    // Groq, DeepSeek, Gemini, Natively, OpenAI, Codex or Claude — so no
+    // particular provider is required.
+    // `disabledProviders`, not isProviderEnabled(): that is declared further down.
+    // Availability reads the PICK, not fastModelDispatchable: that list arrives
+    // asynchronously after credentials load, and the enforcement effect below
+    // would persist the switch OFF in the gap.
+    const hasFastModelPick = fastModel !== 'auto';
+    // AVAILABILITY is key-based, ignoring the provider on/off switches: it drives
+    // the effect below that saves Fast Response OFF, and switching Groq off for a
+    // moment must not wipe the user's Fast Response setting for good. Whether it
+    // APPLIES right now (switches included) is the mirror further down.
+    const hasAutoFastKey = AUTO_FAST_VENDORS.some((p) => !!hasStoredKey[p]);
+    const canUseFastMode = !!(hasFastModelPick || hasAutoFastKey || hasStoredKey.groq || hasStoredKey.natively || (codexCliConfig.enabled && codexOauthStatus.signedIn));
+    // A candidate Auto can use NOW — LLMHelper.fastFamilyReady(): key or sign-in
+    // AND switched on (Codex: isCodexAvailable() reads its switch too).
+    const hasAutoCandidate = AUTO_FAST_VENDORS.some((p) => hasStoredKey[p] && !disabledProviders.includes(p))
+        || (!!hasStoredKey.natively && !disabledProviders.includes('natively'))
+        || (codexCliConfig.enabled && codexOauthStatus.signedIn && !disabledProviders.includes('codex-cli'));
+    // Mirror of LLMHelper.activeIsSelfHosted(): on Auto, a turn for the user's
+    // own endpoint never goes to another vendor.
+    const activeIsSelfHosted = defaultModel.startsWith('litellm/') || defaultModel.startsWith('ninerouter/')
+        || customProviders.some((p) => p.id === defaultModel);
+    // Mirror of LLMHelper's fast gates. A dispatchable pick applies to any
+    // Active Model except a local one. Auto applies to any Active Model except a
+    // local one, an explicitly chosen Codex model (issue #315) or the user's own
+    // endpoint. Antigravity answers before either. Availability
+    // (canUseFastMode) is about keys and the pick; this is about the MODEL, and
     // it is what the inline hint below tells the user.
-    const fastModeAppliesToActiveModel = !!(
-        (codexCliConfig.enabled && codexOauthStatus.signedIn) ||
-        defaultModel === 'natively' ||
-        /^(?:llama-|mixtral-|gemma-|meta-llama\/|qwen\/|qwen-|openai\/gpt-oss-|groq\/)/.test(defaultModel)
-    ) && !defaultModel.startsWith('codex-cli');
+    // An unanswered dispatchable list (null) is not "unavailable" — it is still
+    // loading, and saying otherwise flashes the warning on every open.
+    const fastModelPickApplies = hasFastModelPick
+        && (fastModelDispatchable === null || fastModelDispatchable.includes(fastModel))
+        && !defaultModel.startsWith('ollama-');
+    // Only a gateway-only (or keyless) install lands here: gateways have no fast
+    // tier of their own, so the user names one in Background Model. With nothing
+    // to pick yet — no key, or an opt-in gateway (OpenRouter, LiteLLM) with no
+    // model ticked — the fix is in the provider cards below.
+    const fastModeUnavailableNote = fastModelDispatchable?.length
+        ? t('Pick a Background Model to turn this on.')
+        : t('Add a cloud model below, then pick it as the Background Model.');
+    const autoFastTierApplies = !hasFastModelPick && hasAutoCandidate && !activeIsSelfHosted
+        && !defaultModel.startsWith('ollama-') && !defaultModel.startsWith('codex-cli');
+    const fastModeAppliesToActiveModel = !defaultModel.startsWith('antigravity:') && (fastModelPickApplies || autoFastTierApplies);
 
     // --- Dynamic Model Discovery ---
     const [preferredModels, setPreferredModels] = useState<Record<string, string>>({});
@@ -3147,6 +3151,17 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         // Prefixed, because `antigravity:<id>` is the form the allow-list, the picker
         // and modelAvailable() in ipcHandlers.ts all compare against.
         if (provider === 'antigravity') antigravityModels.forEach(m => push(`antigravity:${m.id}`, m.label || m.id));
+        // Codex: same shape again, prefixed `codex-cli:<id>` like the picker and
+        // modelAvailable(). The Codex default keeps a row even when the installed
+        // CLI's catalogue dropped it, so it stays visible and can be moved.
+        if (provider === 'codex-cli') {
+            codexModels.forEach(m => push(codexCliSelectorId(m.id), m.name));
+            push(codexCliSelectorId(codexCliConfig.model), codexModelsFromCli
+                ? `${prettifyModelId(codexCliConfig.model)} (${t('not in your Codex CLI list')})`
+                : prettifyModelId(codexCliConfig.model));
+            // Ticked models the catalogue has since dropped, named without the prefix.
+            (cloudEnabledModels[provider] || []).forEach(id => push(id, prettifyModelId(id.replace(/^codex-cli:/, ''))));
+        }
         (cloudFetchedModels[provider] || []).forEach(m => push(m.id, m.label || m.id));
         // Allow-listed ids with no catalog entry still get a row, labelled as best we can.
         // LiteLLM ids are proxy literals, so they take the segment label rather than
@@ -3155,7 +3170,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         (cloudEnabledModels[provider] || []).forEach(id =>
             push(id, (provider === 'litellm' || provider === 'ninerouter') ? gatewayModelLabel(id) : prettifyModelId(id)));
         return out;
-    }, [cloudFetchedModels, cloudEnabledModels, litellmModels, ninerouterModels, antigravityModels]);
+    }, [cloudFetchedModels, cloudEnabledModels, litellmModels, ninerouterModels, antigravityModels, codexModelCatalog, codexCliConfig.model, t]);
 
     /**
      * The Background Model picker's options: Auto, plus only the models the fast
@@ -3192,12 +3207,17 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 opts.push({ id: pm, name: prettifyModelId(pm) });
             }
         }
+        // Same allow-list gate as every cloud card. The bare entry runs the Codex
+        // default, so it is listed exactly when that model is ticked
+        // (modelAvailable in ipcHandlers.ts reads it the same way).
         if (isCodexReady && isProviderEnabled('codex-cli')) {
             const configuredName = codexModels.find(model => model.id === codexCliConfig.model)?.name || prettifyModelId(codexCliConfig.model);
-            opts.push({ id: CODEX_CLI_MODEL.id, name: `${CODEX_CLI_MODEL.name} (${configuredName})` });
+            if (isModelEnabled('codex-cli', codexCliSelectorId(codexCliConfig.model))) {
+                opts.push({ id: CODEX_CLI_MODEL.id, name: `${CODEX_CLI_MODEL.name} (${configuredName})` });
+            }
             codexModels.forEach(model => {
                 const id = codexCliSelectorId(model.id);
-                if (!opts.find(o => o.id === id)) {
+                if (isModelEnabled('codex-cli', id) && !opts.find(o => o.id === id)) {
                     opts.push({ id, name: `${CODEX_CLI_MODEL.name}: ${model.name}` });
                 }
             });
@@ -3271,12 +3291,14 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         const opts = buildAvailableModelOptions();
         if (!defaultModel || opts.some(o => o.id === defaultModel) || opts.length === 0) return;
         // A Codex model that is no longer offered (the CLI catalogue dropped it,
-        // or it was a preset the ChatGPT backend now rejects) falls back to the
-        // Codex entry itself — never to whichever provider happens to be first.
+        // or it was a preset the ChatGPT backend now rejects, or it was un-ticked
+        // in the Codex card) falls back to the Codex entry itself, then to any
+        // Codex model still ticked — never to whichever provider happens to be first.
         const next = (defaultModel.startsWith('antigravity:')
             ? opts.find(option => option.id.startsWith('antigravity:'))?.id : undefined)
-            || (defaultModel.startsWith(`${CODEX_CLI_MODEL.id}:`)
-                ? opts.find(option => option.id === CODEX_CLI_MODEL.id)?.id : undefined)
+            || (defaultModel.startsWith(CODEX_CLI_MODEL.id)
+                ? (opts.find(option => option.id === CODEX_CLI_MODEL.id)
+                    ?? opts.find(option => option.id.startsWith(`${CODEX_CLI_MODEL.id}:`)))?.id : undefined)
             || opts[0].id;
         setDefaultModel(next);
         window.electronAPI?.setDefaultModel?.(next).catch(console.error);
@@ -3340,6 +3362,19 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     // "all" — so un-checking the last remaining model re-enables all of them
     // rather than leaving the provider silently empty. Use the provider toggle to
     // hide a provider outright.
+    // Codex keeps its default in codexCliConfig.model, not preferredModels, so the
+    // default-moving above never reached it: un-ticking the Codex default left
+    // the "default" badge on an un-ticked row, and the bare Codex entry (which
+    // runs that model) vanished from every picker. Same rule as the others:
+    // move it to the first model still ticked.
+    const moveCodexDefaultIfUnticked = (allowList: string[]) => {
+        const current = codexCliSelectorId(codexCliConfig.model);
+        if (allowList.length === 0 || isModelAllowed(CODEX_CLI_MODEL.id, current, allowList)) return;
+        const moved = allowList[0].slice(`${CODEX_CLI_MODEL.id}:`.length);
+        void saveCodexCliConfig({ ...codexCliConfig, model: moved })
+            .catch((e: unknown) => console.error('Failed to move the Codex default model:', e));
+    };
+
     const handleToggleModel = async (provider: string, modelId: string) => {
         const universe = effectiveModels(provider).map(m => m.id);
         const current = cloudEnabledModels[provider] || [];
@@ -3378,6 +3413,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             window.electronAPI?.setProviderPreferredModel?.(provider as any, moved)
                 .catch((e: unknown) => console.error('Failed to move default model:', e));
         }
+        if (provider === CODEX_CLI_MODEL.id) moveCodexDefaultIfUnticked(normalised);
         try {
             const res = await window.electronAPI?.setCloudEnabledModels?.(provider, normalised);
             if (res && res.success === false) throw new Error(res.error || 'save failed');
@@ -3430,6 +3466,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             window.electronAPI?.setProviderPreferredModel?.(provider as any, moved)
                 .catch((e: unknown) => console.error('Failed to move default model:', e));
         }
+        if (provider === CODEX_CLI_MODEL.id) moveCodexDefaultIfUnticked(normalised);
         try {
             const res = await window.electronAPI?.setCloudEnabledModels?.(provider, normalised);
             if (res && res.success === false) throw new Error(res.error || 'save failed');
@@ -3795,6 +3832,50 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         const result = await window.electronAPI?.setCodexCliConfig?.(normalized);
         if (result?.config) setCodexCliConfig(result.config as typeof codexCliConfig);
         return result;
+    };
+
+    // "Set default" in the Codex model list is the Model dropdown it replaced: it
+    // moves the Codex default (codexCliConfig.model), which the bare Codex entry,
+    // structured calls and the Auto fast ladder run. Like every card's, it also
+    // allow-lists the model, or it would be a default the picker hides.
+    const handleSetCodexDefault = async (selectorId: string) => {
+        const model = selectorId.slice(`${CODEX_CLI_MODEL.id}:`.length);
+        const prevEnabled = cloudEnabledModels;
+        const prevConfig = codexCliConfig;
+        const current = cloudEnabledModels['codex-cli'] || [];
+        // An empty allow-list already means "all", so there is nothing to add.
+        const needsAllow = current.length > 0 && !current.includes(selectorId);
+        const nextList = needsAllow ? [...current, selectorId] : current;
+
+        if (needsAllow) setCloudEnabledModelsState(p => ({ ...p, 'codex-cli': nextList }));
+        try {
+            if (needsAllow) {
+                const r = await window.electronAPI?.setCloudEnabledModels?.('codex-cli', nextList);
+                if (r && r.success === false) throw new Error(r.error || 'allow-list write failed');
+            }
+            const saved = await saveCodexCliConfig({ ...codexCliConfig, model });
+            if (!saved?.success) throw new Error(saved?.error || 'Codex config write failed');
+        } catch (e) {
+            console.error('Failed to set Codex default model:', e);
+            setCloudEnabledModelsState(prevEnabled);
+            setCodexCliConfig(prevConfig);
+            setModelSaveError(p => ({ ...p, 'codex-cli': true }));
+            setTimeout(() => setModelSaveError(p => ({ ...p, 'codex-cli': false })), 4000);
+        }
+    };
+
+    // Re-reads the installed Codex CLI's catalogue (main reads its models cache
+    // on every call), picking up models the CLI has learned since Settings opened.
+    const handleRefreshCodexModels = async () => {
+        setCodexModelsRefreshing(true);
+        try {
+            const catalog = await window.electronAPI?.getCodexCliModels?.();
+            if (catalog) setCodexModelCatalog(catalog);
+        } catch (e) {
+            console.error('Failed to refresh Codex models:', e);
+        } finally {
+            setCodexModelsRefreshing(false);
+        }
     };
 
     const handleTestCodexCli = async () => {
@@ -4416,7 +4497,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             <div className="aip-card p-5 flex items-center justify-between gap-4">
                     <div className="min-w-0">
                         <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('Background Model')}</label>
-                        <p className="text-[10px] aip-muted mt-0.5">{t('Runs Auto Answer and other quick background decisions.')}</p>
+                        <p className="text-[10px] aip-muted mt-0.5">{t('Runs Auto Answer, quick decisions and Fast Response Mode.')}</p>
                         {/* Advisory only: a big pick silently re-creates the latency
                             problem the measured judge ladder exists to avoid, but a
                             hard filter would need a hand-maintained list that goes
@@ -4557,25 +4638,37 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
 
 <div
                     className={`aip-card p-5 flex items-center justify-between gap-4 ${!canUseFastMode ? 'opacity-50 grayscale' : ''}`}
-                    title={!canUseFastMode ? t("Requires Groq, Natively API, or Codex CLI to be configured") : ""}
+                    title={!canUseFastMode ? fastModeUnavailableNote : ""}
                 >
                     <div className="flex-1 min-w-0">
-                        {/* No "Needs Groq" badge. It named ONE of the three
-                            providers that satisfy canUseFastMode (Groq, Natively
-                            API, Codex CLI), so it read as a hard Groq dependency
+                        {/* No "Needs Groq" badge. It named ONE of the things that
+                            satisfy canUseFastMode (a Background Model pick, any
+                            connected vendor's fast tier, Natively API, Codex), so it read as a hard Groq dependency
                             that does not exist — and the line below already
                             states the real requirement in full, as does the
                             card's title. A badge carries only what no other
                             control already says. */}
                         <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('Fast Response Mode')}</label>
-                        <p className="text-[10px] aip-muted mt-0.5">{t('Uses the fastest available provider instead of your selected model.')}</p>
+                        {/* Says which model will answer: the Background Model when one
+                            is picked, otherwise Auto's fastest connected model. */}
+                        <p className="text-[10px] aip-muted mt-0.5">{hasFastModelPick
+                            ? t('Answers with the Background Model, not the Active Model.')
+                            : t('Uses the fastest available provider instead of your selected model.')}</p>
                         <AipRevealNote
-                            text={!canUseFastMode ? t('Requires Groq, Natively API, or Codex CLI to be configured.') : ''}
+                            text={!canUseFastMode ? fastModeUnavailableNote : ''}
                             className="text-xs aip-warn-fg mt-0.5 font-medium"
                         />
                         <AipRevealNote
                             text={canUseFastMode && fastResponseMode && !fastModeAppliesToActiveModel
-                                ? t('Not applied to the current Active Model — pick a Groq or Natively model (or sign in to Codex CLI) for this to take effect.')
+                                ? (defaultModel.startsWith('antigravity:') || defaultModel.startsWith('ollama-')
+                                    ? t('Not applied while the Active Model is a local or Antigravity model.')
+                                    : hasFastModelPick
+                                        ? t('Your Background Model isn\'t available — pick another or choose Auto.')
+                                        : activeIsSelfHosted
+                                            ? t('On Auto this stays on your own endpoint — pick a Background Model to use another.')
+                                            : !hasAutoCandidate
+                                                ? t('Not applied: the providers it can use are switched off.')
+                                                : t('Not applied to the current Active Model — pick a Background Model above for this to take effect.'))
                                 : ''}
                             className="text-xs aip-warn-fg mt-0.5 font-medium"
                         />
@@ -4590,7 +4683,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         label={t('Fast Response Mode')}
                         onChange={async () => {
                             if (!canUseFastMode) {
-                                alert(t("Please configure Groq, Natively API, or Codex CLI first to enable Fast Response Mode."));
+                                alert(fastModeUnavailableNote);
                                 return;
                             }
                             const newState = !fastResponseMode;
@@ -5017,27 +5110,32 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 {/* Model + settings — only shown once signed in */}
                 {codexOauthStatus.signedIn && (
                         <>
+                            {/* The same model list every provider card has, where two
+                                dropdowns used to be. "Set default" replaces the Model
+                                dropdown (handleSetCodexDefault). The "Fast Mode Model"
+                                dropdown is gone: Fast Response Mode answers with the
+                                Background Model, and a Codex model other than this
+                                default is picked THERE now. Direct child of
+                                .aip-provider-row for the reason Antigravity's comment gives. */}
+                            {!disabledProviders.includes('codex-cli') && (
+                                <div className="aip-provider-row">
+                                    <AipModelList
+                                        models={effectiveModels('codex-cli')}
+                                        enabled={cloudEnabledModels['codex-cli'] || []}
+                                        onToggle={(modelId) => handleToggleModel('codex-cli', modelId)}
+                                        onReset={() => handleResetModels('codex-cli')}
+                                        defaultId={codexCliSelectorId(codexCliConfig.model)}
+                                        onSetDefault={(modelId) => void handleSetCodexDefault(modelId)}
+                                        error={modelSaveError['codex-cli'] ? 'save-failed' : null}
+                                        refreshing={codexModelsRefreshing}
+                                        // Refresh re-reads the installed Codex CLI's model cache; with
+                                        // no CLI list there is nothing it could ever add.
+                                        onRefresh={codexModelsFromCli ? () => void handleRefreshCodexModels() : undefined}
+                                        catalogIsComplete={codexModelsFromCli}
+                                    />
+                                </div>
+                            )}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                <CodexCliModelField
-                                    label={t("Model")}
-                                    value={codexCliConfig.model}
-                                    options={codexModels}
-                                    fromCodexCli={codexModelsFromCli}
-                                    onSelect={(model) => {
-                                        setCodexCliConfig(prev => ({ ...prev, model }));
-                                        saveCodexCliConfig({ ...codexCliConfig, model });
-                                    }}
-                                />
-                                <CodexCliModelField
-                                    label={t("Fast Mode Model")}
-                                    value={codexCliConfig.fastModel}
-                                    options={codexModels}
-                                    fromCodexCli={codexModelsFromCli}
-                                    onSelect={(fastModel) => {
-                                        setCodexCliConfig(prev => ({ ...prev, fastModel }));
-                                        saveCodexCliConfig({ ...codexCliConfig, fastModel });
-                                    }}
-                                />
                                 <label className="space-y-1 block min-w-0">
                                     <span className="aip-label">{t('Reasoning Effort')}</span>
                                     <ModelSelect

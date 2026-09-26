@@ -1030,4 +1030,13 @@ export const JA_GENERATED: Record<string, string> = {
     "from {version}": "{version} から",
     "{done} of {total} MB": "{done} / {total} MB",
     "{n}s left": "残り {n} 秒",
+    "Runs Auto Answer, quick decisions and Fast Response Mode.": "Auto Answer、すばやい判断、高速応答モードに使われます。",
+    "Answers with the Background Model, not the Active Model.": "現在のモデルではなく、Background Model で回答します。",
+    "Pick a Background Model to turn this on.": "オンにするには Background Model を選んでください。",
+    "Add a cloud model below, then pick it as the Background Model.": "下でクラウドモデルを追加し、Background Model として選んでください。",
+    "Not applied while the Active Model is a local or Antigravity model.": "現在のモデルがローカルまたは Antigravity のモデルの間は適用されません。",
+    "Your Background Model isn't available — pick another or choose Auto.": "Background Model が利用できません — 別のモデルか「自動」を選んでください。",
+    "On Auto this stays on your own endpoint — pick a Background Model to use another.": "「自動」では自分のエンドポイントのまま使われます — 別のものを使うには Background Model を選んでください。",
+    "Not applied: the providers it can use are switched off.": "適用されません: 使用できるプロバイダーがオフになっています。",
+    "Not applied to the current Active Model — pick a Background Model above for this to take effect.": "現在のモデルには適用されません — 有効にするには上で Background Model を選んでください。",
 };

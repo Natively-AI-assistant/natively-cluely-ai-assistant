@@ -650,7 +650,6 @@ interface ElectronAPI {
     enabled: boolean;
     path: string;
     model: string;
-    fastModel: string;
     timeoutMs: number;
     sandboxMode?: string;
     serviceTier?: string;
@@ -660,7 +659,6 @@ interface ElectronAPI {
     enabled: boolean;
     path: string;
     model: string;
-    fastModel: string;
     timeoutMs: number;
     sandboxMode?: string;
     serviceTier?: string;
@@ -672,7 +670,6 @@ interface ElectronAPI {
       enabled: boolean;
       path: string;
       model: string;
-      fastModel: string;
       timeoutMs: number;
       sandboxMode?: string;
       serviceTier?: string;
@@ -683,7 +680,6 @@ interface ElectronAPI {
     enabled?: boolean;
     path?: string;
     model?: string;
-    fastModel?: string;
     timeoutMs?: number;
     sandboxMode?: string;
     serviceTier?: string;
@@ -696,7 +692,6 @@ interface ElectronAPI {
       enabled: boolean;
       path: string;
       model: string;
-      fastModel: string;
       timeoutMs: number;
       sandboxMode?: string;
       serviceTier?: string;
@@ -2398,7 +2393,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     enabled: boolean;
     path: string;
     model: string;
-    fastModel: string;
     timeoutMs: number;
     sandboxMode?: string;
     serviceTier?: string;
@@ -2408,7 +2402,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     enabled?: boolean;
     path?: string;
     model?: string;
-    fastModel?: string;
     timeoutMs?: number;
     sandboxMode?: string;
     serviceTier?: string;

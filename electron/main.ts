@@ -2089,7 +2089,6 @@ export class AppState {
         enabled: !!settingsManager.get('codexCliEnabled'),
         path: settingsManager.get('codexCliPath'),
         model: settingsManager.get('codexCliModel'),
-        fastModel: settingsManager.get('codexCliFastModel'),
         timeoutMs: settingsManager.get('codexCliTimeoutMs'),
         sandboxMode: settingsManager.get('codexCliSandboxMode'),
         serviceTier: settingsManager.get('codexCliServiceTier'),

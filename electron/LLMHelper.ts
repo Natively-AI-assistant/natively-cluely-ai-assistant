@@ -184,6 +184,20 @@ const CLAUDE_MODEL = "claude-sonnet-4-6"
 const FAST_MODEL_JUDGE_RUNG_TIMEOUT_MS = 1800
 // Ceiling for a fast call made with no caller signal (the preferFast callers).
 const FAST_MODEL_DEFAULT_TIMEOUT_MS = 8000
+// Codex's measured first token is 1.7-2.0 s (gpt-5.5; see DEFAULT_CODEX_CLI_CONFIG),
+// before a single token of reply. A fast rung with a smaller budget cannot be
+// met on Codex — the judge rung (1.8 s) and the query rewrite (1.5 s) would
+// spend their whole budget and then fall through anyway — so a Codex
+// Background Model skips them and they run their own ladders at once.
+const CODEX_FAST_MIN_BUDGET_MS = 3000
+// 'natively' is an Auto candidate only (its server fast tier). It is never a
+// Background Model: resolveFastModelFamily() does not return it, so the picker
+// cannot offer it and callFastModel never sees it.
+type FastModelFamily = 'openai' | 'groq' | 'gemini' | 'deepseek' | 'claude' | 'codex' | 'natively'
+  | 'openrouter' | 'litellm' | 'nvidia_nim' | 'ninerouter' | 'fluxion'
+// Background Model families on an endpoint the user supplies — the same set
+// activeModelIsUserEndpoint() names for an Active Model.
+const FAST_PICK_USER_ENDPOINT_FAMILIES: ReadonlySet<FastModelFamily> = new Set(['litellm', 'nvidia_nim', 'openrouter', 'fluxion', 'ninerouter'])
 const OPENAI_JUDGE_MODEL = "gpt-5.5"
 const CLAUDE_JUDGE_MODEL = "claude-haiku-4-5"
 // DEEPSEEK_MODEL keeps main's centralised id, NOT the "deepseek-v4-flash"
@@ -191,6 +205,64 @@ const CLAUDE_JUDGE_MODEL = "claude-haiku-4-5"
 // is what DeepSeek serves today (llm/deepseekModels.ts). Taking the literal
 // would silently revert main's fix.
 const DEEPSEEK_MODEL = DEEPSEEK_DEFAULT_MODEL
+// Fast Response Mode on Auto (2026-09-26): the candidates it can answer on,
+// so no particular provider is required. Every id is the one this file already
+// runs as that vendor's quick call; 'codex-cli' resolves to the Codex default
+// and 'natively' is the server's fast tier. The ORDER is only the cold start:
+// once this user's own samples exist, autoFastRanking re-sorts by them. Shipped
+// order, fastest first: Groq sub-second; DeepSeek Flash 0.55s and Gemini
+// Flash-Lite ~1.1s first token (live, 2026-09-26); Natively's fast tier is
+// Flash-Lite behind a server hop; GPT-5.5 p50 1.4s (judge eval above); Codex
+// 1.7-2.0s; Claude Haiku unmeasured, so last.
+const AUTO_FAST_TIERS: ReadonlyArray<{ family: FastModelFamily; model: string }> = [
+  { family: 'groq', model: GROQ_MODEL },
+  { family: 'deepseek', model: DEEPSEEK_MODEL },
+  { family: 'gemini', model: GEMINI_FLASH_LITE_MODEL },
+  { family: 'natively', model: 'natively' },
+  { family: 'openai', model: OPENAI_JUDGE_MODEL },
+  { family: 'codex', model: 'codex-cli' },
+  { family: 'claude', model: CLAUDE_JUDGE_MODEL },
+]
+// How long Auto's ranked order is frozen, so the order does not churn with every
+// sample. One turn's own reads are held together by its FastTurn record instead
+// (textTurn): a freeze can expire mid-turn, a record cannot.
+const AUTO_FAST_ORDER_TTL_MS = 30_000
+// A fast pick that failed before its first token steps aside this long, so the
+// following turns go to (and are timed for) whoever answers instead.
+const FAST_PICK_COOLDOWN_MS = 90_000
+// Share of the pick's route budget it gets to say its first word. A pick that
+// stalls past it is abandoned INSIDE the turn and the fallback answers; the
+// outer deadline would instead abort the whole turn, which looks like a user
+// cancel and teaches nothing. Healthy fast models answer far inside it.
+const FAST_PICK_FIRST_TOKEN_SHARE = 0.5
+/** A fast pick that stalled or ended silent — a failure to fall back from, never a cancel. */
+class FastPickFailure extends Error {
+  constructor(public readonly kind: 'stall' | 'empty', message: string) {
+    super(message);
+    this.name = 'FastPickFailure';
+  }
+}
+type FastPick = { modelId: string; family: FastModelFamily; auto: boolean }
+/**
+ * One answer's Fast Response decision, keyed by the answer's abort signal (see
+ * LLMHelper.textTurn). The caller reads its deadline, latency key and profile
+ * identity BEFORE the answer is dispatched, and those reads and the dispatch
+ * must name the same model: re-resolving at each read let a 30s order refresh
+ * or another turn's failure in between hand the answer to a different model
+ * than the one it was timed and filed for.
+ */
+interface FastTurn {
+  /** Whose helper resolves the pick — a view never resolves one itself. */
+  owner: LLMHelper
+  /** Resolved once, at the first read or at dispatch, whichever comes first. */
+  pick?: FastPick | null
+  /** The first dispatch on this signal has claimed the record; later ones pick fresh. */
+  dispatched?: boolean
+  /** Who answered: the pick, the pick failed and the fallback rescued the turn, or no pick applied. */
+  answered?: 'pick' | 'rescued' | 'active'
+  /** The dispatch saw no image — a screenshot a privacy setting dropped makes a text turn. */
+  textOnly?: boolean
+}
 const DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 // DeepSeek's chat API THINKS BY DEFAULT: `thinking.type` defaults to `enabled`
 // (reasoning_effort `high`), and in streaming the reasoning arrives in
@@ -752,10 +824,21 @@ export class LLMHelper {
   private answerLatency: Map<string, { maxMs: number; ewmaMs: number; count: number }> = new Map();
 
   /**
-   * Stable identity for the endpoint currently selected, or null when the route
-   * is not a user endpoint (nothing else adapts, so nothing else is measured).
+   * Stable identity for the endpoint that will answer the next text turn, or
+   * null when that is not a user endpoint (nothing else adapts, so nothing else
+   * is measured). With Fast Response Mode on a Background Model that is the
+   * pick, not the Active Model: filing a Gemini pick's sub-second first tokens
+   * under a selected LiteLLM proxy would narrow the proxy's budget until it
+   * guillotined its own answers once fast mode was off.
    */
   private answerLatencyKey(): string | null {
+    const pick = this.fastPickForTextTurn();
+    if (pick) return FAST_PICK_USER_ENDPOINT_FAMILIES.has(pick.family) ? `model:${pick.modelId}` : null;
+    return this.activeAnswerLatencyKey();
+  }
+
+  /** answerLatencyKey() for the Active Model — what its own rung measures against. */
+  private activeAnswerLatencyKey(): string | null {
     if (this.customProvider) {
       const c: any = this.customProvider;
       return `custom:${c.id}:${c.baseUrl || c.model || ''}`;
@@ -779,6 +862,9 @@ export class LLMHelper {
    */
   public recordAnswerFirstToken(ms: number): void {
     if (!Number.isFinite(ms) || ms < 0) return;
+    // A rescued answer's first token includes the failed pick's wait, so it
+    // measures neither the pick nor the model that rescued it.
+    if (this._fastTurn?.answered === 'rescued') return;
     const key = this.answerLatencyKey();
     if (!key) return;
     const prev = this.answerLatency.get(key);
@@ -912,9 +998,12 @@ export class LLMHelper {
     return Array.isArray(args?.[1]) && (args![1] as string[]).length > 0;
   }
 
-  /** What we have measured from the selected endpoint; null when unmeasured. */
+  /** What we have measured from the endpoint that will answer; null when unmeasured. */
   public observedAnswerLatency(): { maxMs: number; count: number } | null {
-    const key = this.answerLatencyKey();
+    return this.observedLatencyFor(this.answerLatencyKey());
+  }
+
+  private observedLatencyFor(key: string | null): { maxMs: number; count: number } | null {
     if (!key) return null;
     const e = this.answerLatency.get(key);
     return e ? { maxMs: e.maxMs, count: e.count } : null;
@@ -2564,9 +2653,12 @@ export class LLMHelper {
    * duplicates the whole request for no latency win.
    */
   public hasEngineLevelRetry(): boolean {
+    // A Background Model answer is not wrapped in the engine (the fast block
+    // runs before every rung), so a stalled one needs the caller's regeneration.
+    if (this.fastPickForTextTurn()) return false;
     if (this.useOllama || this.isUsingCodexCli()) return false;
     if (this.activeCurlProvider) return false;      // branch 2b: blocking, terminal
-    return this.isUsingUserEndpoint();
+    return this.activeModelIsUserEndpoint();
   }
 
   private buildTextSpareRungs(
@@ -2619,7 +2711,9 @@ export class LLMHelper {
    * latency statistic for one provider is the recurring mistake in this area.
    */
   private hedgeDelayForBudget(budgetMs: number): number {
-    const observed = this.observedAnswerLatency();
+    // The Active Model's own measurement: this runs inside its rung, which is
+    // reached only when no Background Model answered the turn.
+    const observed = this.observedLatencyFor(this.activeAnswerLatencyKey());
     const floor = Math.round(budgetMs * 0.5);
     const ceil = Math.round(budgetMs * 0.85);
     if (!observed || observed.count <= 0) return Math.round(budgetMs * 0.6);
@@ -2662,9 +2756,11 @@ export class LLMHelper {
     // Dynamic, like every other liveDeadlines use in this file — a static
     // import here closes a module cycle.
     const { totalHardTimeoutMs } = await import('./llm/liveDeadlines');
+    // The Active Model's rung, so its own endpoint class and measurement — the
+    // public predicates follow a Background Model pick, which did not answer.
     const budgetMs = totalHardTimeoutMs({
-      isUserEndpoint: this.isUsingUserEndpoint(),
-      observedUserEndpointLatency: this.observedAnswerLatency(),
+      isUserEndpoint: this.activeModelIsUserEndpoint(),
+      observedUserEndpointLatency: this.observedLatencyFor(this.activeAnswerLatencyKey()),
     });
     const spares = this.buildTextSpareRungs(opts.userContent, opts.finalSystemPrompt, opts.thinkingBudget, [opts.id, ...(opts.excludeSpareIds ?? [])]);
 
@@ -2813,8 +2909,13 @@ export class LLMHelper {
     return [systemPrompt, userContent].filter(Boolean).join('\n\n');
   }
 
-  private getSelectedCodexCliModel(fastMode: boolean): string {
-    if (fastMode) return this.codexCliConfig.fastModel;
+  // Fast Response Mode has no Codex setting of its own any more (2026-09-26).
+  // The Background Model is where the user picks what that mode answers with —
+  // including a Codex model other than the Codex default, which is what the
+  // Codex card's old "Fast Mode Model" was for (codexModelForFastPick). Auto's
+  // Codex candidate and the fallback ladder's Codex rung run the Codex default,
+  // so the `fastMode` flag the callers still pass no longer changes the model.
+  private getSelectedCodexCliModel(): string {
     if (this.currentModelId.startsWith("codex-cli:")) {
       // A selection persisted from an earlier build's presets (gpt-5.4,
       // gpt-5.3-codex, spark) is rejected for a ChatGPT account on every turn;
@@ -2822,6 +2923,14 @@ export class LLMHelper {
       return chatGptCompatibleModel(this.currentModelId.slice("codex-cli:".length), this.codexCliConfig.model);
     }
     return this.codexCliConfig.model;
+  }
+
+  /** The Codex model a Background Model pick names: the bare `codex-cli` entry
+      is the Codex default, and a ChatGPT-rejected id falls back to it as above. */
+  private codexModelForFastPick(modelId: string): string {
+    return modelId.startsWith("codex-cli:")
+      ? chatGptCompatibleModel(modelId.slice("codex-cli:".length), this.codexCliConfig.model)
+      : this.codexCliConfig.model;
   }
 
   private async generateWithCodexCli(userContent: string, systemPrompt?: string, fastMode = false, imagePaths?: string[], signal?: AbortSignal): Promise<string> {
@@ -2841,7 +2950,7 @@ export class LLMHelper {
     // The disabled-provider term is redundant with isCodexAvailable() above and
     // stays for uniformity; the vision + scope terms are new coverage.
     this.assertOutboundScopes('codex', userContent, imagePaths);
-    const model = this.getSelectedCodexCliModel(fastMode);
+    const model = this.getSelectedCodexCliModel();
     // System prompt is sent separately as `body.instructions` (the
     // Responses-API field the Codex backend uses for system content),
     // NOT concatenated into the user prompt. Concatenation diverges
@@ -2876,7 +2985,7 @@ export class LLMHelper {
     // first next() rather than at call time — still strictly before any byte
     // reaches CodexCliService.stream, which is the property that matters.
     this.assertOutboundScopes('codex', userContent, imagePaths);
-    const model = modelOverride || this.getSelectedCodexCliModel(fastMode);
+    const model = modelOverride || this.getSelectedCodexCliModel();
     // See note in generateWithCodexCli — system prompt is sent
     // separately as `body.instructions`, not concatenated.
     yield* CodexCliService.stream(this.codexCliConfig.path, {
@@ -4462,17 +4571,41 @@ let isMultimodal = !!(imagePaths?.length);
         return text;
       }
 
+      // FAST RESPONSE MODE ON THE BACKGROUND MODEL — non-streaming twin of the
+      // block in _streamChatInner; see there for the gate.
+      let fastPickFailed = false;
+      if (!isMultimodal && !this.useOllama) {
+        const fastCtl = new AbortController();
+        const fastPick = this.openFastModelStream(cloudUserContent, systemPromptOverride, finalGeminiPrompt, fastCtl.signal, skipSystemPrompt);
+        if (fastPick) {
+          console.log(`[LLMHelper] ⚡️ Fast Response Mode: answering on ${fastPick.auto ? 'the Auto fast tier' : 'the Background Model'} (${fastPick.modelId})`);
+          let failure: unknown;
+          try {
+            let text = '';
+            for await (const chunk of this.guardFastPick(fastPick, fastCtl)) text += chunk;
+            if (text.trim()) return text;
+            console.warn('[LLMHelper] Background Model fast answer was empty, falling back');
+          } catch (e: any) {
+            failure = e;
+            console.warn('[LLMHelper] Background Model fast answer failed, falling back:', e?.message);
+          }
+          this.noteFastPickFailure(fastPick, failure);
+          fastPickFailed = true;
+        }
+      }
+
       // GROQ FAST TEXT OVERRIDE (Text-Only) — gated on picked model so Gemini/Claude/OpenAI
       // selections aren't silently routed to Groq. See streamChat() for matching gate.
       // !this.isCodexCliModel(this.currentModelId) prevents fast-mode from
-      // overriding an EXPLICITLY-PICKED codex-cli:<model> (which would otherwise
-      // call getSelectedCodexCliModel(true) → fastModel → 0 tokens → fallback).
+      // overriding an EXPLICITLY-PICKED codex-cli:<model> (which used to call
+      // getSelectedCodexCliModel(true) → fastModel → 0 tokens → fallback).
       // Fixes issue #315.
-      const fastModeAppliesNS = this.groqFastTextMode && !isMultimodal && (
+      // Fallback only, as in _streamChatInner.
+      const fastModeAppliesNS = fastPickFailed && this.groqFastTextMode && !isMultimodal && (
         this.isCodexAvailable() ||
         this.isGroqModel(this.currentModelId) ||
         this.currentModelId === 'natively'
-      ) && !this.isCodexCliModel(this.currentModelId);
+      ) && !this.isCodexCliModel(this.currentModelId) && !this.activeIsSelfHosted();
       if (fastModeAppliesNS && this.isCodexAvailable()) {
         console.log(`[LLMHelper] ⚡️ Fast Text Mode Active. Routing to Codex CLI...`);
         try {
@@ -4789,10 +4922,12 @@ let isMultimodal = !!(imagePaths?.length);
    * the first time a branch changed, and invisibly - which is how the gateway
    * egress bug got in.
    */
-  private resolveFastModelFamily(modelId: string):
-    'openai' | 'groq' | 'gemini' | 'deepseek' | 'claude'
-    | 'openrouter' | 'litellm' | 'nvidia_nim' | 'ninerouter' | 'fluxion' | null {
+  private resolveFastModelFamily(modelId: string): Exclude<FastModelFamily, 'natively'> | null {
     if (!modelId) return null;
+    // Codex (2026-09-26): the Background Model is where a Codex fast model is
+    // picked now, and it may differ from the Codex default — the role the
+    // Codex card's old "Fast Mode Model" had. No other predicate claims these ids.
+    if (this.isCodexCliModel(modelId)) return 'codex';
     // Gateways are OpenAI-SHAPED but are NOT OpenAI. isOpenAiModel() self-excludes
     // Groq and Fluxion but not these, and its final clause is `includes('openai')`
     // - so `openrouter/openai/gpt-5.6-terra` (a stock picker preset) would be
@@ -4820,6 +4955,410 @@ let isMultimodal = !!(imagePaths?.length);
    */
   public canDispatchFastModel(modelId: string): boolean {
     return this.resolveFastModelFamily(modelId) !== null;
+  }
+
+  /**
+   * Fast Response Mode's answer on the Background Model — or, on Auto, on
+   * autoFastPick()'s fastest candidate — or null when neither can run right
+   * now, in which case the Active Model answers. The original Codex → Groq →
+   * Natively ladder runs only after a pick FAILED.
+   *
+   * Same family resolver as callFastModel, so the Settings picker, the judge
+   * and this path agree on what is dispatchable. Each streamer takes the pick
+   * as an explicit model id: this.currentModelId is never swapped, because Auto
+   * Answer and manual chat run concurrently on this helper. System prompts
+   * mirror each family's own answer rung below; `baseSystemPrompt` is the
+   * universal one the calling path already built, which Gemini and Codex take.
+   * The streamers keep their local-only and outbound-scope refusals, which fire
+   * on the first next().
+   */
+  private openFastModelStream(
+    userContent: string,
+    systemPromptOverride: string | undefined,
+    baseSystemPrompt: string | undefined,
+    abortSignal?: AbortSignal,
+    skipSystemPrompt = false,
+    turn?: FastTurn | null,
+  ): { modelId: string; family: FastModelFamily; auto: boolean; stream: AsyncGenerator<string, void, unknown> } | null {
+    const pick = turn ? this.fastPickAtDispatch(turn) : this.fastPickForTextTurn();
+    if (!pick) {
+      if (this.groqFastTextMode && this.fastModelId) {
+        console.log(`[LLMHelper] Fast Response Mode: Background Model not usable now (${this.fastModelId}) - the Active Model answers`);
+      }
+      return null;
+    }
+    const { modelId, family, auto } = pick;
+    const system = (base: string) => (skipSystemPrompt ? undefined : this.injectLanguageInstruction(systemPromptOverride || base));
+    const openaiShaped = system(OPENAI_SYSTEM_PROMPT);
+    let stream: AsyncGenerator<string, void, unknown>;
+    switch (family) {
+      case 'openai': stream = this.streamWithOpenai(userContent, openaiShaped, modelId, abortSignal); break;
+      case 'claude': stream = this.streamWithClaude(userContent, system(CLAUDE_SYSTEM_PROMPT), modelId, abortSignal); break;
+      case 'deepseek': stream = this.streamWithDeepseek(userContent, openaiShaped, modelId, abortSignal); break;
+      // strictModel: the user named this model, so a retired id must fail over
+      // to the ladder rather than be silently swapped for another Groq one.
+      case 'groq': stream = this.streamWithGroq(userContent, modelId, system(GROQ_SYSTEM_PROMPT), abortSignal, true); break;
+      case 'gemini': stream = this.streamWithGeminiModel(userContent, modelId, undefined, skipSystemPrompt ? undefined : baseSystemPrompt, abortSignal); break;
+      case 'codex': stream = this.streamWithCodexCli(userContent, skipSystemPrompt ? undefined : baseSystemPrompt, true, undefined, abortSignal, this.codexModelForFastPick(modelId)); break;
+      // fast_mode rides on groqFastTextMode, which is on whenever this runs.
+      case 'natively': stream = this.streamWithNatively(userContent, skipSystemPrompt ? undefined : baseSystemPrompt, undefined, abortSignal); break;
+      case 'openrouter': stream = this.streamWithOpenRouter(userContent, openaiShaped, undefined, abortSignal, modelId); break;
+      case 'litellm': stream = this.streamWithLiteLLM(userContent, openaiShaped, undefined, abortSignal, modelId); break;
+      case 'nvidia_nim': stream = this.streamWithNvidiaNim(userContent, openaiShaped, undefined, abortSignal, modelId); break;
+      case 'ninerouter': stream = this.streamWithNinerouter(userContent, openaiShaped, undefined, abortSignal, modelId); break;
+      case 'fluxion': stream = this.streamWithFluxion(userContent, openaiShaped, undefined, abortSignal, modelId); break;
+    }
+    return { modelId, family, auto, stream };
+  }
+
+  /** Is this Background Model family's client set up right now? */
+  private fastFamilyReady(family: FastModelFamily): boolean {
+    // A provider switched off in Settings never answers, picked or automatic.
+    if (this.isProviderDisabled(family)) return false;
+    switch (family) {
+      case 'openai': return !!this.openaiClient;
+      case 'claude': return !!this.claudeClient;
+      case 'deepseek': return !!this.deepseekClient;
+      case 'groq': return !!this.groqClient && !this._groqLocalDisabled;
+      case 'gemini': return !!this.client;
+      case 'codex': return this.isCodexAvailable();
+      case 'natively': return this.hasNatively();
+      case 'openrouter': return !!this.openrouterClient;
+      case 'litellm': return !!this.litellmClient;
+      case 'nvidia_nim': return !!this.nvidiaNimClient;
+      case 'ninerouter': return !!this.ninerouterClient;
+      case 'fluxion': return this.hasFluxionCredential();
+    }
+  }
+
+  /**
+   * The Background Model Fast Response Mode will answer the next TEXT turn on,
+   * or null: exactly the gate _streamChatInner / chatWithGemini apply before
+   * openFastModelStream — fast mode on, not local-only, not a local Ollama
+   * Active Model, not an Antigravity one (that branch answers above the fast
+   * block), and a pick whose client is set up.
+   *
+   * The live deadline, the latency map and the performance profile are chosen
+   * BEFORE dispatch, from whoever will answer. Reading the Active Model there
+   * gave a gateway pick the shipped-provider deadline and filed the pick's
+   * first-token times under the Active Model's endpoint. Image turns never take
+   * the fast path (the vision chain answers them), so callers that know the
+   * turn has images must not ask this.
+   *
+   * On a textTurn() view this is the turn's PINNED pick — the one its dispatch
+   * will use — and null once the turn was answered by someone else (no pick
+   * applied, or the pick failed and the fallback rescued it).
+   */
+  private fastPickForTextTurn(): FastPick | null {
+    const turn = this._fastTurn;
+    if (!turn) return this.resolveFastPick();
+    if (turn.answered === 'active' || turn.answered === 'rescued') return null;
+    if (turn.pick === undefined) turn.pick = turn.owner.resolveFastPick();
+    return turn.pick;
+  }
+
+  /** The turn record a textTurn() view reads; never set on the helper itself. */
+  private _fastTurn?: FastTurn;
+  private _fastTurns?: WeakMap<AbortSignal, FastTurn>;
+
+  /**
+   * This helper, seen from ONE answer: every route read (the deadline's
+   * isUsingOllama / isUsingCodexCli / isUsingNativelyServerCascade /
+   * isUsingUserEndpoint / observedAnswerLatency, performanceIdentity,
+   * answeredIdentity, recordAnswerFirstToken, hasEngineLevelRetry) names the
+   * model the answer is dispatched to, because the first read pins it and the
+   * dispatch — _streamChatInner with the SAME signal — uses the pin. Callers
+   * pass the exact signal they hand streamChat. A read-only view: it
+   * resolves nothing itself (turn.owner does) and writes no helper state.
+   */
+  public textTurn(signal: AbortSignal | undefined | null): LLMHelper {
+    if (!(signal instanceof AbortSignal)) return this;
+    const view: LLMHelper = Object.create(this);
+    view._fastTurn = this.fastTurnFor(signal);
+    return view;
+  }
+
+  private fastTurnFor(signal: AbortSignal): FastTurn {
+    const turns = (this._fastTurns ??= new WeakMap());
+    let turn = turns.get(signal);
+    if (!turn) {
+      turn = { owner: this };
+      turns.set(signal, turn);
+    }
+    return turn;
+  }
+
+  /**
+   * The record the dispatch on this signal answers from, claimed by the FIRST
+   * dispatch only; null for no signal or a later dispatch on the same one,
+   * which resolves fresh and must not overwrite who answered the turn.
+   */
+  private claimFastTurn(signal: AbortSignal | undefined): FastTurn | null {
+    if (!signal) return null;
+    const turn = this.fastTurnFor(signal);
+    if (turn.dispatched) return null;
+    turn.dispatched = true;
+    return turn;
+  }
+
+  /**
+   * The pinned pick, at dispatch. Held through a cooldown another turn started
+   * after the pin: this answer's deadline and profile identity were set for it,
+   * and guardFastPick hands the fallback the rest of the budget if it really is
+   * down. What it may not do is answer after the user switched it off, unticked
+   * it or turned the mode off.
+   */
+  private fastPickAtDispatch(turn: FastTurn): FastPick | null {
+    if (turn.pick === undefined) turn.pick = this.resolveFastPick();
+    const pick = turn.pick;
+    if (!pick || !this.fastPickGatesOpen()) return null;
+    return this.fastFamilyReady(pick.family) && this.fastModelAllowed(pick.modelId, pick.family) ? pick : null;
+  }
+
+  /** Fast mode can take a text turn at all: on, not local-only, not a local Ollama or an Antigravity Active Model. */
+  private fastPickGatesOpen(): boolean {
+    if (!this.groqFastTextMode || this.isLocalOnlyMode || this.useOllama) return false;
+    return !!(this.customProvider || this.activeCurlProvider) || !this.isAntigravityModel(this.currentModelId);
+  }
+
+  /**
+   * performanceIdentity() for the model that ANSWERED this turn, with the
+   * turn's real image state, or null when no one model did: the pick failed and
+   * the fallback rescued it. The pick's failure is already on file
+   * (noteFastPickFailure), and the rescue's first token includes the pick's
+   * wait, so it measures neither. Off a textTurn() view this is
+   * performanceIdentity(hasImages).
+   */
+  public answeredIdentity(hasImages: boolean = false): { identity: ReturnType<LLMHelper['performanceIdentity']>; hasImages: boolean } | null {
+    const turn = this._fastTurn;
+    if (turn?.answered === 'rescued') return null;
+    const images = hasImages && !turn?.textOnly;
+    return { identity: this.performanceIdentity(images), hasImages: images };
+  }
+
+  /** fastPickForTextTurn() resolved now, from settings and measurements. */
+  private resolveFastPick(): FastPick | null {
+    if (!this.fastPickGatesOpen()) return null;
+    const modelId = this.fastModelId;
+    if (!modelId) return this.autoFastPick();
+    // The pick IS the Active Model: its own rung answers, with the failover the
+    // fast path does not have.
+    if (modelId === this.currentModelId) return null;
+    const family = this.resolveFastModelFamily(modelId);
+    if (!family || !this.fastCandidateUsable(modelId, family)) return null;
+    return { modelId, family, auto: false };
+  }
+
+  /**
+   * Fast Response Mode on Auto (no Background Model picked): the model to answer
+   * a text turn on, or null.
+   *  - null for an explicit Codex Active Model (issue #315: never overridden);
+   *  - null when the Active Model is the user's own endpoint (activeIsSelfHosted):
+   *    someone running LiteLLM or 9Router for privacy did not ask for their turns
+   *    to go to another vendor. An explicit Background Model pick still applies;
+   *  - otherwise the FASTEST connected candidate by this user's own measurements
+   *    (autoFastOrder), skipping one in cooldown after a failure;
+   *  - null when that candidate IS the Active Model: its own rung, with failover,
+   *    answers exactly as it would with fast mode off.
+   */
+  private autoFastPick(): { modelId: string; family: FastModelFamily; auto: boolean } | null {
+    if (this.isCodexCliModel(this.currentModelId) || this.activeIsSelfHosted()) return null;
+    // Readiness is checked lazily, best first — most turns stop at the first
+    // candidate, so the Codex sign-in file is read only when Codex is reached.
+    const best = this.autoFastOrder().find((c) => this.fastCandidateUsable(c.modelId, c.family));
+    if (!best || best.modelId === this.currentModelId) return null;
+    return { modelId: best.modelId, family: best.family, auto: true };
+  }
+
+  /** Can this pick or Auto candidate answer now: provider set up and switched
+      on, model still ticked in its card, and not cooling down after a failure. */
+  private fastCandidateUsable(modelId: string, family: FastModelFamily): boolean {
+    return this.fastFamilyReady(family) && this.fastModelAllowed(modelId, family) && !this.inFastPickCooldown(modelId);
+  }
+
+  /**
+   * The provider card's model list, applied to Fast Response: an un-ticked model
+   * answers nothing, picked or automatic, exactly as the Background Model picker
+   * then labels it "(not supported)". MIRRORS isModelAllowed()
+   * (src/utils/modelUtils.ts) and modelAvailable() (ipcHandlers.ts): empty means
+   * all, except for the opt-in gateways, where empty means none; the bare
+   * `codex-cli` entry is checked as the Codex default it runs. Natively has no
+   * model list. callFastModel (the Auto Answer judge) does not read it.
+   */
+  private fastModelAllowed(modelId: string, family: FastModelFamily): boolean {
+    if (family === 'natively') return true;
+    const listFamily = family === 'codex' ? 'codex-cli' : family;
+    const id = modelId === 'codex-cli' ? `codex-cli:${this.codexCliConfig.model}` : modelId;
+    let list: string[];
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      list = CredentialsManager.getInstance().getCloudEnabledModels?.(listFamily) || [];
+    } catch {
+      return true;
+    }
+    const optIn = listFamily === 'litellm' || listFamily === 'openrouter' || listFamily === 'ninerouter';
+    return optIn ? list.includes(id) : (list.length === 0 || list.includes(id));
+  }
+
+  /** The Active Model is an endpoint the user runs or points at themselves. */
+  private activeIsSelfHosted(): boolean {
+    return !!(this.customProvider || this.activeCurlProvider)
+      || this.isLiteLLMModel(this.currentModelId) || this.isNinerouterModel(this.currentModelId);
+  }
+
+  /**
+   * Auto's connected candidates, best first. Shipped order until this user's
+   * own samples say otherwise (autoFastRanking has the rules); frozen for
+   * AUTO_FAST_ORDER_TTL_MS. Any failure to read the evidence falls back to the
+   * shipped order — the ranking can refine Auto, never break it.
+   */
+  private autoFastOrder(): Array<{ modelId: string; family: FastModelFamily }> {
+    // EVERY tier is ranked, connected or not; readiness is checked at pick time
+    // (autoFastPick), so it never has to be computed to hit this cache.
+    const candidates = AUTO_FAST_TIERS.map((t) => ({
+      family: t.family,
+      // A Groq Active Model is the user's own Groq choice: the old ladder
+      // answered on it, and it stands for Groq here too.
+      modelId: t.family === 'groq' && this.isGroqModel(this.currentModelId) ? this.currentModelId : t.model,
+    }));
+    const key = candidates.map((c) => c.modelId).join('|');
+    const now = Date.now();
+    const cached = this._autoFastOrder;
+    if (cached && cached.key === key && now - cached.at < AUTO_FAST_ORDER_TTL_MS) return cached.order;
+    let order = candidates;
+    try {
+      const { getProviderPerformanceStore } = require('./llm/performance/ProviderPerformanceStore');
+      const { getRuntimeSignals } = require('./llm/performance/runtimeSignals');
+      const { isStale } = require('./llm/performance/types');
+      const { autoFastEvidence, orderAutoFastCandidates } = require('./llm/performance/autoFastRanking');
+      const store = getProviderPerformanceStore();
+      const network = getRuntimeSignals().network().id;
+      // THIS model on THIS network only. store.lookup() falls back to "any model
+      // of this provider", and every non-Codex cloud model shares the provider id
+      // 'gemini', so an unmeasured candidate would borrow another model's speed.
+      // getExact also keeps failure-only rows, which lookup() hides.
+      const exact = (providerId: string, modelId: string) => {
+        const profile = store.getExact(providerId, modelId, network);
+        return profile && !isStale(profile) ? profile : null;
+      };
+      // Filed under performanceIdentity()'s keys: 'codex-cli' for Codex (bare
+      // and prefixed ids both occur), the coarse 'gemini' for every other cloud
+      // model, Natively included.
+      order = orderAutoFastCandidates(candidates.map((c) => ({
+        ...c,
+        evidence: autoFastEvidence(c.family === 'codex'
+          ? [exact('codex-cli', 'codex-cli'), exact('codex-cli', `codex-cli:${this.codexCliConfig.model}`)]
+          : [exact('gemini', c.modelId)]),
+      }))).map(({ modelId, family }: { modelId: string; family: FastModelFamily }) => ({ modelId, family }));
+    } catch (e: any) {
+      console.warn('[LLMHelper] Fast Response Auto: measurements unreadable, using the shipped order:', e?.message);
+    }
+    this._autoFastOrder = { key, at: now, order };
+    return order;
+  }
+  private _autoFastOrder?: { key: string; at: number; order: Array<{ modelId: string; family: FastModelFamily }> };
+
+  private _fastPickCooldownUntil?: Map<string, number>;
+  private inFastPickCooldown(modelId: string): boolean {
+    const until = this._fastPickCooldownUntil?.get(modelId);
+    return until !== undefined && Date.now() < until;
+  }
+  /** Never called for a user's cancel — only a real failure before any token. */
+  private noteFastPickFailure(pick: { modelId: string; family: FastModelFamily }, error?: unknown): void {
+    (this._fastPickCooldownUntil ??= new Map()).set(pick.modelId, Date.now() + FAST_PICK_COOLDOWN_MS);
+    console.warn(`[LLMHelper] Fast Response Mode: ${pick.modelId} failed - stepping aside for ${FAST_PICK_COOLDOWN_MS / 1000}s`);
+    // The turn is then answered by the fallback, and the caller files that as
+    // a SUCCESS under the pick: its identity was fixed when the turn started.
+    // Record the failure itself, or Auto's "unreliable goes last" could never
+    // learn from a real one. An unclassifiable failure before any token still
+    // counts as one, so it is filed as a server error, never as 'unknown'.
+    try {
+      const { isIntelligenceFlagEnabled } = require('./intelligence/intelligenceFlags');
+      if (!isIntelligenceFlagEnabled('providerPerformanceProfile')) return;
+      const { recordStreamObservation, classifyStreamError } = require('./llm/performance/recorder');
+      // A stall is filed as a timeout (no errorClass); anything else as its class.
+      const stalled = (error as any)?.name === 'FastPickFailure' && (error as any).kind === 'stall';
+      const cls = stalled ? null : classifyStreamError(error);
+      const errorClass = stalled ? undefined
+        : cls === 'rate_limit' || cls === 'client_error' || cls === 'connection_failure' ? cls : 'server_error';
+      recordStreamObservation(
+        { ttftMs: null, totalMs: 0, interChunkGapsMs: [], chunkCount: 0, outputChars: 0, reason: stalled ? 'first_useful_timeout' : 'error',
+          error: stalled ? undefined : error, firstUsefulBudgetMs: 0, interTokenStallMs: 0, speculative: false, stream: (async function* () { /* none */ })() },
+        { providerId: this.fastPickProviderId(pick.family), modelId: pick.modelId, route: this.fastPickRoute(pick.family),
+          inputTokens: 0, outputTokens: 0, hasImages: false, startedAt: Date.now(), coldStart: false, userCancelled: false, errorClass },
+      );
+    } catch { /* bookkeeping never breaks the fallback */ }
+  }
+
+  /** performanceIdentity()'s provider id for a fast pick — getCurrentProvider()'s coarse vocabulary. */
+  private fastPickProviderId(family: FastModelFamily): string {
+    return family === 'codex' ? 'codex-cli' : 'gemini';
+  }
+
+  private fastPickRoute(family: FastModelFamily): 'local' | 'server_cascade' | 'user_endpoint' | 'default_provider' {
+    if (family === 'codex') return 'local';
+    if (family === 'natively') return 'server_cascade';
+    return FAST_PICK_USER_ENDPOINT_FAMILIES.has(family) ? 'user_endpoint' : 'default_provider';
+  }
+
+  /**
+   * FAST_PICK_FIRST_TOKEN_SHARE of the pick's own route budget — the same
+   * budget the caller's outer deadline is built from (answerLatencyKey() and
+   * the route predicates follow the pick), so the guard always fires first and
+   * leaves the fallback the rest. A gateway's budget adapts to its measured
+   * first tokens; the guard adapts with it.
+   */
+  private fastPickFirstTokenBudgetMs(pick: { modelId: string; family: FastModelFamily }): number {
+    const route = this.fastPickRoute(pick.family);
+    const { totalHardTimeoutMs } = require('./llm/liveDeadlines');
+    const full: number = totalHardTimeoutMs({
+      isLocal: route === 'local', viaServerCascade: route === 'server_cascade', isUserEndpoint: route === 'user_endpoint',
+      observedUserEndpointLatency: route === 'user_endpoint' ? this.observedLatencyFor(`model:${pick.modelId}`) : null,
+    });
+    return Math.round(full * FAST_PICK_FIRST_TOKEN_SHARE);
+  }
+
+  /**
+   * The fast pick's stream, held to its own first-word budget. A pick that
+   * stalls past it, or ends without a word, throws FastPickFailure, so the
+   * caller's catch treats it like any failure before the first token: cool
+   * down, record, fall back — all inside the turn. `ctl` is the pick's own
+   * controller (the stream was opened on a signal linked to the turn's), so
+   * abandoning it never aborts the turn.
+   */
+  private async *guardFastPick(
+    pick: { modelId: string; family: FastModelFamily; stream: AsyncGenerator<string, void, unknown> },
+    ctl: AbortController,
+  ): AsyncGenerator<string, void, unknown> {
+    const budgetMs = this.fastPickFirstTokenBudgetMs(pick);
+    const it = pick.stream[Symbol.asyncIterator]();
+    let spoke = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const stalled = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new FastPickFailure('stall', `no first word within ${budgetMs}ms`)), budgetMs);
+    });
+    stalled.catch(() => { /* raced below; never unhandled */ });
+    try {
+      while (true) {
+        const next = spoke ? await it.next() : await Promise.race([it.next(), stalled]);
+        if (next.done) break;
+        if (!spoke && typeof next.value === 'string' && next.value.trim()) {
+          spoke = true;
+          clearTimeout(timer);
+        }
+        yield next.value;
+      }
+    } catch (e: any) {
+      if (e?.name === 'FastPickFailure') {
+        ctl.abort();
+        // Not awaited: a generator still parked in next() would hold it.
+        it.return?.(undefined)?.catch?.(() => { /* already closing */ });
+      }
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
+    if (!spoke) throw new FastPickFailure('empty', 'the fast answer was empty');
   }
 
   /**
@@ -4873,6 +5412,20 @@ let isMultimodal = !!(imagePaths?.length);
     };
 
     try {
+      // Codex speaks the Responses API through its own streaming transport, which
+      // keeps its local-only, scope and vision boundaries; drain it. It cannot be
+      // forced to JSON, so a fenced reply is unwrapped by finish() like any other.
+      if (family === 'codex') {
+        if (!this.isCodexAvailable()) return notDispatchable();
+        if (budget !== undefined && budget < CODEX_FAST_MIN_BUDGET_MS) {
+          console.log(`[LLMHelper] fast-model skipped (${modelId}): a ${budget}ms rung is shorter than Codex's first token - falling through to the ladder`);
+          return null;
+        }
+        let text = '';
+        for await (const chunk of this.streamWithCodexCli(message, undefined, true, undefined, timer, this.codexModelForFastPick(modelId))) text += chunk;
+        return finish(text);
+      }
+
       // The gateways are OpenAI-SHAPED but each has its OWN wire-id rule, and
       // getting it wrong 404s: Fluxion strips to a bare id, OpenRouter keeps the
       // vendor segment underneath. Never a generic strip.
@@ -5540,8 +6093,10 @@ let isMultimodal = !!(imagePaths?.length);
 
     const body: any = { messages: [{ role: 'user', content: userMessage }] };
 
-    // Signal fast mode so the server routes to Groq Llama 3.3 (text-only, key-rotated).
-    // Only sent for text-only requests — server ignores it when images are present.
+    // Signal fast mode so the server uses its fast tier. Sent with screenshots
+    // too, and that is fine: the tier is Gemini Flash-Lite, which reads the
+    // images, and MiniMax only when minimaxTierEligible() allows images
+    // (natively-api server.js, routeChat / routeChatStream).
     if (this.groqFastTextMode) body.fast_mode = true;
 
     // EXTRACTION hint: opt-in signal that this is a structured document extraction
@@ -8153,18 +8708,14 @@ let isMultimodal = !!(imagePaths?.length);
 
     // ============================================================
     // KNOWLEDGE MODE INTERCEPT (Streaming)
-    // Skip when fast-text mode (`groqFastTextMode`) is active. The rationale
-    // is broader than latency: skipping the knowledge intercept also DROPS
-    // the orchestrator's `feedForDepthScoring` call (the depth score
-    // doesn't reach the answer), the `isIntroQuestion` shortcut (identity
-    // recall), the persona `systemPromptInjection` override, and the live
-    // negotiation-coaching short-circuit. The trade is intentional — fast
-    // mode trades these for sub-second TTFT — but the comment previously
-    // stated only the latency rationale and hid the rest (audit #4).
-    // `documentGroundedCustomModeActive` already exempts the doc-grounded
-    // case from this gate (so a document-grounded answer can never lose
-    // retrieval to fast mode), even though fast mode is otherwise allowed
-    // with any other active mode.
+    // Runs in Fast Response Mode too (2026-09-26). It used to be skipped there,
+    // which DROPPED the orchestrator's `feedForDepthScoring` call, the
+    // `isIntroQuestion` identity recall, the persona `systemPromptInjection`
+    // and the live negotiation-coaching short-circuit (audit #4) — acceptable
+    // while fast mode meant a Groq few, not once any user can switch it on.
+    // Its output lands in `systemPromptOverride` and `context`, which the fast
+    // path reads like every other rung, so a fast answer carries the profile.
+    // The non-streaming path never skipped it.
     // ============================================================
     const documentGroundedCustomModeActive = (() => {
       try {
@@ -8198,7 +8749,6 @@ let isMultimodal = !!(imagePaths?.length);
     }
     const shouldRunKnowledge = !ignoreKnowledgeMode &&
       !documentGroundedCustomModeActive &&
-      !this.groqFastTextMode &&
       this.knowledgeOrchestrator?.isKnowledgeMode();
 
     // D1/R1: a resume-forbidden answer type (coding/technical/sales/lecture,
@@ -9341,6 +9891,12 @@ let isMultimodal = !!(imagePaths?.length);
     // which would dead-end when the selected model (e.g. `natively`) failed and
     // only Gemini remained. The text-only routing below is unchanged.
     if (isMultimodal && imagePaths && imagePaths.length > 0) {
+      // The vision chain answers, never a Fast Response pick. Say so on the
+      // turn record: the caller's textTurn() view pinned the pick for its
+      // pre-dispatch reads, and would otherwise file this answer's first token
+      // under a gateway pick's latency key.
+      const visionTurn = this.claimFastTurn(abortSignal);
+      if (visionTurn) visionTurn.answered = 'active';
       let visionYielded = false;
       try {
         for await (const chunk of this.streamVisionWithFallback(
@@ -9374,11 +9930,58 @@ let isMultimodal = !!(imagePaths?.length);
     // before falling through — see trackCommit.
     const commit = { emitted: false };
 
-    const fastModeApplies = this.groqFastTextMode && !isMultimodal && (
+    // FAST RESPONSE MODE ON THE BACKGROUND MODEL (2026-09-26). Settings →
+    // Background Model is where the user picks what this mode answers with. On
+    // Auto (no pick) it is the fastest connected candidate by this user's own
+    // measurements (autoFastPick); the ladder below is only the fallback. A pick applies whatever
+    // the Active Model is — that is what "instead of your selected model" means —
+    // except a local Ollama model: moving that turn to a cloud model is the
+    // privacy regression the Ollama rung's comment below rules out. Antigravity
+    // returned above and images took the vision chain, so neither reaches here.
+    // The pick runs on its own controller, linked to the turn's: guardFastPick
+    // can abandon a stalled pick without aborting the turn.
+    // The caller already timed this answer and chose its profile identity
+    // through textTurn(abortSignal); the turn record makes this dispatch use the
+    // same pick, and tells the caller's recorder who actually answered.
+    const fastTurn = this.claimFastTurn(abortSignal);
+    if (fastTurn) fastTurn.textOnly = !isMultimodal;
+    const fastCtl = new AbortController();
+    const fastPick = !isMultimodal && !this.useOllama
+      ? this.openFastModelStream(userContent, systemPromptOverride, finalSystemPrompt,
+        abortSignal ? AbortSignal.any([abortSignal, fastCtl.signal]) : fastCtl.signal, false, fastTurn)
+      : null;
+    if (fastTurn && !fastPick) fastTurn.answered = 'active';
+    let fastPickFailed = false;
+    if (fastPick) {
+      console.log(`[LLMHelper] ⚡️ Fast Response Mode (Streaming): answering on ${fastPick.auto ? 'the Auto fast tier' : 'the Background Model'} (${fastPick.modelId})`);
+      try {
+        yield* this.trackCommit(this.guardFastPick(fastPick, fastCtl), commit);
+        if (fastTurn) fastTurn.answered = 'pick';
+        return;
+      } catch (e: any) {
+        // A cancelled turn must not start a second provider.
+        if (abortSignal?.aborted) return;
+        if (commit.emitted) {
+          console.warn("[LLMHelper] Background Model fast answer failed AFTER first token — ending stream rather than appending a second answer:", e?.message);
+          yield LLMHelper.TRUNCATION_SENTINEL;
+          return;
+        }
+        if (fastTurn) fastTurn.answered = 'rescued';
+        this.noteFastPickFailure(fastPick, e);
+        fastPickFailed = true;
+        console.warn("[LLMHelper] Background Model fast answer failed, falling back:", e?.message);
+      }
+    }
+
+    // The original Codex → Groq → Natively ladder. Auto now ranks those three
+    // with every other candidate (autoFastPick), so this runs only as the
+    // FALLBACK after a fast pick failed — never ahead of a ranking that chose
+    // otherwise, and never for the user's own endpoint (activeIsSelfHosted).
+    const fastModeApplies = fastPickFailed && this.groqFastTextMode && !isMultimodal && (
       this.isCodexAvailable() ||
       this.isGroqModel(this.currentModelId) ||
       this.currentModelId === 'natively'
-    ) && !this.isCodexCliModel(this.currentModelId);
+    ) && !this.isCodexCliModel(this.currentModelId) && !this.activeIsSelfHosted();
     if (fastModeApplies) {
       if (this.isCodexAvailable()) {
         console.log(`[LLMHelper] ⚡️ Fast Text Mode Active (Streaming). Routing to Codex CLI...`);
@@ -11925,9 +12528,15 @@ let isMultimodal = !!(imagePaths?.length);
    * ("Let me come back to that in just a moment."). Mirrors isUsingOllama().
    */
   public isUsingCodexCli(): boolean {
-    return this.isCodexAvailable() && (
-      this.isCodexCliModel(this.currentModelId) || this.groqFastTextMode === true
-    );
+    // With Fast Response answering a text turn on a Background Model or an Auto
+    // candidate, the turn is a Codex turn only when that pick IS Codex. A
+    // screenshot turn with a non-Codex pick moves from the 30s local budget to
+    // the 20s vision budget every non-Codex user has — measured vision tail 11.6s.
+    const pick = this.fastPickForTextTurn();
+    if (pick) return pick.family === 'codex';
+    // No pick: the Codex fast ladder no longer runs ahead of the Active Model
+    // (it is only a fallback), so fast mode alone no longer makes a turn Codex's.
+    return this.isCodexAvailable() && this.isCodexCliModel(this.currentModelId);
   }
 
   /**
@@ -11940,8 +12549,15 @@ let isMultimodal = !!(imagePaths?.length);
    * next provider is the thing that actually RESCUES a slow turn — the client
    * can only give up. Callers use this to pick the deadline; see
    * firstUsefulDeadlineMs(). Mirrors isUsingOllama()/isUsingCodexCli().
+   *
+   * False while Fast Response Mode answers text on a Background Model: the pick
+   * answers, not the cascade. Callers read this once for text AND screenshot
+   * turns, and a screenshot never takes the fast path — but the only screenshot
+   * budget that changes is 13s → 20s (the plain vision budget), never shorter.
    */
   public isUsingNativelyServerCascade(): boolean {
+    const pick = this.fastPickForTextTurn();
+    if (pick) return pick.family === 'natively';
     return this.currentModelId === 'natively';
   }
 
@@ -11964,8 +12580,20 @@ let isMultimodal = !!(imagePaths?.length);
    * Callers use this to pick the deadline; see totalHardTimeoutMs() and
    * firstUsefulDeadlineMs(). Mirrors isUsingOllama()/isUsingCodexCli()/
    * isUsingNativelyServerCascade().
+   *
+   * With Fast Response Mode on a Background Model, a text turn is answered by
+   * the pick, so this follows the pick; the Active Model's own rung asks
+   * activeModelIsUserEndpoint(). On a screenshot turn the vision budget sits
+   * above this one in the route table, so following the pick cannot shorten it.
+   * isUsingCodexCli() and isUsingNativelyServerCascade() follow the pick too.
    */
   public isUsingUserEndpoint(): boolean {
+    const pick = this.fastPickForTextTurn();
+    if (pick) return FAST_PICK_USER_ENDPOINT_FAMILIES.has(pick.family);
+    return this.activeModelIsUserEndpoint();
+  }
+
+  private activeModelIsUserEndpoint(): boolean {
     if (this.customProvider || this.activeCurlProvider) return true;
     // OpenRouter joins this class for the reason liveDeadlines.ts already names
     // at its budget comment: an OpenRouter model can be QUEUEING behind the
@@ -12074,18 +12702,25 @@ let isMultimodal = !!(imagePaths?.length);
     // `mistralai/mistral-nemo` was profiled under `gemini-3.8-flash`, so every
     // sample landed on a model that was never called. The model lives on the
     // provider record; fall back to its id, then to the selected id.
+    //
+    // Same failure one level up: with Fast Response Mode on a Background Model a
+    // TEXT turn is answered by the pick, so its samples are filed under the pick.
+    // A screenshot turn never takes the fast path, so it keeps the Active Model.
+    const pick = hasImages ? null : this.fastPickForTextTurn();
     const custom: any = this.customProvider ?? this.activeCurlProvider;
-    const modelId = (custom
+    const modelId = pick ? pick.modelId : (custom
       ? (custom.model || custom.id || this.currentModelId)
       : this.currentModelId) || 'unknown';
-    const providerId = (() => {
-      try { return this.getCurrentProvider(); } catch { return 'unknown'; }
-    })();
+    const providerId = pick
+      ? this.fastPickProviderId(pick.family)
+      : (() => { try { return this.getCurrentProvider(); } catch { return 'unknown'; } })();
     const route = (() => {
+      if (pick) return this.fastPickRoute(pick.family);
       if (this.isUsingOllama() || this.isUsingCodexCli()) return 'local' as const;
-      if (hasImages && !this.isUsingNativelyServerCascade()) return 'vision' as const;
-      if (this.isUsingNativelyServerCascade()) return 'server_cascade' as const;
-      if (this.isUsingUserEndpoint()) return 'user_endpoint' as const;
+      const nativelyCascade = this.currentModelId === 'natively';
+      if (hasImages && !nativelyCascade) return 'vision' as const;
+      if (nativelyCascade) return 'server_cascade' as const;
+      if (this.activeModelIsUserEndpoint()) return 'user_endpoint' as const;
       return 'default_provider' as const;
     })();
     return { providerId, modelId, route, isOllama: this.isUsingOllama() };
@@ -12396,7 +13031,7 @@ let isMultimodal = !!(imagePaths?.length);
       else if (this.isAntigravityModel(selected)) provider = 'antigravity';
       else if (this.isCodexCliModel(selected)) {
         provider = 'codex-cli';
-        model = this.getSelectedCodexCliModel(false);
+        model = this.getSelectedCodexCliModel();
       } else if (this.isNvidiaNimModel(selected)) provider = 'nvidia_nim';
       else if (this.isOpenRouterModel(selected)) provider = 'openrouter';
       // Fluxion's ids are the real vendors' own, so EVERY predicate below would

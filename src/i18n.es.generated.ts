@@ -1031,4 +1031,13 @@ export const ES_GENERATED: Record<string, string> = {
     "from {version}": "desde {version}",
     "{done} of {total} MB": "{done} de {total} MB",
     "{n}s left": "quedan {n} s",
+    "Runs Auto Answer, quick decisions and Fast Response Mode.": "Auto Answer, decisiones rápidas y Modo de respuesta rápida.",
+    "Answers with the Background Model, not the Active Model.": "Responde con el Background Model, no con el Active Model.",
+    "Pick a Background Model to turn this on.": "Elige un Background Model para activarlo.",
+    "Add a cloud model below, then pick it as the Background Model.": "Añade un modelo en la nube abajo y elígelo como Background Model.",
+    "Not applied while the Active Model is a local or Antigravity model.": "No se aplica mientras el Active Model sea un modelo local o de Antigravity.",
+    "Your Background Model isn't available — pick another or choose Auto.": "Tu Background Model no está disponible — elige otro o selecciona Auto.",
+    "On Auto this stays on your own endpoint — pick a Background Model to use another.": "En Auto se queda en tu propio endpoint — elige un Background Model para usar otro.",
+    "Not applied: the providers it can use are switched off.": "No se aplica: los proveedores que puede usar están desactivados.",
+    "Not applied to the current Active Model — pick a Background Model above for this to take effect.": "No se aplica al Active Model actual — elige un Background Model arriba para que surta efecto.",
 };

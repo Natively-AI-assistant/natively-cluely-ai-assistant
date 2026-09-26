@@ -53,7 +53,6 @@ export interface AppSettings {
     codexCliEnabled?: boolean;
     codexCliPath?: string;
     codexCliModel?: string;
-    codexCliFastModel?: string;
     codexCliTimeoutMs?: number;
     codexCliSandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access';
     codexCliServiceTier?: 'default' | 'fast' | 'flex';

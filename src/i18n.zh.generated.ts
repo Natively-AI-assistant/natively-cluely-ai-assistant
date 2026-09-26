@@ -1030,4 +1030,13 @@ export const ZH_GENERATED: Record<string, string> = {
     "from {version}": "从 {version}",
     "{done} of {total} MB": "{done} / {total} MB",
     "{n}s left": "剩余 {n} 秒",
+    "Runs Auto Answer, quick decisions and Fast Response Mode.": "用于 Auto Answer、快速判断和快速响应模式。",
+    "Answers with the Background Model, not the Active Model.": "使用 Background Model 回答，而不是 Active Model。",
+    "Pick a Background Model to turn this on.": "选择一个 Background Model 即可开启。",
+    "Add a cloud model below, then pick it as the Background Model.": "在下方添加一个云端模型，然后将其选为 Background Model。",
+    "Not applied while the Active Model is a local or Antigravity model.": "当 Active Model 是本地模型或 Antigravity 模型时不生效。",
+    "Your Background Model isn't available — pick another or choose Auto.": "你的 Background Model 不可用 — 请选择其他模型或选择“自动”。",
+    "On Auto this stays on your own endpoint — pick a Background Model to use another.": "在“自动”模式下会继续使用你自己的端点 — 如需使用其他模型，请选择一个 Background Model。",
+    "Not applied: the providers it can use are switched off.": "未生效：它可使用的提供商都已关闭。",
+    "Not applied to the current Active Model — pick a Background Model above for this to take effect.": "对当前 Active Model 不生效 — 请在上方选择一个 Background Model 使其生效。",
 };

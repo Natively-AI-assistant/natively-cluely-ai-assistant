@@ -61,7 +61,9 @@ test('an empty allow-list means "all models allowed" — no sentinel model id is
     // Only a POPULATED list filters. This is what keeps "disable every model"
     // out of persisted state: hiding a provider entirely is disabledProviders'
     // job, so no magic id (e.g. '_none_') is needed or written.
-    assert.match(body, /enabledForFamily\.length > 0 && !enabledForFamily\.includes\(modelId\)/);
+    // allowListId is modelId, except the bare `codex-cli` entry, which is checked
+    // as the Codex default model it runs (OptInModelAllowList pins that mapping).
+    assert.match(body, /enabledForFamily\.length > 0 && !enabledForFamily\.includes\(allowListId\)/);
     assert.doesNotMatch(read(IPC), /_none_/, 'no sentinel model id in the main process');
     assert.doesNotMatch(read(SETTINGS), /_none_/, 'no sentinel model id in the renderer');
     assert.doesNotMatch(read(CM), /_none_/, 'no sentinel model id in persisted state');

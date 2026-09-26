@@ -93,7 +93,11 @@ const SettingsPopup = () => {
 
     const isFirstRender = React.useRef(true);
 
-    const [hasStoredKey, setHasStoredKey] = useState<Record<string, boolean>>({});
+    // Same rule as AI Providers' canUseFastMode: a Background Model pick, a key
+    // for any vendor with a fast tier (Auto uses it), Natively, or a Codex
+    // sign-in. Key-based, like Settings — the on/off switches decide whether it
+    // APPLIES, not whether the toggle can be used, so the two never disagree.
+    const [fastResponseAvailable, setFastResponseAvailable] = useState(false);
     const [interfaceTheme, setInterfaceTheme] = useState<MeetingInterfaceTheme>(() => {
         return getMeetingInterfaceTheme();
     });
@@ -123,16 +127,13 @@ const SettingsPopup = () => {
         try {
             // @ts-ignore
             const creds = await window.electronAPI?.getStoredCredentials?.();
-            if (creds) {
-                setHasStoredKey({
-                    gemini: !!creds.hasGeminiKey,
-                    groq: !!creds.hasGroqKey,
-                    openai: !!creds.hasOpenaiKey,
-                    claude: !!creds.hasClaudeKey,
-                    deepseek: !!creds.hasDeepseekKey,
-                    natively: !!creds.hasNativelyKey
-                });
-            }
+            const fast = await window.electronAPI?.getFastModel?.().catch(() => null);
+            const codexCfg = await window.electronAPI?.getCodexCliConfig?.().catch(() => null);
+            const codexSignedIn = codexCfg?.enabled
+                ? !!(await window.electronAPI?.codexLoginStatus?.().catch(() => null))?.signedIn
+                : false;
+            const autoFastTier = !!(creds?.hasGroqKey || creds?.hasDeepseekKey || creds?.hasGeminiKey || creds?.hasOpenaiKey || creds?.hasClaudeKey);
+            setFastResponseAvailable(!!(fast?.model || autoFastTier || creds?.hasNativelyKey || codexSignedIn));
         } catch (e) {
             console.error("Failed to load settings:", e);
         }
@@ -424,8 +425,8 @@ const SettingsPopup = () => {
                 </div>
 
 
-                {/* Groq (Fast Text) Toggle — enabled with Groq key OR Natively API key */}
-                <div className={`flex items-center justify-between px-2.5 py-1.5 rounded-md transition-colors duration-200 group ${!(hasStoredKey.groq || hasStoredKey.natively) ? 'opacity-50 grayscale cursor-not-allowed' : `${itemHoverClass} ${glassRowClass} cursor-default`}`} title={!(hasStoredKey.groq || hasStoredKey.natively) ? "Requires Groq or Natively API key" : ""}>
+                {/* Fast Response Toggle — see fastResponseAvailable */}
+                <div className={`flex items-center justify-between px-2.5 py-1.5 rounded-md transition-colors duration-200 group ${!fastResponseAvailable ? 'opacity-50 grayscale cursor-not-allowed' : `${itemHoverClass} ${glassRowClass} cursor-default`}`} title={!fastResponseAvailable ? "Connect a cloud provider, or pick a Background Model in AI Providers" : ""}>
                     <div className="flex items-center gap-2.5">
                         <Zap
                             className={`w-4 h-4 transition-colors ${useGroqFastText ? 'text-accent-primary' : inactiveIconColorClass}`}
@@ -436,9 +437,9 @@ const SettingsPopup = () => {
                     <PopupToggle
                         checked={useGroqFastText}
                         label="Fast Response"
-                        disabled={!(hasStoredKey.groq || hasStoredKey.natively)}
+                        disabled={!fastResponseAvailable}
                         onChange={() => {
-                            if (!(hasStoredKey.groq || hasStoredKey.natively)) return;
+                            if (!fastResponseAvailable) return;
                             setUseGroqFastText(!useGroqFastText);
                         }}
                         onClassName="bg-accent-primary shadow-[0_2px_10px_var(--accent-shadow-20)]"

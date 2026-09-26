@@ -4094,8 +4094,17 @@ export class IntelligenceEngine extends EventEmitter {
             // deterministic profile prose. We still enforce first-useful/inter-token
             // deadlines, but a zero-token provider failure becomes a transparent,
             // non-authoritative provider-error line instead of a profile fallback.
-            const usingLocalLlm = typeof (this.llmHelper as any).isUsingOllama === 'function'
-                ? (this.llmHelper as any).isUsingOllama()
+            //
+            // Every route read below goes through THIS answer's view of the
+            // helper (LLMHelper.textTurn), keyed by the signal generateStream
+            // hands streamChat: the first read pins which model answers and the
+            // dispatch uses the pin, so the deadline, the latency map and the
+            // profile row name the model that actually answers.
+            const answerLlm: any = typeof (this.llmHelper as any).textTurn === 'function'
+                ? (this.llmHelper as any).textTurn(whatToAnswerCancellationToken.signal)
+                : this.llmHelper;
+            const usingLocalLlm = typeof answerLlm.isUsingOllama === 'function'
+                ? answerLlm.isUsingOllama()
                 : false;
             // An image-bearing turn goes through streamVisionWithFallback, whose
             // per-attempt budget is 20s and up — but only when the outer ceiling
@@ -4104,8 +4113,8 @@ export class IntelligenceEngine extends EventEmitter {
             // turn actually routed through that server. `viaServerCascade` is the
             // vocabulary firstUsefulDeadlineMs() already uses for that question;
             // reuse it rather than inventing a second way to ask.
-            const viaServerCascade = typeof (this.llmHelper as any).isUsingNativelyServerCascade === 'function'
-                ? (this.llmHelper as any).isUsingNativelyServerCascade() === true
+            const viaServerCascade = typeof answerLlm.isUsingNativelyServerCascade === 'function'
+                ? answerLlm.isUsingNativelyServerCascade() === true
                 : false;
             const isVisionTurn = (imagePaths?.length ?? 0) > 0;
             // A user-supplied endpoint (Custom / cURL / LiteLLM / NVIDIA NIM) is an
@@ -4113,12 +4122,12 @@ export class IntelligenceEngine extends EventEmitter {
             // shipped provider called directly. Same reasoning as viaServerCascade
             // above: ask which route this turn actually takes, rather than letting
             // one route's number become everyone's default.
-            const isUserEndpoint = typeof (this.llmHelper as any).isUsingUserEndpoint === 'function'
-                ? (this.llmHelper as any).isUsingUserEndpoint() === true
+            const isUserEndpoint = typeof answerLlm.isUsingUserEndpoint === 'function'
+                ? answerLlm.isUsingUserEndpoint() === true
                 : false;
             const observedUserEndpointLatency = isUserEndpoint
-                && typeof (this.llmHelper as any).observedAnswerLatency === 'function'
-                ? (this.llmHelper as any).observedAnswerLatency()
+                && typeof answerLlm.observedAnswerLatency === 'function'
+                ? answerLlm.observedAnswerLatency()
                 : null;
             // The shipped route table decides first, and a POST-FILTER may then
             // move it — never the other way round. Written this way so deleting
@@ -4140,7 +4149,7 @@ export class IntelligenceEngine extends EventEmitter {
                     isUserEndpoint,
                     observedUserEndpointLatency,
                 }),
-                { llmHelper: this.llmHelper as any, hasImages: isVisionTurn, inputTokens: estimateTokens(`${preparedTranscript ?? ''}${candidateProfile ?? ''}`) },
+                { llmHelper: answerLlm, hasImages: isVisionTurn, inputTokens: estimateTokens(`${preparedTranscript ?? ''}${candidateProfile ?? ''}`) },
             );
             // Time-to-first-token for THIS turn, recorded only if it commits —
             // see LLMHelper.recordAnswerFirstToken for why an aborted turn must
@@ -4172,7 +4181,7 @@ export class IntelligenceEngine extends EventEmitter {
                 const ms = pendingFirstTokenMs;
                 pendingFirstTokenMs = null;
                 try {
-                    (this.llmHelper as any).recordAnswerFirstToken?.(ms);
+                    answerLlm.recordAnswerFirstToken?.(ms);
                 } catch { /* measurement must never break the answer */ }
             };
             let liveDeadlineFired = false;
@@ -4296,7 +4305,7 @@ export class IntelligenceEngine extends EventEmitter {
             // leaves the reduction to the layers that own it.
             try {
                 const _slow = slowWorkloadAdvice({
-                    llmHelper: this.llmHelper as any,
+                    llmHelper: answerLlm,
                     hasImages: isVisionTurn,
                     inputTokens: estimateTokens(`${preparedTranscript ?? ''}${candidateProfile ?? ''}`),
                     streamRoute: 'wta_live',
@@ -4308,7 +4317,7 @@ export class IntelligenceEngine extends EventEmitter {
                 if (_slow) console.log('[Perf] workload predicted too slow to be useful', _slow);
             } catch { /* an advisory signal must never break a turn */ }
             const perf = performanceHooks({
-                llmHelper: this.llmHelper as any,
+                llmHelper: answerLlm,
                 hasImages: isVisionTurn,
                 // A proxy, not a count. The providers that report real usage do
                 // so only at the END of a stream, and this is needed at the
@@ -4472,8 +4481,8 @@ export class IntelligenceEngine extends EventEmitter {
                     // blocking and terminal, so the engine never retried it and
                     // suppressing the regeneration there left that user with a
                     // single attempt and then the canned line.
-                    const engineAlreadyRetried = typeof (this.llmHelper as any).hasEngineLevelRetry === 'function'
-                        && (this.llmHelper as any).hasEngineLevelRetry() === true
+                    const engineAlreadyRetried = typeof answerLlm.hasEngineLevelRetry === 'function'
+                        && answerLlm.hasEngineLevelRetry() === true
                         && !isVisionTurn;
                     const regenBudget = engineAlreadyRetried ? 0 : regenerationBudgetMs({
                         routeBudgetMs: firstUsefulDeadline,

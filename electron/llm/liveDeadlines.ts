@@ -637,6 +637,9 @@ const DEADLINE = Symbol('deadline');
  * identity themselves; this module knows nothing about providers and must not
  * start to, or it stops being importable from the benchmark runners.
  */
+/** raceStreamWithDeadline's observer; see its `observe` option for `beforeCleanup`. */
+export type StreamObserver = ((observation: StreamObservation) => void) & { beforeCleanup?: () => void };
+
 export interface StreamObservation {
   /** ms from loop start to the first chunk that arrived. Null if none did. */
   ttftMs: number | null;
@@ -725,8 +728,14 @@ export async function raceStreamWithDeadline(opts: {
    * behaviour byte for byte, and a caller whose observer throws still gets its
    * answer (the call is wrapped, like onCleanup's, because measurement must
    * never be able to break a turn).
+   *
+   * An observer may carry `beforeCleanup`, run the moment the loop ends and
+   * BEFORE onCleanup. Callers' cleanups abort their own controllers (manual chat
+   * on every ending, Auto Answer on every deadline), so anything the observer
+   * needs to know about the caller's state AT the ending — "did the user
+   * cancel?" — must be read there, not in the observation after cleanup.
    */
-  observe?: (observation: StreamObservation) => void;
+  observe?: StreamObserver;
 }): Promise<'done' | 'first_useful_timeout' | 'stall_timeout' | 'aborted'> {
   const {
     stream, firstUsefulDeadlineMs: fuMs, interTokenStallMs = LIVE_INTER_TOKEN_STALL_MS,
@@ -754,6 +763,7 @@ export async function raceStreamWithDeadline(opts: {
     reason: 'done' | 'first_useful_timeout' | 'stall_timeout' | 'aborted' | 'error',
     error?: unknown,
   ) => {
+    try { observe?.beforeCleanup?.(); } catch { /* measurement must never break cleanup */ }
     try { onCleanup?.(reason); } catch { /* abort callback must not break cleanup */ }
     // AFTER onCleanup, so the observation is never taken on a turn the caller
     // has not finished tearing down — and inside its own try for the same

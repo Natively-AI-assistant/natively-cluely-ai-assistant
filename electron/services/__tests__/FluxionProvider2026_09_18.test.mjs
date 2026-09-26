@@ -468,7 +468,9 @@ describe('review fixes 2026-09-18 — found by adversarial review, all CONFIRMED
 
   test('Fluxion gets the user-endpoint deadline, not a first-party budget', () => {
     // It queues behind the upstream it fronts, exactly like the other gateways.
-    const fn = llm.slice(llm.indexOf('public isUsingUserEndpoint()'), llm.indexOf('public isUsingUserEndpoint()') + 900);
+    // The Active-Model classification; public isUsingUserEndpoint() delegates to
+    // it unless a Fast Response Background Model pick answers the turn.
+    const fn = llm.slice(llm.indexOf('private activeModelIsUserEndpoint()'), llm.indexOf('private activeModelIsUserEndpoint()') + 900);
     assert.match(fn, /isFluxionModel\(this\.currentModelId\)/);
   });
 

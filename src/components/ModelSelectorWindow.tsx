@@ -245,9 +245,9 @@ const ModelSelectorWindow = () => {
                 // to 300+ models — its allow-list is opt-in (empty = none), so
                 // without this gate the picker would list every model on the proxy.
                 //
-                // `family` mirrors providerFamily() in ipcHandlers.ts. Codex presets
-                // and custom providers have no allow-list UI, so their empty list
-                // means "no filter" and isModelAllowed lets them through unchanged.
+                // `family` mirrors providerFamily() in ipcHandlers.ts. Custom
+                // providers have no allow-list UI, so their empty list means "no
+                // filter" and isModelAllowed lets them through unchanged.
                 const disabled = new Set(creds?.disabledProviders || []);
                 const allowLists: Record<string, string[]> = creds?.cloudEnabledModels || {};
                 const visibleModels = models.filter(m => {
@@ -255,7 +255,11 @@ const ModelSelectorWindow = () => {
                         ?? (m.type === 'ollama' ? 'ollama' : m.type === 'custom' ? 'custom' : null);
                     if (!family) return true;
                     if (disabled.has(family)) return false;
-                    return isModelAllowed(family, m.id, allowLists[family] || []);
+                    // The bare Codex entry runs the Codex default model, so it is
+                    // allowed exactly when that model is (modelAvailable does the same).
+                    const allowId = m.id === CODEX_CLI_MODEL.id && codexCliConfig?.model
+                        ? codexCliSelectorId(codexCliConfig.model) : m.id;
+                    return isModelAllowed(family, allowId, allowLists[family] || []);
                 });
 
                 localStorage.setItem('cached-models', JSON.stringify(visibleModels));

@@ -486,9 +486,13 @@ export function initializeIpcHandlers(appState: AppState): void {
         // pins the two together.
         const optInFamily = family === 'litellm' || family === 'openrouter' || family === 'ninerouter';
         const enabledForFamily = cm.getCloudEnabledModels?.(family) || [];
+        // The bare `codex-cli` id runs the Codex card's default model and is never
+        // itself in the allow-list, which holds `codex-cli:<model>` ids. Without
+        // this, un-ticking any Codex model made the bare id "unavailable".
+        const allowListId = modelId === 'codex-cli' ? `codex-cli:${codexConfig.model}` : modelId;
         if (optInFamily) {
-          if (!enabledForFamily.includes(modelId)) return false;
-        } else if (enabledForFamily.length > 0 && !enabledForFamily.includes(modelId)) return false;
+          if (!enabledForFamily.includes(allowListId)) return false;
+        } else if (enabledForFamily.length > 0 && !enabledForFamily.includes(allowListId)) return false;
 
         if (modelId === 'natively') return has(cm.getNativelyApiKey());
         if (modelId.startsWith('codex-cli')) return codexConfig.enabled === true && codexSignedIn;
@@ -581,7 +585,14 @@ export function initializeIpcHandlers(appState: AppState): void {
         ? (antigravityCatalog ?? await AntigravityService.getInstance().getModels().catch(() => []))
           .map(({ id }) => `antigravity:${id}`).find(modelAvailable)
         : undefined;
+      // Same-provider first, like Antigravity: un-ticking the active Codex model
+      // in the Codex card's model list must land on another Codex model, not on
+      // whichever key the ladder below reaches first.
+      const codexFallback = defaultModel.startsWith('codex-cli') && codexConfig.enabled === true && codexSignedIn
+        ? ['codex-cli', ...(cm.getCloudEnabledModels?.('codex-cli') || [])].find(modelAvailable)
+        : undefined;
       const next = defaultModel.startsWith('antigravity:') && antigravityFallback ? antigravityFallback
+        : codexFallback ? codexFallback
         : modelAvailable('natively') ? 'natively'
         : geminiNext ? geminiNext
         : modelAvailable('gpt-5.4') ? 'gpt-5.4'
@@ -4334,16 +4345,24 @@ export function initializeIpcHandlers(appState: AppState): void {
           // local generation aborted to zero tokens and the user saw the canned
           // fallback line below. Codex CLI shares the cold-load profile
           // (subprocess spawn → codex CLI loads the model → first delta).
-          const usingLocalLlm = llmHelper.isUsingOllama() || llmHelper.isUsingCodexCli();
+          //
+          // Every route read below goes through THIS answer's view of the helper
+          // (LLMHelper.textTurn), keyed by the signal the answer call carries: the
+          // first read pins which model answers, and the dispatch uses that pin.
+          // Read off the bare helper, a Fast Response order refresh or another
+          // turn's failure in between could time and file the answer for one
+          // model while another answered it.
+          const answerLlm = llmHelper.textTurn?.(myController?.signal) ?? llmHelper;
+          const usingLocalLlm = answerLlm.isUsingOllama() || answerLlm.isUsingCodexCli();
           // F-301: on the natively-api route the server rotates providers at
           // 10s; give it room to rescue the turn instead of aborting at 7s.
-          const viaServerCascade = llmHelper.isUsingNativelyServerCascade?.() === true;
+          const viaServerCascade = answerLlm.isUsingNativelyServerCascade?.() === true;
           // A user-supplied endpoint gets the longer ceiling; a shipped provider
           // called directly gets the shorter one. WTA and manual chat read the
           // same route table so one surface cannot inherit the other's bound.
-          const usingUserEndpoint = llmHelper.isUsingUserEndpoint?.() === true;
+          const usingUserEndpoint = answerLlm.isUsingUserEndpoint?.() === true;
           const observedUserEndpointLatency = usingUserEndpoint
-            ? (llmHelper.observedAnswerLatency?.() ?? null)
+            ? (answerLlm.observedAnswerLatency?.() ?? null)
             : null;
           const manualStreamStartedAt = Date.now();
           let manualRecordedFirstToken = false;
@@ -4361,7 +4380,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             if (manualPendingFirstTokenMs == null) return;
             const ms = manualPendingFirstTokenMs;
             manualPendingFirstTokenMs = null;
-            try { llmHelper.recordAnswerFirstToken?.(ms); } catch { /* never break the answer */ }
+            try { answerLlm.recordAnswerFirstToken?.(ms); } catch { /* never break the answer */ }
           };
           let manualFirstUseful = false;
           let manualSuperseded = false;
@@ -4372,7 +4391,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           // comment on firstUsefulDeadlineMs below) — so they take the same
           // helper with the same inputs rather than each assembling their own.
           const manualPerf = performanceHooks({
-            llmHelper: llmHelper as any,
+            llmHelper: answerLlm as any,
             hasImages: (imagePaths?.length ?? 0) > 0,
             inputTokens: _estimatePerfTokens(`${message ?? ''}${context ?? ''}`),
             isUserCancelled: () => manualSuperseded || myController?.signal.aborted === true,
@@ -4400,7 +4419,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               (imagePaths?.length ?? 0) > 0
                 ? totalHardTimeoutMs({ isLocal: usingLocalLlm, isVisionTurn: true, viaServerCascade })
                 : firstUsefulDeadlineMs(answerPlan.answerType, usingLocalLlm, viaServerCascade, usingUserEndpoint, observedUserEndpointLatency),
-              { llmHelper: llmHelper as any, hasImages: (imagePaths?.length ?? 0) > 0, inputTokens: _estimatePerfTokens(`${message ?? ''}${context ?? ''}`) },
+              { llmHelper: answerLlm as any, hasImages: (imagePaths?.length ?? 0) > 0, inputTokens: _estimatePerfTokens(`${message ?? ''}${context ?? ''}`) },
             ),
             isUsefulYet: () => manualFirstUseful,
             shouldAbort: () => {
@@ -13302,12 +13321,15 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
       sm.set('codexCliPath', normalized.path);
       sm.set('codexCliModel', normalized.model);
-      sm.set('codexCliFastModel', normalized.fastModel);
       sm.set('codexCliTimeoutMs', normalized.timeoutMs);
       sm.set('codexCliSandboxMode', normalized.sandboxMode);
       sm.set('codexCliServiceTier', normalized.serviceTier);
       sm.set('codexCliModelReasoningEffort', normalized.modelReasoningEffort);
       appState.processingHelper.getLLMHelper().setCodexCliConfig(normalized);
+      // The overlay's model picker names the Codex default and shows the bare
+      // Codex entry only while that model is ticked; without this it kept both
+      // stale after "Set default" in the Codex card.
+      broadcastCredentialsChanged();
       return { success: true, config: normalized };
     } catch (error: any) {
       return { success: false, error: error.message };
@@ -18152,18 +18174,23 @@ export function initializeIpcHandlers(appState: AppState): void {
         //   • isLocal — a local model cold-loads its weights (8-12s for a 7-9B)
         //     before the first token, so 7s aborted every cold local generation
         //     on the phone path to zero tokens.
-        const phoneUsingLocalLlm = llmHelper.isUsingOllama() || llmHelper.isUsingCodexCli();
-        const phoneViaServerCascade = llmHelper.isUsingNativelyServerCascade?.() === true;
-        const phoneUsingUserEndpoint = llmHelper.isUsingUserEndpoint?.() === true;
+        //
+        // Read through THIS answer's view (LLMHelper.textTurn, keyed by the
+        // signal the answer call carries), so the deadline and the profile name
+        // the model the dispatch uses — see the manual-chat site.
+        const phoneLlm = llmHelper.textTurn?.(phoneController.signal) ?? llmHelper;
+        const phoneUsingLocalLlm = phoneLlm.isUsingOllama() || phoneLlm.isUsingCodexCli();
+        const phoneViaServerCascade = phoneLlm.isUsingNativelyServerCascade?.() === true;
+        const phoneUsingUserEndpoint = phoneLlm.isUsingUserEndpoint?.() === true;
         const phoneObservedLatency = phoneUsingUserEndpoint
-          ? (llmHelper.observedAnswerLatency?.() ?? null)
+          ? (phoneLlm.observedAnswerLatency?.() ?? null)
           : null;
         const phoneStreamStartedAt = Date.now();
         let phoneRecordedFirstToken = false;
         const notePhoneFirstToken = () => {
           if (phoneRecordedFirstToken || !phoneUsingUserEndpoint) return;
           phoneRecordedFirstToken = true;
-          try { llmHelper.recordAnswerFirstToken?.(Date.now() - phoneStreamStartedAt); } catch { /* never break the answer */ }
+          try { phoneLlm.recordAnswerFirstToken?.(Date.now() - phoneStreamStartedAt); } catch { /* never break the answer */ }
         };
         // The THIRD primary answer surface. WTA and manual chat are the other
         // two; a phone-mirror turn is a real answer a real person is waiting on,
@@ -18171,7 +18198,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         // make one provider's evidence depend on which screen the user asked
         // from, which is the silent-divergence failure this area keeps producing.
         const phonePerf = performanceHooks({
-          llmHelper: llmHelper as any,
+          llmHelper: phoneLlm as any,
           hasImages: false,
           inputTokens: _estimatePerfTokens(`${message ?? ''}${context ?? ''}`),
           isUserCancelled: () => phoneSuperseded,
@@ -18186,7 +18213,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           interTokenStallMs: phonePerf.interTokenStallMs,
           firstUsefulDeadlineMs: applyAdaptiveTtft(
             firstUsefulDeadlineMs('general_meeting_answer', phoneUsingLocalLlm, phoneViaServerCascade, phoneUsingUserEndpoint, phoneObservedLatency),
-            { llmHelper: llmHelper as any, hasImages: false, inputTokens: _estimatePerfTokens(`${message ?? ''}${context ?? ''}`) },
+            { llmHelper: phoneLlm as any, hasImages: false, inputTokens: _estimatePerfTokens(`${message ?? ''}${context ?? ''}`) },
           ),
           isUsefulYet: () => full.trim().length >= 5,
           shouldAbort: () => {

@@ -473,7 +473,9 @@ describe('a selected single provider now fails over — or retries itself in par
     // The engine's own EWMA input is absent on this path (the terminal branch
     // never populated textHealth), and a second statistic for one provider is
     // the recurring mistake in this area.
-    assert.match(llm, /hedgeDelayForBudget\(budgetMs: number\)[\s\S]{0,400}?this\.observedAnswerLatency\(\)/);
+    // Same decaying-max map, read under the ACTIVE Model's key: this runs inside
+    // its rung, which a Fast Response Background Model pick never reaches.
+    assert.match(llm, /hedgeDelayForBudget\(budgetMs: number\)[\s\S]{0,400}?this\.observedLatencyFor\(this\.activeAnswerLatencyKey\(\)\)/);
     assert.match(llm, /hedgeDelayDefaultMs: this\.hedgeDelayForBudget\(budgetMs\)/);
   });
 
@@ -536,7 +538,10 @@ describe('a selected single provider now fails over — or retries itself in par
     const body = llm.slice(at, at + 400);
     assert.match(body, /if \(this\.activeCurlProvider\) return false;/,
       'cURL must report no engine-level retry');
-    assert.match(body, /return this\.isUsingUserEndpoint\(\);/,
+    assert.match(body, /return this\.activeModelIsUserEndpoint\(\);/,
       'every other user-endpoint route DOES go through the engine');
+    // A Fast Response Background Model answer is never wrapped in the engine.
+    assert.match(body, /if \(this\.fastPickForTextTurn\(\)\) return false;/,
+      'a Background Model answer got no engine retry, so the regeneration must stay');
   });
 });
