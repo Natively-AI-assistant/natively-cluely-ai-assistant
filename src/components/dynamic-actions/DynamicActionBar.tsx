@@ -12,6 +12,9 @@ interface Props {
   // Optional: how long actions stay visible without user interaction (ms).
   // Server side already expires; this is the renderer-side cap.
   staleAfterMs?: number;
+  // The overlay's opacity-scaled chip fill (appearance.chipStyle), so a card
+  // reads as the quick actions do at every overlay opacity.
+  surfaceStyle?: React.CSSProperties;
 }
 
 // DynamicActionBar — Cluely-style live action card row.
@@ -22,6 +25,7 @@ export const DynamicActionBar: React.FC<Props> = ({
   onAcceptAction,
   maxVisible = 3,
   staleAfterMs = 60_000,
+  surfaceStyle,
 }) => {
   const [actions, setActions] = useState<DynamicActionPayload[]>([]);
   const actionsRef = useRef(actions);
@@ -134,6 +138,7 @@ export const DynamicActionBar: React.FC<Props> = ({
             isPrimary={i === 0}
             onAccept={accept}
             onDismiss={dismiss}
+            surfaceStyle={surfaceStyle}
           />
         ))}
       </AnimatePresence>

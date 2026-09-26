@@ -1,93 +1,105 @@
 import React, { useState } from 'react'
-import { motion } from 'framer-motion'
-import { X, Zap, ChevronRight } from 'lucide-react'
+import { motion, useReducedMotion } from 'framer-motion'
+import {
+  AlignLeft, BookOpen, Calculator, CodeXml, CornerDownRight, ListChecks, ScanText, Workflow, X,
+  type LucideIcon,
+} from 'lucide-react'
 import type { DynamicActionPayload } from '@/types/electron'
+import './dynamicActionCard.css'
 
 interface Props {
   action: DynamicActionPayload
   isPrimary: boolean
   onAccept: (action: DynamicActionPayload) => void
   onDismiss: (actionId: string) => void
+  /** The overlay's opacity-scaled chip fill (appearance.chipStyle), as the quick actions use. */
+  surfaceStyle?: React.CSSProperties
 }
 
-// Single dynamic action card. Compact, glass-styled, dismissible.
-// Primary card (highest priority) gets a subtle accent + shortcut hint.
-// Cards are intentionally lightweight — clicking accept fires the parent
-// callback which is responsible for kicking off the answer stream so the
-// card itself stays presentation-only.
-export const DynamicActionCard: React.FC<Props> = ({ action, isPrimary, onAccept, onDismiss }) => {
-  const [busy, setBusy] = useState(false)
-  const evidence = action.evidenceRefs?.[0]
-  const evidenceText = evidence?.text?.trim() ?? ''
-  const evidenceSnippet = evidenceText.length > 90
-    ? `${evidenceText.slice(0, 90).trimEnd()}…`
-    : evidenceText
+// One glyph per KIND of result, monochrome in the muted text colour. The card
+// used to show the same bolt on every action, which described nothing.
+const GLYPH: Record<string, LucideIcon> = {
+  general_summarize: AlignLeft,
+  general_explain: BookOpen,
+  concept_explanation: BookOpen,
+  worked_example: BookOpen,
+  action_item: ListChecks,
+  decision_point: ListChecks,
+  blocker_check: ListChecks,
+  owner_deadline_check: ListChecks,
+  roi_question: Calculator,
+  coding_problem: CodeXml,
+  complexity_analysis: CodeXml,
+  screen_coding_problem: ScanText,
+  system_design_prompt: Workflow,
+}
+/** Everything else drafts something to say next. */
+const glyphFor = (type: string): LucideIcon => GLYPH[type] ?? CornerDownRight
 
-  const confidencePct = Math.round((action.confidence ?? 0) * 100)
+// A suggested action as one quiet 36px line in the overlay's chip material:
+// the glyph, the action, what was said (italic, the rolling transcript's own
+// treatment) and ONE trailing affordance: Tab on the primary card, the dismiss
+// × in its place on hover. Colours come from the --overlay-text-* tokens, which
+// follow both theme axes (liquid-glass and modern paint a dark panel under
+// data-theme=light). The confidence score and the accent outline are gone:
+// neither told the user anything they could act on.
+export const DynamicActionCard: React.FC<Props> = ({ action, isPrimary, onAccept, onDismiss, surfaceStyle }) => {
+  const [busy, setBusy] = useState(false)
+  const reduceMotion = useReducedMotion()
+  const Icon = glyphFor(action.type)
+  const snippet = action.evidenceRefs?.[0]?.text?.trim() ?? ''
 
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: -8, scale: 0.97 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: -8, scale: 0.97 }}
-      transition={{ duration: 0.16, ease: 'easeOut' }}
-      className={[
-        'group relative flex items-stretch gap-2 px-2.5 py-2 rounded-[12px]',
-        'border backdrop-blur-md no-drag select-none',
-        isPrimary
-          ? 'border-accent-focus bg-accent-subtle hover:bg-accent-muted'
-          : 'border-white/10 bg-white/5 hover:bg-white/8',
-        'transition-colors duration-150 cursor-pointer',
-      ].join(' ')}
-      onClick={async () => {
-        if (busy) return
-        setBusy(true)
-        try {
-          await onAccept(action)
-        } finally {
-          setBusy(false)
-        }
-      }}
-      title={action.description ?? action.label}
+      initial={{ opacity: 0, y: reduceMotion ? 0 : -4 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, transition: { duration: 0.12, ease: [0.4, 0, 1, 1] } }}
+      transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
+      className="group relative no-drag select-none"
       data-testid={`dynamic-action-card-${action.id}`}
     >
-      <div className="flex items-center justify-center w-7 h-7 rounded-full bg-white/8 shrink-0">
-        <Zap className={`w-3.5 h-3.5 ${isPrimary ? 'text-accent-primary' : 'text-white/70'}`} />
-      </div>
-
-      <div className="flex flex-col flex-1 min-w-0 leading-tight">
-        <div className="flex items-baseline gap-2">
-          <span className="text-[12px] font-semibold overlay-text-primary truncate">{action.label}</span>
-          {confidencePct > 0 && (
-            <span className="text-[10px] tabular-nums text-white/40 shrink-0">{confidencePct}%</span>
+      <button
+        type="button"
+        className="overlay-chip-surface action-cue w-full flex items-center gap-2.5 h-9 pl-3 pr-2 rounded-[12px] border text-left cursor-pointer transition-[background-color,transform] duration-150 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--overlay-border)]"
+        style={surfaceStyle}
+        title={action.description ?? action.label}
+        onClick={async () => {
+          if (busy) return
+          setBusy(true)
+          try {
+            await onAccept(action)
+          } finally {
+            setBusy(false)
+          }
+        }}
+      >
+        <Icon aria-hidden className="w-3.5 h-3.5 shrink-0 text-[var(--overlay-text-muted)]" strokeWidth={1.75} />
+        <span className={`shrink-0 text-[12.5px] font-medium ${isPrimary ? 'text-[var(--overlay-text-primary)]' : 'text-[var(--overlay-text-secondary)]'}`}>
+          {action.label}
+        </span>
+        {snippet && (
+          <span className="min-w-0 flex-1 truncate text-[12px] italic text-[var(--overlay-text-secondary)] opacity-80">
+            {snippet}
+          </span>
+        )}
+        <span className="ml-auto flex w-9 shrink-0 justify-end">
+          {isPrimary && (
+            <kbd className="inline-flex items-center h-[18px] px-1.5 rounded-[5px] border text-[10px] font-medium leading-none tracking-[0.02em] text-[var(--overlay-text-muted)] border-[var(--overlay-border-soft)] bg-[var(--overlay-control-bg)] transition-opacity duration-150 group-hover:opacity-0">
+              Tab
+            </kbd>
           )}
-        </div>
-        {evidenceSnippet && (
-          <span className="text-[10.5px] text-white/55 truncate">"{evidenceSnippet}"</span>
-        )}
-      </div>
-
-      <div className="flex items-center gap-1 shrink-0">
-        {isPrimary && (
-          <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium text-white/60 bg-white/8 border border-white/10">
-            Tab
-          </kbd>
-        )}
-        <ChevronRight className="w-3.5 h-3.5 text-white/40 group-hover:text-white/70 transition-colors" />
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            onDismiss(action.id)
-          }}
-          className="ml-0.5 p-1 rounded-full text-white/30 hover:text-white/70 hover:bg-white/10 transition-colors opacity-0 group-hover:opacity-100"
-          title="Dismiss"
-          aria-label={`Dismiss ${action.label}`}
-        >
-          <X className="w-3 h-3" />
-        </button>
-      </div>
+        </span>
+      </button>
+      <button
+        type="button"
+        onClick={() => onDismiss(action.id)}
+        className="absolute right-2 top-1/2 -translate-y-1/2 grid h-6 w-6 place-items-center rounded-full opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-visible:opacity-100 text-[var(--overlay-text-muted)] hover:text-[var(--overlay-text-primary)] hover:bg-[var(--overlay-icon-hover-bg)]"
+        title="Dismiss"
+        aria-label={`Dismiss ${action.label}`}
+      >
+        <X className="w-3 h-3" strokeWidth={2} />
+      </button>
     </motion.div>
   )
 }

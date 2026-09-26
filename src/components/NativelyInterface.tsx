@@ -10622,6 +10622,7 @@ Provide only the answer, nothing else.`;
                 onAcceptAction={(action: DynamicActionPayload) => {
                   void handleWhatToSay(action.promptInstruction);
                 }}
+                surfaceStyle={appearance.chipStyle}
               />
 
               {/* Rolling Transcript Bar — live transcript + on-demand diagnostics

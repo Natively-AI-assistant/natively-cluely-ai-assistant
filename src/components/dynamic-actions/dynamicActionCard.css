@@ -1,0 +1,7 @@
+/* The action row wears the quick-action chip material, but liquid-glass and
+   modern press a chip to scale(0.97). That suits a pill; on a 576px row it is
+   a 17px lurch. Keep their hover lift, press the row to 0.99 instead. */
+[data-interface-theme] .overlay-chip-surface.action-cue:active,
+.overlay-chip-surface.action-cue:active {
+  transform: translateY(0) scale(0.99);
+}
