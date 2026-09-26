@@ -31,6 +31,7 @@ import {
   type GenieSnapshot,
 } from '../onboarding/genieSnapshots';
 import { presenceInitial, presenceReducer, presenceEventFor } from '../onboarding/geniePresence.mjs';
+import { useGenieAnimationEnabled } from '../../lib/genieAnimationSetting';
 
 type DataAttributes = { [key: `data-${string}`]: string | undefined };
 
@@ -159,7 +160,10 @@ export const GenieModal: React.FC<GenieModalProps> = ({
   const lastShotRef = useRef<{ key: string; snap: GenieSnapshot } | null>(null);
   const changedSinceShotRef = useRef(true);
 
-  useEffect(() => { void warmGenieSnapshots(); }, []);
+  // With the genie off (Settings → Advanced) no picture is used, so none is
+  // decoded ahead of time or taken while the card is open.
+  const genieEnabled = useGenieAnimationEnabled();
+  useEffect(() => { if (genieEnabled) void warmGenieSnapshots(); }, [genieEnabled]);
 
   const keyOf = useCallback((view: string): string | null => {
     const wrap = genieRef.current?.wrapRef.current;
@@ -224,7 +228,7 @@ export const GenieModal: React.FC<GenieModalProps> = ({
   // switched. That picture is what the next open pours out. The first one
   // after an open also records which view the card opens into.
   useEffect(() => {
-    if (!open || !shown || !keepPictures) return;
+    if (!open || !shown || !keepPictures || !genieEnabled) return;
     const card = genieRef.current?.cardRef.current;
     if (!card) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -275,7 +279,7 @@ export const GenieModal: React.FC<GenieModalProps> = ({
       card.removeEventListener('scroll', changed, true);
       card.removeEventListener('input', changed, true);
     };
-  }, [open, shown, cardKey, keyOf, keepPictures]);
+  }, [open, shown, cardKey, keyOf, keepPictures, genieEnabled]);
 
   // What the card shows while it drains away: the last thing it showed open.
   const frozen = useRef(children);

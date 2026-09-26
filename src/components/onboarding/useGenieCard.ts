@@ -30,6 +30,7 @@ import {
   genieTrack, SLOT_INSET, BAND_OVERLAP, type GenieGeometry,
 } from './genieMotion.mjs';
 import type { GenieSnapshot } from './genieSnapshots';
+import { useGenieAnimationEnabled } from '../../lib/genieAnimationSetting';
 
 const EASE_FM = [0.23, 1, 0.32, 1] as const;
 
@@ -149,7 +150,10 @@ export interface GenieSnapshotSource {
 }
 
 export function useGenieCard(isOpen: boolean, label: string, options: GenieCardOptions = {}): GenieCard {
-  const reduced = useReducedMotion() ?? false;
+  // The genie also stands down when the user turns it off in Settings →
+  // Advanced: the same plain fade, and no pictures taken.
+  const genieEnabled = useGenieAnimationEnabled();
+  const reduced = (useReducedMotion() ?? false) || !genieEnabled;
   const bandCount = options.bands ?? GENIE_BANDS;
   const onOpenedRef = useRef(options.onOpened);
   onOpenedRef.current = options.onOpened;
