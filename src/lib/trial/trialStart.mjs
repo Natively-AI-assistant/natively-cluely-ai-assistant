@@ -18,8 +18,10 @@ export function classifyTrialStart(res) {
     // The server's ok:true, expired:true is "this device already had its
     // trial", not a trial that started.
     if (res.expired || res.already_used) return 'unavailable';
-    // A token that could not be stored is no trial on this device.
-    if (res.hasToken && res.persisted !== false) return 'started';
+    // A token main could not persist still runs this session (it is held in
+    // memory and announced); the endpoint re-issues the same trial, so a
+    // retry would only loop. Settings warns that it will end on quit.
+    if (res.hasToken) return 'started';
     return 'failed';
   }
   if (typeof res.error === 'string' && UNAVAILABLE_CODES.has(res.error)) return 'unavailable';

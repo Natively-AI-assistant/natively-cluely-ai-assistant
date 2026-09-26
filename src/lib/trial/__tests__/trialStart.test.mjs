@@ -25,7 +25,10 @@ const rows = [
   ['timeout', { ok: false, error: 'The operation was aborted due to timeout' }, 'failed'],
   ['no device id', { ok: false, error: 'hardware_id_unavailable' }, 'failed'],
   ['ok but no token', { ok: true, hasToken: false }, 'failed'],
-  ['token that could not be stored', { ok: true, hasToken: true, persisted: false }, 'failed'],
+  // The trial runs this session (main keeps the token in memory and has
+  // announced it); the start endpoint is idempotent per device, so "failed"
+  // would only loop. Settings warns about the unsaved token (final review I1).
+  ['token that could not be stored', { ok: true, hasToken: true, persisted: false }, 'started'],
   ['no reply at all', undefined, 'failed'],
 ];
 for (const [name, res, want] of rows) {
