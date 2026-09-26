@@ -54,19 +54,26 @@ for (const g of gens.values()) {
 const rows = [];
 for (const t of turns) {
   const mine = [...gens.values()].filter((g) => g.turn === t.id).sort((a, b) => a.first - b.first);
-  const g = mine[0];
+  // A generation that started before the interviewer finished answered a PART
+  // of the turn (an announced spec, a setup): count it as an early fire. The
+  // turn's latency is the first answer after the end of speech, and its
+  // content check is the LAST answer — the one the user ends up reading.
+  const early = mine.filter((x) => x.first < t.speechEnd);
+  const onTime = mine.filter((x) => x.first >= t.speechEnd);
+  const g = onTime[0] ?? mine[mine.length - 1];
+  const last = mine[mine.length - 1];
   const s = byId[t.id];
   const fired = Boolean(g);
   const verdict = t.expect === 'either' ? (fired ? 'ok(fired)' : 'ok(silent)')
     : t.expect === 'answer' ? (fired ? 'OK' : 'MISS')
     : (fired ? 'FALSE_FIRE' : 'OK');
-  const check = fired && s?.check ? s.check.test(g.answer ?? '') : null;
+  const check = fired && s?.check ? s.check.test(last.answer ?? '') : null;
   rows.push({
     id: t.id, expect: t.expect, verdict,
     firstMs: g ? g.first - t.speechEnd : null,
     finalMs: g?.final ? g.final - t.speechEnd : null,
     streamed: g ? g.tokens > 1 || (g.firstLen ?? 0) < (g.answer?.length ?? 0) : null,
-    dup: mine.length > 1 ? mine.length : '',
+    dup: early.length || onTime.length > 1 ? `${early.length}e${onTime.length > 1 ? `+${onTime.length - 1}` : ''}` : '',
     check,
     q: g?.q ? String(g.q).slice(0, 90) : '',
   });
