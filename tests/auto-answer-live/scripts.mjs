@@ -148,4 +148,54 @@ export const salesCall = [
   { who: 'interviewer', id: 'S11', expect: 'silent', parts: ["Sounds good. Send me the details and I'll share them with the team. Thanks again."] },
 ];
 
-export const SCRIPTS = { ti: technicalInterview, lfw: lookingForWork, sales: salesCall };
+// Lecture: the user is a student. Long explanation full of rhetorical
+// questions the lecturer answers himself must stay quiet; a question put to the
+// user by name must be answered; a question thrown to the whole room is either.
+export const lecture = [
+  { who: 'interviewer', id: 'C01', expect: 'silent', parts: ["Okay everyone, let's get started. Today we're covering database indexing, and specifically how B trees make lookups fast."] },
+  { who: 'interviewer', id: 'C02', expect: 'silent', parts: ["So why can't we just scan the table? Because a full scan is linear in the number of rows, and a table with a hundred million rows would take seconds for every query."] },
+  { who: 'interviewer', id: 'C03', expect: 'silent', parts: ["A B tree keeps keys sorted in wide nodes. Each node can hold hundreds of keys, so the tree stays very shallow, usually three or four levels even for huge tables."] },
+  { who: 'interviewer', id: 'C04', expect: 'either', q: 'can anyone tell me the time complexity of a lookup in a B tree', check: /log/i,
+    parts: ['Can anyone tell me the time complexity of a lookup in a B tree?'] },
+  { who: 'interviewer', id: 'C05', expect: 'silent', parts: ["Right, it's logarithmic, but with a very large base, which is why it's so fast in practice."] },
+  { who: 'interviewer', id: 'C06', expect: 'silent', parts: ["Now, what happens when we insert? The leaf might be full. When that happens, the node splits in two and pushes the middle key up to its parent."] },
+  { who: 'interviewer', id: 'C07', expect: 'answer', q: 'Alex, why do you think databases prefer B trees over binary search trees on disk', check: /disk|page|block|I\/O|height|shallow|fan/i,
+    parts: ['Alex, you had your hand up earlier. Why do you think databases prefer B trees over binary search trees when the data lives on disk?'] },
+  { who: 'user', text: 'Because each node fits a disk page, so you do fewer reads.' },
+  { who: 'interviewer', id: 'C08', expect: 'silent', parts: ["Exactly. Every level is one disk read, so a shallow tree means fewer reads. That's the whole trick."] },
+  { who: 'interviewer', id: 'C09', expect: 'silent', parts: ["For next week, read chapter seven on hash indexes, and the problem set is due on Friday."] },
+  { who: 'interviewer', id: 'C10', expect: 'answer', q: 'Alex, can you explain the difference between a clustered and a non clustered index', check: /cluster/i,
+    parts: ['Before we finish, Alex, can you explain the difference between a clustered and a non clustered index?'] },
+  { who: 'user', text: 'A clustered index stores the rows in key order, a non clustered one points to them.' },
+  { who: 'interviewer', id: 'C11', expect: 'either', parts: ['Any questions before we wrap up?'] },
+  { who: 'interviewer', id: 'C12', expect: 'silent', parts: ["Alright, see you all on Thursday."] },
+];
+
+// Team meet: several voices on the meeting audio. Asks addressed to the user
+// (Alex) must be answered; asks addressed to someone else, status updates and
+// decisions must stay quiet.
+export const teamMeet = [
+  { who: 'interviewer', id: 'M01', voice: 'Samantha', expect: 'silent', parts: ["Morning everyone. Let's do a quick standup and then talk about the payout migration."] },
+  { who: 'interviewer', id: 'M02', voice: 'Rishi', expect: 'silent', parts: ["I'll go first. Yesterday I finished the retry dashboard, and today I'm pairing with support on the refund backlog. No blockers."] },
+  { who: 'interviewer', id: 'M03', voice: 'Samantha', expect: 'answer', q: 'Alex, how is the payout migration going', check: /\w{4,}.*\w{4,}/s,
+    parts: ['Thanks Raj. Alex, how is the payout migration going?'] },
+  { who: 'user', text: "It's going well. Half of the merchants are on the new service, the rest move on Thursday." },
+  { who: 'interviewer', id: 'M04', voice: 'Samantha', expect: 'answer', q: 'what is the rollback plan if Thursday goes badly', check: /roll|back|flag|revert|old service/i,
+    parts: ["Okay. And what's the rollback plan if Thursday goes badly?"] },
+  { who: 'user', text: 'We keep the old service warm behind a feature flag, so we can flip merchants back in minutes.' },
+  { who: 'interviewer', id: 'M05', voice: 'Karen', expect: 'silent', parts: ["Sam here. From the data side, the reconciliation report is ready, so we can compare old and new payouts daily."] },
+  { who: 'interviewer', id: 'M06', voice: 'Samantha', expect: 'silent', parts: ['Raj, can you make sure support knows about the Thursday cutover?'] },
+  { who: 'interviewer', id: 'M07', voice: 'Rishi', expect: 'silent', parts: ["Yes, I'll post in their channel today."] },
+  { who: 'interviewer', id: 'M08', voice: 'Karen', expect: 'answer', q: 'Alex, do you need anything from the data team before Thursday', check: /\w{4,}/,
+    parts: ['Alex, do you need anything from the data team before Thursday?'] },
+  { who: 'user', text: 'Just the reconciliation report every morning, thanks.' },
+  { who: 'interviewer', id: 'M09', voice: 'Samantha', expect: 'silent', parts: ["Great. So the decision is: we cut over the remaining merchants on Thursday at ten, and Alex owns the rollback."] },
+  { who: 'interviewer', id: 'M10', voice: 'Samantha', expect: 'either', parts: ['Does anyone have concerns about that plan?'] },
+  { who: 'interviewer', id: 'M11', voice: 'Rishi', expect: 'silent', parts: ["No concerns from me."] },
+  { who: 'interviewer', id: 'M12', voice: 'Samantha', expect: 'answer', q: 'Alex, can you estimate how long the rollback would take end to end', check: /minute|hour|second|\d/i,
+    parts: ['One more thing. Alex, can you estimate how long a full rollback would take end to end?'] },
+  { who: 'user', text: 'About fifteen minutes, most of it waiting for the cache to warm.' },
+  { who: 'interviewer', id: 'M13', voice: 'Samantha', expect: 'silent', parts: ["Perfect, thanks everyone. Let's sync again on Friday."] },
+];
+
+export const SCRIPTS = { ti: technicalInterview, lfw: lookingForWork, sales: salesCall, lecture, team: teamMeet };

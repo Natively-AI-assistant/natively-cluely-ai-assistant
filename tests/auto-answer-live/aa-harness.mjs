@@ -63,13 +63,13 @@ const CLIP_DIR = path.join(os.tmpdir(), `aa-clips-${process.pid}`);
 fs.mkdirSync(CLIP_DIR, { recursive: true });
 
 /** Render once, trimmed at both ends: playback end == end of speech. */
-function renderClip(text, i) {
+function renderClip(text, i, voice = VOICE.interviewer) {
   const raw = path.join(CLIP_DIR, `c${i}.aiff`);
   const wav = path.join(CLIP_DIR, `c${i}.wav`);
   // `say -o` can wedge (seen: 21 min on one clip while another process used
   // speech synthesis). Bound it and retry, rather than hang the whole run.
   for (let attempt = 1; ; attempt++) {
-    try { execFileSync('say', ['-v', VOICE.interviewer, '-r', String(WPM), '-o', raw, text], { timeout: 30000 }); break; } catch (e) {
+    try { execFileSync('say', ['-v', voice, '-r', String(WPM), '-o', raw, text], { timeout: 30000 }); break; } catch (e) {
       if (attempt >= 3) throw new Error(`say failed 3x rendering clip ${i}: ${e.message}`);
       console.warn(`say stalled on clip ${i} (attempt ${attempt}); retrying`);
     }
@@ -114,7 +114,8 @@ if (only) {
 let clipNo = 0;
 for (const s of steps) {
   if (s.who !== 'interviewer') continue;
-  s.clips = s.parts.map((p) => (typeof p === 'string' ? { ...renderClip(p, clipNo++), text: p } : p));
+  // `voice` lets several participants share the meeting audio (team meet).
+  s.clips = s.parts.map((p) => (typeof p === 'string' ? { ...renderClip(p, clipNo++, s.voice), text: p } : p));
 }
 console.log(`rendered ${clipNo} clips`);
 

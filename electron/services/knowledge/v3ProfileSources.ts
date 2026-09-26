@@ -243,6 +243,14 @@ export function buildProfileRawRetriever(
       forceDocumentGrounding: true, ...(meetingActive === undefined ? {} : { meetingActive }),
       // The mode port forwards these (2026-09-10, after a measured 13.5 s stall); this binding did not.
       ...(typeof o.timeoutMs === 'number' ? { timeoutMs: o.timeoutMs, queryEmbedRetryBudgetMs: o.timeoutMs } : {}),
+      // Unlike the mode port, this arm IS raced at the plan's timeout (the
+      // profile port's semantic-arm deadline), so a rerank whose own budget is
+      // longer can never be waited for. Without the deadline it started anyway
+      // and took the arm down with it: live 2026-09-27 (looking for work),
+      // "semantic arm exceeded 1200 ms" on 19 of 19 turns — every answer paid
+      // 1.2 s and got BM25 only. With it, the retriever skips a rerank that
+      // cannot fit and returns its first-stage ranking inside the budget.
+      ...(typeof o.timeoutMs === 'number' ? { rerankDeadlineMs: o.timeoutMs } : {}),
     });
     const out: Array<{ sourceId: string; text: string; chunkIndex: number; score: number }> = [];
     for (const c of res?.chunks ?? []) {
