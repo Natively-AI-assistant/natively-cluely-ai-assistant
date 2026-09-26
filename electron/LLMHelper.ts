@@ -5714,9 +5714,10 @@ let isMultimodal = !!(imagePaths?.length);
     // Nothing small is configured (Codex CLI / Ollama / custom): the structured
     // ladder still answers, bounded by the controller's deadline.
     // NOT preferFast: rung 0 already tried the fast model with the caller's signal.
-    // Re-entering here would bill it a second time, milliseconds after it failed,
-    // on a request that carries no signal and so cannot be cancelled.
-    return this.generateContentStructured(message);
+    // Re-entering here would bill it a second time, milliseconds after it failed.
+    // The signal goes with it: a superseded judge stops the ladder's rotations
+    // and backoffs instead of walking them for a verdict nobody will read.
+    return this.generateContentStructured(message, { signal });
   }
 
   public async generateContentStructured(
@@ -5735,8 +5736,18 @@ let isMultimodal = !!(imagePaths?.length);
     // fallback carries `purpose:'extraction'` so the server runs its own
     // flash-lite→3.7-flash-only loop (never MiniMax/Pro/Scout). The MAX_ROTATIONS
     // loop below gives the 3-cycle retry-then-fail behavior.
-    opts?: { preferFast?: boolean },
+    //
+    // `opts.signal` makes the ladder cancellable (the Auto Answer judge passes
+    // its controller's). Only the Natively rung and the preferFast pick take it
+    // mid-call; the others finish their in-flight request, then the ladder stops
+    // instead of trying the next rung or rotation. An aborted call never resolves.
+    opts?: { preferFast?: boolean; signal?: AbortSignal },
   ): Promise<string> {
+    const signal = opts?.signal;
+    const aborted = () => signal?.aborted === true;
+    const abortError = () => Object.assign(new Error('structured generation aborted: superseded or cancelled'), { name: 'AbortError' });
+    if (aborted()) throw abortError();
+
     type ProviderAttempt = { name: string; execute: () => Promise<string> };
     const providers: ProviderAttempt[] = [];
     // A breaker may skip a rung only if another rung exists to fall to. Evaluated
@@ -5756,9 +5767,10 @@ let isMultimodal = !!(imagePaths?.length);
     // opts` — "retained for API compatibility" — so the flag promised something
     // it never delivered. The ladder below is unchanged and remains the fallback.
     if (opts?.preferFast) {
-      const pickedFast = await this.callFastModel(message, { json: true });
+      const pickedFast = await this.callFastModel(message, { signal, json: true });
       if (pickedFast) return pickedFast;
     }
+    if (aborted()) throw abortError();
 
     // Priority 1: OpenAI
     if (this.openaiClient) {
@@ -5884,7 +5896,7 @@ let isMultimodal = !!(imagePaths?.length);
         // it runs its dedicated flash-lite→3.7-flash-only loop (3 cycles then
         // hard-fail) and NEVER falls through to MiniMax/Pro/Scout. Older servers
         // ignore the unknown field and route via their normal flash-first chain.
-        execute: () => this.generateWithNatively(message, undefined, undefined, { purpose: 'extraction' })
+        execute: () => this.generateWithNatively(message, undefined, undefined, { purpose: 'extraction', signal })
       });
     }
 
@@ -5901,13 +5913,16 @@ let isMultimodal = !!(imagePaths?.length);
     const lastFailureByProvider = new Map<string, string>();
     const permanentlyDeadProviders = new Set<string>();
     for (let rotation = 0; rotation < MAX_ROTATIONS; rotation++) {
+      if (aborted()) throw abortError();
       if (rotation > 0) {
         const backoffMs = 1000 * rotation;
         console.log(`[LLMHelper] 🔄 Structured generation rotation ${rotation + 1}/${MAX_ROTATIONS} after ${backoffMs}ms backoff...`);
         await this.delay(backoffMs);
+        if (aborted()) throw abortError();
       }
 
       for (const provider of providers) {
+        if (aborted()) throw abortError();
         const permanentFailureKey = permanentFailureKeyFor(provider.name);
         if (permanentlyDeadProviders.has(permanentFailureKey)) {
           continue;
@@ -5915,6 +5930,7 @@ let isMultimodal = !!(imagePaths?.length);
         try {
           console.log(`[LLMHelper] 🧠 Structured generation: trying ${provider.name}...`);
           const result = await provider.execute();
+          if (aborted()) throw abortError();
           if (result && result.trim().length > 0) {
             console.log(`[LLMHelper] ✅ Structured generation succeeded with ${provider.name}`);
             return result;
@@ -5922,6 +5938,7 @@ let isMultimodal = !!(imagePaths?.length);
           console.warn(`[LLMHelper] ⚠️ ${provider.name} returned empty response`);
           lastFailureByProvider.set(provider.name, 'empty response');
         } catch (error: any) {
+          if (aborted()) throw abortError();
           const reason = (error?.message ?? String(error)).toString().slice(0, 240);
           console.warn(`[LLMHelper] ⚠️ Structured generation: ${provider.name} failed: ${reason}`);
           lastFailureByProvider.set(provider.name, reason);
