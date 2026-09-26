@@ -1064,9 +1064,17 @@ export class IntelligenceEngine extends EventEmitter {
             if (!stale) {
                 // Keyed reuse (V3 Amendment 6): the controller already verified
                 // identity by questionId or embedding cosine; Jaccard is the fallback.
+                // Text-matched (not keyed) reuse must also have HEARD the
+                // question: the similarity scores any pure prefix at 0.9, and
+                // live 2026-09-26 (T08) it adopted a speculation on "And third,
+                // get a random element, where every element has the same" for
+                // the whole three-operation task — the user got a restatement
+                // of one operation instead of the design.
                 const similarity = trigger.reuseSpeculative
                     ? 1
-                    : speculativeQuestionSimilarity(this.speculativeText, trigger.lastQuestion);
+                    : speculationCoversQuestion(this.speculativeText, trigger.lastQuestion)
+                        ? speculativeQuestionSimilarity(this.speculativeText, trigger.lastQuestion)
+                        : 0;
                 this.speculativeText = null;
                 this.speculativeTextExpiry = Infinity;
                 this.speculativeQuestionId = null;

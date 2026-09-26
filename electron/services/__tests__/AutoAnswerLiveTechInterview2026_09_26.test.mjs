@@ -239,3 +239,30 @@ test('speculationCoversQuestion: a prefix is NOT the whole question, however sim
     assert.equal(speculationCoversQuestion("Nice. What's the difference between a process", full), false);
     assert.equal(speculationCoversQuestion("Nice. What's the difference between a process and a thread", full), true);
 });
+
+// ── 5. the dispatch's text-matched reuse must have heard the question ───────
+
+test('dispatch does NOT adopt a speculation on a fragment of the task (live T08)', async () => {
+    const { engine, finals, runs, release } = await makeGatedEngine();
+    void engine.runWhatShouldISay('And third, get a random element, where every element has the same', 1, undefined, { speculative: true });
+    await until(() => runs() === 1);
+    release(1); await untilIdle(engine);
+    const task = "I want you to design a data structure that supports three operations. First, insert a value. Second, remove a value. And third, get a random element, where every element has the same probability of being returned.";
+    const dispatched = engine.handleSuggestionTrigger({ ...autoTrigger(task, 1, '1-q21'), reuseSpeculative: false });
+    await until(() => runs() === 2);
+    release(2); await dispatched; await flush();
+    assert.equal(finals.length, 1);
+    assert.match(finals[0].text, /ANSWER-2/, 'answered the whole task afresh, not the fragment');
+});
+
+test('dispatch still adopts a text-matched speculation that heard the whole question', async () => {
+    const { engine, finals, runs, release } = await makeGatedEngine();
+    void engine.runWhatShouldISay('How does a hash map handle collisions between keys', 1, undefined, { speculative: true });
+    await until(() => runs() === 1);
+    release(1); await untilIdle(engine);
+    await engine.handleSuggestionTrigger({ ...autoTrigger('How does a hash map handle collisions between keys?', 1, '1-q6'), reuseSpeculative: false });
+    await flush(); await flush();
+    assert.equal(runs(), 1);
+    assert.equal(finals.length, 1);
+    assert.match(finals[0].text, /ANSWER-1/);
+});
