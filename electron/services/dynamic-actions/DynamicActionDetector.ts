@@ -4,6 +4,7 @@ export interface ActionTrigger {
     priority: number;
     label: string;
     promptInstruction: string;
+    requiresScreen?: boolean;
     answerStyle?: {
         maxWords: number;
         format: 'bullets' | 'short_script' | 'code' | 'checklist' | 'summary';
@@ -274,6 +275,7 @@ const TECHNICAL_TRIGGERS: ActionTrigger[] = [
         patterns: [/\b(screen|visible|shown|popup|error message|output|on screen)\b/i],
         priority: 0.92,
         label: 'Answer from screen',
+        requiresScreen: true,
         promptInstruction:
             'You are in Technical Interview mode. A coding problem is visible on the screen. Read the visible problem carefully and provide a solution.',
     },

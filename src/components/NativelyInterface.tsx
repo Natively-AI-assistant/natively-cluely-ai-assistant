@@ -246,6 +246,11 @@ import { decideStreamingHeightCommit } from '../lib/streamingHeightDecision.mjs'
 import { mergeTranscriptChunks } from '../lib/transcriptMerge.mjs';
 import { createTranscriptTailWaiter } from '../lib/answerTailWait.mjs';
 import {
+  actionNeedsScreenCapture,
+  appendScreenshotAttachment,
+  mergePendingScreenshotAttachment,
+} from '../lib/screenshotAttachment.mjs';
+import {
   applyWhatToAnswerNullFeedbackMessages,
   finalizeStreamingByIntentMessages,
   prepareIntelligenceStreamPlaceholderMessages,
@@ -1882,6 +1887,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // handleWhatToSay() can access it even in React 18 concurrent mode (where
   // a plain setTimeout(0) may fire before setAttachedContext flushes).
   const pendingCaptureRef = useRef<{ path: string; preview: string } | null>(null);
+  const dynamicActionAcceptInFlightRef = useRef(false);
 
   // Latent Context State (Screenshots attached but not sent)
   const [attachedContext, setAttachedContext] = useState<Array<{ path: string; preview: string }>>(
@@ -5076,12 +5082,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
   const handleScreenshotAttach = (data: { path: string; preview: string }) => {
     setIsExpanded(true);
-    setAttachedContext((prev) => {
-      // Prevent duplicates and cap at 5
-      if (prev.some((s) => s.path === data.path)) return prev;
-      const updated = [...prev, data];
-      return updated.slice(-5); // Keep last 5
-    });
+    setAttachedContext((prev) => appendScreenshotAttachment(prev, data));
   };
 
   // STT Status listener — must survive isExpanded changes.
@@ -7248,17 +7249,17 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     'follow_up:rephrase': 'Rephrase',
   };
 
-  const handleWhatToSay = async (promptInstruction?: string | React.MouseEvent) => {
-    if (!tryBeginOverlayAction('what_to_say')) {
-      // The press was blocked because a prior 'what_to_say' is still streaming.
-      // Surface a brief hint instead of silently doing nothing, so a blocked
-      // press is never indistinguishable from a crash / dead hotkey.
-      setMessages((prev) => [
-        ...prev,
-        { id: genMessageId(), role: 'system', text: 'Still finishing the previous answer — one moment…' },
-      ]);
-      return;
-    }
+  const showWhatToSayBusyMessage = () => {
+    // The press was blocked because a prior 'what_to_say' is still streaming.
+    // Surface a brief hint instead of silently doing nothing, so a blocked
+    // press is never indistinguishable from a crash / dead hotkey.
+    setMessages((prev) => [
+      ...prev,
+      { id: genMessageId(), role: 'system', text: 'Still finishing the previous answer — one moment…' },
+    ]);
+  };
+
+  const runWhatToSay = async (promptInstruction?: string | React.MouseEvent) => {
     const dynamicPromptInstruction =
       typeof promptInstruction === 'string' ? promptInstruction : undefined;
     setIsExpanded(true);
@@ -7270,10 +7271,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // The question card's id — kept so the "Page attached" line can be stamped
     // onto it below, once we know whether captured page context was consumed.
     const questionCardId = genMessageId();
-    let currentAttachments = attachedContext;
-    if (pending && !currentAttachments.some((s) => s.path === pending.path)) {
-      currentAttachments = [...currentAttachments, pending].slice(-5);
-    }
+    const currentAttachments = mergePendingScreenshotAttachment(attachedContext, pending);
+    if (pending) pendingCaptureRef.current = null;
 
     if (currentAttachments.length > 0) {
       setAttachedContext([]);
@@ -7513,10 +7512,80 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       ]);
       pinAnswerPanel();
     } finally {
-      endOverlayAction('what_to_say');
       // A Direct stream outlives the start IPC acknowledgement; its correlated
       // terminal event owns the processing state. Legacy WTA is request/response.
       if (!directAssistEnabled) setIsProcessing(false);
+    }
+  };
+
+  const handleWhatToSay = async (promptInstruction?: string | React.MouseEvent) => {
+    if (!tryBeginOverlayAction('what_to_say')) {
+      showWhatToSayBusyMessage();
+      return;
+    }
+    try {
+      await runWhatToSay(promptInstruction);
+    } finally {
+      endOverlayAction('what_to_say');
+    }
+  };
+
+  const captureScreenshotForDynamicAction = async (): Promise<boolean> => {
+    const data = await window.electronAPI.takeScreenshot();
+    if (!data?.path) return false;
+    // This capture is consumed immediately, before React may flush attachments.
+    // Ordinary attachments must stay in state only so removing one is final.
+    pendingCaptureRef.current = data as { path: string; preview: string };
+    handleScreenshotAttach(data as { path: string; preview: string });
+    return true;
+  };
+
+  const handleDynamicActionAccept = async (action: DynamicActionPayload) => {
+    if (dynamicActionAcceptInFlightRef.current) return;
+    dynamicActionAcceptInFlightRef.current = true;
+    let shouldReleaseWhatToSay = false;
+
+    try {
+      if (!tryBeginOverlayAction('what_to_say')) {
+        showWhatToSayBusyMessage();
+        return;
+      }
+      shouldReleaseWhatToSay = true;
+
+      if (actionNeedsScreenCapture(action)) {
+        try {
+          const captured = await captureScreenshotForDynamicAction();
+          if (!captured) {
+            setScreenContextStatus('failed');
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: genMessageId(),
+                role: 'system',
+                text: 'Could not capture the screen for this action. Check screen capture permissions and try again.',
+              },
+            ]);
+            return;
+          }
+        } catch (err) {
+          console.error('Error capturing screen for dynamic action:', err);
+          setScreenContextStatus('failed');
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: genMessageId(),
+              role: 'system',
+              text: 'Could not capture the screen for this action. Check screen capture permissions and try again.',
+            },
+          ]);
+          return;
+        }
+      }
+
+      await runWhatToSay(action.promptInstruction);
+    } finally {
+      if (shouldReleaseWhatToSay) endOverlayAction('what_to_say');
+      dynamicActionAcceptInFlightRef.current = false;
     }
   };
 
@@ -9535,10 +9604,7 @@ Provide only the answer, nothing else.`;
       // with an empty attachedContext and causing silent failures.
       pendingCaptureRef.current = data;
 
-      setAttachedContext((prev) => {
-        if (prev.some((s) => s.path === data.path)) return prev;
-        return [...prev, data].slice(-5);
-      });
+      setAttachedContext((prev) => appendScreenshotAttachment(prev, data));
 
       // Use requestAnimationFrame so we wait for at least one paint cycle —
       // more reliable than setTimeout(0) under React 18 concurrent scheduling.
@@ -10617,7 +10683,7 @@ Provide only the answer, nothing else.`;
                                 when no actions are present. */}
               <DynamicActionBar
                 onAcceptAction={(action: DynamicActionPayload) => {
-                  void handleWhatToSay(action.promptInstruction);
+                  void handleDynamicActionAccept(action);
                 }}
               />
 

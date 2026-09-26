@@ -19,6 +19,7 @@ export interface DynamicAction {
     description?: string;
     confidence: number;
     priority: number;
+    requiresScreen?: boolean;
     evidenceRefs: EvidenceRef[];
     status: ActionStatus;
     createdAt: number;
