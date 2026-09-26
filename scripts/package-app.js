@@ -77,6 +77,21 @@ function run(scriptPath, args) {
 
 const builderArgs = process.argv.slice(2);
 
+// An installer built without the calendar client secret ships a calendar that
+// can never connect (scripts/lib/calendar-client-secret.cjs). Stop before
+// electron-builder runs, so the native addons are never touched. Unpacked `dir`
+// builds are local and CI smoke builds, which cannot see the secret: warn only.
+{
+  const { calendarSecretProblem, isUnpackedDirBuild } = require('./lib/calendar-client-secret.cjs');
+  const problem = calendarSecretProblem(path.join(__dirname, '..'));
+  if (problem && isUnpackedDirBuild(builderArgs)) {
+    console.warn(`[package-app] WARNING: calendar sync will not work in this build. ${problem}`);
+  } else if (problem) {
+    console.error(`[package-app] Refusing to package: ${problem}`);
+    process.exit(1);
+  }
+}
+
 // The resolve is inside the guarded region on purpose. The bash original ran
 // the native rebuild even when electron-builder could not be executed at all
 // (sh printed "command not found", set $? to 127, and still ran the next

@@ -145,6 +145,10 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           # GH token for electron-builder publish (artifacts attach to the release on tag builds).
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Calendar sync's Google Desktop-client secret, baked in by build:electron
+          # (scripts/lib/calendar-client-secret.cjs). The signed config's beforePack
+          # fails the release if it is missing.
+          GOOGLE_CALENDAR_CLIENT_SECRET: ${{ secrets.GOOGLE_CALENDAR_CLIENT_SECRET }}
         # Explicit stages (NOT `npm run dist:signed`): the dist:signed chain re-runs
         # `npm run build` (rimraf dist dist-electron) which can race electron-builder's
         # native rebuild and ENOENT on dist-electron at package time. Building the stages
