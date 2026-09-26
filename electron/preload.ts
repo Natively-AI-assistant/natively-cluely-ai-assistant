@@ -224,6 +224,8 @@ interface ElectronAPI {
    *  plan table never carries its own copy of numbers the server enforces. */
   getNativelyPlans: () => Promise<NativelyPlansResponse>;
   getStoredCredentials: () => Promise<{
+    /** Any AI route of the user's own (trialPolicy.hasOwnAiKey: custom and cURL providers count). */
+    hasOwnAiKey?: boolean;
     hasGeminiKey: boolean;
     hasGroqKey: boolean;
     hasOpenaiKey: boolean;

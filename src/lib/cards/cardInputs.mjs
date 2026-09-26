@@ -47,7 +47,11 @@ export function cardInputsFromSources({ creds, licence, profile, trialLocal, ext
   const patch = {};
   if (creds) {
     patch.hasNativelyKey = !!creds.hasNativelyKey;
-    patch.hasOwnAiKey = OWN_AI_FLAGS.some((f) => !!creds[f]);
+    // Main answers with the Trial ended rule (trialPolicy.hasOwnAiKey), which
+    // also counts custom and cURL providers; the flags are the fallback.
+    patch.hasOwnAiKey = typeof creds.hasOwnAiKey === 'boolean'
+      ? creds.hasOwnAiKey
+      : OWN_AI_FLAGS.some((f) => !!creds[f]);
   }
   if (licence) {
     patch.isPremium = !!licence.isPremium;

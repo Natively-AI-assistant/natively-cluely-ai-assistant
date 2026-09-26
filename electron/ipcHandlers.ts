@@ -12122,6 +12122,10 @@ export function initializeIpcHandlers(appState: AppState): void {
         ninerouterThinking: creds.ninerouterThinking || null,
         ninerouterModelMeta: creds.ninerouterModelMeta || {},
         hasNativelyKey: hasKey(creds.nativelyApiKey),
+        // Any AI route of the user's own, by the same rule the Trial ended card
+        // uses (custom and cURL providers count), so the card scheduler and
+        // main never disagree about who is "key-less".
+        hasOwnAiKey: hasOwnAiKey(creds),
         googleServiceAccountPath: creds.googleServiceAccountPath || null,
         sttProvider: creds.sttProvider || 'none',
         nvidiaNimSttModel: creds.nvidiaNimSttModel || 'nemotron-asr-streaming',

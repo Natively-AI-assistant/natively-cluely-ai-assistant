@@ -177,3 +177,21 @@ describe('set-donation-complete', () => {
     assert.equal(changed[0].data.cards.support.retired, true);
   });
 });
+
+// Final review #6: "has an AI route of its own" must mean the same thing to
+// the card scheduler as to the Trial ended logic (trialPolicy.hasOwnAiKey),
+// which also counts custom and cURL providers. Main computes it once.
+describe('get-stored-credentials hasOwnAiKey', () => {
+  test('a cURL provider alone is an AI route of the user\'s own', async () => {
+    const cm = require(path.join(ROOT, 'dist-electron/electron/services/CredentialsManager.js')).CredentialsManager.getInstance();
+    const before = await handlers.get('get-stored-credentials')({});
+    assert.equal(before.hasOwnAiKey, false, 'precondition: no AI route yet');
+    cm.saveCurlProvider({ id: 'curl-test', name: 'Test', curlCommand: 'curl https://example.invalid', responsePath: 'text' });
+    try {
+      const after = await handlers.get('get-stored-credentials')({});
+      assert.equal(after.hasOwnAiKey, true);
+    } finally {
+      cm.deleteCurlProvider('curl-test');
+    }
+  });
+});

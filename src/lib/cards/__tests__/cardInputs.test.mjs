@@ -19,6 +19,11 @@ test('credentials: Natively key and own AI keys', () => {
   assert.equal(cardInputsFromSources({ creds: { hasDeepgramKey: true, hasSonioxKey: true } }).hasOwnAiKey, false, 'speech keys are not AI keys');
 });
 
+test('main\'s own-route answer wins (same rule as the Trial ended card: custom and cURL providers count)', () => {
+  assert.equal(cardInputsFromSources({ creds: { hasOwnAiKey: true } }).hasOwnAiKey, true, 'a cURL provider alone');
+  assert.equal(cardInputsFromSources({ creds: { hasOwnAiKey: false } }).hasOwnAiKey, false);
+});
+
 test('licence: premium and plan tier', () => {
   assert.deepEqual(cardInputsFromSources({ licence: { isPremium: false } }), { isPremium: false, planTier: 'free' });
   assert.equal(cardInputsFromSources({ licence: { isPremium: true, plan: 'pro' } }).planTier, 'pro');
