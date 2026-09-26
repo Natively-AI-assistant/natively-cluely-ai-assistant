@@ -639,7 +639,15 @@ export class SimpleAutoAnswerEngine {
             // verdict — the commit timer is already armed and will apply it —
             // rather than answering into a breath. Usually the ~1.3 s judge has
             // outlasted the window on its own and this commits immediately.
-            if (early && this.clock.now() - this.lastInterviewerAt < STABILITY_MS) {
+            //
+            // Only while that commit is still PENDING. A provider endpoint or the
+            // local VAD can confirm the stop early (ENDPOINT_CONFIRM_MS), and that
+            // commit runs while the judge is still out — it finds the key already
+            // judged and returns. Holding after it has fired waited for a timer
+            // that would never fire again: live 2026-09-27 (DeepSeek judge,
+            // 0.66 s) an 'answer, a=0.9' verdict sat unapplied until the next
+            // interviewer speech replaced the question.
+            if (early && this.timer !== null && this.clock.now() - this.lastInterviewerAt < STABILITY_MS) {
                 this.held = { id, key: normalizeForCompare(candidate), text, answerability: route.answerability, act: route.act, at: this.clock.now() };
                 return;
             }
